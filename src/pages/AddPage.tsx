@@ -1,18 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch } from '../components/GameSearch';
+import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string };
+type RuleInput = { id: string; statement: string; commonMistake?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const date = new Date();
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
 
 export const AddPage = () => {
   const navigate = useNavigate();
-  const { canEdit, loading } = useSession();
+  const [searchParams] = useSearchParams();
+  const { canEdit, isAdmin, loading } = useSession();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
@@ -23,26 +29,40 @@ export const AddPage = () => {
   const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [savedAt, setSavedAt] = useState<number>();
+  const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   useEffect(() => {
-    void localDb.getDraft().then((draft) => {
-      if (!draft) return;
-      setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
-      setGameQuery(draft.gameQuery);
-      setRules(draft.rules.length ? draft.rules : [blankRule()]);
-      setSourceLabel(draft.sourceLabel);
-      setSourceUrl(draft.sourceUrl);
-      setPlayedOn(draft.playedOn || today());
-      setPrivateNote(draft.privateNote);
+    let active = true;
+    void Promise.all([localDb.getDraft(), localDb.recentGames()]).then(async ([draft, recent]) => {
+      if (!active) return;
+      setRecentGames(recent);
+      const hasDraft = Boolean(draft && (draft.game || draft.rules.some((rule) => rule.statement.trim())));
+      if (draft && hasDraft) {
+        setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
+        setGameQuery(draft.gameQuery);
+        setRules(draft.rules.length ? draft.rules : [blankRule()]);
+        setSourceLabel(draft.sourceLabel); setSourceUrl(draft.sourceUrl);
+        setPlayedOn(draft.playedOn || today()); setPrivateNote(draft.privateNote);
+        return;
+      }
+      const requestedGame = searchParams.get('game');
+      if (requestedGame) {
+        const response = await api.game(requestedGame, true);
+        if (!active) return;
+        setGame(response.game); setGameQuery(response.game.displayName);
+        window.setTimeout(() => inputRefs.current[rules[0].id]?.focus(), 0);
+      }
     });
-  }, []);
+    return () => { active = false; };
+  }, [searchParams]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const draft: Omit<DraftRecord, 'id'> = {
         game: game ? { id: game.id, slug: game.slug, displayName: game.displayName } : undefined,
         gameQuery, rules, sourceLabel, sourceUrl, playedOn, privateNote, updatedAt: Date.now(),
       };
-      void localDb.saveDraft(draft);
+      void localDb.saveDraft(draft).then(() => setSavedAt(Date.now()));
     }, 250);
     return () => window.clearTimeout(timer);
   }, [game, gameQuery, rules, sourceLabel, sourceUrl, playedOn, privateNote]);
@@ -74,7 +94,7 @@ export const AddPage = () => {
       sourceUrl: sourceUrl.trim() || undefined,
       privateNote: privateNote.trim() || undefined,
       idempotencyKey: crypto.randomUUID(),
-      rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined })),
+      rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, tagNames: rule.tagNames })),
     };
     await localDb.addPending(payload);
     try {
@@ -90,19 +110,22 @@ export const AddPage = () => {
     <header><p className="eyebrow">快速記錄</p><h1>這次玩錯了什麼？</h1><p>遊戲與來源只選一次；每條規則從一開始就是可搜尋的獨立內容。</p></header>
     <GameSearch value={gameQuery} selectedId={game?.id} allowCreate onChange={(value) => { setGameQuery(value); if (game && value !== game.displayName) setGame(undefined); }}
       onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} />
+    {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
     {game && <div className="rule-input-list">
-      <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>
+      <div className="list-heading"><div><h2>本次發現的錯誤</h2><small>電腦按 Enter 下一條、Shift＋Enter 換行；手機直接按「新增一條」。</small></div><span>{validRules.length} 條</span></div>
       {rules.map((rule, index) => <div className="rule-input" key={rule.id}>
         <span className="rule-number">{index + 1}</span>
         <div>
-          <textarea ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement}
+          <label className="sr-only" htmlFor={`rule-${rule.id}`}>第 {index + 1} 條規則</label><textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement}
             placeholder="例如：三人局起始只有 5 個方塊，不是 7 個。"
             onChange={(event) => setRule(rule.id, { statement: event.target.value })}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addRuleAfter(rule.id); }
+              const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !isCoarsePointer && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
             }} />
           <details><summary>補上常見錯法（選填）</summary><textarea rows={2} value={rule.commonMistake ?? ''}
-            placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></details>
+            aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
+            <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} /></details>
         </div>
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
       </div>)}
@@ -116,8 +139,7 @@ export const AddPage = () => {
         <label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}
     </div>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="sticky-submit"><p>{game ? game.displayName : '先選擇遊戲'}・{validRules.length} 條可儲存</p>
+    <div className="sticky-submit"><p>{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : '先選擇遊戲'}・${validRules.length} 條可儲存`}</p>
       <button className="button primary" type="button" disabled={!game || validRules.length === 0 || saving} onClick={() => void submit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
   </section>;
 };
-

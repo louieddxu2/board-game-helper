@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 export interface LegacyRecord {
   rowNumber: number;
   timestamp: string;
+  timestampMs: number;
   gameName: string;
   ruleText: string;
   category: string;
@@ -21,14 +22,59 @@ export const splitLegacyRules = (text: string): string[] => text
   .filter(Boolean);
 
 export const chooseFlowStage = (category: string): string => {
-  if (/起始|設置/.test(category)) return 'setup';
-  if (/計分|結束/.test(category)) return 'end_scoring';
-  if (/回合/.test(category)) return 'round';
-  if (/不對稱|版本|擴充|人數/.test(category)) return 'edition_player_count';
+  const normalized = category.normalize('NFKC').trim();
+  if (normalized === '起始設置') return 'setup';
+  if (normalized === '回合設置') return 'round';
+  if (normalized === '計分' || normalized === '結束方式') return 'end_scoring';
   return 'uncategorized';
 };
 
-export const firstUrl = (value: string): string | undefined => value.match(/https?:\/\/[^\s]+/)?.[0];
+const stageOverrides: Record<number, string[]> = {
+  2: ['setup', 'setup', 'end_scoring', 'action'],
+  4: ['round', 'end_scoring'],
+  47: ['setup', 'action', 'action'],
+  73: ['round'],
+  97: ['end_scoring', 'action', 'end_scoring'],
+  99: ['setup', 'setup'],
+  100: ['setup', 'action', 'action', 'action'],
+};
+
+const singleRuleRows = new Set([8, 42, 51, 75, 103]);
+
+export interface LegacyRuleDraft {
+  statement: string;
+  details?: string;
+  flowStage: string;
+}
+
+export const prepareLegacyRules = (record: LegacyRecord): LegacyRuleDraft[] => {
+  const paragraphs = splitLegacyRules(record.ruleText);
+  const statements = singleRuleRows.has(record.rowNumber) ? paragraphs.slice(0, 1) : paragraphs;
+  const details = singleRuleRows.has(record.rowNumber) ? paragraphs.slice(1).join('\n') || undefined : undefined;
+  const overrides = stageOverrides[record.rowNumber];
+  return statements.map((statement, index) => ({
+    statement,
+    details: index === 0 ? details : undefined,
+    flowStage: overrides?.[index] ?? chooseFlowStage(record.category),
+  }));
+};
+
+export const canonicalLegacyGameName = (value: string): string =>
+  normalizeLegacyName(value) === normalizeLegacyName('氣笛山脈') ? 'Whistle Mountain 汽笛山脈' : value.trim();
+
+export const legacyGameAliases = (value: string): string[] => {
+  const canonical = canonicalLegacyGameName(value);
+  const aliases = new Set([value.trim(), canonical]);
+  const english = canonical.match(/[A-Za-z][A-Za-z0-9:.'’&!\- ]*/g)?.join(' ').trim();
+  const chinese = canonical.match(/[\p{Script=Han}][\p{Script=Han}\s·：！—-]*/gu)?.join(' ').trim();
+  if (english) aliases.add(english);
+  if (chinese) aliases.add(chinese);
+  if (canonical === 'Whistle Mountain 汽笛山脈') aliases.add('氣笛山脈');
+  return [...aliases].filter(Boolean);
+};
+
+export const allUrls = (value: string): string[] => [...new Set(value.match(/https?:\/\/[^\s]+/g) ?? [])];
+
 export const parseDeclaredCount = (value: unknown): number | undefined => {
   const match = String(value ?? '').normalize('NFKC').match(/\d+/);
   if (!match) return undefined;

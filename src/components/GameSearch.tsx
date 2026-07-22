@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
-import type { GameSummary } from '../shared/types';
+import type { GameSummary, RuleSearchResult } from '../shared/types';
 
 interface Props {
   value: string;
@@ -10,39 +10,65 @@ interface Props {
   selectedId?: string;
   allowCreate?: boolean;
   onCreate?(name: string): void;
+  includeRules?: boolean;
+  onRuleSelect?(rule: RuleSearchResult): void;
 }
 
-export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate }: Props) => {
+export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect }: Props) => {
+  const inputId = useId();
   const query = useDebouncedValue(value.trim());
   const [games, setGames] = useState<GameSummary[]>([]);
+  const [rules, setRules] = useState<RuleSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   useEffect(() => {
-    if (!query || selectedId) { setGames([]); return; }
+    if (!query || selectedId) { setGames([]); setRules([]); return; }
     let active = true;
     setLoading(true);
-    api.searchGames(query).then((response) => {
-      if (active) setGames(response.games);
-    }).finally(() => { if (active) setLoading(false); });
+    const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
+    request.then((response) => {
+      if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); }
+    }).catch(() => { if (active) { setGames([]); setRules([]); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [query, selectedId]);
+  }, [includeRules, query, selectedId]);
+  const canCreate = Boolean(!loading && games.length === 0 && allowCreate && query);
+  const optionCount = games.length + rules.length + (canCreate ? 1 : 0);
+  const chooseActive = () => {
+    if (activeIndex < 0) return;
+    if (activeIndex < games.length) onSelect(games[activeIndex]);
+    else if (activeIndex < games.length + rules.length) onRuleSelect?.(rules[activeIndex - games.length]);
+    else onCreate?.(value.trim());
+  };
   return <div className="game-search">
-    <label htmlFor="game-search-input">玩了哪款遊戲？</label>
+    <label htmlFor={inputId}>玩了哪款遊戲？</label>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
-      <input id="game-search-input" value={value} onChange={(event) => onChange(event.target.value)}
-        placeholder="輸入中文名、英文名或別名" autoComplete="off" />
+      <input id={inputId} value={value} onChange={(event) => onChange(event.target.value)}
+        placeholder={includeRules ? '搜尋遊戲，或輸入「平手」「補牌」' : '輸入中文名、英文名或別名'} autoComplete="off"
+        role="combobox" aria-autocomplete="list" aria-expanded={!selectedId && (loading || optionCount > 0)} aria-controls={`${inputId}-results`}
+        aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' && optionCount) { event.preventDefault(); setActiveIndex((index) => (index + 1) % optionCount); }
+          if (event.key === 'ArrowUp' && optionCount) { event.preventDefault(); setActiveIndex((index) => index <= 0 ? optionCount - 1 : index - 1); }
+          if (event.key === 'Enter' && activeIndex >= 0) { event.preventDefault(); chooseActive(); }
+          if (event.key === 'Escape') { setGames([]); setRules([]); setActiveIndex(-1); }
+        }} />
       {selectedId && <span aria-hidden="true">✓</span>}
     </div>
-    {!selectedId && (loading || games.length > 0 || (allowCreate && query)) && <div className="search-results" role="listbox">
+    {!selectedId && (loading || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
       {loading && <p className="muted">尋找遊戲中…</p>}
-      {games.map((game) => <button type="button" key={game.id} onClick={() => onSelect(game)} role="option">
+      {games.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}
+      {games.map((game, index) => <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">
         <strong>{game.displayName}</strong>
         {game.englishName && <span>{game.englishName}</span>}
         <small>{game.ruleCount} 條規則</small>
       </button>)}
-      {!loading && games.length === 0 && allowCreate && query && <button type="button" className="create-result" onClick={() => onCreate?.(value.trim())}>
+      {rules.length > 0 && <p className="result-group-label">規則內容</p>}
+      {rules.map((rule, ruleIndex) => { const index = games.length + ruleIndex; return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} className="rule-result" key={rule.ruleId} onClick={() => onRuleSelect?.(rule)} role="option">
+        <strong>{rule.gameName}</strong><span>{rule.statement}</span><small>查看規則 →</small>
+      </button>; })}
+      {canCreate && <button type="button" id={`${inputId}-option-${games.length + rules.length}`} aria-selected={activeIndex === games.length + rules.length} role="option" className="create-result" onClick={() => onCreate?.(value.trim())}>
         ＋建立新遊戲「{value.trim()}」
       </button>}
     </div>}
   </div>;
 };
-

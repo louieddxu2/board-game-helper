@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type RuleCard, type UserRole } from '../src/shared/types';
 import { requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
 import type { D1PreparedStatement, Env } from './env';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, slugify } from './utils';
+import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify } from './utils';
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 app.use('/api/*', sessionMiddleware);
@@ -14,6 +14,7 @@ app.onError((error, c) => {
   const safeCodes = new Set([
     'google_auth_not_configured', 'invalid_google_identity', 'not_found',
     'session_creation_failed', 'game_not_found', 'rule_not_found',
+    'unknown_tag', 'tag_not_found',
   ]);
   return c.json({ error: safeCodes.has(message) ? message : 'internal_error' }, 500);
 });
@@ -31,7 +32,11 @@ const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_count_note, r.edition_note, r.status,
     r.is_featured, r.created_at, r.updated_at,
-    s.source_label, s.source_url
+    s.source_label, s.source_url,
+    (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
+      FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json,
+    (SELECT COALESCE(json_group_array(json_object('id', t.id, 'slug', t.slug, 'name', t.name)), '[]')
+      FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = r.id) AS tags_json
   FROM rules r JOIN submissions s ON s.id = r.submission_id
 `;
 
@@ -55,6 +60,8 @@ interface RuleRow {
   source_url: string | null;
   created_at: number;
   updated_at: number;
+  tags_json: string | null;
+  sources_json: string | null;
 }
 
 const toRule = (row: RuleRow): RuleCard => ({
@@ -68,11 +75,56 @@ const toRule = (row: RuleRow): RuleCard => ({
   editionNote: row.edition_note ?? undefined,
   sourceLabel: row.source_label ?? undefined,
   sourceUrl: row.source_url ?? undefined,
+  sourceLinks: (() => {
+    try {
+      const links = JSON.parse(row.sources_json ?? '[]') as RuleCard['sourceLinks'];
+      return links.length ? links : (row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []);
+    } catch { return row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []; }
+  })(),
   status: row.status,
   isFeatured: Boolean(row.is_featured),
+  tags: (() => {
+    try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
+  })(),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const cleanTagNames = (names: string[] | undefined): string[] => Array.from(new Map((names ?? [])
+  .map((name) => name.trim().replace(/^#/, '').slice(0, 40))
+  .filter(Boolean)
+  .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 8);
+
+const tagWriteStatements = async (c: AppContext, ruleId: string, names: string[], userId: string, timestamp: number, replace = true) => {
+  const statements: D1PreparedStatement[] = replace
+    ? [c.env.DB.prepare('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
+    : [];
+  const canCreate = Boolean(c.get('user')?.roles.includes('admin'));
+  for (const name of cleanTagNames(names)) {
+    const normalized = normalizeText(name);
+    const existing = await c.env.DB.prepare(`
+      SELECT t.id FROM tags t LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
+      WHERE t.status = 'active' AND (t.normalized_name = ? OR ta.normalized_alias = ?) LIMIT 1
+    `).bind(normalized, normalized).first<{ id: string }>();
+    const suffix = (await sha256Hex(normalized)).slice(0, 20);
+    const tagId = existing?.id ?? `tag_${suffix}`;
+    if (!existing && !canCreate) throw new Error('unknown_tag');
+    if (!existing) {
+      statements.push(c.env.DB.prepare(`
+        INSERT OR IGNORE INTO tags (id, slug, name, normalized_name, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(tagId, slugify(name), name, normalized, userId, timestamp, timestamp));
+      statements.push(c.env.DB.prepare(`
+        INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(`ta_${suffix}`, tagId, name, normalized, timestamp));
+    }
+    statements.push(c.env.DB.prepare(`
+      INSERT OR IGNORE INTO rule_tags (rule_id, tag_id, created_by, created_at) VALUES (?, ?, ?, ?)
+    `).bind(ruleId, tagId, userId, timestamp));
+  }
+  return statements;
+};
 
 interface GameRow {
   id: string;
@@ -171,6 +223,52 @@ app.get('/api/games/search', async (c) => {
     LIMIT 20
   `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
   return c.json({ games: (result.results ?? []).map(toGame) });
+});
+
+app.get('/api/search', async (c) => {
+  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
+  if (!rawQuery) return c.json({ games: [], rules: [] });
+  const query = normalizeText(rawQuery);
+  const [gamesResult, rulesResult] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, COUNT(DISTINCT r.id) AS rule_count
+      FROM games g LEFT JOIN game_aliases a ON a.game_id = g.id
+      LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+      WHERE g.merged_into_game_id IS NULL AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
+      GROUP BY g.id ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END, rule_count DESC, g.display_name LIMIT 8
+    `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>(),
+    c.env.DB.prepare(`
+      SELECT DISTINCT r.id rule_id, g.id game_id, g.display_name game_name, g.slug game_slug, r.statement
+      FROM rules r JOIN games g ON g.id = r.game_id
+      LEFT JOIN rule_tags rt ON rt.rule_id = r.id LEFT JOIN tags t ON t.id = rt.tag_id
+      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
+        AND (r.statement LIKE ? COLLATE NOCASE OR r.common_mistake LIKE ? COLLATE NOCASE
+          OR r.details LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
+      ORDER BY r.updated_at DESC LIMIT 10
+    `).bind(`%${rawQuery}%`, `%${rawQuery}%`, `%${rawQuery}%`, `%${rawQuery}%`).all<{
+      rule_id: string; game_id: string; game_name: string; game_slug: string; statement: string;
+    }>(),
+  ]);
+  return c.json({
+    games: (gamesResult.results ?? []).map(toGame),
+    rules: (rulesResult.results ?? []).map((row) => ({ ruleId: row.rule_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug, statement: row.statement })),
+  });
+});
+
+app.get('/api/tags', async (c) => {
+  const rawQuery = (c.req.query('q') ?? '').trim();
+  const query = normalizeText(rawQuery);
+  const result = await c.env.DB.prepare(`
+    SELECT t.id, t.slug, t.name, COUNT(rt.rule_id) usage_count
+    FROM tags t
+    LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
+    LEFT JOIN rule_tags rt ON rt.tag_id = t.id
+    WHERE t.status = 'active' AND (? = '' OR t.normalized_name LIKE ? OR ta.normalized_alias LIKE ?)
+    GROUP BY t.id
+    ORDER BY usage_count DESC, t.name
+    LIMIT 20
+  `).bind(query, `%${query}%`, `%${query}%`).all<{ id: string; slug: string; name: string; usage_count: number }>();
+  return c.json({ tags: (result.results ?? []).map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, usageCount: tag.usage_count })) });
 });
 
 app.get('/api/games/:identifier', async (c) => {
@@ -276,6 +374,7 @@ const submissionSchema = z.object({
     flowStage: z.enum(FLOW_STAGES).optional(),
     playerCountNote: z.string().trim().max(300).optional(),
     editionNote: z.string().trim().max(300).optional(),
+    tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   })).min(1).max(20),
 });
 
@@ -308,6 +407,12 @@ app.post('/api/submissions', requireRole('editor'), async (c) => {
     cleanOptional(parsed.data.privateNote, 2000) ?? null,
     timestamp,
   )];
+  if (parsed.data.sourceUrl) {
+    statements.push(c.env.DB.prepare(`
+      INSERT INTO submission_sources (id, submission_id, label, url, position, created_at)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `).bind(createId('source'), submissionId, cleanOptional(parsed.data.sourceLabel, 300) ?? null, parsed.data.sourceUrl, timestamp));
+  }
   for (const input of parsed.data.rules) {
     const ruleId = createId('rule');
     ruleIds.push(ruleId);
@@ -326,6 +431,7 @@ app.post('/api/submissions', requireRole('editor'), async (c) => {
       cleanOptional(input.editionNote, 300) ?? null,
       user.id, timestamp, timestamp,
     ));
+    statements.push(...await tagWriteStatements(c, ruleId, input.tagNames ?? [], user.id, timestamp, false));
   }
   statements.push(c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
   await c.env.DB.batch(statements);
@@ -342,13 +448,19 @@ const rulePatchSchema = z.object({
   isFeatured: z.boolean().optional(),
   featuredOrder: z.number().int().min(0).max(9999).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
+  tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  sourceLabel: z.string().trim().max(300).nullable().optional(),
+  sourceUrl: z.url().max(2000).nullable().optional().or(z.literal('')),
 });
 
 app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const parsed = rulePatchSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_rule', issues: parsed.error.issues }, 400);
-  const row = await c.env.DB.prepare('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>();
+  const row = await c.env.DB.prepare(`SELECT r.*, s.source_label, s.source_url FROM rules r JOIN submissions s ON s.id = r.submission_id WHERE r.id = ?`)
+    .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const existingTags = await c.env.DB.prepare(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
+    .bind(c.req.param('id')).all<{ name: string }>();
   const user = c.get('user')!;
   const timestamp = now();
   const updated = {
@@ -365,7 +477,7 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     c.env.DB.prepare(`
       INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(createId('rev'), c.req.param('id'), JSON.stringify(row), user.id, parsed.data.reason ?? 'edit', timestamp),
+    `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     c.env.DB.prepare(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
         player_count_note = ?, edition_note = ?, is_featured = ?, featured_order = ?,
@@ -375,6 +487,16 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
       updated.playerCountNote, updated.editionNote, updated.isFeatured,
       updated.featuredOrder, timestamp, c.req.param('id'),
     ),
+    ...(parsed.data.sourceLabel === undefined && parsed.data.sourceUrl === undefined ? [] : [c.env.DB.prepare(`
+      UPDATE submissions SET source_label = ?, source_url = ? WHERE id = ?
+    `).bind(
+      parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
+      parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
+      row.submission_id,
+    ), c.env.DB.prepare('DELETE FROM submission_sources WHERE submission_id = ?').bind(row.submission_id),
+    ...(parsed.data.sourceUrl ? [c.env.DB.prepare(`INSERT INTO submission_sources (id, submission_id, label, url, position, created_at) VALUES (?, ?, ?, ?, 0, ?)`)
+      .bind(createId('source'), row.submission_id, parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel, parsed.data.sourceUrl, timestamp)] : [])]),
+    ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
   ]);
   return c.json({ ok: true, updatedAt: timestamp });
 });
@@ -422,6 +544,7 @@ app.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), 
   if (!current || !revision) return c.json({ error: 'revision_not_found' }, 404);
   let previous: Record<string, unknown>;
   try { previous = JSON.parse(revision.previous_json) as Record<string, unknown>; } catch { return c.json({ error: 'invalid_revision' }, 409); }
+  const restoredTagNames = Array.isArray(previous.tag_names) ? previous.tag_names.filter((name): name is string => typeof name === 'string') : undefined;
   const timestamp = now();
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
@@ -435,6 +558,7 @@ app.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), 
       previous.is_featured ?? 0, previous.featured_order ?? null, previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),
+    ...(restoredTagNames ? await tagWriteStatements(c, c.req.param('id'), restoredTagNames, c.get('user')!.id, timestamp) : []),
   ]);
   return c.json({ ok: true });
 });

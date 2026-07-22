@@ -13,6 +13,7 @@ export const HomePage = () => {
   const [home, setHome] = useState<HomePayload>();
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<{ game?: { displayName: string }; rules: Array<unknown> }>();
+  const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   useEffect(() => {
     let active = true;
     void localDb.getCachedHome().then((cached) => { if (active && cached) setHome(cached.data); });
@@ -21,18 +22,23 @@ export const HomePage = () => {
       return localDb.cacheHome(data);
     }).catch(() => undefined);
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
+    void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
     return () => { active = false; };
   }, []);
   return <>
     <section className="hero">
-      <p className="eyebrow">桌邊的錯誤記憶庫</p>
-      <h1>這次玩對，<br />或是下次玩對。</h1>
-      <p className="hero-copy">不重寫整本說明書，只留下真正讓玩家踩過坑的規則。開桌前花半分鐘，少玩錯一整場。</p>
-      <div className="hero-actions">
-        {canEdit && <Link className="button primary" to="/add">記錄玩錯規則</Link>}
-        <a className="button secondary" href="#discover">先看看內容</a>
+      <div className="hero-inner"><div className="hero-main"><p className="eyebrow">桌邊的錯誤記憶庫</p>
+        <h1>這次玩對，<br />或是下次玩對。</h1>
+        <p className="hero-copy">不重寫整本說明書，只留下真正讓玩家踩過坑的規則。開桌前花半分鐘，少玩錯一整場。</p>
+        <div className="hero-actions">
+          {canEdit ? <Link className="button primary" to="/add">記錄玩錯規則</Link> : <Link className="button primary" to="/login">登入後記錄</Link>}
+          <a className="button secondary" href="#discover">瀏覽真實紀錄</a>
+        </div>
+        <div className="hero-search" id="home-search"><GameSearch includeRules value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} /></div>
+        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span>{recentGames.slice(0, 4).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>}
       </div>
-      <div className="hero-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} /></div>
+      {home?.featuredRules[0] && <aside className="hero-preview"><p className="eyebrow">一張卡就看懂</p><RuleCard rule={home.featuredRules[0]} gameName={home.featuredRules[0].gameName} gameHref={`/games/${home.featuredRules[0].gameSlug}`} /></aside>}
+      </div>
     </section>
     {draft && canEdit && <section className="draft-banner">
       <div><small>未完成草稿</small><strong>{draft.game?.displayName ?? '尚未選擇遊戲'}・{draft.rules.length} 個輸入格</strong></div>

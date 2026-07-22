@@ -5,7 +5,7 @@ export interface DraftRecord {
   id: string;
   game?: { id: string; slug: string; displayName: string };
   gameQuery: string;
-  rules: Array<{ id: string; statement: string; commonMistake?: string }>;
+  rules: Array<{ id: string; statement: string; commonMistake?: string; tagNames?: string[] }>;
   sourceLabel: string;
   sourceUrl: string;
   playedOn: string;
@@ -29,13 +29,14 @@ const database = openDB<RulesDb>('wrong-board-game-rules', 1, {
     recent.createIndex('viewedAt', 'viewedAt');
   },
 });
+const notifyPending = () => window.dispatchEvent(new CustomEvent('rules-pending-change'));
 
 export const localDb = {
   getDraft: async () => (await database).get('drafts', 'active'),
   saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await database).put('drafts', { ...draft, id: 'active' }),
   clearDraft: async () => (await database).delete('drafts', 'active'),
-  addPending: async (payload: SubmissionInput) => (await database).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }),
-  removePending: async (id: string) => (await database).delete('pending', id),
+  addPending: async (payload: SubmissionInput) => { const result = await (await database).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
+  removePending: async (id: string) => { await (await database).delete('pending', id); notifyPending(); },
   getPending: async () => (await database).getAll('pending'),
   cacheHome: async (data: HomePayload) => (await database).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => (await database).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
@@ -51,4 +52,3 @@ export const localDb = {
     return all.reverse().slice(0, 8);
   },
 };
-

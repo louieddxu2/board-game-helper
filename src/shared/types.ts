@@ -28,6 +28,21 @@ export interface GameSummary {
   updatedAt: number;
 }
 
+export interface RuleSearchResult {
+  ruleId: string;
+  gameId: string;
+  gameName: string;
+  gameSlug: string;
+  statement: string;
+}
+
+export interface TagSummary {
+  id: string;
+  slug: string;
+  name: string;
+  usageCount?: number;
+}
+
 export interface RuleCard {
   id: string;
   gameId: string;
@@ -39,8 +54,10 @@ export interface RuleCard {
   editionNote?: string;
   sourceLabel?: string;
   sourceUrl?: string;
+  sourceLinks: Array<{ label?: string; url: string }>;
   status: 'draft' | 'published' | 'hidden';
   isFeatured: boolean;
+  tags: TagSummary[];
   createdAt: number;
   updatedAt: number;
 }
@@ -72,6 +89,7 @@ export interface SubmissionRuleInput {
   flowStage?: FlowStage;
   playerCountNote?: string;
   editionNote?: string;
+  tagNames?: string[];
 }
 
 export interface SubmissionInput {
