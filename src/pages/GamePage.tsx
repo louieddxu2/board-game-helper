@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { AdSlot } from '../components/AdSlot';
 import { RuleCard } from '../components/RuleCard';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
@@ -70,7 +71,10 @@ export const GamePage = () => {
       {availableTags.length > 0 && <div className="tag-filter" aria-label="依主題篩選"><span>主題</span>{availableTags.map((tag) => <button type="button" aria-pressed={activeTag === tag} className={activeTag === tag ? 'tag-chip active' : 'tag-chip'} key={tag} onClick={() => setActiveTag((value) => value === tag ? '' : tag)}>#{tag}</button>)}</div>}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />)}
+      {visibleRules.map((rule, index) => <Fragment key={rule.id}>
+        <RuleCard rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+        {index === 3 && visibleRules.length > 5 && <AdSlot placement="game-rule-list" />}
+      </Fragment>)}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveStage('all'); setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
     </div>
     {game.aliases.length > 1 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
