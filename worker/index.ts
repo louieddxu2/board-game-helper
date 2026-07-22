@@ -1,0 +1,587 @@
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type RuleCard, type UserRole } from '../src/shared/types';
+import { requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
+import type { D1PreparedStatement, Env } from './env';
+import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, slugify } from './utils';
+
+const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+app.use('/api/*', sessionMiddleware);
+
+app.onError((error, c) => {
+  console.error('api_error', error);
+  const message = error instanceof Error ? error.message : '';
+  const safeCodes = new Set([
+    'google_auth_not_configured', 'invalid_google_identity', 'not_found',
+    'session_creation_failed', 'game_not_found', 'rule_not_found',
+  ]);
+  return c.json({ error: safeCodes.has(message) ? message : 'internal_error' }, 500);
+});
+
+app.use('/api/*', async (c, next) => {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !assertMutationOrigin(c)) {
+    return c.json({ error: 'forbidden_origin' }, 403);
+  }
+  await next();
+});
+
+app.get('/api/health', (c) => c.json({ ok: true, service: 'wrong-board-game-rules' }));
+
+const ruleSelect = `
+  SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
+    r.flow_stage, r.player_count_note, r.edition_note, r.status,
+    r.is_featured, r.created_at, r.updated_at,
+    s.source_label, s.source_url
+  FROM rules r JOIN submissions s ON s.id = r.submission_id
+`;
+
+const homeRuleSelect = ruleSelect.replace(
+  'FROM rules r',
+  ', g.display_name, g.slug FROM rules r',
+);
+
+interface RuleRow {
+  id: string;
+  game_id: string;
+  statement: string;
+  common_mistake: string | null;
+  details: string | null;
+  flow_stage: FlowStage;
+  player_count_note: string | null;
+  edition_note: string | null;
+  status: 'draft' | 'published' | 'hidden';
+  is_featured: number;
+  source_label: string | null;
+  source_url: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+const toRule = (row: RuleRow): RuleCard => ({
+  id: row.id,
+  gameId: row.game_id,
+  statement: row.statement,
+  commonMistake: row.common_mistake ?? undefined,
+  details: row.details ?? undefined,
+  flowStage: row.flow_stage,
+  playerCountNote: row.player_count_note ?? undefined,
+  editionNote: row.edition_note ?? undefined,
+  sourceLabel: row.source_label ?? undefined,
+  sourceUrl: row.source_url ?? undefined,
+  status: row.status,
+  isFeatured: Boolean(row.is_featured),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+interface GameRow {
+  id: string;
+  slug: string;
+  display_name: string;
+  english_name: string | null;
+  rule_count: number;
+  updated_at: number;
+}
+
+const toGame = (row: GameRow): GameSummary => ({
+  id: row.id,
+  slug: row.slug,
+  displayName: row.display_name,
+  englishName: row.english_name ?? undefined,
+  ruleCount: row.rule_count,
+  updatedAt: row.updated_at,
+});
+
+app.get('/api/session', (c) => c.json({
+  user: c.get('user') ?? null,
+  googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
+  localDevLogin: ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname),
+}));
+
+app.post('/api/auth/google', async (c) => {
+  const body = await c.req.json<{ credential?: unknown }>();
+  if (typeof body.credential !== 'string' || body.credential.length > 10_000) {
+    return c.json({ error: 'invalid_credential' }, 400);
+  }
+  const user = await signInWithGoogle(c, body.credential);
+  return c.json({ user });
+});
+
+app.post('/api/auth/dev', async (c) => {
+  const user = await signInAsLocalAdmin(c);
+  return c.json({ user });
+});
+
+app.post('/api/logout', async (c) => {
+  await signOut(c);
+  return c.json({ ok: true });
+});
+
+app.get('/api/home', async (c) => {
+  const [featuredResult, recentResult, popularResult] = await Promise.all([
+    c.env.DB.prepare(`${homeRuleSelect}
+      JOIN games g ON g.id = r.game_id
+      WHERE r.status = 'published' AND r.is_featured = 1 AND g.merged_into_game_id IS NULL
+      ORDER BY COALESCE(r.featured_order, 9999), r.updated_at DESC LIMIT 10
+    `).all<RuleRow & { display_name: string; slug: string }>(),
+    c.env.DB.prepare(`${homeRuleSelect}
+      JOIN games g ON g.id = r.game_id
+      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
+      ORDER BY r.created_at DESC LIMIT 10
+    `).all<RuleRow & { display_name: string; slug: string }>(),
+    c.env.DB.prepare(`
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+        COUNT(r.id) AS rule_count
+      FROM games g
+      LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+      WHERE g.merged_into_game_id IS NULL
+      GROUP BY g.id
+      HAVING rule_count > 0
+      ORDER BY rule_count DESC, g.updated_at DESC LIMIT 10
+    `).all<GameRow>(),
+  ]);
+  const withGame = (row: RuleRow & { display_name: string; slug: string }) => ({
+    ...toRule(row), gameName: row.display_name, gameSlug: row.slug,
+  });
+  const payload: HomePayload = {
+    generatedAt: now(),
+    featuredRules: (featuredResult.results ?? []).map(withGame),
+    recentRules: (recentResult.results ?? []).map(withGame),
+    popularGames: (popularResult.results ?? []).map(toGame),
+  };
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=900, stale-while-revalidate=3600');
+  return c.json(payload);
+});
+
+app.get('/api/games/search', async (c) => {
+  const rawQuery = (c.req.query('q') ?? '').trim();
+  if (rawQuery.length < 1) return c.json({ games: [] });
+  const query = normalizeText(rawQuery);
+  const result = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      COUNT(DISTINCT r.id) AS rule_count
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+    WHERE g.merged_into_game_id IS NULL
+      AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
+    GROUP BY g.id
+    ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END,
+      rule_count DESC, g.display_name
+    LIMIT 20
+  `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
+  return c.json({ games: (result.results ?? []).map(toGame) });
+});
+
+app.get('/api/games/:identifier', async (c) => {
+  const identifier = c.req.param('identifier');
+  const game = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      COUNT(r.id) AS rule_count
+    FROM games g LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+    WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
+    GROUP BY g.id
+  `).bind(identifier, identifier).first<GameRow>();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const [aliasesResult, rulesResult] = await Promise.all([
+    c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
+      .bind(game.id).all<{ alias: string }>(),
+    c.env.DB.prepare(`${ruleSelect}
+      WHERE r.game_id = ? AND r.status = 'published'
+      ORDER BY CASE r.flow_stage
+        WHEN 'setup' THEN 1 WHEN 'round' THEN 2 WHEN 'action' THEN 3
+        WHEN 'always' THEN 4 WHEN 'end_scoring' THEN 5
+        WHEN 'edition_player_count' THEN 6 ELSE 7 END,
+        r.created_at DESC
+    `).bind(game.id).all<RuleRow>(),
+  ]);
+  const detail: GameDetail = {
+    ...toGame(game),
+    aliases: (aliasesResult.results ?? []).map((row) => row.alias),
+    rules: (rulesResult.results ?? []).map(toRule),
+  };
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  return c.json({ game: detail });
+});
+
+const gameSchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
+  englishName: z.string().trim().max(120).optional(),
+  aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+});
+
+app.post('/api/games', requireRole('editor'), async (c) => {
+  const parsed = gameSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
+  const user = c.get('user')!;
+  const id = createId('game');
+  const timestamp = now();
+  const baseSlug = slugify(parsed.data.englishName || parsed.data.displayName);
+  const slugExists = await c.env.DB.prepare('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
+  const slug = slugExists ? `${baseSlug}-${id.slice(-6)}` : baseSlug;
+  const aliases = new Set([
+    parsed.data.displayName,
+    parsed.data.englishName,
+    ...(parsed.data.aliases ?? []),
+  ].filter((value): value is string => Boolean(value?.trim())));
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`
+      INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizeText(parsed.data.displayName), user.id, timestamp, timestamp),
+  ];
+  for (const alias of aliases) {
+    statements.push(c.env.DB.prepare(`
+      INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(createId('alias'), id, alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
+  }
+  await c.env.DB.batch(statements);
+  return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, updatedAt: timestamp } }, 201);
+});
+
+app.patch('/api/games/:id', requireRole('editor'), async (c) => {
+  const parsed = gameSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
+  const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+    .bind(c.req.param('id')).first();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const timestamp = now();
+  const aliases = new Set([parsed.data.displayName, parsed.data.englishName, ...(parsed.data.aliases ?? [])]
+    .filter((value): value is string => Boolean(value?.trim())));
+  const statements: D1PreparedStatement[] = [c.env.DB.prepare(`
+    UPDATE games SET display_name = ?, english_name = ?, normalized_name = ?, updated_at = ? WHERE id = ?
+  `).bind(parsed.data.displayName, cleanOptional(parsed.data.englishName, 120) ?? null, normalizeText(parsed.data.displayName), timestamp, c.req.param('id'))];
+  for (const alias of aliases) {
+    statements.push(c.env.DB.prepare(`
+      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(createId('alias'), c.req.param('id'), alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
+  }
+  await c.env.DB.batch(statements);
+  return c.json({ ok: true });
+});
+
+const submissionSchema = z.object({
+  gameId: z.string().min(1).max(100),
+  playedOn: z.string().max(20).optional(),
+  sourceLabel: z.string().trim().max(300).optional(),
+  sourceUrl: z.url().max(2000).optional().or(z.literal('')),
+  privateNote: z.string().trim().max(2000).optional(),
+  idempotencyKey: z.string().min(8).max(120),
+  rules: z.array(z.object({
+    statement: z.string().trim().min(1).max(2000),
+    commonMistake: z.string().trim().max(2000).optional(),
+    details: z.string().trim().max(5000).optional(),
+    flowStage: z.enum(FLOW_STAGES).optional(),
+    playerCountNote: z.string().trim().max(300).optional(),
+    editionNote: z.string().trim().max(300).optional(),
+  })).min(1).max(20),
+});
+
+app.post('/api/submissions', requireRole('editor'), async (c) => {
+  const contentLength = Number(c.req.header('content-length') ?? 0);
+  if (contentLength > 64 * 1024) return c.json({ error: 'request_too_large' }, 413);
+  const parsed = submissionSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_submission', issues: parsed.error.issues }, 400);
+  const user = c.get('user')!;
+  const existing = await c.env.DB.prepare(`
+    SELECT id FROM submissions WHERE author_id = ? AND idempotency_key = ?
+  `).bind(user.id, parsed.data.idempotencyKey).first<{ id: string }>();
+  if (existing) return c.json({ submissionId: existing.id, reused: true });
+  const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+    .bind(parsed.data.gameId).first();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const submissionId = createId('sub');
+  const timestamp = now();
+  const ruleIds: string[] = [];
+  const statements: D1PreparedStatement[] = [c.env.DB.prepare(`
+    INSERT INTO submissions (
+      id, game_id, author_id, idempotency_key, played_on, source_label,
+      source_url, private_note, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    submissionId, parsed.data.gameId, user.id, parsed.data.idempotencyKey,
+    cleanOptional(parsed.data.playedOn, 20) ?? null,
+    cleanOptional(parsed.data.sourceLabel, 300) ?? null,
+    cleanOptional(parsed.data.sourceUrl, 2000) ?? null,
+    cleanOptional(parsed.data.privateNote, 2000) ?? null,
+    timestamp,
+  )];
+  for (const input of parsed.data.rules) {
+    const ruleId = createId('rule');
+    ruleIds.push(ruleId);
+    statements.push(c.env.DB.prepare(`
+      INSERT INTO rules (
+        id, submission_id, game_id, statement, common_mistake, details,
+        flow_stage, player_count_note, edition_note, status, created_by,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+    `).bind(
+      ruleId, submissionId, parsed.data.gameId, input.statement,
+      cleanOptional(input.commonMistake, 2000) ?? null,
+      cleanOptional(input.details, 5000) ?? null,
+      input.flowStage ?? 'uncategorized',
+      cleanOptional(input.playerCountNote, 300) ?? null,
+      cleanOptional(input.editionNote, 300) ?? null,
+      user.id, timestamp, timestamp,
+    ));
+  }
+  statements.push(c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
+  await c.env.DB.batch(statements);
+  return c.json({ submissionId, ruleIds, reused: false }, 201);
+});
+
+const rulePatchSchema = z.object({
+  statement: z.string().trim().min(1).max(2000).optional(),
+  commonMistake: z.string().trim().max(2000).nullable().optional(),
+  details: z.string().trim().max(5000).nullable().optional(),
+  flowStage: z.enum(FLOW_STAGES).optional(),
+  playerCountNote: z.string().trim().max(300).nullable().optional(),
+  editionNote: z.string().trim().max(300).nullable().optional(),
+  isFeatured: z.boolean().optional(),
+  featuredOrder: z.number().int().min(0).max(9999).nullable().optional(),
+  reason: z.string().trim().max(300).optional(),
+});
+
+app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
+  const parsed = rulePatchSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_rule', issues: parsed.error.issues }, 400);
+  const row = await c.env.DB.prepare('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>();
+  if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const user = c.get('user')!;
+  const timestamp = now();
+  const updated = {
+    statement: parsed.data.statement ?? row.statement,
+    commonMistake: parsed.data.commonMistake === undefined ? row.common_mistake : parsed.data.commonMistake,
+    details: parsed.data.details === undefined ? row.details : parsed.data.details,
+    flowStage: parsed.data.flowStage ?? row.flow_stage,
+    playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
+    editionNote: parsed.data.editionNote === undefined ? row.edition_note : parsed.data.editionNote,
+    isFeatured: parsed.data.isFeatured === undefined ? row.is_featured : (parsed.data.isFeatured ? 1 : 0),
+    featuredOrder: parsed.data.featuredOrder === undefined ? row.featured_order : parsed.data.featuredOrder,
+  };
+  await c.env.DB.batch([
+    c.env.DB.prepare(`
+      INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(createId('rev'), c.req.param('id'), JSON.stringify(row), user.id, parsed.data.reason ?? 'edit', timestamp),
+    c.env.DB.prepare(`
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
+        player_count_note = ?, edition_note = ?, is_featured = ?, featured_order = ?,
+        updated_at = ? WHERE id = ?
+    `).bind(
+      updated.statement, updated.commonMistake, updated.details, updated.flowStage,
+      updated.playerCountNote, updated.editionNote, updated.isFeatured,
+      updated.featuredOrder, timestamp, c.req.param('id'),
+    ),
+  ]);
+  return c.json({ ok: true, updatedAt: timestamp });
+});
+
+const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published') => {
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare('SELECT * FROM rules WHERE id = ?').bind(id).first<Record<string, unknown>>();
+  if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const user = c.get('user')!;
+  const timestamp = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`
+      INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(createId('rev'), id, JSON.stringify(row), user.id, status === 'hidden' ? 'hide' : 'restore', timestamp),
+    c.env.DB.prepare(`
+      UPDATE rules SET status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
+    `).bind(status, status === 'hidden' ? timestamp : null, status === 'hidden' ? user.id : null, timestamp, id),
+  ]);
+  return c.json({ ok: true });
+};
+
+app.post('/api/rules/:id/hide', requireRole('editor'), (c) => changeRuleVisibility(c, 'hidden'));
+app.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeRuleVisibility(c, 'published'));
+
+app.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
+  const result = await c.env.DB.prepare(`
+    SELECT rr.id, rr.previous_json, rr.reason, rr.created_at, u.email editor_email
+    FROM rule_revisions rr LEFT JOIN users u ON u.id = rr.edited_by
+    WHERE rr.rule_id = ? ORDER BY rr.created_at DESC LIMIT 30
+  `).bind(c.req.param('id')).all<{ id: string; previous_json: string; reason: string | null; created_at: number; editor_email: string | null }>();
+  return c.json({ revisions: (result.results ?? []).map((row) => {
+    let previousStatement = '先前版本';
+    try { previousStatement = String((JSON.parse(row.previous_json) as Record<string, unknown>).statement ?? previousStatement); } catch { /* retain fallback */ }
+    return { id: row.id, reason: row.reason ?? 'edit', createdAt: row.created_at, editorEmail: row.editor_email ?? undefined, previousStatement };
+  }) });
+});
+
+app.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), async (c) => {
+  const [current, revision] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>(),
+    c.env.DB.prepare('SELECT previous_json FROM rule_revisions WHERE id = ? AND rule_id = ?')
+      .bind(c.req.param('revisionId'), c.req.param('id')).first<{ previous_json: string }>(),
+  ]);
+  if (!current || !revision) return c.json({ error: 'revision_not_found' }, 404);
+  let previous: Record<string, unknown>;
+  try { previous = JSON.parse(revision.previous_json) as Record<string, unknown>; } catch { return c.json({ error: 'invalid_revision' }, 409); }
+  const timestamp = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
+      .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), c.get('user')!.id, timestamp),
+    c.env.DB.prepare(`
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_count_note = ?,
+        edition_note = ?, status = ?, is_featured = ?, featured_order = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
+    `).bind(
+      previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
+      previous.player_count_note ?? null, previous.edition_note ?? null, previous.status ?? 'published',
+      previous.is_featured ?? 0, previous.featured_order ?? null, previous.hidden_at ?? null,
+      previous.hidden_by ?? null, timestamp, c.req.param('id'),
+    ),
+  ]);
+  return c.json({ ok: true });
+});
+
+const mergeSchema = z.object({ targetGameId: z.string().min(1), reason: z.string().max(300).optional() });
+app.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
+  const parsed = mergeSchema.safeParse(await c.req.json());
+  if (!parsed.success || parsed.data.targetGameId === c.req.param('id')) return c.json({ error: 'invalid_merge' }, 400);
+  const [source, target] = await Promise.all([
+    c.env.DB.prepare('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<Record<string, unknown>>(),
+    c.env.DB.prepare('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
+  ]);
+  if (!source || !target) return c.json({ error: 'game_not_found' }, 404);
+  const timestamp = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(`
+      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+      SELECT ?, ?, display_name, normalized_name, 'legacy', ? FROM games WHERE id = ?
+    `).bind(createId('alias'), parsed.data.targetGameId, timestamp, c.req.param('id')),
+    c.env.DB.prepare(`
+      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+      SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
+    `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    c.env.DB.prepare('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
+    c.env.DB.prepare('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    c.env.DB.prepare('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
+  ]);
+  return c.json({ ok: true, targetGameId: parsed.data.targetGameId });
+});
+
+app.get('/api/admin/editors', requireRole('admin'), async (c) => {
+  const [users, invites] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT u.id, u.email, u.display_name, ur.role, ur.granted_at, ur.revoked_at
+      FROM user_roles ur JOIN users u ON u.id = ur.user_id
+      ORDER BY ur.revoked_at IS NOT NULL, ur.granted_at DESC
+    `).all(),
+    c.env.DB.prepare(`
+      SELECT id, email_normalized email, role, invited_at, claimed_at, revoked_at
+      FROM editor_invitations ORDER BY invited_at DESC
+    `).all(),
+  ]);
+  return c.json({ users: users.results ?? [], invitations: invites.results ?? [] });
+});
+
+const inviteSchema = z.object({ email: z.email(), role: z.enum(['admin', 'editor']) });
+app.post('/api/admin/editors', requireRole('admin'), async (c) => {
+  const parsed = inviteSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_invitation' }, 400);
+  const email = normalizeEmail(parsed.data.email);
+  const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email_normalized = ?').bind(email).first<{ id: string }>();
+  const timestamp = now();
+  if (existing) {
+    await c.env.DB.prepare(`
+      INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+      VALUES (?, ?, ?, ?, NULL)
+      ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_by = excluded.granted_by, granted_at = excluded.granted_at
+    `).bind(existing.id, parsed.data.role, c.get('user')!.id, timestamp).run();
+    return c.json({ ok: true, userId: existing.id });
+  }
+  const id = createId('invite');
+  await c.env.DB.prepare(`
+    INSERT INTO editor_invitations (id, email_normalized, role, invited_by, invited_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(id, email, parsed.data.role, c.get('user')!.id, timestamp).run();
+  return c.json({ ok: true, invitationId: id }, 201);
+});
+
+app.delete('/api/admin/editors/:userId/:role', requireRole('admin'), async (c) => {
+  const role = c.req.param('role') as UserRole;
+  if (!['admin', 'editor'].includes(role)) return c.json({ error: 'invalid_role' }, 400);
+  if (c.req.param('userId') === c.get('user')!.id && role === 'admin') {
+    return c.json({ error: 'cannot_revoke_own_admin' }, 409);
+  }
+  await c.env.DB.prepare(`
+    UPDATE user_roles SET revoked_at = ? WHERE user_id = ? AND role = ?
+  `).bind(now(), c.req.param('userId'), role).run();
+  return c.json({ ok: true });
+});
+
+app.delete('/api/admin/invitations/:id', requireRole('admin'), async (c) => {
+  await c.env.DB.prepare(`UPDATE editor_invitations SET revoked_at = ? WHERE id = ? AND claimed_at IS NULL`)
+    .bind(now(), c.req.param('id')).run();
+  return c.json({ ok: true });
+});
+
+app.get('/api/admin/imports', requireRole('editor'), async (c) => {
+  const status = c.req.query('status') ?? 'pending';
+  const result = await c.env.DB.prepare(`
+    SELECT * FROM legacy_import_rows WHERE status = ? ORDER BY source_row_number LIMIT 100
+  `).bind(status).all();
+  return c.json({ rows: result.results ?? [] });
+});
+
+const importConfirmSchema = z.object({
+  rules: z.array(z.string().trim().min(1).max(2000)).min(1).max(20).optional(),
+  gameId: z.string().min(1).optional(),
+});
+
+app.post('/api/admin/imports/:id/confirm', requireRole('editor'), async (c) => {
+  const parsed = importConfirmSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_import_confirmation' }, 400);
+  const row = await c.env.DB.prepare(`
+    SELECT * FROM legacy_import_rows WHERE id = ? AND status = 'pending'
+  `).bind(c.req.param('id')).first<{
+    id: string; matched_game_id: string | null; proposed_rules_json: string;
+    raw_source_label: string | null; raw_source_url: string | null; raw_timestamp: string | null;
+    raw_category: string | null;
+  }>();
+  if (!row) return c.json({ error: 'import_row_not_found' }, 404);
+  const gameId = parsed.data.gameId ?? row.matched_game_id;
+  if (!gameId) return c.json({ error: 'game_required' }, 400);
+  const rules = parsed.data.rules ?? JSON.parse(row.proposed_rules_json) as string[];
+  const timestamp = now();
+  const submissionId = createId('sub');
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`
+      INSERT INTO submissions (id, game_id, author_id, played_on, source_label, source_url, legacy_import_row_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      submissionId, gameId, c.get('user')!.id, row.raw_timestamp?.slice(0, 10) ?? null,
+      row.raw_source_label ?? null, row.raw_source_url?.match(/https?:\/\/[^\s]+/)?.[0] ?? null,
+      row.id, timestamp,
+    ),
+  ];
+  for (const statement of rules) {
+    statements.push(c.env.DB.prepare(`
+      INSERT INTO rules (id, submission_id, game_id, statement, flow_stage, status, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'published', ?, ?, ?)
+    `).bind(createId('rule'), submissionId, gameId, statement, row.raw_category?.includes('起始') ? 'setup' : row.raw_category?.includes('計分') ? 'end_scoring' : 'uncategorized', c.get('user')!.id, timestamp, timestamp));
+  }
+  statements.push(c.env.DB.prepare(`UPDATE legacy_import_rows SET status = 'imported', matched_game_id = ? WHERE id = ?`).bind(gameId, row.id));
+  await c.env.DB.batch(statements);
+  return c.json({ ok: true, importedRules: rules.length });
+});
+
+app.post('/api/admin/imports/:id/skip', requireRole('editor'), async (c) => {
+  await c.env.DB.prepare(`UPDATE legacy_import_rows SET status = 'skipped' WHERE id = ? AND status = 'pending'`).bind(c.req.param('id')).run();
+  return c.json({ ok: true });
+});
+
+app.get('/api/admin/hidden-rules', requireRole('editor'), async (c) => {
+  const result = await c.env.DB.prepare(`${ruleSelect}
+    WHERE r.status = 'hidden' ORDER BY r.updated_at DESC LIMIT 100
+  `).all<RuleRow>();
+  return c.json({ rules: (result.results ?? []).map(toRule) });
+});
+
+export default app;

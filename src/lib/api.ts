@@ -1,0 +1,64 @@
+import type { GameDetail, GameSummary, HomePayload, RuleRevision, SessionUser, SubmissionInput } from '../shared/types';
+
+export class ApiError extends Error {
+  constructor(public readonly code: string, public readonly status: number) {
+    super(code);
+  }
+}
+
+const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const response = await fetch(path, {
+    ...init,
+    credentials: 'same-origin',
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...init?.headers,
+    },
+  });
+  const body = await response.json().catch(() => ({})) as T & { error?: string };
+  if (!response.ok) throw new ApiError(body.error ?? 'request_failed', response.status);
+  return body;
+};
+
+export const api = {
+  session: () => request<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session'),
+  googleLogin: (credential: string) => request<{ user: SessionUser }>('/api/auth/google', {
+    method: 'POST', body: JSON.stringify({ credential }),
+  }),
+  devLogin: () => request<{ user: SessionUser }>('/api/auth/dev', { method: 'POST', body: '{}' }),
+  logout: () => request<{ ok: true }>('/api/logout', { method: 'POST', body: '{}' }),
+  home: () => request<HomePayload>('/api/home'),
+  searchGames: (query: string) => request<{ games: GameSummary[] }>(`/api/games/search?q=${encodeURIComponent(query)}`),
+  game: (identifier: string, fresh = false) => request<{ game: GameDetail }>(`/api/games/${encodeURIComponent(identifier)}`, fresh ? { cache: 'no-store' } : undefined),
+  createGame: (input: { displayName: string; englishName?: string; aliases?: string[] }) => request<{ game: GameSummary }>('/api/games', {
+    method: 'POST', body: JSON.stringify(input),
+  }),
+  patchGame: (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => request<{ ok: true }>(`/api/games/${id}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }),
+  submit: (input: SubmissionInput) => request<{ submissionId: string; ruleIds?: string[]; reused: boolean }>('/api/submissions', {
+    method: 'POST', body: JSON.stringify(input),
+  }),
+  patchRule: (id: string, input: Record<string, unknown>) => request<{ ok: true }>(`/api/rules/${id}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }),
+  hideRule: (id: string) => request<{ ok: true }>(`/api/rules/${id}/hide`, { method: 'POST', body: '{}' }),
+  restoreRule: (id: string) => request<{ ok: true }>(`/api/rules/${id}/restore`, { method: 'POST', body: '{}' }),
+  ruleRevisions: (id: string) => request<{ revisions: RuleRevision[] }>(`/api/rules/${id}/revisions`),
+  restoreRevision: (ruleId: string, revisionId: string) => request<{ ok: true }>(`/api/rules/${ruleId}/revisions/${revisionId}/restore`, { method: 'POST', body: '{}' }),
+  mergeGame: (id: string, targetGameId: string) => request<{ ok: true }>(`/api/games/${id}/merge`, {
+    method: 'POST', body: JSON.stringify({ targetGameId }),
+  }),
+  editors: () => request<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>('/api/admin/editors'),
+  inviteEditor: (email: string, role: 'admin' | 'editor') => request<{ ok: true }>('/api/admin/editors', {
+    method: 'POST', body: JSON.stringify({ email, role }),
+  }),
+  revokeEditor: (userId: string, role: 'admin' | 'editor') => request<{ ok: true }>(`/api/admin/editors/${userId}/${role}`, { method: 'DELETE', body: '{}' }),
+  revokeInvitation: (id: string) => request<{ ok: true }>(`/api/admin/invitations/${id}`, { method: 'DELETE', body: '{}' }),
+  importRows: (status = 'pending') => request<{ rows: Array<Record<string, unknown>> }>(`/api/admin/imports?status=${status}`),
+  confirmImport: (id: string, rules?: string[], gameId?: string) => request<{ ok: true; importedRules: number }>(`/api/admin/imports/${id}/confirm`, {
+    method: 'POST', body: JSON.stringify({ rules, gameId }),
+  }),
+  skipImport: (id: string) => request<{ ok: true }>(`/api/admin/imports/${id}/skip`, { method: 'POST', body: '{}' }),
+  hiddenRules: () => request<{ rules: import('../shared/types').RuleCard[] }>('/api/admin/hidden-rules'),
+};

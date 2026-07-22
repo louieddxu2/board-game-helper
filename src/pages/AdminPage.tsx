@@ -1,0 +1,59 @@
+import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { GameSearch } from '../components/GameSearch';
+import { useSession } from '../context/SessionContext';
+import { api } from '../lib/api';
+import type { GameSummary, RuleCard } from '../shared/types';
+
+export const AdminPage = () => {
+  const { isAdmin, loading } = useSession();
+  const [editors, setEditors] = useState<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>({ users: [], invitations: [] });
+  const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
+  const [hiddenRules, setHiddenRules] = useState<RuleCard[]>([]);
+  const [sourceGame, setSourceGame] = useState<GameSummary>();
+  const [targetGame, setTargetGame] = useState<GameSummary>();
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [targetQuery, setTargetQuery] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'editor' | 'admin'>('editor');
+  const [message, setMessage] = useState('');
+  const load = async () => {
+    const [editorData, importData, hiddenData] = await Promise.all([api.editors(), api.importRows(), api.hiddenRules()]);
+    setEditors(editorData); setImportRows(importData.rows); setHiddenRules(hiddenData.rules);
+  };
+  useEffect(() => { if (isAdmin) void load(); }, [isAdmin]);
+  if (!loading && !isAdmin) return <Navigate to="/" replace />;
+  return <section className="admin-page">
+    <header><p className="eyebrow">管理與校稿</p><h1>內容工作臺</h1><p>管理編輯者、處理舊資料拆分與名稱整理。</p></header>
+    {message && <div className="success-banner">{message}</div>}
+    <div className="admin-grid">
+      <section className="admin-card"><h2>編輯者</h2>
+        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role).then(() => { setEmail(''); setMessage('已建立編輯者授權。'); return load(); }); }}>
+          <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
+          <label>角色<select value={role} onChange={(event) => setRole(event.target.value as 'editor' | 'admin')}><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
+          <button className="button primary" type="submit">新增／邀請</button>
+        </form>
+        <div className="admin-list">{editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`}><span><strong>{String(row.email)}</strong><small>{String(row.role)}{row.revoked_at ? '・已撤銷' : ''}</small></span>
+          {!row.revoked_at && <button type="button" className="danger-link" onClick={() => { if (window.confirm(`撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`)) void api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); }}>撤銷</button>}</div>)}
+          {editors.invitations.map((row) => <div key={String(row.id)}><span><strong>{String(row.email)}</strong><small>{String(row.role)}・{row.revoked_at ? '已撤銷' : '等待首次登入'}</small></span>
+            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void api.revokeInvitation(String(row.id)).then(load)}>取消</button>}</div>)}</div>
+      </section>
+      <section className="admin-card import-card"><div className="list-heading"><h2>舊資料待確認</h2><span>{importRows.length} 筆</span></div>
+        {importRows.length === 0 && <p className="muted">目前沒有 staged 資料。執行匯入指令後會在這裡出現。</p>}
+        {importRows.slice(0, 20).map((row) => <article key={String(row.id)}><strong>{String(row.raw_game_name)}</strong><p>{String(row.raw_rule_text)}</p><small>原始第 {String(row.source_row_number)} 列・宣告 {String(row.declared_rule_count ?? '?')} 條</small>
+          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(() => { setMessage('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
+            <button type="button" className="danger-link" onClick={() => void api.skipImport(String(row.id)).then(load)}>略過</button></div></article>)}
+      </section>
+      <section className="admin-card"><h2>合併重複遊戲</h2><p className="muted">來源遊戲的規則與別名會移到目標遊戲，原名稱仍可搜尋。</p>
+        <GameSearch value={sourceQuery} selectedId={sourceGame?.id} onChange={(value) => { setSourceQuery(value); if (sourceGame && value !== sourceGame.displayName) setSourceGame(undefined); }} onSelect={(game) => { setSourceGame(game); setSourceQuery(game.displayName); }} />
+        <div className="merge-arrow">↓ 合併到</div>
+        <GameSearch value={targetQuery} selectedId={targetGame?.id} onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
+        <button type="button" className="button primary full-button" disabled={!sourceGame || !targetGame || sourceGame.id === targetGame.id}
+          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(() => { setMessage('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
+      </section>
+      <section className="admin-card"><div className="list-heading"><h2>已隱藏規則</h2><span>{hiddenRules.length} 條</span></div>
+        <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(load)}>恢復</button></div>)}</div>
+      </section>
+    </div>
+  </section>;
+};

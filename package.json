@@ -1,0 +1,47 @@
+{
+  "name": "wrong-board-game-rules",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env XDG_CONFIG_HOME=.wrangler/xdg vite",
+    "build": "cross-env XDG_CONFIG_HOME=.wrangler/xdg vite build",
+    "preview": "cross-env XDG_CONFIG_HOME=.wrangler/xdg vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-local --local",
+    "db:migrate:remote": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-prod --remote",
+    "db:seed:local": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 execute board-game-rules-local --local --file=seed.sql",
+    "import:legacy": "tsx scripts/import-legacy.ts",
+    "deploy": "npm run build && cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.9.2",
+    "idb": "^8.0.3",
+    "jose": "^6.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.8.0",
+    "zod": "^4.0.17"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.12.3",
+    "@cloudflare/workers-types": "latest",
+    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.2.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "cross-env": "^10.1.0",
+    "jsdom": "^26.1.0",
+    "read-excel-file": "^9.3.4",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.30.0"
+  }
+}
