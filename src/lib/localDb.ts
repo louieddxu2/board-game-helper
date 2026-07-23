@@ -40,12 +40,14 @@ export const localDb = {
   getPending: async () => (await database).getAll('pending'),
   cacheHome: async (data: HomePayload) => (await database).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => (await database).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
+  invalidateHome: async () => (await database).delete('cache', 'home'),
   cacheGame: async (game: GameDetail) => {
     const db = await database;
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
   getCachedGame: async (slug: string) => (await database).get('cache', `game:${slug}`) as Promise<{ data: GameDetail } | undefined>,
+  invalidateGame: async (slug: string) => (await database).delete('cache', `game:${slug}`),
   recentGames: async () => {
     const db = await database;
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');

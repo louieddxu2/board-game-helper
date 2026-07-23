@@ -17,10 +17,10 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/home')) {
     event.respondWith(caches.open(PUBLIC_CACHE).then(async (cache) => {
-      const cached = await cache.match(request);
-      const network = fetch(request).then((response) => { if (response.ok) cache.put(request, response.clone()); return response; })
-        .catch(() => cached || Response.error());
-      return cached || network;
+      return fetch(request).then((response) => {
+        if (response.ok) cache.put(request, response.clone());
+        return response;
+      }).catch(() => cache.match(request).then((cached) => cached || Response.error()));
     }));
     return;
   }

@@ -31,7 +31,7 @@ export const api = {
   searchGames: (query: string) => request<{ games: GameSummary[] }>(`/api/games/search?q=${encodeURIComponent(query)}`),
   search: (query: string) => request<{ games: GameSummary[]; rules: RuleSearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`),
   tags: (query = '') => request<{ tags: TagSummary[] }>(`/api/tags?q=${encodeURIComponent(query)}`),
-  game: (identifier: string, fresh = false) => request<{ game: GameDetail }>(`/api/games/${encodeURIComponent(identifier)}`, fresh ? { cache: 'no-store' } : undefined),
+  game: (identifier: string, fresh = false) => request<{ game: GameDetail }>(`/api/games/${encodeURIComponent(identifier)}${fresh ? '?fresh=1' : ''}`, fresh ? { cache: 'no-store' } : undefined),
   createGame: (input: { displayName: string; englishName?: string; aliases?: string[] }) => request<{ game: GameSummary }>('/api/games', {
     method: 'POST', body: JSON.stringify(input),
   }),

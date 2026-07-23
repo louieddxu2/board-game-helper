@@ -99,7 +99,10 @@ export const AddPage = () => {
     await localDb.addPending(payload);
     try {
       await api.submit(payload);
-      await Promise.all([localDb.removePending(payload.idempotencyKey), localDb.clearDraft()]);
+      await Promise.all([
+        localDb.removePending(payload.idempotencyKey), localDb.clearDraft(),
+        localDb.invalidateHome(), localDb.invalidateGame(game.slug),
+      ]);
       navigate(`/games/${game.slug}`, { state: { justAdded: validRules.length } });
     } catch (caught) {
       setError(caught instanceof ApiError && caught.status === 401 ? '登入已過期，草稿已保留，請重新登入。' : '尚未成功同步；內容已保存在這台裝置。');

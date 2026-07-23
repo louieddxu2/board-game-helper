@@ -69,6 +69,12 @@ export const sessionMiddleware: MiddlewareHandler<{
   Bindings: Env;
   Variables: AppVariables;
 }> = async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  const isPublicRead = c.req.method === 'GET' && (
+    ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/games/search'].includes(path)
+    || /^\/api\/games\/[^/]+$/.test(path)
+  );
+  if (isPublicRead) { await next(); return; }
   const token = getCookie(c, SESSION_COOKIE);
   if (token) c.set('user', await sessionUser(c.env.DB, token));
   await next();

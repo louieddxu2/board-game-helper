@@ -36,7 +36,7 @@ export const GamePage = () => {
     let active = true;
     setLoading(true);
     void localDb.getCachedGame(identifier).then((cached) => { if (active && cached) setGame(cached.data); });
-    api.game(identifier).then((response) => {
+    api.game(identifier, Boolean((location.state as { justAdded?: number } | null)?.justAdded)).then((response) => {
       if (active) setGame(response.game);
       return localDb.cacheGame(response.game);
     }).finally(() => { if (active) setLoading(false); });

@@ -71,9 +71,20 @@ npm run import:legacy -- --apply
 
 - 首頁一次最多回傳 10 條精選、10 條最新與 10 款熱門遊戲，不會下載整個 D1。
 - 首頁快照存入 IndexedDB；五分鐘內再次開啟不發出首頁 API 請求，逾時後先顯示舊內容再背景更新。
-- Service Worker 保存首頁與看過的遊戲頁，公開 API 另提供瀏覽器與 Cloudflare 邊緣快取標頭。
+- Service Worker 保存首頁與看過的遊戲頁；需要更新時採網路優先，離線才回傳舊內容，避免多層 stale-while-revalidate 讓舊資料被反覆延長。
 - 遊戲搜尋停字 350ms 後才查詢，結果限制 20 款；首頁全文搜尋限制 8 款遊戲與 10 條規則。相同查詢會優先使用目前頁面生命週期內的記憶體快取。
 - 遊戲名稱同時比對正式名稱與別名；建立遊戲時後端會再次做完全相同比對，避免略過介面時產生重複主檔。
+- 首頁、搜尋、標籤與遊戲頁會寫入 Worker Cache API；同一 Cloudflare 資料中心的訪客共用結果，快取命中時不讀取 D1。
+- 公開 API 每個來源每分鐘最多 120 次，寫入 API 每個來源每分鐘最多 30 次；超過時回傳 `429` 與 `Retry-After`。
+- Worker Cache 與 Rate Limiting 都以 Cloudflare 資料中心為範圍，不是全球精確計數；它們用來降低正常重複讀取並攔截大量濫用，不作為計費或安全身分判斷依據。
+
+## 爬蟲與濫用防護
+
+- `robots.txt` 允許搜尋引擎索引公開內容頁，但禁止索引 API、登入、輸入與管理頁，並拒絕數個常見 AI 訓練爬蟲。
+- 所有 API 回應帶有 `X-Robots-Tag: noindex, nofollow`；robots 規則是自願遵守，不能單獨阻止惡意爬蟲。
+- 正式網域啟用後，應在 Cloudflare Security Settings 開啟免費的 Bot Fight Mode 與 Block AI Bots。前者可能有誤判，啟用後需查看 Security Events。
+- 目前只有授權編輯者能寫入，另有 Worker Rate Limiting。未來若開放一般使用者投稿，再於投稿表單加入 Turnstile，不提前增加目前的輸入摩擦。
+- 公開內容本質上無法保證不被複製；防護目標是讓大量抓取被限速或挑戰，並讓正常搜尋引擎與讀者仍能使用網站。
 
 ## 尚未啟用
 

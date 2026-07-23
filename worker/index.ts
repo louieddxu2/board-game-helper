@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type RuleCard, type UserRole } from '../src/shared/types';
 import { requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
@@ -6,7 +6,52 @@ import type { D1PreparedStatement, Env } from './env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify } from './utils';
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+type AppMiddleware = MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }>;
+const PUBLIC_CACHE_NAME = 'wrong-board-game-rules-public-v1';
+const publicCache = (): AppMiddleware => async (c, next) => {
+  if (c.req.method !== 'GET') { await next(); return; }
+  const requestCacheControl = c.req.header('Cache-Control') ?? '';
+  const bypass = c.req.query('fresh') === '1' || /no-cache|no-store/.test(requestCacheControl);
+  if (bypass || !globalThis.caches) { await next(); return; }
+  const cache = await caches.open(PUBLIC_CACHE_NAME);
+  const key = c.req.url;
+  const cached = await cache.match(key);
+  if (cached) {
+    const headers = new Headers(cached.headers);
+    headers.set('X-Edge-Cache', 'HIT');
+    return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers });
+  }
+  await next();
+  if (!c.res.ok || c.res.headers.has('Set-Cookie')) return;
+  c.header('X-Edge-Cache', 'MISS');
+  c.executionCtx.waitUntil(cache.put(key, c.res.clone()));
+};
+
+app.use('/api/*', async (c, next) => {
+  const isRead = ['GET', 'HEAD'].includes(c.req.method);
+  const limiter = isRead ? c.env.PUBLIC_RATE_LIMITER : c.env.WRITE_RATE_LIMITER;
+  const client = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'local';
+  const scope = isRead ? 'read' : 'write';
+  const { success } = await limiter.limit({ key: `${scope}:${client}` });
+  if (!success) {
+    c.header('Retry-After', '60');
+    c.header('Cache-Control', 'no-store');
+    return c.json({ error: 'rate_limited' }, 429);
+  }
+  await next();
+});
+
+app.use('/api/home', publicCache());
+app.use('/api/search', publicCache());
+app.use('/api/tags', publicCache());
+app.use('/api/games/:identifier', publicCache());
 app.use('/api/*', sessionMiddleware);
+
+app.use('/api/*', async (c, next) => {
+  await next();
+  c.header('X-Robots-Tag', 'noindex, nofollow');
+});
 
 app.onError((error, c) => {
   console.error('api_error', error);
@@ -206,7 +251,7 @@ app.get('/api/home', async (c) => {
 });
 
 app.get('/api/games/search', async (c) => {
-  const rawQuery = (c.req.query('q') ?? '').trim();
+  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (rawQuery.length < 1) return c.json({ games: [] });
   const query = normalizeText(rawQuery);
   const result = await c.env.DB.prepare(`
@@ -258,7 +303,7 @@ app.get('/api/search', async (c) => {
 });
 
 app.get('/api/tags', async (c) => {
-  const rawQuery = (c.req.query('q') ?? '').trim();
+  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   const query = normalizeText(rawQuery);
   const result = await c.env.DB.prepare(`
     SELECT t.id, t.slug, t.name, COUNT(rt.rule_id) usage_count

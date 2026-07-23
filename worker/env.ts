@@ -16,8 +16,14 @@ export interface D1Database {
   batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
 }
 
+export interface RateLimitBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   DB: D1Database;
+  PUBLIC_RATE_LIMITER: RateLimitBinding;
+  WRITE_RATE_LIMITER: RateLimitBinding;
   APP_ORIGIN?: string;
   GOOGLE_CLIENT_ID?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
