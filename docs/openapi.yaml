@@ -5,6 +5,16 @@ info:
 servers:
   - url: https://rules.example.com
 paths:
+  /api/export/public:
+    get:
+      summary: 下載全部公開遊戲與規則快照
+      parameters:
+        - in: header
+          name: If-None-Match
+          schema: { type: string }
+      responses:
+        "200": { description: 公開 JSON 快照，含 ETag }
+        "304": { description: 本機快照仍是最新版 }
   /api/games/resolve:
     get:
       summary: 以正式名稱或別名解析遊戲

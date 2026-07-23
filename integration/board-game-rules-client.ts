@@ -37,6 +37,14 @@ export interface RulesGameDetail extends RulesGameSummary {
   }>;
 }
 
+export interface RulesPublicSnapshot {
+  schemaVersion: 1;
+  datasetVersion: string;
+  updatedAt: number;
+  counts: { games: number; rules: number; tags: number };
+  games: RulesGameDetail[];
+}
+
 export interface RulesSubmissionInput {
   gameId: string;
   idempotencyKey: string;
@@ -117,6 +125,14 @@ export class BoardGameRulesClient {
     return this.request(`/api/games/${encodeURIComponent(identifier)}`);
   }
 
+  publicSnapshot(etag?: string): Promise<{ snapshot?: RulesPublicSnapshot; etag?: string; unchanged: boolean }> {
+    return this.snapshotRequest(etag);
+  }
+
+  publicSnapshotDownloadUrl(): string {
+    return `${this.baseUrl}/api/export/public`;
+  }
+
   submit(input: RulesSubmissionInput): Promise<{ submissionId: string; ruleIds?: string[]; reused: boolean }> {
     return this.request('/api/submissions', {
       method: 'POST',
@@ -134,6 +150,16 @@ export class BoardGameRulesClient {
 
   private token(): string | undefined {
     return this.externalToken?.() ?? this.accessToken;
+  }
+
+  private async snapshotRequest(etag?: string): Promise<{ snapshot?: RulesPublicSnapshot; etag?: string; unchanged: boolean }> {
+    const headers = new Headers();
+    if (etag) headers.set('If-None-Match', etag);
+    const response = await fetch(`${this.baseUrl}/api/export/public`, { mode: 'cors', headers });
+    if (response.status === 304) return { etag: response.headers.get('ETag') ?? etag, unchanged: true };
+    const payload = await response.json() as RulesPublicSnapshot & { error?: string };
+    if (!response.ok) throw new Error(payload.error ?? `rules_http_${response.status}`);
+    return { snapshot: payload, etag: response.headers.get('ETag') ?? undefined, unchanged: false };
   }
 
   private async request<T>(path: string, init: RequestInit = {}, authenticated = false): Promise<T> {

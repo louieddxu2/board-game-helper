@@ -79,6 +79,12 @@ Google Client ID 可以公開；session secret 與其他敏感設定不得提交
 
 公開讀取保持匿名以共用 CDN 快取；只有 session 檢查與寫入帶 Bearer token。遊戲名稱先由正式名稱與別名解析，計分板可保存 `localGameId → rulesGameId` 映射。
 
+`GET /api/export/public` 可一鍵下載完整公開資料快照，支援 CDN、ETag/304 與瀏覽器壓縮。真正包含帳號、私人資料和歷史的 D1 管理備份，請使用：
+
+```powershell
+npx wrangler d1 export board-game-rules-prod --remote --output=board-game-rules-backup.sql
+```
+
 ## 爬蟲與濫用
 
 - `robots.txt` 阻止一般搜尋引擎索引 API 與管理頁，API 回應另有 `X-Robots-Tag`。

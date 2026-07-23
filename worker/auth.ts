@@ -83,7 +83,7 @@ export const sessionMiddleware: MiddlewareHandler<{
 }> = async (c, next) => {
   const path = new URL(c.req.url).pathname;
   const isPublicRead = c.req.method === 'GET' && (
-    ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve'].includes(path)
+    ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
     || /^\/api\/games\/[^/]+$/.test(path)
   );
   if (isPublicRead) { await next(); return; }

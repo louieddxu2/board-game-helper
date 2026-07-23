@@ -46,4 +46,20 @@ describe('BoardGameRulesClient', () => {
     const headers = new Headers((fetchMock.mock.calls[0] as [string, RequestInit])[1].headers);
     expect(headers.has('Authorization')).toBe(false);
   });
+
+  test('revalidates a cached public snapshot without redownloading it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 304,
+      headers: { ETag: 'W/"v1-123-10-20-5"' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new BoardGameRulesClient({ baseUrl: 'https://rules.example.com' });
+
+    const result = await client.publicSnapshot('W/"v1-123-10-20-5"');
+
+    expect(result.unchanged).toBe(true);
+    const headers = new Headers((fetchMock.mock.calls[0] as [string, RequestInit])[1].headers);
+    expect(headers.get('If-None-Match')).toBe('W/"v1-123-10-20-5"');
+    expect(headers.has('Authorization')).toBe(false);
+  });
 });

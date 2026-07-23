@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
@@ -16,10 +16,13 @@ app.use('/api/*', async (c, next) => {
   const origin = c.req.header('Origin')?.replace(/\/$/, '');
   const isTrusted = origin ? trustedOrigins(c.env, c.req.url).has(origin) : false;
   if (c.req.method === 'OPTIONS') {
-    if (!origin || !isTrusted) return c.json({ error: 'forbidden_origin' }, 403);
-    c.header('Access-Control-Allow-Origin', origin);
+    const path = new URL(c.req.url).pathname;
+    const publicRead = c.req.header('Access-Control-Request-Method') === 'GET'
+      && isPublicCacheableRequest('GET', path);
+    if (!origin || (!isTrusted && !publicRead)) return c.json({ error: 'forbidden_origin' }, 403);
+    c.header('Access-Control-Allow-Origin', publicRead ? '*' : origin);
     c.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, If-None-Match');
     c.header('Access-Control-Max-Age', '86400');
     c.header('Vary', 'Origin');
     c.header('Cache-Control', 'public, max-age=86400');
@@ -29,8 +32,10 @@ app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (isPublicCacheableRequest(c.req.method, path)) {
     c.header('Access-Control-Allow-Origin', '*');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version');
   } else if (origin && isTrusted) {
     c.header('Access-Control-Allow-Origin', origin);
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version');
     c.header('Vary', 'Origin');
   }
 });
@@ -404,6 +409,86 @@ app.get('/api/games/:identifier', async (c) => {
   };
   c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
   return c.json({ game: detail });
+});
+
+app.get('/api/export/public', async (c) => {
+  const metadata = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM games WHERE merged_into_game_id IS NULL) AS game_count,
+      (SELECT COUNT(*) FROM rules WHERE status = 'published') AS rule_count,
+      (SELECT COUNT(*) FROM tags WHERE status = 'active') AS tag_count,
+      COALESCE((SELECT MAX(updated_at) FROM games WHERE merged_into_game_id IS NULL), 0) AS games_updated_at,
+      COALESCE((SELECT MAX(updated_at) FROM rules WHERE status = 'published'), 0) AS rules_updated_at,
+      COALESCE((SELECT MAX(updated_at) FROM tags WHERE status = 'active'), 0) AS tags_updated_at
+  `).first<{
+    game_count: number;
+    rule_count: number;
+    tag_count: number;
+    games_updated_at: number;
+    rules_updated_at: number;
+    tags_updated_at: number;
+  }>();
+  const values = metadata ?? {
+    game_count: 0, rule_count: 0, tag_count: 0,
+    games_updated_at: 0, rules_updated_at: 0, tags_updated_at: 0,
+  };
+  const updatedAt = Math.max(values.games_updated_at, values.rules_updated_at, values.tags_updated_at);
+  const datasetVersion = `v1-${updatedAt}-${values.game_count}-${values.rule_count}-${values.tag_count}`;
+  const etag = `W/"${datasetVersion}"`;
+  c.header('ETag', etag);
+  c.header('Cache-Control', 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800');
+  c.header('Content-Disposition', 'attachment; filename="wrong-board-game-rules-public-v1.json"');
+  if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
+
+  const [gamesResult, aliasesResult, rulesResult] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+        COUNT(r.id) AS rule_count
+      FROM games g
+      LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+      WHERE g.merged_into_game_id IS NULL
+      GROUP BY g.id
+      ORDER BY g.display_name, g.id
+    `).all<GameRow>(),
+    c.env.DB.prepare(`
+      SELECT a.game_id, a.alias
+      FROM game_aliases a JOIN games g ON g.id = a.game_id
+      WHERE g.merged_into_game_id IS NULL
+      ORDER BY a.game_id, a.alias
+    `).all<{ game_id: string; alias: string }>(),
+    c.env.DB.prepare(`${ruleSelect}
+      JOIN games g ON g.id = r.game_id
+      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
+      ORDER BY r.game_id, r.created_at, r.id
+    `).all<RuleRow>(),
+  ]);
+  const aliasesByGame = new Map<string, string[]>();
+  for (const alias of aliasesResult.results ?? []) {
+    const aliases = aliasesByGame.get(alias.game_id) ?? [];
+    aliases.push(alias.alias);
+    aliasesByGame.set(alias.game_id, aliases);
+  }
+  const rulesByGame = new Map<string, RuleCard[]>();
+  for (const row of rulesResult.results ?? []) {
+    const rules = rulesByGame.get(row.game_id) ?? [];
+    rules.push(toRule(row));
+    rulesByGame.set(row.game_id, rules);
+  }
+  return c.json({
+    schemaVersion: 1,
+    datasetVersion,
+    updatedAt,
+    counts: {
+      games: values.game_count,
+      rules: values.rule_count,
+      tags: values.tag_count,
+    },
+    games: (gamesResult.results ?? []).map((game) => ({
+      ...toGame(game),
+      aliases: aliasesByGame.get(game.id) ?? [],
+      rules: rulesByGame.get(game.id) ?? [],
+    })),
+  });
 });
 
 const gameSchema = z.object({
