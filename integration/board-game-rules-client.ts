@@ -32,8 +32,6 @@ export interface RulesGameDetail extends RulesGameSummary {
     sourceUrl?: string;
     sourceLinks: Array<{ label?: string; url: string }>;
     tags: Array<{ id: string; slug: string; name: string }>;
-    createdAt: number;
-    updatedAt: number;
   }>;
 }
 

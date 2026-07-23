@@ -58,8 +58,6 @@ export interface RuleCard {
   status: 'draft' | 'published' | 'hidden';
   isFeatured: boolean;
   tags: TagSummary[];
-  createdAt: number;
-  updatedAt: number;
 }
 
 export interface RuleRevision {

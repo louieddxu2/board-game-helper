@@ -14,6 +14,19 @@ const isPublicCacheableRequest = (method: string, path: string) => method === 'G
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
+const setPublicCache = (
+  c: AppContext,
+  browserSeconds: number,
+  edgeSeconds: number,
+  staleSeconds: number,
+) => {
+  c.header('Cache-Control', `public, max-age=${browserSeconds}`);
+  c.header(
+    'Cloudflare-CDN-Cache-Control',
+    `public, max-age=${edgeSeconds}, stale-while-revalidate=${staleSeconds}`,
+  );
+};
+
 app.use('/api/*', async (c, next) => {
   const origin = c.req.header('Origin')?.replace(/\/$/, '');
   const isTrusted = origin ? trustedOrigins(c.env, c.req.url).has(origin) : false;
@@ -146,8 +159,6 @@ const toRule = (row: RuleRow): RuleCard => ({
   tags: (() => {
     try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
   })(),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
 });
 
 const cleanTagNames = (names: string[] | undefined): string[] => Array.from(new Map((names ?? [])
@@ -320,7 +331,7 @@ app.get('/api/home', async (c) => {
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: (popularResult.results ?? []).map(toGame),
   };
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=900, stale-while-revalidate=3600');
+  setPublicCache(c, 60, 900, 3600);
   return c.json(payload);
 });
 
@@ -341,7 +352,7 @@ app.get('/api/games/search', async (c) => {
       rule_count DESC, g.display_name
     LIMIT 20
   `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
+  setPublicCache(c, 60, 300, 900);
   return c.json({ games: (result.results ?? []).map(toGame) });
 });
 
@@ -361,7 +372,7 @@ app.get('/api/games/resolve', async (c) => {
     LIMIT 1
   `).bind(name, name).first<GameRow>();
   if (exact) {
-    c.header('Cache-Control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+    setPublicCache(c, 300, 3600, 86400);
     return c.json({ game: toGame(exact), suggestions: [] });
   }
   const result = await c.env.DB.prepare(`
@@ -376,7 +387,7 @@ app.get('/api/games/resolve', async (c) => {
     ORDER BY rule_count DESC, g.display_name
     LIMIT 5
   `).bind(`%${name}%`, `%${name}%`).all<GameRow>();
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  setPublicCache(c, 60, 300, 1800);
   return c.json({ game: null, suggestions: (result.results ?? []).map(toGame) });
 });
 
@@ -404,7 +415,7 @@ app.get('/api/search', async (c) => {
       rule_id: string; game_id: string; game_name: string; game_slug: string; statement: string;
     }>(),
   ]);
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
+  setPublicCache(c, 60, 300, 900);
   return c.json({
     games: (gamesResult.results ?? []).map(toGame),
     rules: (rulesResult.results ?? []).map((row) => ({ ruleId: row.rule_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug, statement: row.statement })),
@@ -424,7 +435,7 @@ app.get('/api/tags', async (c) => {
     ORDER BY usage_count DESC, t.name
     LIMIT 20
   `).bind(query, `%${query}%`, `%${query}%`).all<{ id: string; slug: string; name: string; usage_count: number }>();
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
+  setPublicCache(c, 60, 300, 900);
   return c.json({ tags: (result.results ?? []).map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, usageCount: tag.usage_count })) });
 });
 
@@ -455,7 +466,7 @@ app.get('/api/games/:identifier', async (c) => {
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
     rules: (rulesResult.results ?? []).map(toRule),
   };
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  setPublicCache(c, 60, 300, 1800);
   return c.json({ game: detail });
 });
 
@@ -484,7 +495,7 @@ app.get('/api/export/public', async (c) => {
   const datasetVersion = `v1-${updatedAt}-${values.game_count}-${values.rule_count}-${values.tag_count}`;
   const etag = `W/"${datasetVersion}"`;
   c.header('ETag', etag);
-  c.header('Cache-Control', 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800');
+  setPublicCache(c, 300, 86400, 604800);
   c.header('Content-Disposition', 'attachment; filename="wrong-board-game-rules-public-v1.json"');
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
 

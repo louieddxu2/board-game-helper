@@ -36,6 +36,9 @@ export const Layout = () => {
       {canEdit && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}
       {isAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>管理</small></NavLink>}
     </nav>
-    <footer>把踩過的坑，留給下一次更好的開桌。</footer>
+    <footer>
+      <span>把踩過的坑，留給下一次更好的開桌。</span>
+      <NavLink to="/privacy">隱私與資料</NavLink>
+    </footer>
   </div>;
 };

@@ -2,7 +2,7 @@
 
 > 這次玩對，或是下次玩對。
 
-公開可閱讀、由受邀編輯者維護的桌遊規則踩雷平台。前端是 React PWA，API 使用 Cloudflare Worker，正式資料存於 D1。
+公開可閱讀、由指定編輯者維護的桌遊規則踩雷資料庫。前端是可安裝的 React PWA，API 使用 Cloudflare Worker，正式資料存於 D1。
 
 ## 本機開發
 
@@ -13,7 +13,7 @@ npm run import:legacy -- --apply
 npm run dev
 ```
 
-本機預設網址是 `http://localhost:5173`。首頁、搜尋與遊戲頁公開；寫入需要本機管理員或正式 Google 登入。
+本機開發模式提供管理員登入，不需要 Google OAuth。Excel 原檔、匯入 SQL 與本機 D1 均已由 `.gitignore` 排除。
 
 ## 驗證
 
@@ -23,71 +23,61 @@ npm run typecheck
 npm run build
 ```
 
-## 舊資料
+## 正式發布
 
-Excel 原始檔在 `.gitignore` 內，不會提交。匯入程式會保留原始列，先產生 staging SQL，再由管理介面確認拆分與遊戲名稱配對。
+正式環境使用獨立的 `wrangler.production.jsonc`，不會覆用本機 D1。
 
 ```powershell
-npm run import:legacy
-npm run import:legacy -- --apply
+npm run cloudflare:login
+npx wrangler d1 create board-game-rules-prod --config wrangler.production.jsonc
 ```
 
-## 正式環境
+把建立結果中的 `database_id` 填入 `wrangler.production.jsonc`，再執行：
 
-1. `npx wrangler login`
-2. 建立正式 D1：`npx wrangler d1 create board-game-rules-prod`
-3. 將正式 database ID 寫入部署用 Wrangler 設定。
-4. 在 Google Cloud Console 建立 Web Client ID，只使用 Sign in with Google，不要求 Drive、Sheets 或 Gmail scope。
-5. 設定 Worker 變數：
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_IDS`（可選，多個 Client ID 時以逗號分隔）
-   - `APP_ORIGIN`
-   - `TRUSTED_APP_ORIGINS`（可選，允許整合的 App 網域）
-   - `BOOTSTRAP_ADMIN_EMAIL`
-6. `npm run db:migrate:remote`
-7. `npm run deploy`
+```powershell
+npm run db:migrate:remote
+npm run import:legacy -- --apply --remote --confirm-remote
+npm run deploy
+```
 
-Google Client ID 可以公開；session secret 與其他敏感設定不得提交。
+首次部署取得 `workers.dev` 或自訂網域後，把 `APP_ORIGIN` 改成正式來源並重新部署。接著在 Google Cloud 建立 Web Client ID，將正式來源加入 Authorized JavaScript origins，最後把 Client ID 設為 Worker 的 `GOOGLE_CLIENT_ID` 變數。
 
-## 權限
+Google 登入只驗證身分，不要求 Drive、Sheets、Gmail 或其他 Google API 權限。`BOOTSTRAP_ADMIN_EMAIL` 只負責首次建立管理員；其他編輯者由管理頁指派。
 
-- 訪客：讀取公開規則。
-- `editor`：新增與編輯規則、整理遊戲名稱、處理匯入。
-- `admin`：包含 editor 權限，並可邀請或撤銷其他編輯者。
-- `BOOTSTRAP_ADMIN_EMAIL` 第一次登入後自動取得 admin。
+## 快取與公開 API
 
-角色由 Worker 與 D1 驗證，不依賴前端隱藏按鈕。
+- 首頁最多回傳三組各 10 筆內容，瀏覽器與 Cloudflare CDN 分層快取。
+- 遊戲搜尋有前端防抖、結果快取、筆數上限及 API 限速。
+- 遊戲名稱透過 canonical game 與 aliases 檢索。
+- 公開 API 可跨來源唯讀；寫入必須使用受信任來源與有效 Bearer session。
+- `GET /api/export/public` 提供精簡公開快照，支援 CDN、ETag 與 304。
+- IndexedDB 只保存可重建的閱讀快取，以及尚未送出的草稿／佇列。
 
-## 快取與呼叫量
+## 計分板整合
 
-- 首頁一次回傳精選、最近與熱門資料，每區最多十筆。
-- 公開 GET 有 CDN Cache-Control，Wrangler Workers Caching 可在 Worker 執行前命中。
-- 首頁與看過的遊戲頁也存入瀏覽器快取；草稿獨立存在 IndexedDB。
-- 搜尋至少輸入兩字、350ms 防抖、限制結果數量，並快取最近查詢。
-- 寫入、登入、管理 API 一律 `no-store`。
-- 公開與寫入 API 有不同 Rate Limiting binding。
+整合文件：
 
-## 萬用桌遊計分板整合
-
-平台提供可跨 App 使用的公開讀取 API，以及 Google ID token 交換短期 Bearer session 的寫入流程。計分板延續同一個 Google 帳號，但絕不把其 Drive access token 交給規則平台。
-
-完整流程與範例：
-
-- [計分板整合說明](docs/scorepad-integration.md)
+- [計分板整合路線](docs/scorepad-integration.md)
 - [OpenAPI v1](docs/openapi.yaml)
 - [TypeScript client](integration/board-game-rules-client.ts)
-- [校稿交換流程](docs/review-workflow.md)
 
-公開讀取保持匿名以共用 CDN 快取；只有 session 檢查與寫入帶 Bearer token。遊戲名稱先由正式名稱與別名解析，計分板可保存 `localGameId → rulesGameId` 映射。
+計分板以遊戲名稱或別名呼叫 resolve API，取得此服務的 `gameId` 後再讀規則。兩個網站可各自使用同一個 Google 身分；規則服務驗證 Google ID token 後簽發自己的 Bearer session，不共用另一個網站的 cookie。
 
-`GET /api/export/public` 可一鍵下載完整公開資料快照，支援 CDN、ETag/304 與瀏覽器壓縮。真正包含帳號、私人資料和歷史的 D1 管理備份，請使用：
+## 校稿交換
+
+- 可依遊戲、標籤、流程、來源狀態及更新時間限定匯出範圍。
+- 匯出 JSON 或 CSV 後可由人工或 AI 校稿。
+- 匯入只建立提案，不會直接覆蓋正式資料。
+- 每筆提案必須人工接受或拒絕；若原文已更新會標示衝突。
+
+詳見 [校稿工作流](docs/review-workflow.md)。
+
+## 備份
+
+D1 Time Travel 用於短期災難復原；需要獨立檔案時可執行：
 
 ```powershell
-npx wrangler d1 export board-game-rules-prod --remote --output=board-game-rules-backup.sql
+npx wrangler d1 export board-game-rules-prod --remote --config wrangler.production.jsonc --output=imports/private/board-game-rules-backup.sql
 ```
 
-## 爬蟲與濫用
-
-- `robots.txt` 阻止一般搜尋引擎索引 API 與管理頁，API 回應另有 `X-Robots-Tag`。
-- Worker 限速與 Origin allowlist 保護動態 API。
-- 公開內容無法對惡意爬蟲做到絕對禁止；大量讀取主要由 CDN 承擔，必要時再於 Cloudflare 啟用 Bot Fight Mode、WAF 或 Turnstile。
+`imports/private/` 不會提交到 Git。

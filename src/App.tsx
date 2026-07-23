@@ -6,6 +6,7 @@ import { AdminPage } from './pages/AdminPage';
 import { GamePage } from './pages/GamePage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
+import { PrivacyPage } from './pages/PrivacyPage';
 import { ReviewPage } from './pages/ReviewPage';
 
 const router = createBrowserRouter([
@@ -14,6 +15,7 @@ const router = createBrowserRouter([
     { path: 'add', element: <AddPage /> },
     { path: 'games/:identifier', element: <GamePage /> },
     { path: 'login', element: <LoginPage /> },
+    { path: 'privacy', element: <PrivacyPage /> },
     { path: 'review', element: <ReviewPage /> },
     { path: 'admin', element: <AdminPage /> },
   ] },

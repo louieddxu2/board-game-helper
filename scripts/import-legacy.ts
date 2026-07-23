@@ -112,7 +112,15 @@ console.log(JSON.stringify({
 
 if (apply) {
   const wranglerCli = path.resolve(root, 'node_modules/wrangler/bin/wrangler.js');
-  const args = [wranglerCli, 'd1', 'execute', remote ? 'board-game-rules-prod' : 'board-game-rules-local', remote ? '--remote' : '--local', `--file=${outputPath}`];
+  const args = [
+    wranglerCli,
+    'd1',
+    'execute',
+    remote ? 'board-game-rules-prod' : 'board-game-rules-local',
+    remote ? '--remote' : '--local',
+    `--file=${outputPath}`,
+    ...(remote ? ['--config', 'wrangler.production.jsonc'] : []),
+  ];
   const result = spawnSync(process.execPath, args, {
     cwd: root,
     stdio: 'inherit',

@@ -11,7 +11,7 @@ describe('RuleCard', () => {
       rule={{
         id: 'rule_1', gameId: 'game_1', statement: '三人局使用五個方塊',
         flowStage: 'setup', sourceUrl: 'https://example.com/rules', status: 'published',
-        isFeatured: false, tags: [], sourceLinks: [{ url: 'https://example.com/rules' }], createdAt: 1, updatedAt: 1,
+        isFeatured: false, tags: [], sourceLinks: [{ url: 'https://example.com/rules' }],
       }}
     /></MemoryRouter>);
     expect(screen.getByRole('link', { name: '三人局使用五個方塊' })).toHaveAttribute('href', '/games/shipyard');
