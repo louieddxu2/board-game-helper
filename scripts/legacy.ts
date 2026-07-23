@@ -29,17 +29,23 @@ export const chooseFlowStage = (category: string): string => {
   return 'uncategorized';
 };
 
-const stageOverrides: Record<number, string[]> = {
-  2: ['setup', 'setup', 'end_scoring', 'action'],
-  4: ['round', 'end_scoring'],
-  47: ['setup', 'action', 'action'],
-  73: ['round'],
-  97: ['end_scoring', 'action', 'end_scoring'],
-  99: ['setup', 'setup'],
-  100: ['setup', 'action', 'action', 'action'],
+const stageOverrides: Record<string, string[]> = {
+  '2020-08-24T14:16:23.441Z': ['setup', 'setup', 'end_scoring', 'action'],
+  '2020-08-24T22:43:25.453Z': ['round', 'end_scoring'],
+  '2021-03-07T23:07:31.144Z': ['setup', 'action', 'action'],
+  '2022-11-26T17:34:46.062Z': ['round'],
+  '2024-07-28T00:05:19.032Z': ['end_scoring', 'action', 'end_scoring'],
+  '2024-08-11T21:56:59.795Z': ['setup', 'setup'],
+  '2024-08-18T22:22:56.088Z': ['setup', 'action', 'action', 'action'],
 };
 
-const singleRuleRows = new Set([8, 42, 51, 75, 103]);
+const reviewedSingleRuleTimestamps = new Set([
+  '2020-09-01T23:43:15.586Z',
+  '2021-01-25T23:23:04.263Z',
+  '2021-04-01T23:49:00.543Z',
+  '2023-01-15T11:51:06.778Z',
+  '2024-11-23T23:38:19.302Z',
+]);
 
 export interface LegacyRuleDraft {
   statement: string;
@@ -47,16 +53,33 @@ export interface LegacyRuleDraft {
   flowStage: string;
 }
 
+export const isReviewedLegacySplit = (timestamp: string): boolean =>
+  reviewedSingleRuleTimestamps.has(timestamp);
+
 export const prepareLegacyRules = (record: LegacyRecord): LegacyRuleDraft[] => {
   const paragraphs = splitLegacyRules(record.ruleText);
-  const statements = singleRuleRows.has(record.rowNumber) ? paragraphs.slice(0, 1) : paragraphs;
-  const details = singleRuleRows.has(record.rowNumber) ? paragraphs.slice(1).join('\n') || undefined : undefined;
-  const overrides = stageOverrides[record.rowNumber];
+  const reviewedAsSingleRule = isReviewedLegacySplit(record.timestamp);
+  const statements = reviewedAsSingleRule ? paragraphs.slice(0, 1) : paragraphs;
+  const details = reviewedAsSingleRule ? paragraphs.slice(1).join('\n') || undefined : undefined;
+  const overrides = stageOverrides[record.timestamp];
   return statements.map((statement, index) => ({
     statement,
     details: index === 0 ? details : undefined,
     flowStage: overrides?.[index] ?? chooseFlowStage(record.category),
   }));
+};
+
+export const taipeiCalendarDate = (timestamp: string): string => {
+  const milliseconds = Date.parse(timestamp);
+  if (!Number.isFinite(milliseconds)) throw new Error(`Invalid legacy timestamp: ${timestamp}`);
+  // Taiwan has remained UTC+8 for the entire range represented by the workbook.
+  return new Date(milliseconds + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+};
+
+export const legacyRowKey = (timestamp: string): string => {
+  const milliseconds = Date.parse(timestamp);
+  if (!Number.isFinite(milliseconds)) throw new Error(`Invalid legacy timestamp: ${timestamp}`);
+  return new Date(milliseconds).toISOString();
 };
 
 export const canonicalLegacyGameName = (value: string): string =>

@@ -1,5 +1,18 @@
 import { describe, expect, test } from 'vitest';
-import { allUrls, canonicalLegacyGameName, chooseFlowStage, legacyGameAliases, normalizeLegacyName, parseDeclaredCount, prepareLegacyRules, splitLegacyRules, sqlValue } from './legacy';
+import {
+  allUrls,
+  canonicalLegacyGameName,
+  chooseFlowStage,
+  isReviewedLegacySplit,
+  legacyGameAliases,
+  legacyRowKey,
+  normalizeLegacyName,
+  parseDeclaredCount,
+  prepareLegacyRules,
+  splitLegacyRules,
+  sqlValue,
+  taipeiCalendarDate,
+} from './legacy';
 
 describe('legacy import helpers', () => {
   test('normalizes full width characters, spaces and punctuation', () => {
@@ -24,12 +37,15 @@ describe('legacy import helpers', () => {
   });
 
   test('keeps known explanatory paragraphs with one legacy rule', () => {
-    const rules = prepareLegacyRules({ rowNumber: 8, timestamp: '', timestampMs: 0, gameName: 'test', ruleText: '規則結論\n補充推論', category: '機制', sourceLabel: '', sourceUrl: '' });
+    const timestamp = '2020-09-01T23:43:15.586Z';
+    const rules = prepareLegacyRules({ rowNumber: 999, timestamp, timestampMs: Date.parse(timestamp), gameName: 'test', ruleText: '規則結論\n補充推論', category: '機制', sourceLabel: '', sourceUrl: '' });
     expect(rules).toEqual([{ statement: '規則結論', details: '補充推論', flowStage: 'uncategorized' }]);
+    expect(isReviewedLegacySplit(timestamp)).toBe(true);
   });
 
   test('uses audited per-rule stages and canonical aliases', () => {
-    const rules = prepareLegacyRules({ rowNumber: 2, timestamp: '', timestampMs: 0, gameName: 'test', ruleText: '一\n二\n三\n四', category: '起始設置,計分,機制', sourceLabel: '', sourceUrl: '' });
+    const timestamp = '2020-08-24T14:16:23.441Z';
+    const rules = prepareLegacyRules({ rowNumber: 999, timestamp, timestampMs: Date.parse(timestamp), gameName: 'test', ruleText: '一\n二\n三\n四', category: '起始設置,計分,機制', sourceLabel: '', sourceUrl: '' });
     expect(rules.map((rule) => rule.flowStage)).toEqual(['setup', 'setup', 'end_scoring', 'action']);
     expect(canonicalLegacyGameName('氣笛山脈')).toBe('Whistle Mountain 汽笛山脈');
     expect(legacyGameAliases('氣笛山脈')).toEqual(expect.arrayContaining(['氣笛山脈', 'Whistle Mountain 汽笛山脈', 'Whistle Mountain', '汽笛山脈']));
@@ -43,5 +59,16 @@ describe('legacy import helpers', () => {
   test('escapes SQL text', () => {
     expect(sqlValue("player's rule")).toBe("'player''s rule'");
     expect(sqlValue('')).toBe('NULL');
+  });
+
+  test('converts the legacy instant to a Taipei calendar date', () => {
+    expect(taipeiCalendarDate('2020-08-24T22:31:01.350Z')).toBe('2020-08-25');
+    expect(taipeiCalendarDate('2020-08-24T14:16:23.441Z')).toBe('2020-08-24');
+    expect(() => taipeiCalendarDate('not-a-date')).toThrow('Invalid legacy timestamp');
+  });
+
+  test('uses the immutable form timestamp as the row identity', () => {
+    expect(legacyRowKey('2020-09-01T23:43:15.586Z')).toBe('2020-09-01T23:43:15.586Z');
+    expect(() => legacyRowKey('invalid')).toThrow('Invalid legacy timestamp');
   });
 });

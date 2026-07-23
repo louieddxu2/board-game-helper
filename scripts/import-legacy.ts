@@ -3,7 +3,20 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { readSheet } from 'read-excel-file/node';
-import { allUrls, canonicalLegacyGameName, legacyGameAliases, normalizeLegacyName, parseDeclaredCount, prepareLegacyRules, sqlValue, stableLegacyId, type LegacyRecord } from './legacy';
+import {
+  allUrls,
+  canonicalLegacyGameName,
+  isReviewedLegacySplit,
+  legacyGameAliases,
+  legacyRowKey,
+  normalizeLegacyName,
+  parseDeclaredCount,
+  prepareLegacyRules,
+  sqlValue,
+  stableLegacyId,
+  taipeiCalendarDate,
+  type LegacyRecord,
+} from './legacy';
 
 const root = process.cwd();
 const sourcePath = path.resolve(root, '玩錯的桌遊規則紀錄.xlsx');
@@ -28,10 +41,11 @@ const text = (value: unknown) => String(value ?? '').trim();
 const records: LegacyRecord[] = rawRows.map((row, index) => {
   const rawTimestamp = row['時間戳記'];
   const timestampMs = rawTimestamp instanceof Date ? rawTimestamp.getTime() : Date.parse(text(rawTimestamp));
+  if (!Number.isFinite(timestampMs)) throw new Error(`Invalid timestamp at workbook row ${index + 2}`);
   return ({
   rowNumber: index + 2,
-  timestamp: Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : text(rawTimestamp),
-  timestampMs: Number.isFinite(timestampMs) ? timestampMs : Date.now(),
+  timestamp: new Date(timestampMs).toISOString(),
+  timestampMs,
   gameName: text(row['玩錯的桌遊名稱']),
   ruleText: text(row['玩錯的規則與正確規則詳述']),
   category: text(row['玩錯的規則類型']),
@@ -68,18 +82,24 @@ for (const record of records) {
 
 let publishedRules = 0;
 let reviewRows = 0;
+const seenRowKeys = new Set<string>();
 for (const record of records) {
-  const rowKey = `${sourceFilename}:${record.rowNumber}`;
+  const rowKey = legacyRowKey(record.timestamp);
+  if (seenRowKeys.has(rowKey)) throw new Error(`Duplicate legacy timestamp at workbook row ${record.rowNumber}: ${rowKey}`);
+  seenRowKeys.add(rowKey);
   const rowId = stableLegacyId('legacy', rowKey);
   const gameId = gameIds.get(normalizeLegacyName(canonicalLegacyGameName(record.gameName)))!;
   const proposed = prepareLegacyRules(record);
-  const status = proposed.length ? 'imported' : 'pending';
-  if (!proposed.length) reviewRows += 1;
+  const countsMatch = isReviewedLegacySplit(record.timestamp)
+    || !record.declaredCount
+    || proposed.length === record.declaredCount;
+  const status = proposed.length && countsMatch ? 'imported' : 'pending';
+  if (status === 'pending') reviewRows += 1;
   lines.push(`INSERT INTO legacy_import_rows (id, batch_id, source_row_number, raw_game_name, raw_rule_text, raw_category, raw_source_label, raw_source_url, raw_timestamp, declared_rule_count, proposed_rules_json, matched_game_id, status, created_at) VALUES (${sqlValue(rowId)}, ${sqlValue(batchId)}, ${record.rowNumber}, ${sqlValue(record.gameName)}, ${sqlValue(record.ruleText)}, ${sqlValue(record.category)}, ${sqlValue(record.sourceLabel)}, ${sqlValue(record.sourceUrl)}, ${sqlValue(record.timestamp)}, ${record.declaredCount ?? 'NULL'}, ${sqlValue(JSON.stringify(proposed.map((rule) => rule.statement)))}, ${sqlValue(gameId)}, ${sqlValue(status)}, ${record.timestampMs}) ON CONFLICT(id) DO UPDATE SET raw_game_name=excluded.raw_game_name, raw_rule_text=excluded.raw_rule_text, raw_category=excluded.raw_category, raw_source_label=excluded.raw_source_label, raw_source_url=excluded.raw_source_url, raw_timestamp=excluded.raw_timestamp, declared_rule_count=excluded.declared_rule_count, proposed_rules_json=excluded.proposed_rules_json, matched_game_id=excluded.matched_game_id, status=excluded.status;`);
-  if (!proposed.length) continue;
+  if (status === 'pending') continue;
   const submissionId = stableLegacyId('sub', rowKey);
   const urls = allUrls(record.sourceUrl);
-  lines.push(`INSERT OR IGNORE INTO submissions (id, game_id, played_on, source_label, source_url, source_notes, legacy_import_row_id, created_at) VALUES (${sqlValue(submissionId)}, ${sqlValue(gameId)}, NULL, ${sqlValue(record.sourceLabel)}, ${sqlValue(urls[0])}, ${sqlValue(record.sourceUrl)}, ${sqlValue(rowId)}, ${record.timestampMs});`);
+  lines.push(`INSERT OR IGNORE INTO submissions (id, game_id, played_on, source_label, source_url, source_notes, legacy_import_row_id, created_at) VALUES (${sqlValue(submissionId)}, ${sqlValue(gameId)}, ${sqlValue(taipeiCalendarDate(record.timestamp))}, ${sqlValue(record.sourceLabel)}, ${sqlValue(urls[0])}, ${sqlValue(record.sourceUrl)}, ${sqlValue(rowId)}, ${record.timestampMs});`);
   urls.forEach((url, index) => lines.push(`INSERT OR IGNORE INTO submission_sources (id, submission_id, label, url, position, created_at) VALUES (${sqlValue(stableLegacyId('source', `${submissionId}:${url}`))}, ${sqlValue(submissionId)}, ${sqlValue(record.sourceLabel)}, ${sqlValue(url)}, ${index}, ${record.timestampMs});`));
   proposed.forEach((draft, index) => {
     const ruleId = stableLegacyId('rule', `${rowKey}:${index}`);
