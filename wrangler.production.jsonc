@@ -34,6 +34,7 @@
   "vars": {
     "APP_ORIGIN": "https://board-game-helper.louieddxu2.workers.dev",
     "TRUSTED_APP_ORIGINS": "",
+    "GOOGLE_CLIENT_ID": "646550209695-k8rpmd24gsndqo41bdo7mqcu1ftrcpjb.apps.googleusercontent.com",
     "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com"
   }
 }
