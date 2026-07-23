@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link } from 'react-router-dom';
 
@@ -7,12 +8,21 @@ const stageNames: Record<string, string> = {
   always: '全程適用', uncategorized: '未分類',
 };
 
-export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rule: RuleCardType; gameName?: string; gameHref?: string; onEdit?: () => void; onTagClick?: (tag: string) => void }) => <article className="rule-card" id={`rule-${rule.id}`}>
-  <div className="rule-meta"><span>{gameName ?? stageNames[rule.flowStage]}</span>{gameName && <span>{stageNames[rule.flowStage]}</span>}</div>
-  <h3>{gameHref ? <Link className="rule-title-link" to={gameHref}>{rule.statement}</Link> : rule.statement}</h3>
-  {rule.commonMistake && <p className="mistake"><strong>常見錯法</strong>{rule.commonMistake}</p>}
-  {rule.details && <p>{rule.details}</p>}
-  {rule.tags.length > 0 && <div className="rule-tags" aria-label="主題標籤">{rule.tags.slice(0, 3).map((tag) => onTagClick
+export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rule: RuleCardType; gameName?: string; gameHref?: string; onEdit?: () => void; onTagClick?: (tag: string) => void }) => {
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const isLongDetails = Boolean(rule.details && rule.details.length > 80);
+
+  return <article className="rule-card" id={`rule-${rule.id}`}>
+    <div className="rule-meta"><span>{gameName ?? stageNames[rule.flowStage]}</span>{gameName && <span>{stageNames[rule.flowStage]}</span>}</div>
+    <h3>{gameHref ? <Link className="rule-title-link" to={gameHref}>{rule.statement}</Link> : rule.statement}</h3>
+    {rule.commonMistake && <p className="mistake"><strong>常見錯法</strong>{rule.commonMistake}</p>}
+    {rule.details && <div className={isLongDetails && !detailsExpanded ? 'rule-details collapsed' : 'rule-details'}>
+      <p>{rule.details}</p>
+      {isLongDetails && <button type="button" className="text-action details-toggle" onClick={() => setDetailsExpanded((prev) => !prev)}>
+        {detailsExpanded ? '收合' : '展開詳細'}
+      </button>}
+    </div>}
+    {rule.tags.length > 0 && <div className="rule-tags" aria-label="主題標籤">{rule.tags.slice(0, 3).map((tag) => onTagClick
     ? <button type="button" className="tag-chip" key={tag.id} onClick={() => onTagClick(tag.name)}>#{tag.name}</button>
     : <span className="tag-chip" key={tag.id}>#{tag.name}</span>)}{rule.tags.length > 3 && <span className="tag-overflow">＋{rule.tags.length - 3}</span>}</div>}
   <div className="rule-notes">
@@ -23,4 +33,5 @@ export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rul
     {!rule.sourceLabel && rule.sourceLinks.length === 0 && <span className="unverified">未附來源</span>}
   </div>
   {onEdit && <button type="button" className="text-action" onClick={onEdit}>編輯</button>}
-</article>;
+  </article>;
+};

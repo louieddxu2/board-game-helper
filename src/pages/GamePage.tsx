@@ -7,6 +7,7 @@ import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCardType, type RuleRevision } from '../shared/types';
+import { useToast } from '../context/ToastContext';
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
@@ -18,6 +19,7 @@ export const GamePage = () => {
   const { identifier = '' } = useParams();
   const location = useLocation();
   const { canEdit } = useSession();
+  const { showToast } = useToast();
   const [game, setGame] = useState<GameDetail>();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
@@ -52,16 +54,18 @@ export const GamePage = () => {
   const visibleRules = game?.rules.filter((rule) => (activeStage === 'all' || rule.flowStage === activeStage)
     && (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
     && (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))) ?? [];
-  if (!game && loading) return <section className="narrow-page"><p>載入遊戲中…</p></section>;
+  if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
+  useEffect(() => {
+    if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
+  }, []); // 只在 mount 時執行一次
   return <section className="game-page">
     <header className="game-hero">
       <div><p className="eyebrow">開桌前快速複習</p><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
         <p>{game.ruleCount} 條曾經讓人踩坑的規則</p></div>
       {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.id}`}>＋新增規則</Link></div>}
     </header>
-    {justAdded && <div className="success-banner">已經記下 {justAdded} 條規則。下次開桌前，它們會在這裡等你。</div>}
     <section className="rule-filters" aria-label="篩選規則">
       <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
       <nav className="stage-tabs" aria-label="規則流程分類">

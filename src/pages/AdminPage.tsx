@@ -4,9 +4,11 @@ import { GameSearch } from '../components/GameSearch';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import type { GameSummary, RuleCard } from '../shared/types';
+import { useToast } from '../context/ToastContext';
 
 export const AdminPage = () => {
   const { isAdmin, loading } = useSession();
+  const { showToast } = useToast();
   const [editors, setEditors] = useState<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>({ users: [], invitations: [] });
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [hiddenRules, setHiddenRules] = useState<RuleCard[]>([]);
@@ -16,7 +18,6 @@ export const AdminPage = () => {
   const [targetQuery, setTargetQuery] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'editor' | 'admin'>('editor');
-  const [message, setMessage] = useState('');
   const load = async () => {
     const [editorData, importData, hiddenData] = await Promise.all([api.editors(), api.importRows(), api.hiddenRules()]);
     setEditors(editorData); setImportRows(importData.rows); setHiddenRules(hiddenData.rules);
@@ -25,10 +26,10 @@ export const AdminPage = () => {
   if (!loading && !isAdmin) return <Navigate to="/" replace />;
   return <section className="admin-page">
     <header><p className="eyebrow">管理與校稿</p><h1>內容工作臺</h1><p>管理編輯者、處理舊資料拆分與名稱整理。</p></header>
-    {message && <div className="success-banner">{message}</div>}
     <div className="admin-grid">
       <section className="admin-card"><h2>編輯者</h2>
-        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role).then(() => { setEmail(''); setMessage('已建立編輯者授權。'); return load(); }); }}>
+        <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
+        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role).then(() => { setEmail(''); showToast('已建立編輯者授權。'); return load(); }); }}>
           <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
           <label>角色<select value={role} onChange={(event) => setRole(event.target.value as 'editor' | 'admin')}><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
           <button className="button primary" type="submit">新增／邀請</button>
@@ -41,7 +42,7 @@ export const AdminPage = () => {
       <section className="admin-card import-card"><div className="list-heading"><h2>舊資料待確認</h2><span>{importRows.length} 筆</span></div>
         {importRows.length === 0 && <p className="muted">目前沒有 staged 資料。執行匯入指令後會在這裡出現。</p>}
         {importRows.slice(0, 20).map((row) => <article key={String(row.id)}><strong>{String(row.raw_game_name)}</strong><p>{String(row.raw_rule_text)}</p><small>原始第 {String(row.source_row_number)} 列・宣告 {String(row.declared_rule_count ?? '?')} 條</small>
-          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(() => { setMessage('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
+          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(() => { showToast('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
             <button type="button" className="danger-link" onClick={() => void api.skipImport(String(row.id)).then(load)}>略過</button></div></article>)}
       </section>
       <section className="admin-card"><h2>合併重複遊戲</h2><p className="muted">來源遊戲的規則與別名會移到目標遊戲，原名稱仍可搜尋。</p>
@@ -49,7 +50,7 @@ export const AdminPage = () => {
         <div className="merge-arrow">↓ 合併到</div>
         <GameSearch value={targetQuery} selectedId={targetGame?.id} onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
         <button type="button" className="button primary full-button" disabled={!sourceGame || !targetGame || sourceGame.id === targetGame.id}
-          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(() => { setMessage('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
+          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(() => { showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
       </section>
       <section className="admin-card"><div className="list-heading"><h2>已隱藏規則</h2><span>{hiddenRules.length} 條</span></div>
         <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(load)}>恢復</button></div>)}</div>

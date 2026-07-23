@@ -155,11 +155,16 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   ).run();
 
   if (normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '') === emailNormalized) {
-    await c.env.DB.prepare(`
-      INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
-      VALUES (?, 'admin', ?, ?, NULL)
-      ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL
-    `).bind(userId, userId, timestamp).run();
+    const existingAdmin = await c.env.DB.prepare(
+      `SELECT 1 FROM user_roles WHERE role = 'admin' AND revoked_at IS NULL LIMIT 1`
+    ).first();
+    if (!existingAdmin) {
+      await c.env.DB.prepare(`
+        INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+        VALUES (?, 'admin', ?, ?, NULL)
+        ON CONFLICT(user_id, role) DO NOTHING
+      `).bind(userId, userId, timestamp).run();
+    }
   }
 
   const invites = await c.env.DB.prepare(`
@@ -171,7 +176,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
       c.env.DB.prepare(`
         INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
         SELECT ?, role, invited_by, ?, NULL FROM editor_invitations WHERE id = ?
-        ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL
+        ON CONFLICT(user_id, role) DO NOTHING
       `).bind(userId, timestamp, invite.id),
       c.env.DB.prepare(`
         UPDATE editor_invitations SET claimed_by = ?, claimed_at = ? WHERE id = ?
@@ -225,7 +230,7 @@ export const exchangeGoogleCredential = async (c: AppContext, credential: string
 export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> => {
   const url = new URL(c.req.url);
   if (!['localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('not_found');
-  const email = normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? 'louieddxu2@gmail.com');
+  const email = normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@localhost');
   const userId = await upsertGoogleUser(c, {
     sub: `local:${email}`,
     email,

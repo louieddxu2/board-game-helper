@@ -8,6 +8,7 @@ import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { ReviewPage } from './pages/ReviewPage';
+import { ToastProvider } from './context/ToastContext';
 
 const router = createBrowserRouter([
   { path: '/', element: <Layout />, children: [
@@ -21,4 +22,4 @@ const router = createBrowserRouter([
   ] },
 ]);
 
-export const App = () => <SessionProvider><RouterProvider router={router} /></SessionProvider>;
+export const App = () => <SessionProvider><ToastProvider><RouterProvider router={router} /></ToastProvider></SessionProvider>;

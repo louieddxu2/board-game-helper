@@ -56,7 +56,14 @@ export const HomePage = () => {
       <div className="rule-grid">
         {(home?.featuredRules.length ? home.featuredRules : home?.recentRules ?? []).slice(0, 10).map((rule) =>
           <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
-        {!home && <p className="loading-card">載入規則中…</p>}
+        {!home && Array.from({ length: 3 }, (_, index) => (
+          <div className="skeleton-card" key={index}>
+            <div className="skeleton-line title" />
+            <div className="skeleton-line" />
+            <div className="skeleton-line medium" />
+            <div className="skeleton-line short" />
+          </div>
+        ))}
         {home && home.featuredRules.length === 0 && home.recentRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
