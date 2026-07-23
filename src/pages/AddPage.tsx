@@ -112,7 +112,7 @@ export const AddPage = () => {
       onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} />
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
     {game && <div className="rule-input-list">
-      <div className="list-heading"><div><h2>本次發現的錯誤</h2><small>電腦按 Enter 下一條、Shift＋Enter 換行；手機直接按「新增一條」。</small></div><span>{validRules.length} 條</span></div>
+      <div className="list-heading"><div><h2>本次發現的錯誤</h2><small><span className="desktop-entry-hint">Enter 新增下一條；Shift＋Enter 換行。</span><span className="mobile-entry-hint">Enter 直接換行；用下方按鈕新增下一條。</span></small></div><span>{validRules.length} 條</span></div>
       {rules.map((rule, index) => <div className="rule-input" key={rule.id}>
         <span className="rule-number">{index + 1}</span>
         <div>
@@ -120,8 +120,8 @@ export const AddPage = () => {
             placeholder="例如：三人局起始只有 5 個方塊，不是 7 個。"
             onChange={(event) => setRule(rule.id, { statement: event.target.value })}
             onKeyDown={(event) => {
-              const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !isCoarsePointer && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
+              const usesMobileEntry = window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !usesMobileEntry && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
             }} />
           <details><summary>補上常見錯法（選填）</summary><textarea rows={2} value={rule.commonMistake ?? ''}
             aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
@@ -129,7 +129,7 @@ export const AddPage = () => {
         </div>
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
       </div>)}
-      <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增一條</button>
+      <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增下一條</button>
     </div>}
     {game && <div className="shared-fields">
       <label>共同來源（選填）<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="例如：官方英文說明書第 8 頁" /></label>
