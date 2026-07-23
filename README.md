@@ -74,9 +74,10 @@ npm run import:legacy -- --apply
 - Service Worker 保存首頁與看過的遊戲頁；需要更新時採網路優先，離線才回傳舊內容，避免多層 stale-while-revalidate 讓舊資料被反覆延長。
 - 遊戲搜尋停字 350ms 後才查詢，結果限制 20 款；首頁全文搜尋限制 8 款遊戲與 10 條規則。相同查詢會優先使用目前頁面生命週期內的記憶體快取。
 - 遊戲名稱同時比對正式名稱與別名；建立遊戲時後端會再次做完全相同比對，避免略過介面時產生重複主檔。
-- 首頁、搜尋、標籤與遊戲頁會寫入 Worker Cache API；同一 Cloudflare 資料中心的訪客共用結果，快取命中時不讀取 D1。
+- 首頁、搜尋、標籤與遊戲頁使用 Workers Caching；Cloudflare 會在執行 Worker 前檢查快取，命中時不消耗 Worker 請求，也不讀取 D1。
 - 公開 API 每個來源每分鐘最多 120 次，寫入 API 每個來源每分鐘最多 30 次；超過時回傳 `429` 與 `Retry-After`。
-- Worker Cache 與 Rate Limiting 都以 Cloudflare 資料中心為範圍，不是全球精確計數；它們用來降低正常重複讀取並攔截大量濫用，不作為計費或安全身分判斷依據。
+- Rate Limiting 以 Cloudflare 資料中心為範圍，不是全球精確計數；它用來攔截大量濫用，不作為計費或安全身分判斷依據。
+- 登入、寫入、管理 API 與編輯後的強制更新一律回傳 `Cache-Control: no-store`，不會進入公開快取。
 
 ## 爬蟲與濫用防護
 
