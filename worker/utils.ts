@@ -30,12 +30,19 @@ export const cleanOptional = (value: unknown, maxLength: number): string | undef
   return cleaned ? cleaned.slice(0, maxLength) : undefined;
 };
 
-export const assertMutationOrigin = (c: { req: { header(name: string): string | undefined; url: string }; env: { APP_ORIGIN?: string } }): boolean => {
+export const trustedOrigins = (env: { APP_ORIGIN?: string; TRUSTED_APP_ORIGINS?: string }, requestUrl?: string): Set<string> => {
+  const values = [
+    requestUrl ? new URL(requestUrl).origin : undefined,
+    env.APP_ORIGIN,
+    ...(env.TRUSTED_APP_ORIGINS ?? '').split(','),
+  ];
+  return new Set(values.map((value) => value?.trim().replace(/\/$/, '')).filter((value): value is string => Boolean(value)));
+};
+
+export const assertMutationOrigin = (c: { req: { header(name: string): string | undefined; url: string }; env: { APP_ORIGIN?: string; TRUSTED_APP_ORIGINS?: string } }): boolean => {
   const origin = c.req.header('origin');
   if (!origin) return true;
-  const requestOrigin = new URL(c.req.url).origin;
-  const configured = c.env.APP_ORIGIN?.replace(/\/$/, '');
-  return origin === requestOrigin || Boolean(configured && origin === configured);
+  return trustedOrigins(c.env, c.req.url).has(origin.replace(/\/$/, ''));
 };
 
 export const apiError = (code: string, status: 400 | 401 | 403 | 404 | 409 | 413 | 429 | 500 = 400) => ({

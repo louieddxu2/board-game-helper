@@ -1,16 +1,39 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type RuleCard, type UserRole } from '../src/shared/types';
-import { requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
+import { exchangeGoogleCredential, requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
 import type { D1PreparedStatement, Env } from './env';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify } from './utils';
+import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from './utils';
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/games/search'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
+
+app.use('/api/*', async (c, next) => {
+  const origin = c.req.header('Origin')?.replace(/\/$/, '');
+  const isTrusted = origin ? trustedOrigins(c.env, c.req.url).has(origin) : false;
+  if (c.req.method === 'OPTIONS') {
+    if (!origin || !isTrusted) return c.json({ error: 'forbidden_origin' }, 403);
+    c.header('Access-Control-Allow-Origin', origin);
+    c.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    c.header('Access-Control-Max-Age', '86400');
+    c.header('Vary', 'Origin');
+    c.header('Cache-Control', 'public, max-age=86400');
+    return c.body(null, 204);
+  }
+  await next();
+  const path = new URL(c.req.url).pathname;
+  if (isPublicCacheableRequest(c.req.method, path)) {
+    c.header('Access-Control-Allow-Origin', '*');
+  } else if (origin && isTrusted) {
+    c.header('Access-Control-Allow-Origin', origin);
+    c.header('Vary', 'Origin');
+  }
+});
 
 app.use('/api/*', async (c, next) => {
   const isRead = ['GET', 'HEAD'].includes(c.req.method);
@@ -31,6 +54,7 @@ app.use('/api/*', sessionMiddleware);
 app.use('/api/*', async (c, next) => {
   await next();
   c.header('X-Robots-Tag', 'noindex, nofollow');
+  c.header('X-API-Version', '1');
   const path = new URL(c.req.url).pathname;
   if (!isPublicCacheableRequest(c.req.method, path) || c.req.query('fresh') === '1') {
     c.header('Cache-Control', 'no-store');
@@ -41,7 +65,7 @@ app.onError((error, c) => {
   console.error('api_error', error);
   const message = error instanceof Error ? error.message : '';
   const safeCodes = new Set([
-    'google_auth_not_configured', 'invalid_google_identity', 'not_found',
+    'google_auth_not_configured', 'invalid_google_identity', 'google_identity_conflict', 'not_found',
     'session_creation_failed', 'game_not_found', 'rule_not_found',
     'unknown_tag', 'tag_not_found',
   ]);
@@ -188,6 +212,19 @@ app.post('/api/auth/google', async (c) => {
   return c.json({ user });
 });
 
+app.post('/api/auth/google/exchange', async (c) => {
+  const origin = c.req.header('Origin')?.replace(/\/$/, '');
+  if (!origin || !trustedOrigins(c.env, c.req.url).has(origin)) {
+    return c.json({ error: 'forbidden_origin' }, 403);
+  }
+  const body = await c.req.json<{ credential?: unknown }>();
+  if (typeof body.credential !== 'string' || body.credential.length > 10_000) {
+    return c.json({ error: 'invalid_credential' }, 400);
+  }
+  const session = await exchangeGoogleCredential(c, body.credential);
+  return c.json({ ...session, tokenType: 'Bearer' as const });
+});
+
 app.post('/api/auth/dev', async (c) => {
   const user = await signInAsLocalAdmin(c);
   return c.json({ user });
@@ -253,6 +290,41 @@ app.get('/api/games/search', async (c) => {
   `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
   c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
   return c.json({ games: (result.results ?? []).map(toGame) });
+});
+
+app.get('/api/games/resolve', async (c) => {
+  const rawName = (c.req.query('name') ?? '').trim().slice(0, 120);
+  if (!rawName) return c.json({ game: null, suggestions: [] });
+  const name = normalizeText(rawName);
+  const exact = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      COUNT(DISTINCT r.id) AS rule_count
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+    WHERE g.merged_into_game_id IS NULL
+      AND (g.normalized_name = ? OR a.normalized_alias = ?)
+    GROUP BY g.id
+    LIMIT 1
+  `).bind(name, name).first<GameRow>();
+  if (exact) {
+    c.header('Cache-Control', 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400');
+    return c.json({ game: toGame(exact), suggestions: [] });
+  }
+  const result = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      COUNT(DISTINCT r.id) AS rule_count
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+    WHERE g.merged_into_game_id IS NULL
+      AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
+    GROUP BY g.id
+    ORDER BY rule_count DESC, g.display_name
+    LIMIT 5
+  `).bind(`%${name}%`, `%${name}%`).all<GameRow>();
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  return c.json({ game: null, suggestions: (result.results ?? []).map(toGame) });
 });
 
 app.get('/api/search', async (c) => {

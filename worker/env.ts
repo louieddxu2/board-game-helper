@@ -25,6 +25,8 @@ export interface Env {
   PUBLIC_RATE_LIMITER: RateLimitBinding;
   WRITE_RATE_LIMITER: RateLimitBinding;
   APP_ORIGIN?: string;
+  TRUSTED_APP_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_IDS?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
 }

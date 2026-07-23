@@ -32,6 +32,7 @@
   ],
   "vars": {
     "APP_ORIGIN": "http://localhost:5173",
+    "TRUSTED_APP_ORIGINS": "http://localhost:5174",
     "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com"
   }
 }

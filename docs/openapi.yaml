@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: 玩錯的桌遊規則 API
+  version: 1.0.0
+servers:
+  - url: https://rules.example.com
+paths:
+  /api/games/resolve:
+    get:
+      summary: 以正式名稱或別名解析遊戲
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema: { type: string, maxLength: 120 }
+      responses:
+        "200": { description: 唯一結果或候選清單 }
+  /api/games/search:
+    get:
+      summary: 搜尋遊戲候選
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200": { description: 最多二十款遊戲 }
+  /api/games/{identifier}:
+    get:
+      summary: 取得遊戲與公開規則
+      parameters:
+        - in: path
+          name: identifier
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: 遊戲詳情 }
+        "404": { description: 找不到遊戲 }
+  /api/auth/google/exchange:
+    post:
+      summary: 將 Google ID token 換成短期整合 session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: { type: string }
+      responses:
+        "200": { description: Bearer session 與使用者 }
+        "403": { description: Origin 不在允許清單 }
+  /api/session:
+    get:
+      summary: 檢查目前規則平台 session
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: 使用者或 null }
+  /api/submissions:
+    post:
+      summary: 一次新增多條玩錯規則
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: 重複提交的既有結果 }
+        "201": { description: 新建的投稿與規則 ID }
+        "401": { description: 尚未登入 }
+        "403": { description: 不是編輯者 }
+  /api/logout:
+    post:
+      summary: 撤銷目前 Bearer session 或網站 cookie session
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: 已撤銷 }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
