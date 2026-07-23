@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCardType, type RuleRevision } from '../shared/types';
 import { detectDeterministicTags } from '../lib/tagDetector';
+import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorter';
 import { useToast } from '../context/ToastContext';
 
 const stageNames: Record<FlowStage, string> = {
@@ -21,6 +22,7 @@ export const GamePage = () => {
   const location = useLocation();
   const { canEdit } = useSession();
   const { showToast } = useToast();
+  const [viewMode, setViewMode] = useState<'index' | 'briefing'>('index');
   const [game, setGame] = useState<GameDetail>();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
@@ -55,6 +57,12 @@ export const GamePage = () => {
   const visibleRules = game?.rules.filter((rule) => (activeStage === 'all' || rule.flowStage === activeStage)
     && (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
     && (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))) ?? [];
+  const groupedSections = useMemo(() => groupRulesUniversally(visibleRules), [visibleRules]);
+  const briefingRules = useMemo(() => {
+    if (!game) return [];
+    const highlights = game.rules.filter((rule) => classifyRuleUniversally(rule) === 'highlight');
+    return highlights.length > 0 ? highlights : game.rules.slice(0, 3);
+  }, [game]);
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
@@ -67,21 +75,68 @@ export const GamePage = () => {
         <p>{game.ruleCount} 條曾經讓人踩坑的規則</p></div>
       {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.id}`}>＋新增規則</Link></div>}
     </header>
-    <section className="rule-filters" aria-label="篩選規則">
-      <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
-      <nav className="stage-tabs" aria-label="規則流程分類">
-        <button type="button" aria-pressed={activeStage === 'all'} className={activeStage === 'all' ? 'active' : ''} onClick={() => setActiveStage('all')}>全部 <small>{game.rules.length}</small></button>
-        {stages.map((stage) => <button type="button" aria-pressed={activeStage === stage} key={stage} className={activeStage === stage ? 'active' : ''} onClick={() => setActiveStage(stage)}>{stageNames[stage]} <small>{game.rules.filter((rule) => rule.flowStage === stage).length}</small></button>)}
-      </nav>
-      {availableTags.length > 0 && <div className="tag-filter" aria-label="依主題篩選"><span>主題</span>{availableTags.map((tag) => <button type="button" aria-pressed={activeTag === tag} className={activeTag === tag ? 'tag-chip active' : 'tag-chip'} key={tag} onClick={() => setActiveTag((value) => value === tag ? '' : tag)}>#{tag}</button>)}</div>}
-    </section>
-    <div className="game-rules">
-      {visibleRules.map((rule, index) => <Fragment key={rule.id}>
-        <RuleCard rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
-        {index === 3 && visibleRules.length > 5 && <AdSlot placement="game-rule-list" />}
-      </Fragment>)}
-      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveStage('all'); setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
+    <div className="view-mode-header">
+      <div className="view-mode-switcher" role="tablist" aria-label="檢視模式切換">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'index'}
+          className={viewMode === 'index' ? 'active' : ''}
+          onClick={() => setViewMode('index')}
+        >
+          📚 遊戲中完整索引
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={viewMode === 'briefing'}
+          className={viewMode === 'briefing' ? 'active' : ''}
+          onClick={() => setViewMode('briefing')}
+        >
+          ⚡ 開桌前 30 秒速覽
+        </button>
+      </div>
     </div>
+    {viewMode === 'briefing' ? (
+      <>
+        <div className="briefing-notice">
+          <h2>⚡ 開桌前 30 秒速覽 (Pre-Game Briefing)</h2>
+          <p>精選本遊戲最關鍵的踩雷警示與常見誤區，開桌前半分鐘看完避免全桌翻車。</p>
+        </div>
+        <div className="game-rules">
+          {briefingRules.map((rule) => (
+            <RuleCard key={rule.id} rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+          ))}
+        </div>
+      </>
+    ) : (
+      <>
+        <section className="rule-filters" aria-label="篩選規則">
+          <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
+          <nav className="stage-tabs" aria-label="規則流程分類">
+            <button type="button" aria-pressed={activeStage === 'all'} className={activeStage === 'all' ? 'active' : ''} onClick={() => setActiveStage('all')}>全部 <small>{game.rules.length}</small></button>
+            {stages.map((stage) => <button type="button" aria-pressed={activeStage === stage} key={stage} className={activeStage === stage ? 'active' : ''} onClick={() => setActiveStage(stage)}>{stageNames[stage]} <small>{game.rules.filter((rule) => rule.flowStage === stage).length}</small></button>)}
+          </nav>
+          {availableTags.length > 0 && <div className="tag-filter" aria-label="依主題篩選"><span>主題</span>{availableTags.map((tag) => <button type="button" aria-pressed={activeTag === tag} className={activeTag === tag ? 'tag-chip active' : 'tag-chip'} key={tag} onClick={() => setActiveTag((value) => value === tag ? '' : tag)}>#{tag}</button>)}</div>}
+        </section>
+        <div className="grouped-rules-container">
+          {groupedSections.map((group) => (
+            <section key={group.id} className="rule-group-section">
+              <h2 className="rule-group-heading">
+                <span>{group.icon} {group.title}</span>
+                <span className="group-count">{group.rules.length}</span>
+              </h2>
+              <div className="game-rules">
+                {group.rules.map((rule) => (
+                  <RuleCard key={rule.id} rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+                ))}
+              </div>
+            </section>
+          ))}
+          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveStage('all'); setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
+        </div>
+      </>
+    )}
     {game.aliases.length > 1 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await load(); }} />}
