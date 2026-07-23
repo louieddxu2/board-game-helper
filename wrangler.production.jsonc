@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "wrong-board-game-rules",
+  "name": "board-game-helper",
   "main": "worker/index.ts",
   "compatibility_date": "2026-07-22",
   "compatibility_flags": ["nodejs_compat"],
@@ -32,7 +32,7 @@
     }
   ],
   "vars": {
-    "APP_ORIGIN": "https://wrong-board-game-rules.louieddxu2.workers.dev",
+    "APP_ORIGIN": "https://board-game-helper.louieddxu2.workers.dev",
     "TRUSTED_APP_ORIGINS": "",
     "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com"
   }
