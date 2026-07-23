@@ -190,7 +190,7 @@ export const ReviewPage = () => {
               <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label="建議常見錯法" rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder="常見錯法" /></div>
             </div>
             <details><summary>其他欄位</summary><div className="review-detail-grid">
-              <label>流程<select disabled={!editable} value={draft.flowStage} onChange={(event) => updateDraft(proposal.id, { flowStage: event.target.value as FlowStage })}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
+              <label>流程<select disabled={!editable} value={draft.flowStage ?? 'uncategorized'} onChange={(event) => updateDraft(proposal.id, { flowStage: event.target.value as FlowStage })}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
               <label>Tag<input disabled={!editable} value={draft.tagNames.join('、')} onChange={(event) => updateDraft(proposal.id, { tagNames: event.target.value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean) })} /></label>
               <label>來源名稱<input disabled={!editable} value={value(draft.sourceLabel)} onChange={(event) => updateDraft(proposal.id, { sourceLabel: event.target.value || null })} /></label>
               <label>來源網址<input disabled={!editable} value={value(draft.sourceUrl)} onChange={(event) => updateDraft(proposal.id, { sourceUrl: event.target.value || null })} /></label>

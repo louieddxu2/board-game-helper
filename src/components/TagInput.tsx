@@ -8,9 +8,16 @@ interface TagInputProps {
   onChange(value: string[]): void;
   canCreate?: boolean;
   label?: string;
+  detectedSuggestions?: string[];
 }
 
-export const TagInput = ({ value, onChange, canCreate = false, label = '標籤' }: TagInputProps) => {
+export const TagInput = ({
+  value,
+  onChange,
+  canCreate = false,
+  label = '標籤',
+  detectedSuggestions = [],
+}: TagInputProps) => {
   const id = useId();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
@@ -33,6 +40,9 @@ export const TagInput = ({ value, onChange, canCreate = false, label = '標籤' 
     else if (suggestions[0]) add(suggestions[0].name);
     else if (canCreate) add(query);
   };
+
+  const unselectedDetected = detectedSuggestions.filter((tag) => !value.includes(tag));
+
   return <div className="tag-input">
     <label htmlFor={id}>{label}</label>
     <div className="tag-composer">
@@ -45,6 +55,27 @@ export const TagInput = ({ value, onChange, canCreate = false, label = '標籤' 
           if (event.key === 'Escape') setOpen(false);
         }} />
     </div>
+
+    {/* 確信命中點亮區面板 */}
+    {unselectedDetected.length > 0 && (
+      <div className="detected-tags-panel">
+        <small className="muted">內文提及的常用標籤：</small>
+        <div className="detected-chips">
+          {unselectedDetected.map((tagName) => (
+            <button
+              type="button"
+              key={tagName}
+              className="tag-chip light-up"
+              onClick={() => add(tagName)}
+              title="點擊新增此標籤"
+            >
+              ＋ #{tagName}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+
     {open && (suggestions.length > 0 || (canCreate && query.trim())) && <div className="tag-suggestions" id={`${id}-list`} role="listbox">
       {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}<small>{tag.usageCount ?? 0} 條</small></button>)}
       {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add(query)}>＋建立「{query.trim()}」</button>}

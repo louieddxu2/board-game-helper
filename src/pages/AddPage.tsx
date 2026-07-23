@@ -4,6 +4,7 @@ import { GameSearch } from '../components/GameSearch';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
+import { detectDeterministicTags } from '../lib/tagDetector';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
@@ -119,7 +120,9 @@ export const AddPage = () => {
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
     {game && <div className="rule-input-list">
       <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>
-      {rules.map((rule, index) => <div className="rule-input" key={rule.id}>
+      {rules.map((rule, index) => {
+        const detected = detectDeterministicTags({ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }, { gameTags: [] }, rule.tagNames);
+        return <div className="rule-input" key={rule.id}>
         <span className="rule-number">{index + 1}</span>
         <div>
           <label className="sr-only" htmlFor={`rule-${rule.id}`}>第 {index + 1} 條規則</label><textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} aria-keyshortcuts="Enter Shift+Enter"
@@ -131,10 +134,10 @@ export const AddPage = () => {
             }} />
           <details><summary>常見錯法</summary><textarea rows={2} value={rule.commonMistake ?? ''}
             aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
-            <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} /></details>
+            <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} detectedSuggestions={detected} /></details>
         </div>
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
-      </div>)}
+      </div>})}
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增下一條</button>
     </div>}
     {game && <div className="shared-fields">

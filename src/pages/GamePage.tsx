@@ -7,6 +7,7 @@ import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCardType, type RuleRevision } from '../shared/types';
+import { detectDeterministicTags } from '../lib/tagDetector';
 import { useToast } from '../context/ToastContext';
 
 const stageNames: Record<FlowStage, string> = {
@@ -82,12 +83,12 @@ export const GamePage = () => {
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveStage('all'); setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
     </div>
     {game.aliases.length > 1 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
-    {editing && <RuleEditor rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
+    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await load(); }} />}
   </section>;
 };
 
-const RuleEditor = ({ rule, onClose, onSaved }: { rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {
+const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {
   const { isAdmin } = useSession();
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
@@ -120,10 +121,10 @@ const RuleEditor = ({ rule, onClose, onSaved }: { rule: RuleCardType; onClose():
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>常見錯法<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
-      <div className="two-columns"><label>流程位置<select value={flowStage} onChange={(event) => setFlowStage(event.target.value as FlowStage)}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
+      <div className="two-columns"><label>流程位置<select value={flowStage ?? 'uncategorized'} onChange={(event) => setFlowStage(event.target.value as FlowStage)}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
         <label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label></div>
       <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label>
-      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} />
+      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
       <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <label className="checkbox"><input type="checkbox" checked={isFeatured} onChange={(event) => setFeatured(event.target.checked)} />首頁精選</label>
       <section className="revision-panel">

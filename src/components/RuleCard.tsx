@@ -13,7 +13,7 @@ export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rul
   const isLongDetails = Boolean(rule.details && rule.details.length > 80);
 
   return <article className="rule-card" id={`rule-${rule.id}`}>
-    <div className="rule-meta"><span>{gameName ?? stageNames[rule.flowStage]}</span>{gameName && <span>{stageNames[rule.flowStage]}</span>}</div>
+    <div className="rule-meta"><span>{gameName ?? (rule.flowStage ? stageNames[rule.flowStage] : undefined)}</span>{gameName && rule.flowStage && <span>{stageNames[rule.flowStage]}</span>}</div>
     <h3>{gameHref ? <Link className="rule-title-link" to={gameHref}>{rule.statement}</Link> : rule.statement}</h3>
     {rule.commonMistake && <p className="mistake"><strong>常見錯法</strong>{rule.commonMistake}</p>}
     {rule.details && <div className={isLongDetails && !detailsExpanded ? 'rule-details collapsed' : 'rule-details'}>

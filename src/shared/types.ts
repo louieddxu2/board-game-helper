@@ -49,7 +49,7 @@ export interface RuleCard {
   statement: string;
   commonMistake?: string;
   details?: string;
-  flowStage: FlowStage;
+  flowStage?: FlowStage | null;
   playerCountNote?: string;
   editionNote?: string;
   sourceLabel?: string;
@@ -104,7 +104,7 @@ export interface ReviewContent {
   statement: string;
   commonMistake?: string | null;
   details?: string | null;
-  flowStage: FlowStage;
+  flowStage?: FlowStage | null;
   playerCountNote?: string | null;
   editionNote?: string | null;
   sourceLabel?: string | null;
