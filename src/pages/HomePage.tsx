@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
@@ -54,13 +54,12 @@ export const HomePage = () => {
         {home && home.featuredRules.length === 0 && home.recentRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
-    <AdSlot placement="home-between-sections" />
-    {home && home.popularGames.length > 0 && <section className="content-section game-section">
+    {home && home.popularGames.length > 0 && <Fragment><section className="content-section game-section">
       <div className="section-heading"><div><p className="eyebrow">依遊戲探索</p><h2>規則紀錄較多的遊戲</h2></div></div>
       <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
         <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條踩雷紀錄 →</small>
       </Link>)}</div>
-    </section>}
+    </section><AdSlot placement="home-after-game-exploration" /></Fragment>}
     {home && home.recentRules.length > 0 && <section className="content-section">
       <div className="section-heading"><div><p className="eyebrow">最近新增</p><h2>剛被記住的錯誤</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>

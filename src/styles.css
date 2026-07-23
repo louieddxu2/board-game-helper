@@ -88,7 +88,7 @@ footer { padding: 34px 24px; text-align: center; border-top: 1px solid var(--lin
 .content-section + .content-section { padding-top: 20px; }
 .ad-slot { min-height: 34px; display: grid; place-items: center; color: #7d847f; background: rgba(255,253,248,.55); border: 1px dashed #c9c3b7; border-radius: 10px; text-align: center; }
 .ad-slot small { min-height: auto; font-size: 10px; letter-spacing: .08em; }
-.ad-slot-home-between-sections { width: min(1132px, calc(100% - 48px)); margin: -48px auto 54px; }
+.ad-slot-home-after-game-exploration { width: min(1132px, calc(100% - 48px)); margin: -48px auto 54px; }
 .ad-slot-game-rule-list { margin: 4px 0; }
 .section-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 32px; }
 .section-heading h2 { font-size: clamp(30px, 4vw, 48px); margin-bottom: 0; }
@@ -233,7 +233,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .rule-grid, .rule-grid.compact, .game-grid, .admin-grid { grid-template-columns: 1fr; }
   .content-section { padding: 65px 18px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }
-  .ad-slot-home-between-sections { width: calc(100% - 36px); margin: -36px auto 42px; }
+  .ad-slot-home-after-game-exploration { width: calc(100% - 36px); margin: -36px auto 42px; }
   .draft-banner { margin: 14px; }
   .game-hero { align-items: start; gap: 20px; }
   .game-hero .button { padding: 0 14px; white-space: nowrap; }
