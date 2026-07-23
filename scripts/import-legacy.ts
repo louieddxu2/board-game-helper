@@ -60,7 +60,6 @@ const batchId = stableLegacyId('import', sourceFilename);
 const timestamp = Date.now();
 const lines: string[] = [
   'PRAGMA foreign_keys = ON;',
-  'BEGIN TRANSACTION;',
   `INSERT INTO import_batches (id, source_filename, source_hash, row_count, status, created_at, imported_at) VALUES (${sqlValue(batchId)}, ${sqlValue(sourceFilename)}, ${sqlValue(sourceHash)}, ${records.length}, 'staged', ${timestamp}, NULL) ON CONFLICT(id) DO UPDATE SET source_hash=excluded.source_hash, row_count=excluded.row_count, status='staged', imported_at=NULL;`,
 ];
 
@@ -121,7 +120,6 @@ UPDATE rules SET is_featured = 1,
 WHERE id IN (SELECT id FROM first_rules WHERE row_number = 1);
 `);
 lines.push(`UPDATE import_batches SET status=${reviewRows ? "'staged'" : "'imported'"}, imported_at=${reviewRows ? 'NULL' : timestamp} WHERE id=${sqlValue(batchId)};`);
-lines.push('COMMIT;');
 await mkdir(outputDir, { recursive: true });
 await writeFile(outputPath, lines.join('\n'), 'utf8');
 
