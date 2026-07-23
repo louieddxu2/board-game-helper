@@ -63,12 +63,12 @@ export const GamePage = () => {
     const highlights = game.rules.filter((rule) => classifyRuleUniversally(rule) === 'highlight');
     return highlights.length > 0 ? highlights : game.rules.slice(0, 3);
   }, [game]);
-  if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
-  if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
   }, []); // 只在 mount 時執行一次
+  if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
+  if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   return <section className="game-page">
     <header className="game-hero">
       <div><p className="eyebrow">開桌前快速複習</p><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
