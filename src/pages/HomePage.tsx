@@ -8,6 +8,8 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import type { HomePayload } from '../shared/types';
 
+const HOME_CACHE_FRESH_MS = 5 * 60 * 1000;
+
 export const HomePage = () => {
   const navigate = useNavigate();
   const { canEdit } = useSession();
@@ -17,11 +19,15 @@ export const HomePage = () => {
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   useEffect(() => {
     let active = true;
-    void localDb.getCachedHome().then((cached) => { if (active && cached) setHome(cached.data); });
-    void api.home().then((data) => {
+    const refreshHome = () => api.home().then((data) => {
       if (active) setHome(data);
       return localDb.cacheHome(data);
     }).catch(() => undefined);
+    void localDb.getCachedHome().then((cached) => {
+      if (!active) return;
+      if (cached) setHome(cached.data);
+      if (!cached || Date.now() - cached.cachedAt >= HOME_CACHE_FRESH_MS) void refreshHome();
+    }).catch(() => { void refreshHome(); });
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
     return () => { active = false; };

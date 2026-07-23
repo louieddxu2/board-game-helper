@@ -14,6 +14,15 @@ interface Props {
   onRuleSelect?(rule: RuleSearchResult): void;
 }
 
+type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
+type CachedSearch = SearchResponse & { cachedAt: number };
+const SEARCH_CACHE_FRESH_MS = 60 * 1000;
+const searchCache = new Map<string, CachedSearch>();
+const rememberSearch = (key: string, response: SearchResponse) => {
+  if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value as string);
+  searchCache.set(key, { ...response, cachedAt: Date.now() });
+};
+
 export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect }: Props) => {
   const inputId = useId();
   const query = useDebouncedValue(value.trim());
@@ -23,10 +32,18 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const [activeIndex, setActiveIndex] = useState(-1);
   useEffect(() => {
     if (!query || selectedId) { setGames([]); setRules([]); return; }
+    const cacheKey = `${includeRules ? 'all' : 'games'}:${query.toLocaleLowerCase()}`;
+    const cached = searchCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < SEARCH_CACHE_FRESH_MS) {
+      setGames(cached.games); setRules(cached.rules); setActiveIndex(-1); setLoading(false);
+      return;
+    }
+    if (cached) searchCache.delete(cacheKey);
     let active = true;
     setLoading(true);
     const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
     request.then((response) => {
+      rememberSearch(cacheKey, response);
       if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); }
     }).catch(() => { if (active) { setGames([]); setRules([]); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };

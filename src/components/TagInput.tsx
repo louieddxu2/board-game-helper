@@ -10,7 +10,7 @@ interface TagInputProps {
   label?: string;
 }
 
-export const TagInput = ({ value, onChange, canCreate = false, label = '主題標籤（選填）' }: TagInputProps) => {
+export const TagInput = ({ value, onChange, canCreate = false, label = '標籤' }: TagInputProps) => {
   const id = useId();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
@@ -49,6 +49,5 @@ export const TagInput = ({ value, onChange, canCreate = false, label = '主題�
       {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}<small>{tag.usageCount ?? 0} 條</small></button>)}
       {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add(query)}>＋建立「{query.trim()}」</button>}
     </div>}
-    <small className="field-help">用標籤補充主題；流程位置、人數與版本仍各自獨立。</small>
   </div>;
 };

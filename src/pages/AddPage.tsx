@@ -107,23 +107,23 @@ export const AddPage = () => {
   };
   if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
   return <section className="add-page narrow-page">
-    <header><p className="eyebrow">快速記錄</p><h1>這次玩錯了什麼？</h1><p>遊戲與來源只選一次；每條規則從一開始就是可搜尋的獨立內容。</p></header>
+    <header><p className="eyebrow">快速記錄</p><h1>這次玩錯了什麼？</h1></header>
     <GameSearch value={gameQuery} selectedId={game?.id} allowCreate onChange={(value) => { setGameQuery(value); if (game && value !== game.displayName) setGame(undefined); }}
       onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} />
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
     {game && <div className="rule-input-list">
-      <div className="list-heading"><div><h2>本次發現的錯誤</h2><small><span className="desktop-entry-hint">Enter 新增下一條；Shift＋Enter 換行。</span><span className="mobile-entry-hint">Enter 直接換行；用下方按鈕新增下一條。</span></small></div><span>{validRules.length} 條</span></div>
+      <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>
       {rules.map((rule, index) => <div className="rule-input" key={rule.id}>
         <span className="rule-number">{index + 1}</span>
         <div>
-          <label className="sr-only" htmlFor={`rule-${rule.id}`}>第 {index + 1} 條規則</label><textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement}
+          <label className="sr-only" htmlFor={`rule-${rule.id}`}>第 {index + 1} 條規則</label><textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} aria-keyshortcuts="Enter Shift+Enter"
             placeholder="例如：三人局起始只有 5 個方塊，不是 7 個。"
             onChange={(event) => setRule(rule.id, { statement: event.target.value })}
             onKeyDown={(event) => {
               const usesMobileEntry = window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !usesMobileEntry && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
             }} />
-          <details><summary>補上常見錯法（選填）</summary><textarea rows={2} value={rule.commonMistake ?? ''}
+          <details><summary>常見錯法</summary><textarea rows={2} value={rule.commonMistake ?? ''}
             aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
             <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} /></details>
         </div>
@@ -132,8 +132,8 @@ export const AddPage = () => {
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增下一條</button>
     </div>}
     {game && <div className="shared-fields">
-      <label>共同來源（選填）<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="例如：官方英文說明書第 8 頁" /></label>
-      <label>來源網址（選填）<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://…" /></label>
+      <label>共同來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="例如：官方英文說明書第 8 頁" /></label>
+      <label>來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://…" /></label>
       <button type="button" className="text-action" onClick={() => setShowMore((value) => !value)}>{showMore ? '收起其他資料' : '遊玩日期與私人備註'}</button>
       {showMore && <div className="more-fields"><label>遊玩日期<input type="date" value={playedOn} onChange={(event) => setPlayedOn(event.target.value)} /></label>
         <label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}

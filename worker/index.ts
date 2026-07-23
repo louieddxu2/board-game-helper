@@ -222,6 +222,7 @@ app.get('/api/games/search', async (c) => {
       rule_count DESC, g.display_name
     LIMIT 20
   `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
   return c.json({ games: (result.results ?? []).map(toGame) });
 });
 
@@ -249,6 +250,7 @@ app.get('/api/search', async (c) => {
       rule_id: string; game_id: string; game_name: string; game_slug: string; statement: string;
     }>(),
   ]);
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
   return c.json({
     games: (gamesResult.results ?? []).map(toGame),
     rules: (rulesResult.results ?? []).map((row) => ({ ruleId: row.rule_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug, statement: row.statement })),
@@ -268,6 +270,7 @@ app.get('/api/tags', async (c) => {
     ORDER BY usage_count DESC, t.name
     LIMIT 20
   `).bind(query, `%${query}%`, `%${query}%`).all<{ id: string; slug: string; name: string; usage_count: number }>();
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=900');
   return c.json({ tags: (result.results ?? []).map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, usageCount: tag.usage_count })) });
 });
 
@@ -311,6 +314,19 @@ const gameSchema = z.object({
 app.post('/api/games', requireRole('editor'), async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
+  const normalizedName = normalizeText(parsed.data.displayName);
+  const existing = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      COUNT(DISTINCT r.id) AS rule_count
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+    WHERE g.merged_into_game_id IS NULL
+      AND (g.normalized_name = ? OR a.normalized_alias = ?)
+    GROUP BY g.id
+    LIMIT 1
+  `).bind(normalizedName, normalizedName).first<GameRow>();
+  if (existing) return c.json({ game: toGame(existing), reused: true });
   const user = c.get('user')!;
   const id = createId('game');
   const timestamp = now();
@@ -326,7 +342,7 @@ app.post('/api/games', requireRole('editor'), async (c) => {
     c.env.DB.prepare(`
       INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizeText(parsed.data.displayName), user.id, timestamp, timestamp),
+    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizedName, user.id, timestamp, timestamp),
   ];
   for (const alias of aliases) {
     statements.push(c.env.DB.prepare(`

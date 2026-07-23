@@ -120,8 +120,7 @@ const RuleEditor = ({ rule, onClose, onSaved }: { rule: RuleCardType; onClose():
         <label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label></div>
       <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} />
-      <div className="two-columns"><label>共同來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
-      <p className="field-help">來源屬於同一次提交；修改後會套用到同批新增的規則。</p>
+      <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <label className="checkbox"><input type="checkbox" checked={isFeatured} onChange={(event) => setFeatured(event.target.checked)} />首頁精選</label>
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
@@ -157,8 +156,7 @@ const GameEditor = ({ game, onClose, onSaved }: { game: GameDetail; onClose(): v
       <div className="modal-heading"><h2 id="edit-game-title">編輯遊戲名稱</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
       <label>顯示名稱<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
       <label>英文名稱<input value={englishName} onChange={(event) => setEnglishName(event.target.value)} /></label>
-      <label>其他別名（每行一個）<textarea rows={5} value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
-      <p className="muted">既有別名不會被刪除，避免舊名稱突然搜尋不到。</p>
+      <label>可搜尋的別名（每行一個）<textarea rows={5} value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
       <div className="modal-actions"><span /><div><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="button" className="button primary" disabled={!displayName.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存遊戲'}</button></div></div>
     </div>
   </div>;
