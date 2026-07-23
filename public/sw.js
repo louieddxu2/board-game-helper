@@ -1,5 +1,5 @@
-const SHELL_CACHE = 'wrong-rules-shell-v2';
-const PUBLIC_CACHE = 'wrong-rules-public-v2';
+const SHELL_CACHE = 'wrong-rules-shell-v3';
+const PUBLIC_CACHE = 'wrong-rules-public-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -25,6 +25,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (/^\/api\/games\/[^/]+$/.test(url.pathname)) {
+    if (url.searchParams.has('fresh')) {
+      event.respondWith(fetch(request));
+      return;
+    }
     event.respondWith(fetch(request).then(async (response) => {
       if (response.ok) (await caches.open(PUBLIC_CACHE)).put(request, response.clone());
       return response;
