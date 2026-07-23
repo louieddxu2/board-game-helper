@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type RuleCard, type UserRole } from '../src/shared/types';
+import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../src/shared/types';
 import { exchangeGoogleCredential, requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
 import type { D1PreparedStatement, Env } from './env';
+import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from './review';
+import { parseReviewCsv, serializeReviewCsv } from './review-csv';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from './utils';
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
@@ -201,6 +203,52 @@ const toGame = (row: GameRow): GameSummary => ({
   ruleCount: row.rule_count,
   updatedAt: row.updated_at,
 });
+
+interface ReviewRuleRow {
+  id: string;
+  submission_id: string;
+  game_id: string;
+  game_name: string;
+  game_slug: string;
+  statement: string;
+  common_mistake: string | null;
+  details: string | null;
+  flow_stage: FlowStage;
+  player_count_note: string | null;
+  edition_note: string | null;
+  source_label: string | null;
+  source_url: string | null;
+  updated_at: number;
+  tags_json: string | null;
+}
+
+const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => normalizedReviewContent({
+  statement: row.statement,
+  commonMistake: row.common_mistake,
+  details: row.details,
+  flowStage: row.flow_stage,
+  playerCountNote: row.player_count_note,
+  editionNote: row.edition_note,
+  sourceLabel: row.source_label,
+  sourceUrl: row.source_url,
+  tagNames: (() => {
+    try {
+      return (JSON.parse(row.tags_json ?? '[]') as Array<{ name: string }>).map((tag) => tag.name);
+    } catch { return []; }
+  })(),
+});
+
+const reviewRuleSelect = `
+  SELECT r.id, r.submission_id, r.game_id, g.display_name game_name, g.slug game_slug,
+    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_count_note,
+    r.edition_note, r.updated_at, s.source_label, s.source_url,
+    (SELECT COALESCE(json_group_array(json_object('name', t.name)), '[]')
+      FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id
+      WHERE rt.rule_id = r.id) AS tags_json
+  FROM rules r
+  JOIN games g ON g.id = r.game_id
+  JOIN submissions s ON s.id = r.submission_id
+`;
 
 app.get('/api/session', (c) => c.json({
   user: c.get('user') ?? null,
@@ -790,6 +838,421 @@ app.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
   ]);
   return c.json({ ok: true, targetGameId: parsed.data.targetGameId });
+});
+
+app.get('/api/admin/review/export', requireRole('editor'), async (c) => {
+  const gameIds = (c.req.query('gameIds') ?? c.req.query('gameId') ?? '')
+    .split(',').map((value) => value.trim()).filter(Boolean).slice(0, 50);
+  const flowStages = (c.req.query('flowStages') ?? c.req.query('flowStage') ?? '')
+    .split(',').map((value) => value.trim()).filter((value): value is FlowStage => FLOW_STAGES.includes(value as FlowStage));
+  const tag = (c.req.query('tag') ?? '').trim().slice(0, 40);
+  const query = (c.req.query('q') ?? '').trim().slice(0, 120);
+  const missingSource = c.req.query('missingSource') === '1';
+  const updatedAfter = Math.max(0, Number(c.req.query('updatedAfter') ?? 0) || 0);
+  const limit = Math.min(500, Math.max(1, Number(c.req.query('limit') ?? 100) || 100));
+  const conditions = [`r.status = 'published'`, 'g.merged_into_game_id IS NULL'];
+  const bindings: unknown[] = [];
+  if (gameIds.length) {
+    conditions.push(`r.game_id IN (${gameIds.map(() => '?').join(',')})`);
+    bindings.push(...gameIds);
+  }
+  if (flowStages.length) {
+    conditions.push(`r.flow_stage IN (${flowStages.map(() => '?').join(',')})`);
+    bindings.push(...flowStages);
+  }
+  if (tag) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM rule_tags filter_rt JOIN tags filter_t ON filter_t.id = filter_rt.tag_id
+      WHERE filter_rt.rule_id = r.id AND (filter_t.slug = ? OR filter_t.normalized_name = ?)
+    )`);
+    bindings.push(tag, normalizeText(tag));
+  }
+  if (query) {
+    conditions.push('(r.statement LIKE ? COLLATE NOCASE OR r.common_mistake LIKE ? COLLATE NOCASE OR r.details LIKE ? COLLATE NOCASE)');
+    bindings.push(`%${query}%`, `%${query}%`, `%${query}%`);
+  }
+  if (missingSource) conditions.push(`COALESCE(s.source_url, '') = '' AND COALESCE(s.source_label, '') = ''`);
+  if (updatedAfter) {
+    conditions.push('r.updated_at >= ?');
+    bindings.push(updatedAfter);
+  }
+  const result = await c.env.DB.prepare(`${reviewRuleSelect}
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY g.display_name, r.updated_at DESC, r.id
+    LIMIT ?
+  `).bind(...bindings, limit).all<ReviewRuleRow>();
+  const rows = result.results ?? [];
+  const items = await Promise.all(rows.map(async (row) => {
+    const current = reviewContentFromRow(row);
+    return {
+      action: 'unchanged' as const,
+      target: {
+        type: 'rule' as const,
+        id: row.id,
+        gameId: row.game_id,
+        gameName: row.game_name,
+        gameSlug: row.game_slug,
+      },
+      base: { updatedAt: row.updated_at, contentHash: await reviewContentHash(current) },
+      current,
+      proposed: current,
+      reason: '',
+    };
+  }));
+  const scope = { gameIds, flowStages, tag: tag || undefined, query: query || undefined, missingSource, updatedAfter: updatedAfter || undefined, limit };
+  const datasetVersion = await sha256Hex(JSON.stringify(items.map((item) => [item.target.id, item.base.updatedAt, item.base.contentHash])));
+  const timestamp = now();
+  const file: ReviewFile = {
+    format: REVIEW_FORMAT,
+    schemaVersion: REVIEW_SCHEMA_VERSION,
+    name: `校稿包 ${new Date(timestamp).toISOString().slice(0, 10)}`,
+    exportedAt: timestamp,
+    datasetVersion,
+    scope,
+    instructions: [
+      '只修改 proposed、reason 與 action；不要修改 target、base 或 current。',
+      '需要提出修改時將 action 設為 propose；需要隱藏時設為 hide；不處理則保留 unchanged。',
+      'proposed 必須保留完整欄位；tagNames 使用既有標籤名稱。',
+    ],
+    items,
+  };
+  if (c.req.query('format') === 'csv') {
+    c.header('Content-Type', 'text/csv; charset=utf-8');
+    c.header('Content-Disposition', `attachment; filename="board-game-rules-review-${new Date(timestamp).toISOString().slice(0, 10)}.csv"`);
+    return c.body(serializeReviewCsv(file));
+  }
+  c.header('Content-Disposition', `attachment; filename="board-game-rules-review-${new Date(timestamp).toISOString().slice(0, 10)}.json"`);
+  return c.json(file);
+});
+
+const reviewImportSchema = z.union([
+  z.object({ file: z.unknown() }),
+  z.object({ format: z.literal('csv'), content: z.string().min(1).max(3 * 1024 * 1024) }),
+]);
+app.post('/api/admin/review/import', requireRole('editor'), async (c) => {
+  const contentLength = Number(c.req.header('content-length') ?? 0);
+  if (contentLength > 3 * 1024 * 1024) return c.json({ error: 'request_too_large' }, 413);
+  const body = reviewImportSchema.safeParse(await c.req.json());
+  if (!body.success) return c.json({ error: 'invalid_review_file' }, 400);
+  let reviewInput: unknown;
+  try {
+    reviewInput = 'content' in body.data ? parseReviewCsv(body.data.content) : body.data.file;
+  } catch {
+    return c.json({ error: 'invalid_review_file' }, 400);
+  }
+  const parsed = reviewFileSchema.safeParse(reviewInput);
+  if (!parsed.success) return c.json({ error: 'invalid_review_file', issues: parsed.error.issues }, 400);
+  const sourceHash = await sha256Hex(JSON.stringify(parsed.data));
+  const existing = await c.env.DB.prepare('SELECT id, proposal_count FROM review_batches WHERE source_hash = ?')
+    .bind(sourceHash).first<{ id: string; proposal_count: number }>();
+  if (existing) return c.json({ batchId: existing.id, imported: existing.proposal_count, reused: true });
+
+  const candidates = parsed.data.items.filter((item) =>
+    item.action !== 'unchanged' && (item.action === 'hide' || !sameReviewContent(item.current, item.proposed)));
+  const targetIds = Array.from(new Set(candidates.map((item) => item.target.id)));
+  const currentRows = new Map<string, ReviewRuleRow>();
+  for (let index = 0; index < targetIds.length; index += 50) {
+    const ids = targetIds.slice(index, index + 50);
+    if (!ids.length) continue;
+    const result = await c.env.DB.prepare(`${reviewRuleSelect}
+      WHERE r.id IN (${ids.map(() => '?').join(',')})
+    `).bind(...ids).all<ReviewRuleRow>();
+    for (const row of result.results ?? []) currentRows.set(row.id, row);
+  }
+
+  const timestamp = now();
+  const user = c.get('user')!;
+  const batchId = createId('review_batch');
+  const proposals: Array<{
+    id: string; item: (typeof candidates)[number]; status: 'pending' | 'conflict';
+    original: ReviewContent; proposed: ReviewContent;
+  }> = [];
+  let skipped = 0;
+  for (const item of candidates) {
+    const row = currentRows.get(item.target.id);
+    if (!row) { skipped += 1; continue; }
+    const original = reviewContentFromRow(row);
+    const proposed = normalizedReviewContent(item.proposed);
+    if (item.action !== 'hide' && sameReviewContent(original, proposed)) { skipped += 1; continue; }
+    const currentHash = await reviewContentHash(original);
+    proposals.push({
+      id: createId('review'),
+      item,
+      status: row.updated_at === item.base.updatedAt && currentHash === item.base.contentHash ? 'pending' : 'conflict',
+      original,
+      proposed,
+    });
+  }
+  await c.env.DB.prepare(`
+    INSERT INTO review_batches (
+      id, name, source_type, source_hash, base_dataset_version, scope_json,
+      proposal_count, pending_count, created_by, created_at, updated_at
+    ) VALUES (?, ?, 'file', ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    batchId, parsed.data.name, sourceHash, parsed.data.datasetVersion,
+    JSON.stringify(parsed.data.scope), proposals.length,
+    proposals.filter((proposal) => proposal.status === 'pending').length,
+    user.id, timestamp, timestamp,
+  ).run();
+  try {
+    for (let index = 0; index < proposals.length; index += 50) {
+      const statements = proposals.slice(index, index + 50).map(({ id, item, status, original, proposed }) =>
+        c.env.DB.prepare(`
+          INSERT INTO review_proposals (
+            id, batch_id, target_id, operation, base_updated_at, base_content_hash,
+            original_json, proposed_json, reason, status, created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id, batchId, item.target.id, item.action === 'hide' ? 'hide' : 'edit',
+          item.base.updatedAt, item.base.contentHash, JSON.stringify(original),
+          JSON.stringify(proposed), cleanOptional(item.reason, 1000) ?? null,
+          status, user.id, timestamp, timestamp,
+        ));
+      if (statements.length) await c.env.DB.batch(statements);
+    }
+  } catch (error) {
+    await c.env.DB.prepare('DELETE FROM review_batches WHERE id = ?').bind(batchId).run();
+    throw error;
+  }
+  return c.json({
+    batchId,
+    imported: proposals.length,
+    pending: proposals.filter((proposal) => proposal.status === 'pending').length,
+    conflicts: proposals.filter((proposal) => proposal.status === 'conflict').length,
+    skipped,
+    reused: false,
+  }, 201);
+});
+
+const manualProposalSchema = z.object({
+  targetId: z.string().min(1).max(100),
+  proposed: reviewContentSchema,
+  reason: z.string().trim().max(1000).optional(),
+  operation: z.enum(['edit', 'hide']).default('edit'),
+});
+app.post('/api/admin/review/proposals', requireRole('editor'), async (c) => {
+  const parsed = manualProposalSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_review_proposal', issues: parsed.error.issues }, 400);
+  const row = await c.env.DB.prepare(`${reviewRuleSelect} WHERE r.id = ?`)
+    .bind(parsed.data.targetId).first<ReviewRuleRow>();
+  if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const original = reviewContentFromRow(row);
+  const proposed = normalizedReviewContent(parsed.data.proposed);
+  if (parsed.data.operation === 'edit' && sameReviewContent(original, proposed)) {
+    return c.json({ error: 'proposal_has_no_changes' }, 409);
+  }
+  const id = createId('review');
+  const timestamp = now();
+  await c.env.DB.prepare(`
+    INSERT INTO review_proposals (
+      id, target_id, operation, base_updated_at, base_content_hash,
+      original_json, proposed_json, reason, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, row.id, parsed.data.operation, row.updated_at, await reviewContentHash(original),
+    JSON.stringify(original), JSON.stringify(proposed), parsed.data.reason ?? null,
+    c.get('user')!.id, timestamp, timestamp,
+  ).run();
+  return c.json({ proposalId: id }, 201);
+});
+
+app.get('/api/admin/review/batches', requireRole('editor'), async (c) => {
+  const result = await c.env.DB.prepare(`
+    SELECT id, name, source_type, status, proposal_count, pending_count,
+      accepted_count, rejected_count, created_at, updated_at
+    FROM review_batches
+    ORDER BY updated_at DESC LIMIT 50
+  `).all<{
+    id: string; name: string; source_type: ReviewBatch['sourceType']; status: ReviewBatch['status'];
+    proposal_count: number; pending_count: number; accepted_count: number; rejected_count: number;
+    created_at: number; updated_at: number;
+  }>();
+  return c.json({ batches: (result.results ?? []).map((row): ReviewBatch => ({
+    id: row.id, name: row.name, sourceType: row.source_type, status: row.status,
+    proposalCount: row.proposal_count, pendingCount: row.pending_count,
+    acceptedCount: row.accepted_count, rejectedCount: row.rejected_count,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  })) });
+});
+
+app.get('/api/admin/review/proposals', requireRole('editor'), async (c) => {
+  const status = c.req.query('status') ?? 'pending';
+  if (!['pending', 'accepted', 'rejected', 'conflict', 'cancelled'].includes(status)) {
+    return c.json({ error: 'invalid_review_status' }, 400);
+  }
+  const batchId = (c.req.query('batchId') ?? '').trim();
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? 20) || 20));
+  const [cursorTimeText, cursorId = ''] = (c.req.query('cursor') ?? '').split('|');
+  const cursorTime = Math.max(0, Number(cursorTimeText) || 0);
+  const result = await c.env.DB.prepare(`
+    SELECT p.*, b.name batch_name, g.id game_id, g.display_name game_name, g.slug game_slug,
+      claimant.email claimed_email
+    FROM review_proposals p
+    JOIN rules r ON r.id = p.target_id
+    JOIN games g ON g.id = r.game_id
+    LEFT JOIN review_batches b ON b.id = p.batch_id
+    LEFT JOIN users claimant ON claimant.id = p.claimed_by
+    WHERE p.status = ? AND (? = '' OR p.batch_id = ?)
+      AND (? = 0 OR p.created_at < ? OR (p.created_at = ? AND p.id < ?))
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT ?
+  `).bind(status, batchId, batchId, cursorTime, cursorTime, cursorTime, cursorId, limit + 1).all<{
+    id: string; batch_id: string | null; batch_name: string | null; target_id: string;
+    game_id: string; game_name: string; game_slug: string; operation: 'edit' | 'hide';
+    base_updated_at: number; original_json: string; proposed_json: string; reason: string | null;
+    status: ReviewProposal['status']; version: number; claimed_email: string | null;
+    claimed_until: number | null; created_at: number;
+  }>();
+  const rows = result.results ?? [];
+  const visibleRows = rows.slice(0, limit);
+  const last = visibleRows.at(-1);
+  return c.json({ proposals: visibleRows.map((row): ReviewProposal => ({
+    id: row.id, batchId: row.batch_id ?? undefined, batchName: row.batch_name ?? undefined,
+    targetId: row.target_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug,
+    operation: row.operation, baseUpdatedAt: row.base_updated_at,
+    original: JSON.parse(row.original_json) as SharedReviewContent,
+    proposed: JSON.parse(row.proposed_json) as SharedReviewContent,
+    reason: row.reason ?? undefined, status: row.status, version: row.version,
+    claimedBy: row.claimed_email ?? undefined, claimedUntil: row.claimed_until ?? undefined,
+    createdAt: row.created_at,
+  })), nextCursor: rows.length > limit && last ? `${last.created_at}|${last.id}` : null });
+});
+
+app.post('/api/admin/review/proposals/:id/claim', requireRole('editor'), async (c) => {
+  const timestamp = now();
+  const until = timestamp + 10 * 60 * 1000;
+  const result = await c.env.DB.prepare(`
+    UPDATE review_proposals
+    SET claimed_by = ?, claimed_until = ?, version = version + 1, updated_at = ?
+    WHERE id = ? AND status = 'pending'
+      AND (claimed_by IS NULL OR claimed_by = ? OR claimed_until < ?)
+  `).bind(c.get('user')!.id, until, timestamp, c.req.param('id'), c.get('user')!.id, timestamp).run();
+  if (!result.meta?.changes) return c.json({ error: 'proposal_claimed' }, 409);
+  const claimed = await c.env.DB.prepare('SELECT version FROM review_proposals WHERE id = ?')
+    .bind(c.req.param('id')).first<{ version: number }>();
+  return c.json({ ok: true, claimedUntil: until, version: claimed?.version ?? 1 });
+});
+
+const reviewDecisionSchema = z.object({
+  decisions: z.array(z.object({
+    proposalId: z.string().min(1).max(100),
+    version: z.number().int().positive(),
+    decision: z.enum(['accept', 'reject']),
+    proposed: reviewContentSchema.optional(),
+  })).min(1).max(50),
+});
+app.post('/api/admin/review/decisions', requireRole('editor'), async (c) => {
+  const parsed = reviewDecisionSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_review_decisions', issues: parsed.error.issues }, 400);
+  const ids = Array.from(new Set(parsed.data.decisions.map((decision) => decision.proposalId)));
+  const result = await c.env.DB.prepare(`
+    SELECT p.*, r.submission_id, r.game_id, r.updated_at rule_updated_at
+    FROM review_proposals p JOIN rules r ON r.id = p.target_id
+    WHERE p.id IN (${ids.map(() => '?').join(',')})
+  `).bind(...ids).all<{
+    id: string; batch_id: string | null; target_id: string; operation: 'edit' | 'hide';
+    base_updated_at: number; original_json: string; proposed_json: string;
+    status: ReviewProposal['status']; version: number; submission_id: string;
+    game_id: string; rule_updated_at: number; claimed_by: string | null; claimed_until: number | null;
+  }>();
+  const rows = new Map((result.results ?? []).map((row) => [row.id, row]));
+  const statements: D1PreparedStatement[] = [];
+  const affectedBatches = new Set<string>();
+  const outcomes: Array<{ proposalId: string; status: 'accepted' | 'rejected' | 'conflict' | 'stale' }> = [];
+  const user = c.get('user')!;
+  const timestamp = now();
+  for (const decision of parsed.data.decisions) {
+    const row = rows.get(decision.proposalId);
+    if (!row || row.status !== 'pending' || row.version !== decision.version) {
+      outcomes.push({ proposalId: decision.proposalId, status: 'stale' });
+      continue;
+    }
+    if (row.claimed_by && row.claimed_by !== user.id && (row.claimed_until ?? 0) >= timestamp) {
+      outcomes.push({ proposalId: decision.proposalId, status: 'stale' });
+      continue;
+    }
+    if (row.batch_id) affectedBatches.add(row.batch_id);
+    if (decision.decision === 'reject') {
+      statements.push(c.env.DB.prepare(`
+        UPDATE review_proposals SET status = 'rejected', reviewed_by = ?, reviewed_at = ?,
+          claimed_by = NULL, claimed_until = NULL, version = version + 1, updated_at = ?
+        WHERE id = ? AND status = 'pending' AND version = ?
+      `).bind(user.id, timestamp, timestamp, row.id, decision.version));
+      outcomes.push({ proposalId: row.id, status: 'rejected' });
+      continue;
+    }
+    if (row.rule_updated_at !== row.base_updated_at) {
+      statements.push(c.env.DB.prepare(`
+        UPDATE review_proposals SET status = 'conflict', reviewed_by = ?, reviewed_at = ?,
+          claimed_by = NULL, claimed_until = NULL, version = version + 1, updated_at = ?
+        WHERE id = ? AND status = 'pending' AND version = ?
+      `).bind(user.id, timestamp, timestamp, row.id, decision.version));
+      outcomes.push({ proposalId: row.id, status: 'conflict' });
+      continue;
+    }
+    const original = JSON.parse(row.original_json) as ReviewContent;
+    const proposed = normalizedReviewContent(decision.proposed ?? JSON.parse(row.proposed_json) as ReviewContent);
+    statements.push(c.env.DB.prepare(`
+      INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
+      VALUES (?, ?, ?, ?, 'review_accept', ?)
+    `).bind(createId('rev'), row.target_id, JSON.stringify({ ...original, tag_names: original.tagNames }), user.id, timestamp));
+    if (row.operation === 'hide') {
+      statements.push(c.env.DB.prepare(`
+        UPDATE rules SET status = 'hidden', hidden_at = ?, hidden_by = ?, updated_at = ?
+        WHERE id = ? AND updated_at = ?
+      `).bind(timestamp, user.id, timestamp, row.target_id, row.base_updated_at));
+    } else {
+      statements.push(c.env.DB.prepare(`
+        UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
+          player_count_note = ?, edition_note = ?, updated_at = ?
+        WHERE id = ? AND updated_at = ?
+      `).bind(
+        proposed.statement, proposed.commonMistake ?? null, proposed.details ?? null,
+        proposed.flowStage, proposed.playerCountNote ?? null, proposed.editionNote ?? null,
+        timestamp, row.target_id, row.base_updated_at,
+      ));
+      statements.push(
+        c.env.DB.prepare('UPDATE submissions SET source_label = ?, source_url = ? WHERE id = ?')
+          .bind(proposed.sourceLabel ?? null, proposed.sourceUrl || null, row.submission_id),
+        c.env.DB.prepare('DELETE FROM submission_sources WHERE submission_id = ?').bind(row.submission_id),
+      );
+      if (proposed.sourceUrl) {
+        statements.push(c.env.DB.prepare(`
+          INSERT INTO submission_sources (id, submission_id, label, url, position, created_at)
+          VALUES (?, ?, ?, ?, 0, ?)
+        `).bind(createId('source'), row.submission_id, proposed.sourceLabel ?? null, proposed.sourceUrl, timestamp));
+      }
+      statements.push(...await tagWriteStatements(c, row.target_id, proposed.tagNames, user.id, timestamp));
+    }
+    statements.push(
+      c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id),
+      c.env.DB.prepare(`
+        UPDATE review_proposals SET status = 'accepted', proposed_json = ?, reviewed_by = ?,
+          reviewed_at = ?, claimed_by = NULL, claimed_until = NULL,
+          version = version + 1, updated_at = ?
+        WHERE id = ? AND status = 'pending' AND version = ?
+      `).bind(JSON.stringify(proposed), user.id, timestamp, timestamp, row.id, decision.version),
+    );
+    outcomes.push({ proposalId: row.id, status: 'accepted' });
+  }
+  for (const batchId of affectedBatches) {
+    statements.push(c.env.DB.prepare(`
+      UPDATE review_batches SET
+        pending_count = (SELECT COUNT(*) FROM review_proposals WHERE batch_id = ? AND status = 'pending'),
+        accepted_count = (SELECT COUNT(*) FROM review_proposals WHERE batch_id = ? AND status = 'accepted'),
+        rejected_count = (SELECT COUNT(*) FROM review_proposals WHERE batch_id = ? AND status = 'rejected'),
+        status = CASE WHEN EXISTS (
+          SELECT 1 FROM review_proposals WHERE batch_id = ? AND status IN ('pending', 'conflict')
+        ) THEN 'open' ELSE 'completed' END,
+        completed_at = CASE WHEN EXISTS (
+          SELECT 1 FROM review_proposals WHERE batch_id = ? AND status IN ('pending', 'conflict')
+        ) THEN NULL ELSE ? END,
+        updated_at = ?
+      WHERE id = ?
+    `).bind(batchId, batchId, batchId, batchId, batchId, timestamp, timestamp, batchId));
+  }
+  if (statements.length) await c.env.DB.batch(statements);
+  return c.json({ outcomes });
 });
 
 app.get('/api/admin/editors', requireRole('admin'), async (c) => {

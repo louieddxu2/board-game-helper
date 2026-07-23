@@ -76,6 +76,7 @@ Google Client ID 可以公開；session secret 與其他敏感設定不得提交
 - [計分板整合說明](docs/scorepad-integration.md)
 - [OpenAPI v1](docs/openapi.yaml)
 - [TypeScript client](integration/board-game-rules-client.ts)
+- [校稿交換流程](docs/review-workflow.md)
 
 公開讀取保持匿名以共用 CDN 快取；只有 session 檢查與寫入帶 Bearer token。遊戲名稱先由正式名稱與別名解析，計分板可保存 `localGameId → rulesGameId` 映射。
 

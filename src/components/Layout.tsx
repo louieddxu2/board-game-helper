@@ -21,6 +21,7 @@ export const Layout = () => {
       <nav className="desktop-nav" aria-label="主要導覽">
         <NavLink to="/">探索</NavLink>
         {canEdit && <NavLink to="/add" className="nav-primary">＋記錄</NavLink>}
+        {canEdit && <NavLink to="/review">校稿</NavLink>}
         {isAdmin && <NavLink to="/admin">管理</NavLink>}
         {!user && <NavLink to="/login">登入</NavLink>}
         {user && <button type="button" className="link-button" onClick={() => void logout()}>登出</button>}
@@ -32,6 +33,7 @@ export const Layout = () => {
       <NavLink to="/#home-search"><span aria-hidden="true">⌕</span><small>搜尋</small></NavLink>
       {canEdit ? <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋</span><small>記錄{pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
         : <NavLink to="/login" className="mobile-primary"><span aria-hidden="true">＋</span><small>登入記錄</small></NavLink>}
+      {canEdit && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}
       {isAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>管理</small></NavLink>}
     </nav>
     <footer>把踩過的坑，留給下一次更好的開桌。</footer>

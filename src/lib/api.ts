@@ -1,4 +1,4 @@
-import type { GameDetail, GameSummary, HomePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -63,4 +63,20 @@ export const api = {
   }),
   skipImport: (id: string) => request<{ ok: true }>(`/api/admin/imports/${id}/skip`, { method: 'POST', body: '{}' }),
   hiddenRules: () => request<{ rules: import('../shared/types').RuleCard[] }>('/api/admin/hidden-rules'),
+  reviewBatches: () => request<{ batches: ReviewBatch[] }>('/api/admin/review/batches'),
+  reviewProposals: (status = 'pending', batchId = '', limit = 20, cursor = '') =>
+    request<{ proposals: ReviewProposal[]; nextCursor: string | null }>(`/api/admin/review/proposals?status=${encodeURIComponent(status)}&batchId=${encodeURIComponent(batchId)}&limit=${limit}&cursor=${encodeURIComponent(cursor)}`),
+  importReviewFile: (file: unknown) => request<{ batchId: string; imported: number; pending?: number; conflicts?: number; skipped?: number; reused: boolean }>('/api/admin/review/import', {
+    method: 'POST', body: JSON.stringify({ file }),
+  }),
+  importReviewCsv: (content: string) => request<{ batchId: string; imported: number; pending?: number; conflicts?: number; skipped?: number; reused: boolean }>('/api/admin/review/import', {
+    method: 'POST', body: JSON.stringify({ format: 'csv', content }),
+  }),
+  claimReviewProposal: (id: string) => request<{ ok: true; claimedUntil: number; version: number }>(`/api/admin/review/proposals/${id}/claim`, {
+    method: 'POST', body: '{}',
+  }),
+  decideReviewProposals: (decisions: Array<{ proposalId: string; version: number; decision: 'accept' | 'reject'; proposed?: ReviewContent }>) =>
+    request<{ outcomes: Array<{ proposalId: string; status: string }> }>('/api/admin/review/decisions', {
+      method: 'POST', body: JSON.stringify({ decisions }),
+    }),
 };

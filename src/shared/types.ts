@@ -101,3 +101,48 @@ export interface SubmissionInput {
   idempotencyKey: string;
   rules: SubmissionRuleInput[];
 }
+
+export interface ReviewContent {
+  statement: string;
+  commonMistake?: string | null;
+  details?: string | null;
+  flowStage: FlowStage;
+  playerCountNote?: string | null;
+  editionNote?: string | null;
+  sourceLabel?: string | null;
+  sourceUrl?: string | null;
+  tagNames: string[];
+}
+
+export interface ReviewProposal {
+  id: string;
+  batchId?: string;
+  batchName?: string;
+  targetId: string;
+  gameId: string;
+  gameName: string;
+  gameSlug: string;
+  operation: 'edit' | 'hide';
+  baseUpdatedAt: number;
+  original: ReviewContent;
+  proposed: ReviewContent;
+  reason?: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'conflict' | 'cancelled';
+  version: number;
+  claimedBy?: string;
+  claimedUntil?: number;
+  createdAt: number;
+}
+
+export interface ReviewBatch {
+  id: string;
+  name: string;
+  sourceType: 'file' | 'ai' | 'manual';
+  status: 'open' | 'completed' | 'cancelled';
+  proposalCount: number;
+  pendingCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
