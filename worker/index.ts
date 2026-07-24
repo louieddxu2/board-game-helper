@@ -415,7 +415,7 @@ app.get('/api/home', async (c) => {
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: finalPopularGames.map(toGame),
   };
-  setPublicCache(c, 0, 3600, 86400);
+  c.header('Cache-Control', 'no-cache, must-revalidate');
   return c.json(payload);
 });
 
@@ -585,7 +585,7 @@ app.get('/api/games/:identifier', async (c) => {
 
   const etag = `W/"game-${game.id}-${game.updated_at}"`;
   c.header('ETag', etag);
-  c.header('Cache-Control', 'public, max-age=0, s-maxage=86400, must-revalidate');
+  c.header('Cache-Control', 'no-cache, must-revalidate');
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
 
   const [aliasesResult, rulesResult] = await Promise.all([
