@@ -45,14 +45,8 @@ export const HomePage = () => {
       <div><small>未完成草稿</small><strong>{draft.game?.displayName ?? '尚未選擇遊戲'}・{draft.rules.length} 個輸入格</strong></div>
       <Link to="/add">繼續記錄 →</Link>
     </section>}
-    {home && home.popularGames.length > 0 && <section className="content-section game-section">
-      <div className="section-heading"><div><h2>近 7 天常被查閱的遊戲</h2></div></div>
-      <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
-        <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條規則紀錄 →</small>
-      </Link>)}</div>
-    </section>}
     <section id="discover" className="content-section">
-      <div className="section-heading"><div><h2>精選勘誤規則</h2></div></div>
+      <div className="section-heading"><div><h2>近 7 天常被查閱的規則</h2></div></div>
       <div className="rule-grid">
         {(home?.featuredRules.length ? home.featuredRules : home?.recentRules ?? []).slice(0, 10).map((rule) =>
           <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
@@ -67,11 +61,17 @@ export const HomePage = () => {
         {home && home.featuredRules.length === 0 && home.recentRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
+    <AdSlot placement="home-after-game-exploration" />
+    {home && home.popularGames.length > 0 && <section className="content-section game-section">
+      <div className="section-heading"><div><h2>已收錄規則的遊戲</h2></div></div>
+      <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
+        <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條規則紀錄 →</small>
+      </Link>)}</div>
+    </section>}
     {home && home.recentRules.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}</div>
     </section>}
-    <AdSlot placement="home-after-game-exploration" />
   </>;
 };
