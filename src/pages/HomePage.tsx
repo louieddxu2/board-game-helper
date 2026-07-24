@@ -46,7 +46,7 @@ export const HomePage = () => {
       <Link to="/add">繼續記錄 →</Link>
     </section>}
     <section id="discover" className="content-section">
-      <div className="section-heading"><div><h2>近 7 天常被查閱的規則</h2></div></div>
+      <div className="section-heading"><div><h2>近期常被查閱的遊戲/規則</h2></div></div>
       <div className="rule-grid">
         {(home?.featuredRules ?? []).map((rule) =>
           <RuleCard key={rule.id} rule={rule} gameId={(rule as any).gameId} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}

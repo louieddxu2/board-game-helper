@@ -306,12 +306,33 @@ app.post('/api/logout', async (c) => {
 });
 
 app.get('/api/home', async (c) => {
+  const windowRow = await c.env.DB.prepare(`
+    WITH recent_games AS (
+      SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
+      FROM (
+        SELECT game_id, view_date, created_at
+        FROM daily_views
+        ORDER BY created_at DESC
+      )
+      GROUP BY game_id
+      ORDER BY last_seen DESC
+      LIMIT 6
+    )
+    SELECT MIN(min_date) as window_start FROM recent_games;
+  `).first<{ window_start: string | null }>();
+
+  let startDateStr = '';
+  if (windowRow && windowRow.window_start) {
+    startDateStr = new Date(new Date(windowRow.window_start).getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  }
+  const viewDateCondition = startDateStr ? `dv.view_date >= '${startDateStr}'` : `dv.view_date >= DATE('now', '-7 days')`;
+
   const [popularRulesViewsResult, featuredResult, recentResult, popularViewsResult, popularResult] = await Promise.all([
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
       JOIN daily_views dv ON dv.rule_id = r.id
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
-        AND dv.view_date >= DATE('now', '-7 days')
+        AND ${viewDateCondition}
       GROUP BY r.id
       ORDER BY COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
       LIMIT 10
@@ -332,7 +353,7 @@ app.get('/api/home', async (c) => {
         (SELECT COUNT(r.id) FROM rules r WHERE r.game_id = g.id AND r.status = 'published') AS rule_count
       FROM games g
       JOIN daily_views dv ON g.id = dv.game_id
-      WHERE dv.view_date >= DATE('now', '-7 days') AND g.merged_into_game_id IS NULL
+      WHERE ${viewDateCondition} AND g.merged_into_game_id IS NULL
       GROUP BY g.id
       ORDER BY view_count DESC, MAX(dv.created_at) DESC
       LIMIT 6
@@ -530,6 +551,12 @@ app.get('/api/games/:identifier', async (c) => {
     GROUP BY g.id
   `).bind(identifier, identifier).first<GameRow>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
+
+  const etag = `W/"game-${game.id}-${game.updated_at}"`;
+  c.header('ETag', etag);
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, must-revalidate');
+  if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
+
   const [aliasesResult, rulesResult] = await Promise.all([
     c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
@@ -839,6 +866,7 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     ...(parsed.data.sourceUrl ? [c.env.DB.prepare(`INSERT INTO submission_sources (id, submission_id, label, url, position, created_at) VALUES (?, ?, ?, ?, 0, ?)`)
       .bind(createId('source'), row.submission_id, parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel, parsed.data.sourceUrl, timestamp)] : [])]),
     ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
+    c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
   return c.json({ ok: true, updatedAt: timestamp });
 });
