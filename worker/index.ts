@@ -375,7 +375,7 @@ app.get('/api/home', async (c) => {
 
   let finalFeaturedRules = popularRulesViewsResult.results ?? [];
   if (finalFeaturedRules.length === 0) {
-    finalFeaturedRules = featuredResult.results ?? [];
+    finalFeaturedRules = recentResult.results ?? [];
   }
 
   let finalPopularGames = popularViewsResult.results ?? [];
