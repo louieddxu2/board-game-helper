@@ -152,7 +152,6 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
   const [details, setDetails] = useState(rule.details ?? '');
   const [playerCountNote, setPlayerCountNote] = useState(rule.playerCountNote ?? '');
   const [editionNote, setEditionNote] = useState(rule.editionNote ?? '');
-  const [isFeatured, setFeatured] = useState(rule.isFeatured);
   const [tagNames, setTagNames] = useState(rule.tags.map((tag) => tag.name));
   const [sourceLabel, setSourceLabel] = useState(rule.sourceLabel ?? '');
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
@@ -166,7 +165,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, isFeatured, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -181,7 +180,6 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
         <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} gameId={game.id} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
       <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
-      <label className="checkbox"><input type="checkbox" checked={isFeatured} onChange={(event) => setFeatured(event.target.checked)} />首頁精選</label>
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
