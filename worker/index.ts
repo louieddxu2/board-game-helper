@@ -767,12 +767,15 @@ app.patch('/api/games/:id', requireRole('editor'), async (c) => {
   const timestamp = now();
   const aliases = new Set([parsed.data.displayName, parsed.data.englishName, ...(parsed.data.aliases ?? [])]
     .filter((value): value is string => Boolean(value?.trim())));
-  const statements: D1PreparedStatement[] = [c.env.DB.prepare(`
-    UPDATE games SET display_name = ?, english_name = ?, normalized_name = ?, updated_at = ? WHERE id = ?
-  `).bind(parsed.data.displayName, cleanOptional(parsed.data.englishName, 120) ?? null, normalizeText(parsed.data.displayName), timestamp, c.req.param('id'))];
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`
+      UPDATE games SET display_name = ?, english_name = ?, normalized_name = ?, updated_at = ? WHERE id = ?
+    `).bind(parsed.data.displayName, cleanOptional(parsed.data.englishName, 120) ?? null, normalizeText(parsed.data.displayName), timestamp, c.req.param('id')),
+    c.env.DB.prepare('DELETE FROM game_aliases WHERE game_id = ?').bind(c.req.param('id')),
+  ];
   for (const alias of aliases) {
     statements.push(c.env.DB.prepare(`
-      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+      INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('alias'), c.req.param('id'), alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
