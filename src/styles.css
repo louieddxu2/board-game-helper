@@ -53,17 +53,18 @@ footer a { color: inherit; }
 .hero::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
 .eyebrow { color: var(--orange); font-size: 12px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; margin-bottom: 14px; }
 .hero .eyebrow { color: var(--yellow); text-align: center; }
-.hero h1 { font-size: clamp(1.75rem, 5vw, 2.75rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 16ch; margin-left: auto; margin-right: auto; }
+.hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
 .hero-inner { width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
-.hero-recents { margin-top: 16px; display: flex; flex-direction: column; align-items: center; }
-.hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; margin-bottom: 8px; text-align: center; }
-.recent-game-chips, .hero-recents div, .tag-input-values, .rule-tags, .tag-filter { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 7px; }
+.hero-recents { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; text-align: center; }
+.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: 680px; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
-.recent-game-chips button, .hero-recents a, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
-.hero-recents a { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: white; }
+.recent-game-chips button, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+.hero-recents a { display: inline-flex; align-items: center; justify-content: center; text-align: center; border: 1px solid rgba(255,255,255,.25); border-radius: 100px; background: rgba(255,255,255,.12); color: white; padding: 6px 14px; font-size: 13px; line-height: 1.2; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 150ms ease, border-color 150ms ease; }
+.hero-recents a:hover { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }
 .hero-copy { font-size: 20px; line-height: 1.6; max-width: 620px; color: #dfe8e4; text-align: center; margin-bottom: 40px; }
 .hero-actions { display: flex; gap: 12px; margin: 34px 0 48px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 21px; border-radius: 100px; border: 1px solid transparent; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .16s ease, opacity .16s; }

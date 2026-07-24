@@ -35,9 +35,9 @@ export const HomePage = () => {
   return <>
     <section className="hero">
       <div className="hero-inner"><div className="hero-main">
-        <h1>這次玩對，<br />或是下次玩對。</h1>
+        <h1>這次玩對，或是下次玩對。</h1>
         <div className="hero-search" id="home-search"><GameSearch includeRules value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={(name) => { navigate(canEdit ? `/add?name=${encodeURIComponent(name)}` : '/login'); }} /></div>
-        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span>{recentGames.slice(0, 4).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>}
+        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 5).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
       </div>
       </div>
     </section>
