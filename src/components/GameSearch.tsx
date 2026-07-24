@@ -28,7 +28,7 @@ const rememberSearch = (key: string, response: SearchResponse) => {
 export function formatGameSearchDisplay(
   game: GameSummary,
   query: string
-): { primary: string; secondary?: string; note?: string } {
+): { primary: string; secondary?: string } {
   const q = query.trim().toLowerCase();
   if (!q) {
     return {
@@ -67,7 +67,6 @@ export function formatGameSearchDisplay(
     return {
       primary: matchedAlias,
       secondary: secondaryName,
-      note: `別名 (原名：${game.displayName})`,
     };
   }
 
@@ -89,7 +88,12 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!query || selectedId) { setGames([]); setRules([]); setSearchError(false); return; }
+    const isEnglishOnly = /^[a-zA-Z0-9\s\-_'.]+$/.test(query);
+    const isMinLengthSatisfied = isEnglishOnly ? query.length >= 2 : query.length >= 1;
+
+    if (!query || selectedId || !isMinLengthSatisfied) {
+      setGames([]); setRules([]); setSearchError(false); return;
+    }
     const cacheKey = `${includeRules ? 'all' : 'games'}:${query.toLocaleLowerCase()}`;
     const cached = searchCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < SEARCH_CACHE_FRESH_MS) {
@@ -175,7 +179,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
           <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">
             <strong>{display.primary}</strong>
             {display.secondary && <span>({display.secondary})</span>}
-            {display.note && <small className="alias-note">{display.note}</small>}
             <small>{game.ruleCount} 條規則</small>
           </button>
         );
