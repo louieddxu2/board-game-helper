@@ -78,7 +78,7 @@ export const HomePage = () => {
       <div className="section-heading"><div><h2>近期常被查閱的遊戲/規則</h2></div></div>
       <div className="rule-grid">
         {displayedFeaturedRules.map((rule) =>
-          <RuleCard key={rule.id} rule={rule} gameId={(rule as any).gameId} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
+          <RuleCard key={rule.id} rule={rule} gameId={(rule as any).gameId} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}
         {!home && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />
@@ -94,7 +94,7 @@ export const HomePage = () => {
     {home && home.recentRules.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>
-        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}</div>
+        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
     </section>}
   </>;
 };

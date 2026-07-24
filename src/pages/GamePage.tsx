@@ -27,7 +27,17 @@ export const GamePage = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
-  const [activeTag, setActiveTag] = useState('');
+  const [activeTags, setActiveTags] = useState<string[]>(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tagParam = searchParams.get('tag') || searchParams.get('tags');
+    return tagParam ? tagParam.split(',').map((t) => t.trim()).filter(Boolean) : [];
+  });
+
+  const toggleTag = (tag: string) => {
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
     try {
@@ -61,8 +71,10 @@ export const GamePage = () => {
   }, [game, user]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = game?.rules.filter((rule) => (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
-    && (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))) ?? [];
+  const visibleRules = game?.rules.filter((rule) =>
+    (activeTags.length === 0 || rule.tags.some((tag) => activeTags.includes(tag.name))) &&
+    (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
+  ) ?? [];
   const groupedSections = useMemo(() => groupRulesUniversally(visibleRules), [visibleRules]);
   const briefingRules = useMemo(() => {
     if (!game) return [];
@@ -111,7 +123,7 @@ export const GamePage = () => {
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
           ))}
         </div>
       </>
@@ -119,7 +131,33 @@ export const GamePage = () => {
       <>
         <section className="rule-filters" aria-label="篩選規則">
           <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
-          {availableTags.length > 0 && <div className="tag-filter" aria-label="依主題篩選"><span>主題</span>{availableTags.map((tag) => <button type="button" aria-pressed={activeTag === tag} className={activeTag === tag ? 'tag-chip active' : 'tag-chip'} key={tag} onClick={() => setActiveTag((value) => value === tag ? '' : tag)}>#{tag}</button>)}</div>}
+          {availableTags.length > 0 && (
+            <div className="tag-filter" aria-label="依標籤篩選">
+              {availableTags.map((tag) => {
+                const isSelected = activeTags.includes(tag);
+                return (
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={isSelected ? 'tag-chip active' : 'tag-chip'}
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {isSelected ? '✓ ' : ''}#{tag}
+                  </button>
+                );
+              })}
+              {activeTags.length > 0 && (
+                <button
+                  type="button"
+                  className="clear-tags-btn"
+                  onClick={() => setActiveTags([])}
+                >
+                  清除篩選 ✕
+                </button>
+              )}
+            </div>
+          )}
         </section>
         <div className="grouped-rules-container">
           {groupedSections.map((group) => (
@@ -130,12 +168,12 @@ export const GamePage = () => {
               </h2>
               <div className="game-rules">
                 {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
                 ))}
               </div>
             </section>
           ))}
-          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
+          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
         </div>
       </>
     )}

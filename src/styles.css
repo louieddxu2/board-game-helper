@@ -594,8 +594,28 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   transform: scale(1.05);
 }
 
-.tag-chip.active {
-  transform: scale(1.05);
+.tag-chip.active, .tag-filter button.active {
+  background: var(--green) !important;
+  color: #ffffff !important;
+  border-color: var(--green) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(23, 47, 40, 0.22);
+  transform: translateY(-1px) scale(1.03);
+}
+
+.clear-tags-btn {
+  border: 0;
+  background: none;
+  color: var(--orange);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 10px;
+  margin-left: 6px;
+  align-self: center;
+}
+.clear-tags-btn:hover {
+  text-decoration: underline;
 }
 
 /* ===== Detected Tag Light-up Panel ===== */
