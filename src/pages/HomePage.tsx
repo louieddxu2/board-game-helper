@@ -48,8 +48,8 @@ export const HomePage = () => {
     <section id="discover" className="content-section">
       <div className="section-heading"><div><h2>近 7 天常被查閱的規則</h2></div></div>
       <div className="rule-grid">
-        {(home?.featuredRules.length ? home.featuredRules : home?.recentRules ?? []).slice(0, 10).map((rule) =>
-          <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
+        {(home?.featuredRules ?? []).map((rule) =>
+          <RuleCard key={rule.id} rule={rule} gameId={(rule as any).gameId} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
         {!home && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />
@@ -58,7 +58,7 @@ export const HomePage = () => {
             <div className="skeleton-line short" />
           </div>
         ))}
-        {home && home.featuredRules.length === 0 && home.recentRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
+        {home && home.featuredRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />

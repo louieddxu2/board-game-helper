@@ -20,36 +20,52 @@ interface RulesDb extends DBSchema {
   recentGames: { key: string; value: { id: string; slug: string; displayName: string; viewedAt: number }; indexes: { viewedAt: number } };
 }
 
-const database = openDB<RulesDb>('wrong-board-game-rules', 1, {
-  upgrade(db) {
-    db.createObjectStore('drafts', { keyPath: 'id' });
-    db.createObjectStore('pending', { keyPath: 'id' });
-    db.createObjectStore('cache', { keyPath: 'key' });
-    const recent = db.createObjectStore('recentGames', { keyPath: 'id' });
-    recent.createIndex('viewedAt', 'viewedAt');
-  },
-});
-const notifyPending = () => window.dispatchEvent(new CustomEvent('rules-pending-change'));
+const getDb = () => {
+  if (typeof indexedDB === 'undefined') return null;
+  return openDB<RulesDb>('wrong-board-game-rules', 1, {
+    upgrade(db) {
+      db.createObjectStore('drafts', { keyPath: 'id' });
+      db.createObjectStore('pending', { keyPath: 'id' });
+      db.createObjectStore('cache', { keyPath: 'key' });
+      const recent = db.createObjectStore('recentGames', { keyPath: 'id' });
+      recent.createIndex('viewedAt', 'viewedAt');
+    },
+  });
+};
+
+let dbPromise: ReturnType<typeof getDb> | null = null;
+const getDatabase = async () => {
+  if (!dbPromise) dbPromise = getDb();
+  const db = await dbPromise;
+  if (!db) throw new Error('IndexedDB not available');
+  return db;
+};
+
+const notifyPending = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('rules-pending-change'));
+  }
+};
 
 export const localDb = {
-  getDraft: async () => (await database).get('drafts', 'active'),
-  saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await database).put('drafts', { ...draft, id: 'active' }),
-  clearDraft: async () => (await database).delete('drafts', 'active'),
-  addPending: async (payload: SubmissionInput) => { const result = await (await database).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
-  removePending: async (id: string) => { await (await database).delete('pending', id); notifyPending(); },
-  getPending: async () => (await database).getAll('pending'),
-  cacheHome: async (data: HomePayload) => (await database).put('cache', { key: 'home', data, cachedAt: Date.now() }),
-  getCachedHome: async () => (await database).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
-  invalidateHome: async () => (await database).delete('cache', 'home'),
+  getDraft: async () => (await getDatabase()).get('drafts', 'active'),
+  saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await getDatabase()).put('drafts', { ...draft, id: 'active' }),
+  clearDraft: async () => (await getDatabase()).delete('drafts', 'active'),
+  addPending: async (payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
+  removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
+  getPending: async () => (await getDatabase()).getAll('pending'),
+  cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
+  getCachedHome: async () => (await getDatabase()).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
+  invalidateHome: async () => (await getDatabase()).delete('cache', 'home'),
   cacheGame: async (game: GameDetail) => {
-    const db = await database;
+    const db = await getDatabase();
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
-  getCachedGame: async (slug: string) => (await database).get('cache', `game:${slug}`) as Promise<{ data: GameDetail } | undefined>,
-  invalidateGame: async (slug: string) => (await database).delete('cache', `game:${slug}`),
+  getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ data: GameDetail } | undefined>,
+  invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
   recentGames: async () => {
-    const db = await database;
+    const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
     return all.reverse().slice(0, 8);
   },

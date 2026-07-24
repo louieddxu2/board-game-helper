@@ -300,7 +300,16 @@ app.post('/api/logout', async (c) => {
 });
 
 app.get('/api/home', async (c) => {
-  const [featuredResult, recentResult, popularViewsResult, popularResult] = await Promise.all([
+  const [popularRulesViewsResult, featuredResult, recentResult, popularViewsResult, popularResult] = await Promise.all([
+    c.env.DB.prepare(`${homeRuleSelect}
+      JOIN games g ON g.id = r.game_id
+      JOIN daily_views dv ON dv.rule_id = r.id
+      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
+        AND dv.view_date >= DATE('now', '-7 days')
+      GROUP BY r.id
+      ORDER BY COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
+      LIMIT 10
+    `).all<RuleRow & { display_name: string; slug: string }>(),
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
       WHERE r.status = 'published' AND r.is_featured = 1 AND g.merged_into_game_id IS NULL
@@ -313,13 +322,13 @@ app.get('/api/home', async (c) => {
     `).all<RuleRow & { display_name: string; slug: string }>(),
     c.env.DB.prepare(`
       SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-        COUNT(gv.user_id) AS view_count,
+        COUNT(DISTINCT dv.user_id) AS view_count,
         (SELECT COUNT(r.id) FROM rules r WHERE r.game_id = g.id AND r.status = 'published') AS rule_count
       FROM games g
-      JOIN game_daily_views gv ON g.id = gv.game_id
-      WHERE gv.view_date >= DATE('now', '-7 days') AND g.merged_into_game_id IS NULL
+      JOIN daily_views dv ON g.id = dv.game_id
+      WHERE dv.view_date >= DATE('now', '-7 days') AND g.merged_into_game_id IS NULL
       GROUP BY g.id
-      ORDER BY view_count DESC, MAX(gv.created_at) DESC
+      ORDER BY view_count DESC, MAX(dv.created_at) DESC
       LIMIT 6
     `).all<GameRow>(),
     c.env.DB.prepare(`
@@ -337,6 +346,11 @@ app.get('/api/home', async (c) => {
     ...toRule(row), gameName: row.display_name, gameSlug: row.slug,
   });
 
+  let finalFeaturedRules = popularRulesViewsResult.results ?? [];
+  if (finalFeaturedRules.length === 0) {
+    finalFeaturedRules = featuredResult.results ?? [];
+  }
+
   let finalPopularGames = popularViewsResult.results ?? [];
   if (finalPopularGames.length === 0) {
     finalPopularGames = popularResult.results ?? [];
@@ -344,7 +358,7 @@ app.get('/api/home', async (c) => {
 
   const payload: HomePayload = {
     generatedAt: now(),
-    featuredRules: (featuredResult.results ?? []).map(withGame),
+    featuredRules: finalFeaturedRules.map(withGame),
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: finalPopularGames.map(toGame),
   };
@@ -483,13 +497,20 @@ app.post('/api/games/:id/view', async (c) => {
   if (!user) return c.json({ error: 'unauthorized' }, 401);
   const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ?').bind(c.req.param('id')).first();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
+
+  const ruleId = c.req.query('ruleId') || null;
+  if (ruleId) {
+    const rule = await c.env.DB.prepare('SELECT id FROM rules WHERE id = ? AND game_id = ?').bind(ruleId, game.id).first();
+    if (!rule) return c.json({ error: 'rule_not_found' }, 404);
+  }
+
   const timestamp = now();
   const viewDate = new Date(timestamp).toISOString().slice(0, 10);
   await c.env.DB.prepare(`
-    INSERT INTO game_daily_views (game_id, user_id, view_date, created_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(game_id, user_id, view_date) DO NOTHING
-  `).bind(game.id, user.id, viewDate, timestamp).run();
+    INSERT INTO daily_views (game_id, rule_id, user_id, view_date, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(game_id, rule_id, user_id, view_date) DO NOTHING
+  `).bind(game.id, ruleId ?? '', user.id, viewDate, timestamp).run();
   return c.json({ success: true });
 });
 

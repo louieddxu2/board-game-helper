@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link } from 'react-router-dom';
+import { SessionContext } from '../context/SessionContext';
+import { api } from '../lib/api';
 
 const stageNames: Record<string, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
@@ -8,8 +10,10 @@ const stageNames: Record<string, string> = {
   always: '全程適用', uncategorized: '未分類',
 };
 
-export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rule: RuleCardType; gameName?: string; gameHref?: string; onEdit?: () => void; onTagClick?: (tag: string) => void }) => {
+export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick, gameId }: { rule: RuleCardType; gameName?: string; gameHref?: string; onEdit?: () => void; onTagClick?: (tag: string) => void; gameId?: string }) => {
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const session = useContext(SessionContext);
+  const user = session?.user;
   const isLongDetails = Boolean(rule.details && rule.details.length > 80);
 
   return <article className="rule-card" id={`rule-${rule.id}`}>
@@ -21,7 +25,19 @@ export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rul
     {rule.commonMistake && <p className="mistake"><strong className="mistake-badge">⚠️ 常見錯法</strong> <span className="mistake-text">{rule.commonMistake}</span></p>}
     {rule.details && <div className={isLongDetails && !detailsExpanded ? 'rule-details collapsed' : 'rule-details'}>
       <p>{rule.details}</p>
-      {isLongDetails && <button type="button" className="text-action details-toggle" onClick={() => setDetailsExpanded((prev) => !prev)}>
+      {isLongDetails && <button type="button" className="text-action details-toggle" onClick={() => {
+        if (!detailsExpanded) {
+          if (user && gameId) {
+            const today = new Date().toISOString().slice(0, 10);
+            const storageKey = `viewed_rule:${rule.id}:${today}`;
+            if (!localStorage.getItem(storageKey)) {
+              api.recordView(gameId, rule.id).catch(() => undefined);
+              localStorage.setItem(storageKey, '1');
+            }
+          }
+        }
+        setDetailsExpanded((prev) => !prev);
+      }}>
         {detailsExpanded ? '收合' : '展開詳細'}
       </button>}
     </div>}

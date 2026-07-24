@@ -53,7 +53,7 @@ export const GamePage = () => {
   useEffect(() => {
     if (!game || !user) return;
     const today = new Date().toISOString().slice(0, 10);
-    const storageKey = `viewed:${game.id}:${today}`;
+    const storageKey = `viewed:game:${game.id}:${today}`;
     if (!localStorage.getItem(storageKey)) {
       api.recordView(game.id).catch(() => undefined);
       localStorage.setItem(storageKey, '1');
@@ -111,7 +111,7 @@ export const GamePage = () => {
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+            <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
           ))}
         </div>
       </>
@@ -130,7 +130,7 @@ export const GamePage = () => {
               </h2>
               <div className="game-rules">
                 {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+                  <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={setActiveTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
                 ))}
               </div>
             </section>

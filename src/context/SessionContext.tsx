@@ -16,7 +16,7 @@ interface SessionState {
   isAdmin: boolean;
 }
 
-const SessionContext = createContext<SessionState | null>(null);
+export const SessionContext = createContext<SessionState | null>(null);
 
 export const SessionProvider = ({ children }: PropsWithChildren) => {
   const [user, setUser] = useState<SessionUser | null>(null);
