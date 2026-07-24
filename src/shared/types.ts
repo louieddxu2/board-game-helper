@@ -41,6 +41,9 @@ export interface TagSummary {
   slug: string;
   name: string;
   usageCount?: number;
+  isPublic?: boolean;
+  description?: string;
+  aliases?: string[];
 }
 
 export interface RuleCard {

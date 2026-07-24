@@ -51,12 +51,17 @@ export const SearchModal = ({ open, onClose }: Props) => {
           value={searchValue}
           onChange={setSearchValue}
           includeRules={true}
+          allowCreate={true}
+          onCreate={(name) => {
+            navigate(`/add?name=${encodeURIComponent(name)}`);
+            onClose();
+          }}
           onSelect={(game) => {
-            navigate(`/game/${game.id}`);
+            navigate(`/games/${game.slug}`);
             onClose();
           }}
           onRuleSelect={(rule) => {
-            navigate(`/game/${rule.gameId}#${rule.ruleId}`);
+            navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(searchValue)}#rule-${rule.ruleId}`);
             onClose();
           }}
         />

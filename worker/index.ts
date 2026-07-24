@@ -424,19 +424,41 @@ app.get('/api/search', async (c) => {
 
 app.get('/api/tags', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
+  const gameId = (c.req.query('gameId') ?? '').trim();
   const query = normalizeText(rawQuery);
-  const result = await c.env.DB.prepare(`
-    SELECT t.id, t.slug, t.name, COUNT(rt.rule_id) usage_count
+
+  let sql = `
+    SELECT t.id, t.slug, t.name, t.is_public, COUNT(DISTINCT rt.rule_id) AS usage_count
     FROM tags t
     LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
     LEFT JOIN rule_tags rt ON rt.tag_id = t.id
-    WHERE t.status = 'active' AND (? = '' OR t.normalized_name LIKE ? OR ta.normalized_alias LIKE ?)
-    GROUP BY t.id
-    ORDER BY usage_count DESC, t.name
-    LIMIT 20
-  `).bind(query, `%${query}%`, `%${query}%`).all<{ id: string; slug: string; name: string; usage_count: number }>();
+  `;
+  const conditions = ["t.status = 'active'"];
+  const params: unknown[] = [];
+
+  if (query) {
+    conditions.push('(t.normalized_name LIKE ? OR ta.normalized_alias LIKE ?)');
+    params.push(`%${query}%`, `%${query}%`);
+  }
+
+  if (gameId) {
+    conditions.push('(t.is_public = 1 OR rt.rule_id IN (SELECT id FROM rules WHERE game_id = ?))');
+    params.push(gameId);
+  }
+
+  sql += ` GROUP BY t.id ORDER BY usage_count DESC, t.name LIMIT 20`;
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all<{ id: string; slug: string; name: string; is_public: number; usage_count: number }>();
   setPublicCache(c, 60, 300, 900);
-  return c.json({ tags: (result.results ?? []).map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, usageCount: tag.usage_count })) });
+  return c.json({
+    tags: (result.results ?? []).map((tag) => ({
+      id: tag.id,
+      slug: tag.slug,
+      name: tag.name,
+      isPublic: Boolean(tag.is_public),
+      usageCount: tag.usage_count,
+    })),
+  });
 });
 
 app.get('/api/games/:identifier', async (c) => {
@@ -1382,6 +1404,138 @@ app.get('/api/admin/hidden-rules', requireRole('editor'), async (c) => {
     WHERE r.status = 'hidden' ORDER BY r.updated_at DESC LIMIT 100
   `).all<RuleRow>();
   return c.json({ rules: (result.results ?? []).map(toRule) });
+});
+
+const tagAdminSchema = z.object({
+  name: z.string().min(1).max(40),
+  description: z.string().max(200).optional().nullable(),
+  isPublic: z.boolean().default(true),
+  aliases: z.array(z.string()).optional(),
+});
+
+app.get('/api/admin/tags', requireRole('editor'), async (c) => {
+  const result = await c.env.DB.prepare(`
+    SELECT t.id, t.slug, t.name, t.description, t.is_public, COUNT(DISTINCT rt.rule_id) AS usage_count
+    FROM tags t
+    LEFT JOIN rule_tags rt ON rt.tag_id = t.id
+    WHERE t.status = 'active'
+    GROUP BY t.id
+    ORDER BY t.is_public DESC, usage_count DESC, t.name
+  `).all<{ id: string; slug: string; name: string; description: string | null; is_public: number; usage_count: number }>();
+
+  const aliasesResult = await c.env.DB.prepare(`SELECT tag_id, alias FROM tag_aliases ORDER BY alias`).all<{ tag_id: string; alias: string }>();
+  const aliasMap = new Map<string, string[]>();
+  (aliasesResult.results ?? []).forEach((row) => {
+    const list = aliasMap.get(row.tag_id) ?? [];
+    list.push(row.alias);
+    aliasMap.set(row.tag_id, list);
+  });
+
+  return c.json({
+    tags: (result.results ?? []).map((tag) => ({
+      id: tag.id,
+      slug: tag.slug,
+      name: tag.name,
+      description: tag.description ?? undefined,
+      isPublic: Boolean(tag.is_public),
+      usageCount: tag.usage_count,
+      aliases: aliasMap.get(tag.id) ?? [],
+    })),
+  });
+});
+
+app.post('/api/admin/tags', requireRole('admin'), async (c) => {
+  const parsed = tagAdminSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
+
+  const { name, description, isPublic, aliases } = parsed.data;
+  const normalized = normalizeText(name);
+  const existing = await c.env.DB.prepare(`
+    SELECT id FROM tags WHERE status = 'active' AND normalized_name = ? LIMIT 1
+  `).bind(normalized).first<{ id: string }>();
+
+  const timestamp = Date.now();
+  const userId = c.get('user')!.id;
+
+  if (existing) {
+    await c.env.DB.prepare(`
+      UPDATE tags SET is_public = ?, description = COALESCE(?, description), updated_at = ? WHERE id = ?
+    `).bind(isPublic ? 1 : 0, description || null, timestamp, existing.id).run();
+    return c.json({ ok: true, tagId: existing.id });
+  }
+
+  const suffix = (await sha256Hex(normalized)).slice(0, 20);
+  const tagId = `tag_${suffix}`;
+
+  const statements: D1PreparedStatement[] = [
+    c.env.DB.prepare(`
+      INSERT INTO tags (id, slug, name, normalized_name, description, is_public, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(tagId, slugify(name), name, normalized, description || null, isPublic ? 1 : 0, userId, timestamp, timestamp),
+  ];
+
+  for (const alias of cleanTagNames(aliases)) {
+    const normAlias = normalizeText(alias);
+    const aliasSuffix = (await sha256Hex(normAlias)).slice(0, 20);
+    statements.push(
+      c.env.DB.prepare(`
+        INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(`ta_${aliasSuffix}`, tagId, alias, normAlias, timestamp)
+    );
+  }
+
+  await c.env.DB.batch(statements);
+  return c.json({ ok: true, tagId });
+});
+
+app.patch('/api/admin/tags/:id', requireRole('admin'), async (c) => {
+  const tagId = c.req.param('id');
+  const parsed = tagAdminSchema.partial().safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
+
+  const existing = await c.env.DB.prepare(`SELECT id FROM tags WHERE id = ? AND status = 'active'`).bind(tagId).first();
+  if (!existing) return c.json({ error: 'tag_not_found' }, 404);
+
+  const timestamp = Date.now();
+  const updates: string[] = ['updated_at = ?'];
+  const bindings: unknown[] = [timestamp];
+
+  if (parsed.data.name !== undefined) {
+    updates.push('name = ?', 'slug = ?', 'normalized_name = ?');
+    bindings.push(parsed.data.name, slugify(parsed.data.name), normalizeText(parsed.data.name));
+  }
+  if (parsed.data.description !== undefined) {
+    updates.push('description = ?');
+    bindings.push(parsed.data.description || null);
+  }
+  if (parsed.data.isPublic !== undefined) {
+    updates.push('is_public = ?');
+    bindings.push(parsed.data.isPublic ? 1 : 0);
+  }
+
+  bindings.push(tagId);
+  await c.env.DB.prepare(`UPDATE tags SET ${updates.join(', ')} WHERE id = ?`).bind(...bindings).run();
+
+  if (parsed.data.aliases !== undefined) {
+    await c.env.DB.prepare(`DELETE FROM tag_aliases WHERE tag_id = ?`).bind(tagId).run();
+    const aliasStatements: D1PreparedStatement[] = [];
+    for (const alias of cleanTagNames(parsed.data.aliases)) {
+      const normAlias = normalizeText(alias);
+      const aliasSuffix = (await sha256Hex(normAlias)).slice(0, 20);
+      aliasStatements.push(
+        c.env.DB.prepare(`
+          INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(`ta_${aliasSuffix}`, tagId, alias, normAlias, timestamp)
+      );
+    }
+    if (aliasStatements.length > 0) {
+      await c.env.DB.batch(aliasStatements);
+    }
+  }
+
+  return c.json({ ok: true });
 });
 
 export default app;

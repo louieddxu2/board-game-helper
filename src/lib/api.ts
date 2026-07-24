@@ -30,7 +30,14 @@ export const api = {
   home: () => request<HomePayload>('/api/home'),
   searchGames: (query: string) => request<{ games: GameSummary[] }>(`/api/games/search?q=${encodeURIComponent(query)}`),
   search: (query: string) => request<{ games: GameSummary[]; rules: RuleSearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`),
-  tags: (query = '') => request<{ tags: TagSummary[] }>(`/api/tags?q=${encodeURIComponent(query)}`),
+  tags: (query = '', gameId = '') => request<{ tags: TagSummary[] }>(`/api/tags?q=${encodeURIComponent(query)}${gameId ? `&gameId=${encodeURIComponent(gameId)}` : ''}`),
+  adminTags: () => request<{ tags: TagSummary[] }>('/api/admin/tags'),
+  createAdminTag: (input: { name: string; description?: string; isPublic?: boolean; aliases?: string[] }) => request<{ ok: true; tagId: string }>('/api/admin/tags', {
+    method: 'POST', body: JSON.stringify(input),
+  }),
+  updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[] }) => request<{ ok: true }>(`/api/admin/tags/${id}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }),
   game: (identifier: string, fresh = false) => request<{ game: GameDetail }>(
     `/api/games/${encodeURIComponent(identifier)}${fresh ? `?fresh=${encodeURIComponent(crypto.randomUUID())}` : ''}`,
     fresh ? { cache: 'no-store' } : undefined,

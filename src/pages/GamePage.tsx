@@ -27,7 +27,6 @@ export const GamePage = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
-  const [activeStage, setActiveStage] = useState<FlowStage | 'all'>('all');
   const [activeTag, setActiveTag] = useState('');
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
@@ -51,11 +50,9 @@ export const GamePage = () => {
     if (!game || !location.hash) return;
     window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }, [game, location.hash]);
-  const stages = useMemo(() => FLOW_STAGES.filter((stage) => game?.rules.some((rule) => rule.flowStage === stage)), [game]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = game?.rules.filter((rule) => (activeStage === 'all' || rule.flowStage === activeStage)
-    && (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
+  const visibleRules = game?.rules.filter((rule) => (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
     && (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))) ?? [];
   const groupedSections = useMemo(() => groupRulesUniversally(visibleRules), [visibleRules]);
   const briefingRules = useMemo(() => {
@@ -113,10 +110,6 @@ export const GamePage = () => {
       <>
         <section className="rule-filters" aria-label="篩選規則">
           <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
-          <nav className="stage-tabs" aria-label="規則流程分類">
-            <button type="button" aria-pressed={activeStage === 'all'} className={activeStage === 'all' ? 'active' : ''} onClick={() => setActiveStage('all')}>全部 <small>{game.rules.length}</small></button>
-            {stages.map((stage) => <button type="button" aria-pressed={activeStage === stage} key={stage} className={activeStage === stage ? 'active' : ''} onClick={() => setActiveStage(stage)}>{stageNames[stage]} <small>{game.rules.filter((rule) => rule.flowStage === stage).length}</small></button>)}
-          </nav>
           {availableTags.length > 0 && <div className="tag-filter" aria-label="依主題篩選"><span>主題</span>{availableTags.map((tag) => <button type="button" aria-pressed={activeTag === tag} className={activeTag === tag ? 'tag-chip active' : 'tag-chip'} key={tag} onClick={() => setActiveTag((value) => value === tag ? '' : tag)}>#{tag}</button>)}</div>}
         </section>
         <div className="grouped-rules-container">
@@ -133,7 +126,7 @@ export const GamePage = () => {
               </div>
             </section>
           ))}
-          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveStage('all'); setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
+          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveTag(''); setRuleQuery(''); }}>清除篩選</button></div>}
         </div>
       </>
     )}
@@ -148,7 +141,6 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
   const [details, setDetails] = useState(rule.details ?? '');
-  const [flowStage, setFlowStage] = useState(rule.flowStage);
   const [playerCountNote, setPlayerCountNote] = useState(rule.playerCountNote ?? '');
   const [editionNote, setEditionNote] = useState(rule.editionNote ?? '');
   const [isFeatured, setFeatured] = useState(rule.isFeatured);
@@ -165,7 +157,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, flowStage, playerCountNote: playerCountNote || null, editionNote: editionNote || null, isFeatured, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, isFeatured, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -176,10 +168,9 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>常見錯法<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
-      <div className="two-columns"><label>流程位置<select value={flowStage ?? 'uncategorized'} onChange={(event) => setFlowStage(event.target.value as FlowStage)}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
-        <label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label></div>
-      <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label>
-      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
+      <div className="two-columns"><label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label>
+        <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
+      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} gameId={game.id} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
       <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <label className="checkbox"><input type="checkbox" checked={isFeatured} onChange={(event) => setFeatured(event.target.checked)} />首頁精選</label>
       <section className="revision-panel">

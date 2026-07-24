@@ -9,6 +9,7 @@ interface TagInputProps {
   canCreate?: boolean;
   label?: string;
   detectedSuggestions?: string[];
+  gameId?: string;
 }
 
 export const TagInput = ({
@@ -17,6 +18,7 @@ export const TagInput = ({
   canCreate = false,
   label = '標籤',
   detectedSuggestions = [],
+  gameId,
 }: TagInputProps) => {
   const id = useId();
   const [query, setQuery] = useState('');
@@ -26,9 +28,9 @@ export const TagInput = ({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    void api.tags(debouncedQuery).then((result) => { if (active) setSuggestions(result.tags.filter((tag) => !value.includes(tag.name))); });
+    void api.tags(debouncedQuery, gameId).then((result) => { if (active) setSuggestions(result.tags.filter((tag) => !value.includes(tag.name))); });
     return () => { active = false; };
-  }, [debouncedQuery, open, value]);
+  }, [debouncedQuery, gameId, open, value]);
   const add = (name: string) => {
     const cleaned = name.trim().replace(/^#/, '');
     if (!cleaned || value.includes(cleaned) || value.length >= 8) return;

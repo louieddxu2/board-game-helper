@@ -146,7 +146,6 @@ export const ReviewPage = () => {
           onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} />
         {game && <button className="text-action" type="button" onClick={() => { setGame(undefined); setGameQuery(''); }}>不限遊戲</button>}
         <div className="review-filter-grid">
-          <label>流程<select value={flowStage} onChange={(event) => setFlowStage(event.target.value)}><option value="">全部</option>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
           <label>Tag<input value={tag} onChange={(event) => setTag(event.target.value)} placeholder="例如：補牌" /></label>
           <label>更新日期<input type="date" value={updatedAfter} onChange={(event) => setUpdatedAfter(event.target.value)} /></label>
           <label>最多<select value={limit} onChange={(event) => setLimit(event.target.value)}><option value="50">50 條</option><option value="100">100 條</option><option value="250">250 條</option><option value="500">500 條</option></select></label>
@@ -190,7 +189,6 @@ export const ReviewPage = () => {
               <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label="建議常見錯法" rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder="常見錯法" /></div>
             </div>
             <details><summary>其他欄位</summary><div className="review-detail-grid">
-              <label>流程<select disabled={!editable} value={draft.flowStage ?? 'uncategorized'} onChange={(event) => updateDraft(proposal.id, { flowStage: event.target.value as FlowStage })}>{FLOW_STAGES.map((stage) => <option key={stage} value={stage}>{stageNames[stage]}</option>)}</select></label>
               <label>Tag<input disabled={!editable} value={draft.tagNames.join('、')} onChange={(event) => updateDraft(proposal.id, { tagNames: event.target.value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean) })} /></label>
               <label>來源名稱<input disabled={!editable} value={value(draft.sourceLabel)} onChange={(event) => updateDraft(proposal.id, { sourceLabel: event.target.value || null })} /></label>
               <label>來源網址<input disabled={!editable} value={value(draft.sourceUrl)} onChange={(event) => updateDraft(proposal.id, { sourceUrl: event.target.value || null })} /></label>
