@@ -208,6 +208,7 @@ interface GameRow {
   slug: string;
   display_name: string;
   english_name: string | null;
+  aliases_str?: string | null;
   rule_count: number;
   updated_at: number;
 }
@@ -217,6 +218,7 @@ const toGame = (row: GameRow): GameSummary => ({
   slug: row.slug,
   displayName: row.display_name,
   englishName: row.english_name ?? undefined,
+  aliases: row.aliases_str ? row.aliases_str.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
   ruleCount: row.rule_count,
   updatedAt: row.updated_at,
 });
@@ -423,7 +425,8 @@ app.get('/api/games/search', async (c) => {
   const query = normalizeText(rawQuery);
   const result = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count
+      COUNT(DISTINCT r.id) AS rule_count,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
     LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
@@ -444,7 +447,8 @@ app.get('/api/games/resolve', async (c) => {
   const name = normalizeText(rawName);
   const exact = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count
+      COUNT(DISTINCT r.id) AS rule_count,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
     LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
@@ -459,7 +463,8 @@ app.get('/api/games/resolve', async (c) => {
   }
   const result = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count
+      COUNT(DISTINCT r.id) AS rule_count,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
     LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
@@ -479,7 +484,9 @@ app.get('/api/search', async (c) => {
   const query = normalizeText(rawQuery);
   const [gamesResult, rulesResult] = await Promise.all([
     c.env.DB.prepare(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, COUNT(DISTINCT r.id) AS rule_count
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+        COUNT(DISTINCT r.id) AS rule_count,
+        GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
       FROM games g LEFT JOIN game_aliases a ON a.game_id = g.id
       LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
       WHERE g.merged_into_game_id IS NULL AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)

@@ -24,6 +24,7 @@ export interface GameSummary {
   slug: string;
   displayName: string;
   englishName?: string;
+  aliases?: string[];
   ruleCount: number;
   updatedAt: number;
 }

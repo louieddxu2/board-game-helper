@@ -25,6 +25,58 @@ const rememberSearch = (key: string, response: SearchResponse) => {
   searchCache.set(key, { ...response, cachedAt: Date.now() });
 };
 
+export function formatGameSearchDisplay(
+  game: GameSummary,
+  query: string
+): { primary: string; secondary?: string; note?: string } {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return {
+      primary: game.displayName,
+      secondary: game.englishName,
+    };
+  }
+
+  const normDisplayName = game.displayName.toLowerCase();
+  const normEnglishName = game.englishName?.toLowerCase();
+
+  if (normDisplayName.includes(q)) {
+    return {
+      primary: game.displayName,
+      secondary: game.englishName,
+    };
+  }
+
+  if (normEnglishName && normEnglishName.includes(q)) {
+    return {
+      primary: game.englishName!,
+      secondary: game.displayName,
+    };
+  }
+
+  const matchedAlias = game.aliases?.find((alias) => {
+    const a = alias.trim();
+    if (!a) return false;
+    const normA = a.toLowerCase();
+    if (normA === normDisplayName || normA === normEnglishName) return false;
+    return normA.includes(q);
+  });
+
+  if (matchedAlias) {
+    const secondaryName = game.englishName || game.displayName;
+    return {
+      primary: matchedAlias,
+      secondary: secondaryName,
+      note: `別名 (原名：${game.displayName})`,
+    };
+  }
+
+  return {
+    primary: game.displayName,
+    secondary: game.englishName,
+  };
+}
+
 export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect }: Props) => {
   const inputId = useId();
   const query = useDebouncedValue(value.trim());
@@ -59,7 +111,8 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const hasExactMatch = games.some(
     (g) =>
       g.displayName.toLowerCase() === query.toLowerCase() ||
-      g.englishName?.toLowerCase() === query.toLowerCase()
+      g.englishName?.toLowerCase() === query.toLowerCase() ||
+      g.aliases?.some((a) => a.toLowerCase() === query.toLowerCase())
   );
   
   const showCreateOption = Boolean(!loading && !searchError && query && (onCreate || !hasExactMatch));
@@ -110,17 +163,23 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       {selectedId && <span aria-hidden="true">✓</span>}
     </div>
     {!selectedId && (loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
-      {loading && <p className="muted">尋找遊戲或規則中…</p>}
+      {loading && <p className="muted">尋找遊戲中…</p>}
       {searchError && <p className="search-error">搜尋發生錯誤，請稍後重試</p>}
       {!loading && !searchError && games.length === 0 && rules.length === 0 && query && (
         <p className="empty-search-message">找不到相符的遊戲</p>
       )}
       {games.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}
-      {games.map((game, index) => <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">
-        <strong>{game.displayName}</strong>
-        {game.englishName && <span>{game.englishName}</span>}
-        <small>{game.ruleCount} 條規則</small>
-      </button>)}
+      {games.map((game, index) => {
+        const display = formatGameSearchDisplay(game, query);
+        return (
+          <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">
+            <strong>{display.primary}</strong>
+            {display.secondary && <span>({display.secondary})</span>}
+            {display.note && <small className="alias-note">{display.note}</small>}
+            <small>{game.ruleCount} 條規則</small>
+          </button>
+        );
+      })}
       {rules.length > 0 && <p className="result-group-label">規則內容</p>}
       {rules.map((rule, ruleIndex) => { const index = games.length + ruleIndex; return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} className="rule-result" key={rule.ruleId} onClick={() => onRuleSelect?.(rule)} role="option">
         <strong>{rule.gameName}</strong><span>{rule.statement}</span><small>查看規則 →</small>
