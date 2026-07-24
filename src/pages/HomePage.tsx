@@ -91,12 +91,6 @@ export const HomePage = () => {
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />
-    {home && home.popularGames.length > 0 && <section className="content-section game-section">
-      <div className="section-heading"><div><h2>已收錄規則的遊戲</h2></div></div>
-      <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
-        <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條規則紀錄 →</small>
-      </Link>)}</div>
-    </section>}
     {home && home.recentRules.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>
