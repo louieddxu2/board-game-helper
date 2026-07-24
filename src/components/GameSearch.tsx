@@ -18,7 +18,7 @@ interface Props {
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type CachedSearch = SearchResponse & { cachedAt: number };
-const SEARCH_CACHE_FRESH_MS = 5 * 60 * 1000;
+const SEARCH_CACHE_FRESH_MS = 60 * 60 * 1000;
 const searchCache = new Map<string, CachedSearch>();
 export const clearSearchCache = () => searchCache.clear();
 const rememberSearch = (key: string, response: SearchResponse) => {

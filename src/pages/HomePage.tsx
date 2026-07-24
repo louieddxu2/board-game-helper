@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
-const HOME_CACHE_FRESH_MS = 5 * 60 * 1000;
+const HOME_CACHE_FRESH_MS = 60 * 60 * 1000;
 
 export const HomePage = () => {
   const navigate = useNavigate();

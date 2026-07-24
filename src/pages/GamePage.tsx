@@ -12,7 +12,7 @@ import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorte
 import { useToast } from '../context/ToastContext';
 import { clearSearchCache } from '../components/GameSearch';
 
-const GAME_CACHE_FRESH_MS = 5 * 60 * 1000;
+const GAME_CACHE_FRESH_MS = 60 * 60 * 1000;
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
