@@ -48,11 +48,27 @@ export const AddPage = () => {
         return;
       }
       const requestedGame = searchParams.get('game');
+      const nameParam = searchParams.get('name') || searchParams.get('gameName');
       if (requestedGame) {
         const response = await api.game(requestedGame, true);
         if (!active) return;
         setGame(response.game); setGameQuery(response.game.displayName);
         window.setTimeout(() => inputRefs.current[rules[0].id]?.focus(), 0);
+      } else if (nameParam && (!draft || !draft.gameQuery)) {
+        setGameQuery(nameParam);
+        try {
+          const response = await api.game(nameParam, true).catch(async () => {
+            const search = await api.searchGames(nameParam);
+            const exact = search.games.find((g) => g.displayName.toLowerCase() === nameParam.toLowerCase() || g.englishName?.toLowerCase() === nameParam.toLowerCase());
+            return exact ? { game: { ...exact, aliases: [], rules: [] } } : null;
+          });
+          if (active && response && response.game) {
+            setGame(response.game);
+            setGameQuery(response.game.displayName);
+          }
+        } catch {
+          // Ignore lookup failure for uncreated games
+        }
       }
     });
     return () => { active = false; };

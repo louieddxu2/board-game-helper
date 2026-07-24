@@ -87,10 +87,10 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const { canEdit } = useSession();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const isEnglishOnly = /^[a-zA-Z0-9\s\-_'.]+$/.test(query);
-    const isMinLengthSatisfied = isEnglishOnly ? query.length >= 2 : query.length >= 1;
+  const isEnglishOnly = Boolean(query && /^[a-zA-Z0-9\s\-_'.]+$/.test(query));
+  const isMinLengthSatisfied = isEnglishOnly ? query.length >= 2 : query.length >= 1;
 
+  useEffect(() => {
     if (!query || selectedId || !isMinLengthSatisfied) {
       setGames([]); setRules([]); setSearchError(false); return;
     }
@@ -110,7 +110,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
     }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [includeRules, query, selectedId]);
+  }, [includeRules, isMinLengthSatisfied, query, selectedId]);
 
   const hasExactMatch = games.some(
     (g) =>
@@ -119,15 +119,15 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       g.aliases?.some((a) => a.toLowerCase() === query.toLowerCase())
   );
   
-  const showCreateOption = Boolean(!loading && !searchError && query && (onCreate || !hasExactMatch));
+  const showCreateOption = Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
   const optionCount = games.length + rules.length + (showCreateOption ? 1 : 0);
 
   const handleCreateOrLogin = () => {
     if (canEdit || onCreate) {
       if (onCreate) onCreate(query);
-      else navigate(`/add?gameName=${encodeURIComponent(query)}`);
+      else navigate(`/add?name=${encodeURIComponent(query)}`);
     } else {
-      navigate(`/login?redirect=${encodeURIComponent(`/add?gameName=${encodeURIComponent(query)}`)}`);
+      navigate(`/login?redirect=${encodeURIComponent(`/add?name=${encodeURIComponent(query)}`)}`);
     }
   };
 
@@ -166,10 +166,15 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         }} />
       {selectedId && <span aria-hidden="true">✓</span>}
     </div>
-    {!selectedId && (loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
+    {!selectedId && (isEnglishOnly && query.length === 1 || loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
+      {isEnglishOnly && query.length === 1 && (
+        <p className="search-hint muted" style={{ padding: '0.5rem 0.75rem', margin: 0, fontSize: '0.875rem' }}>
+          請輸入至少 2 個英文字母進行搜尋
+        </p>
+      )}
       {loading && <p className="muted">尋找遊戲中…</p>}
       {searchError && <p className="search-error">搜尋發生錯誤，請稍後重試</p>}
-      {!loading && !searchError && games.length === 0 && rules.length === 0 && query && (
+      {!loading && !searchError && !(isEnglishOnly && query.length === 1) && games.length === 0 && rules.length === 0 && query && (
         <p className="empty-search-message">找不到相符的遊戲</p>
       )}
       {games.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}

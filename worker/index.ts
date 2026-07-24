@@ -454,12 +454,12 @@ app.get('/api/games/search', async (c) => {
     LEFT JOIN game_aliases a ON a.game_id = g.id
     LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
     WHERE g.merged_into_game_id IS NULL
-      AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
+      AND (g.normalized_name LIKE ? OR LOWER(g.english_name) LIKE ? OR a.normalized_alias LIKE ?)
     GROUP BY g.id
     ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END,
       rule_count DESC, g.display_name
     LIMIT 20
-  `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
+  `).bind(`%${query}%`, `%${query}%`, `%${query}%`, query).all<GameRow>();
   setNoCache(c);
   return c.json({ games: (result.results ?? []).map(toGame) });
 });
