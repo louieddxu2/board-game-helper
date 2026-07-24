@@ -34,7 +34,7 @@ export const HomePage = () => {
   }, []);
   return <>
     <section className="hero">
-      <div className="hero-inner"><div className="hero-main"><p className="eyebrow">桌邊的錯誤記憶庫</p>
+      <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，<br />或是下次玩對。</h1>
         <div className="hero-search" id="home-search"><GameSearch includeRules value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={(name) => { navigate(canEdit ? `/add?name=${encodeURIComponent(name)}` : '/login'); }} /></div>
         {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span>{recentGames.slice(0, 4).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>}
@@ -45,8 +45,14 @@ export const HomePage = () => {
       <div><small>未完成草稿</small><strong>{draft.game?.displayName ?? '尚未選擇遊戲'}・{draft.rules.length} 個輸入格</strong></div>
       <Link to="/add">繼續記錄 →</Link>
     </section>}
+    {home && home.popularGames.length > 0 && <Fragment><section className="content-section game-section">
+      <div className="section-heading"><div><h2>熱門與常用遊戲</h2></div></div>
+      <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
+        <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條踩雷紀錄 →</small>
+      </Link>)}</div>
+    </section><AdSlot placement="home-after-game-exploration" /></Fragment>}
     <section id="discover" className="content-section">
-      <div className="section-heading"><div><p className="eyebrow">一看就懂</p><h2>大家真的玩錯過這些</h2></div></div>
+      <div className="section-heading"><div><h2>勘誤與易錯規則紀錄</h2></div></div>
       <div className="rule-grid">
         {(home?.featuredRules.length ? home.featuredRules : home?.recentRules ?? []).slice(0, 10).map((rule) =>
           <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}
@@ -61,14 +67,8 @@ export const HomePage = () => {
         {home && home.featuredRules.length === 0 && home.recentRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
-    {home && home.popularGames.length > 0 && <Fragment><section className="content-section game-section">
-      <div className="section-heading"><div><p className="eyebrow">依遊戲探索</p><h2>規則紀錄較多的遊戲</h2></div></div>
-      <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
-        <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條踩雷紀錄 →</small>
-      </Link>)}</div>
-    </section><AdSlot placement="home-after-game-exploration" /></Fragment>}
     {home && home.recentRules.length > 0 && <section className="content-section">
-      <div className="section-heading"><div><p className="eyebrow">最近新增</p><h2>剛被記住的錯誤</h2></div></div>
+      <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} />)}</div>
     </section>}

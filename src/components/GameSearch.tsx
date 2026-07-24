@@ -82,10 +82,10 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   };
 
   return <div className="game-search">
-    <label htmlFor={inputId}>玩了哪款遊戲？</label>
+    <label htmlFor={inputId}>遊戲名稱</label>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
       <input id={inputId} value={value} onChange={(event) => onChange(event.target.value)}
-        placeholder={includeRules ? '搜尋遊戲，或輸入「平手」「補牌」' : '輸入中文名、英文名或別名'} autoComplete="off"
+        placeholder="搜尋遊戲名稱..." autoComplete="off"
         role="combobox" aria-autocomplete="list" aria-expanded={!selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
         onKeyDown={(event) => {
@@ -113,7 +113,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       {loading && <p className="muted">尋找遊戲或規則中…</p>}
       {searchError && <p className="search-error">搜尋發生錯誤，請稍後重試</p>}
       {!loading && !searchError && games.length === 0 && rules.length === 0 && query && (
-        <p className="empty-search-message">找不到相符的遊戲或規則</p>
+        <p className="empty-search-message">找不到相符的遊戲</p>
       )}
       {games.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}
       {games.map((game, index) => <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">

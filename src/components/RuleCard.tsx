@@ -14,8 +14,11 @@ export const RuleCard = ({ rule, gameName, gameHref, onEdit, onTagClick }: { rul
 
   return <article className="rule-card" id={`rule-${rule.id}`}>
     <div className="rule-meta"><span>{gameName ?? (rule.flowStage ? stageNames[rule.flowStage] : undefined)}</span>{gameName && rule.flowStage && <span>{stageNames[rule.flowStage]}</span>}</div>
-    <h3>{gameHref ? <Link className="rule-title-link" to={gameHref}>{rule.statement}</Link> : rule.statement}</h3>
-    {rule.commonMistake && <p className="mistake"><strong>常見錯法</strong>{rule.commonMistake}</p>}
+    <h3 className="statement-text">
+      <span className="statement-badge">💡 正確規則</span>
+      <span>{gameHref ? <Link className="rule-title-link" to={gameHref}>{rule.statement}</Link> : rule.statement}</span>
+    </h3>
+    {rule.commonMistake && <p className="mistake"><strong className="mistake-badge">⚠️ 常見錯法</strong> <span className="mistake-text">{rule.commonMistake}</span></p>}
     {rule.details && <div className={isLongDetails && !detailsExpanded ? 'rule-details collapsed' : 'rule-details'}>
       <p>{rule.details}</p>
       {isLongDetails && <button type="button" className="text-action details-toggle" onClick={() => setDetailsExpanded((prev) => !prev)}>
