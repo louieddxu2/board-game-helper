@@ -327,21 +327,7 @@ app.get('/api/home', async (c) => {
   }
   const viewDateCondition = startDateStr ? `dv.view_date >= '${startDateStr}'` : `dv.view_date >= DATE('now', '-7 days')`;
 
-  const [popularRulesViewsResult, featuredResult, recentResult, popularViewsResult, popularResult] = await Promise.all([
-    c.env.DB.prepare(`${homeRuleSelect}
-      JOIN games g ON g.id = r.game_id
-      JOIN daily_views dv ON (dv.rule_id = r.id OR (dv.rule_id = '' AND dv.game_id = r.game_id))
-      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
-        AND ${viewDateCondition}
-      GROUP BY r.id
-      ORDER BY COUNT(DISTINCT CASE WHEN dv.rule_id = r.id THEN dv.user_id END) DESC, COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
-      LIMIT 10
-    `).all<RuleRow & { display_name: string; slug: string }>(),
-    c.env.DB.prepare(`${homeRuleSelect}
-      JOIN games g ON g.id = r.game_id
-      WHERE r.status = 'published' AND r.is_featured = 1 AND g.merged_into_game_id IS NULL
-      ORDER BY COALESCE(r.featured_order, 9999), r.updated_at DESC LIMIT 10
-    `).all<RuleRow & { display_name: string; slug: string }>(),
+  const [recentResult, popularViewsResult, popularResult] = await Promise.all([
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
@@ -366,26 +352,59 @@ app.get('/api/home', async (c) => {
       WHERE g.merged_into_game_id IS NULL
       GROUP BY g.id
       HAVING rule_count > 0
-      ORDER BY rule_count DESC, g.updated_at DESC LIMIT 10
+      ORDER BY rule_count DESC, g.updated_at DESC LIMIT 6
     `).all<GameRow>(),
   ]);
+
   const withGame = (row: RuleRow & { display_name: string; slug: string }) => ({
     ...toRule(row), gameName: row.display_name, gameSlug: row.slug,
   });
-
-  let finalFeaturedRules = popularRulesViewsResult.results ?? [];
-  if (finalFeaturedRules.length === 0) {
-    finalFeaturedRules = recentResult.results ?? [];
-  }
 
   let finalPopularGames = popularViewsResult.results ?? [];
   if (finalPopularGames.length === 0) {
     finalPopularGames = popularResult.results ?? [];
   }
 
+  const finalFeaturedRules: ReturnType<typeof withGame>[] = [];
+  
+  if (finalPopularGames.length > 0) {
+    const rulePromises = finalPopularGames.map(async (game) => {
+      const bestRule = await c.env.DB.prepare(`${homeRuleSelect}
+        JOIN games g ON g.id = r.game_id
+        JOIN daily_views dv ON dv.rule_id = r.id
+        WHERE r.game_id = ? AND r.status = 'published' AND dv.rule_id != ''
+          AND ${viewDateCondition}
+        GROUP BY r.id
+        ORDER BY COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
+        LIMIT 1
+      `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
+
+      if (bestRule) {
+        return withGame(bestRule);
+      }
+
+      const fallbackRule = await c.env.DB.prepare(`${homeRuleSelect}
+        JOIN games g ON g.id = r.game_id
+        WHERE r.game_id = ? AND r.status = 'published'
+        ORDER BY r.created_at DESC
+        LIMIT 1
+      `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
+
+      if (fallbackRule) {
+        return withGame(fallbackRule);
+      }
+      return null;
+    });
+
+    const rules = await Promise.all(rulePromises);
+    for (const rule of rules) {
+      if (rule) finalFeaturedRules.push(rule);
+    }
+  }
+
   const payload: HomePayload = {
     generatedAt: now(),
-    featuredRules: finalFeaturedRules.map(withGame),
+    featuredRules: finalFeaturedRules,
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: finalPopularGames.map(toGame),
   };
