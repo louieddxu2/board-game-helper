@@ -187,25 +187,31 @@ const tagWriteStatements = async (c: AppContext, ruleId: string, names: string[]
   const statements: D1PreparedStatement[] = replace
     ? [c.env.DB.prepare('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
     : [];
-  const canCreate = Boolean(c.get('user')?.roles.includes('admin'));
+  const userRoles = c.get('user')?.roles ?? [];
+  const canCreate = userRoles.includes('admin') || userRoles.includes('editor');
   for (const name of cleanTagNames(names)) {
     const normalized = normalizeText(name);
+    if (!normalized) continue;
     const existing = await c.env.DB.prepare(`
       SELECT t.id FROM tags t LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
-      WHERE t.status = 'active' AND (t.normalized_name = ? OR ta.normalized_alias = ?) LIMIT 1
+      WHERE (t.normalized_name = ? OR ta.normalized_alias = ?) LIMIT 1
     `).bind(normalized, normalized).first<{ id: string }>();
     const suffix = (await sha256Hex(normalized)).slice(0, 20);
     const tagId = existing?.id ?? `tag_${suffix}`;
     if (!existing && !canCreate) throw new Error('unknown_tag');
     if (!existing) {
       statements.push(c.env.DB.prepare(`
-        INSERT OR IGNORE INTO tags (id, slug, name, normalized_name, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO tags (id, slug, name, normalized_name, created_by, created_at, updated_at, is_public)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
       `).bind(tagId, slugify(name), name, normalized, userId, timestamp, timestamp));
       statements.push(c.env.DB.prepare(`
         INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
         VALUES (?, ?, ?, ?, ?)
       `).bind(`ta_${suffix}`, tagId, name, normalized, timestamp));
+    } else {
+      statements.push(c.env.DB.prepare(`
+        UPDATE tags SET is_public = 1, updated_at = ? WHERE id = ?
+      `).bind(timestamp, tagId));
     }
     statements.push(c.env.DB.prepare(`
       INSERT OR IGNORE INTO rule_tags (rule_id, tag_id, created_by, created_at) VALUES (?, ?, ?, ?)
