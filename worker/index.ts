@@ -339,7 +339,7 @@ app.get('/api/home', async (c) => {
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
-      ORDER BY r.created_at DESC LIMIT 10
+      ORDER BY r.created_at DESC LIMIT 6
     `).all<RuleRow & { display_name: string; slug: string }>(),
   ]);
 
