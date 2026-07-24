@@ -301,6 +301,7 @@ app.post('/api/logout', async (c) => {
 });
 
 app.get('/api/home', async (c) => {
+  // 1. 動態計算時間視窗起點 (第6款遊戲觀看日期 - 7 天)
   const windowRow = await c.env.DB.prepare(`
     WITH recent_games AS (
       SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
@@ -317,82 +318,113 @@ app.get('/api/home', async (c) => {
   if (windowRow && windowRow.window_start) {
     startDateStr = new Date(new Date(windowRow.window_start).getTime() - 7 * 86400000).toISOString().slice(0, 10);
   }
-  const viewDateCondition = startDateStr ? `dv.view_date >= '${startDateStr}'` : `dv.view_date >= DATE('now', '-7 days')`;
+  const viewDateCondition = startDateStr ? `view_date >= '${startDateStr}'` : `view_date >= DATE('now', '-7 days')`;
 
-  const [recentResult, popularViewsResult, popularResult] = await Promise.all([
+  // 2. 統計階段 (100% 只查 daily_views，零大表 JOIN)
+  const [popularGameIdsResult, recentResult] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT game_id, COUNT(DISTINCT user_id) AS view_count
+      FROM daily_views
+      WHERE ${viewDateCondition}
+      GROUP BY game_id
+      ORDER BY view_count DESC, MAX(created_at) DESC
+      LIMIT 6
+    `).all<{ game_id: string }>(),
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
       ORDER BY r.created_at DESC LIMIT 10
     `).all<RuleRow & { display_name: string; slug: string }>(),
-    c.env.DB.prepare(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-        COUNT(DISTINCT dv.user_id) AS view_count,
-        (SELECT COUNT(r.id) FROM rules r WHERE r.game_id = g.id AND r.status = 'published') AS rule_count
-      FROM games g
-      JOIN daily_views dv ON g.id = dv.game_id
-      WHERE ${viewDateCondition} AND g.merged_into_game_id IS NULL
-      GROUP BY g.id
-      ORDER BY view_count DESC, MAX(dv.created_at) DESC
-      LIMIT 6
-    `).all<GameRow>(),
-    c.env.DB.prepare(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-        COUNT(r.id) AS rule_count
-      FROM games g
-      LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
-      WHERE g.merged_into_game_id IS NULL
-      GROUP BY g.id
-      HAVING rule_count > 0
-      ORDER BY rule_count DESC, g.updated_at DESC LIMIT 6
-    `).all<GameRow>(),
   ]);
+
+  let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
+
+  if (popularGameIds.length < 6) {
+    const fallbackGameIdsResult = await c.env.DB.prepare(`
+      SELECT g.id FROM games g
+      WHERE g.merged_into_game_id IS NULL
+      ORDER BY g.updated_at DESC LIMIT 6
+    `).all<{ id: string }>();
+    const extraIds = (fallbackGameIdsResult.results ?? []).map((g) => g.id);
+    popularGameIds = Array.from(new Set([...popularGameIds, ...extraIds])).slice(0, 6);
+  }
+
+  if (popularGameIds.length === 0) {
+    setNoCache(c);
+    return c.json({ generatedAt: now(), featured: [], featuredRules: [], recentRules: [], popularGames: [] });
+  }
+
+  // 3. 點對點極速解析內容 (WHERE id IN)
+  const placeholders = popularGameIds.map(() => '?').join(',');
+
+  const gamesResult = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      (SELECT COUNT(r.id) FROM rules r WHERE r.game_id = g.id AND r.status = 'published') AS rule_count
+    FROM games g
+    WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL
+  `).bind(...popularGameIds).all<GameRow>();
+
+  const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
+  const finalPopularGames = popularGameIds.map((id) => gameMap.get(id)).filter(Boolean) as GameSummary[];
+
+  const featuredRuleIdsResult = await c.env.DB.prepare(`
+    SELECT game_id, rule_id, COUNT(DISTINCT user_id) AS view_count
+    FROM daily_views
+    WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
+    GROUP BY game_id, rule_id
+    ORDER BY view_count DESC, MAX(created_at) DESC
+  `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>();
+
+  const featuredRuleIdByGame = new Map<string, string>();
+  (featuredRuleIdsResult.results ?? []).forEach((row) => {
+    if (!featuredRuleIdByGame.has(row.game_id)) {
+      featuredRuleIdByGame.set(row.game_id, row.rule_id);
+    }
+  });
 
   const withGame = (row: RuleRow & { display_name: string; slug: string }) => ({
     ...toRule(row), gameName: row.display_name, gameSlug: row.slug,
   });
 
-  let finalPopularGames = popularViewsResult.results ?? [];
-  if (finalPopularGames.length === 0) {
-    finalPopularGames = popularResult.results ?? [];
-  }
-
   const finalFeaturedRules: ReturnType<typeof withGame>[] = [];
   
-  if (finalPopularGames.length > 0) {
-    const gameIds = finalPopularGames.map((g) => g.id);
-    const placeholders = gameIds.map(() => '?').join(',');
-
-    const featuredBatch = await c.env.DB.prepare(`
-      WITH ranked_rules AS (
-        SELECT r.id as rule_id,
-          ROW_NUMBER() OVER (PARTITION BY r.game_id ORDER BY r.is_featured DESC, r.created_at DESC) as rn
-        FROM rules r
-        WHERE r.game_id IN (${placeholders}) AND r.status = 'published'
-      )
+  const rulePromises = finalPopularGames.map(async (game) => {
+    const specificRuleId = featuredRuleIdByGame.get(game.id);
+    if (specificRuleId) {
+      const rule = await c.env.DB.prepare(`
+        ${homeRuleSelect}
+        JOIN games g ON g.id = r.game_id
+        WHERE r.id = ? AND r.status = 'published'
+        LIMIT 1
+      `).bind(specificRuleId).first<RuleRow & { display_name: string; slug: string }>();
+      if (rule) return withGame(rule);
+    }
+    const fallbackRule = await c.env.DB.prepare(`
       ${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
-      JOIN ranked_rules rr ON rr.rule_id = r.id
-      WHERE rr.rn = 1
-    `).bind(...gameIds).all<RuleRow & { display_name: string; slug: string }>();
+      WHERE r.game_id = ? AND r.status = 'published'
+      ORDER BY r.is_featured DESC, r.created_at DESC
+      LIMIT 1
+    `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
 
-    const ruleMap = new Map((featuredBatch.results ?? []).map((r) => [r.game_id, withGame(r)]));
-    for (const game of finalPopularGames) {
-      const rule = ruleMap.get(game.id);
-      if (rule) finalFeaturedRules.push(rule);
-    }
+    return fallbackRule ? withGame(fallbackRule) : null;
+  });
+
+  const rules = await Promise.all(rulePromises);
+  for (const rule of rules) {
+    if (rule) finalFeaturedRules.push(rule);
   }
 
   const payload: HomePayload = {
     generatedAt: now(),
     featured: finalPopularGames.map((game, index) => ({
-      gameSlug: toGame(game).slug,
-      gameName: toGame(game).displayName,
+      gameSlug: game.slug,
+      gameName: game.displayName,
       ruleId: finalFeaturedRules[index]?.id ?? '',
     })),
     featuredRules: finalFeaturedRules,
     recentRules: (recentResult.results ?? []).map(withGame),
-    popularGames: finalPopularGames.map(toGame),
+    popularGames: finalPopularGames,
   };
   setNoCache(c);
   return c.json(payload);
