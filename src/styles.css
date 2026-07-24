@@ -714,3 +714,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   border-radius: 12px;
   padding: 0.125rem 0.5rem;
 }
+
+/* 單條規則錨點定位高亮 */
+.rule-card:target {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 3px rgba(233,180,76,.4);
+  animation: ruleTargetPulse 2s ease;
+}
+
+@keyframes ruleTargetPulse {
+  0% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(233,180,76,.6); }
+  50% { transform: scale(1); box-shadow: 0 0 0 3px rgba(233,180,76,.4); }
+  100% { transform: scale(1); }
+}

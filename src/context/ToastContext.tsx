@@ -12,7 +12,7 @@ interface ToastState {
   showToast(message: string, type?: ToastType): void;
 }
 
-const ToastContext = createContext<ToastState | null>(null);
+export const ToastContext = createContext<ToastState | null>(null);
 
 let nextToastId = 0;
 
