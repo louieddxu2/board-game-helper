@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { GameSearch } from '../components/GameSearch';
+import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameSummary, type ReviewBatch, type ReviewContent, type ReviewProposal } from '../shared/types';
 
 const stageNames: Record<FlowStage, string> = {
@@ -130,6 +131,8 @@ export const ReviewPage = () => {
       })));
       const conflicts = result.outcomes.filter((outcome) => outcome.status === 'conflict' || outcome.status === 'stale').length;
       setMessage(`已處理 ${result.outcomes.length} 項${conflicts ? `，其中 ${conflicts} 項需要重新確認` : ''}。`);
+      await localDb.clearAllCache();
+      clearSearchCache();
       await load();
     } finally { setBusy(false); }
   };

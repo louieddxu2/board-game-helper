@@ -10,6 +10,9 @@ import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCard
 import { detectDeterministicTags } from '../lib/tagDetector';
 import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorter';
 import { useToast } from '../context/ToastContext';
+import { clearSearchCache } from '../components/GameSearch';
+
+const GAME_CACHE_FRESH_MS = 5 * 60 * 1000;
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
@@ -49,13 +52,22 @@ export const GamePage = () => {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void localDb.getCachedGame(identifier).then((cached) => { if (active && cached) setGame(cached.data); });
-    api.game(identifier, Boolean((location.state as { justAdded?: number } | null)?.justAdded)).then((response) => {
-      if (active) setGame(response.game);
-      return localDb.cacheGame(response.game);
-    }).finally(() => { if (active) setLoading(false); });
+    const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
+    void localDb.getCachedGame(identifier).then((cached) => {
+      if (!active) return;
+      if (cached && (Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) && !justAdded) {
+        setGame(cached.data);
+        setLoading(false);
+      } else {
+        if (cached) setGame(cached.data);
+        api.game(identifier, justAdded).then((response) => {
+          if (active) setGame(response.game);
+          return localDb.cacheGame(response.game);
+        }).finally(() => { if (active) setLoading(false); });
+      }
+    });
     return () => { active = false; };
-  }, [identifier]);
+  }, [identifier, location.state]);
   useEffect(() => {
     if (!game || !location.hash) return;
     window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
@@ -178,8 +190,8 @@ export const GamePage = () => {
       </>
     )}
     {game.aliases.length > 1 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
-    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); await load(); }} />}
-    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); await load(); }} />}
+    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); clearSearchCache(); await load(); }} />}
+    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); clearSearchCache(); await load(); }} />}
   </section>;
 };
 

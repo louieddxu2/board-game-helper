@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { GameSearch } from '../components/GameSearch';
+import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
@@ -118,8 +118,12 @@ export const AddPage = () => {
       const result = await api.submit(payload);
       await Promise.all([
         localDb.removePending(payload.idempotencyKey), localDb.clearDraft(),
-        localDb.invalidateHome(), localDb.invalidateGame(game.slug),
       ]);
+      await localDb.invalidateHome();
+      clearSearchCache();
+      if (game?.slug) {
+        await localDb.invalidateGame(game.slug);
+      }
       const firstRule = result.ruleIds?.[0];
       navigate(`/games/${game.slug}${firstRule ? `#rule-${firstRule}` : ''}`, {
         state: { justAdded: validRules.length, addedRuleIds: result.ruleIds ?? [] },

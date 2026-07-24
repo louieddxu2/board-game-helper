@@ -62,11 +62,12 @@ export const localDb = {
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
-  getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ data: GameDetail } | undefined>,
+  getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
   invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
   recentGames: async () => {
     const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
     return all.reverse().slice(0, 8);
   },
+  clearAllCache: async () => (await getDatabase()).clear('cache'),
 };

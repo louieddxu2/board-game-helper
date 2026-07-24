@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import type { SessionUser } from '../shared/types';
+import { clearSearchCache } from '../components/GameSearch';
 
 interface SessionState {
   user: SessionUser | null;
@@ -47,6 +48,8 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
             && draft.rules.filter((rule) => rule.statement.trim()).map((rule) => rule.statement.trim()).join('\n')
               === item.payload.rules.map((rule) => rule.statement.trim()).join('\n');
           if (sameDraft) await localDb.clearDraft();
+          await localDb.clearAllCache();
+          clearSearchCache();
         } catch { /* the queue remains available for the next online session */ }
       }
     });

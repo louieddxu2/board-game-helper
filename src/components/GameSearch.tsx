@@ -18,8 +18,9 @@ interface Props {
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type CachedSearch = SearchResponse & { cachedAt: number };
-const SEARCH_CACHE_FRESH_MS = 60 * 1000;
+const SEARCH_CACHE_FRESH_MS = 5 * 60 * 1000;
 const searchCache = new Map<string, CachedSearch>();
+export const clearSearchCache = () => searchCache.clear();
 const rememberSearch = (key: string, response: SearchResponse) => {
   if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value as string);
   searchCache.set(key, { ...response, cachedAt: Date.now() });
@@ -100,6 +101,35 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       setGames(cached.games); setRules(cached.rules); setActiveIndex(-1); setLoading(false); setSearchError(false);
       return;
     }
+
+    const qLower = query.toLowerCase();
+    const prefix = `${includeRules ? 'all' : 'games'}:`;
+    let foundProgressive = false;
+    for (const [key, data] of searchCache.entries()) {
+      if (key.startsWith(prefix) && cacheKey.startsWith(key) && data.games.length < 20) {
+        const filteredGames = data.games.filter(game => 
+          game.displayName.toLowerCase().includes(qLower) ||
+          game.englishName?.toLowerCase().includes(qLower) ||
+          game.aliases?.some(a => a.toLowerCase().includes(qLower))
+        );
+        const filteredRules = data.rules.filter(rule => 
+          rule.statement.toLowerCase().includes(qLower) ||
+          rule.gameName.toLowerCase().includes(qLower)
+        );
+        
+        rememberSearch(cacheKey, { games: filteredGames, rules: filteredRules });
+        setGames(filteredGames);
+        setRules(filteredRules);
+        setActiveIndex(-1);
+        setLoading(false);
+        setSearchError(false);
+        foundProgressive = true;
+        break;
+      }
+    }
+    
+    if (foundProgressive) return;
+
     if (cached) searchCache.delete(cacheKey);
     let active = true;
     setLoading(true);

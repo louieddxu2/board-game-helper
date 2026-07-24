@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { GameSearch } from '../components/GameSearch';
+import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import type { GameSummary, RuleCard, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 
@@ -97,7 +98,7 @@ export const AdminPage = () => {
       <section className="admin-card import-card"><div className="list-heading"><h2>舊資料待確認</h2><span>{importRows.length} 筆</span></div>
         {importRows.length === 0 && <p className="muted">目前沒有 staged 資料。執行匯入指令後會在這裡出現。</p>}
         {importRows.slice(0, 20).map((row) => <article key={String(row.id)}><strong>{String(row.raw_game_name)}</strong><p>{String(row.raw_rule_text)}</p><small>原始第 {String(row.source_row_number)} 列・宣告 {String(row.declared_rule_count ?? '?')} 條</small>
-          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(() => { showToast('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
+          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(async () => { await localDb.clearAllCache(); clearSearchCache(); showToast('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
             <button type="button" className="danger-link" onClick={() => void api.skipImport(String(row.id)).then(load)}>略過</button></div></article>)}
       </section>
 
@@ -106,11 +107,11 @@ export const AdminPage = () => {
         <div className="merge-arrow">↓ 合併到</div>
         <GameSearch value={targetQuery} selectedId={targetGame?.id} onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
         <button type="button" className="button primary full-button" disabled={!sourceGame || !targetGame || sourceGame.id === targetGame.id}
-          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(() => { showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
+          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(async () => { await localDb.invalidateGame(sourceGame.slug); await localDb.invalidateGame(targetGame.slug); await localDb.invalidateHome(); clearSearchCache(); showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
       </section>
 
       <section className="admin-card"><div className="list-heading"><h2>已隱藏規則</h2><span>{hiddenRules.length} 條</span></div>
-        <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(load)}>恢復</button></div>)}</div>
+        <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(async () => { await localDb.clearAllCache(); clearSearchCache(); load(); })}>恢復</button></div>)}</div>
       </section>
     </div>
   </section>;
