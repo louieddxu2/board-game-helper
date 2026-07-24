@@ -14,17 +14,10 @@ const isPublicCacheableRequest = (method: string, path: string) => method === 'G
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
-const setPublicCache = (
-  c: AppContext,
-  browserSeconds: number,
-  edgeSeconds: number,
-  staleSeconds: number,
-) => {
-  c.header('Cache-Control', `public, max-age=${browserSeconds}`);
-  c.header(
-    'Cloudflare-CDN-Cache-Control',
-    `public, max-age=${edgeSeconds}, stale-while-revalidate=${staleSeconds}`,
-  );
+const setNoCache = (c: AppContext) => {
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+  c.header('Pragma', 'no-cache');
+  c.header('Expires', '0');
 };
 
 app.use('/api/*', async (c, next) => {
@@ -415,7 +408,7 @@ app.get('/api/home', async (c) => {
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: finalPopularGames.map(toGame),
   };
-  c.header('Cache-Control', 'no-cache, must-revalidate');
+  setNoCache(c);
   return c.json(payload);
 });
 
@@ -437,7 +430,7 @@ app.get('/api/games/search', async (c) => {
       rule_count DESC, g.display_name
     LIMIT 20
   `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>();
-  setPublicCache(c, 60, 300, 900);
+  setNoCache(c);
   return c.json({ games: (result.results ?? []).map(toGame) });
 });
 
@@ -458,7 +451,7 @@ app.get('/api/games/resolve', async (c) => {
     LIMIT 1
   `).bind(name, name).first<GameRow>();
   if (exact) {
-    setPublicCache(c, 300, 3600, 86400);
+    setNoCache(c);
     return c.json({ game: toGame(exact), suggestions: [] });
   }
   const result = await c.env.DB.prepare(`
@@ -474,7 +467,7 @@ app.get('/api/games/resolve', async (c) => {
     ORDER BY rule_count DESC, g.display_name
     LIMIT 5
   `).bind(`%${name}%`, `%${name}%`).all<GameRow>();
-  setPublicCache(c, 60, 300, 1800);
+  setNoCache(c);
   return c.json({ game: null, suggestions: (result.results ?? []).map(toGame) });
 });
 
@@ -504,7 +497,7 @@ app.get('/api/search', async (c) => {
       rule_id: string; game_id: string; game_name: string; game_slug: string; statement: string;
     }>(),
   ]);
-  setPublicCache(c, 60, 300, 900);
+  setNoCache(c);
   return c.json({
     games: (gamesResult.results ?? []).map(toGame),
     rules: (rulesResult.results ?? []).map((row) => ({ ruleId: row.rule_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug, statement: row.statement })),
@@ -538,7 +531,7 @@ app.get('/api/tags', async (c) => {
   sql += ` GROUP BY t.id ORDER BY usage_count DESC, t.name LIMIT 20`;
 
   const result = await c.env.DB.prepare(sql).bind(...params).all<{ id: string; slug: string; name: string; is_public: number; usage_count: number }>();
-  setPublicCache(c, 60, 300, 900);
+  setNoCache(c);
   return c.json({
     tags: (result.results ?? []).map((tag) => ({
       id: tag.id,
@@ -583,10 +576,7 @@ app.get('/api/games/:identifier', async (c) => {
   `).bind(identifier, identifier).first<GameRow>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
-  const etag = `W/"game-${game.id}-${game.updated_at}"`;
-  c.header('ETag', etag);
-  c.header('Cache-Control', 'no-cache, must-revalidate');
-  if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
+  setNoCache(c);
 
   const [aliasesResult, rulesResult] = await Promise.all([
     c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
@@ -605,7 +595,7 @@ app.get('/api/games/:identifier', async (c) => {
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
     rules: (rulesResult.results ?? []).map(toRule),
   };
-  setPublicCache(c, 60, 300, 1800);
+  setNoCache(c);
   return c.json({ game: detail });
 });
 
@@ -634,7 +624,7 @@ app.get('/api/export/public', async (c) => {
   const datasetVersion = `v1-${updatedAt}-${values.game_count}-${values.rule_count}-${values.tag_count}`;
   const etag = `W/"${datasetVersion}"`;
   c.header('ETag', etag);
-  setPublicCache(c, 300, 86400, 604800);
+  setNoCache(c);
   c.header('Content-Disposition', 'attachment; filename="wrong-board-game-rules-public-v1.json"');
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
 
