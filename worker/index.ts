@@ -304,11 +304,8 @@ app.get('/api/home', async (c) => {
   const windowRow = await c.env.DB.prepare(`
     WITH recent_games AS (
       SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
-      FROM (
-        SELECT game_id, view_date, created_at
-        FROM daily_views
-        ORDER BY created_at DESC
-      )
+      FROM daily_views
+      WHERE view_date >= DATE('now', '-30 days')
       GROUP BY game_id
       ORDER BY last_seen DESC
       LIMIT 6
