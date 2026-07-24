@@ -320,12 +320,18 @@ app.get('/api/home', async (c) => {
   }
   const viewDateCondition = startDateStr ? `view_date >= '${startDateStr}'` : `view_date >= DATE('now', '-7 days')`;
 
-  // 2. 統計階段 (100% 只查 daily_views，零大表 JOIN)
+  // 2. 統計階段 (100% 只查 daily_views，加上 LIMIT 100 硬上限熔斷保護)
   const [popularGameIdsResult, recentResult] = await Promise.all([
     c.env.DB.prepare(`
+      WITH scoped_views AS (
+        SELECT game_id, user_id, created_at
+        FROM daily_views
+        WHERE ${viewDateCondition}
+        ORDER BY created_at DESC
+        LIMIT 100
+      )
       SELECT game_id, COUNT(DISTINCT user_id) AS view_count
-      FROM daily_views
-      WHERE ${viewDateCondition}
+      FROM scoped_views
       GROUP BY game_id
       ORDER BY view_count DESC, MAX(created_at) DESC
       LIMIT 6
@@ -368,9 +374,15 @@ app.get('/api/home', async (c) => {
   const finalPopularGames = popularGameIds.map((id) => gameMap.get(id)).filter(Boolean) as GameSummary[];
 
   const featuredRuleIdsResult = await c.env.DB.prepare(`
+    WITH scoped_views AS (
+      SELECT game_id, rule_id, user_id, created_at
+      FROM daily_views
+      WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
+      ORDER BY created_at DESC
+      LIMIT 100
+    )
     SELECT game_id, rule_id, COUNT(DISTINCT user_id) AS view_count
-    FROM daily_views
-    WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
+    FROM scoped_views
     GROUP BY game_id, rule_id
     ORDER BY view_count DESC, MAX(created_at) DESC
   `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>();
