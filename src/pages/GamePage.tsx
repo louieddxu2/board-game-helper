@@ -68,8 +68,8 @@ export const GamePage = () => {
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   return <section className="game-page">
     <header className="game-hero">
-      <div><p className="eyebrow">開桌前快速複習</p><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
-        <p>{game.ruleCount} 條曾經讓人踩坑的規則</p></div>
+      <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
+        <p>{game.ruleCount} 條易錯規則紀錄</p></div>
       {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.id}`}>＋新增規則</Link></div>}
     </header>
     <div className="view-mode-header">
@@ -81,7 +81,7 @@ export const GamePage = () => {
           className={viewMode === 'index' ? 'active' : ''}
           onClick={() => setViewMode('index')}
         >
-          📚 遊戲中完整索引
+          📚 完整索引
         </button>
         <button
           type="button"
@@ -90,15 +90,15 @@ export const GamePage = () => {
           className={viewMode === 'briefing' ? 'active' : ''}
           onClick={() => setViewMode('briefing')}
         >
-          ⚡ 開桌前 30 秒速覽
+          ⚡ 30 秒速覽
         </button>
       </div>
     </div>
     {viewMode === 'briefing' ? (
       <>
         <div className="briefing-notice">
-          <h2>⚡ 開桌前 30 秒速覽 (Pre-Game Briefing)</h2>
-          <p>精選本遊戲最關鍵的踩雷警示與常見誤區，開桌前半分鐘看完避免全桌翻車。</p>
+          <h2>⚡ 30 秒速覽</h2>
+          <p>整理本遊戲常被誤解的重點規則。</p>
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
