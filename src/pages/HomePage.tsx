@@ -46,7 +46,7 @@ export const HomePage = () => {
       <Link to="/add">繼續記錄 →</Link>
     </section>}
     {home && home.popularGames.length > 0 && <Fragment><section className="content-section game-section">
-      <div className="section-heading"><div><h2>已收錄規則的遊戲</h2></div></div>
+      <div className="section-heading"><div><h2>近 7 天常被查閱的遊戲</h2></div></div>
       <div className="game-grid">{home.popularGames.map((game) => <Link to={`/games/${game.slug}`} key={game.id}>
         <strong>{game.displayName}</strong>{game.englishName && <span>{game.englishName}</span>}<small>{game.ruleCount} 條規則紀錄 →</small>
       </Link>)}</div>

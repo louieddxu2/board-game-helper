@@ -20,7 +20,7 @@ const stageNames: Record<FlowStage, string> = {
 export const GamePage = () => {
   const { identifier = '' } = useParams();
   const location = useLocation();
-  const { canEdit } = useSession();
+  const { canEdit, user } = useSession();
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<'index' | 'briefing'>('index');
   const [game, setGame] = useState<GameDetail>();
@@ -50,6 +50,15 @@ export const GamePage = () => {
     if (!game || !location.hash) return;
     window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }, [game, location.hash]);
+  useEffect(() => {
+    if (!game || !user) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const storageKey = `viewed:${game.id}:${today}`;
+    if (!localStorage.getItem(storageKey)) {
+      api.recordView(game.id).catch(() => undefined);
+      localStorage.setItem(storageKey, '1');
+    }
+  }, [game, user]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
   const visibleRules = game?.rules.filter((rule) => (!activeTag || rule.tags.some((tag) => tag.name === activeTag))
