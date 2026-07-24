@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { SessionContext } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
 import { api } from '../lib/api';
@@ -25,6 +25,7 @@ export const RuleCard = ({
   gameId,
 }: RuleCardProps) => {
   const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
   const session = useContext(SessionContext);
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
@@ -42,12 +43,23 @@ export const RuleCard = ({
     ? `${fullContent.slice(0, 80)}...`
     : fullContent;
 
-  const copyRuleLink = () => {
+  const copyRuleLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const targetPath = gameHref ? `${gameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
     const fullUrl = `${window.location.origin}${targetPath}`;
     void navigator.clipboard.writeText(fullUrl).then(() => {
       showToast('已複製這條規則的直接連結 🔗', 'info');
     });
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, label')) {
+      return;
+    }
+    if (gameHref) {
+      navigate(`${gameHref}#rule-${rule.id}`);
+    }
   };
 
   const titleText = gameName
@@ -57,14 +69,18 @@ export const RuleCard = ({
     : undefined;
 
   return (
-    <article className="rule-card" id={`rule-${rule.id}`}>
+    <article
+      className={gameHref ? 'rule-card clickable' : 'rule-card'}
+      id={`rule-${rule.id}`}
+      onClick={handleCardClick}
+    >
       {/* 第一行：遊戲名稱(英文名稱)、屬性(擴充、人數)、右上編輯 */}
       <div className="rule-card-header">
         <div className="rule-card-title-group">
           {titleText && (
             <h3 className="rule-game-title">
               {gameHref ? (
-                <Link className="rule-title-link" to={gameHref}>
+                <Link className="rule-title-link" to={gameHref} onClick={(e) => e.stopPropagation()}>
                   {titleText}
                 </Link>
               ) : (
@@ -86,7 +102,14 @@ export const RuleCard = ({
 
         {/* 右上角編輯按鈕 (僅當傳入 onEdit 且具有權限時顯示) */}
         {onEdit && (
-          <button type="button" className="text-action edit-btn" onClick={onEdit}>
+          <button
+            type="button"
+            className="text-action edit-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
             編輯
           </button>
         )}
@@ -101,7 +124,10 @@ export const RuleCard = ({
                 type="button"
                 className="tag-chip"
                 key={tag.id}
-                onClick={() => onTagClick(tag.name)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTagClick(tag.name);
+                }}
               >
                 #{tag.name}
               </button>
@@ -123,7 +149,8 @@ export const RuleCard = ({
           <button
             type="button"
             className="text-action details-toggle"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (!expanded && user && gameId) {
                 const today = new Date().toISOString().slice(0, 10);
                 const storageKey = `viewed_rule:${rule.id}:${today}`;
@@ -158,6 +185,7 @@ export const RuleCard = ({
               href={source.url}
               target="_blank"
               rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
             >
               查看依據{rule.sourceLinks.length > 1 ? ` ${index + 1}` : ''} ↗
             </a>
