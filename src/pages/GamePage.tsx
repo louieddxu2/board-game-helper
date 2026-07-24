@@ -72,7 +72,7 @@ export const GamePage = () => {
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
   const visibleRules = game?.rules.filter((rule) =>
-    (activeTags.length === 0 || rule.tags.some((tag) => activeTags.includes(tag.name))) &&
+    (activeTags.length === 0 || activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName))) &&
     (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
   ) ?? [];
   const groupedSections = useMemo(() => groupRulesUniversally(visibleRules), [visibleRules]);
