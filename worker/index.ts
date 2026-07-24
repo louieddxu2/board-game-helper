@@ -330,11 +330,11 @@ app.get('/api/home', async (c) => {
   const [popularRulesViewsResult, featuredResult, recentResult, popularViewsResult, popularResult] = await Promise.all([
     c.env.DB.prepare(`${homeRuleSelect}
       JOIN games g ON g.id = r.game_id
-      JOIN daily_views dv ON dv.rule_id = r.id
+      JOIN daily_views dv ON (dv.rule_id = r.id OR (dv.rule_id = '' AND dv.game_id = r.game_id))
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
         AND ${viewDateCondition}
       GROUP BY r.id
-      ORDER BY COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
+      ORDER BY COUNT(DISTINCT CASE WHEN dv.rule_id = r.id THEN dv.user_id END) DESC, COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
       LIMIT 10
     `).all<RuleRow & { display_name: string; slug: string }>(),
     c.env.DB.prepare(`${homeRuleSelect}
