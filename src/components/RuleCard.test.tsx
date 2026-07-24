@@ -14,7 +14,7 @@ describe('RuleCard', () => {
         isFeatured: false, tags: [], sourceLinks: [{ url: 'https://example.com/rules' }],
       }}
     /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: '三人局使用五個方塊' })).toHaveAttribute('href', '/games/shipyard');
+    expect(screen.getByRole('link', { name: '船廠' })).toHaveAttribute('href', '/games/shipyard');
     expect(screen.getByRole('link', { name: /查看依據/ })).toHaveAttribute('href', 'https://example.com/rules');
     expect(container.querySelector('a a')).toBeNull();
   });

@@ -106,31 +106,42 @@ footer a { color: inherit; }
 .section-heading h2 { font-size: clamp(30px, 4vw, 48px); margin-bottom: 0; }
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rule-card { height: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 16px; position: relative; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s; }
+.rule-card { height: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s; display: flex; flex-direction: column; }
 .rule-card:has(.rule-title-link:hover) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(23,47,40,.08); }
-.rule-title-link { color: inherit; text-decoration-thickness: 1px; text-decoration-color: transparent; text-underline-offset: 4px; }
-.rule-title-link:hover { text-decoration-color: currentColor; }
-.revision-panel { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 10px; }
-.revision-panel .admin-list { margin-top: 10px; max-height: 240px; overflow: auto; }
-.revision-panel .admin-list > div { align-items: flex-start; }
-.rule-meta { display: flex; gap: 6px; margin-bottom: 10px; }
-.rule-meta span { display: inline-block; background: var(--cream); color: var(--green); border-radius: 100px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
-.statement-text { display: flex; align-items: flex-start; gap: 8px; font-size: 17px; line-height: 1.45; margin-bottom: 14px; }
-.statement-badge { background: var(--green); color: white; padding: 2px 6px; border-radius: 6px; font-size: 11px; white-space: nowrap; flex-shrink: 0; margin-top: 3px; }
-.rule-card h3 { font-size: 19px; line-height: 1.55; margin-bottom: 17px; }
-.rule-card > p { line-height: 1.6; color: #46544f; font-size: 14px; }
-.rule-tags { margin-top: 14px; }
-.tag-chip { min-height: 34px; }
-.rule-tags button.tag-chip:hover, .tag-filter button:hover, .tag-filter button.active { background: var(--green); border-color: var(--green); color: white; }
-.tag-overflow { color: var(--muted); font-size: 11px; }
-.mistake { background-color: #fdf5f3; border: 1px solid rgba(183, 70, 47, 0.3); border-left: 4px solid var(--orange); padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
-.mistake .mistake-badge { background-color: var(--orange); color: white; padding: 3px 6px; border-radius: 4px; font-size: 11px; align-self: flex-start; font-weight: 700; }
-.mistake .mistake-text { color: #5a2a22; font-size: 13px; line-height: 1.5; }
-.rule-notes { display: flex; flex-wrap: wrap; gap: 7px 13px; margin-top: 18px; font-size: 11px; color: var(--muted); }
-.rule-notes a { color: var(--green); font-weight: 700; }
+.rule-title-link { color: inherit; text-decoration: none; }
+.rule-title-link:hover { text-decoration: underline; }
+
+/* 第一行：標題 + 屬性 + 編輯按鈕 */
+.rule-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.rule-card-title-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.rule-game-title { font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--ink); margin: 0; }
+.rule-attributes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.attr-chip { display: inline-flex; align-items: center; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
+
+/* 第二行：標籤列 */
+.rule-card .rule-tags { margin: 4px 0 12px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 第三行：正確規則 (支援換行 pre-line) */
+.rule-statement-section { margin-bottom: 12px; }
+.statement-text { font-size: 16px; line-height: 1.6; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
+.details-toggle { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 4px; }
+
+/* 第四行：玩錯版本 (支援換行 pre-line) */
+.mistake { background-color: #fdf5f3; border: 1px solid rgba(183, 70, 47, 0.3); border-left: 4px solid var(--orange); padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px 0; }
+.mistake .mistake-badge { background-color: var(--orange); color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; align-self: flex-start; font-weight: 700; }
+.mistake .mistake-text { color: #5a2a22; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-line; word-break: break-word; }
+
+/* 第五行：來源與右下角分享按鈕 */
+.rule-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.rule-source { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rule-source a { color: var(--green); font-weight: 700; text-decoration: none; }
+.rule-source a:hover { text-decoration: underline; }
 .unverified { color: #9b6e38; }
-.text-action { border: 0; background: none; color: var(--orange); padding: 8px 0; font-weight: 700; cursor: pointer; }
-.rule-card > .text-action { position: absolute; right: 20px; top: 17px; }
+
+.copy-link-btn { border: 0; background: none; color: var(--orange); font-weight: 700; cursor: pointer; font-size: 12px; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
+
+.text-action { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; }
+.edit-btn { font-size: 13px; flex-shrink: 0; }
 .game-section { background: var(--cream); max-width: none; padding-left: max(24px, calc((100vw - 1180px) / 2)); padding-right: max(24px, calc((100vw - 1180px) / 2)); }
 .game-grid { display: flex; flex-wrap: wrap; gap: 10px; }
 .game-grid a { background: var(--white); border-radius: 100px; padding: 8px 16px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); }
