@@ -137,46 +137,29 @@ interface RuleRow {
   sources_json: string | null;
 }
 
-const stageTagMap: Record<string, string> = {
-  setup: '設置',
-  round: '回合階段',
-  action: '玩家行動',
-  end_scoring: '結算勝負',
-  edition_player_count: '人數擴充',
-  always: '全程適用',
-};
-
-const toRule = (row: RuleRow): RuleCard => {
-  const baseTags = (() => {
+const toRule = (row: RuleRow): RuleCard => ({
+  id: row.id,
+  gameId: row.game_id,
+  statement: row.statement,
+  commonMistake: row.common_mistake ?? undefined,
+  details: row.details ?? undefined,
+  flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
+  playerCountNote: row.player_count_note ?? undefined,
+  editionNote: row.edition_note ?? undefined,
+  sourceLabel: row.source_label ?? undefined,
+  sourceUrl: row.source_url ?? undefined,
+  sourceLinks: (() => {
+    try {
+      const links = JSON.parse(row.sources_json ?? '[]') as RuleCard['sourceLinks'];
+      return links.length ? links : (row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []);
+    } catch { return row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []; }
+  })(),
+  status: row.status,
+  isFeatured: Boolean(row.is_featured),
+  tags: (() => {
     try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
-  })();
-  const stageTagName = row.flow_stage ? stageTagMap[row.flow_stage] : undefined;
-  const tags = [...baseTags];
-  if (stageTagName && !tags.some((t) => t.name === stageTagName)) {
-    tags.unshift({ id: `stage-${row.flow_stage}`, name: stageTagName, slug: stageTagName.toLowerCase(), isPublic: true });
-  }
-  return {
-    id: row.id,
-    gameId: row.game_id,
-    statement: row.statement,
-    commonMistake: row.common_mistake ?? undefined,
-    details: row.details ?? undefined,
-    flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
-    playerCountNote: row.player_count_note ?? undefined,
-    editionNote: row.edition_note ?? undefined,
-    sourceLabel: row.source_label ?? undefined,
-    sourceUrl: row.source_url ?? undefined,
-    sourceLinks: (() => {
-      try {
-        const links = JSON.parse(row.sources_json ?? '[]') as RuleCard['sourceLinks'];
-        return links.length ? links : (row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []);
-      } catch { return row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []; }
-    })(),
-    status: row.status,
-    isFeatured: Boolean(row.is_featured),
-    tags,
-  };
-};
+  })(),
+});
 
 const cleanTagNames = (names: string[] | undefined): string[] => Array.from(new Map((names ?? [])
   .map((name) => name.trim().replace(/^#/, '').slice(0, 40))
