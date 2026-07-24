@@ -53,17 +53,17 @@ footer a { color: inherit; }
 .hero::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
 .eyebrow { color: var(--orange); font-size: 12px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; margin-bottom: 14px; }
 .hero .eyebrow { color: var(--yellow); text-align: center; }
-.hero h1 { font-size: clamp(52px, 8vw, 96px); line-height: 1.1; margin-bottom: 24px; text-align: center; }
+.hero h1 { font-size: clamp(1.75rem, 5vw, 2.75rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 16ch; margin-left: auto; margin-right: auto; }
 .hero-inner { width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
-.hero-recents { margin-top: 20px; }
+.hero-recents { margin-top: 16px; display: flex; flex-direction: column; align-items: center; }
 .hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; margin-bottom: 8px; text-align: center; }
 .recent-game-chips, .hero-recents div, .tag-input-values, .rule-tags, .tag-filter { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 7px; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
-.recent-game-chips button, .hero-recents a, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 7px 11px; font-size: 12px; text-decoration: none; cursor: pointer; }
-.hero-recents a { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.25); color: white; }
+.recent-game-chips button, .hero-recents a, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
+.hero-recents a { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: white; }
 .hero-copy { font-size: 20px; line-height: 1.6; max-width: 620px; color: #dfe8e4; text-align: center; margin-bottom: 40px; }
 .hero-actions { display: flex; gap: 12px; margin: 34px 0 48px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 21px; border-radius: 100px; border: 1px solid transparent; font-weight: 700; text-decoration: none; cursor: pointer; transition: transform .16s ease, opacity .16s; }
@@ -272,15 +272,15 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   footer { padding-bottom: 90px; }
   .hero { min-height: auto; padding: 50px 18px 40px; }
   .hero-inner { grid-template-columns: 1fr; gap: 30px; }
-  .hero h1 { font-size: clamp(42px, 14vw, 62px); margin-bottom: 24px; }
+  .hero h1 { font-size: clamp(1.5rem, 7vw, 2.25rem); margin-bottom: 16px; text-wrap: balance; word-break: keep-all; max-width: 14ch; }
   .hero::after { width: 320px; height: 320px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   .hero-copy { font-size: 17px; line-height: 1.6; text-align: center; margin-bottom: 30px; }
   .hero-actions { flex-wrap: wrap; margin: 18px 0 22px; justify-content: center; }
   .hero-actions .button { flex: 1; white-space: nowrap; max-width: 240px; }
-  .hero-search .search-input input { padding: 18px 22px; font-size: 18px; }
-  .hero-search .search-input span { font-size: 20px; padding: 0 20px; }
+  .hero-search .search-input input { padding: 14px 18px; font-size: 16px; }
+  .hero-search .search-input span { font-size: 18px; padding: 0 16px; }
   .hero-preview { display: none; }
-  .hero-recents { display: none; }
+  .hero-recents { display: flex; margin-top: 14px; }
   .rule-grid, .rule-grid.compact, .admin-grid { grid-template-columns: 1fr; }
   .game-grid { flex-direction: column; align-items: stretch; }
   .content-section { padding: 65px 18px; }
