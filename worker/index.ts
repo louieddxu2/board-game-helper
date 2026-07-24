@@ -363,36 +363,25 @@ app.get('/api/home', async (c) => {
   const finalFeaturedRules: ReturnType<typeof withGame>[] = [];
   
   if (finalPopularGames.length > 0) {
-    const rulePromises = finalPopularGames.map(async (game) => {
-      const bestRule = await c.env.DB.prepare(`${homeRuleSelect}
-        JOIN games g ON g.id = r.game_id
-        JOIN daily_views dv ON dv.rule_id = r.id
-        WHERE r.game_id = ? AND r.status = 'published' AND dv.rule_id != ''
-          AND ${viewDateCondition}
-        GROUP BY r.id
-        ORDER BY COUNT(DISTINCT dv.user_id) DESC, MAX(dv.created_at) DESC
-        LIMIT 1
-      `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
+    const gameIds = finalPopularGames.map((g) => g.id);
+    const placeholders = gameIds.map(() => '?').join(',');
 
-      if (bestRule) {
-        return withGame(bestRule);
-      }
+    const featuredBatch = await c.env.DB.prepare(`
+      WITH ranked_rules AS (
+        SELECT r.id as rule_id,
+          ROW_NUMBER() OVER (PARTITION BY r.game_id ORDER BY r.is_featured DESC, r.created_at DESC) as rn
+        FROM rules r
+        WHERE r.game_id IN (${placeholders}) AND r.status = 'published'
+      )
+      ${homeRuleSelect}
+      JOIN games g ON g.id = r.game_id
+      JOIN ranked_rules rr ON rr.rule_id = r.id
+      WHERE rr.rn = 1
+    `).bind(...gameIds).all<RuleRow & { display_name: string; slug: string }>();
 
-      const fallbackRule = await c.env.DB.prepare(`${homeRuleSelect}
-        JOIN games g ON g.id = r.game_id
-        WHERE r.game_id = ? AND r.status = 'published'
-        ORDER BY r.created_at DESC
-        LIMIT 1
-      `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
-
-      if (fallbackRule) {
-        return withGame(fallbackRule);
-      }
-      return null;
-    });
-
-    const rules = await Promise.all(rulePromises);
-    for (const rule of rules) {
+    const ruleMap = new Map((featuredBatch.results ?? []).map((r) => [r.game_id, withGame(r)]));
+    for (const game of finalPopularGames) {
+      const rule = ruleMap.get(game.id);
       if (rule) finalFeaturedRules.push(rule);
     }
   }
