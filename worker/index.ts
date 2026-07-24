@@ -404,11 +404,16 @@ app.get('/api/home', async (c) => {
 
   const payload: HomePayload = {
     generatedAt: now(),
+    featured: finalPopularGames.map((game, index) => ({
+      gameSlug: toGame(game).slug,
+      gameName: toGame(game).displayName,
+      ruleId: finalFeaturedRules[index]?.id ?? '',
+    })),
     featuredRules: finalFeaturedRules,
     recentRules: (recentResult.results ?? []).map(withGame),
     popularGames: finalPopularGames.map(toGame),
   };
-  setPublicCache(c, 60, 900, 3600);
+  setPublicCache(c, 60, 3600, 86400);
   return c.json(payload);
 });
 
@@ -573,7 +578,7 @@ app.get('/api/games/:identifier', async (c) => {
 
   const etag = `W/"game-${game.id}-${game.updated_at}"`;
   c.header('ETag', etag);
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, must-revalidate');
+  c.header('Cache-Control', 'public, max-age=60, s-maxage=86400, must-revalidate');
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
 
   const [aliasesResult, rulesResult] = await Promise.all([
@@ -729,8 +734,8 @@ app.post('/api/games', requireRole('editor'), async (c) => {
 app.patch('/api/games/:id', requireRole('editor'), async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
-  const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
-    .bind(c.req.param('id')).first();
+  const game = await c.env.DB.prepare('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+    .bind(c.req.param('id')).first<{ id: string; slug: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
   const aliases = new Set([parsed.data.displayName, parsed.data.englishName, ...(parsed.data.aliases ?? [])]
@@ -745,6 +750,11 @@ app.patch('/api/games/:id', requireRole('editor'), async (c) => {
     `).bind(createId('alias'), c.req.param('id'), alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
   await c.env.DB.batch(statements);
+  const cache = (caches as any).default;
+  c.executionCtx.waitUntil(Promise.all([
+    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
+    cache.delete(new Request(new URL('/api/home', c.req.url))),
+  ]));
   return c.json({ ok: true });
 });
 
@@ -887,6 +897,14 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
     c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
+  const cache = (caches as any).default;
+  const gameSlug = await c.env.DB.prepare('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(c.req.param('id')).first<{ slug: string }>();
+  if (gameSlug) {
+    c.executionCtx.waitUntil(Promise.all([
+      cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
+      cache.delete(new Request(new URL('/api/home', c.req.url))),
+    ]));
+  }
   return c.json({ ok: true, updatedAt: timestamp });
 });
 
@@ -905,6 +923,14 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
       UPDATE rules SET status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(status, status === 'hidden' ? timestamp : null, status === 'hidden' ? user.id : null, timestamp, id),
   ]);
+  const cache = (caches as any).default;
+  const gameSlug = await c.env.DB.prepare('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(id).first<{ slug: string }>();
+  if (gameSlug) {
+    c.executionCtx.waitUntil(Promise.all([
+      cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
+      cache.delete(new Request(new URL('/api/home', c.req.url))),
+    ]));
+  }
   return c.json({ ok: true });
 };
 

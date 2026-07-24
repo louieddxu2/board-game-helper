@@ -78,6 +78,7 @@ export interface GameDetail extends GameSummary {
 
 export interface HomePayload {
   generatedAt: number;
+  featured: { gameSlug: string; gameName: string; ruleId: string }[];
   featuredRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   recentRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   popularGames: GameSummary[];
