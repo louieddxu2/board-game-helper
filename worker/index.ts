@@ -2,10 +2,33 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../src/shared/types';
 import { exchangeGoogleCredential, requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
-import type { D1PreparedStatement, Env } from './env';
+import type { D1PreparedStatement, Env, D1Result } from './env';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from './review';
 import { parseReviewCsv, serializeReviewCsv } from './review-csv';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from './utils';
+
+
+interface LoggedQueryContext {
+  reqPath: string;
+  totalRowsRead: number;
+  queries: Array<{ name: string; rowsRead: number }>;
+}
+
+const logD1Query = <T extends D1Result<unknown>>(c: AppContext, queryName: string, result: T): T => {
+  const rowsRead = result.meta?.rows_read ?? 0;
+  console.log(`[D1_METRICS] [${c.req.path}] ${queryName}: ${rowsRead} rows_read`);
+  
+  let ctx = c.get('d1Metrics');
+  if (!ctx) {
+    ctx = { reqPath: c.req.path, totalRowsRead: 0, queries: [] };
+    c.set('d1Metrics', ctx);
+  }
+  ctx.totalRowsRead += rowsRead;
+  ctx.queries.push({ name: queryName, rowsRead });
+  c.header('X-D1-Rows-Read', String(ctx.totalRowsRead));
+  
+  return result;
+};
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 

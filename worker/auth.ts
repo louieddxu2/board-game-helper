@@ -12,6 +12,7 @@ const INTEGRATION_SESSION_MINUTES = 60;
 
 export interface AppVariables {
   user?: SessionUser;
+  d1Metrics?: any;
 }
 
 export type AppContext = Context<{ Bindings: Env; Variables: AppVariables }>;
