@@ -83,6 +83,16 @@ export interface HomePayload {
   featuredRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   recentRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   popularGames: GameSummary[];
+  popularGameIds?: string[];
+  recentRuleIds?: string[];
+  featuredRuleIds?: string[];
+}
+
+export interface HomeIDPayload {
+  generatedAt: number;
+  popularGameIds: string[];
+  recentRuleIds: string[];
+  featuredRuleIds: string[];
 }
 
 export interface SubmissionRuleInput {

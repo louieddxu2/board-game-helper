@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../src/shared/types';
+import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../src/shared/types';
 import { exchangeGoogleCredential, requireRole, sessionMiddleware, signInAsLocalAdmin, signInWithGoogle, signOut, type AppContext, type AppVariables } from './auth';
 import type { D1PreparedStatement, Env } from './env';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from './review';
@@ -427,8 +427,11 @@ app.get('/api/home', async (c) => {
     if (rule) finalFeaturedRules.push(rule);
   }
 
-  const payload: HomePayload = {
+  const payload: HomePayload & HomeIDPayload = {
     generatedAt: now(),
+    popularGameIds,
+    recentRuleIds: (recentResult.results ?? []).map((r) => r.id),
+    featuredRuleIds: finalFeaturedRules.map((r) => r.id),
     featured: finalPopularGames.map((game, index) => ({
       gameSlug: game.slug,
       gameName: game.displayName,

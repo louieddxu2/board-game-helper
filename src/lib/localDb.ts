@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameDetail, HomePayload, SubmissionInput } from '../shared/types';
+import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput } from '../shared/types';
 
 export interface DraftRecord {
   id: string;
@@ -17,7 +17,7 @@ interface RulesDb extends DBSchema {
   drafts: { key: string; value: DraftRecord };
   pending: { key: string; value: { id: string; payload: SubmissionInput; createdAt: number } };
   cache: { key: string; value: { key: string; data: unknown; cachedAt: number } };
-  recentGames: { key: string; value: { id: string; slug: string; displayName: string; viewedAt: number }; indexes: { viewedAt: number } };
+  recentGames: { key: string; value: { id: string; viewedAt: number }; indexes: { viewedAt: number } };
 }
 
 const getDb = () => {
@@ -56,18 +56,39 @@ export const localDb = {
   getPending: async () => (await getDatabase()).getAll('pending'),
   cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => (await getDatabase()).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
-  invalidateHome: async () => (await getDatabase()).delete('cache', 'home'),
+  cacheHomeIDs: async (data: HomeIDPayload) => (await getDatabase()).put('cache', { key: 'home_ids', data, cachedAt: Date.now() }),
+  getCachedHomeIDs: async () => (await getDatabase()).get('cache', 'home_ids') as Promise<{ key: string; data: HomeIDPayload; cachedAt: number } | undefined>,
+  invalidateHome: async () => {
+    const db = await getDatabase();
+    await db.delete('cache', 'home');
+    await db.delete('cache', 'home_ids');
+  },
   cacheGame: async (game: GameDetail) => {
     const db = await getDatabase();
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
-    await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
+    await db.put('recentGames', { id: game.id, viewedAt: Date.now() });
   },
   getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
   invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
+  recentGameIds: async () => {
+    const db = await getDatabase();
+    const all = await db.getAllFromIndex('recentGames', 'viewedAt');
+    return all.reverse().slice(0, 8).map((r) => r.id);
+  },
   recentGames: async () => {
     const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
-    return all.reverse().slice(0, 8);
+    const recentRecords = all.reverse().slice(0, 8);
+    const resolved = await Promise.all(
+      recentRecords.map(async (r) => {
+        const cached = (await db.get('cache', `game:${r.id}`)) as { data: GameDetail } | undefined;
+        if (cached?.data) {
+          return { id: r.id, slug: cached.data.slug, displayName: cached.data.displayName };
+        }
+        return null;
+      })
+    );
+    return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
   },
   clearAllCache: async () => (await getDatabase()).clear('cache'),
 };

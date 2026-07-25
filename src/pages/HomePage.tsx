@@ -23,8 +23,23 @@ export const HomePage = () => {
     let active = true;
     const refreshHome = () => api.home().then((data) => {
       if (active) setHome(data);
-      return localDb.cacheHome(data);
+      void localDb.cacheHome(data);
+      if (data.popularGameIds) {
+        void localDb.cacheHomeIDs({
+          generatedAt: data.generatedAt,
+          popularGameIds: data.popularGameIds,
+          recentRuleIds: data.recentRuleIds ?? [],
+          featuredRuleIds: data.featuredRuleIds ?? [],
+        });
+      }
+      return data;
     }).catch(() => undefined);
+    void localDb.getCachedHomeIDs().then((cachedIds) => {
+      if (!active) return;
+      if (cachedIds && (Date.now() - cachedIds.cachedAt < HOME_CACHE_FRESH_MS)) {
+        // Fast ID-only initialization
+      }
+    });
     void localDb.getCachedHome().then((cached) => {
       if (!active) return;
       if (cached) setHome(cached.data);
