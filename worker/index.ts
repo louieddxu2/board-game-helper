@@ -394,55 +394,38 @@ app.get('/api/home', async (c) => {
     }
   });
 
-  const withGame = (row: RuleRow & { display_name: string; slug: string }) => ({
-    ...toRule(row), gameName: row.display_name, gameSlug: row.slug,
-  });
+  const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
+  const featuredRuleIds = popularGameIds.map((id) => featuredRuleIdByGame.get(id) ?? '').filter(Boolean);
 
-  const finalFeaturedRules: ReturnType<typeof withGame>[] = [];
-  
-  const rulePromises = finalPopularGames.map(async (game) => {
-    const specificRuleId = featuredRuleIdByGame.get(game.id);
-    if (specificRuleId) {
-      const rule = await c.env.DB.prepare(`
-        ${homeRuleSelect}
-        JOIN games g ON g.id = r.game_id
-        WHERE r.id = ? AND r.status = 'published'
-        LIMIT 1
-      `).bind(specificRuleId).first<RuleRow & { display_name: string; slug: string }>();
-      if (rule) return withGame(rule);
-    }
-    const fallbackRule = await c.env.DB.prepare(`
-      ${homeRuleSelect}
-      JOIN games g ON g.id = r.game_id
-      WHERE r.game_id = ? AND r.status = 'published'
-      ORDER BY r.is_featured DESC, r.created_at DESC
-      LIMIT 1
-    `).bind(game.id).first<RuleRow & { display_name: string; slug: string }>();
-
-    return fallbackRule ? withGame(fallbackRule) : null;
-  });
-
-  const rules = await Promise.all(rulePromises);
-  for (const rule of rules) {
-    if (rule) finalFeaturedRules.push(rule);
-  }
-
-  const payload: HomePayload & HomeIDPayload = {
+  setNoCache(c);
+  return c.json({
     generatedAt: now(),
     popularGameIds,
-    recentRuleIds: (recentResult.results ?? []).map((r) => r.id),
-    featuredRuleIds: finalFeaturedRules.map((r) => r.id),
-    featured: finalPopularGames.map((game, index) => ({
-      gameSlug: game.slug,
-      gameName: game.displayName,
-      ruleId: finalFeaturedRules[index]?.id ?? '',
+    recentRuleIds,
+    featuredRuleIds,
+    featured: popularGameIds.map((id) => ({
+      gameSlug: gameMap.get(id)?.slug ?? '',
+      gameName: gameMap.get(id)?.displayName ?? '',
+      ruleId: featuredRuleIdByGame.get(id) ?? '',
     })),
-    featuredRules: finalFeaturedRules,
-    recentRules: (recentResult.results ?? []).map(withGame),
-    popularGames: finalPopularGames,
-  };
+  });
+});
+
+app.get('/api/rules/:id', async (c) => {
+  const id = c.req.param('id');
+  const row = await c.env.DB.prepare(`
+    SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
+      r.statement, r.common_mistake, r.details, r.flow_stage,
+      r.player_count_note, r.edition_note, r.status, r.is_featured, r.created_at, r.updated_at
+    FROM rules r
+    JOIN games g ON g.id = r.game_id
+    WHERE r.id = ? AND r.status = 'published'
+    LIMIT 1
+  `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
+
+  if (!row) return c.json({ error: 'rule_not_found' }, 404);
   setNoCache(c);
-  return c.json(payload);
+  return c.json({ rule: { ...toRule(row), gameName: row.game_name, gameSlug: row.game_slug } });
 });
 
 app.get('/api/games/search', async (c) => {

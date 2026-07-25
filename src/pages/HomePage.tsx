@@ -57,17 +57,16 @@ export const HomePage = () => {
       const cards: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
       for (const ref of home.featured) {
         try {
-          const cached = await localDb.getCachedGame(ref.gameSlug);
-          const isFresh = cached && (Date.now() - cached.cachedAt < HOME_CACHE_FRESH_MS);
-          let game = isFresh ? cached.data : undefined;
-          if (!game) {
-            const response = await api.game(ref.gameSlug);
-            game = response.game;
-            void localDb.cacheGame(game);
+          const cached = await localDb.getCachedRuleEntity(ref.ruleId);
+          if (cached) {
+            cards.push({ ...cached.data, gameName: ref.gameName, gameSlug: ref.gameSlug });
+          } else {
+            const response = await api.rule(ref.ruleId);
+            const rule = response.rule;
+            void localDb.cacheRuleEntity(rule);
+            cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
           }
-          const rule = game.rules.find((r) => r.id === ref.ruleId) ?? game.rules[0];
-          if (rule) cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
-        } catch { /* skip failed games */ }
+        } catch { /* skip failed rules */ }
       }
       if (active) setResolvedCards(cards);
     };

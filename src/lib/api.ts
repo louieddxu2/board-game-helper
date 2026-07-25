@@ -52,6 +52,7 @@ export const api = {
   submit: (input: SubmissionInput) => request<{ submissionId: string; ruleIds?: string[]; reused: boolean }>('/api/submissions', {
     method: 'POST', body: JSON.stringify(input),
   }),
+  rule: (id: string) => request<{ rule: import('../shared/types').RuleCard & { gameName: string; gameSlug: string } }>(`/api/rules/${id}`),
   patchRule: (id: string, input: Record<string, unknown>) => request<{ ok: true }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
