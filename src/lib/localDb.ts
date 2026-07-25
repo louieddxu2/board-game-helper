@@ -107,7 +107,7 @@ export const localDb = {
     };
     await db.put('cache', { key: `gameMeta:${game.slug}`, data: meta, cachedAt: Date.now() });
     for (const rule of game.rules) {
-      await db.put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() });
+      await db.put('cache', { key: `rule:${rule.id}`, data: { ...rule, gameName: game.displayName, gameSlug: game.slug } as RuleEntity, cachedAt: Date.now() });
     }
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, viewedAt: Date.now() });

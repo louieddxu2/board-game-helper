@@ -91,8 +91,10 @@ export const HomePage = () => {
         if (!ruleId) continue;
         try {
           const cached = await localDb.getCachedRuleEntity(ruleId);
-          if (cached?.data) {
-            cards.push({ ...cached.data, gameName: (cached.data as any).gameName ?? '', gameSlug: (cached.data as any).gameSlug ?? '' });
+          const cachedGameName = (cached?.data as any)?.gameName;
+          const cachedGameSlug = (cached?.data as any)?.gameSlug;
+          if (cached?.data && cachedGameName && cachedGameSlug) {
+            cards.push({ ...cached.data, gameName: cachedGameName, gameSlug: cachedGameSlug });
           } else {
             const response = await api.rule(ruleId);
             const rule = response?.rule;
