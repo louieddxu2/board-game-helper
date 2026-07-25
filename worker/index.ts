@@ -369,7 +369,7 @@ app.get('/api/home', async (c) => {
         SELECT game_id, user_id, created_at
         FROM daily_views
         WHERE ${viewDateCondition}
-        ORDER BY created_at DESC
+        ORDER BY view_date DESC, created_at DESC
         LIMIT 100
       )
       SELECT game_id, COUNT(DISTINCT user_id) AS view_count
@@ -422,7 +422,7 @@ app.get('/api/home', async (c) => {
       SELECT game_id, rule_id, user_id, created_at
       FROM daily_views
       WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
-      ORDER BY created_at DESC
+      ORDER BY view_date DESC, created_at DESC
       LIMIT 100
     )
     SELECT game_id, rule_id, COUNT(DISTINCT user_id) AS view_count
@@ -657,7 +657,7 @@ app.get('/api/games/:identifier', async (c) => {
   return c.json({ game: detail });
 });
 
-app.get('/api/export/public', requireRole('editor'), async (c) => {
+app.get('/api/export/public', requireRole('admin'), async (c) => {
   const metadata = await c.env.DB.prepare(`
     SELECT
       (SELECT COUNT(*) FROM games WHERE merged_into_game_id IS NULL) AS game_count,
