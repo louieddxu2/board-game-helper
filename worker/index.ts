@@ -365,7 +365,7 @@ app.get('/api/home', async (c) => {
 
   const gamesResult = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      (SELECT COUNT(r.id) FROM rules r WHERE r.game_id = g.id AND r.status = 'published') AS rule_count
+      0 AS rule_count
     FROM games g
     WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL
   `).bind(...popularGameIds).all<GameRow>();
@@ -469,11 +469,10 @@ app.get('/api/games/resolve', async (c) => {
   const name = normalizeText(rawName);
   const exact = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count,
+      0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
-    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
     WHERE g.merged_into_game_id IS NULL
       AND (g.normalized_name = ? OR a.normalized_alias = ?)
     GROUP BY g.id
@@ -485,15 +484,14 @@ app.get('/api/games/resolve', async (c) => {
   }
   const result = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count,
+      0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
-    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
     WHERE g.merged_into_game_id IS NULL
       AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
     GROUP BY g.id
-    ORDER BY rule_count DESC, g.display_name
+    ORDER BY g.display_name
     LIMIT 5
   `).bind(`%${name}%`, `%${name}%`).all<GameRow>();
   setNoCache(c);
@@ -583,10 +581,10 @@ app.get('/api/games/:identifier', async (c) => {
   const identifier = c.req.param('identifier');
   const game = await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(r.id) AS rule_count
-    FROM games g LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
+      0 AS rule_count
+    FROM games g
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
-    GROUP BY g.id
+    LIMIT 1
   `).bind(identifier, identifier).first<GameRow>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
@@ -606,6 +604,7 @@ app.get('/api/games/:identifier', async (c) => {
   ]);
   const detail: GameDetail = {
     ...toGame(game),
+    ruleCount: rulesResult.results?.length ?? 0,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
     rules: (rulesResult.results ?? []).map(toRule),
   };
