@@ -31,7 +31,7 @@ interface RulesDb extends DBSchema {
   drafts: { key: string; value: DraftRecord };
   pending: { key: string; value: { id: string; payload: SubmissionInput; createdAt: number } };
   cache: { key: string; value: { key: string; data: unknown; cachedAt: number } };
-  recentGames: { key: string; value: { id: string; viewedAt: number }; indexes: { viewedAt: number } };
+  recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; viewedAt: number }; indexes: { viewedAt: number } };
 }
 
 const getDb = () => {
@@ -110,7 +110,7 @@ export const localDb = {
       await db.put('cache', { key: `rule:${rule.id}`, data: { ...rule, gameName: game.displayName, gameSlug: game.slug } as RuleEntity, cachedAt: Date.now() });
     }
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
-    await db.put('recentGames', { id: game.id, viewedAt: Date.now() });
+    await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
   getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
   invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
@@ -124,8 +124,11 @@ export const localDb = {
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
     const recentRecords = all.reverse().slice(0, 8);
     const resolved = await Promise.all(
-      recentRecords.map(async (r) => {
-        const cached = (await db.get('cache', `game:${r.id}`)) as { data: GameDetail } | undefined;
+      recentRecords.map(async (r: any) => {
+        if (r.slug && r.displayName) {
+          return { id: r.id, slug: r.slug, displayName: r.displayName };
+        }
+        const cached = (await db.get('cache', `game:${r.slug || r.id}`)) as { data: GameDetail } | undefined;
         if (cached?.data) {
           return { id: r.id, slug: cached.data.slug, displayName: cached.data.displayName };
         }

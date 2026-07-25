@@ -194,10 +194,9 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   };
 
   return <div className="game-search">
-    <label htmlFor={inputId}>遊戲名稱</label>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
       <input id={inputId} value={value} onChange={(event) => onChange(event.target.value)}
-        placeholder="搜尋遊戲名稱..." autoComplete="off"
+        placeholder="搜尋遊戲名稱..." autoComplete="off" aria-label="搜尋遊戲名稱"
         role="combobox" aria-autocomplete="list" aria-expanded={!selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
         onKeyDown={(event) => {
