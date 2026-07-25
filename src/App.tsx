@@ -13,7 +13,7 @@ import { ToastProvider } from './context/ToastContext';
 const ErrorFallback = () => (
   <section className="narrow-page">
     <h1>頁面發生小意外</h1>
-    <p>抱歉，載入頁面時發生不預期的錯誤。請嘗試重新整理或回到首頁。</p>
+    <p>抱歉，載入頁面時發生預期以外的錯誤。請嘗試重新整理或回到首頁。<br />若仍無效果，請聯繫網頁管理員。</p>
     <div className="hero-actions">
       <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
       <a className="button secondary" href="/">回首頁</a>

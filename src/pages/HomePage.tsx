@@ -56,15 +56,18 @@ export const HomePage = () => {
     const resolve = async () => {
       const cards: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
       for (const ref of home.featured) {
+        if (!ref?.ruleId) continue;
         try {
           const cached = await localDb.getCachedRuleEntity(ref.ruleId);
-          if (cached) {
+          if (cached?.data) {
             cards.push({ ...cached.data, gameName: ref.gameName, gameSlug: ref.gameSlug });
           } else {
             const response = await api.rule(ref.ruleId);
-            const rule = response.rule;
-            void localDb.cacheRuleEntity(rule);
-            cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
+            const rule = response?.rule;
+            if (rule) {
+              void localDb.cacheRuleEntity(rule);
+              cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
+            }
           }
         } catch { /* skip failed rules */ }
       }
@@ -106,7 +109,7 @@ export const HomePage = () => {
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />
-    {home && home.recentRules.length > 0 && <section className="content-section">
+    {home && home.recentRules && home.recentRules.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{home.recentRules.map((rule) =>
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
