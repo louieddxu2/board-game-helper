@@ -58,6 +58,7 @@ export const GamePage = () => {
       if (cached && (Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) && !justAdded) {
         setGame(cached.data);
         setLoading(false);
+        void localDb.cacheGame(cached.data);
       } else {
         if (cached) setGame(cached.data);
         api.game(identifier, justAdded).then((response) => {

@@ -123,18 +123,18 @@ export const localDb = {
     const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
     const recentRecords = all.reverse().slice(0, 8);
-    const resolved = await Promise.all(
-      recentRecords.map(async (r: any) => {
-        if (r.slug && r.displayName) {
-          return { id: r.id, slug: r.slug, displayName: r.displayName };
-        }
-        const cached = (await db.get('cache', `game:${r.slug || r.id}`)) as { data: GameDetail } | undefined;
-        if (cached?.data) {
-          return { id: r.id, slug: cached.data.slug, displayName: cached.data.displayName };
-        }
-        return null;
-      })
-    );
+    const allCache = await db.getAll('cache');
+    const resolved = recentRecords.map((r: any) => {
+      if (r.slug && r.displayName) {
+        return { id: r.id, slug: r.slug, displayName: r.displayName };
+      }
+      const matched = allCache.find((item: any) => item.data && (item.data.id === r.id || item.data.slug === r.id));
+      if (matched?.data) {
+        const game = matched.data as GameDetail;
+        return { id: r.id, slug: game.slug, displayName: game.displayName };
+      }
+      return null;
+    });
     return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
   },
   clearAllCache: async () => (await getDatabase()).clear('cache'),
