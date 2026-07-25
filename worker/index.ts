@@ -63,10 +63,10 @@ app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (isPublicCacheableRequest(c.req.method, path)) {
     c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read');
   } else if (origin && isTrusted) {
     c.header('Access-Control-Allow-Origin', origin);
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read');
     c.header('Vary', 'Origin');
   }
 });
@@ -91,6 +91,10 @@ app.use('/api/*', async (c, next) => {
   await next();
   c.header('X-Robots-Tag', 'noindex, nofollow');
   c.header('X-API-Version', '1');
+  const metrics = c.get('d1Metrics');
+  if (metrics) {
+    c.res.headers.set('X-D1-Rows-Read', String(metrics.totalRowsRead));
+  }
   const path = new URL(c.req.url).pathname;
   if (!isPublicCacheableRequest(c.req.method, path) || c.req.query('fresh') === '1') {
     c.header('Cache-Control', 'no-store');
