@@ -1,20 +1,15 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env, D1Result, D1PreparedStatement } from '../env';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
-import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
-import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { type AppVariables } from '../auth';
+import type { Env } from '../env';
+import { now } from '../utils';
+import { setNoCache, toGame, GameRow } from './shared';
 
 const homeRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 homeRoutes.get('/api/home', async (c) => {
-  const d1Logs: Array<{ name: string; rowsRead: number; meta: unknown }> = [];
-  const track = <T extends D1Result<unknown>>(name: string, res: T): T => {
-    const rowsRead = Number(res.meta?.rows_read ?? (res.meta as any)?.rowsRead ?? 0);
-    d1Logs.push({ name, rowsRead, meta: res.meta });
+  const d1Logs: Array<{ name: string; rowsRead: number }> = [];
+  const track = <T extends { meta?: { rows_read?: number } }>(name: string, res: T): T => {
+    d1Logs.push({ name, rowsRead: res.meta?.rows_read ?? 0 });
     return res;
   };
 
@@ -25,7 +20,7 @@ homeRoutes.get('/api/home', async (c) => {
       WHERE view_date >= DATE('now', '-30 days')
       GROUP BY game_id
       ORDER BY last_seen DESC
-      LIMIT 6
+      LIMIT 8
     )
     SELECT MIN(min_date) as window_start FROM recent_games;
   `).all<{ window_start: string | null }>());
@@ -37,7 +32,7 @@ homeRoutes.get('/api/home', async (c) => {
   }
   const viewDateCondition = startDateStr ? `view_date >= '${startDateStr}'` : `view_date >= DATE('now', '-7 days')`;
 
-  // 2. 統計階段 (100% 只查 daily_views，加上 LIMIT 100 硬上限熔斷保護)
+  // 2. 統計階段
   const [popularGameIdsRaw, recentRaw] = await Promise.all([
     c.env.DB.prepare(`
       WITH scoped_views AS (
@@ -45,34 +40,36 @@ homeRoutes.get('/api/home', async (c) => {
         FROM daily_views
         WHERE ${viewDateCondition}
         ORDER BY view_date DESC, created_at DESC
-        LIMIT 100
+        LIMIT 200
       )
       SELECT game_id, COUNT(DISTINCT user_id) AS view_count
       FROM scoped_views
       GROUP BY game_id
       ORDER BY view_count DESC, MAX(created_at) DESC
-      LIMIT 6
+      LIMIT 8
     `).all<{ game_id: string }>(),
     c.env.DB.prepare(`
       SELECT id FROM rules
       WHERE status = 'published'
-      ORDER BY created_at DESC LIMIT 6
+      ORDER BY created_at DESC LIMIT 8
     `).all<{ id: string }>(),
   ]);
 
-  const popularGameIdsResult = track('home:popular-games', popularGameIdsRaw);
-  const recentResult = track('home:recent-rules', recentRaw);
+  const popularGameIdsResult = track('home:popular-games', await popularGameIdsRaw);
+  const recentResult = track('home:recent-rules', await recentRaw);
 
   let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
 
-  if (popularGameIds.length < 6) {
+  if (popularGameIds.length < 8) {
     const fallbackGameIdsResult = track('home:fallback-games', await c.env.DB.prepare(`
       SELECT g.id FROM games g
+      JOIN rules r ON r.game_id = g.id AND r.status = 'published'
       WHERE g.merged_into_game_id IS NULL
-      ORDER BY g.updated_at DESC LIMIT 6
+      GROUP BY g.id
+      ORDER BY MAX(g.updated_at) DESC LIMIT 8
     `).all<{ id: string }>());
     const extraIds = (fallbackGameIdsResult.results ?? []).map((g) => g.id);
-    popularGameIds = Array.from(new Set([...popularGameIds, ...extraIds])).slice(0, 6);
+    popularGameIds = Array.from(new Set([...popularGameIds, ...extraIds])).slice(0, 8);
   }
 
   if (popularGameIds.length === 0) {
@@ -98,7 +95,7 @@ homeRoutes.get('/api/home', async (c) => {
       FROM daily_views
       WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
       ORDER BY view_date DESC, created_at DESC
-      LIMIT 100
+      LIMIT 200
     )
     SELECT game_id, rule_id, COUNT(DISTINCT user_id) AS view_count
     FROM scoped_views
@@ -133,7 +130,8 @@ homeRoutes.get('/api/home', async (c) => {
   });
 
   const featured = await Promise.all(featuredPromises);
-  const featuredRuleIds = featured.map((f) => f.ruleId).filter(Boolean);
+  const featuredFiltered = featured.filter((f) => f.ruleId && f.gameSlug);
+  const featuredRuleIds = featuredFiltered.map((f) => f.ruleId);
 
   setNoCache(c);
   return c.json({
@@ -141,10 +139,9 @@ homeRoutes.get('/api/home', async (c) => {
     popularGameIds,
     recentRuleIds,
     featuredRuleIds,
-    featured,
+    featured: featuredFiltered,
     debugD1Metrics: d1Logs,
   });
 });
-
 
 export { homeRoutes };
