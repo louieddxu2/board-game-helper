@@ -1,7 +1,19 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult } from '../shared/types';
+import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard } from '../shared/types';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
+
+export interface GameMetaRecord {
+  id: string;
+  slug: string;
+  displayName: string;
+  englishName?: string;
+  aliases: string[];
+  ruleIds: string[];
+  updatedAt: number;
+}
+
+export type RuleEntity = RuleCard;
 
 export interface DraftRecord {
   id: string;
@@ -76,8 +88,27 @@ export const localDb = {
     await db.delete('cache', 'home');
     await db.delete('cache', 'home_ids');
   },
+  cacheGameMeta: async (meta: GameMetaRecord) => (await getDatabase()).put('cache', { key: `gameMeta:${meta.slug}`, data: meta, cachedAt: Date.now() }),
+  getCachedGameMeta: async (slug: string) => (await getDatabase()).get('cache', `gameMeta:${slug}`) as Promise<{ key: string; data: GameMetaRecord; cachedAt: number } | undefined>,
+  invalidateGameMeta: async (slug: string) => (await getDatabase()).delete('cache', `gameMeta:${slug}`),
+  cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
+  getCachedRuleEntity: async (ruleId: string) => (await getDatabase()).get('cache', `rule:${ruleId}`) as Promise<{ key: string; data: RuleEntity; cachedAt: number } | undefined>,
+  invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),
   cacheGame: async (game: GameDetail) => {
     const db = await getDatabase();
+    const meta: GameMetaRecord = {
+      id: game.id,
+      slug: game.slug,
+      displayName: game.displayName,
+      englishName: game.englishName,
+      aliases: game.aliases,
+      ruleIds: game.rules.map(r => r.id),
+      updatedAt: Date.now()
+    };
+    await db.put('cache', { key: `gameMeta:${game.slug}`, data: meta, cachedAt: Date.now() });
+    for (const rule of game.rules) {
+      await db.put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() });
+    }
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, viewedAt: Date.now() });
   },
