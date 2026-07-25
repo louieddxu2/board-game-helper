@@ -1,5 +1,7 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput } from '../shared/types';
+import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult } from '../shared/types';
+
+type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 
 export interface DraftRecord {
   id: string;
@@ -54,6 +56,8 @@ export const localDb = {
   addPending: async (payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
   getPending: async () => (await getDatabase()).getAll('pending'),
+  cacheSearch: async (key: string, data: SearchResponse) => (await getDatabase()).put('cache', { key: `search:${key}`, data, cachedAt: Date.now() }),
+  getCachedSearch: async (key: string) => (await getDatabase()).get('cache', `search:${key}`) as Promise<{ key: string; data: SearchResponse; cachedAt: number } | undefined>,
   cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => (await getDatabase()).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
   cacheHomeIDs: async (data: HomeIDPayload) => (await getDatabase()).put('cache', { key: 'home_ids', data, cachedAt: Date.now() }),

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { GameSummary, RuleSearchResult } from '../shared/types';
 import { useSession } from '../context/SessionContext';
@@ -134,11 +135,32 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     let active = true;
     setLoading(true);
     setSearchError(false);
-    const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
-    request.then((response) => {
-      rememberSearch(cacheKey, response);
-      if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
-    }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
+    
+    const fetchApi = () => {
+      const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
+      request.then((response) => {
+        rememberSearch(cacheKey, response);
+        localDb.cacheSearch(cacheKey, response).catch(() => {});
+        if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
+      }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
+    };
+
+    localDb.getCachedSearch(cacheKey).then(idbCached => {
+      if (!active) return;
+      if (idbCached && Date.now() - idbCached.cachedAt < SEARCH_CACHE_FRESH_MS) {
+        rememberSearch(cacheKey, idbCached.data);
+        setGames(idbCached.data.games);
+        setRules(idbCached.data.rules);
+        setActiveIndex(-1);
+        setLoading(false);
+        setSearchError(false);
+      } else {
+        fetchApi();
+      }
+    }).catch(() => {
+      if (active) fetchApi();
+    });
+
     return () => { active = false; };
   }, [includeRules, isMinLengthSatisfied, query, selectedId]);
 
@@ -214,7 +236,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
           <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option">
             <strong>{display.primary}</strong>
             {display.secondary && <span>({display.secondary})</span>}
-            <small>{game.ruleCount} 條規則</small>
           </button>
         );
       })}
