@@ -142,11 +142,11 @@ export const HomePage = () => {
         {home && displayedFeaturedRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
+    <AdSlot placement="home-after-game-exploration" />
     {resolvedRecentCards.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{resolvedRecentCards.map((rule) =>
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
     </section>}
-    <AdSlot placement="home-after-game-exploration" />
   </>;
 };
