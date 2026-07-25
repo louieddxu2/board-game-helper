@@ -18,6 +18,7 @@ export const HomePage = () => {
   const [draft, setDraft] = useState<{ game?: { displayName: string }; rules: Array<unknown> }>();
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
+  const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -77,6 +78,37 @@ export const HomePage = () => {
     return () => { active = false; };
   }, [home?.featured]);
 
+  useEffect(() => {
+    if (!home?.recentRuleIds?.length && !home?.recentRules?.length) return;
+    if (home.recentRules?.length) {
+      setResolvedRecentCards(home.recentRules);
+      return;
+    }
+    let active = true;
+    const resolve = async () => {
+      const cards: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
+      for (const ruleId of home.recentRuleIds!) {
+        if (!ruleId) continue;
+        try {
+          const cached = await localDb.getCachedRuleEntity(ruleId);
+          if (cached?.data) {
+            cards.push({ ...cached.data, gameName: (cached.data as any).gameName ?? '', gameSlug: (cached.data as any).gameSlug ?? '' });
+          } else {
+            const response = await api.rule(ruleId);
+            const rule = response?.rule;
+            if (rule) {
+              void localDb.cacheRuleEntity(rule);
+              cards.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
+            }
+          }
+        } catch { /* skip failed rules */ }
+      }
+      if (active) setResolvedRecentCards(cards);
+    };
+    void resolve();
+    return () => { active = false; };
+  }, [home?.recentRuleIds, home?.recentRules]);
+
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
 
   return <>
@@ -108,6 +140,11 @@ export const HomePage = () => {
         {home && displayedFeaturedRules.length === 0 && <p className="empty-state">內容正在整理中。登入後可以先從第一款遊戲開始記錄。</p>}
       </div>
     </section>
+    {resolvedRecentCards.length > 0 && <section className="content-section">
+      <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
+      <div className="rule-grid compact">{resolvedRecentCards.map((rule) =>
+        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
+    </section>}
     <AdSlot placement="home-after-game-exploration" />
   </>;
 };
