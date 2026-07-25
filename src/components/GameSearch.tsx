@@ -21,7 +21,10 @@ type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type CachedSearch = SearchResponse & { cachedAt: number };
 const SEARCH_CACHE_FRESH_MS = 60 * 60 * 1000;
 const searchCache = new Map<string, CachedSearch>();
-export const clearSearchCache = () => searchCache.clear();
+export const clearSearchCache = () => {
+  searchCache.clear();
+  void localDb.invalidateSearch();
+};
 const rememberSearch = (key: string, response: SearchResponse) => {
   if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value as string);
   searchCache.set(key, { ...response, cachedAt: Date.now() });

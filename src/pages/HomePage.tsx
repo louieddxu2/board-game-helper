@@ -58,7 +58,8 @@ export const HomePage = () => {
       for (const ref of home.featured) {
         try {
           const cached = await localDb.getCachedGame(ref.gameSlug);
-          let game = cached?.data;
+          const isFresh = cached && (Date.now() - cached.cachedAt < HOME_CACHE_FRESH_MS);
+          let game = isFresh ? cached.data : undefined;
           if (!game) {
             const response = await api.game(ref.gameSlug);
             game = response.game;
