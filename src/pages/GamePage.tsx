@@ -221,7 +221,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
     } finally { setSaving(false); }
   };
   const hide = async () => { if (window.confirm('隱藏這條規則？之後仍可從管理頁恢復。')) { await api.hideRule(rule.id); await onSaved(); } };
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
@@ -260,7 +260,7 @@ const GameEditor = ({ game, onClose, onSaved }: { game: GameDetail; onClose(): v
       await onSaved();
     } finally { setSaving(false); }
   };
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-game-title">
       <div className="modal-heading"><h2 id="edit-game-title">編輯遊戲名稱</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
       <label>顯示名稱<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>

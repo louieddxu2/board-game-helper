@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSummary } from '../shared/types';
@@ -21,10 +21,25 @@ export const TagInput = ({
   gameId,
 }: TagInputProps) => {
   const id = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
   const [open, setOpen] = useState(false);
   const debouncedQuery = useDebouncedValue(query.trim());
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -49,7 +64,7 @@ export const TagInput = ({
 
   const unselectedDetected = detectedSuggestions.filter((tag) => !value.includes(tag));
 
-  return <div className="tag-input">
+  return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
     <div className="tag-composer">
       {value.map((name) => <span className="tag-chip selected" key={name}>#{name}<button type="button" aria-label={`移除標籤 ${name}`} onClick={() => onChange(value.filter((item) => item !== name))}>×</button></span>)}
