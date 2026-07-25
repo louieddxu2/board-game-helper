@@ -64,10 +64,26 @@ export const AdminPage = () => {
           <label>角色<select value={role} onChange={(event) => setRole(event.target.value as 'editor' | 'admin')}><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
           <button className="button primary" type="submit">新增／邀請</button>
         </form>
-        <div className="admin-list">{editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`}><span><strong>{String(row.email)}</strong><small>{String(row.role)}{row.revoked_at ? '・已撤銷' : ''}</small></span>
-          {!row.revoked_at && <button type="button" className="danger-link" onClick={() => { if (window.confirm(`撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`)) void api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); }}>撤銷</button>}</div>)}
-          {editors.invitations.map((row) => <div key={String(row.id)}><span><strong>{String(row.email)}</strong><small>{String(row.role)}・{row.revoked_at ? '已撤銷' : '等待首次登入'}</small></span>
-            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void api.revokeInvitation(String(row.id)).then(load)}>取消</button>}</div>)}</div>
+        <div className="admin-list">
+          {editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.email)}</strong>
+              <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
+                {String(row.role)}{row.revoked_at ? '・已撤銷' : ''}
+              </small>
+            </span>
+            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => { if (window.confirm(`撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`)) void api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); }}>撤銷</button>}
+          </div>)}
+          {editors.invitations.map((row) => <div key={String(row.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.email)}</strong>
+              <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
+                {String(row.role)}・{row.revoked_at ? '已撤銷' : '等待首次登入'}
+              </small>
+            </span>
+            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void api.revokeInvitation(String(row.id)).then(load)}>取消</button>}
+          </div>)}
+        </div>
       </section>
 
       <section className="admin-card">

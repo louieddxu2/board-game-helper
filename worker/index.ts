@@ -1477,16 +1477,29 @@ app.post('/api/admin/review/decisions', requireRole('editor'), async (c) => {
 app.get('/api/admin/editors', requireRole('admin'), async (c) => {
   const [users, invites] = await Promise.all([
     c.env.DB.prepare(`
-      SELECT u.id, u.email, u.display_name, ur.role, ur.granted_at, ur.revoked_at
+      SELECT u.id, u.email, u.email_normalized, u.display_name, ur.role, ur.granted_at, ur.revoked_at
       FROM user_roles ur JOIN users u ON u.id = ur.user_id
       ORDER BY ur.revoked_at IS NOT NULL, ur.granted_at DESC
-    `).all(),
+    `).all<{ id: string; email: string; email_normalized?: string; display_name: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
     c.env.DB.prepare(`
       SELECT id, email_normalized email, role, invited_at, claimed_at, revoked_at
-      FROM editor_invitations ORDER BY invited_at DESC
-    `).all(),
+      FROM editor_invitations
+      WHERE claimed_at IS NULL AND revoked_at IS NULL
+      ORDER BY invited_at DESC
+    `).all<{ id: string; email: string; role: string; invited_at: number; claimed_at: number | null; revoked_at: number | null }>(),
   ]);
-  return c.json({ users: users.results ?? [], invitations: invites.results ?? [] });
+
+  const activeUserEmails = new Set(
+    (users.results ?? [])
+      .filter((u) => !u.revoked_at)
+      .map((u) => u.email_normalized || normalizeEmail(u.email))
+  );
+
+  const filteredInvites = (invites.results ?? []).filter(
+    (inv) => !activeUserEmails.has(normalizeEmail(inv.email))
+  );
+
+  return c.json({ users: users.results ?? [], invitations: filteredInvites });
 });
 
 const inviteSchema = z.object({ email: z.email(), role: z.enum(['admin', 'editor']) });
@@ -1504,6 +1517,15 @@ app.post('/api/admin/editors', requireRole('admin'), async (c) => {
     `).bind(existing.id, parsed.data.role, c.get('user')!.id, timestamp).run();
     return c.json({ ok: true, userId: existing.id });
   }
+
+  const existingInvite = await c.env.DB.prepare('SELECT id FROM editor_invitations WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(email).first<{ id: string }>();
+  if (existingInvite) {
+    await c.env.DB.prepare(`
+      UPDATE editor_invitations SET role = ?, invited_by = ?, invited_at = ? WHERE id = ?
+    `).bind(parsed.data.role, c.get('user')!.id, timestamp, existingInvite.id).run();
+    return c.json({ ok: true, invitationId: existingInvite.id });
+  }
+
   const id = createId('invite');
   await c.env.DB.prepare(`
     INSERT INTO editor_invitations (id, email_normalized, role, invited_by, invited_at)
