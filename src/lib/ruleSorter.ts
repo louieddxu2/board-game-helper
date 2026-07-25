@@ -22,7 +22,7 @@ const UNIVERSAL_SCORING_KEYWORDS = ['scoring', '計分', '結算', '終局', '�
  */
 export const classifyRuleUniversally = (rule: RuleCard): UniversalCategory => {
   // 1. 客觀特徵：優先抽離重點警示或含有常見錯法的規則 ➔ 【重點警示區】
-  if (rule.isFeatured || (rule.commonMistake && rule.commonMistake.trim().length > 0)) {
+  if (rule.commonMistake && rule.commonMistake.trim().length > 0) {
     return 'highlight';
   }
 

@@ -134,7 +134,7 @@ app.get('/api/health', (c) => c.json({ ok: true, service: 'wrong-board-game-rule
 const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_count_note, r.edition_note, r.status,
-    r.is_featured, r.created_at, r.updated_at,
+    r.created_at, r.updated_at,
     s.source_label, s.source_url,
     (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
       FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json,
@@ -158,7 +158,6 @@ interface RuleRow {
   player_count_note: string | null;
   edition_note: string | null;
   status: 'draft' | 'published' | 'hidden';
-  is_featured: number;
   source_label: string | null;
   source_url: string | null;
   created_at: number;
@@ -185,7 +184,6 @@ const toRule = (row: RuleRow): RuleCard => ({
     } catch { return row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []; }
   })(),
   status: row.status,
-  isFeatured: Boolean(row.is_featured),
   tags: (() => {
     try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
   })(),
@@ -447,7 +445,7 @@ app.get('/api/home', async (c) => {
       const fallback = track('home:fallback-rule-id', await c.env.DB.prepare(`
         SELECT id FROM rules
         WHERE game_id = ? AND status = 'published'
-        ORDER BY is_featured DESC, created_at DESC
+        ORDER BY created_at DESC
         LIMIT 1
       `).bind(id).all<{ id: string }>());
       ruleId = fallback.results?.[0]?.id ?? '';
@@ -478,7 +476,7 @@ app.get('/api/rules/:id', async (c) => {
   const row = await c.env.DB.prepare(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_count_note, r.edition_note, r.status, r.is_featured, r.created_at, r.updated_at
+      r.player_count_note, r.edition_note, r.status, r.created_at, r.updated_at
     FROM rules r
     JOIN games g ON g.id = r.game_id
     WHERE r.id = ? AND r.status = 'published'
@@ -903,8 +901,6 @@ const rulePatchSchema = z.object({
   flowStage: z.enum(FLOW_STAGES).optional(),
   playerCountNote: z.string().trim().max(300).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
-  isFeatured: z.boolean().optional(),
-  featuredOrder: z.number().int().min(0).max(9999).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
   tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
@@ -928,8 +924,6 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     flowStage: parsed.data.flowStage ?? row.flow_stage,
     playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
     editionNote: parsed.data.editionNote === undefined ? row.edition_note : parsed.data.editionNote,
-    isFeatured: parsed.data.isFeatured === undefined ? row.is_featured : (parsed.data.isFeatured ? 1 : 0),
-    featuredOrder: parsed.data.featuredOrder === undefined ? row.featured_order : parsed.data.featuredOrder,
   };
   await c.env.DB.batch([
     c.env.DB.prepare(`
@@ -938,12 +932,12 @@ app.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     c.env.DB.prepare(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-        player_count_note = ?, edition_note = ?, is_featured = ?, featured_order = ?,
+        player_count_note = ?, edition_note = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
-      updated.playerCountNote, updated.editionNote, updated.isFeatured,
-      updated.featuredOrder, timestamp, c.req.param('id'),
+      updated.playerCountNote, updated.editionNote,
+      timestamp, c.req.param('id'),
     ),
     ...(parsed.data.sourceLabel === undefined && parsed.data.sourceUrl === undefined ? [] : [c.env.DB.prepare(`
       UPDATE submissions SET source_label = ?, source_url = ? WHERE id = ?
@@ -1026,11 +1020,11 @@ app.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), 
       .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), c.get('user')!.id, timestamp),
     c.env.DB.prepare(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_count_note = ?,
-        edition_note = ?, status = ?, is_featured = ?, featured_order = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
+        edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
       previous.player_count_note ?? null, previous.edition_note ?? null, previous.status ?? 'published',
-      previous.is_featured ?? 0, previous.featured_order ?? null, previous.hidden_at ?? null,
+      previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),
     ...(restoredTagNames ? await tagWriteStatements(c, c.req.param('id'), restoredTagNames, c.get('user')!.id, timestamp) : []),

@@ -4,15 +4,14 @@ import type { RuleCard } from '../shared/types';
 
 describe('ruleSorter', () => {
   describe('classifyRuleUniversally', () => {
-    it('should classify rule with isFeatured as highlight', () => {
+    it('should classify rule with no highlighting features as general', () => {
       const rule = {
         id: '1',
         title: 'Rule 1',
         description: 'desc',
-        isFeatured: true,
         tags: [],
       } as unknown as RuleCard;
-      expect(classifyRuleUniversally(rule)).toBe('highlight');
+      expect(classifyRuleUniversally(rule)).toBe('general');
     });
 
     it('should classify rule with commonMistake as highlight', () => {
@@ -73,7 +72,7 @@ describe('ruleSorter', () => {
         {
           id: '1',
           title: 'Rule 1',
-          isFeatured: true,
+          commonMistake: 'yes',
           tags: [],
         } as unknown as RuleCard,
         {
