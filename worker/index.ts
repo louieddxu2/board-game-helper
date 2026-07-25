@@ -336,11 +336,11 @@ app.get('/api/home', async (c) => {
       ORDER BY view_count DESC, MAX(created_at) DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
-    c.env.DB.prepare(`${homeRuleSelect}
-      JOIN games g ON g.id = r.game_id
-      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
-      ORDER BY r.created_at DESC LIMIT 6
-    `).all<RuleRow & { display_name: string; slug: string }>(),
+    c.env.DB.prepare(`
+      SELECT id FROM rules
+      WHERE status = 'published'
+      ORDER BY created_at DESC LIMIT 6
+    `).all<{ id: string }>(),
   ]);
 
   let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
@@ -504,30 +504,17 @@ app.get('/api/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (!rawQuery) return c.json({ games: [], rules: [] });
   const query = normalizeText(rawQuery);
-  const [gamesResult, rulesResult] = await Promise.all([
-    c.env.DB.prepare(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-        GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
-      FROM games g LEFT JOIN game_aliases a ON a.game_id = g.id
-      WHERE g.merged_into_game_id IS NULL AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
-      GROUP BY g.id ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END, g.display_name LIMIT 8
-    `).bind(`%${query}%`, `%${query}%`, query).all<GameRow>(),
-    c.env.DB.prepare(`
-      SELECT DISTINCT r.id rule_id, g.id game_id, g.display_name game_name, g.slug game_slug, r.statement
-      FROM rules r JOIN games g ON g.id = r.game_id
-      LEFT JOIN rule_tags rt ON rt.rule_id = r.id LEFT JOIN tags t ON t.id = rt.tag_id
-      WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
-        AND (r.statement LIKE ? COLLATE NOCASE OR r.common_mistake LIKE ? COLLATE NOCASE
-          OR r.details LIKE ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
-      ORDER BY r.updated_at DESC LIMIT 10
-    `).bind(`%${rawQuery}%`, `%${rawQuery}%`, `%${rawQuery}%`, `%${rawQuery}%`).all<{
-      rule_id: string; game_id: string; game_name: string; game_slug: string; statement: string;
-    }>(),
-  ]);
+  const result = await c.env.DB.prepare(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
+    FROM games g LEFT JOIN game_aliases a ON a.game_id = g.id
+    WHERE g.merged_into_game_id IS NULL AND (g.normalized_name LIKE ? OR LOWER(g.english_name) LIKE ? OR a.normalized_alias LIKE ?)
+    GROUP BY g.id ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END, g.display_name LIMIT 8
+  `).bind(`%${query}%`, `%${query}%`, `%${query}%`, query).all<GameRow>();
   setNoCache(c);
   return c.json({
-    games: (gamesResult.results ?? []).map(toGame),
-    rules: (rulesResult.results ?? []).map((row) => ({ ruleId: row.rule_id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug, statement: row.statement })),
+    games: (result.results ?? []).map(toGame),
+    rules: [],
   });
 });
 
