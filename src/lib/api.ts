@@ -64,16 +64,16 @@ export const api = {
     method: 'POST', body: JSON.stringify({ targetGameId }),
   }),
   editors: () => request<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>('/api/admin/editors'),
-  inviteEditor: (email: string, role: 'admin' | 'editor') => request<{ ok: true }>('/api/admin/editors', {
+  inviteEditor: (email: string, role: 'admin' | 'editor') => request<{ ok: true }>('/api/admin/editors/invite', {
     method: 'POST', body: JSON.stringify({ email, role }),
   }),
-  revokeEditor: (userId: string, role: 'admin' | 'editor') => request<{ ok: true }>(`/api/admin/editors/${userId}/${role}`, { method: 'DELETE', body: '{}' }),
-  revokeInvitation: (id: string) => request<{ ok: true }>(`/api/admin/invitations/${id}`, { method: 'DELETE', body: '{}' }),
-  importRows: (status = 'pending') => request<{ rows: Array<Record<string, unknown>> }>(`/api/admin/imports?status=${status}`),
-  confirmImport: (id: string, rules?: string[], gameId?: string) => request<{ ok: true; importedRules: number }>(`/api/admin/imports/${id}/confirm`, {
+  revokeEditor: (userId: string, role: 'admin' | 'editor') => request<{ ok: true }>(`/api/admin/editors/${userId}?role=${role}`, { method: 'DELETE', body: '{}' }),
+  revokeInvitation: (id: string) => request<{ ok: true }>(`/api/admin/editors/invitations/${id}`, { method: 'DELETE', body: '{}' }),
+  importRows: (status = 'pending') => request<{ rows: Array<Record<string, unknown>> }>(`/api/admin/import-rows?status=${status}`),
+  confirmImport: (id: string, rules?: string[], gameId?: string) => request<{ ok: true; importedRules: number }>(`/api/admin/import-rows/${id}/confirm`, {
     method: 'POST', body: JSON.stringify({ rules, gameId }),
   }),
-  skipImport: (id: string) => request<{ ok: true }>(`/api/admin/imports/${id}/skip`, { method: 'POST', body: '{}' }),
+  skipImport: (id: string) => request<{ ok: true }>(`/api/admin/import-rows/${id}/skip`, { method: 'POST', body: '{}' }),
   hiddenRules: () => request<{ rules: import('../shared/types').RuleCard[] }>('/api/admin/hidden-rules'),
   reviewBatches: () => request<{ batches: ReviewBatch[] }>('/api/admin/review/batches'),
   reviewProposals: (status = 'pending', batchId = '', limit = 20, cursor = '') =>

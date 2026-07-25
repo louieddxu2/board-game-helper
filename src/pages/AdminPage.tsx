@@ -26,7 +26,10 @@ export const AdminPage = () => {
 
   const load = async () => {
     const [editorData, importData, hiddenData, tagData] = await Promise.all([
-      api.editors(), api.importRows(), api.hiddenRules(), api.adminTags(),
+      api.editors().catch(() => ({ users: [], invitations: [] })),
+      api.importRows().catch(() => ({ rows: [] })),
+      api.hiddenRules().catch(() => ({ rules: [] })),
+      api.adminTags().catch(() => ({ tags: [] })),
     ]);
     setEditors(editorData);
     setImportRows(importData.rows);
@@ -34,6 +37,16 @@ export const AdminPage = () => {
     setTags(tagData.tags);
   };
   useEffect(() => { if (isAdmin) void load(); }, [isAdmin]);
+
+  const handleClearLocalData = async () => {
+    if (window.confirm('確定要完全清除本機快取與儲存資料嗎？（不會影響雲端資料庫）')) {
+      await localDb.clearAllCache();
+      localStorage.clear();
+      clearSearchCache();
+      showToast('本機快取與所有資料已完全清除！');
+      window.location.reload();
+    }
+  };
 
   const handleCreatePublicTag = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +68,16 @@ export const AdminPage = () => {
 
   if (!loading && !isAdmin) return <Navigate to="/" replace />;
   return <section className="admin-page">
-    <header><p className="eyebrow">管理與校稿</p><h1>內容工作臺</h1><p>管理編輯者、公共 Tag、舊資料拆分與名稱整理。</p></header>
+    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div>
+        <p className="eyebrow">管理與校稿</p>
+        <h1>內容工作臺</h1>
+        <p>管理編輯者、公共 Tag、舊資料拆分與名稱整理。</p>
+      </div>
+      <button type="button" className="button secondary" onClick={() => void handleClearLocalData()} style={{ whiteSpace: 'nowrap' }}>
+        🧹 清除本機快取與資料
+      </button>
+    </header>
     <div className="admin-grid">
       <section className="admin-card"><h2>編輯者</h2>
         <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
