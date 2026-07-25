@@ -395,7 +395,26 @@ app.get('/api/home', async (c) => {
   });
 
   const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
-  const featuredRuleIds = popularGameIds.map((id) => featuredRuleIdByGame.get(id) ?? '').filter(Boolean);
+  const featuredPromises = popularGameIds.map(async (id) => {
+    let ruleId = featuredRuleIdByGame.get(id);
+    if (!ruleId) {
+      const fallback = await c.env.DB.prepare(`
+        SELECT id FROM rules
+        WHERE game_id = ? AND status = 'published'
+        ORDER BY is_featured DESC, created_at DESC
+        LIMIT 1
+      `).bind(id).first<{ id: string }>();
+      ruleId = fallback?.id ?? '';
+    }
+    return {
+      gameSlug: gameMap.get(id)?.slug ?? '',
+      gameName: gameMap.get(id)?.displayName ?? '',
+      ruleId,
+    };
+  });
+
+  const featured = await Promise.all(featuredPromises);
+  const featuredRuleIds = featured.map((f) => f.ruleId).filter(Boolean);
 
   setNoCache(c);
   return c.json({
@@ -403,11 +422,7 @@ app.get('/api/home', async (c) => {
     popularGameIds,
     recentRuleIds,
     featuredRuleIds,
-    featured: popularGameIds.map((id) => ({
-      gameSlug: gameMap.get(id)?.slug ?? '',
-      gameName: gameMap.get(id)?.displayName ?? '',
-      ruleId: featuredRuleIdByGame.get(id) ?? '',
-    })),
+    featured,
   });
 });
 
