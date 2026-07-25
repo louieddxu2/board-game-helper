@@ -338,8 +338,7 @@ app.post('/api/logout', async (c) => {
 });
 
 app.get('/api/home', async (c) => {
-  // 1. 動態計算時間視窗起點 (第6款遊戲觀看日期 - 7 天)
-  const windowRow = await c.env.DB.prepare(`
+  const windowResult = logD1Query(c, 'home:window-start', await c.env.DB.prepare(`
     WITH recent_games AS (
       SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
       FROM daily_views
@@ -349,8 +348,9 @@ app.get('/api/home', async (c) => {
       LIMIT 6
     )
     SELECT MIN(min_date) as window_start FROM recent_games;
-  `).first<{ window_start: string | null }>();
+  `).all<{ window_start: string | null }>());
 
+  const windowRow = windowResult.results?.[0];
   let startDateStr = '';
   if (windowRow && windowRow.window_start) {
     startDateStr = new Date(new Date(windowRow.window_start).getTime() - 7 * 86400000).toISOString().slice(0, 10);
@@ -358,7 +358,7 @@ app.get('/api/home', async (c) => {
   const viewDateCondition = startDateStr ? `view_date >= '${startDateStr}'` : `view_date >= DATE('now', '-7 days')`;
 
   // 2. 統計階段 (100% 只查 daily_views，加上 LIMIT 100 硬上限熔斷保護)
-  const [popularGameIdsResult, recentResult] = await Promise.all([
+  const [popularGameIdsRaw, recentRaw] = await Promise.all([
     c.env.DB.prepare(`
       WITH scoped_views AS (
         SELECT game_id, user_id, created_at
@@ -380,14 +380,17 @@ app.get('/api/home', async (c) => {
     `).all<{ id: string }>(),
   ]);
 
+  const popularGameIdsResult = logD1Query(c, 'home:popular-games', popularGameIdsRaw);
+  const recentResult = logD1Query(c, 'home:recent-rules', recentRaw);
+
   let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
 
   if (popularGameIds.length < 6) {
-    const fallbackGameIdsResult = await c.env.DB.prepare(`
+    const fallbackGameIdsResult = logD1Query(c, 'home:fallback-games', await c.env.DB.prepare(`
       SELECT g.id FROM games g
       WHERE g.merged_into_game_id IS NULL
       ORDER BY g.updated_at DESC LIMIT 6
-    `).all<{ id: string }>();
+    `).all<{ id: string }>());
     const extraIds = (fallbackGameIdsResult.results ?? []).map((g) => g.id);
     popularGameIds = Array.from(new Set([...popularGameIds, ...extraIds])).slice(0, 6);
   }
@@ -400,17 +403,16 @@ app.get('/api/home', async (c) => {
   // 3. 點對點極速解析內容 (WHERE id IN)
   const placeholders = popularGameIds.map(() => '?').join(',');
 
-  const gamesResult = await c.env.DB.prepare(`
+  const gamesResult = logD1Query(c, 'home:games-meta', await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
     WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL
-  `).bind(...popularGameIds).all<GameRow>();
+  `).bind(...popularGameIds).all<GameRow>());
 
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
-  const finalPopularGames = popularGameIds.map((id) => gameMap.get(id)).filter(Boolean) as GameSummary[];
 
-  const featuredRuleIdsResult = await c.env.DB.prepare(`
+  const featuredRuleIdsResult = logD1Query(c, 'home:featured-rule-ids', await c.env.DB.prepare(`
     WITH scoped_views AS (
       SELECT game_id, rule_id, user_id, created_at
       FROM daily_views
@@ -422,7 +424,7 @@ app.get('/api/home', async (c) => {
     FROM scoped_views
     GROUP BY game_id, rule_id
     ORDER BY view_count DESC, MAX(created_at) DESC
-  `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>();
+  `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>());
 
   const featuredRuleIdByGame = new Map<string, string>();
   (featuredRuleIdsResult.results ?? []).forEach((row) => {
@@ -435,13 +437,13 @@ app.get('/api/home', async (c) => {
   const featuredPromises = popularGameIds.map(async (id) => {
     let ruleId = featuredRuleIdByGame.get(id);
     if (!ruleId) {
-      const fallback = await c.env.DB.prepare(`
+      const fallback = logD1Query(c, 'home:fallback-rule-id', await c.env.DB.prepare(`
         SELECT id FROM rules
         WHERE game_id = ? AND status = 'published'
         ORDER BY is_featured DESC, created_at DESC
         LIMIT 1
-      `).bind(id).first<{ id: string }>();
-      ruleId = fallback?.id ?? '';
+      `).bind(id).all<{ id: string }>());
+      ruleId = fallback.results?.[0]?.id ?? '';
     }
     return {
       gameSlug: gameMap.get(id)?.slug ?? '',
