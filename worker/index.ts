@@ -460,6 +460,7 @@ app.get('/api/home', async (c) => {
     recentRuleIds,
     featuredRuleIds,
     featured,
+    debugD1Metrics: c.get('d1Metrics'),
   });
 });
 
