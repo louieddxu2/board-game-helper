@@ -109,10 +109,5 @@ export const HomePage = () => {
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />
-    {home && home.recentRules && home.recentRules.length > 0 && <section className="content-section">
-      <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
-      <div className="rule-grid compact">{home.recentRules.map((rule) =>
-        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
-    </section>}
   </>;
 };
