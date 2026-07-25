@@ -612,7 +612,7 @@ app.get('/api/games/:identifier', async (c) => {
   return c.json({ game: detail });
 });
 
-app.get('/api/export/public', async (c) => {
+app.get('/api/export/public', requireRole('editor'), async (c) => {
   const metadata = await c.env.DB.prepare(`
     SELECT
       (SELECT COUNT(*) FROM games WHERE merged_into_game_id IS NULL) AS game_count,
