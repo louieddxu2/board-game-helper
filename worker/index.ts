@@ -15,7 +15,8 @@ interface LoggedQueryContext {
 }
 
 const logD1Query = <T extends D1Result<unknown>>(c: AppContext, queryName: string, result: T): T => {
-  const rowsRead = result.meta?.rows_read ?? 0;
+  const meta = result?.meta as Record<string, unknown> | undefined;
+  const rowsRead = Number(meta?.rows_read ?? meta?.rowsRead ?? meta?.rows_served ?? 0);
   console.log(`[D1_METRICS] [${c.req.path}] ${queryName}: ${rowsRead} rows_read`);
   
   let ctx = c.get('d1Metrics');
@@ -89,11 +90,20 @@ app.use('/api/*', sessionMiddleware);
 
 app.use('/api/*', async (c, next) => {
   await next();
-  c.header('X-Robots-Tag', 'noindex, nofollow');
-  c.header('X-API-Version', '1');
   const metrics = c.get('d1Metrics');
-  if (metrics) {
-    c.res.headers.set('X-D1-Rows-Read', String(metrics.totalRowsRead));
+  if (metrics && c.res) {
+    const headers = new Headers(c.res.headers);
+    headers.set('X-D1-Rows-Read', String(metrics.totalRowsRead));
+    headers.set('X-Robots-Tag', 'noindex, nofollow');
+    headers.set('X-API-Version', '1');
+    c.res = new Response(c.res.body, {
+      status: c.res.status,
+      statusText: c.res.statusText,
+      headers,
+    });
+  } else if (c.res) {
+    c.header('X-Robots-Tag', 'noindex, nofollow');
+    c.header('X-API-Version', '1');
   }
   const path = new URL(c.req.url).pathname;
   if (!isPublicCacheableRequest(c.req.method, path) || c.req.query('fresh') === '1') {
