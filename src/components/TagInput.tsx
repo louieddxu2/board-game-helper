@@ -15,7 +15,7 @@ interface TagInputProps {
 export const TagInput = ({
   value,
   onChange,
-  canCreate = false,
+  canCreate = true,
   label = '標籤',
   detectedSuggestions = [],
   gameId,
@@ -37,10 +37,14 @@ export const TagInput = ({
     onChange([...value, cleaned]); setQuery(''); setOpen(false);
   };
   const commitQuery = () => {
-    const exact = suggestions.find((tag) => tag.name.toLocaleLowerCase() === query.trim().toLocaleLowerCase());
-    if (exact) add(exact.name);
-    else if (suggestions[0]) add(suggestions[0].name);
-    else if (canCreate) add(query);
+    const cleaned = query.trim().replace(/^#/, '');
+    if (!cleaned || value.includes(cleaned) || value.length >= 8) return;
+    const exact = suggestions.find((tag) => tag.name.toLocaleLowerCase() === cleaned.toLocaleLowerCase());
+    if (exact) {
+      add(exact.name);
+    } else {
+      add(cleaned);
+    }
   };
 
   const unselectedDetected = detectedSuggestions.filter((tag) => !value.includes(tag));
