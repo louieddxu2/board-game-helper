@@ -338,7 +338,14 @@ app.post('/api/logout', async (c) => {
 });
 
 app.get('/api/home', async (c) => {
-  const windowResult = logD1Query(c, 'home:window-start', await c.env.DB.prepare(`
+  const d1Logs: Array<{ name: string; rowsRead: number; meta: unknown }> = [];
+  const track = <T extends D1Result<unknown>>(name: string, res: T): T => {
+    const rowsRead = Number(res.meta?.rows_read ?? (res.meta as any)?.rowsRead ?? 0);
+    d1Logs.push({ name, rowsRead, meta: res.meta });
+    return res;
+  };
+
+  const windowResult = track('home:window-start', await c.env.DB.prepare(`
     WITH recent_games AS (
       SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
       FROM daily_views
@@ -380,13 +387,13 @@ app.get('/api/home', async (c) => {
     `).all<{ id: string }>(),
   ]);
 
-  const popularGameIdsResult = logD1Query(c, 'home:popular-games', popularGameIdsRaw);
-  const recentResult = logD1Query(c, 'home:recent-rules', recentRaw);
+  const popularGameIdsResult = track('home:popular-games', popularGameIdsRaw);
+  const recentResult = track('home:recent-rules', recentRaw);
 
   let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
 
   if (popularGameIds.length < 6) {
-    const fallbackGameIdsResult = logD1Query(c, 'home:fallback-games', await c.env.DB.prepare(`
+    const fallbackGameIdsResult = track('home:fallback-games', await c.env.DB.prepare(`
       SELECT g.id FROM games g
       WHERE g.merged_into_game_id IS NULL
       ORDER BY g.updated_at DESC LIMIT 6
@@ -397,13 +404,13 @@ app.get('/api/home', async (c) => {
 
   if (popularGameIds.length === 0) {
     setNoCache(c);
-    return c.json({ generatedAt: now(), featured: [], featuredRules: [], recentRules: [], popularGames: [] });
+    return c.json({ generatedAt: now(), featured: [], featuredRules: [], recentRules: [], popularGames: [], debugD1Metrics: d1Logs });
   }
 
   // 3. 點對點極速解析內容 (WHERE id IN)
   const placeholders = popularGameIds.map(() => '?').join(',');
 
-  const gamesResult = logD1Query(c, 'home:games-meta', await c.env.DB.prepare(`
+  const gamesResult = track('home:games-meta', await c.env.DB.prepare(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
@@ -412,7 +419,7 @@ app.get('/api/home', async (c) => {
 
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
 
-  const featuredRuleIdsResult = logD1Query(c, 'home:featured-rule-ids', await c.env.DB.prepare(`
+  const featuredRuleIdsResult = track('home:featured-rule-ids', await c.env.DB.prepare(`
     WITH scoped_views AS (
       SELECT game_id, rule_id, user_id, created_at
       FROM daily_views
@@ -437,7 +444,7 @@ app.get('/api/home', async (c) => {
   const featuredPromises = popularGameIds.map(async (id) => {
     let ruleId = featuredRuleIdByGame.get(id);
     if (!ruleId) {
-      const fallback = logD1Query(c, 'home:fallback-rule-id', await c.env.DB.prepare(`
+      const fallback = track('home:fallback-rule-id', await c.env.DB.prepare(`
         SELECT id FROM rules
         WHERE game_id = ? AND status = 'published'
         ORDER BY is_featured DESC, created_at DESC
@@ -462,7 +469,7 @@ app.get('/api/home', async (c) => {
     recentRuleIds,
     featuredRuleIds,
     featured,
-    debugD1Metrics: c.get('d1Metrics'),
+    debugD1Metrics: d1Logs,
   });
 });
 
