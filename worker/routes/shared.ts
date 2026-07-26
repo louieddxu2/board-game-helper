@@ -68,6 +68,7 @@ export const toRule = (row: RuleRow): RuleCard => ({
   })(),
   status: row.status,
   createdBy: row.created_by ?? undefined,
+  updatedAt: row.updated_at,
   tags: (() => {
     try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
   })(),

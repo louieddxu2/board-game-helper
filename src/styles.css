@@ -292,6 +292,40 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .account-item small { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; }
 .account-change { display: grid; gap: 4px; margin-top: 8px; padding: 9px 11px; border-left: 3px solid var(--yellow); background: var(--cream); color: var(--muted); font-size: 13px; line-height: 1.5; }
 
+.catalog-page { max-width: 1280px; margin: 0 auto; padding: 64px 24px 120px; }
+.catalog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.catalog-header h1 { font-size: clamp(38px, 6vw, 62px); margin-bottom: 14px; }
+.catalog-header p:last-child { max-width: 680px; line-height: 1.7; }
+.catalog-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+.catalog-toolbar strong { color: var(--ink); }
+.catalog-sheet-scroll, .catalog-detail-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--white); }
+.catalog-table, .catalog-rules-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.catalog-table { min-width: 760px; }
+.catalog-table th, .catalog-table td, .catalog-rules-table th, .catalog-rules-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+.catalog-table th, .catalog-rules-table th { background: var(--cream); color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.catalog-table tr:last-child td, .catalog-rules-table tr:last-child td { border-bottom: 0; }
+.catalog-table th:last-child, .catalog-table td:last-child, .catalog-rules-table th:last-child, .catalog-rules-table td:last-child { border-right: 0; }
+.catalog-game-row:hover td { background: #fffaf0; }
+.catalog-game-row.expanded td { background: var(--cream); }
+.catalog-game-button { display: flex; align-items: flex-start; gap: 9px; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font-weight: 700; }
+.catalog-expand-icon { display: inline-grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); font-size: 18px; line-height: 1; }
+.catalog-detail-cell { padding: 0 !important; background: var(--paper); }
+.catalog-detail-wrap { padding: 16px; }
+.catalog-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.catalog-detail-heading a { color: var(--orange); font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.catalog-rules-table { min-width: 1180px; }
+.catalog-rules-table th { position: static; }
+.catalog-rules-table td { line-height: 1.5; }
+.catalog-text-cell { min-width: 180px; max-width: 320px; white-space: pre-wrap; word-break: break-word; }
+.catalog-rules-table td:first-child { white-space: nowrap; }
+.catalog-rules-table a { color: var(--orange); font-weight: 700; }
+.catalog-status { display: inline-flex; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.catalog-status-published { background: #d9e9e1; color: var(--green); }
+.catalog-status-hidden { background: #f7d8d1; color: #842d20; }
+.catalog-status-draft { background: #f5dfad; color: #5f481a; }
+.catalog-empty-cell, .catalog-loading { padding: 24px !important; color: var(--muted); text-align: center; }
+.catalog-loading { margin: 0; }
+
 @media (max-width: 800px) {
   .site-header { height: 66px; padding: 0 14px; }
   .brand small { display: none; }
@@ -348,6 +382,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .account-header .button { width: 100%; }
   .account-card { padding: 16px; }
   .account-section-heading h2 { font-size: 21px; }
+  .catalog-page { padding: 42px 14px 110px; }
+  .catalog-header { display: grid; gap: 18px; }
+  .catalog-header .button { width: 100%; }
+  .catalog-toolbar { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .catalog-detail-wrap { padding: 12px; }
+  .catalog-detail-heading { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

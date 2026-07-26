@@ -43,6 +43,8 @@ export const api = {
     `/api/games/${encodeURIComponent(identifier)}${fresh ? `?fresh=${encodeURIComponent(crypto.randomUUID())}` : ''}`,
     fresh ? { cache: 'no-store' } : undefined,
   ),
+  editorCatalogGames: () => request<{ games: GameSummary[] }>('/api/editor/catalog/games'),
+  editorCatalogGame: (identifier: string) => request<{ game: GameDetail }>(`/api/editor/catalog/games/${encodeURIComponent(identifier)}`),
   recordView: (gameId: string, ruleId?: string) => request<{ success: boolean }>(`/api/games/${gameId}/view${ruleId ? `?ruleId=${ruleId}` : ''}`, { method: 'POST', body: '{}' }),
   createGame: (input: { displayName: string; englishName?: string; aliases?: string[] }) => request<{ game: GameSummary }>('/api/games', {
     method: 'POST', body: JSON.stringify(input),

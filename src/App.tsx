@@ -4,6 +4,7 @@ import { SessionProvider } from './context/SessionContext';
 import { AddPage } from './pages/AddPage';
 import { AdminPage } from './pages/AdminPage';
 import { AccountPage } from './pages/AccountPage';
+import { CatalogPage } from './pages/CatalogPage';
 import { GamePage } from './pages/GamePage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
     { path: 'games/:identifier', element: <GamePage /> },
     { path: 'login', element: <LoginPage /> },
     { path: 'account', element: <AccountPage /> },
+    { path: 'catalog', element: <CatalogPage /> },
     { path: 'privacy', element: <PrivacyPage /> },
     { path: 'review', element: <ReviewPage /> },
     { path: 'admin', element: <AdminPage /> },

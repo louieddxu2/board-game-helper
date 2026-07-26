@@ -45,6 +45,7 @@ export const Layout = () => {
         <NavLink to="/">探索</NavLink>
         {canEdit && <NavLink to="/add" className="nav-primary">＋記錄</NavLink>}
         {canEdit && <NavLink to="/review">校稿</NavLink>}
+        {canEdit && <NavLink to="/catalog">資料表</NavLink>}
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
         <NavLink to={user ? '/account' : '/login'}>{user ? '帳號' : '登入'}</NavLink>
       </nav>
@@ -55,6 +56,7 @@ export const Layout = () => {
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span><small>搜尋</small></button>
       {canEdit && <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋</span><small>記錄{pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>}
       {canEdit && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}
+      {canEdit && <NavLink to="/catalog"><span aria-hidden="true">表</span><small>資料表</small></NavLink>}
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>{adminLabel}</small></NavLink>}
       <NavLink to={user ? '/account' : '/login'}><span aria-hidden="true">◎</span><small>{user ? '帳號' : '登入'}</small></NavLink>
     </nav>
