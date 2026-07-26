@@ -60,6 +60,7 @@ export interface RuleCard {
   sourceUrl?: string;
   sourceLinks: Array<{ label?: string; url: string }>;
   status: 'draft' | 'published' | 'hidden';
+  createdBy?: string;
   tags: TagSummary[];
 }
 

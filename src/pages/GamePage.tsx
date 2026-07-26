@@ -23,7 +23,8 @@ const stageNames: Record<FlowStage, string> = {
 export const GamePage = () => {
   const { identifier = '' } = useParams();
   const location = useLocation();
-  const { canEdit, user } = useSession();
+  const { canEdit, user, isAdmin } = useSession();
+  const canEditRule = (rule: RuleCardType) => isAdmin || (canEdit && Boolean(rule.createdBy && user?.id && rule.createdBy === user.id));
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<'index' | 'briefing'>('index');
   const [game, setGame] = useState<GameDetail>();
@@ -136,7 +137,7 @@ export const GamePage = () => {
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
           ))}
         </div>
       </>
@@ -181,7 +182,7 @@ export const GamePage = () => {
               </h2>
               <div className="game-rules">
                 {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEdit ? () => setEditing(rule) : undefined} />
+                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
                 ))}
               </div>
             </section>

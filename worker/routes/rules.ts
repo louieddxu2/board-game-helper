@@ -15,9 +15,15 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await c.env.DB.prepare(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_count_note, r.edition_note, r.status, r.created_at, r.updated_at
+      r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      s.source_label, s.source_url,
+      (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
+        FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json,
+      (SELECT COALESCE(json_group_array(json_object('id', t.id, 'slug', t.slug, 'name', t.name)), '[]')
+        FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = r.id) AS tags_json
     FROM rules r
     JOIN games g ON g.id = r.game_id
+    JOIN submissions s ON s.id = r.submission_id
     WHERE r.id = ? AND r.status = 'published'
     LIMIT 1
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
@@ -46,9 +52,13 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const row = await c.env.DB.prepare(`SELECT r.*, s.source_label, s.source_url FROM rules r JOIN submissions s ON s.id = r.submission_id WHERE r.id = ?`)
     .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const user = c.get('user')!;
+  const isAdmin = user.roles.includes('admin');
+  if (!isAdmin && row.created_by !== user.id) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
   const existingTags = await c.env.DB.prepare(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
     .bind(c.req.param('id')).all<{ name: string }>();
-  const user = c.get('user')!;
   const timestamp = now();
   const updated = {
     statement: parsed.data.statement ?? row.statement,
@@ -100,6 +110,10 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
   const row = await c.env.DB.prepare('SELECT * FROM rules WHERE id = ?').bind(id).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
+  const isAdmin = user.roles.includes('admin');
+  if (!isAdmin && row.created_by !== user.id) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
   const timestamp = now();
   await c.env.DB.batch([
     c.env.DB.prepare(`
@@ -126,10 +140,18 @@ rulesRoutes.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeR
 
 rulesRoutes.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
   const result = await c.env.DB.prepare(`
-    SELECT rr.id, rr.previous_json, rr.reason, rr.created_at, u.email editor_email
-    FROM rule_revisions rr LEFT JOIN users u ON u.id = rr.edited_by
+    SELECT rr.id, rr.previous_json, rr.reason, rr.created_at, u.email editor_email, r.created_by
+    FROM rule_revisions rr
+    JOIN rules r ON r.id = rr.rule_id
+    LEFT JOIN users u ON u.id = rr.edited_by
     WHERE rr.rule_id = ? ORDER BY rr.created_at DESC LIMIT 30
-  `).bind(c.req.param('id')).all<{ id: string; previous_json: string; reason: string | null; created_at: number; editor_email: string | null }>();
+  `).bind(c.req.param('id')).all<{ id: string; previous_json: string; reason: string | null; created_at: number; editor_email: string | null; created_by: string | null }>();
+  const user = c.get('user')!;
+  const isAdmin = user.roles.includes('admin');
+  const firstRow = (result.results ?? [])[0];
+  if (!isAdmin && firstRow && firstRow.created_by !== user.id) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
   return c.json({ revisions: (result.results ?? []).map((row) => {
     let previousStatement = '先前版本';
     try { previousStatement = String((JSON.parse(row.previous_json) as Record<string, unknown>).statement ?? previousStatement); } catch { /* retain fallback */ }
@@ -144,13 +166,18 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
       .bind(c.req.param('revisionId'), c.req.param('id')).first<{ previous_json: string }>(),
   ]);
   if (!current || !revision) return c.json({ error: 'revision_not_found' }, 404);
+  const user = c.get('user')!;
+  const isAdmin = user.roles.includes('admin');
+  if (!isAdmin && current.created_by !== user.id) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
   let previous: Record<string, unknown>;
   try { previous = JSON.parse(revision.previous_json) as Record<string, unknown>; } catch { return c.json({ error: 'invalid_revision' }, 409); }
   const restoredTagNames = Array.isArray(previous.tag_names) ? previous.tag_names.filter((name): name is string => typeof name === 'string') : undefined;
   const timestamp = now();
   await c.env.DB.batch([
     c.env.DB.prepare(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
-      .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), c.get('user')!.id, timestamp),
+      .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), user.id, timestamp),
     c.env.DB.prepare(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_count_note = ?,
         edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
@@ -160,7 +187,7 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
       previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),
-    ...(restoredTagNames ? await tagWriteStatements(c, c.req.param('id'), restoredTagNames, c.get('user')!.id, timestamp) : []),
+    ...(restoredTagNames ? await tagWriteStatements(c, c.req.param('id'), restoredTagNames, user.id, timestamp) : []),
   ]);
   return c.json({ ok: true });
 });
@@ -171,6 +198,5 @@ rulesRoutes.get('/api/admin/hidden-rules', requireRole('editor'), async (c) => {
   `).all<RuleRow>();
   return c.json({ rules: (result.results ?? []).map(toRule) });
 });
-
 
 export { rulesRoutes };

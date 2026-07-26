@@ -12,10 +12,11 @@ export const setNoCache = (c: AppContext) => {
   c.header('Pragma', 'no-cache');
   c.header('Expires', '0');
 };
+
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_count_note, r.edition_note, r.status,
-    r.created_at, r.updated_at,
+    r.created_by, r.created_at, r.updated_at,
     s.source_label, s.source_url,
     (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
       FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json,
@@ -41,6 +42,7 @@ export interface RuleRow {
   status: 'draft' | 'published' | 'hidden';
   source_label: string | null;
   source_url: string | null;
+  created_by: string | null;
   created_at: number;
   updated_at: number;
   tags_json: string | null;
@@ -65,6 +67,7 @@ export const toRule = (row: RuleRow): RuleCard => ({
     } catch { return row.source_url ? [{ label: row.source_label ?? undefined, url: row.source_url }] : []; }
   })(),
   status: row.status,
+  createdBy: row.created_by ?? undefined,
   tags: (() => {
     try { return JSON.parse(row.tags_json ?? '[]') as RuleCard['tags']; } catch { return []; }
   })(),

@@ -137,5 +137,5 @@ export const localDb = {
     });
     return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
   },
-  clearAllCache: async () => (await getDatabase()).clear('cache'),
+  clearCache: async () => (await getDatabase()).clear('cache'),
 };

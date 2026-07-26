@@ -110,6 +110,10 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     const prefix = `${includeRules ? 'all' : 'games'}:`;
     let foundProgressive = false;
     for (const [key, data] of searchCache.entries()) {
+      if (Date.now() - data.cachedAt >= SEARCH_CACHE_FRESH_MS) {
+        searchCache.delete(key);
+        continue;
+      }
       if (key.startsWith(prefix) && cacheKey.startsWith(key) && data.games.length < 20) {
         const filteredGames = data.games.filter(game => 
           game.displayName.toLowerCase().includes(qLower) ||
@@ -174,15 +178,13 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       g.aliases?.some((a) => a.toLowerCase() === query.toLowerCase())
   );
   
-  const showCreateOption = Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
+  const showCreateOption = Boolean(canEdit || onCreate) && Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
   const optionCount = games.length + rules.length + (showCreateOption ? 1 : 0);
 
   const handleCreateOrLogin = () => {
     if (canEdit || onCreate) {
       if (onCreate) onCreate(query);
       else navigate(`/add?name=${encodeURIComponent(query)}`);
-    } else {
-      navigate(`/login?redirect=${encodeURIComponent(`/add?name=${encodeURIComponent(query)}`)}`);
     }
   };
 
@@ -212,7 +214,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
               onSelect(games[0]);
             } else if (rules.length > 0) {
               if (onRuleSelect) onRuleSelect(rules[0]);
-            } else if (query) {
+            } else if (query && showCreateOption) {
               handleCreateOrLogin();
             }
           }
@@ -246,9 +248,8 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         <strong>{rule.gameName}</strong><span>{rule.statement}</span><small>查看規則 →</small>
       </button>; })}
       {showCreateOption && <button type="button" id={`${inputId}-option-${games.length + rules.length}`} aria-selected={activeIndex === games.length + rules.length} role="option" className="create-result" onClick={handleCreateOrLogin}>
-        {(canEdit || onCreate) ? `＋ 新增「${query}」的第一條玩錯規則` : `🔒 登入後新增「${query}」的第一條玩錯規則`}
+        ＋ 新增「{query}」的第一條玩錯規則
       </button>}
     </div>}
   </div>;
 };
-

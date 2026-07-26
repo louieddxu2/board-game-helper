@@ -8,7 +8,7 @@ import type { GameSummary, RuleCard, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 
 export const AdminPage = () => {
-  const { isAdmin, loading } = useSession();
+  const { realIsAdmin, mockRole, setMockRole, loading } = useSession();
   const { showToast } = useToast();
   const [editors, setEditors] = useState<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>({ users: [], invitations: [] });
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
@@ -36,14 +36,14 @@ export const AdminPage = () => {
     setHiddenRules(hiddenData.rules);
     setTags(tagData.tags);
   };
-  useEffect(() => { if (isAdmin) void load(); }, [isAdmin]);
+  useEffect(() => { if (realIsAdmin) void load(); }, [realIsAdmin]);
 
   const handleClearLocalData = async () => {
-    if (window.confirm('確定要完全清除本機快取與儲存資料嗎？（不會影響雲端資料庫）')) {
-      await localDb.clearAllCache();
+    if (window.confirm('確定要清除本機快取嗎？（不會影響雲端資料庫，也不會刪除草稿或待送出資料）')) {
+      await localDb.clearCache();
       localStorage.clear();
       clearSearchCache();
-      showToast('本機快取與所有資料已完全清除！');
+      showToast('本機快取已清除！');
       window.location.reload();
     }
   };
@@ -66,18 +66,75 @@ export const AdminPage = () => {
 
   const filteredTags = tags.filter((t) => !tagQuery || t.name.includes(tagQuery) || (t.aliases && t.aliases.some((a) => a.includes(tagQuery))));
 
-  if (!loading && !isAdmin) return <Navigate to="/" replace />;
+  if (!loading && !realIsAdmin) return <Navigate to="/" replace />;
   return <section className="admin-page">
-    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
       <div>
         <p className="eyebrow">管理與校稿</p>
         <h1>內容工作臺</h1>
         <p>管理編輯者、公共 Tag、舊資料拆分與名稱整理。</p>
       </div>
       <button type="button" className="button secondary" onClick={() => void handleClearLocalData()} style={{ whiteSpace: 'nowrap' }}>
-        🧹 清除本機快取與資料
+        🧹 清除本機快取
       </button>
     </header>
+
+    <section className="admin-card" style={{ marginBottom: '1.5rem', background: 'var(--surface-elevated, #fafafa)', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>🎭 身份模擬與 UI 預覽</span>
+            {mockRole && <span className="tag-chip active" style={{ fontSize: '0.75rem' }}>模擬中</span>}
+          </h2>
+          <p className="muted" style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem' }}>
+            切換前台頁面（首頁、遊戲頁等）預覽不同角色的介面視角。導覽列按鈕將標示當前模擬狀態，方便隨時切換。
+          </p>
+        </div>
+        <div className="inline-actions" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={mockRole === null ? 'button primary' : 'button secondary'}
+            onClick={() => { setMockRole(null); showToast('已恢復真實 Admin 身份'); }}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+          >
+            👑 真實身分
+          </button>
+          <button
+            type="button"
+            className={mockRole === 'unauthenticated' ? 'button primary' : 'button secondary'}
+            onClick={() => { setMockRole('unauthenticated'); showToast('已切換模擬為：未登入 (Guest)'); }}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+          >
+            👤 未登入
+          </button>
+          <button
+            type="button"
+            className={mockRole === 'user' ? 'button primary' : 'button secondary'}
+            onClick={() => { setMockRole('user'); showToast('已切換模擬為：一般使用者'); }}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+          >
+            📱 一般使用者
+          </button>
+          <button
+            type="button"
+            className={mockRole === 'editor' ? 'button primary' : 'button secondary'}
+            onClick={() => { setMockRole('editor'); showToast('已切換模擬為：Editor'); }}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+          >
+            ✏️ Editor
+          </button>
+          <button
+            type="button"
+            className={mockRole === 'admin' ? 'button primary' : 'button secondary'}
+            onClick={() => { setMockRole('admin'); showToast('已切換模擬為：Admin'); }}
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}
+          >
+            🔑 Admin
+          </button>
+        </div>
+      </div>
+    </section>
+
     <div className="admin-grid">
       <section className="admin-card"><h2>編輯者</h2>
         <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
@@ -136,7 +193,7 @@ export const AdminPage = () => {
       <section className="admin-card import-card"><div className="list-heading"><h2>舊資料待確認</h2><span>{importRows.length} 筆</span></div>
         {importRows.length === 0 && <p className="muted">目前沒有 staged 資料。執行匯入指令後會在這裡出現。</p>}
         {importRows.slice(0, 20).map((row) => <article key={String(row.id)}><strong>{String(row.raw_game_name)}</strong><p>{String(row.raw_rule_text)}</p><small>原始第 {String(row.source_row_number)} 列・宣告 {String(row.declared_rule_count ?? '?')} 條</small>
-          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(async () => { await localDb.clearAllCache(); clearSearchCache(); showToast('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
+          <div className="inline-actions"><button type="button" className="text-action" onClick={() => void api.confirmImport(String(row.id)).then(async () => { await localDb.clearCache(); clearSearchCache(); showToast('已確認並匯入這筆舊資料。'); return load(); })}>按建議拆分匯入</button>
             <button type="button" className="danger-link" onClick={() => void api.skipImport(String(row.id)).then(load)}>略過</button></div></article>)}
       </section>
 
@@ -149,9 +206,8 @@ export const AdminPage = () => {
       </section>
 
       <section className="admin-card"><div className="list-heading"><h2>已隱藏規則</h2><span>{hiddenRules.length} 條</span></div>
-        <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(async () => { await localDb.clearAllCache(); clearSearchCache(); load(); })}>恢復</button></div>)}</div>
+        <div className="admin-list">{hiddenRules.map((rule) => <div key={rule.id}><strong>{rule.statement}</strong><button type="button" className="text-action" onClick={() => void api.restoreRule(rule.id).then(async () => { await localDb.clearCache(); clearSearchCache(); load(); })}>恢復</button></div>)}</div>
       </section>
     </div>
   </section>;
 };
-

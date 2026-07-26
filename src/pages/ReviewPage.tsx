@@ -131,7 +131,7 @@ export const ReviewPage = () => {
       })));
       const conflicts = result.outcomes.filter((outcome) => outcome.status === 'conflict' || outcome.status === 'stale').length;
       setMessage(`已處理 ${result.outcomes.length} 項${conflicts ? `，其中 ${conflicts} 項需要重新確認` : ''}。`);
-      await localDb.clearAllCache();
+      await localDb.clearCache();
       clearSearchCache();
       await load();
     } finally { setBusy(false); }
