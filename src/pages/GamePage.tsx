@@ -230,7 +230,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
       <div className="two-columns"><label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label>
         <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
-      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} gameId={game.id} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
+      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
       <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>

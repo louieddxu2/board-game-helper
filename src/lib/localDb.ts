@@ -1,7 +1,8 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard } from '../shared/types';
+import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
+type PublicTagsResponse = { tags: TagSummary[] };
 
 export interface GameMetaRecord {
   id: string;
@@ -91,6 +92,9 @@ export const localDb = {
   cacheGameMeta: async (meta: GameMetaRecord) => (await getDatabase()).put('cache', { key: `gameMeta:${meta.slug}`, data: meta, cachedAt: Date.now() }),
   getCachedGameMeta: async (slug: string) => (await getDatabase()).get('cache', `gameMeta:${slug}`) as Promise<{ key: string; data: GameMetaRecord; cachedAt: number } | undefined>,
   invalidateGameMeta: async (slug: string) => (await getDatabase()).delete('cache', `gameMeta:${slug}`),
+  cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: 'publicTags', data, cachedAt: Date.now() }),
+  getCachedPublicTags: async () => (await getDatabase()).get('cache', 'publicTags') as Promise<{ key: string; data: PublicTagsResponse; cachedAt: number } | undefined>,
+  invalidatePublicTags: async () => (await getDatabase()).delete('cache', 'publicTags'),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
   getCachedRuleEntity: async (ruleId: string) => (await getDatabase()).get('cache', `rule:${ruleId}`) as Promise<{ key: string; data: RuleEntity; cachedAt: number } | undefined>,
   invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),

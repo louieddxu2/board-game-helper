@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
@@ -52,6 +53,7 @@ export const AdminPage = () => {
     e.preventDefault();
     if (!newTagName.trim()) return;
     await api.createAdminTag({ name: newTagName.trim(), description: newTagDesc.trim() || undefined, isPublic: true });
+    clearPublicTagCache();
     setNewTagName('');
     setNewTagDesc('');
     showToast('已成功建立公共 Tag！');
@@ -60,6 +62,7 @@ export const AdminPage = () => {
 
   const handleTogglePublic = async (tag: TagSummary) => {
     await api.updateAdminTag(tag.id, { isPublic: !tag.isPublic });
+    clearPublicTagCache();
     showToast(`已將 #${tag.name} 設定為 ${!tag.isPublic ? '公共 Tag' : '非公共 Tag'}`);
     await load();
   };

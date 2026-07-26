@@ -1,7 +1,44 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSummary } from '../shared/types';
+
+const PUBLIC_TAG_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+let publicTagsPromise: Promise<TagSummary[]> | undefined;
+
+const loadPublicTags = async (): Promise<TagSummary[]> => {
+  const cached = await localDb.getCachedPublicTags().catch(() => undefined);
+  if (cached && Date.now() - cached.cachedAt < PUBLIC_TAG_CACHE_FRESH_MS) return cached.data.tags;
+
+  try {
+    const result = await api.tags();
+    await localDb.cachePublicTags(result).catch(() => undefined);
+    return result.tags;
+  } catch (error) {
+    if (cached) return cached.data.tags;
+    throw error;
+  }
+};
+
+const getPublicTags = () => {
+  publicTagsPromise ??= loadPublicTags().finally(() => { publicTagsPromise = undefined; });
+  return publicTagsPromise;
+};
+
+export const clearPublicTagCache = () => {
+  publicTagsPromise = undefined;
+  void localDb.invalidatePublicTags().catch(() => undefined);
+};
+
+const filterTags = (tags: TagSummary[], query: string, selected: string[]) => {
+  const normalizedQuery = query.toLocaleLowerCase();
+  return tags.filter((tag) => {
+    if (selected.includes(tag.name)) return false;
+    if (!normalizedQuery) return true;
+    return [tag.name, ...(tag.aliases ?? [])].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+  });
+};
 
 interface TagInputProps {
   value: string[];
@@ -9,7 +46,7 @@ interface TagInputProps {
   canCreate?: boolean;
   label?: string;
   detectedSuggestions?: string[];
-  gameId?: string;
+  availableTags?: TagSummary[];
 }
 
 export const TagInput = ({
@@ -18,7 +55,7 @@ export const TagInput = ({
   canCreate = true,
   label = '標籤',
   detectedSuggestions = [],
-  gameId,
+  availableTags,
 }: TagInputProps) => {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,9 +80,15 @@ export const TagInput = ({
   useEffect(() => {
     if (!open) return;
     let active = true;
-    void api.tags(debouncedQuery, gameId).then((result) => { if (active) setSuggestions(result.tags.filter((tag) => !value.includes(tag.name))); });
+    if (availableTags) {
+      setSuggestions(filterTags(availableTags, debouncedQuery, value));
+      return () => { active = false; };
+    }
+    void getPublicTags().then((tags) => {
+      if (active) setSuggestions(filterTags(tags, debouncedQuery, value));
+    }).catch(() => { if (active) setSuggestions([]); });
     return () => { active = false; };
-  }, [debouncedQuery, gameId, open, value]);
+  }, [availableTags, debouncedQuery, open, value]);
   const add = (name: string) => {
     const cleaned = name.trim().replace(/^#/, '');
     if (!cleaned || value.includes(cleaned) || value.length >= 8) return;
@@ -98,7 +141,7 @@ export const TagInput = ({
     )}
 
     {open && (suggestions.length > 0 || (canCreate && query.trim())) && <div className="tag-suggestions" id={`${id}-list`} role="listbox">
-      {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}<small>{tag.usageCount ?? 0} 條</small></button>)}
+      {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}{tag.usageCount !== undefined && <small>{tag.usageCount} 條</small>}</button>)}
       {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add(query)}>＋建立「{query.trim()}」</button>}
     </div>}
   </div>;

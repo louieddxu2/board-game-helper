@@ -29,40 +29,23 @@ tagsRoutes.get('/api/search', async (c) => {
 });
 
 tagsRoutes.get('/api/tags', async (c) => {
-  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
-  const gameId = (c.req.query('gameId') ?? '').trim();
-  const query = normalizeText(rawQuery);
-
-  let sql = `
-    SELECT t.id, t.slug, t.name, t.is_public, COUNT(DISTINCT rt.rule_id) AS usage_count
+  const result = await c.env.DB.prepare(`
+    SELECT t.id, t.slug, t.name, t.is_public,
+      GROUP_CONCAT(DISTINCT ta.alias) AS aliases_str
     FROM tags t
     LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
-    LEFT JOIN rule_tags rt ON rt.tag_id = t.id
-  `;
-  const conditions = ["t.status = 'active'"];
-  const params: unknown[] = [];
-
-  if (query) {
-    conditions.push('(t.normalized_name LIKE ? OR ta.normalized_alias LIKE ?)');
-    params.push(`%${query}%`, `%${query}%`);
-  }
-
-  if (gameId) {
-    conditions.push('(t.is_public = 1 OR rt.rule_id IN (SELECT id FROM rules WHERE game_id = ? AND status = \'published\'))');
-    params.push(gameId);
-  }
-
-  sql += ` GROUP BY t.id ORDER BY usage_count DESC, t.name LIMIT 20`;
-
-  const result = await c.env.DB.prepare(sql).bind(...params).all<{ id: string; slug: string; name: string; is_public: number; usage_count: number }>();
-  setNoCache(c);
+    WHERE t.status = 'active' AND t.is_public = 1
+    GROUP BY t.id
+    ORDER BY t.name
+  `).all<{ id: string; slug: string; name: string; is_public: number; aliases_str: string | null }>();
+  c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
   return c.json({
     tags: (result.results ?? []).map((tag) => ({
       id: tag.id,
       slug: tag.slug,
       name: tag.name,
       isPublic: Boolean(tag.is_public),
-      usageCount: tag.usage_count,
+      aliases: tag.aliases_str ? tag.aliases_str.split(',') : [],
     })),
   });
 });

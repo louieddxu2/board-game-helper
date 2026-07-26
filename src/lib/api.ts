@@ -30,7 +30,7 @@ export const api = {
   home: () => request<HomePayload>('/api/home'),
   searchGames: (query: string) => request<{ games: GameSummary[] }>(`/api/games/search?q=${encodeURIComponent(query)}`),
   search: (query: string) => request<{ games: GameSummary[]; rules: RuleSearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`),
-  tags: (query = '', gameId = '') => request<{ tags: TagSummary[] }>(`/api/tags?q=${encodeURIComponent(query)}${gameId ? `&gameId=${encodeURIComponent(gameId)}` : ''}`),
+  tags: () => request<{ tags: TagSummary[] }>('/api/tags'),
   adminTags: () => request<{ tags: TagSummary[] }>('/api/admin/tags'),
   createAdminTag: (input: { name: string; description?: string; isPublic?: boolean; aliases?: string[] }) => request<{ ok: true; tagId: string }>('/api/admin/tags', {
     method: 'POST', body: JSON.stringify(input),
