@@ -101,6 +101,7 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): Ru
     })(),
     status: row.status,
     createdBy: row.created_by ?? undefined,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
     tagIds,
     tags: tagIds.map((tagId) => tagMap.get(tagId)).filter((tag): tag is TagSummary => Boolean(tag)),
@@ -155,7 +156,10 @@ export interface GameRow {
   display_name: string;
   english_name: string | null;
   aliases_str?: string | null;
-  rule_count: number;
+  rule_count?: number | null;
+  published_rule_count?: number | null;
+  total_rule_count?: number | null;
+  latest_rule_updated_at?: number | null;
   updated_at: number;
 }
 
@@ -165,7 +169,10 @@ export const toGame = (row: GameRow): GameSummary => ({
   displayName: row.display_name,
   englishName: row.english_name ?? undefined,
   aliases: row.aliases_str ? row.aliases_str.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
-  ruleCount: row.rule_count,
+  ruleCount: Number(row.rule_count ?? row.published_rule_count ?? 0),
+  publishedRuleCount: Number(row.published_rule_count ?? row.rule_count ?? 0),
+  totalRuleCount: Number(row.total_rule_count ?? row.rule_count ?? 0),
+  latestRuleUpdatedAt: row.latest_rule_updated_at ?? undefined,
   updatedAt: row.updated_at,
 });
 

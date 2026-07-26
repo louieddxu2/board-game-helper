@@ -65,6 +65,9 @@ export interface GameSummary {
   englishName?: string;
   aliases?: string[];
   ruleCount: number;
+  publishedRuleCount?: number;
+  totalRuleCount?: number;
+  latestRuleUpdatedAt?: number;
   updatedAt: number;
 }
 
@@ -101,6 +104,7 @@ export interface RuleCard {
   sourceLinks: Array<{ label?: string; url: string }>;
   status: 'draft' | 'published' | 'hidden';
   createdBy?: string;
+  createdAt?: number;
   updatedAt?: number;
   tagIds?: string[];
   tags: TagSummary[];

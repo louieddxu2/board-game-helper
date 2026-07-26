@@ -69,11 +69,19 @@ const mutation = <T>(path: string, init: RequestInit) => transportRequest<T>(pat
 const searchKey = (kind: 'games' | 'all', query: string) => `${kind}:${query.toLocaleLowerCase()}`;
 type ApiRule = RuleCard & { gameName: string; gameSlug: string };
 
-const fetchGame = (identifier: string, fresh: boolean) => transportRequest<{ game: GameDetail }>(
+type GameResponse = { game: GameDetail; rulesComplete?: boolean };
+
+const fetchGame = (identifier: string, fresh: boolean) => transportRequest<GameResponse>(
   `/api/games/${encodeURIComponent(identifier)}${fresh ? `?fresh=${encodeURIComponent(crypto.randomUUID())}` : ''}`,
   fresh ? { cache: 'no-store' } : undefined,
   'cache-miss',
 );
+
+const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
+  if (includePrivate) return game;
+  const rules = game.rules.filter((rule) => rule.status === 'published');
+  return { ...game, rules, ruleCount: game.publishedRuleCount ?? rules.length };
+};
 
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
@@ -139,31 +147,38 @@ export const api = {
   updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
-  game: async (identifier: string, fresh = false) => ({ game: await cachedRead({
-    readCache: () => localDb.getCachedGame(identifier),
-    fetchFresh: () => fetchGame(identifier, fresh).then((response) => response.game),
-    writeCache: localDb.cacheGame,
-    force: fresh,
-  }) }),
+  game: async (identifier: string, fresh = false, includePrivate = false) => {
+    if (!fresh) {
+      const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
+      if (cached) return { game: cached.data };
+    }
+    const response = await fetchGame(identifier, fresh);
+    const rulesComplete = Boolean(response.rulesComplete);
+    await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
+    if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
+    return { game: presentGame(response.game, includePrivate) };
+  },
   editorCatalogGames: (fresh = false) => cachedRead({
     readCache: async () => (await localDb.getCachedCatalogGames()) as { data: { games: GameSummary[] } } | undefined,
     fetchFresh: () => transportRequest<{ games: GameSummary[] }>('/api/editor/catalog/games', undefined, 'cache-miss'),
     writeCache: localDb.cacheCatalogGames,
     force: fresh,
   }),
-  editorCatalogGame: (identifier: string, fresh = false) => cachedRead({
-    readCache: async () => (await localDb.getCachedCatalogGame(identifier)) as { data: GameDetail } | undefined,
-    fetchFresh: () => transportRequest<{ game: GameDetail }>(`/api/editor/catalog/games/${encodeURIComponent(identifier)}`, undefined, 'cache-miss').then((response) => response.game),
-    writeCache: localDb.cacheCatalogGame,
-    force: fresh,
-  }).then((game) => ({ game })),
   recordView: (gameId: string, ruleId?: string) => mutation<{ success: boolean }>(`/api/games/${gameId}/view${ruleId ? `?ruleId=${ruleId}` : ''}`, { method: 'POST', body: '{}' }),
-  createGame: (input: { displayName: string; englishName?: string; aliases?: string[] }) => mutation<{ game: GameSummary }>('/api/games', {
-    method: 'POST', body: JSON.stringify(input),
-  }),
-  patchGame: (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => mutation<{ ok: true }>(`/api/games/${id}`, {
-    method: 'PATCH', body: JSON.stringify(input),
-  }),
+  createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
+    const response = await mutation<{ game: GameSummary }>('/api/games', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    await localDb.upsertGameSummary(response.game).catch(() => undefined);
+    return response;
+  },
+  patchGame: async (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => {
+    const response = await mutation<{ ok: true; game: GameSummary }>(`/api/games/${id}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+    await localDb.upsertGameSummary(response.game).catch(() => undefined);
+    return response;
+  },
   submit: (input: SubmissionInput) => mutation<{ submissionId: string; ruleIds?: string[]; reused: boolean }>('/api/submissions', {
     method: 'POST', body: JSON.stringify(input),
   }),
@@ -179,9 +194,13 @@ export const api = {
   restoreRule: (id: string) => mutation<{ ok: true }>(`/api/rules/${id}/restore`, { method: 'POST', body: '{}' }),
   ruleRevisions: (id: string) => uncachedRead<{ revisions: RuleRevision[] }>(`/api/rules/${id}/revisions`, 'revision history is a private editor view'),
   restoreRevision: (ruleId: string, revisionId: string) => mutation<{ ok: true }>(`/api/rules/${ruleId}/revisions/${revisionId}/restore`, { method: 'POST', body: '{}' }),
-  mergeGame: (id: string, targetGameId: string) => mutation<{ ok: true }>(`/api/games/${id}/merge`, {
-    method: 'POST', body: JSON.stringify({ targetGameId }),
-  }),
+  mergeGame: async (id: string, targetGameId: string) => {
+    const response = await mutation<{ ok: true }>(`/api/games/${id}/merge`, {
+      method: 'POST', body: JSON.stringify({ targetGameId }),
+    });
+    await localDb.invalidateCatalogGames().catch(() => undefined);
+    return response;
+  },
   editors: () => uncachedRead<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>('/api/admin/editors', 'editor administration is private and intentionally always current'),
   inviteEditor: (email: string, role: 'admin' | 'editor') => mutation<{ ok: true }>('/api/admin/editors/invite', {
     method: 'POST', body: JSON.stringify({ email, role }),

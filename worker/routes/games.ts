@@ -90,9 +90,11 @@ gamesRoutes.post('/api/games/:id/view', async (c) => {
 
 gamesRoutes.get('/api/games/:identifier', async (c) => {
   const identifier = c.req.param('identifier');
+  const includePrivate = Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      0 AS rule_count
+      ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,
+      g.published_rule_count, g.total_rule_count, g.latest_rule_updated_at
     FROM games g
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
     LIMIT 1
@@ -105,7 +107,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     getDatabase(c).statement('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
     getDatabase(c).statement(`${gameRuleSelect}
-      WHERE r.game_id = ? AND r.status = 'published'
+      WHERE r.game_id = ?${includePrivate ? '' : " AND r.status = 'published'"}
       ORDER BY CASE r.flow_stage
         WHEN 'setup' THEN 1 WHEN 'round' THEN 2 WHEN 'action' THEN 3
         WHEN 'always' THEN 4 WHEN 'end_scoring' THEN 5
@@ -121,7 +123,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     rules: ruleRows.map((row) => toRule(row)),
   };
   setNoCache(c);
-  return c.json({ game: detail });
+  return c.json({ game: detail, rulesComplete: includePrivate });
 });
 
 const gameSchema = z.object({
@@ -136,10 +138,10 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   const normalizedName = normalizeText(parsed.data.displayName);
   const existing = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      COUNT(DISTINCT r.id) AS rule_count
+      g.published_rule_count AS rule_count, g.published_rule_count,
+      g.total_rule_count, g.latest_rule_updated_at
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
-    LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
     WHERE g.merged_into_game_id IS NULL
       AND (g.normalized_name = ? OR a.normalized_alias = ?)
     GROUP BY g.id
@@ -170,7 +172,7 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
     `).bind(createId('alias'), id, alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
   await getDatabase(c).batch(statements);
-  return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, updatedAt: timestamp } }, 201);
+  return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, publishedRuleCount: 0, totalRuleCount: 0, updatedAt: timestamp } }, 201);
 });
 
 gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
@@ -200,7 +202,17 @@ gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
     cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
     cache.delete(new Request(new URL('/api/home', c.req.url))),
   ]));
-  return c.json({ ok: true });
+  const updatedGame = await getDatabase(c).statement(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      g.published_rule_count AS rule_count, g.published_rule_count,
+      g.total_rule_count, g.latest_rule_updated_at,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    WHERE g.id = ?
+    GROUP BY g.id
+  `).bind(c.req.param('id')).first<GameRow>();
+  return c.json({ ok: true, game: toGame(updatedGame!) });
 });
 
 const mergeSchema = z.object({ targetGameId: z.string().min(1), reason: z.string().max(300).optional() });

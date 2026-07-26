@@ -89,7 +89,7 @@ export const CatalogPage = () => {
     setLoadingGameId(game.id);
     setError('');
     try {
-      const data = await api.editorCatalogGame(game.id);
+      const data = await api.game(game.id, false, true);
       const hydratedGame = await hydrateGameTags(data.game);
       setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
     } catch {
@@ -136,7 +136,7 @@ export const CatalogPage = () => {
               <td><strong>{game.displayName}</strong></td>
               <td>{game.englishName || '—'}</td>
               <td>{game.ruleCount}</td>
-              <td>{formatDate(game.updatedAt)}</td>
+              <td>{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
             {expandedGameId === game.id && <tr><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : details[game.id] ? <RulesSheet game={details[game.id]} /> : null}</td></tr>}
           </Fragment>)}

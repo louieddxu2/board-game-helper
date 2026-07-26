@@ -59,4 +59,37 @@ describe('api game refresh', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(cacheGame).toHaveBeenCalledOnce();
   });
+
+  test('stores the editor rule set once while presenting only published rules on the game page', async () => {
+    const publishedRule = { id: 'rule-public', gameId: 'game-1', statement: 'Public', status: 'published' as const, sourceLinks: [], tags: [] };
+    const hiddenRule = { id: 'rule-hidden', gameId: 'game-1', statement: 'Hidden', status: 'hidden' as const, sourceLinks: [], tags: [] };
+    const game = { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], rules: [publishedRule, hiddenRule], ruleCount: 2, publishedRuleCount: 1, totalRuleCount: 2, updatedAt: 1 };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ game, rulesComplete: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    const cacheGame = vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+
+    const publicResult = await api.game('emberleaf');
+
+    expect(publicResult.game.rules).toEqual([publishedRule]);
+    expect(publicResult.game.ruleCount).toBe(1);
+    expect(cacheGame).toHaveBeenCalledWith(game, true);
+  });
+
+  test('requires a complete local rule set for the editor catalog', async () => {
+    const getCachedGame = vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ game: { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], rules: [], ruleCount: 0, updatedAt: 1 }, rulesComplete: false }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+
+    await expect(api.game('emberleaf', false, true)).rejects.toMatchObject({ code: 'forbidden', status: 403 });
+
+    expect(getCachedGame).toHaveBeenCalledWith('emberleaf', true);
+  });
 });
