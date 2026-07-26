@@ -6,7 +6,7 @@ import type { Env, D1Result, D1PreparedStatement } from '../env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const gamesRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -103,7 +103,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
   const [aliasesResult, rulesResult] = await Promise.all([
     c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
-    c.env.DB.prepare(`${ruleSelect}
+    c.env.DB.prepare(`${gameRuleSelect}
       WHERE r.game_id = ? AND r.status = 'published'
       ORDER BY CASE r.flow_stage
         WHEN 'setup' THEN 1 WHEN 'round' THEN 2 WHEN 'action' THEN 3

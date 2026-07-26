@@ -142,7 +142,7 @@ export const GamePage = () => {
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
+            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} showSource={false} />
           ))}
         </div>
       </>
@@ -187,7 +187,7 @@ export const GamePage = () => {
               </h2>
               <div className="game-rules">
                 {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
+                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} showSource={false} />
                 ))}
               </div>
             </section>
@@ -212,6 +212,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
   const [tagNames, setTagNames] = useState(rule.tags.map((tag) => tag.name));
   const [sourceLabel, setSourceLabel] = useState(rule.sourceLabel ?? '');
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
+  const [sourceLoaded, setSourceLoaded] = useState(Boolean(rule.sourceLabel || rule.sourceUrl));
   const [saving, setSaving] = useState(false);
   const [revisions, setRevisions] = useState<RuleRevision[]>();
   useEffect(() => {
@@ -219,10 +220,26 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
     document.addEventListener('keydown', closeOnEscape); document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', closeOnEscape); document.body.style.overflow = ''; };
   }, [onClose]);
+  useEffect(() => {
+    if (sourceLoaded) return;
+    let active = true;
+    void api.rule(rule.id).then(({ rule: fullRule }) => {
+      if (!active) return;
+      setSourceLabel(fullRule.sourceLabel ?? '');
+      setSourceUrl(fullRule.sourceUrl ?? '');
+      setSourceLoaded(true);
+    }).catch(() => { if (active) setSourceLoaded(true); });
+    return () => { active = false; };
+  }, [rule.id, sourceLoaded]);
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      const payload: Record<string, unknown> = { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, tagNames };
+      if (sourceLoaded) {
+        payload.sourceLabel = sourceLabel || null;
+        payload.sourceUrl = sourceUrl || null;
+      }
+      await api.patchRule(rule.id, payload);
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -236,7 +253,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
       <div className="two-columns"><label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label>
         <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectedSuggestions={detectDeterministicTags({ statement, commonMistake, details }, { gameTags: game.rules.flatMap(r => r.tags.map(t => t.name)) }, tagNames)} />
-      <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
+      {sourceLoaded && <div className="two-columns"><label>這批規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這批規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>}
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
@@ -244,7 +261,7 @@ const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: 
           <button type="button" className="text-action" onClick={() => { if (window.confirm('恢復到這個版本？目前內容也會保留在版本紀錄中。')) void api.restoreRevision(rule.id, revision.id).then(onSaved); }}>恢復</button>
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
       </section>
-      <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>隱藏</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
+      <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>隱藏</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="button" className="button primary" disabled={!statement.trim() || saving || !sourceLoaded} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
     </div>
   </div>;
 };

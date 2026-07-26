@@ -24,6 +24,13 @@ export const ruleSelect = `
   FROM rules r JOIN submissions s ON s.id = r.submission_id
 `;
 
+export const gameRuleSelect = `
+  SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
+    r.flow_stage, r.player_count_note, r.edition_note, r.status,
+    r.created_by, r.created_at, r.updated_at, r.tag_ids_json
+  FROM rules r
+`;
+
 export const homeRuleSelect = ruleSelect.replace(
   'FROM rules r',
   ', g.display_name, g.slug FROM rules r',
@@ -39,13 +46,13 @@ export interface RuleRow {
   player_count_note: string | null;
   edition_note: string | null;
   status: 'draft' | 'published' | 'hidden';
-  source_label: string | null;
-  source_url: string | null;
+  source_label?: string | null;
+  source_url?: string | null;
   created_by: string | null;
   created_at: number;
   updated_at: number;
   tag_ids_json: string | null;
-  sources_json: string | null;
+  sources_json?: string | null;
 }
 
 export const parseRuleTagIds = (row: Pick<RuleRow, 'tag_ids_json'>): string[] => {
