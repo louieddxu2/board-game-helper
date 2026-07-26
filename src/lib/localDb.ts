@@ -3,6 +3,7 @@ import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSumma
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type PublicTagsResponse = { tags: TagSummary[] };
+export type CatalogGamesCache = { games: GameSummary[] };
 export interface TagCacheRecord {
   key: string;
   data: TagSummary;
@@ -94,6 +95,11 @@ export const localDb = {
     await db.delete('cache', 'home');
     await db.delete('cache', 'home_ids');
   },
+  cacheCatalogGames: async (data: CatalogGamesCache) => (await getDatabase()).put('cache', { key: 'catalog:games', data, cachedAt: Date.now() }),
+  getCachedCatalogGames: async () => (await getDatabase()).get('cache', 'catalog:games') as Promise<{ key: string; data: CatalogGamesCache; cachedAt: number } | undefined>,
+  cacheCatalogGame: async (game: GameDetail) => (await getDatabase()).put('cache', { key: `catalog:game:${game.id}`, data: game, cachedAt: Date.now() }),
+  getCachedCatalogGame: async (id: string) => (await getDatabase()).get('cache', `catalog:game:${id}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
+  invalidateCatalogGame: async (id: string) => (await getDatabase()).delete('cache', `catalog:game:${id}`),
   cacheGameMeta: async (meta: GameMetaRecord) => (await getDatabase()).put('cache', { key: `gameMeta:${meta.slug}`, data: meta, cachedAt: Date.now() }),
   getCachedGameMeta: async (slug: string) => (await getDatabase()).get('cache', `gameMeta:${slug}`) as Promise<{ key: string; data: GameMetaRecord; cachedAt: number } | undefined>,
   invalidateGameMeta: async (slug: string) => (await getDatabase()).delete('cache', `gameMeta:${slug}`),

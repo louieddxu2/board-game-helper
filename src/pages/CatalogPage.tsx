@@ -2,8 +2,11 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
+
+const CATALOG_CACHE_FRESH_MS = 60 * 60 * 1000;
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -67,12 +70,19 @@ export const CatalogPage = () => {
   const [loadingGameId, setLoadingGameId] = useState<string>();
   const [error, setError] = useState('');
 
-  const loadGames = async () => {
+  const loadGames = async (forceRefresh = false) => {
     setError('');
+    const cached = await localDb.getCachedCatalogGames().catch(() => undefined);
+    if (!forceRefresh && cached && Date.now() - cached.cachedAt < CATALOG_CACHE_FRESH_MS) {
+      setGames(cached.data.games);
+      return;
+    }
     try {
       const data = await api.editorCatalogGames();
       setGames(data.games);
+      void localDb.cacheCatalogGames(data).catch(() => undefined);
     } catch {
+      if (cached) setGames(cached.data.games);
       setError('資料表載入失敗，請重新整理後再試。');
     }
   };
@@ -88,11 +98,20 @@ export const CatalogPage = () => {
     if (details[game.id]) return;
     setLoadingGameId(game.id);
     setError('');
+    const cached = await localDb.getCachedCatalogGame(game.id).catch(() => undefined);
+    if (cached && Date.now() - cached.cachedAt < CATALOG_CACHE_FRESH_MS) {
+      const hydratedGame = await hydrateGameTags(cached.data);
+      setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
+      setLoadingGameId(undefined);
+      return;
+    }
     try {
       const data = await api.editorCatalogGame(game.id);
       const hydratedGame = await hydrateGameTags(data.game);
       setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
+      void localDb.cacheCatalogGame(hydratedGame).catch(() => undefined);
     } catch {
+      if (cached) setDetails((current) => ({ ...current, [game.id]: cached.data }));
       setExpandedGameId(undefined);
       setError('這個遊戲的規則載入失敗，請再試一次。');
     } finally {
@@ -109,7 +128,7 @@ export const CatalogPage = () => {
         <p className="eyebrow">Editor / Admin</p>
         <h1>遊戲資料表</h1>
       </div>
-      <button type="button" className="button secondary" onClick={() => void loadGames()}>重新整理</button>
+      <button type="button" className="button secondary" onClick={() => void loadGames(true)}>重新整理</button>
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar"><strong>{games.length} 款遊戲</strong></div>
