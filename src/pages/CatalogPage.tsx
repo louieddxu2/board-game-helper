@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
+import { hydrateGameTags } from '../lib/tagHydration';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
@@ -89,7 +90,8 @@ export const CatalogPage = () => {
     setError('');
     try {
       const data = await api.editorCatalogGame(game.id);
-      setDetails((current) => ({ ...current, [game.id]: data.game }));
+      const hydratedGame = await hydrateGameTags(data.game);
+      setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
     } catch {
       setExpandedGameId(undefined);
       setError('這個遊戲的規則載入失敗，請再試一次。');

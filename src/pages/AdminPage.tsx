@@ -41,7 +41,7 @@ export const AdminPage = () => {
 
   const handleClearLocalData = async () => {
     if (window.confirm('確定要清除本機快取嗎？（不會影響雲端資料庫，也不會刪除草稿或待送出資料）')) {
-      await localDb.clearCache();
+      await localDb.clearCache({ includeTags: true });
       localStorage.clear();
       clearSearchCache();
       showToast('本機快取已清除！');
@@ -62,6 +62,7 @@ export const AdminPage = () => {
 
   const handleTogglePublic = async (tag: TagSummary) => {
     await api.updateAdminTag(tag.id, { isPublic: !tag.isPublic });
+    await localDb.invalidateTagEntity(tag.id);
     clearPublicTagCache();
     showToast(`已將 #${tag.name} 設定為 ${!tag.isPublic ? '公共 Tag' : '非公共 Tag'}`);
     await load();

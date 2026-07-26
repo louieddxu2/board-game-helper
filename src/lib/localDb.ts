@@ -3,6 +3,11 @@ import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSumma
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type PublicTagsResponse = { tags: TagSummary[] };
+export interface TagCacheRecord {
+  key: string;
+  data: TagSummary;
+  cachedAt: number;
+}
 
 export interface GameMetaRecord {
   id: string;
@@ -95,6 +100,17 @@ export const localDb = {
   cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: 'publicTags', data, cachedAt: Date.now() }),
   getCachedPublicTags: async () => (await getDatabase()).get('cache', 'publicTags') as Promise<{ key: string; data: PublicTagsResponse; cachedAt: number } | undefined>,
   invalidatePublicTags: async () => (await getDatabase()).delete('cache', 'publicTags'),
+  cacheTagEntities: async (tags: TagSummary[]) => {
+    const db = await getDatabase();
+    const cachedAt = Date.now();
+    await Promise.all(tags.map((tag) => db.put('cache', { key: `tag:${tag.id}`, data: tag, cachedAt })));
+  },
+  getCachedTagEntities: async (ids: string[]) => {
+    const db = await getDatabase();
+    const records = await Promise.all(ids.map((id) => db.get('cache', `tag:${id}`) as Promise<TagCacheRecord | undefined>));
+    return records.filter((record): record is TagCacheRecord => Boolean(record));
+  },
+  invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
   getCachedRuleEntity: async (ruleId: string) => (await getDatabase()).get('cache', `rule:${ruleId}`) as Promise<{ key: string; data: RuleEntity; cachedAt: number } | undefined>,
   invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),
@@ -141,5 +157,13 @@ export const localDb = {
     });
     return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
   },
-  clearCache: async () => (await getDatabase()).clear('cache'),
+  clearCache: async (options: { includeTags?: boolean } = {}) => {
+    const db = await getDatabase();
+    const keys = await db.getAllKeys('cache');
+    for (const key of keys) {
+      if (options.includeTags || (typeof key === 'string' && !key.startsWith('tag:'))) {
+        await db.delete('cache', key);
+      }
+    }
+  },
 };

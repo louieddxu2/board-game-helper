@@ -6,7 +6,7 @@ import type { Env, D1Result, D1PreparedStatement } from '../env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, resolveRuleTags, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const rulesRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -28,9 +28,8 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
 
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
-  const tagMap = await resolveRuleTags(c.env.DB, [row]);
   setNoCache(c);
-  return c.json({ rule: { ...toRule(row, tagMap), gameName: row.game_name, gameSlug: row.game_slug } });
+  return c.json({ rule: { ...toRule(row), gameName: row.game_name, gameSlug: row.game_slug } });
 });
 
 const rulePatchSchema = z.object({

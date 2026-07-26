@@ -29,15 +29,38 @@ tagsRoutes.get('/api/search', async (c) => {
 });
 
 tagsRoutes.get('/api/tags', async (c) => {
+  const requestedIds = Array.from(new Set((c.req.query('ids') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean))).slice(0, 100);
+  if (requestedIds.length > 0) {
+    const placeholders = requestedIds.map(() => '?').join(',');
+    const result = await c.env.DB.prepare(`
+      SELECT t.id, t.slug, t.name, t.is_public, t.updated_at
+      FROM tags t
+      WHERE t.id IN (${placeholders})
+    `).bind(...requestedIds).all<{ id: string; slug: string; name: string; is_public: number; updated_at: number }>();
+    c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    return c.json({
+      tags: (result.results ?? []).map((tag) => ({
+        id: tag.id,
+        slug: tag.slug,
+        name: tag.name,
+        isPublic: Boolean(tag.is_public),
+        updatedAt: tag.updated_at,
+      })),
+    });
+  }
+
   const result = await c.env.DB.prepare(`
-    SELECT t.id, t.slug, t.name, t.is_public,
+    SELECT t.id, t.slug, t.name, t.is_public, t.updated_at,
       GROUP_CONCAT(DISTINCT ta.alias) AS aliases_str
     FROM tags t
     LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
     WHERE t.status = 'active' AND t.is_public = 1
     GROUP BY t.id
     ORDER BY t.name
-  `).all<{ id: string; slug: string; name: string; is_public: number; aliases_str: string | null }>();
+  `).all<{ id: string; slug: string; name: string; is_public: number; updated_at: number; aliases_str: string | null }>();
   c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
   return c.json({
     tags: (result.results ?? []).map((tag) => ({
@@ -45,6 +68,7 @@ tagsRoutes.get('/api/tags', async (c) => {
       slug: tag.slug,
       name: tag.name,
       isPublic: Boolean(tag.is_public),
+      updatedAt: tag.updated_at,
       aliases: tag.aliases_str ? tag.aliases_str.split(',') : [],
     })),
   });

@@ -11,6 +11,7 @@ import { detectDeterministicTags } from '../lib/tagDetector';
 import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorter';
 import { useToast } from '../context/ToastContext';
 import { clearSearchCache } from '../components/GameSearch';
+import { hydrateGameTags } from '../lib/tagHydration';
 
 const GAME_CACHE_FRESH_MS = 60 * 60 * 1000;
 
@@ -46,25 +47,29 @@ export const GamePage = () => {
   const load = async () => {
     try {
       const response = await api.game(identifier, true);
-      setGame(response.game);
-      void localDb.cacheGame(response.game);
+      const hydratedGame = await hydrateGameTags(response.game);
+      setGame(hydratedGame);
+      void localDb.cacheGame(hydratedGame);
     } finally { setLoading(false); }
   };
   useEffect(() => {
     let active = true;
     setLoading(true);
     const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
-    void localDb.getCachedGame(identifier).then((cached) => {
+    void localDb.getCachedGame(identifier).then(async (cached) => {
       if (!active) return;
       if (cached && (Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) && !justAdded) {
-        setGame(cached.data);
+        const hydratedGame = await hydrateGameTags(cached.data);
+        if (!active) return;
+        setGame(hydratedGame);
         setLoading(false);
-        void localDb.cacheGame(cached.data);
+        void localDb.cacheGame(hydratedGame);
       } else {
         if (cached) setGame(cached.data);
-        api.game(identifier, justAdded).then((response) => {
-          if (active) setGame(response.game);
-          return localDb.cacheGame(response.game);
+        api.game(identifier, justAdded).then(async (response) => {
+          const hydratedGame = await hydrateGameTags(response.game);
+          if (active) setGame(hydratedGame);
+          return localDb.cacheGame(hydratedGame);
         }).finally(() => { if (active) setLoading(false); });
       }
     });

@@ -81,6 +81,7 @@ export interface TagSummary {
   name: string;
   usageCount?: number;
   isPublic?: boolean;
+  updatedAt?: number;
   description?: string;
   aliases?: string[];
 }

@@ -6,6 +6,7 @@ import { RuleCard } from '../components/RuleCard';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
+import { hydrateRuleTags } from '../lib/tagHydration';
 import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
 const HOME_CACHE_FRESH_MS = 60 * 60 * 1000;
@@ -66,13 +67,14 @@ export const HomePage = () => {
             const response = await api.rule(ref.ruleId);
             const rule = response?.rule;
             if (rule) {
-              void localDb.cacheRuleEntity(rule);
               cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
             }
           }
         } catch { /* skip failed rules */ }
       }
-      if (active) setResolvedCards(cards);
+      const hydratedCards = await hydrateRuleTags(cards);
+      await Promise.all(hydratedCards.map((rule) => localDb.cacheRuleEntity(rule)));
+      if (active) setResolvedCards(hydratedCards);
     };
     void resolve();
     return () => { active = false; };
@@ -99,13 +101,14 @@ export const HomePage = () => {
             const response = await api.rule(ruleId);
             const rule = response?.rule;
             if (rule) {
-              void localDb.cacheRuleEntity(rule);
               cards.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
             }
           }
         } catch { /* skip failed rules */ }
       }
-      if (active) setResolvedRecentCards(cards);
+      const hydratedCards = await hydrateRuleTags(cards);
+      await Promise.all(hydratedCards.map((rule) => localDb.cacheRuleEntity(rule)));
+      if (active) setResolvedRecentCards(hydratedCards);
     };
     void resolve();
     return () => { active = false; };
