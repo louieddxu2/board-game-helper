@@ -30,3 +30,6 @@ export interface Env {
   GOOGLE_CLIENT_IDS?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
 }
+
+// Route handlers receive configuration and service bindings, never the raw D1 binding.
+export type RouteEnv = Omit<Env, 'DB'>;

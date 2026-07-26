@@ -7,6 +7,9 @@ const allowedDirectories = ['worker/data/'];
 const forbiddenPatterns = [
   /\bc\.env\.DB\b/,
   /\benv\.DB\b/,
+  /\bc\.env\s*\[\s*['"]DB['"]\s*\]/,
+  /\benv\s*\[\s*['"]DB['"]\s*\]/,
+  /\b(?:const|let|var)\s*\{[^}]*\bDB\b[^}]*\}\s*=/,
   /\.DB\s*\.\s*(prepare|batch)\s*\(/,
   /\bD1Database\b/,
   /\bD1PreparedStatement\b/,

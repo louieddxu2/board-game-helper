@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import type { GameDetail } from '../../src/shared/types';
 import { requireRole, type AppVariables } from '../auth';
-import type { Env } from '../env';
+import type { RouteEnv } from '../env';
 import { getDatabase } from '../data/database';
 import { setNoCache, ruleSelect, toGame, toRule, type GameRow, type RuleRow } from './shared';
 
-const catalogRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+const catalogRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 catalogRoutes.get('/api/editor/catalog/games', requireRole('editor'), async (c) => {
   const result = await getDatabase(c).statement(`

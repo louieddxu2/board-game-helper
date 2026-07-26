@@ -2,14 +2,14 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env } from '../env';
+import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
-const authRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+const authRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 const nicknameSchema = z.object({ nickname: z.string().trim().min(1).max(12) }).refine(
   (value) => isValidNickname(value.nickname),

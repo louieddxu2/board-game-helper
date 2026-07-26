@@ -2,12 +2,12 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
-import type { Env } from '../env';
+import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { createId, normalizeEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
-const adminRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
   const metadata = await getDatabase(c).statement(`

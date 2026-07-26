@@ -2,7 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { SessionUser, UserRole } from '../src/shared/types';
-import type { Env } from './env';
+import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
 import { createId, normalizeEmail, now, sha256Hex } from './utils';
 
@@ -17,7 +17,7 @@ export interface AppVariables {
   database?: Database;
 }
 
-export type AppContext = Context<{ Bindings: Env; Variables: AppVariables }>;
+export type AppContext = Context<{ Bindings: RouteEnv; Variables: AppVariables }>;
 
 export interface IntegrationSession {
   accessToken: string;
@@ -25,7 +25,7 @@ export interface IntegrationSession {
   user: SessionUser;
 }
 
-const googleAudiences = (env: Env): string[] => Array.from(new Set([
+const googleAudiences = (env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>): string[] => Array.from(new Set([
   env.GOOGLE_CLIENT_ID,
   ...(env.GOOGLE_CLIENT_IDS ?? '').split(','),
 ].map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
@@ -84,7 +84,7 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
 };
 
 export const sessionMiddleware: MiddlewareHandler<{
-  Bindings: Env;
+  Bindings: RouteEnv;
   Variables: AppVariables;
 }> = async (c, next) => {
   const path = new URL(c.req.url).pathname;
@@ -262,7 +262,7 @@ export const signOut = async (c: AppContext): Promise<void> => {
 };
 
 export const requireRole = (role: UserRole): MiddlewareHandler<{
-  Bindings: Env;
+  Bindings: RouteEnv;
   Variables: AppVariables;
 }> => async (c, next) => {
   const user = c.get('user');
@@ -272,7 +272,7 @@ export const requireRole = (role: UserRole): MiddlewareHandler<{
 };
 
 export const requireUser: MiddlewareHandler<{
-  Bindings: Env;
+  Bindings: RouteEnv;
   Variables: AppVariables;
 }> = async (c, next) => {
   const user = c.get('user');

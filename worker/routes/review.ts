@@ -2,14 +2,14 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type ReviewBatch, type ReviewProposal, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
-import type { Env } from '../env';
+import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { normalizeText, now, sha256Hex, createId } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, cleanTagNames, tagWriteStatements, reviewContentFromRow, reviewRuleSelect, RuleRow, ReviewRuleRow } from './shared';
 
-const reviewRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+const reviewRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 reviewRoutes.get('/api/admin/review/export', requireRole('editor'), async (c) => {
   const gameIds = (c.req.query('gameIds') ?? c.req.query('gameId') ?? '')
