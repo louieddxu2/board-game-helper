@@ -92,35 +92,36 @@ export const AddPage = () => {
     window.setTimeout(() => inputRefs.current[next.id]?.focus(), 0);
   };
   const removeRule = (id: string) => setRules((current) => current.length === 1 ? [blankRule()] : current.filter((rule) => rule.id !== id));
-  const createGame = async (name: string) => {
-    try {
-      const response = await api.createGame({ displayName: name });
-      setGame(response.game); setGameQuery(response.game.displayName);
-    } catch { setError('無法建立遊戲，請稍後再試。'); }
-  };
   const submit = async () => {
-    if (!game || validRules.length === 0 || saving) return;
+    if (validRules.length === 0 || saving || (!game && !gameQuery.trim())) return;
     setSaving(true); setError('');
-    const payload: SubmissionInput = {
-      gameId: game.id,
-      playedOn,
-      privateNote: privateNote.trim() || undefined,
-      idempotencyKey: crypto.randomUUID(),
-      rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
-    };
-    await localDb.addPending(payload);
     try {
+      let targetGame = game;
+      if (!targetGame) {
+        const response = await api.createGame({ displayName: gameQuery.trim() });
+        targetGame = response.game;
+        setGame(targetGame);
+        setGameQuery(targetGame.displayName);
+      }
+      const payload: SubmissionInput = {
+        gameId: targetGame.id,
+        playedOn,
+        privateNote: privateNote.trim() || undefined,
+        idempotencyKey: crypto.randomUUID(),
+        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
+      };
+      await localDb.addPending(payload);
       const result = await api.submit(payload);
       await Promise.all([
         localDb.removePending(payload.idempotencyKey), localDb.clearDraft(),
       ]);
       await localDb.invalidateHome();
       clearSearchCache();
-      if (game?.slug) {
-        await localDb.invalidateGame(game.slug);
+      if (targetGame.slug) {
+        await localDb.invalidateGame(targetGame.slug);
       }
       const firstRule = result.ruleIds?.[0];
-      navigate(`/games/${game.slug}${firstRule ? `#rule-${firstRule}` : ''}`, {
+      navigate(`/games/${targetGame.slug}${firstRule ? `#rule-${firstRule}` : ''}`, {
         state: { justAdded: validRules.length, addedRuleIds: result.ruleIds ?? [] },
       });
     } catch (caught) {
@@ -131,9 +132,9 @@ export const AddPage = () => {
   return <section className="add-page narrow-page">
     <header><h1>記錄玩錯的規則</h1></header>
     <GameSearch value={gameQuery} selectedId={game?.id} allowCreate onChange={(value) => { setGameQuery(value); if (game && value !== game.displayName) setGame(undefined); }}
-      onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} placeholder="遊戲名稱" />
+      onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => { setGame(undefined); setGameQuery(name); }} placeholder="遊戲名稱" />
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
-    {game && <div className="rule-input-list">
+    <div className="rule-input-list">
       <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>
       {rules.map((rule, index) => {
         const detected = detectDeterministicTags({ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }, { gameTags: [] }, rule.tagNames);
@@ -155,14 +156,14 @@ export const AddPage = () => {
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
       </div>})}
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增下一條</button>
-    </div>}
+    </div>
     {game && <div className="shared-fields">
       <button type="button" className="text-action" onClick={() => setShowMore((value) => !value)}>{showMore ? '收起其他資料' : '遊玩日期與私人備註'}</button>
       {showMore && <div className="more-fields"><label>遊玩日期<input type="date" value={playedOn} onChange={(event) => setPlayedOn(event.target.value)} /></label>
         <label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}
     </div>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="sticky-submit"><p>{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : '先選擇遊戲'}・${validRules.length} 條可儲存`}</p>
-      <button className="button primary" type="button" disabled={!game || validRules.length === 0 || saving} onClick={() => void submit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
+    <div className="sticky-submit"><p>{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : gameQuery.trim() ? `待建立：${gameQuery.trim()}` : '請先輸入遊戲名稱'}・${validRules.length} 條可儲存`}</p>
+      <button className="button primary" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving} onClick={() => void submit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
   </section>;
 };
