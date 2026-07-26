@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { Env, D1Result, D1PreparedStatement } from '../env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
@@ -15,6 +15,92 @@ authRoutes.get('/api/session', (c) => c.json({
   googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
   localDevLogin: ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname),
 }));
+
+authRoutes.get('/api/account', requireUser, async (c) => {
+  const user = c.get('user')!;
+  const [createdResult, modifiedResult, viewedResult] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
+        r.status, r.created_at, r.updated_at
+      FROM rules r
+      JOIN games g ON g.id = r.game_id
+      WHERE r.created_by = ?
+      ORDER BY r.created_at DESC, r.id DESC
+      LIMIT 100
+    `).bind(user.id).all<{
+      id: string; game_name: string; game_slug: string; statement: string;
+      status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;
+    }>(),
+    c.env.DB.prepare(`
+      SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,
+        r.statement current_statement, rr.previous_json, rr.reason,
+        rr.created_at edited_at, u.display_name edited_by_name
+      FROM rule_revisions rr
+      JOIN rules r ON r.id = rr.rule_id
+      JOIN games g ON g.id = r.game_id
+      LEFT JOIN users u ON u.id = rr.edited_by
+      WHERE r.created_by = ? AND rr.edited_by <> ?
+      ORDER BY rr.created_at DESC, rr.id DESC
+      LIMIT 100
+    `).bind(user.id, user.id).all<{
+      id: string; rule_id: string; game_name: string; game_slug: string;
+      current_statement: string; previous_json: string; reason: string | null;
+      edited_at: number; edited_by_name: string | null;
+    }>(),
+    c.env.DB.prepare(`
+      SELECT dv.rule_id, g.display_name game_name, g.slug game_slug,
+        r.statement, MAX(dv.created_at) viewed_at, COUNT(*) view_count
+      FROM daily_views dv
+      JOIN rules r ON r.id = dv.rule_id
+      JOIN games g ON g.id = r.game_id
+      WHERE dv.user_id = ? AND dv.rule_id <> ''
+      GROUP BY dv.rule_id
+      ORDER BY viewed_at DESC
+      LIMIT 100
+    `).bind(user.id).all<{
+      rule_id: string; game_name: string; game_slug: string; statement: string;
+      viewed_at: number; view_count: number;
+    }>(),
+  ]);
+
+  const createdRules = (createdResult.results ?? []).map((row) => ({
+    id: row.id,
+    gameName: row.game_name,
+    gameSlug: row.game_slug,
+    statement: row.statement,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+  const modifiedRules = (modifiedResult.results ?? []).map((row) => {
+    let previousStatement: string | undefined;
+    try {
+      const previous = JSON.parse(row.previous_json) as { statement?: unknown };
+      if (typeof previous.statement === 'string') previousStatement = previous.statement;
+    } catch { /* keep the activity item usable even if an old snapshot is malformed */ }
+    return {
+      id: row.id,
+      ruleId: row.rule_id,
+      gameName: row.game_name,
+      gameSlug: row.game_slug,
+      currentStatement: row.current_statement,
+      previousStatement,
+      editedByName: row.edited_by_name ?? undefined,
+      reason: row.reason ?? '修改',
+      editedAt: row.edited_at,
+    };
+  });
+  const viewedRules = (viewedResult.results ?? []).map((row) => ({
+    ruleId: row.rule_id,
+    gameName: row.game_name,
+    gameSlug: row.game_slug,
+    statement: row.statement,
+    viewedAt: row.viewed_at,
+    viewCount: row.view_count,
+  }));
+
+  return c.json({ user, createdRules, modifiedRules, viewedRules });
+});
 
 authRoutes.post('/api/auth/google', async (c) => {
   const body = await c.req.json<{ credential?: unknown }>();

@@ -265,3 +265,12 @@ export const requireRole = (role: UserRole): MiddlewareHandler<{
   if (!allowed) return c.json({ error: user ? 'forbidden' : 'authentication_required' }, user ? 403 : 401);
   await next();
 };
+
+export const requireUser: MiddlewareHandler<{
+  Bindings: Env;
+  Variables: AppVariables;
+}> = async (c, next) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'authentication_required' }, 401);
+  await next();
+};

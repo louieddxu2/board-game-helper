@@ -19,6 +19,44 @@ export interface SessionUser {
   roles: UserRole[];
 }
 
+export interface AccountRuleSummary {
+  id: string;
+  gameName: string;
+  gameSlug: string;
+  statement: string;
+  status: RuleCard['status'];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AccountRevisionSummary {
+  id: string;
+  ruleId: string;
+  gameName: string;
+  gameSlug: string;
+  currentStatement: string;
+  previousStatement?: string;
+  editedByName?: string;
+  reason: string;
+  editedAt: number;
+}
+
+export interface AccountViewedRuleSummary {
+  ruleId: string;
+  gameName: string;
+  gameSlug: string;
+  statement: string;
+  viewedAt: number;
+  viewCount: number;
+}
+
+export interface AccountPayload {
+  user: SessionUser;
+  createdRules: AccountRuleSummary[];
+  modifiedRules: AccountRevisionSummary[];
+  viewedRules: AccountViewedRuleSummary[];
+}
+
 export interface GameSummary {
   id: string;
   slug: string;

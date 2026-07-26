@@ -46,8 +46,7 @@ export const Layout = () => {
         {canEdit && <NavLink to="/add" className="nav-primary">＋記錄</NavLink>}
         {canEdit && <NavLink to="/review">校稿</NavLink>}
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
-        {!user && <NavLink to="/login">登入</NavLink>}
-        {user && <button type="button" className="link-button" onClick={() => void logout()}>登出</button>}
+        <NavLink to={user ? '/account' : '/login'}>{user ? '帳號' : '登入'}</NavLink>
       </nav>
     </header>
     <main id="main-content"><Outlet /></main>
@@ -57,6 +56,7 @@ export const Layout = () => {
       {canEdit && <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋</span><small>記錄{pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>}
       {canEdit && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>{adminLabel}</small></NavLink>}
+      <NavLink to={user ? '/account' : '/login'}><span aria-hidden="true">◎</span><small>{user ? '帳號' : '登入'}</small></NavLink>
     </nav>
     <footer>
       <span>把踩過的坑，留給下一次更好的開桌。</span>

@@ -1,4 +1,4 @@
-import type { GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -22,6 +22,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 export const api = {
   session: () => request<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session'),
+  account: () => request<AccountPayload>('/api/account'),
   googleLogin: (credential: string) => request<{ user: SessionUser }>('/api/auth/google', {
     method: 'POST', body: JSON.stringify({ credential }),
   }),
