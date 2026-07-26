@@ -129,9 +129,9 @@ export const AddPage = () => {
   };
   if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
   return <section className="add-page narrow-page">
-    <header><p className="eyebrow">快速記錄</p><h1>這次玩錯了什麼？</h1></header>
+    <header><h1>記錄玩錯的規則</h1></header>
     <GameSearch value={gameQuery} selectedId={game?.id} allowCreate onChange={(value) => { setGameQuery(value); if (game && value !== game.displayName) setGame(undefined); }}
-      onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} />
+      onSelect={(selected) => { setGame(selected); setGameQuery(selected.displayName); }} onCreate={(name) => void createGame(name)} placeholder="遊戲名稱" />
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => { setGame({ ...recent, ruleCount: 0, updatedAt: Date.now() }); setGameQuery(recent.displayName); }}>{recent.displayName}</button>)}</div>}
     {game && <div className="rule-input-list">
       <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>

@@ -15,6 +15,7 @@ interface Props {
   onCreate?(name: string): void;
   includeRules?: boolean;
   onRuleSelect?(rule: RuleSearchResult): void;
+  placeholder?: string;
 }
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
@@ -81,7 +82,7 @@ export function formatGameSearchDisplay(
   };
 }
 
-export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect }: Props) => {
+export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...' }: Props) => {
   const inputId = useId();
   const query = useDebouncedValue(value.trim());
   const [games, setGames] = useState<GameSummary[]>([]);
@@ -198,7 +199,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   return <div className="game-search">
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
       <input id={inputId} value={value} onChange={(event) => onChange(event.target.value)}
-        placeholder="搜尋遊戲名稱..." autoComplete="off" aria-label="搜尋遊戲名稱"
+        placeholder={placeholder} autoComplete="off" aria-label="搜尋遊戲名稱"
         role="combobox" aria-autocomplete="list" aria-expanded={!selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
         onKeyDown={(event) => {
