@@ -7,16 +7,8 @@ import type { TagSummary } from '../shared/types';
 let publicTagsPromise: Promise<TagSummary[]> | undefined;
 
 const loadPublicTags = async (): Promise<TagSummary[]> => {
-  const cached = await localDb.getCachedPublicTags().catch(() => undefined);
-  if (cached) return cached.data.tags;
-
-  try {
-    const result = await api.tags();
-    await localDb.cachePublicTags(result).catch(() => undefined);
-    return result.tags;
-  } catch (error) {
-    throw error;
-  }
+  const result = await api.tags();
+  return result.tags;
 };
 
 const getPublicTags = () => {

@@ -21,24 +21,7 @@ export const HomePage = () => {
 
   useEffect(() => {
     let active = true;
-    const refreshHome = () => api.home().then((data) => {
-      if (active) setHome(data);
-      void localDb.cacheHome(data);
-      if (data.popularGameIds) {
-        void localDb.cacheHomeIDs({
-          generatedAt: data.generatedAt,
-          popularGameIds: data.popularGameIds,
-          recentRuleIds: data.recentRuleIds ?? [],
-          featuredRuleIds: data.featuredRuleIds ?? [],
-        });
-      }
-      return data;
-    }).catch(() => undefined);
-    void localDb.getCachedHome().then((cached) => {
-      if (!active) return;
-      if (cached) setHome(cached.data);
-      if (!cached) void refreshHome();
-    }).catch(() => { void refreshHome(); });
+    void api.home().then((data) => { if (active) setHome(data); }).catch(() => undefined);
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
     return () => { active = false; };
@@ -52,15 +35,10 @@ export const HomePage = () => {
       for (const ref of home.featured) {
         if (!ref?.ruleId) continue;
         try {
-          const cached = await localDb.getCachedRuleEntity(ref.ruleId);
-          if (cached?.data) {
-            cards.push({ ...cached.data, gameName: ref.gameName, gameSlug: ref.gameSlug });
-          } else {
-            const response = await api.rule(ref.ruleId);
-            const rule = response?.rule;
-            if (rule) {
-              cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
-            }
+          const response = await api.rule(ref.ruleId);
+          const rule = response?.rule;
+          if (rule) {
+            cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
           }
         } catch { /* skip failed rules */ }
       }
@@ -84,17 +62,10 @@ export const HomePage = () => {
       for (const ruleId of home.recentRuleIds!) {
         if (!ruleId) continue;
         try {
-          const cached = await localDb.getCachedRuleEntity(ruleId);
-          const cachedGameName = (cached?.data as any)?.gameName;
-          const cachedGameSlug = (cached?.data as any)?.gameSlug;
-          if (cached?.data && cachedGameName && cachedGameSlug) {
-            cards.push({ ...cached.data, gameName: cachedGameName, gameSlug: cachedGameSlug });
-          } else {
-            const response = await api.rule(ruleId);
-            const rule = response?.rule;
-            if (rule) {
-              cards.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
-            }
+          const response = await api.rule(ruleId);
+          const rule = response?.rule;
+          if (rule) {
+            cards.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
           }
         } catch { /* skip failed rules */ }
       }

@@ -2,7 +2,6 @@ import { Fragment, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
-import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
 
@@ -70,18 +69,10 @@ export const CatalogPage = () => {
 
   const loadGames = async (forceRefresh = false) => {
     setError('');
-    const cached = await localDb.getCachedCatalogGames().catch(() => undefined);
-    const cachedGames = cached?.data.games;
-    if (!forceRefresh && cached) {
-      setGames(cached.data.games);
-      return;
-    }
     try {
-      const data = await api.editorCatalogGames();
+      const data = await api.editorCatalogGames(forceRefresh);
       setGames(data.games);
-      void localDb.cacheCatalogGames(data).catch(() => undefined);
     } catch {
-      if (cachedGames) setGames(cachedGames);
       setError('資料表載入失敗，請重新整理後再試。');
     }
   };
@@ -97,18 +88,10 @@ export const CatalogPage = () => {
     if (details[game.id]) return;
     setLoadingGameId(game.id);
     setError('');
-    const cached = await localDb.getCachedCatalogGame(game.id).catch(() => undefined);
-    if (cached) {
-      const hydratedGame = await hydrateGameTags(cached.data);
-      setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
-      setLoadingGameId(undefined);
-      return;
-    }
     try {
       const data = await api.editorCatalogGame(game.id);
       const hydratedGame = await hydrateGameTags(data.game);
       setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
-      void localDb.cacheCatalogGame(hydratedGame).catch(() => undefined);
     } catch {
       setExpandedGameId(undefined);
       setError('這個遊戲的規則載入失敗，請再試一次。');

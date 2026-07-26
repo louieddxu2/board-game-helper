@@ -1,6 +1,5 @@
 import { useEffect, useId, useState } from 'react';
 import { api } from '../lib/api';
-import { localDb } from '../lib/localDb';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { GameSummary, RuleSearchResult } from '../shared/types';
 import { useSession } from '../context/SessionContext';
@@ -20,7 +19,7 @@ interface Props {
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 export const clearSearchCache = () => {
-  void localDb.invalidateSearch();
+  void api.invalidateSearchCache();
 };
 
 export function formatGameSearchDisplay(
@@ -101,25 +100,13 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     const fetchApi = () => {
       const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
       request.then((response) => {
-        localDb.cacheSearch(cacheKey, response).catch(() => {});
         if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
       }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
     };
 
     const loadCached = async () => {
       try {
-        const cached = await localDb.getCachedSearch(cacheKey);
-        if (!active) return;
-        if (cached) {
-          setGames(cached.data.games);
-          setRules(cached.data.rules);
-          setActiveIndex(-1);
-          setLoading(false);
-          setSearchError(false);
-          return;
-        }
-
-        const progressive = await localDb.getCachedSearchPrefix(prefix, cacheKey);
+        const progressive = await api.searchCachedPrefix(prefix, cacheKey);
         if (!active) return;
         if (progressive) {
           const qLower = query.toLowerCase();

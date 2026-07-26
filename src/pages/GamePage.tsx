@@ -47,30 +47,16 @@ export const GamePage = () => {
       const response = await api.game(identifier, true);
       const hydratedGame = await hydrateGameTags(response.game);
       setGame(hydratedGame);
-      void localDb.cacheGame(hydratedGame);
     } finally { setLoading(false); }
   };
   useEffect(() => {
     let active = true;
     setLoading(true);
     const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
-    void localDb.getCachedGame(identifier).then(async (cached) => {
-      if (!active) return;
-      if (cached && !justAdded) {
-        const hydratedGame = await hydrateGameTags(cached.data);
-        if (!active) return;
-        setGame(hydratedGame);
-        setLoading(false);
-        void localDb.cacheGame(hydratedGame);
-      } else {
-        if (cached) setGame(cached.data);
-        api.game(identifier, justAdded).then(async (response) => {
-          const hydratedGame = await hydrateGameTags(response.game);
-          if (active) setGame(hydratedGame);
-          return localDb.cacheGame(hydratedGame);
-        }).finally(() => { if (active) setLoading(false); });
-      }
-    });
+    void api.game(identifier, justAdded).then(async (response) => {
+      const hydratedGame = await hydrateGameTags(response.game);
+      if (active) setGame(hydratedGame);
+    }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [identifier, location.state]);
   useEffect(() => {

@@ -47,16 +47,9 @@ export const AddPage = () => {
       const requestedGame = searchParams.get('game');
       const nameParam = searchParams.get('name') || searchParams.get('gameName');
       if (requestedGame) {
-        const cached = await localDb.getCachedGame(requestedGame).catch(() => undefined);
-        if (cached) {
-          if (!active) return;
-          setGame(cached.data); setGameQuery(cached.data.displayName);
-        } else {
-          const response = await api.game(requestedGame);
-          if (!active) return;
-          setGame(response.game); setGameQuery(response.game.displayName);
-          void localDb.cacheGame(response.game).catch(() => undefined);
-        }
+        const response = await api.game(requestedGame);
+        if (!active) return;
+        setGame(response.game); setGameQuery(response.game.displayName);
         window.setTimeout(() => inputRefs.current[rules[0].id]?.focus(), 0);
       } else if (nameParam && (!draft || !draft.gameQuery)) {
         setGameQuery(nameParam);

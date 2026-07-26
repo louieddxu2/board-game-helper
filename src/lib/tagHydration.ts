@@ -1,5 +1,4 @@
 import { api } from './api';
-import { localDb } from './localDb';
 import type { GameDetail, RuleCard, TagSummary } from '../shared/types';
 
 const tagBatchPromises = new Map<string, Promise<TagSummary[]>>();
@@ -27,37 +26,12 @@ export const hydrateRuleTags = async <T extends RuleCard>(rules: T[]): Promise<T
     for (const tag of rule.tags ?? []) tagMap.set(tag.id, tag);
   }
 
-  if (!tagIds.length) {
-    await localDb.cacheTagEntities(Array.from(tagMap.values())).catch(() => undefined);
-    return rules;
-  }
-
-  const cachedRecords = await localDb.getCachedTagEntities(tagIds).catch(() => []);
-  const cachedIds = new Set<string>();
-  for (const record of cachedRecords) {
-    tagMap.set(record.data.id, record.data);
-    cachedIds.add(record.data.id);
-  }
-
-  const publicTags = await localDb.getCachedPublicTags().catch(() => undefined);
-  if (publicTags) {
-    const publicTagMap = new Map(publicTags.data.tags.map((tag) => [tag.id, tag]));
-    const fromPublicCache = tagIds.filter((id) => publicTagMap.has(id)).map((id) => publicTagMap.get(id)!);
-    fromPublicCache.forEach((tag) => tagMap.set(tag.id, tag));
-    await localDb.cacheTagEntities(fromPublicCache).catch(() => undefined);
-  }
-
-  const idsToFetch = tagIds.filter((id) => !cachedIds.has(id))
-    .filter((id) => !publicTags || !publicTags.data.tags.some((tag) => tag.id === id))
-    .sort();
-
-  if (idsToFetch.length) {
+  if (tagIds.length) {
     try {
-      const tags = await fetchTagBatch(idsToFetch);
-      await localDb.cacheTagEntities(tags).catch(() => undefined);
+      const tags = await fetchTagBatch(tagIds.sort());
       tags.forEach((tag) => tagMap.set(tag.id, tag));
     } catch {
-      // Existing cached tag data remains usable while a revalidation fails.
+      // Existing tag data embedded in the rule remains usable while a lookup fails.
     }
   }
 
