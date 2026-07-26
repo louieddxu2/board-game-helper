@@ -3,12 +3,17 @@ import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { Env, D1Result, D1PreparedStatement } from '../env';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
+import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const authRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
+
+const nicknameSchema = z.object({ nickname: z.string().trim().min(1).max(12) }).refine(
+  (value) => isValidNickname(value.nickname),
+  { message: 'invalid_nickname', path: ['nickname'] },
+);
 
 authRoutes.get('/api/session', (c) => c.json({
   user: c.get('user') ?? null,
@@ -34,7 +39,7 @@ authRoutes.get('/api/account', requireUser, async (c) => {
     c.env.DB.prepare(`
       SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,
         r.statement current_statement, rr.previous_json, rr.reason,
-        rr.created_at edited_at, u.display_name edited_by_name
+        rr.created_at edited_at, COALESCE(u.nickname, u.display_name) edited_by_name
       FROM rule_revisions rr
       JOIN rules r ON r.id = rr.rule_id
       JOIN games g ON g.id = r.game_id
@@ -100,6 +105,27 @@ authRoutes.get('/api/account', requireUser, async (c) => {
   }));
 
   return c.json({ user, createdRules, modifiedRules, viewedRules });
+});
+
+authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
+  const parsed = nicknameSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_nickname' }, 400);
+  const user = c.get('user')!;
+  const nickname = parsed.data.nickname.normalize('NFKC').trim();
+  const nicknameNormalized = normalizeNickname(nickname);
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM users WHERE nickname_normalized = ? AND id <> ?',
+  ).bind(nicknameNormalized, user.id).first<{ id: string }>();
+  if (existing) return c.json({ error: 'nickname_taken' }, 409);
+  try {
+    await c.env.DB.prepare(
+      'UPDATE users SET nickname = ?, nickname_normalized = ? WHERE id = ?',
+    ).bind(nickname, nicknameNormalized, user.id).run();
+  } catch (error) {
+    if (String(error).toLowerCase().includes('unique')) return c.json({ error: 'nickname_taken' }, 409);
+    throw error;
+  }
+  return c.json({ user: { ...user, nickname } });
 });
 
 authRoutes.post('/api/auth/google', async (c) => {

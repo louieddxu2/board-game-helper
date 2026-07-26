@@ -23,6 +23,9 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 export const api = {
   session: () => request<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session'),
   account: () => request<AccountPayload>('/api/account'),
+  updateNickname: (nickname: string) => request<{ user: SessionUser }>('/api/account/nickname', {
+    method: 'PATCH', body: JSON.stringify({ nickname }),
+  }),
   googleLogin: (credential: string) => request<{ user: SessionUser }>('/api/auth/google', {
     method: 'POST', body: JSON.stringify({ credential }),
   }),

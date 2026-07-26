@@ -193,7 +193,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
 reviewRoutes.get('/api/admin/review/batches', requireRole('editor'), async (c) => {
   const result = await c.env.DB.prepare(`
     SELECT b.id, b.name, b.source_type, b.base_dataset_version, b.proposal_count, b.pending_count,
-      b.created_by, b.created_at, b.updated_at, u.display_name created_by_name
+      b.created_by, b.created_at, b.updated_at, COALESCE(u.nickname, u.display_name) created_by_name
     FROM review_batches b JOIN users u ON u.id = b.created_by
     ORDER BY b.created_at DESC
   `).all<{
@@ -244,7 +244,7 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('editor'), async (c)
       p.base_updated_at, p.base_content_hash, p.original_content_json, p.proposed_content_json,
       p.decided_by, p.decided_at, p.decision_reason, p.applied_revision_id, p.created_at, p.updated_at,
       g.display_name game_name, g.slug game_slug,
-      u1.display_name created_by_name, u2.display_name decided_by_name
+      COALESCE(u1.nickname, u1.display_name) created_by_name, COALESCE(u2.nickname, u2.display_name) decided_by_name
     FROM review_proposals p
     JOIN rules r ON r.id = p.target_rule_id
     JOIN games g ON g.id = r.game_id

@@ -38,13 +38,14 @@ const rolesForUser = async (db: D1Database, userId: string): Promise<UserRole[]>
 
 const userById = async (db: D1Database, userId: string): Promise<SessionUser | undefined> => {
   const row = await db.prepare(`
-    SELECT id, email, display_name, avatar_url FROM users WHERE id = ?
-  `).bind(userId).first<{ id: string; email: string; display_name: string | null; avatar_url: string | null }>();
+    SELECT id, email, display_name, nickname, avatar_url FROM users WHERE id = ?
+  `).bind(userId).first<{ id: string; email: string; display_name: string | null; nickname: string | null; avatar_url: string | null }>();
   if (!row) return undefined;
   return {
     id: row.id,
     email: row.email,
     displayName: row.display_name ?? undefined,
+    nickname: row.nickname ?? undefined,
     avatarUrl: row.avatar_url ?? undefined,
     roles: await rolesForUser(db, row.id),
   };
@@ -53,13 +54,14 @@ const userById = async (db: D1Database, userId: string): Promise<SessionUser | u
 const sessionUser = async (db: D1Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
   const row = await db.prepare(`
-    SELECT u.id, u.email, u.display_name, u.avatar_url, s.expires_at
+    SELECT u.id, u.email, u.display_name, u.nickname, u.avatar_url, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.id_hash = ?
   `).bind(tokenHash).first<{
     id: string;
     email: string;
     display_name: string | null;
+    nickname: string | null;
     avatar_url: string | null;
     expires_at: number;
   }>();
@@ -73,6 +75,7 @@ const sessionUser = async (db: D1Database, token: string): Promise<SessionUser |
     id: row.id,
     email: row.email,
     displayName: row.display_name ?? undefined,
+    nickname: row.nickname ?? undefined,
     avatarUrl: row.avatar_url ?? undefined,
     roles,
   };

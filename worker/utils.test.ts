@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { assertMutationOrigin, cleanOptional, normalizeEmail, normalizeText, slugify, trustedOrigins } from './utils';
+import { assertMutationOrigin, cleanOptional, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
 
 describe('worker utilities', () => {
   test('normalizes names and email consistently', () => {
@@ -11,6 +11,15 @@ describe('worker utilities', () => {
     expect(slugify('Whistle Mountain 汽笛山脈')).toBe('whistle-mountain-汽笛山脈');
     expect(cleanOptional('  abcdef  ', 3)).toBe('abc');
     expect(cleanOptional('   ', 10)).toBeUndefined();
+  });
+
+  test('validates nickname character and weighted length limits', () => {
+    expect(isValidNickname('小明')).toBe(true);
+    expect(isValidNickname('abcdefghijkl')).toBe(true);
+    expect(isValidNickname('小明abcdefgh')).toBe(true);
+    expect(isValidNickname('小明abcdefghi')).toBe(false);
+    expect(isValidNickname('abcdefg!')).toBe(false);
+    expect(normalizeNickname(' ABCdef ')).toBe('abcdef');
   });
 
   test('accepts same-origin mutations and rejects unrelated origins', () => {

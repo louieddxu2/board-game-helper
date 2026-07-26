@@ -15,6 +15,7 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName?: string;
+  nickname?: string;
   avatarUrl?: string;
   roles: UserRole[];
 }

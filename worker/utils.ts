@@ -10,6 +10,23 @@ export const normalizeText = (value: string): string => value
 
 export const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
+const hanCharacter = /^\p{Script=Han}$/u;
+const latinCharacter = /^[A-Za-z]$/;
+
+export const normalizeNickname = (value: string): string => normalizeText(value);
+
+export const isValidNickname = (value: string): boolean => {
+  const nickname = value.normalize('NFKC').trim();
+  if (!nickname) return false;
+  let weight = 0;
+  for (const character of Array.from(nickname)) {
+    if (hanCharacter.test(character)) weight += 2;
+    else if (latinCharacter.test(character)) weight += 1;
+    else return false;
+  }
+  return weight <= 12;
+};
+
 export const slugify = (value: string): string => {
   const ascii = value.normalize('NFKD').toLowerCase()
     .replace(/[^a-z0-9\u3400-\u9fff]+/g, '-')
