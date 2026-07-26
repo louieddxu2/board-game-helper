@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type TagSummary, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
-import type { D1Database, D1PreparedStatement, D1Result } from '../env';
+import type { Database, DatabaseStatement, D1Result } from '../data/database';
+import { getDatabase } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -62,11 +63,11 @@ export const parseRuleTagIds = (row: Pick<RuleRow, 'tag_ids_json'>): string[] =>
   }
 };
 
-export const resolveRuleTags = async (db: D1Database, rows: RuleRow[]): Promise<Map<string, TagSummary>> => {
+export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Map<string, TagSummary>> => {
   const tagIds = Array.from(new Set(rows.flatMap(parseRuleTagIds)));
   if (!tagIds.length) return new Map();
   const placeholders = tagIds.map(() => '?').join(',');
-  const result = await db.prepare(`
+  const result = await db.statement(`
     SELECT t.id, t.slug, t.name, t.is_public
     FROM tags t
     WHERE t.id IN (${placeholders})
@@ -112,8 +113,8 @@ export const cleanTagNames = (names: string[] | undefined): string[] => Array.fr
   .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 8);
 
 export const tagWriteStatements = async (c: AppContext, ruleId: string, names: string[], userId: string, timestamp: number, replace = true) => {
-  const statements: D1PreparedStatement[] = replace
-    ? [c.env.DB.prepare('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
+  const statements: DatabaseStatement[] = replace
+    ? [getDatabase(c).statement('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
     : [];
   const tagIds: string[] = [];
   const userRoles = c.get('user')?.roles ?? [];
@@ -121,7 +122,7 @@ export const tagWriteStatements = async (c: AppContext, ruleId: string, names: s
   for (const name of cleanTagNames(names)) {
     const normalized = normalizeText(name);
     if (!normalized) continue;
-    const existing = await c.env.DB.prepare(`
+    const existing = await getDatabase(c).statement(`
       SELECT t.id FROM tags t LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
       WHERE (t.normalized_name = ? OR ta.normalized_alias = ?) LIMIT 1
     `).bind(normalized, normalized).first<{ id: string }>();
@@ -130,20 +131,20 @@ export const tagWriteStatements = async (c: AppContext, ruleId: string, names: s
     if (!existing && !canCreate) throw new Error('unknown_tag');
     if (!tagIds.includes(tagId)) tagIds.push(tagId);
     if (!existing) {
-      statements.push(c.env.DB.prepare(`
+      statements.push(getDatabase(c).statement(`
         INSERT OR IGNORE INTO tags (id, slug, name, normalized_name, created_by, created_at, updated_at, is_public)
         VALUES (?, ?, ?, ?, ?, ?, ?, 0)
       `).bind(tagId, slugify(name), name, normalized, userId, timestamp, timestamp));
-      statements.push(c.env.DB.prepare(`
+      statements.push(getDatabase(c).statement(`
         INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
         VALUES (?, ?, ?, ?, ?)
       `).bind(`ta_${suffix}`, tagId, name, normalized, timestamp));
     }
-    statements.push(c.env.DB.prepare(`
+    statements.push(getDatabase(c).statement(`
       INSERT OR IGNORE INTO rule_tags (rule_id, tag_id, created_by, created_at) VALUES (?, ?, ?, ?)
     `).bind(ruleId, tagId, userId, timestamp));
   }
-  statements.push(c.env.DB.prepare('UPDATE rules SET tag_ids_json = ? WHERE id = ?')
+  statements.push(getDatabase(c).statement('UPDATE rules SET tag_ids_json = ? WHERE id = ?')
     .bind(JSON.stringify(tagIds), ruleId));
   return statements;
 };

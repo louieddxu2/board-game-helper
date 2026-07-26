@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env, D1Result, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -36,17 +37,17 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
   const parsed = submissionSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_submission', issues: parsed.error.issues }, 400);
   const user = c.get('user')!;
-  const existing = await c.env.DB.prepare(`
+  const existing = await getDatabase(c).statement(`
     SELECT id FROM submissions WHERE author_id = ? AND idempotency_key = ?
   `).bind(user.id, parsed.data.idempotencyKey).first<{ id: string }>();
   if (existing) return c.json({ submissionId: existing.id, reused: true });
-  const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
     .bind(parsed.data.gameId).first();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const submissionId = createId('sub');
   const timestamp = now();
   const ruleIds: string[] = [];
-  const statements: D1PreparedStatement[] = [c.env.DB.prepare(`
+  const statements: DatabaseStatement[] = [getDatabase(c).statement(`
     INSERT INTO submissions (
       id, game_id, author_id, idempotency_key, played_on, source_label,
       source_url, private_note, created_at
@@ -60,7 +61,7 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
     timestamp,
   )];
   if (parsed.data.sourceUrl) {
-    statements.push(c.env.DB.prepare(`
+    statements.push(getDatabase(c).statement(`
       INSERT INTO submission_sources (id, submission_id, label, url, position, created_at)
       VALUES (?, ?, ?, ?, 0, ?)
     `).bind(createId('source'), submissionId, cleanOptional(parsed.data.sourceLabel, 300) ?? null, parsed.data.sourceUrl, timestamp));
@@ -68,7 +69,7 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
   for (const input of parsed.data.rules) {
     const ruleId = createId('rule');
     ruleIds.push(ruleId);
-    statements.push(c.env.DB.prepare(`
+    statements.push(getDatabase(c).statement(`
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
         flow_stage, player_count_note, edition_note, source_label, source_url,
@@ -87,8 +88,8 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
     ));
     statements.push(...await tagWriteStatements(c, ruleId, input.tagNames ?? [], user.id, timestamp, false));
   }
-  statements.push(c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
-  await c.env.DB.batch(statements);
+  statements.push(getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
+  await getDatabase(c).batch(statements);
   return c.json({ submissionId, ruleIds, reused: false }, 201);
 });
 

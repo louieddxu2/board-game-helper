@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { sessionMiddleware } from './auth';
-import type { Env, D1Result, D1PreparedStatement } from './env';
+import type { Env } from './env';
 import { assertMutationOrigin, trustedOrigins } from './utils';
+import { createDatabase } from './data/database';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -14,6 +15,11 @@ import reviewRoutes from './routes/review';
 import { catalogRoutes } from './routes/catalog';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
+
+app.use('/api/*', async (c, next) => {
+  c.set('database', createDatabase(c.env));
+  await next();
+});
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
   ['/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)

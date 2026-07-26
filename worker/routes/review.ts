@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type ReviewBatch, type ReviewProposal, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
-import type { Env, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import { getDatabase, type DatabaseStatement } from '../data/database';
 import { normalizeText, now, sha256Hex, createId } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -46,7 +47,7 @@ reviewRoutes.get('/api/admin/review/export', requireRole('editor'), async (c) =>
     conditions.push('r.updated_at >= ?');
     bindings.push(updatedAfter);
   }
-  const result = await c.env.DB.prepare(`${reviewRuleSelect}
+  const result = await getDatabase(c).statement(`${reviewRuleSelect}
     WHERE ${conditions.join(' AND ')}
     ORDER BY g.display_name, r.updated_at DESC, r.id
     LIMIT ?
@@ -113,7 +114,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
   const parsed = reviewFileSchema.safeParse(reviewInput);
   if (!parsed.success) return c.json({ error: 'invalid_review_file', issues: parsed.error.issues }, 400);
   const sourceHash = await sha256Hex(JSON.stringify(parsed.data));
-  const existing = await c.env.DB.prepare('SELECT id, proposal_count FROM review_batches WHERE source_hash = ?')
+  const existing = await getDatabase(c).statement('SELECT id, proposal_count FROM review_batches WHERE source_hash = ?')
     .bind(sourceHash).first<{ id: string; proposal_count: number }>();
   if (existing) return c.json({ batchId: existing.id, imported: existing.proposal_count, reused: true });
 
@@ -124,7 +125,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
   for (let index = 0; index < targetIds.length; index += 50) {
     const ids = targetIds.slice(index, index + 50);
     if (!ids.length) continue;
-    const result = await c.env.DB.prepare(`${reviewRuleSelect}
+    const result = await getDatabase(c).statement(`${reviewRuleSelect}
       WHERE r.id IN (${ids.map(() => '?').join(',')})
     `).bind(...ids).all<ReviewRuleRow>();
     for (const row of result.results ?? []) currentRows.set(row.id, row);
@@ -153,7 +154,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
       proposed,
     });
   }
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     INSERT INTO review_batches (
       id, name, source_type, source_hash, base_dataset_version, scope_json,
       proposal_count, pending_count, created_by, created_at, updated_at
@@ -167,7 +168,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
   try {
     for (let index = 0; index < proposals.length; index += 50) {
       const statements = proposals.slice(index, index + 50).map(({ id, item, status, original, proposed }) =>
-        c.env.DB.prepare(`
+        getDatabase(c).statement(`
           INSERT INTO review_proposals (
             id, batch_id, target_rule_id, action, status, reason,
             base_updated_at, base_content_hash, original_content_json, proposed_content_json,
@@ -178,12 +179,12 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
           item.base.updatedAt, item.base.contentHash, JSON.stringify(original), JSON.stringify(proposed),
           user.id, timestamp, timestamp,
         ));
-      await c.env.DB.batch(statements);
+      await getDatabase(c).batch(statements);
     }
   } catch (error) {
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM review_proposals WHERE batch_id = ?').bind(batchId),
-      c.env.DB.prepare('DELETE FROM review_batches WHERE id = ?').bind(batchId),
+    await getDatabase(c).batch([
+      getDatabase(c).statement('DELETE FROM review_proposals WHERE batch_id = ?').bind(batchId),
+      getDatabase(c).statement('DELETE FROM review_batches WHERE id = ?').bind(batchId),
     ]);
     throw error;
   }
@@ -191,7 +192,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
 });
 
 reviewRoutes.get('/api/admin/review/batches', requireRole('editor'), async (c) => {
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT b.id, b.name, b.source_type, b.base_dataset_version, b.proposal_count, b.pending_count,
       b.created_by, b.created_at, b.updated_at, COALESCE(u.nickname, u.display_name) created_by_name
     FROM review_batches b JOIN users u ON u.id = b.created_by
@@ -239,7 +240,7 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('editor'), async (c)
     bindings.push(cursor);
   }
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT p.id, p.batch_id, p.target_rule_id, p.action, p.status, p.reason,
       p.base_updated_at, p.base_content_hash, p.original_content_json, p.proposed_content_json,
       p.decided_by, p.decided_at, p.decision_reason, p.applied_revision_id, p.created_at, p.updated_at,
@@ -298,7 +299,7 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
   if (!body.success) return c.json({ error: 'invalid_payload' }, 400);
 
   const proposalIds = body.data.decisions.map((decision) => decision.proposalId);
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT p.id, p.batch_id, p.target_rule_id, p.action, p.status, p.base_updated_at, p.base_content_hash,
       p.proposed_content_json, r.game_id, r.updated_at rule_updated_at, r.source_label, r.source_url,
       r.submission_id
@@ -314,7 +315,7 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
   const proposals = new Map((result.results ?? []).map((row) => [row.id, row]));
   const user = c.get('user')!;
   const timestamp = now();
-  const statements: D1PreparedStatement[] = [];
+  const statements: DatabaseStatement[] = [];
   const affectedBatches = new Set<string>();
 
   for (const decision of body.data.decisions) {
@@ -323,7 +324,7 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
     affectedBatches.add(row.batch_id);
 
     if (decision.action === 'reject') {
-      statements.push(c.env.DB.prepare(`
+      statements.push(getDatabase(c).statement(`
         UPDATE review_proposals
         SET status = 'rejected', decided_by = ?, decided_at = ?, decision_reason = ?, updated_at = ?
         WHERE id = ?
@@ -333,11 +334,11 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
 
     if (row.action === 'hide') {
       statements.push(
-        c.env.DB.prepare(`
+        getDatabase(c).statement(`
           UPDATE rules SET status = 'hidden', hidden_at = ?, hidden_by = ?, updated_at = ?
           WHERE id = ?
         `).bind(timestamp, user.id, timestamp, row.target_rule_id),
-        c.env.DB.prepare(`
+        getDatabase(c).statement(`
           UPDATE review_proposals
           SET status = 'approved', decided_by = ?, decided_at = ?, decision_reason = ?, updated_at = ?
           WHERE id = ?
@@ -347,27 +348,27 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
     }
 
     const proposed = JSON.parse(row.proposed_content_json) as ReviewContent;
-    const existingRule = await c.env.DB.prepare(`${reviewRuleSelect} WHERE r.id = ?`).bind(row.target_rule_id).first<ReviewRuleRow>();
+    const existingRule = await getDatabase(c).statement(`${reviewRuleSelect} WHERE r.id = ?`).bind(row.target_rule_id).first<ReviewRuleRow>();
     if (!existingRule) continue;
     const currentContent = reviewContentFromRow(existingRule);
     const revisionId = createId('rev');
 
     statements.push(
-      c.env.DB.prepare(`
+      getDatabase(c).statement(`
         INSERT INTO rule_revisions (id, rule_id, snapshot_json, created_by, reason, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `).bind(revisionId, row.target_rule_id, JSON.stringify(currentContent), user.id, decision.reason || 'review_import', timestamp),
-      c.env.DB.prepare(`
+      getDatabase(c).statement(`
         UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
           player_count_note = ?, edition_note = ?, updated_at = ? WHERE id = ?
       `).bind(
         proposed.statement, proposed.commonMistake || null, proposed.details || null, proposed.flowStage,
         proposed.playerCountNote || null, proposed.editionNote || null, timestamp, row.target_rule_id,
       ),
-      c.env.DB.prepare(`
+      getDatabase(c).statement(`
       UPDATE rules SET source_label = ?, source_url = ? WHERE id = ?
       `).bind(proposed.sourceLabel || null, proposed.sourceUrl || null, row.target_rule_id),
-      c.env.DB.prepare(`
+      getDatabase(c).statement(`
         UPDATE review_proposals
         SET status = 'approved', decided_by = ?, decided_at = ?, decision_reason = ?, applied_revision_id = ?, updated_at = ?
         WHERE id = ?
@@ -377,15 +378,15 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
     statements.push(...await tagWriteStatements(c, row.target_rule_id, cleanTagNames(proposed.tagNames), user.id, timestamp));
   }
 
-  if (statements.length) await c.env.DB.batch(statements);
+  if (statements.length) await getDatabase(c).batch(statements);
 
   for (const batchId of affectedBatches) {
-    const counts = await c.env.DB.prepare(`
+    const counts = await getDatabase(c).statement(`
       SELECT COUNT(*) total, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) pending
       FROM review_proposals WHERE batch_id = ?
     `).bind(batchId).first<{ total: number; pending: number }>();
     if (counts) {
-      await c.env.DB.prepare(`
+      await getDatabase(c).statement(`
         UPDATE review_batches SET proposal_count = ?, pending_count = ?, updated_at = ? WHERE id = ?
       `).bind(counts.total, counts.pending, timestamp, batchId).run();
     }

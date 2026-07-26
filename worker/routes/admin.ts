@@ -2,14 +2,15 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
-import type { Env, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import { getDatabase, type DatabaseStatement } from '../data/database';
 import { createId, normalizeEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
 const adminRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
-  const metadata = await c.env.DB.prepare(`
+  const metadata = await getDatabase(c).statement(`
     SELECT
       (SELECT COUNT(*) FROM games WHERE merged_into_game_id IS NULL) AS game_count,
       (SELECT COUNT(*) FROM rules WHERE status = 'published') AS rule_count,
@@ -38,7 +39,7 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
   if (c.req.header('If-None-Match') === etag) return c.body(null, 304);
 
   const [gamesResult, aliasesResult, rulesResult] = await Promise.all([
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
         COUNT(r.id) AS rule_count
       FROM games g
@@ -47,13 +48,13 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
       GROUP BY g.id
       ORDER BY g.display_name, g.id
     `).all<GameRow>(),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT a.game_id, a.alias
       FROM game_aliases a JOIN games g ON g.id = a.game_id
       WHERE g.merged_into_game_id IS NULL
       ORDER BY a.game_id, a.alias
     `).all<{ game_id: string; alias: string }>(),
-    c.env.DB.prepare(`${ruleSelect}
+    getDatabase(c).statement(`${ruleSelect}
       JOIN games g ON g.id = r.game_id
       WHERE r.status = 'published' AND g.merged_into_game_id IS NULL
       ORDER BY r.game_id, r.created_at, r.id
@@ -65,7 +66,7 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
     aliases.push(alias.alias);
     aliasesByGame.set(alias.game_id, aliases);
   }
-  const tagMap = await resolveRuleTags(c.env.DB, rulesResult.results ?? []);
+  const tagMap = await resolveRuleTags(getDatabase(c), rulesResult.results ?? []);
   const rulesByGame = new Map<string, any[]>();
   for (const row of rulesResult.results ?? []) {
     const rules = rulesByGame.get(row.game_id) ?? [];
@@ -91,12 +92,12 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
 
 adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
   const [users, invites] = await Promise.all([
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT u.id, u.email, u.email_normalized, u.display_name, ur.role, ur.granted_at, ur.revoked_at
       FROM user_roles ur JOIN users u ON u.id = ur.user_id
       ORDER BY ur.revoked_at IS NOT NULL, ur.granted_at DESC
     `).all<{ id: string; email: string; email_normalized?: string; display_name: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT id, email_normalized email, role, invited_at, claimed_at, revoked_at
       FROM editor_invitations
       WHERE claimed_at IS NULL AND revoked_at IS NULL
@@ -123,10 +124,10 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
   if (!body.success) return c.json({ error: 'invalid_email' }, 400);
   const email = normalizeEmail(body.data.email);
 
-  const existingUser = await c.env.DB.prepare('SELECT id FROM users WHERE email_normalized = ?').bind(email).first<{ id: string }>();
+  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_normalized = ?').bind(email).first<{ id: string }>();
   const timestamp = now();
   if (existingUser) {
-    await c.env.DB.prepare(`
+    await getDatabase(c).statement(`
       INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
       VALUES (?, ?, ?, ?, NULL)
       ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
@@ -134,16 +135,16 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
     return c.json({ ok: true, userId: existingUser.id });
   }
 
-  const existingInvite = await c.env.DB.prepare('SELECT id FROM editor_invitations WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(email).first<{ id: string }>();
+  const existingInvite = await getDatabase(c).statement('SELECT id FROM editor_invitations WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(email).first<{ id: string }>();
   if (existingInvite) {
-    await c.env.DB.prepare(`
+    await getDatabase(c).statement(`
       UPDATE editor_invitations SET role = ?, invited_by = ?, invited_at = ? WHERE id = ?
     `).bind(body.data.role, c.get('user')!.id, timestamp, existingInvite.id).run();
     return c.json({ ok: true, invitationId: existingInvite.id });
   }
 
   const id = createId('invite');
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     INSERT INTO editor_invitations (id, email_normalized, role, invited_by, invited_at)
     VALUES (?, ?, ?, ?, ?)
   `).bind(id, email, body.data.role, c.get('user')!.id, timestamp).run();
@@ -153,14 +154,14 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
 adminRoutes.delete('/api/admin/editors/:userId', requireRole('admin'), async (c) => {
   const role = c.req.query('role') as UserRole | undefined;
   if (!role || !['admin', 'editor'].includes(role)) return c.json({ error: 'invalid_role' }, 400);
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     UPDATE user_roles SET revoked_at = ? WHERE user_id = ? AND role = ? AND revoked_at IS NULL
   `).bind(now(), c.req.param('userId'), role).run();
   return c.json({ ok: true });
 });
 
 adminRoutes.delete('/api/admin/editors/invitations/:invitationId', requireRole('admin'), async (c) => {
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     UPDATE editor_invitations SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL
   `).bind(now(), c.req.param('invitationId')).run();
   return c.json({ ok: true });
@@ -169,7 +170,7 @@ adminRoutes.delete('/api/admin/editors/invitations/:invitationId', requireRole('
 adminRoutes.get('/api/admin/import-rows', requireRole('editor'), async (c) => {
   const status = (c.req.query('status') ?? 'pending').trim();
   const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 20) || 20));
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT r.id, r.raw_name, r.suggested_display_name, r.suggested_english_name,
       r.raw_statement, r.suggested_statement, r.suggested_common_mistake,
       r.suggested_details, r.suggested_flow_stage, r.suggested_player_count_note,
@@ -221,7 +222,7 @@ adminRoutes.get('/api/admin/import-rows', requireRole('editor'), async (c) => {
 });
 
 adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), async (c) => {
-  const row = await c.env.DB.prepare(`
+  const row = await getDatabase(c).statement(`
     SELECT * FROM legacy_import_rows WHERE id = ?
   `).bind(c.req.param('id')).first<{
     id: string; raw_name: string; suggested_display_name: string;
@@ -241,7 +242,7 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
   let gameSlug = '';
 
   if (!gameId) {
-    const existingGame = await c.env.DB.prepare(`
+    const existingGame = await getDatabase(c).statement(`
       SELECT g.id, g.slug FROM games g
       LEFT JOIN game_aliases a ON a.game_id = g.id
       WHERE (g.normalized_name = ? OR a.normalized_alias = ?) AND g.merged_into_game_id IS NULL
@@ -256,22 +257,22 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
       const baseSlug = slugify(row.suggested_display_name);
       gameSlug = baseSlug;
 
-      const slugExists = await c.env.DB.prepare('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
+      const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
       if (slugExists) gameSlug = `${baseSlug}-${gameId.slice(-6)}`;
 
-      await c.env.DB.batch([
-        c.env.DB.prepare(`
+      await getDatabase(c).batch([
+        getDatabase(c).statement(`
           INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(gameId, gameSlug, row.suggested_display_name, row.suggested_english_name || null, normalizeText(row.suggested_display_name), user.id, timestamp, timestamp),
-        c.env.DB.prepare(`
+        getDatabase(c).statement(`
           INSERT INTO game_aliases (id, game_id, alias, normalized_alias, created_at)
           VALUES (?, ?, ?, ?, ?)
         `).bind(createId('alias'), gameId, row.suggested_display_name, normalizeText(row.suggested_display_name), timestamp),
       ]);
     }
   } else {
-    const matched = await c.env.DB.prepare('SELECT slug FROM games WHERE id = ?').bind(gameId).first<{ slug: string }>();
+      const matched = await getDatabase(c).statement('SELECT slug FROM games WHERE id = ?').bind(gameId).first<{ slug: string }>();
     gameSlug = matched?.slug ?? '';
   }
 
@@ -281,12 +282,12 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
     try { return JSON.parse(row.suggested_tags_json ?? '[]') as string[]; } catch { return []; }
   })();
 
-  const statements: D1PreparedStatement[] = [
-    c.env.DB.prepare(`
+  const statements: DatabaseStatement[] = [
+    getDatabase(c).statement(`
       INSERT INTO submissions (id, game_id, raw_input, source_label, source_url, submitter_type, created_by, created_at)
       VALUES (?, ?, ?, ?, ?, 'editor', ?, ?)
     `).bind(submissionId, gameId, row.raw_statement, row.raw_source_label || null, row.raw_source_url || null, user.id, timestamp),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       INSERT INTO rules (
         id, game_id, submission_id, statement, common_mistake, details,
         flow_stage, player_count_note, edition_note, source_label, source_url,
@@ -299,7 +300,7 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
       row.suggested_edition_note || null, row.raw_source_label || null, row.raw_source_url || null,
       user.id, timestamp, timestamp,
     ),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       UPDATE legacy_import_rows
       SET status = 'processed', matched_game_id = ?, processed_at = ?, processed_by = ?
       WHERE id = ?
@@ -307,7 +308,7 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
   ];
 
   statements.push(...await tagWriteStatements(c, ruleId, cleanTagNames(tagNames), user.id, timestamp));
-  await c.env.DB.batch(statements);
+  await getDatabase(c).batch(statements);
 
   return c.json({ ok: true, gameId, gameSlug, ruleId });
 });
@@ -315,7 +316,7 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
 adminRoutes.post('/api/admin/import-rows/:id/skip', requireRole('editor'), async (c) => {
   const user = c.get('user')!;
   const timestamp = now();
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     UPDATE legacy_import_rows
     SET status = 'skipped', processed_at = ?, processed_by = ?
     WHERE id = ? AND status = 'pending'

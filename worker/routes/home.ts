@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env, D1Result, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import type { D1Result } from '../data/database';
+import { getDatabase } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -18,7 +20,7 @@ homeRoutes.get('/api/home', async (c) => {
     return res;
   };
 
-  const windowResult = track('home:window-start', await c.env.DB.prepare(`
+  const windowResult = track('home:window-start', await getDatabase(c).statement(`
     WITH recent_games AS (
       SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
       FROM daily_views
@@ -39,7 +41,7 @@ homeRoutes.get('/api/home', async (c) => {
 
   // 2. 統計階段 (100% 只查 daily_views，加上 LIMIT 100 硬上限熔斷保護)
   const [popularGameIdsRaw, recentRaw] = await Promise.all([
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       WITH scoped_views AS (
         SELECT game_id, user_id, created_at
         FROM daily_views
@@ -53,7 +55,7 @@ homeRoutes.get('/api/home', async (c) => {
       ORDER BY view_count DESC, MAX(created_at) DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT id FROM rules
       WHERE status = 'published'
       ORDER BY created_at DESC LIMIT 6
@@ -66,7 +68,7 @@ homeRoutes.get('/api/home', async (c) => {
   let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
 
   if (popularGameIds.length < 6) {
-    const fallbackGameIdsResult = track('home:fallback-games', await c.env.DB.prepare(`
+    const fallbackGameIdsResult = track('home:fallback-games', await getDatabase(c).statement(`
       SELECT g.id FROM games g
       WHERE g.merged_into_game_id IS NULL
       ORDER BY g.updated_at DESC LIMIT 6
@@ -83,7 +85,7 @@ homeRoutes.get('/api/home', async (c) => {
   // 3. 點對點極速解析內容 (WHERE id IN)
   const placeholders = popularGameIds.map(() => '?').join(',');
 
-  const gamesResult = track('home:games-meta', await c.env.DB.prepare(`
+  const gamesResult = track('home:games-meta', await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
@@ -92,7 +94,7 @@ homeRoutes.get('/api/home', async (c) => {
 
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
 
-  const featuredRuleIdsResult = track('home:featured-rule-ids', await c.env.DB.prepare(`
+  const featuredRuleIdsResult = track('home:featured-rule-ids', await getDatabase(c).statement(`
     WITH scoped_views AS (
       SELECT game_id, rule_id, user_id, created_at
       FROM daily_views
@@ -117,7 +119,7 @@ homeRoutes.get('/api/home', async (c) => {
   const featuredPromises = popularGameIds.map(async (id) => {
     let ruleId = featuredRuleIdByGame.get(id);
     if (!ruleId) {
-      const fallback = track('home:fallback-rule-id', await c.env.DB.prepare(`
+      const fallback = track('home:fallback-rule-id', await getDatabase(c).statement(`
         SELECT id FROM rules
         WHERE game_id = ? AND status = 'published'
         ORDER BY created_at DESC

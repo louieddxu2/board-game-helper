@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env, D1Result, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -14,7 +15,7 @@ gamesRoutes.get('/api/games/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (rawQuery.length < 1) return c.json({ games: [] });
   const query = normalizeText(rawQuery);
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
@@ -34,7 +35,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
   const rawName = (c.req.query('name') ?? '').trim().slice(0, 120);
   if (!rawName) return c.json({ game: null, suggestions: [] });
   const name = normalizeText(rawName);
-  const exact = await c.env.DB.prepare(`
+  const exact = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
@@ -49,7 +50,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
     setNoCache(c);
     return c.json({ game: toGame(exact), suggestions: [] });
   }
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
@@ -68,18 +69,18 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
 gamesRoutes.post('/api/games/:id/view', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ error: 'unauthorized' }, 401);
-  const game = await c.env.DB.prepare('SELECT id FROM games WHERE id = ?').bind(c.req.param('id')).first();
+  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ?').bind(c.req.param('id')).first();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
   const ruleId = c.req.query('ruleId') || null;
   if (ruleId) {
-    const rule = await c.env.DB.prepare('SELECT id FROM rules WHERE id = ? AND game_id = ?').bind(ruleId, game.id).first();
+    const rule = await getDatabase(c).statement('SELECT id FROM rules WHERE id = ? AND game_id = ?').bind(ruleId, game.id).first();
     if (!rule) return c.json({ error: 'rule_not_found' }, 404);
   }
 
   const timestamp = now();
   const viewDate = new Date(timestamp).toISOString().slice(0, 10);
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     INSERT INTO daily_views (game_id, rule_id, user_id, view_date, created_at)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(game_id, rule_id, user_id, view_date) DO NOTHING
@@ -89,7 +90,7 @@ gamesRoutes.post('/api/games/:id/view', async (c) => {
 
 gamesRoutes.get('/api/games/:identifier', async (c) => {
   const identifier = c.req.param('identifier');
-  const game = await c.env.DB.prepare(`
+  const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
@@ -101,9 +102,9 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
   setNoCache(c);
 
   const [aliasesResult, rulesResult] = await Promise.all([
-    c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
+    getDatabase(c).statement('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
-    c.env.DB.prepare(`${gameRuleSelect}
+    getDatabase(c).statement(`${gameRuleSelect}
       WHERE r.game_id = ? AND r.status = 'published'
       ORDER BY CASE r.flow_stage
         WHEN 'setup' THEN 1 WHEN 'round' THEN 2 WHEN 'action' THEN 3
@@ -133,7 +134,7 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
   const normalizedName = normalizeText(parsed.data.displayName);
-  const existing = await c.env.DB.prepare(`
+  const existing = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       COUNT(DISTINCT r.id) AS rule_count
     FROM games g
@@ -149,51 +150,51 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   const id = createId('game');
   const timestamp = now();
   const baseSlug = slugify(parsed.data.englishName || parsed.data.displayName);
-  const slugExists = await c.env.DB.prepare('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
+  const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
   const slug = slugExists ? `${baseSlug}-${id.slice(-6)}` : baseSlug;
   const aliases = new Set([
     parsed.data.displayName,
     parsed.data.englishName,
     ...(parsed.data.aliases ?? []),
   ].filter((value): value is string => Boolean(value?.trim())));
-  const statements: D1PreparedStatement[] = [
-    c.env.DB.prepare(`
+  const statements: DatabaseStatement[] = [
+    getDatabase(c).statement(`
       INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizedName, user.id, timestamp, timestamp),
   ];
   for (const alias of aliases) {
-    statements.push(c.env.DB.prepare(`
+    statements.push(getDatabase(c).statement(`
       INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('alias'), id, alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
-  await c.env.DB.batch(statements);
+  await getDatabase(c).batch(statements);
   return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, updatedAt: timestamp } }, 201);
 });
 
 gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
-  const game = await c.env.DB.prepare('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL')
     .bind(c.req.param('id')).first<{ id: string; slug: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
   const aliases = new Set([parsed.data.displayName, parsed.data.englishName, ...(parsed.data.aliases ?? [])]
     .filter((value): value is string => Boolean(value?.trim())));
-  const statements: D1PreparedStatement[] = [
-    c.env.DB.prepare(`
+  const statements: DatabaseStatement[] = [
+    getDatabase(c).statement(`
       UPDATE games SET display_name = ?, english_name = ?, normalized_name = ?, updated_at = ? WHERE id = ?
     `).bind(parsed.data.displayName, cleanOptional(parsed.data.englishName, 120) ?? null, normalizeText(parsed.data.displayName), timestamp, c.req.param('id')),
-    c.env.DB.prepare('DELETE FROM game_aliases WHERE game_id = ?').bind(c.req.param('id')),
+    getDatabase(c).statement('DELETE FROM game_aliases WHERE game_id = ?').bind(c.req.param('id')),
   ];
   for (const alias of aliases) {
-    statements.push(c.env.DB.prepare(`
+    statements.push(getDatabase(c).statement(`
       INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('alias'), c.req.param('id'), alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
-  await c.env.DB.batch(statements);
+  await getDatabase(c).batch(statements);
   const cache = (caches as any).default;
   c.executionCtx.waitUntil(Promise.all([
     cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
@@ -207,24 +208,24 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
   const parsed = mergeSchema.safeParse(await c.req.json());
   if (!parsed.success || parsed.data.targetGameId === c.req.param('id')) return c.json({ error: 'invalid_merge' }, 400);
   const [source, target] = await Promise.all([
-    c.env.DB.prepare('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<Record<string, unknown>>(),
-    c.env.DB.prepare('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
+    getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<Record<string, unknown>>(),
+    getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
   ]);
   if (!source || !target) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
-  await c.env.DB.batch([
-    c.env.DB.prepare(`
+  await getDatabase(c).batch([
+    getDatabase(c).statement(`
       INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       SELECT ?, ?, display_name, normalized_name, 'legacy', ? FROM games WHERE id = ?
     `).bind(createId('alias'), parsed.data.targetGameId, timestamp, c.req.param('id')),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
     `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    c.env.DB.prepare('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
-    c.env.DB.prepare('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    c.env.DB.prepare('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
+    getDatabase(c).statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
+    getDatabase(c).statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
   ]);
   return c.json({ ok: true, targetGameId: parsed.data.targetGameId });
 });

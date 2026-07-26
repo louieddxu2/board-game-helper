@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
-import type { Env, D1Result, D1PreparedStatement } from '../env';
+import type { Env } from '../env';
+import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -24,7 +25,7 @@ authRoutes.get('/api/session', (c) => c.json({
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
   const [createdResult, modifiedResult, viewedResult] = await Promise.all([
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
         r.status, r.created_at, r.updated_at
       FROM rules r
@@ -36,7 +37,7 @@ authRoutes.get('/api/account', requireUser, async (c) => {
       id: string; game_name: string; game_slug: string; statement: string;
       status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;
     }>(),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,
         r.statement current_statement, rr.previous_json, rr.reason,
         rr.created_at edited_at, COALESCE(u.nickname, u.display_name) edited_by_name
@@ -52,7 +53,7 @@ authRoutes.get('/api/account', requireUser, async (c) => {
       current_statement: string; previous_json: string; reason: string | null;
       edited_at: number; edited_by_name: string | null;
     }>(),
-    c.env.DB.prepare(`
+    getDatabase(c).statement(`
       SELECT dv.rule_id, g.display_name game_name, g.slug game_slug,
         r.statement, MAX(dv.created_at) viewed_at, COUNT(*) view_count
       FROM daily_views dv
@@ -113,12 +114,12 @@ authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
   const user = c.get('user')!;
   const nickname = parsed.data.nickname.normalize('NFKC').trim();
   const nicknameNormalized = normalizeNickname(nickname);
-  const existing = await c.env.DB.prepare(
+  const existing = await getDatabase(c).statement(
     'SELECT id FROM users WHERE nickname_normalized = ? AND id <> ?',
   ).bind(nicknameNormalized, user.id).first<{ id: string }>();
   if (existing) return c.json({ error: 'nickname_taken' }, 409);
   try {
-    await c.env.DB.prepare(
+    await getDatabase(c).statement(
       'UPDATE users SET nickname = ?, nickname_normalized = ? WHERE id = ?',
     ).bind(nickname, nicknameNormalized, user.id).run();
   } catch (error) {

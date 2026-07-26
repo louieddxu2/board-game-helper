@@ -2,7 +2,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { SessionUser, UserRole } from '../src/shared/types';
-import type { D1Database, Env } from './env';
+import type { Env } from './env';
+import { getDatabase, type Database } from './data/database';
 import { createId, normalizeEmail, now, sha256Hex } from './utils';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
@@ -13,6 +14,7 @@ const INTEGRATION_SESSION_MINUTES = 60;
 export interface AppVariables {
   user?: SessionUser;
   d1Metrics?: any;
+  database?: Database;
 }
 
 export type AppContext = Context<{ Bindings: Env; Variables: AppVariables }>;
@@ -28,16 +30,16 @@ const googleAudiences = (env: Env): string[] => Array.from(new Set([
   ...(env.GOOGLE_CLIENT_IDS ?? '').split(','),
 ].map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 
-const rolesForUser = async (db: D1Database, userId: string): Promise<UserRole[]> => {
-  const rows = await db.prepare(`
+const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> => {
+  const rows = await db.statement(`
     SELECT role FROM user_roles
     WHERE user_id = ? AND revoked_at IS NULL
   `).bind(userId).all<{ role: UserRole }>();
   return (rows.results ?? []).map((row) => row.role);
 };
 
-const userById = async (db: D1Database, userId: string): Promise<SessionUser | undefined> => {
-  const row = await db.prepare(`
+const userById = async (db: Database, userId: string): Promise<SessionUser | undefined> => {
+  const row = await db.statement(`
     SELECT id, email, display_name, nickname, avatar_url FROM users WHERE id = ?
   `).bind(userId).first<{ id: string; email: string; display_name: string | null; nickname: string | null; avatar_url: string | null }>();
   if (!row) return undefined;
@@ -51,9 +53,9 @@ const userById = async (db: D1Database, userId: string): Promise<SessionUser | u
   };
 };
 
-const sessionUser = async (db: D1Database, token: string): Promise<SessionUser | undefined> => {
+const sessionUser = async (db: Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
-  const row = await db.prepare(`
+  const row = await db.statement(`
     SELECT u.id, u.email, u.display_name, u.nickname, u.avatar_url, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.id_hash = ?
@@ -67,7 +69,7 @@ const sessionUser = async (db: D1Database, token: string): Promise<SessionUser |
   }>();
   if (!row) return undefined;
   if (row.expires_at <= now()) {
-    await db.prepare('DELETE FROM sessions WHERE id_hash = ?').bind(tokenHash).run();
+    await db.statement('DELETE FROM sessions WHERE id_hash = ?').bind(tokenHash).run();
     return undefined;
   }
   const roles = await rolesForUser(db, row.id);
@@ -94,7 +96,7 @@ export const sessionMiddleware: MiddlewareHandler<{
   const authorization = c.req.header('Authorization');
   const bearer = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
   const token = bearer ?? getCookie(c, SESSION_COOKIE);
-  if (token) c.set('user', await sessionUser(c.env.DB, token));
+  if (token) c.set('user', await sessionUser(getDatabase(c), token));
   await next();
 };
 
@@ -107,7 +109,7 @@ const saveSession = async (c: AppContext, userId: string, options: {
   const token = `${createId('session')}.${crypto.randomUUID()}`;
   const timestamp = now();
   const expiresAt = timestamp + options.ttlMs;
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     INSERT INTO sessions (id_hash, user_id, created_at, expires_at, last_seen_at, session_kind, client_origin)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).bind(await sha256Hex(token), userId, timestamp, expiresAt, timestamp, options.kind, options.clientOrigin ?? null).run();
@@ -133,14 +135,14 @@ const upsertGoogleUser = async (c: AppContext, profile: {
 }): Promise<string> => {
   const timestamp = now();
   const emailNormalized = normalizeEmail(profile.email);
-  const existing = await c.env.DB.prepare('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_normalized = ?')
+  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_normalized = ?')
     .bind(profile.sub, emailNormalized)
     .first<{ id: string; google_sub: string }>();
   if (existing && existing.google_sub !== profile.sub) {
     throw new Error('google_identity_conflict');
   }
   const userId = existing?.id ?? createId('usr');
-  await c.env.DB.prepare(`
+  await getDatabase(c).statement(`
     INSERT INTO users (
       id, google_sub, email, email_normalized, email_verified,
       display_name, avatar_url, created_at, last_login_at
@@ -159,11 +161,11 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   ).run();
 
   if (normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '') === emailNormalized) {
-    const existingAdmin = await c.env.DB.prepare(
+    const existingAdmin = await getDatabase(c).statement(
       `SELECT 1 FROM user_roles WHERE role = 'admin' AND revoked_at IS NULL LIMIT 1`
     ).first();
     if (!existingAdmin) {
-      await c.env.DB.prepare(`
+      await getDatabase(c).statement(`
         INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
         VALUES (?, 'admin', ?, ?, NULL)
         ON CONFLICT(user_id, role) DO NOTHING
@@ -171,18 +173,18 @@ const upsertGoogleUser = async (c: AppContext, profile: {
     }
   }
 
-  const invites = await c.env.DB.prepare(`
+  const invites = await getDatabase(c).statement(`
     SELECT id, role FROM editor_invitations
     WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL
   `).bind(emailNormalized).all<{ id: string; role: UserRole }>();
   for (const invite of invites.results ?? []) {
-    await c.env.DB.batch([
-      c.env.DB.prepare(`
+    await getDatabase(c).batch([
+      getDatabase(c).statement(`
         INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
         SELECT ?, role, invited_by, ?, NULL FROM editor_invitations WHERE id = ?
         ON CONFLICT(user_id, role) DO NOTHING
       `).bind(userId, timestamp, invite.id),
-      c.env.DB.prepare(`
+      getDatabase(c).statement(`
         UPDATE editor_invitations SET claimed_by = ?, claimed_at = ? WHERE id = ?
       `).bind(userId, timestamp, invite.id),
     ]);
@@ -208,7 +210,7 @@ const authenticateGoogleCredential = async (c: AppContext, credential: string): 
     name: typeof payload.name === 'string' ? payload.name : undefined,
     picture: typeof payload.picture === 'string' ? payload.picture : undefined,
   });
-  const user = await userById(c.env.DB, userId);
+  const user = await userById(getDatabase(c), userId);
   if (!user) throw new Error('session_creation_failed');
   return { userId, user };
 };
@@ -248,14 +250,14 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
     id: userId,
     email,
     displayName: '本機管理員',
-    roles: await rolesForUser(c.env.DB, userId),
+    roles: await rolesForUser(getDatabase(c), userId),
   };
 };
 
 export const signOut = async (c: AppContext): Promise<void> => {
   const bearer = c.req.header('Authorization')?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
   const token = bearer ?? getCookie(c, SESSION_COOKIE);
-  if (token) await c.env.DB.prepare('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256Hex(token)).run();
+  if (token) await getDatabase(c).statement('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256Hex(token)).run();
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
 };
 

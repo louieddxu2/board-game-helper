@@ -2,12 +2,13 @@ import { Hono } from 'hono';
 import type { GameDetail } from '../../src/shared/types';
 import { requireRole, type AppVariables } from '../auth';
 import type { Env } from '../env';
+import { getDatabase } from '../data/database';
 import { setNoCache, ruleSelect, toGame, toRule, type GameRow, type RuleRow } from './shared';
 
 const catalogRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
 catalogRoutes.get('/api/editor/catalog/games', requireRole('editor'), async (c) => {
-  const result = await c.env.DB.prepare(`
+  const result = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       COUNT(r.id) AS rule_count
     FROM games g
@@ -22,7 +23,7 @@ catalogRoutes.get('/api/editor/catalog/games', requireRole('editor'), async (c) 
 
 catalogRoutes.get('/api/editor/catalog/games/:identifier', requireRole('editor'), async (c) => {
   const identifier = c.req.param('identifier');
-  const game = await c.env.DB.prepare(`
+  const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
@@ -32,9 +33,9 @@ catalogRoutes.get('/api/editor/catalog/games/:identifier', requireRole('editor')
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
   const [aliasesResult, rulesResult] = await Promise.all([
-    c.env.DB.prepare('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
+    getDatabase(c).statement('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
-    c.env.DB.prepare(`${ruleSelect}
+    getDatabase(c).statement(`${ruleSelect}
       WHERE r.game_id = ?
       ORDER BY r.updated_at DESC, r.id DESC
       `).bind(game.id).all<RuleRow>(),
