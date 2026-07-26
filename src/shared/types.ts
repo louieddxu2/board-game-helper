@@ -143,6 +143,8 @@ export interface SubmissionRuleInput {
   flowStage?: FlowStage;
   playerCountNote?: string;
   editionNote?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   tagNames?: string[];
 }
 

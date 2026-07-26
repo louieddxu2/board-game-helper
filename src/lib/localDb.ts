@@ -25,9 +25,9 @@ export interface DraftRecord {
   id: string;
   game?: { id: string; slug: string; displayName: string };
   gameQuery: string;
-  rules: Array<{ id: string; statement: string; commonMistake?: string; tagNames?: string[] }>;
-  sourceLabel: string;
-  sourceUrl: string;
+  rules: Array<{ id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] }>;
+  sourceLabel?: string;
+  sourceUrl?: string;
   playedOn: string;
   privateNote: string;
   updatedAt: number;

@@ -8,7 +8,7 @@ import { detectDeterministicTags } from '../lib/tagDetector';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string; tagNames?: string[] };
+type RuleInput = { id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -23,8 +23,6 @@ export const AddPage = () => {
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
-  const [sourceLabel, setSourceLabel] = useState('');
-  const [sourceUrl, setSourceUrl] = useState('');
   const [playedOn, setPlayedOn] = useState(today());
   const [privateNote, setPrivateNote] = useState('');
   const [showMore, setShowMore] = useState(false);
@@ -42,8 +40,7 @@ export const AddPage = () => {
       if (draft && hasDraft) {
         setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
         setGameQuery(draft.gameQuery);
-        setRules(draft.rules.length ? draft.rules : [blankRule()]);
-        setSourceLabel(draft.sourceLabel); setSourceUrl(draft.sourceUrl);
+        setRules(draft.rules.length ? draft.rules.map((rule) => ({ ...rule, sourceLabel: rule.sourceLabel ?? draft.sourceLabel, sourceUrl: rule.sourceUrl ?? draft.sourceUrl })) : [blankRule()]);
         setPlayedOn(draft.playedOn || today()); setPrivateNote(draft.privateNote);
         return;
       }
@@ -77,12 +74,12 @@ export const AddPage = () => {
     const timer = window.setTimeout(() => {
       const draft: Omit<DraftRecord, 'id'> = {
         game: game ? { id: game.id, slug: game.slug, displayName: game.displayName } : undefined,
-        gameQuery, rules, sourceLabel, sourceUrl, playedOn, privateNote, updatedAt: Date.now(),
+        gameQuery, rules, playedOn, privateNote, updatedAt: Date.now(),
       };
       void localDb.saveDraft(draft).then(() => setSavedAt(Date.now()));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [game, gameQuery, rules, sourceLabel, sourceUrl, playedOn, privateNote]);
+  }, [game, gameQuery, rules, playedOn, privateNote]);
   const validRules = useMemo(() => rules.filter((rule) => rule.statement.trim()), [rules]);
   const setRule = (id: string, patch: Partial<RuleInput>) => setRules((current) => current.map((rule) => rule.id === id ? { ...rule, ...patch } : rule));
   const addRuleAfter = (id?: string) => {
@@ -107,11 +104,9 @@ export const AddPage = () => {
     const payload: SubmissionInput = {
       gameId: game.id,
       playedOn,
-      sourceLabel: sourceLabel.trim() || undefined,
-      sourceUrl: sourceUrl.trim() || undefined,
       privateNote: privateNote.trim() || undefined,
       idempotencyKey: crypto.randomUUID(),
-      rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, tagNames: rule.tagNames })),
+      rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
     };
     await localDb.addPending(payload);
     try {
@@ -154,6 +149,7 @@ export const AddPage = () => {
             }} />
           <details><summary>常見錯法</summary><textarea rows={2} value={rule.commonMistake ?? ''}
             aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
+            <div className="two-columns"><label>來源說明<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>來源網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} placeholder="https://…" /></label></div>
             <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} detectedSuggestions={detected} /></details>
         </div>
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
@@ -161,8 +157,6 @@ export const AddPage = () => {
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增下一條</button>
     </div>}
     {game && <div className="shared-fields">
-      <label>共同來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="例如：官方英文說明書第 8 頁" /></label>
-      <label>來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://…" /></label>
       <button type="button" className="text-action" onClick={() => setShowMore((value) => !value)}>{showMore ? '收起其他資料' : '遊玩日期與私人備註'}</button>
       {showMore && <div className="more-fields"><label>遊玩日期<input type="date" value={playedOn} onChange={(event) => setPlayedOn(event.target.value)} /></label>
         <label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}

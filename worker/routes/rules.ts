@@ -16,13 +16,9 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
       r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
-      r.tag_ids_json,
-      s.source_label, s.source_url,
-      (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
-        FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json
+      r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
-    JOIN submissions s ON s.id = r.submission_id
     WHERE r.id = ? AND r.status = 'published'
     LIMIT 1
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
@@ -48,7 +44,7 @@ const rulePatchSchema = z.object({
 rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const parsed = rulePatchSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_rule', issues: parsed.error.issues }, 400);
-  const row = await c.env.DB.prepare(`SELECT r.*, s.source_label, s.source_url FROM rules r JOIN submissions s ON s.id = r.submission_id WHERE r.id = ?`)
+  const row = await c.env.DB.prepare('SELECT r.* FROM rules r WHERE r.id = ?')
     .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
@@ -66,6 +62,8 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     flowStage: parsed.data.flowStage ?? row.flow_stage,
     playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
     editionNote: parsed.data.editionNote === undefined ? row.edition_note : parsed.data.editionNote,
+    sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
+    sourceUrl: parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
   };
   await c.env.DB.batch([
     c.env.DB.prepare(`
@@ -74,22 +72,13 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     c.env.DB.prepare(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-        player_count_note = ?, edition_note = ?,
+        player_count_note = ?, edition_note = ?, source_label = ?, source_url = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
-      updated.playerCountNote, updated.editionNote,
+      updated.playerCountNote, updated.editionNote, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
     ),
-    ...(parsed.data.sourceLabel === undefined && parsed.data.sourceUrl === undefined ? [] : [c.env.DB.prepare(`
-      UPDATE submissions SET source_label = ?, source_url = ? WHERE id = ?
-    `).bind(
-      parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
-      parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
-      row.submission_id,
-    ), c.env.DB.prepare('DELETE FROM submission_sources WHERE submission_id = ?').bind(row.submission_id),
-    ...(parsed.data.sourceUrl ? [c.env.DB.prepare(`INSERT INTO submission_sources (id, submission_id, label, url, position, created_at) VALUES (?, ?, ?, ?, 0, ?)`)
-      .bind(createId('source'), row.submission_id, parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel, parsed.data.sourceUrl, timestamp)] : [])]),
     ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
     c.env.DB.prepare('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);

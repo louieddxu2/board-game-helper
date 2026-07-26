@@ -41,7 +41,7 @@ reviewRoutes.get('/api/admin/review/export', requireRole('editor'), async (c) =>
     conditions.push('(r.statement LIKE ? COLLATE NOCASE OR r.common_mistake LIKE ? COLLATE NOCASE OR r.details LIKE ? COLLATE NOCASE)');
     bindings.push(`%${query}%`, `%${query}%`, `%${query}%`);
   }
-  if (missingSource) conditions.push(`COALESCE(s.source_url, '') = '' AND COALESCE(s.source_label, '') = ''`);
+  if (missingSource) conditions.push(`COALESCE(r.source_url, '') = '' AND COALESCE(r.source_label, '') = ''`);
   if (updatedAfter) {
     conditions.push('r.updated_at >= ?');
     bindings.push(updatedAfter);
@@ -300,18 +300,15 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
   const proposalIds = body.data.decisions.map((decision) => decision.proposalId);
   const result = await c.env.DB.prepare(`
     SELECT p.id, p.batch_id, p.target_rule_id, p.action, p.status, p.base_updated_at, p.base_content_hash,
-      p.proposed_content_json, r.game_id, r.updated_at rule_updated_at, s.source_label, s.source_url,
-      s.id submission_id,
-      (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
-        FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json
+      p.proposed_content_json, r.game_id, r.updated_at rule_updated_at, r.source_label, r.source_url,
+      r.submission_id
     FROM review_proposals p
     JOIN rules r ON r.id = p.target_rule_id
-    JOIN submissions s ON s.id = r.submission_id
     WHERE p.id IN (${proposalIds.map(() => '?').join(',')})
   `).bind(...proposalIds).all<{
     id: string; batch_id: string; target_rule_id: string; action: 'propose' | 'hide'; status: ReviewProposal['status'];
     base_updated_at: number; base_content_hash: string; proposed_content_json: string; game_id: string;
-    rule_updated_at: number; source_label: string | null; source_url: string | null; submission_id: string; sources_json: string | null;
+    rule_updated_at: number; source_label: string | null; source_url: string | null; submission_id: string;
   }>();
 
   const proposals = new Map((result.results ?? []).map((row) => [row.id, row]));
@@ -368,8 +365,8 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), a
         proposed.playerCountNote || null, proposed.editionNote || null, timestamp, row.target_rule_id,
       ),
       c.env.DB.prepare(`
-        UPDATE submissions SET source_label = ?, source_url = ? WHERE id = ?
-      `).bind(proposed.sourceLabel || null, proposed.sourceUrl || null, row.submission_id),
+      UPDATE rules SET source_label = ?, source_url = ? WHERE id = ?
+      `).bind(proposed.sourceLabel || null, proposed.sourceUrl || null, row.target_rule_id),
       c.env.DB.prepare(`
         UPDATE review_proposals
         SET status = 'approved', decided_by = ?, decided_at = ?, decision_reason = ?, applied_revision_id = ?, updated_at = ?

@@ -17,17 +17,15 @@ export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_count_note, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at,
-    r.tag_ids_json,
-    s.source_label, s.source_url,
-    (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
-      FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json
-  FROM rules r JOIN submissions s ON s.id = r.submission_id
+    r.tag_ids_json, r.source_label, r.source_url
+  FROM rules r
 `;
 
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_count_note, r.edition_note, r.status,
-    r.created_by, r.created_at, r.updated_at, r.tag_ids_json
+    r.created_by, r.created_at, r.updated_at, r.tag_ids_json,
+    r.source_label, r.source_url
   FROM rules r
 `;
 
@@ -207,13 +205,12 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
 export const reviewRuleSelect = `
   SELECT r.id, r.submission_id, r.game_id, g.display_name game_name, g.slug game_slug,
     r.statement, r.common_mistake, r.details, r.flow_stage, r.player_count_note,
-    r.edition_note, r.updated_at, s.source_label, s.source_url,
+    r.edition_note, r.updated_at, r.source_label, r.source_url,
     (SELECT COALESCE(json_group_array(json_object('name', t.name)), '[]')
       FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id
       WHERE rt.rule_id = r.id) AS tags_json
   FROM rules r
   JOIN games g ON g.id = r.game_id
-  JOIN submissions s ON s.id = r.submission_id
 `;
 
 

@@ -13,7 +13,6 @@ export interface RuleCardProps {
   onEdit?: () => void;
   onTagClick?: (tag: string) => void;
   gameId?: string;
-  showSource?: boolean;
 }
 
 export const RuleCard = ({
@@ -24,7 +23,6 @@ export const RuleCard = ({
   onEdit,
   onTagClick,
   gameId,
-  showSource = true,
 }: RuleCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
@@ -179,7 +177,7 @@ export const RuleCard = ({
 
       {/* 第五行：來源與右下角「分享此規則 🔗」 */}
       <div className="rule-card-footer">
-        {showSource && <div className="rule-source">
+        <div className="rule-source">
           {rule.sourceLabel && <span>來源：{rule.sourceLabel}</span>}
           {rule.sourceLinks && rule.sourceLinks.map((source, index) => (
             <a
@@ -195,7 +193,7 @@ export const RuleCard = ({
           {!rule.sourceLabel && (!rule.sourceLinks || rule.sourceLinks.length === 0) && (
             <span className="unverified">未附來源</span>
           )}
-        </div>}
+        </div>
 
         <button
           type="button"

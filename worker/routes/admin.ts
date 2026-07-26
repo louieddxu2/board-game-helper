@@ -229,6 +229,7 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
     suggested_statement: string; suggested_common_mistake: string | null;
     suggested_details: string | null; suggested_flow_stage: string;
     suggested_player_count_note: string | null; suggested_edition_note: string | null;
+    raw_source_label: string | null; raw_source_url: string | null;
     suggested_tags_json: string | null; status: string; matched_game_id: string | null;
   }>();
   if (!row) return c.json({ error: 'import_row_not_found' }, 404);
@@ -283,18 +284,20 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
   const statements: D1PreparedStatement[] = [
     c.env.DB.prepare(`
       INSERT INTO submissions (id, game_id, raw_input, source_label, source_url, submitter_type, created_by, created_at)
-      VALUES (?, ?, ?, ?, NULL, 'editor', ?, ?)
-    `).bind(submissionId, gameId, row.raw_statement, `離線檔案舊資料 (原紀錄名: ${row.raw_name})`, user.id, timestamp),
+      VALUES (?, ?, ?, ?, ?, 'editor', ?, ?)
+    `).bind(submissionId, gameId, row.raw_statement, row.raw_source_label || null, row.raw_source_url || null, user.id, timestamp),
     c.env.DB.prepare(`
       INSERT INTO rules (
         id, game_id, submission_id, statement, common_mistake, details,
-        flow_stage, player_count_note, edition_note, status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+        flow_stage, player_count_note, edition_note, source_label, source_url,
+        status, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, gameId, submissionId, row.suggested_statement,
       row.suggested_common_mistake || null, row.suggested_details || null,
       row.suggested_flow_stage, row.suggested_player_count_note || null,
-      row.suggested_edition_note || null, user.id, timestamp, timestamp,
+      row.suggested_edition_note || null, row.raw_source_label || null, row.raw_source_url || null,
+      user.id, timestamp, timestamp,
     ),
     c.env.DB.prepare(`
       UPDATE legacy_import_rows

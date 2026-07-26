@@ -24,6 +24,8 @@ const submissionSchema = z.object({
     flowStage: z.enum(FLOW_STAGES).optional(),
     playerCountNote: z.string().trim().max(300).optional(),
     editionNote: z.string().trim().max(300).optional(),
+    sourceLabel: z.string().trim().max(300).optional(),
+    sourceUrl: z.url().max(2000).optional().or(z.literal('')),
     tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   })).min(1).max(20),
 });
@@ -69,9 +71,9 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
     statements.push(c.env.DB.prepare(`
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
-        flow_stage, player_count_note, edition_note, status, created_by,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+        flow_stage, player_count_note, edition_note, source_label, source_url,
+        status, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, submissionId, parsed.data.gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
@@ -79,6 +81,8 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
       input.flowStage ?? 'uncategorized',
       cleanOptional(input.playerCountNote, 300) ?? null,
       cleanOptional(input.editionNote, 300) ?? null,
+      cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,
+      cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
       user.id, timestamp, timestamp,
     ));
     statements.push(...await tagWriteStatements(c, ruleId, input.tagNames ?? [], user.id, timestamp, false));
