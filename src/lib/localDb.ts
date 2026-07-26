@@ -19,16 +19,6 @@ export interface TagCacheRecord {
   cachedAt: number;
 }
 
-export interface GameMetaRecord {
-  id: string;
-  slug: string;
-  displayName: string;
-  englishName?: string;
-  aliases: string[];
-  ruleIds: string[];
-  updatedAt: number;
-}
-
 export type RuleEntity = RuleCard;
 
 export interface CachedGameRow extends GameSummary {
@@ -36,6 +26,7 @@ export interface CachedGameRow extends GameSummary {
   cachedAt: number;
   rulesFetchedAt?: number;
   rulesComplete?: boolean;
+  rulesVersion?: number;
 }
 
 export interface CachedRuleRow extends RuleCard {
@@ -130,6 +121,17 @@ const sortRules = (rules: RuleCard[], includePrivate: boolean) => [...rules].sor
   : (publicRuleOrder[left.flowStage ?? 'uncategorized'] ?? 7) - (publicRuleOrder[right.flowStage ?? 'uncategorized'] ?? 7)
     || (right.createdAt ?? 0) - (left.createdAt ?? 0));
 
+export const isCachedRuleSetUsable = (
+  game: CachedGameRow,
+  includePrivate: boolean,
+  currentTime = Date.now(),
+) => Boolean(
+  game.rulesFetchedAt
+  && currentTime - game.rulesFetchedAt < HOUR_CACHE_FRESH_MS
+  && (!includePrivate || game.rulesComplete)
+  && game.rulesVersion === game.latestRuleUpdatedAt
+);
+
 export const localDb = {
   getDraft: async () => (await getDatabase()).get('drafts', 'active'),
   saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await getDatabase()).put('drafts', { ...draft, id: 'active' }),
@@ -214,7 +216,7 @@ export const localDb = {
     if (!meta) return undefined;
     const games = (await (await getDatabase()).getAll('games'))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, 'zh-Hant'))
-      .map(({ cachedAt: _cachedAt, rulesFetchedAt: _rulesFetchedAt, rulesComplete: _rulesComplete, ...game }) => ({
+      .map(({ cachedAt: _cachedAt, rulesFetchedAt: _rulesFetchedAt, rulesComplete: _rulesComplete, rulesVersion: _rulesVersion, ...game }) => ({
         ...game,
         ruleCount: game.totalRuleCount ?? game.ruleCount,
       }));
@@ -277,6 +279,7 @@ export const localDb = {
       cachedAt,
       rulesFetchedAt: cachedAt,
       rulesComplete,
+      rulesVersion: game.latestRuleUpdatedAt,
     } as CachedGameRow);
     await tx.objectStore('recentGames').put({ id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: cachedAt });
     await tx.done;
@@ -284,15 +287,17 @@ export const localDb = {
   getCachedGame: async (identifier: string, includePrivate = false) => {
     const db = await getDatabase();
     const game = await findCachedGame(db, identifier);
-    if (!game?.rulesFetchedAt || Date.now() - game.rulesFetchedAt >= HOUR_CACHE_FRESH_MS) return undefined;
-    if (includePrivate && !game.rulesComplete) return undefined;
+    if (!game || !isCachedRuleSetUsable(game, includePrivate)) return undefined;
     const storedRules = await db.getAllFromIndex('rules', 'gameId', game.id);
     const rules = sortRules(
       storedRules.filter((rule) => includePrivate || rule.status === 'published'),
       includePrivate,
     );
-    const { cachedAt: _cachedAt, rulesFetchedAt, rulesComplete: _rulesComplete, ...summary } = game;
-    const detail: GameDetail = { ...summary, rules, ruleCount: rules.length };
+    const { cachedAt: _cachedAt, rulesFetchedAt, rulesComplete: _rulesComplete, rulesVersion: _rulesVersion, ...summary } = game;
+    const ruleCount = includePrivate
+      ? game.totalRuleCount ?? rules.length
+      : game.publishedRuleCount ?? rules.length;
+    const detail: GameDetail = { ...summary, rules, ruleCount };
     return { key: `game:${game.id}`, data: detail, cachedAt: rulesFetchedAt };
   },
   invalidateGame: async (identifier: string) => {

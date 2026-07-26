@@ -45,6 +45,19 @@ describe('api game refresh', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('uses the same local game store for the editor catalog detail', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const editorGame = { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], rules: [], ruleCount: 0, updatedAt: 1 };
+    const getCachedGame = vi.spyOn(localDb, 'getCachedGame').mockResolvedValue({ key: 'game:game-1', data: editorGame, cachedAt: Date.now() });
+
+    const result = await api.game('game-1', false, true);
+
+    expect(result.game).toEqual(editorGame);
+    expect(getCachedGame).toHaveBeenCalledWith('game-1', true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test('writes a freshly fetched game through the API cache boundary', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

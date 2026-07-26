@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
@@ -63,15 +63,22 @@ export const CatalogPage = () => {
   const { canEdit, loading } = useSession();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [expandedGameId, setExpandedGameId] = useState<string>();
-  const [details, setDetails] = useState<Record<string, GameDetail>>({});
+  const [expandedGame, setExpandedGame] = useState<GameDetail>();
   const [loadingGameId, setLoadingGameId] = useState<string>();
   const [error, setError] = useState('');
+  const detailRequestId = useRef(0);
 
   const loadGames = async (forceRefresh = false) => {
     setError('');
     try {
       const data = await api.editorCatalogGames(forceRefresh);
       setGames(data.games);
+      if (forceRefresh) {
+        detailRequestId.current += 1;
+        setExpandedGameId(undefined);
+        setExpandedGame(undefined);
+        setLoadingGameId(undefined);
+      }
     } catch {
       setError('資料表載入失敗，請重新整理後再試。');
     }
@@ -80,23 +87,35 @@ export const CatalogPage = () => {
   useEffect(() => { if (canEdit) void loadGames(); }, [canEdit]);
 
   const toggleGame = async (game: GameSummary) => {
+    const requestId = ++detailRequestId.current;
     if (expandedGameId === game.id) {
       setExpandedGameId(undefined);
+      setExpandedGame(undefined);
       return;
     }
     setExpandedGameId(game.id);
-    if (details[game.id]) return;
+    setExpandedGame(undefined);
     setLoadingGameId(game.id);
     setError('');
     try {
       const data = await api.game(game.id, false, true);
       const hydratedGame = await hydrateGameTags(data.game);
-      setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
+      if (requestId !== detailRequestId.current) return;
+      setExpandedGame(hydratedGame);
+      setGames((current) => current.map((summary) => summary.id === hydratedGame.id
+        ? {
+            ...summary,
+            ...hydratedGame,
+            aliases: hydratedGame.aliases,
+            ruleCount: hydratedGame.totalRuleCount ?? hydratedGame.ruleCount,
+          }
+        : summary));
     } catch {
+      if (requestId !== detailRequestId.current) return;
       setExpandedGameId(undefined);
       setError('這個遊戲的規則載入失敗，請再試一次。');
     } finally {
-      setLoadingGameId(undefined);
+      if (requestId === detailRequestId.current) setLoadingGameId(undefined);
     }
   };
 
@@ -138,7 +157,7 @@ export const CatalogPage = () => {
               <td>{game.ruleCount}</td>
               <td>{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
-            {expandedGameId === game.id && <tr><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : details[game.id] ? <RulesSheet game={details[game.id]} /> : null}</td></tr>}
+            {expandedGameId === game.id && <tr><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} /> : null}</td></tr>}
           </Fragment>)}
         </tbody>
       </table>
