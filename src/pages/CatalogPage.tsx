@@ -108,24 +108,35 @@ export const CatalogPage = () => {
       <div>
         <p className="eyebrow">Editor / Admin</p>
         <h1>遊戲資料表</h1>
-        <p className="muted">先瀏覽全部遊戲；點擊列後，才載入該遊戲的全部規則。這裡是編輯用資料視圖，不會取代一般搜尋。</p>
       </div>
       <button type="button" className="button secondary" onClick={() => void loadGames()}>重新整理</button>
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="catalog-toolbar"><strong>{games.length} 款遊戲</strong><span>規則只在展開時讀取</span></div>
+    <div className="catalog-toolbar"><strong>{games.length} 款遊戲</strong></div>
     <div className="catalog-sheet-scroll">
       <table className="catalog-table">
-        <thead><tr><th>遊戲</th><th>英文名稱</th><th>規則數</th><th>最後更新</th><th>操作</th></tr></thead>
+        <thead><tr><th aria-label="展開"></th><th>遊戲</th><th>英文名稱</th><th>規則數</th><th>最後更新</th></tr></thead>
         <tbody>
           {games.length === 0 && !error && <tr><td colSpan={5} className="catalog-empty-cell">目前沒有遊戲資料。</td></tr>}
           {games.map((game) => <Fragment key={game.id}>
-            <tr className={expandedGameId === game.id ? 'catalog-game-row expanded' : 'catalog-game-row'}>
-              <td><button type="button" className="catalog-game-button" aria-expanded={expandedGameId === game.id} onClick={() => void toggleGame(game)}><span className="catalog-expand-icon" aria-hidden="true">{expandedGameId === game.id ? '−' : '+'}</span><strong>{game.displayName}</strong></button></td>
+            <tr
+              className={expandedGameId === game.id ? 'catalog-game-row expanded' : 'catalog-game-row'}
+              role="button"
+              tabIndex={0}
+              aria-expanded={expandedGameId === game.id}
+              onClick={() => void toggleGame(game)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  void toggleGame(game);
+                }
+              }}
+            >
+              <td className="catalog-expand-cell"><span className="catalog-expand-icon" aria-hidden="true">{expandedGameId === game.id ? '−' : '+'}</span></td>
+              <td><strong>{game.displayName}</strong></td>
               <td>{game.englishName || '—'}</td>
               <td>{game.ruleCount}</td>
               <td>{formatDate(game.updatedAt)}</td>
-              <td><button type="button" className="text-action" onClick={() => void toggleGame(game)}>{expandedGameId === game.id ? '收合' : '展開規則'}</button></td>
             </tr>
             {expandedGameId === game.id && <tr><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : details[game.id] ? <RulesSheet game={details[game.id]} /> : null}</td></tr>}
           </Fragment>)}

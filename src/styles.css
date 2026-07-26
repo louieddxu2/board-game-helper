@@ -298,7 +298,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-page { max-width: 1280px; margin: 0 auto; padding: 64px 24px 120px; }
 .catalog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
 .catalog-header h1 { font-size: clamp(38px, 6vw, 62px); margin-bottom: 14px; }
-.catalog-header p:last-child { max-width: 680px; line-height: 1.7; }
 .catalog-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
 .catalog-toolbar strong { color: var(--ink); }
 .catalog-sheet-scroll, .catalog-detail-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--white); }
@@ -308,9 +307,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-table th, .catalog-rules-table th { background: var(--cream); color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
 .catalog-table tr:last-child td, .catalog-rules-table tr:last-child td { border-bottom: 0; }
 .catalog-table th:last-child, .catalog-table td:last-child, .catalog-rules-table th:last-child, .catalog-rules-table td:last-child { border-right: 0; }
+.catalog-game-row { cursor: pointer; }
+.catalog-game-row:focus-visible td { outline: 2px solid var(--orange); outline-offset: -2px; }
 .catalog-game-row:hover td { background: #fffaf0; }
 .catalog-game-row.expanded td { background: var(--cream); }
-.catalog-game-button { display: flex; align-items: flex-start; gap: 9px; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font-weight: 700; }
+.catalog-expand-cell { width: 48px; padding-right: 8px !important; padding-left: 8px !important; text-align: center; }
 .catalog-expand-icon { display: inline-grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); font-size: 18px; line-height: 1; }
 .catalog-detail-cell { padding: 0 !important; background: var(--paper); }
 .catalog-detail-wrap { padding: 16px; }
