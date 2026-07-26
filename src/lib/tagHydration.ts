@@ -2,7 +2,6 @@ import { api } from './api';
 import { localDb } from './localDb';
 import type { GameDetail, RuleCard, TagSummary } from '../shared/types';
 
-const TAG_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 const tagBatchPromises = new Map<string, Promise<TagSummary[]>>();
 
 const uniqueTagIds = (rules: RuleCard[]) => Array.from(new Set(
@@ -28,7 +27,6 @@ export const hydrateRuleTags = async <T extends RuleCard>(rules: T[]): Promise<T
     for (const tag of rule.tags ?? []) tagMap.set(tag.id, tag);
   }
 
-  const now = Date.now();
   if (!tagIds.length) {
     await localDb.cacheTagEntities(Array.from(tagMap.values())).catch(() => undefined);
     return rules;
@@ -36,23 +34,21 @@ export const hydrateRuleTags = async <T extends RuleCard>(rules: T[]): Promise<T
 
   const cachedRecords = await localDb.getCachedTagEntities(tagIds).catch(() => []);
   const cachedIds = new Set<string>();
-  const staleIds: string[] = [];
   for (const record of cachedRecords) {
     tagMap.set(record.data.id, record.data);
     cachedIds.add(record.data.id);
-    if (now - record.cachedAt >= TAG_CACHE_FRESH_MS) staleIds.push(record.data.id);
   }
 
   const publicTags = await localDb.getCachedPublicTags().catch(() => undefined);
-  if (publicTags && now - publicTags.cachedAt < TAG_CACHE_FRESH_MS) {
+  if (publicTags) {
     const publicTagMap = new Map(publicTags.data.tags.map((tag) => [tag.id, tag]));
     const fromPublicCache = tagIds.filter((id) => publicTagMap.has(id)).map((id) => publicTagMap.get(id)!);
     fromPublicCache.forEach((tag) => tagMap.set(tag.id, tag));
     await localDb.cacheTagEntities(fromPublicCache).catch(() => undefined);
   }
 
-  const idsToFetch = tagIds.filter((id) => !cachedIds.has(id) || staleIds.includes(id))
-    .filter((id) => !publicTags || !publicTags.data.tags.some((tag) => tag.id === id && now - publicTags.cachedAt < TAG_CACHE_FRESH_MS))
+  const idsToFetch = tagIds.filter((id) => !cachedIds.has(id))
+    .filter((id) => !publicTags || !publicTags.data.tags.some((tag) => tag.id === id))
     .sort();
 
   if (idsToFetch.length) {

@@ -19,16 +19,8 @@ interface Props {
 }
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
-type CachedSearch = SearchResponse & { cachedAt: number };
-const SEARCH_CACHE_FRESH_MS = 60 * 60 * 1000;
-const searchCache = new Map<string, CachedSearch>();
 export const clearSearchCache = () => {
-  searchCache.clear();
   void localDb.invalidateSearch();
-};
-const rememberSearch = (key: string, response: SearchResponse) => {
-  if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value as string);
-  searchCache.set(key, { ...response, cachedAt: Date.now() });
 };
 
 export function formatGameSearchDisplay(
@@ -101,45 +93,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       setGames([]); setRules([]); setSearchError(false); return;
     }
     const cacheKey = `${includeRules ? 'all' : 'games'}:${query.toLocaleLowerCase()}`;
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < SEARCH_CACHE_FRESH_MS) {
-      setGames(cached.games); setRules(cached.rules); setActiveIndex(-1); setLoading(false); setSearchError(false);
-      return;
-    }
-
-    const qLower = query.toLowerCase();
     const prefix = `${includeRules ? 'all' : 'games'}:`;
-    let foundProgressive = false;
-    for (const [key, data] of searchCache.entries()) {
-      if (Date.now() - data.cachedAt >= SEARCH_CACHE_FRESH_MS) {
-        searchCache.delete(key);
-        continue;
-      }
-      if (key.startsWith(prefix) && cacheKey.startsWith(key) && data.games.length < 20) {
-        const filteredGames = data.games.filter(game => 
-          game.displayName.toLowerCase().includes(qLower) ||
-          game.englishName?.toLowerCase().includes(qLower) ||
-          game.aliases?.some(a => a.toLowerCase().includes(qLower))
-        );
-        const filteredRules = data.rules.filter(rule => 
-          rule.statement.toLowerCase().includes(qLower) ||
-          rule.gameName.toLowerCase().includes(qLower)
-        );
-        
-        rememberSearch(cacheKey, { games: filteredGames, rules: filteredRules });
-        setGames(filteredGames);
-        setRules(filteredRules);
-        setActiveIndex(-1);
-        setLoading(false);
-        setSearchError(false);
-        foundProgressive = true;
-        break;
-      }
-    }
-    
-    if (foundProgressive) return;
-
-    if (cached) searchCache.delete(cacheKey);
     let active = true;
     setLoading(true);
     setSearchError(false);
@@ -147,27 +101,51 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     const fetchApi = () => {
       const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
       request.then((response) => {
-        rememberSearch(cacheKey, response);
         localDb.cacheSearch(cacheKey, response).catch(() => {});
         if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
       }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
     };
 
-    localDb.getCachedSearch(cacheKey).then(idbCached => {
-      if (!active) return;
-      if (idbCached && Date.now() - idbCached.cachedAt < SEARCH_CACHE_FRESH_MS) {
-        rememberSearch(cacheKey, idbCached.data);
-        setGames(idbCached.data.games);
-        setRules(idbCached.data.rules);
-        setActiveIndex(-1);
-        setLoading(false);
-        setSearchError(false);
-      } else {
+    const loadCached = async () => {
+      try {
+        const cached = await localDb.getCachedSearch(cacheKey);
+        if (!active) return;
+        if (cached) {
+          setGames(cached.data.games);
+          setRules(cached.data.rules);
+          setActiveIndex(-1);
+          setLoading(false);
+          setSearchError(false);
+          return;
+        }
+
+        const progressive = await localDb.getCachedSearchPrefix(prefix, cacheKey);
+        if (!active) return;
+        if (progressive) {
+          const qLower = query.toLowerCase();
+          const filteredGames = progressive.data.games.filter((game) =>
+            game.displayName.toLowerCase().includes(qLower) ||
+            game.englishName?.toLowerCase().includes(qLower) ||
+            game.aliases?.some((alias) => alias.toLowerCase().includes(qLower)),
+          );
+          const filteredRules = progressive.data.rules.filter((rule) =>
+            rule.statement.toLowerCase().includes(qLower) ||
+            rule.gameName.toLowerCase().includes(qLower),
+          );
+          setGames(filteredGames);
+          setRules(filteredRules);
+          setActiveIndex(-1);
+          setLoading(false);
+          setSearchError(false);
+          return;
+        }
+
         fetchApi();
+      } catch {
+        if (active) fetchApi();
       }
-    }).catch(() => {
-      if (active) fetchApi();
-    });
+    };
+    void loadCached();
 
     return () => { active = false; };
   }, [includeRules, isMinLengthSatisfied, query, selectedId]);

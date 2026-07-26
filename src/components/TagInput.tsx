@@ -4,19 +4,17 @@ import { localDb } from '../lib/localDb';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSummary } from '../shared/types';
 
-const PUBLIC_TAG_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 let publicTagsPromise: Promise<TagSummary[]> | undefined;
 
 const loadPublicTags = async (): Promise<TagSummary[]> => {
   const cached = await localDb.getCachedPublicTags().catch(() => undefined);
-  if (cached && Date.now() - cached.cachedAt < PUBLIC_TAG_CACHE_FRESH_MS) return cached.data.tags;
+  if (cached) return cached.data.tags;
 
   try {
     const result = await api.tags();
     await localDb.cachePublicTags(result).catch(() => undefined);
     return result.tags;
   } catch (error) {
-    if (cached) return cached.data.tags;
     throw error;
   }
 };

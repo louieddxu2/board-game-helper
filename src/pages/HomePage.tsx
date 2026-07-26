@@ -9,8 +9,6 @@ import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
 import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
-const HOME_CACHE_FRESH_MS = 60 * 60 * 1000;
-
 export const HomePage = () => {
   const navigate = useNavigate();
   const { canEdit } = useSession();
@@ -36,16 +34,10 @@ export const HomePage = () => {
       }
       return data;
     }).catch(() => undefined);
-    void localDb.getCachedHomeIDs().then((cachedIds) => {
-      if (!active) return;
-      if (cachedIds && (Date.now() - cachedIds.cachedAt < HOME_CACHE_FRESH_MS)) {
-        // Fast ID-only initialization
-      }
-    });
     void localDb.getCachedHome().then((cached) => {
       if (!active) return;
       if (cached) setHome(cached.data);
-      if (!cached || Date.now() - cached.cachedAt >= HOME_CACHE_FRESH_MS) void refreshHome();
+      if (!cached) void refreshHome();
     }).catch(() => { void refreshHome(); });
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });

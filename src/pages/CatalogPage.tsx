@@ -6,8 +6,6 @@ import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
 
-const CATALOG_CACHE_FRESH_MS = 60 * 60 * 1000;
-
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
 });
@@ -73,7 +71,8 @@ export const CatalogPage = () => {
   const loadGames = async (forceRefresh = false) => {
     setError('');
     const cached = await localDb.getCachedCatalogGames().catch(() => undefined);
-    if (!forceRefresh && cached && Date.now() - cached.cachedAt < CATALOG_CACHE_FRESH_MS) {
+    const cachedGames = cached?.data.games;
+    if (!forceRefresh && cached) {
       setGames(cached.data.games);
       return;
     }
@@ -82,7 +81,7 @@ export const CatalogPage = () => {
       setGames(data.games);
       void localDb.cacheCatalogGames(data).catch(() => undefined);
     } catch {
-      if (cached) setGames(cached.data.games);
+      if (cachedGames) setGames(cachedGames);
       setError('資料表載入失敗，請重新整理後再試。');
     }
   };
@@ -99,7 +98,7 @@ export const CatalogPage = () => {
     setLoadingGameId(game.id);
     setError('');
     const cached = await localDb.getCachedCatalogGame(game.id).catch(() => undefined);
-    if (cached && Date.now() - cached.cachedAt < CATALOG_CACHE_FRESH_MS) {
+    if (cached) {
       const hydratedGame = await hydrateGameTags(cached.data);
       setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
       setLoadingGameId(undefined);
@@ -111,7 +110,6 @@ export const CatalogPage = () => {
       setDetails((current) => ({ ...current, [game.id]: hydratedGame }));
       void localDb.cacheCatalogGame(hydratedGame).catch(() => undefined);
     } catch {
-      if (cached) setDetails((current) => ({ ...current, [game.id]: cached.data }));
       setExpandedGameId(undefined);
       setError('這個遊戲的規則載入失敗，請再試一次。');
     } finally {

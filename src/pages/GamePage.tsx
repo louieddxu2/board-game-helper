@@ -13,8 +13,6 @@ import { useToast } from '../context/ToastContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 
-const GAME_CACHE_FRESH_MS = 60 * 60 * 1000;
-
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
   end_scoring: '結束與計分', edition_player_count: '人數／版本／擴充',
@@ -58,7 +56,7 @@ export const GamePage = () => {
     const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
     void localDb.getCachedGame(identifier).then(async (cached) => {
       if (!active) return;
-      if (cached && (Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) && !justAdded) {
+      if (cached && !justAdded) {
         const hydratedGame = await hydrateGameTags(cached.data);
         if (!active) return;
         setGame(hydratedGame);

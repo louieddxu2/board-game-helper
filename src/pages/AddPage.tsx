@@ -9,7 +9,6 @@ import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
 type RuleInput = { id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
-const GAME_CACHE_FRESH_MS = 60 * 60 * 1000;
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -49,7 +48,7 @@ export const AddPage = () => {
       const nameParam = searchParams.get('name') || searchParams.get('gameName');
       if (requestedGame) {
         const cached = await localDb.getCachedGame(requestedGame).catch(() => undefined);
-        if (cached && Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) {
+        if (cached) {
           if (!active) return;
           setGame(cached.data); setGameQuery(cached.data.displayName);
         } else {

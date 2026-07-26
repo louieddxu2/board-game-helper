@@ -4,7 +4,15 @@ import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSumma
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type PublicTagsResponse = { tags: TagSummary[] };
 export type CatalogGamesCache = { games: GameSummary[] };
-const RULE_CACHE_FRESH_MS = 60 * 60 * 1000;
+const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
+const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+type CacheRecord<T> = { key: string; data: T; cachedAt: number };
+const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
+
+const getFreshCache = async <T>(key: string, maxAge: number): Promise<CacheRecord<T> | undefined> => {
+  const cached = await (await getDatabase()).get('cache', key) as CacheRecord<T> | undefined;
+  return cached && Date.now() - cached.cachedAt < maxAge ? cached : undefined;
+};
 export interface TagCacheRecord {
   key: string;
   data: TagSummary;
@@ -76,9 +84,36 @@ export const localDb = {
   addPending: async (payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
   getPending: async () => (await getDatabase()).getAll('pending'),
-  cacheSearch: async (key: string, data: SearchResponse) => (await getDatabase()).put('cache', { key: `search:${key}`, data, cachedAt: Date.now() }),
-  getCachedSearch: async (key: string) => (await getDatabase()).get('cache', `search:${key}`) as Promise<{ key: string; data: SearchResponse; cachedAt: number } | undefined>,
+  cacheSearch: async (key: string, data: SearchResponse) => {
+    const record = { key: `search:${key}`, data, cachedAt: Date.now() } satisfies CacheRecord<SearchResponse>;
+    if (searchMemoryCache.size >= 100 && !searchMemoryCache.has(key)) {
+      searchMemoryCache.delete(searchMemoryCache.keys().next().value as string);
+    }
+    searchMemoryCache.set(key, record);
+    await (await getDatabase()).put('cache', record);
+  },
+  getCachedSearch: async (key: string) => {
+    const memory = searchMemoryCache.get(key);
+    if (memory) {
+      if (Date.now() - memory.cachedAt < HOUR_CACHE_FRESH_MS) return memory;
+      searchMemoryCache.delete(key);
+    }
+    const cached = await getFreshCache<SearchResponse>(`search:${key}`, HOUR_CACHE_FRESH_MS);
+    if (cached) searchMemoryCache.set(key, cached);
+    return cached;
+  },
+  getCachedSearchPrefix: async (prefix: string, targetKey: string) => {
+    for (const [key, cached] of searchMemoryCache) {
+      if (Date.now() - cached.cachedAt >= HOUR_CACHE_FRESH_MS) {
+        searchMemoryCache.delete(key);
+        continue;
+      }
+      if (key.startsWith(prefix) && targetKey.startsWith(key) && cached.data.games.length < 20) return cached;
+    }
+    return undefined;
+  },
   invalidateSearch: async () => {
+    searchMemoryCache.clear();
     const db = await getDatabase();
     const keys = await db.getAllKeys('cache');
     for (const key of keys) {
@@ -88,24 +123,24 @@ export const localDb = {
     }
   },
   cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
-  getCachedHome: async () => (await getDatabase()).get('cache', 'home') as Promise<{ key: string; data: HomePayload; cachedAt: number } | undefined>,
+  getCachedHome: async () => getFreshCache<HomePayload>('home', HOUR_CACHE_FRESH_MS),
   cacheHomeIDs: async (data: HomeIDPayload) => (await getDatabase()).put('cache', { key: 'home_ids', data, cachedAt: Date.now() }),
-  getCachedHomeIDs: async () => (await getDatabase()).get('cache', 'home_ids') as Promise<{ key: string; data: HomeIDPayload; cachedAt: number } | undefined>,
+  getCachedHomeIDs: async () => getFreshCache<HomeIDPayload>('home_ids', HOUR_CACHE_FRESH_MS),
   invalidateHome: async () => {
     const db = await getDatabase();
     await db.delete('cache', 'home');
     await db.delete('cache', 'home_ids');
   },
   cacheCatalogGames: async (data: CatalogGamesCache) => (await getDatabase()).put('cache', { key: 'catalog:games', data, cachedAt: Date.now() }),
-  getCachedCatalogGames: async () => (await getDatabase()).get('cache', 'catalog:games') as Promise<{ key: string; data: CatalogGamesCache; cachedAt: number } | undefined>,
+  getCachedCatalogGames: async () => getFreshCache<CatalogGamesCache>('catalog:games', HOUR_CACHE_FRESH_MS),
   cacheCatalogGame: async (game: GameDetail) => (await getDatabase()).put('cache', { key: `catalog:game:${game.id}`, data: game, cachedAt: Date.now() }),
-  getCachedCatalogGame: async (id: string) => (await getDatabase()).get('cache', `catalog:game:${id}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
+  getCachedCatalogGame: async (id: string) => getFreshCache<GameDetail>(`catalog:game:${id}`, HOUR_CACHE_FRESH_MS),
   invalidateCatalogGame: async (id: string) => (await getDatabase()).delete('cache', `catalog:game:${id}`),
   cacheGameMeta: async (meta: GameMetaRecord) => (await getDatabase()).put('cache', { key: `gameMeta:${meta.slug}`, data: meta, cachedAt: Date.now() }),
-  getCachedGameMeta: async (slug: string) => (await getDatabase()).get('cache', `gameMeta:${slug}`) as Promise<{ key: string; data: GameMetaRecord; cachedAt: number } | undefined>,
+  getCachedGameMeta: async (slug: string) => getFreshCache<GameMetaRecord>(`gameMeta:${slug}`, HOUR_CACHE_FRESH_MS),
   invalidateGameMeta: async (slug: string) => (await getDatabase()).delete('cache', `gameMeta:${slug}`),
   cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: 'publicTags', data, cachedAt: Date.now() }),
-  getCachedPublicTags: async () => (await getDatabase()).get('cache', 'publicTags') as Promise<{ key: string; data: PublicTagsResponse; cachedAt: number } | undefined>,
+  getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>('publicTags', DAY_CACHE_FRESH_MS),
   invalidatePublicTags: async () => (await getDatabase()).delete('cache', 'publicTags'),
   cacheTagEntities: async (tags: TagSummary[]) => {
     const db = await getDatabase();
@@ -113,16 +148,12 @@ export const localDb = {
     await Promise.all(tags.map((tag) => db.put('cache', { key: `tag:${tag.id}`, data: tag, cachedAt })));
   },
   getCachedTagEntities: async (ids: string[]) => {
-    const db = await getDatabase();
-    const records = await Promise.all(ids.map((id) => db.get('cache', `tag:${id}`) as Promise<TagCacheRecord | undefined>));
+    const records = await Promise.all(ids.map((id) => getFreshCache<TagSummary>(`tag:${id}`, DAY_CACHE_FRESH_MS)));
     return records.filter((record): record is TagCacheRecord => Boolean(record));
   },
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
-  getCachedRuleEntity: async (ruleId: string) => {
-    const cached = await (await getDatabase()).get('cache', `rule:${ruleId}`) as { key: string; data: RuleEntity; cachedAt: number } | undefined;
-    return cached && Date.now() - cached.cachedAt < RULE_CACHE_FRESH_MS ? cached : undefined;
-  },
+  getCachedRuleEntity: async (ruleId: string) => getFreshCache<RuleEntity>(`rule:${ruleId}`, HOUR_CACHE_FRESH_MS),
   invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),
   cacheGame: async (game: GameDetail) => {
     const db = await getDatabase();
@@ -142,7 +173,7 @@ export const localDb = {
     await db.put('cache', { key: `game:${game.slug}`, data: game, cachedAt: Date.now() });
     await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
-  getCachedGame: async (slug: string) => (await getDatabase()).get('cache', `game:${slug}`) as Promise<{ key: string; data: GameDetail; cachedAt: number } | undefined>,
+  getCachedGame: async (slug: string) => getFreshCache<GameDetail>(`game:${slug}`, HOUR_CACHE_FRESH_MS),
   invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
   recentGameIds: async () => {
     const db = await getDatabase();
@@ -168,6 +199,7 @@ export const localDb = {
     return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
   },
   clearCache: async (options: { includeTags?: boolean } = {}) => {
+    searchMemoryCache.clear();
     const db = await getDatabase();
     const keys = await db.getAllKeys('cache');
     for (const key of keys) {
