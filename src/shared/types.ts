@@ -100,6 +100,7 @@ export interface RuleCard {
   status: 'draft' | 'published' | 'hidden';
   createdBy?: string;
   updatedAt?: number;
+  tagIds?: string[];
   tags: TagSummary[];
 }
 

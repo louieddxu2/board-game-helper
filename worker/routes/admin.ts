@@ -4,7 +4,7 @@ import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { Env, D1PreparedStatement } from '../env';
 import { createId, normalizeEmail, normalizeText, now, slugify } from '../utils';
-import { setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
+import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
 const adminRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -65,10 +65,11 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
     aliases.push(alias.alias);
     aliasesByGame.set(alias.game_id, aliases);
   }
+  const tagMap = await resolveRuleTags(c.env.DB, rulesResult.results ?? []);
   const rulesByGame = new Map<string, any[]>();
   for (const row of rulesResult.results ?? []) {
     const rules = rulesByGame.get(row.game_id) ?? [];
-    rules.push(toRule(row));
+    rules.push(toRule(row, tagMap));
     rulesByGame.set(row.game_id, rules);
   }
   return c.json({

@@ -6,7 +6,7 @@ import type { Env, D1Result, D1PreparedStatement } from '../env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, resolveRuleTags, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const gamesRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -112,11 +112,13 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
         r.created_at DESC
     `).bind(game.id).all<RuleRow>(),
   ]);
+  const ruleRows = rulesResult.results ?? [];
+  const tagMap = await resolveRuleTags(c.env.DB, ruleRows);
   const detail: GameDetail = {
     ...toGame(game),
-    ruleCount: rulesResult.results?.length ?? 0,
+    ruleCount: ruleRows.length,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
-    rules: (rulesResult.results ?? []).map(toRule),
+    rules: ruleRows.map((row) => toRule(row, tagMap)),
   };
   setNoCache(c);
   return c.json({ game: detail });

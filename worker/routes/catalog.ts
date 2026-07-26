@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { GameDetail } from '../../src/shared/types';
 import { requireRole, type AppVariables } from '../auth';
 import type { Env } from '../env';
-import { setNoCache, ruleSelect, toGame, toRule, type GameRow, type RuleRow } from './shared';
+import { resolveRuleTags, setNoCache, ruleSelect, toGame, toRule, type GameRow, type RuleRow } from './shared';
 
 const catalogRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -37,13 +37,15 @@ catalogRoutes.get('/api/editor/catalog/games/:identifier', requireRole('editor')
     c.env.DB.prepare(`${ruleSelect}
       WHERE r.game_id = ?
       ORDER BY r.updated_at DESC, r.id DESC
-    `).bind(game.id).all<RuleRow>(),
+      `).bind(game.id).all<RuleRow>(),
   ]);
+  const ruleRows = rulesResult.results ?? [];
+  const tagMap = await resolveRuleTags(c.env.DB, ruleRows);
   const detail: GameDetail = {
     ...toGame(game),
-    ruleCount: rulesResult.results?.length ?? 0,
+    ruleCount: ruleRows.length,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
-    rules: (rulesResult.results ?? []).map(toRule),
+    rules: ruleRows.map((row) => toRule(row, tagMap)),
   };
   setNoCache(c);
   return c.json({ game: detail });

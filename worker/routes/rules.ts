@@ -6,7 +6,7 @@ import type { Env, D1Result, D1PreparedStatement } from '../env';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, resolveRuleTags, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const rulesRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -16,11 +16,10 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
       r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      r.tag_ids_json,
       s.source_label, s.source_url,
       (SELECT COALESCE(json_group_array(json_object('label', ss.label, 'url', ss.url)), '[]')
-        FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json,
-      (SELECT COALESCE(json_group_array(json_object('id', t.id, 'slug', t.slug, 'name', t.name)), '[]')
-        FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = r.id) AS tags_json
+        FROM submission_sources ss WHERE ss.submission_id = s.id ORDER BY ss.position) AS sources_json
     FROM rules r
     JOIN games g ON g.id = r.game_id
     JOIN submissions s ON s.id = r.submission_id
@@ -29,8 +28,9 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
 
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const tagMap = await resolveRuleTags(c.env.DB, [row]);
   setNoCache(c);
-  return c.json({ rule: { ...toRule(row), gameName: row.game_name, gameSlug: row.game_slug } });
+  return c.json({ rule: { ...toRule(row, tagMap), gameName: row.game_name, gameSlug: row.game_slug } });
 });
 
 const rulePatchSchema = z.object({
@@ -196,7 +196,7 @@ rulesRoutes.get('/api/admin/hidden-rules', requireRole('editor'), async (c) => {
   const result = await c.env.DB.prepare(`${ruleSelect}
     WHERE r.status = 'hidden' ORDER BY r.updated_at DESC LIMIT 100
   `).all<RuleRow>();
-  return c.json({ rules: (result.results ?? []).map(toRule) });
+  return c.json({ rules: (result.results ?? []).map((row) => toRule(row)) });
 });
 
 export { rulesRoutes };
