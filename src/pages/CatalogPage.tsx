@@ -102,13 +102,9 @@ export const CatalogPage = () => {
       const hydratedGame = await hydrateGameTags(data.game);
       if (requestId !== detailRequestId.current) return;
       setExpandedGame(hydratedGame);
+      const { rules: _rules, ...gameSummary } = hydratedGame;
       setGames((current) => current.map((summary) => summary.id === hydratedGame.id
-        ? {
-            ...summary,
-            ...hydratedGame,
-            aliases: hydratedGame.aliases,
-            ruleCount: hydratedGame.totalRuleCount ?? hydratedGame.ruleCount,
-          }
+        ? { ...summary, ...gameSummary, ruleCount: hydratedGame.totalRuleCount ?? hydratedGame.ruleCount }
         : summary));
     } catch {
       if (requestId !== detailRequestId.current) return;
