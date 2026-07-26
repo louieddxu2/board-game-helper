@@ -77,6 +77,13 @@ const notifyPending = () => {
   }
 };
 
+const invalidateCatalogCaches = async (db: Awaited<ReturnType<typeof getDatabase>>) => {
+  const keys = await db.getAllKeys('cache');
+  await Promise.all(keys
+    .filter((key): key is string => typeof key === 'string' && (key === 'catalog:games' || key.startsWith('catalog:game:')))
+    .map((key) => db.delete('cache', key)));
+};
+
 export const localDb = {
   getDraft: async () => (await getDatabase()).get('drafts', 'active'),
   saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await getDatabase()).put('drafts', { ...draft, id: 'active' }),
@@ -136,6 +143,7 @@ export const localDb = {
   cacheCatalogGame: async (game: GameDetail) => (await getDatabase()).put('cache', { key: `catalog:game:${game.id}`, data: game, cachedAt: Date.now() }),
   getCachedCatalogGame: async (id: string) => getFreshCache<GameDetail>(`catalog:game:${id}`, HOUR_CACHE_FRESH_MS),
   invalidateCatalogGame: async (id: string) => (await getDatabase()).delete('cache', `catalog:game:${id}`),
+  invalidateCatalogGames: async () => invalidateCatalogCaches(await getDatabase()),
   cacheGameMeta: async (meta: GameMetaRecord) => (await getDatabase()).put('cache', { key: `gameMeta:${meta.slug}`, data: meta, cachedAt: Date.now() }),
   getCachedGameMeta: async (slug: string) => getFreshCache<GameMetaRecord>(`gameMeta:${slug}`, HOUR_CACHE_FRESH_MS),
   invalidateGameMeta: async (slug: string) => (await getDatabase()).delete('cache', `gameMeta:${slug}`),
@@ -154,7 +162,11 @@ export const localDb = {
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
   getCachedRuleEntity: async (ruleId: string) => getFreshCache<RuleEntity>(`rule:${ruleId}`, HOUR_CACHE_FRESH_MS),
-  invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),
+  invalidateRuleEntity: async (ruleId: string) => {
+    const db = await getDatabase();
+    await db.delete('cache', `rule:${ruleId}`);
+    await invalidateCatalogCaches(db);
+  },
   cacheGame: async (game: GameDetail) => {
     const db = await getDatabase();
     const meta: GameMetaRecord = {
@@ -174,7 +186,12 @@ export const localDb = {
     await db.put('recentGames', { id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: Date.now() });
   },
   getCachedGame: async (slug: string) => getFreshCache<GameDetail>(`game:${slug}`, HOUR_CACHE_FRESH_MS),
-  invalidateGame: async (slug: string) => (await getDatabase()).delete('cache', `game:${slug}`),
+  invalidateGame: async (slug: string) => {
+    const db = await getDatabase();
+    await db.delete('cache', `game:${slug}`);
+    await db.delete('cache', `gameMeta:${slug}`);
+    await invalidateCatalogCaches(db);
+  },
   recentGameIds: async () => {
     const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
