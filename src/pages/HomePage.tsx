@@ -10,7 +10,6 @@ import { hydrateRuleTags } from '../lib/tagHydration';
 import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
 const HOME_CACHE_FRESH_MS = 60 * 60 * 1000;
-const RULE_CACHE_FRESH_MS = 60 * 60 * 1000;
 
 export const HomePage = () => {
   const navigate = useNavigate();
@@ -62,7 +61,7 @@ export const HomePage = () => {
         if (!ref?.ruleId) continue;
         try {
           const cached = await localDb.getCachedRuleEntity(ref.ruleId);
-          if (cached?.data && Date.now() - cached.cachedAt < RULE_CACHE_FRESH_MS) {
+          if (cached?.data) {
             cards.push({ ...cached.data, gameName: ref.gameName, gameSlug: ref.gameSlug });
           } else {
             const response = await api.rule(ref.ruleId);
@@ -96,7 +95,7 @@ export const HomePage = () => {
           const cached = await localDb.getCachedRuleEntity(ruleId);
           const cachedGameName = (cached?.data as any)?.gameName;
           const cachedGameSlug = (cached?.data as any)?.gameSlug;
-          if (cached?.data && Date.now() - cached.cachedAt < RULE_CACHE_FRESH_MS && cachedGameName && cachedGameSlug) {
+          if (cached?.data && cachedGameName && cachedGameSlug) {
             cards.push({ ...cached.data, gameName: cachedGameName, gameSlug: cachedGameSlug });
           } else {
             const response = await api.rule(ruleId);

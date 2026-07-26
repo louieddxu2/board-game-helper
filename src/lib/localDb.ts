@@ -4,6 +4,7 @@ import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSumma
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type PublicTagsResponse = { tags: TagSummary[] };
 export type CatalogGamesCache = { games: GameSummary[] };
+const RULE_CACHE_FRESH_MS = 60 * 60 * 1000;
 export interface TagCacheRecord {
   key: string;
   data: TagSummary;
@@ -118,7 +119,10 @@ export const localDb = {
   },
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('cache', { key: `rule:${rule.id}`, data: rule, cachedAt: Date.now() }),
-  getCachedRuleEntity: async (ruleId: string) => (await getDatabase()).get('cache', `rule:${ruleId}`) as Promise<{ key: string; data: RuleEntity; cachedAt: number } | undefined>,
+  getCachedRuleEntity: async (ruleId: string) => {
+    const cached = await (await getDatabase()).get('cache', `rule:${ruleId}`) as { key: string; data: RuleEntity; cachedAt: number } | undefined;
+    return cached && Date.now() - cached.cachedAt < RULE_CACHE_FRESH_MS ? cached : undefined;
+  },
   invalidateRuleEntity: async (ruleId: string) => (await getDatabase()).delete('cache', `rule:${ruleId}`),
   cacheGame: async (game: GameDetail) => {
     const db = await getDatabase();
