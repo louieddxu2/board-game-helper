@@ -9,6 +9,7 @@ import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
 type RuleInput = { id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
+const GAME_CACHE_FRESH_MS = 60 * 60 * 1000;
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -47,25 +48,19 @@ export const AddPage = () => {
       const requestedGame = searchParams.get('game');
       const nameParam = searchParams.get('name') || searchParams.get('gameName');
       if (requestedGame) {
-        const response = await api.game(requestedGame, true);
-        if (!active) return;
-        setGame(response.game); setGameQuery(response.game.displayName);
+        const cached = await localDb.getCachedGame(requestedGame).catch(() => undefined);
+        if (cached && Date.now() - cached.cachedAt < GAME_CACHE_FRESH_MS) {
+          if (!active) return;
+          setGame(cached.data); setGameQuery(cached.data.displayName);
+        } else {
+          const response = await api.game(requestedGame);
+          if (!active) return;
+          setGame(response.game); setGameQuery(response.game.displayName);
+          void localDb.cacheGame(response.game).catch(() => undefined);
+        }
         window.setTimeout(() => inputRefs.current[rules[0].id]?.focus(), 0);
       } else if (nameParam && (!draft || !draft.gameQuery)) {
         setGameQuery(nameParam);
-        try {
-          const response = await api.game(nameParam, true).catch(async () => {
-            const search = await api.searchGames(nameParam);
-            const exact = search.games.find((g) => g.displayName.toLowerCase() === nameParam.toLowerCase() || g.englishName?.toLowerCase() === nameParam.toLowerCase());
-            return exact ? { game: { ...exact, aliases: [], rules: [] } } : null;
-          });
-          if (active && response && response.game) {
-            setGame(response.game);
-            setGameQuery(response.game.displayName);
-          }
-        } catch {
-          // Ignore lookup failure for uncreated games
-        }
       }
     });
     return () => { active = false; };

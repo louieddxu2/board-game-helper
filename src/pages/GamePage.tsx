@@ -110,7 +110,7 @@ export const GamePage = () => {
     <header className="game-hero">
       <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
         <p>{game.ruleCount} 條易錯規則紀錄</p></div>
-      {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.id}`}>＋新增規則</Link></div>}
+      {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></div>}
     </header>
     <div className="view-mode-header">
       <div className="view-mode-switcher" role="tablist" aria-label="檢視模式切換">
