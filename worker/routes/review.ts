@@ -5,7 +5,7 @@ import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { normalizeText, now, sha256Hex, createId } from '../utils';
-import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
+import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, cleanTagNames, tagWriteStatements, reviewContentFromRow, reviewRuleSelect, RuleRow, ReviewRuleRow } from './shared';
 
@@ -170,12 +170,12 @@ reviewRoutes.post('/api/admin/review/import', requireRole('admin'), async (c) =>
       const statements = proposals.slice(index, index + 50).map(({ id, item, status, original, proposed }) =>
         getDatabase(c).statement(`
           INSERT INTO review_proposals (
-            id, batch_id, target_rule_id, action, status, reason,
-            base_updated_at, base_content_hash, original_content_json, proposed_content_json,
+            id, batch_id, target_id, operation, status, reason,
+            base_updated_at, base_content_hash, original_json, proposed_json,
             created_by, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          id, batchId, item.target.id, item.action, status, item.reason || null,
+          id, batchId, item.target.id, item.action === 'hide' ? 'hide' : 'edit', status, item.reason || null,
           item.base.updatedAt, item.base.contentHash, JSON.stringify(original), JSON.stringify(proposed),
           user.id, timestamp, timestamp,
         ));
@@ -193,13 +193,14 @@ reviewRoutes.post('/api/admin/review/import', requireRole('admin'), async (c) =>
 
 reviewRoutes.get('/api/admin/review/batches', requireRole('admin'), async (c) => {
   const result = await getDatabase(c).statement(`
-    SELECT b.id, b.name, b.source_type, b.base_dataset_version, b.proposal_count, b.pending_count,
+    SELECT b.id, b.name, b.source_type, b.status, b.base_dataset_version, b.proposal_count, b.pending_count,
+      b.accepted_count, b.rejected_count,
       b.created_by, b.created_at, b.updated_at, COALESCE(u.nickname, u.display_name) created_by_name
     FROM review_batches b JOIN users u ON u.id = b.created_by
     ORDER BY b.created_at DESC
   `).all<{
-    id: string; name: string; source_type: string; base_dataset_version: string | null;
-    proposal_count: number; pending_count: number; created_by: string; created_at: number;
+    id: string; name: string; source_type: string; status: ReviewBatch['status']; base_dataset_version: string | null;
+    proposal_count: number; pending_count: number; accepted_count: number; rejected_count: number; created_by: string; created_at: number;
     updated_at: number; created_by_name: string | null;
   }>();
   setNoCache(c);
@@ -208,11 +209,11 @@ reviewRoutes.get('/api/admin/review/batches', requireRole('admin'), async (c) =>
       id: row.id,
       name: row.name,
       sourceType: row.source_type as ReviewBatch['sourceType'],
-      status: 'open',
+      status: row.status,
       proposalCount: row.proposal_count,
       pendingCount: row.pending_count,
-      acceptedCount: 0,
-      rejectedCount: 0,
+      acceptedCount: row.accepted_count,
+      rejectedCount: row.rejected_count,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     })),
@@ -241,25 +242,23 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) 
   }
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const result = await getDatabase(c).statement(`
-    SELECT p.id, p.batch_id, p.target_rule_id, p.action, p.status, p.reason,
-      p.base_updated_at, p.base_content_hash, p.original_content_json, p.proposed_content_json,
-      p.decided_by, p.decided_at, p.decision_reason, p.applied_revision_id, p.created_at, p.updated_at,
+    SELECT p.id, p.batch_id, p.target_id, p.operation, p.status, p.reason,
+      p.base_updated_at, p.base_content_hash, p.original_json, p.proposed_json,
+      p.claimed_by, p.claimed_until, p.version, p.created_at, p.updated_at,
       g.display_name game_name, g.slug game_slug,
-      COALESCE(u1.nickname, u1.display_name) created_by_name, COALESCE(u2.nickname, u2.display_name) decided_by_name
+      COALESCE(u1.nickname, u1.display_name) created_by_name
     FROM review_proposals p
-    JOIN rules r ON r.id = p.target_rule_id
+    JOIN rules r ON r.id = p.target_id
     JOIN games g ON g.id = r.game_id
     LEFT JOIN users u1 ON u1.id = p.created_by
-    LEFT JOIN users u2 ON u2.id = p.decided_by
     ${whereClause}
     ORDER BY p.id DESC
     LIMIT ?
   `).bind(...bindings, limit + 1).all<{
-    id: string; batch_id: string; target_rule_id: string; action: 'propose' | 'hide'; status: ReviewProposal['status'];
-    reason: string | null; base_updated_at: number; base_content_hash: string; original_content_json: string;
-    proposed_content_json: string; decided_by: string | null; decided_at: number | null; decision_reason: string | null;
-    applied_revision_id: string | null; created_at: number; updated_at: number; game_name: string; game_slug: string;
-    created_by_name: string | null; decided_by_name: string | null;
+    id: string; batch_id: string; target_id: string; operation: 'edit' | 'hide'; status: ReviewProposal['status'];
+    reason: string | null; base_updated_at: number; base_content_hash: string; original_json: string;
+    proposed_json: string; claimed_by: string | null; claimed_until: number | null; version: number;
+    created_at: number; updated_at: number; game_name: string; game_slug: string; created_by_name: string | null;
   }>();
 
   const rows = result.results ?? [];
@@ -270,17 +269,19 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) 
     proposals: items.map((row): ReviewProposal => ({
       id: row.id,
       batchId: row.batch_id,
-      targetId: row.target_rule_id,
+      targetId: row.target_id,
       gameId: '',
       gameName: row.game_name,
       gameSlug: row.game_slug,
-      operation: row.action === 'hide' ? 'hide' : 'edit',
+      operation: row.operation,
       status: row.status as ReviewProposal['status'],
       reason: row.reason ?? undefined,
       baseUpdatedAt: row.base_updated_at,
-      original: JSON.parse(row.original_content_json) as ReviewContent,
-      proposed: JSON.parse(row.proposed_content_json) as ReviewContent,
-      version: 1,
+      original: normalizedReviewContent(JSON.parse(row.original_json) as ReviewContent),
+      proposed: normalizedReviewContent(JSON.parse(row.proposed_json) as ReviewContent),
+      version: row.version,
+      claimedBy: row.claimed_by ?? undefined,
+      claimedUntil: row.claimed_until ?? undefined,
       createdAt: row.created_at,
     })),
     nextCursor: hasMore ? items[items.length - 1].id : undefined,
@@ -290,26 +291,27 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) 
 const decisionSchema = z.object({
   decisions: z.array(z.object({
     proposalId: z.string(),
-    action: z.enum(['approve', 'reject']),
-    reason: z.string().trim().max(300).optional(),
+    version: z.number().int().positive(),
+    decision: z.enum(['accept', 'reject']),
+    proposed: reviewContentSchema.optional(),
   })).min(1).max(100),
 });
-reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('admin'), async (c) => {
+reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c) => {
   const body = decisionSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'invalid_payload' }, 400);
 
   const proposalIds = body.data.decisions.map((decision) => decision.proposalId);
   const result = await getDatabase(c).statement(`
-    SELECT p.id, p.batch_id, p.target_rule_id, p.action, p.status, p.base_updated_at, p.base_content_hash,
-      p.proposed_content_json, r.game_id, r.updated_at rule_updated_at, r.source_label, r.source_url,
-      r.submission_id
+    SELECT p.id, p.batch_id, p.target_id, p.operation, p.status, p.base_updated_at,
+      p.proposed_json, p.version, r.game_id, r.updated_at rule_updated_at, g.slug game_slug
     FROM review_proposals p
-    JOIN rules r ON r.id = p.target_rule_id
+    JOIN rules r ON r.id = p.target_id
+    JOIN games g ON g.id = r.game_id
     WHERE p.id IN (${proposalIds.map(() => '?').join(',')})
   `).bind(...proposalIds).all<{
-    id: string; batch_id: string; target_rule_id: string; action: 'propose' | 'hide'; status: ReviewProposal['status'];
-    base_updated_at: number; base_content_hash: string; proposed_content_json: string; game_id: string;
-    rule_updated_at: number; source_label: string | null; source_url: string | null; submission_id: string;
+    id: string; batch_id: string; target_id: string; operation: 'edit' | 'hide'; status: ReviewProposal['status'];
+    base_updated_at: number; proposed_json: string; version: number; game_id: string;
+    rule_updated_at: number; game_slug: string;
   }>();
 
   const proposals = new Map((result.results ?? []).map((row) => [row.id, row]));
@@ -317,83 +319,121 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('admin'), as
   const timestamp = now();
   const statements: DatabaseStatement[] = [];
   const affectedBatches = new Set<string>();
+  const affectedGameSlugs = new Set<string>();
+  const outcomes: Array<{ proposalId: string; status: string }> = [];
 
   for (const decision of body.data.decisions) {
     const row = proposals.get(decision.proposalId);
-    if (!row || (row.status !== 'pending' && row.status !== 'conflict')) continue;
+    if (!row || row.version !== decision.version) {
+      outcomes.push({ proposalId: decision.proposalId, status: 'stale' });
+      continue;
+    }
+    if (row.status !== 'pending' && row.status !== 'conflict') {
+      outcomes.push({ proposalId: decision.proposalId, status: row.status });
+      continue;
+    }
     affectedBatches.add(row.batch_id);
 
-    if (decision.action === 'reject') {
+    if (decision.decision === 'reject') {
       statements.push(getDatabase(c).statement(`
         UPDATE review_proposals
-        SET status = 'rejected', decided_by = ?, decided_at = ?, decision_reason = ?, updated_at = ?
-        WHERE id = ?
-      `).bind(user.id, timestamp, decision.reason || null, timestamp, row.id));
+        SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, version = version + 1, updated_at = ?
+        WHERE id = ? AND version = ?
+      `).bind(user.id, timestamp, timestamp, row.id, row.version));
+      outcomes.push({ proposalId: row.id, status: 'rejected' });
       continue;
     }
 
-    if (row.action === 'hide') {
+    if (row.rule_updated_at !== row.base_updated_at) {
+      statements.push(getDatabase(c).statement(`
+        UPDATE review_proposals SET status = 'conflict', version = version + 1, updated_at = ? WHERE id = ? AND version = ?
+      `).bind(timestamp, row.id, row.version));
+      outcomes.push({ proposalId: row.id, status: 'stale' });
+      continue;
+    }
+
+    affectedGameSlugs.add(row.game_slug);
+    if (row.operation === 'hide') {
       statements.push(
         getDatabase(c).statement(`
           UPDATE rules SET status = 'hidden', hidden_at = ?, hidden_by = ?, updated_at = ?
           WHERE id = ?
-        `).bind(timestamp, user.id, timestamp, row.target_rule_id),
+        `).bind(timestamp, user.id, timestamp, row.target_id),
         getDatabase(c).statement(`
           UPDATE review_proposals
-          SET status = 'approved', decided_by = ?, decided_at = ?, decision_reason = ?, updated_at = ?
-          WHERE id = ?
-        `).bind(user.id, timestamp, decision.reason || null, timestamp, row.id),
+          SET status = 'accepted', reviewed_by = ?, reviewed_at = ?, version = version + 1, updated_at = ?
+          WHERE id = ? AND version = ?
+        `).bind(user.id, timestamp, timestamp, row.id, row.version),
       );
+      outcomes.push({ proposalId: row.id, status: 'accepted' });
       continue;
     }
 
-    const proposed = JSON.parse(row.proposed_content_json) as ReviewContent;
-    const existingRule = await getDatabase(c).statement(`${reviewRuleSelect} WHERE r.id = ?`).bind(row.target_rule_id).first<ReviewRuleRow>();
-    if (!existingRule) continue;
+    const proposed = normalizedReviewContent(decision.proposed ?? JSON.parse(row.proposed_json) as ReviewContent);
+    const existingRule = await getDatabase(c).statement(`${reviewRuleSelect} WHERE r.id = ?`).bind(row.target_id).first<ReviewRuleRow>();
+    if (!existingRule) {
+      outcomes.push({ proposalId: row.id, status: 'stale' });
+      continue;
+    }
     const currentContent = reviewContentFromRow(existingRule);
     const revisionId = createId('rev');
+    const editionNotes = proposed.editionNotes ?? (proposed.editionNote ? [proposed.editionNote] : []);
 
     statements.push(
       getDatabase(c).statement(`
-        INSERT INTO rule_revisions (id, rule_id, snapshot_json, created_by, reason, created_at)
+        INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(revisionId, row.target_rule_id, JSON.stringify(currentContent), user.id, decision.reason || 'review_import', timestamp),
+      `).bind(revisionId, row.target_id, JSON.stringify(currentContent), user.id, 'manual_review', timestamp),
       getDatabase(c).statement(`
         UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-          player_count_note = ?, edition_notes_json = ?, edition_note = ?, updated_at = ? WHERE id = ?
+          player_counts_json = ?, player_count_note = ?, edition_notes_json = ?, edition_note = ?,
+          source_label = ?, source_url = ?, updated_at = ? WHERE id = ?
       `).bind(
         proposed.statement, proposed.commonMistake || null, proposed.details || null, proposed.flowStage,
-        proposed.playerCountNote || null, JSON.stringify(proposed.editionNote ? [proposed.editionNote] : []),
-        proposed.editionNote || null, timestamp, row.target_rule_id,
+        JSON.stringify(proposed.playerCounts ?? []), proposed.playerCountNote || null,
+        JSON.stringify(editionNotes), editionNotes[0] ?? null,
+        proposed.sourceLabel || null, proposed.sourceUrl || null, timestamp, row.target_id,
       ),
       getDatabase(c).statement(`
-      UPDATE rules SET source_label = ?, source_url = ? WHERE id = ?
-      `).bind(proposed.sourceLabel || null, proposed.sourceUrl || null, row.target_rule_id),
-      getDatabase(c).statement(`
         UPDATE review_proposals
-        SET status = 'approved', decided_by = ?, decided_at = ?, decision_reason = ?, applied_revision_id = ?, updated_at = ?
-        WHERE id = ?
-      `).bind(user.id, timestamp, decision.reason || null, revisionId, timestamp, row.id),
+        SET status = 'accepted', proposed_json = ?, reviewed_by = ?, reviewed_at = ?, version = version + 1, updated_at = ?
+        WHERE id = ? AND version = ?
+      `).bind(JSON.stringify(proposed), user.id, timestamp, timestamp, row.id, row.version),
+      getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id),
     );
 
-    statements.push(...await tagWriteStatements(c, row.target_rule_id, cleanTagNames(proposed.tagNames), user.id, timestamp));
+    statements.push(...await tagWriteStatements(c, row.target_id, cleanTagNames(proposed.tagNames), user.id, timestamp));
+    outcomes.push({ proposalId: row.id, status: 'accepted' });
   }
 
   if (statements.length) await getDatabase(c).batch(statements);
 
   for (const batchId of affectedBatches) {
     const counts = await getDatabase(c).statement(`
-      SELECT COUNT(*) total, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) pending
+      SELECT COUNT(*) total,
+        SUM(CASE WHEN status IN ('pending', 'conflict') THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) accepted,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) rejected
       FROM review_proposals WHERE batch_id = ?
-    `).bind(batchId).first<{ total: number; pending: number }>();
+    `).bind(batchId).first<{ total: number; pending: number; accepted: number; rejected: number }>();
     if (counts) {
       await getDatabase(c).statement(`
-        UPDATE review_batches SET proposal_count = ?, pending_count = ?, updated_at = ? WHERE id = ?
-      `).bind(counts.total, counts.pending, timestamp, batchId).run();
+        UPDATE review_batches SET proposal_count = ?, pending_count = ?, accepted_count = ?, rejected_count = ?,
+          status = CASE WHEN ? = 0 THEN 'completed' ELSE 'open' END,
+          completed_at = CASE WHEN ? = 0 THEN ? ELSE NULL END, updated_at = ? WHERE id = ?
+      `).bind(counts.total, counts.pending, counts.accepted, counts.rejected,
+        counts.pending, counts.pending, timestamp, timestamp, batchId).run();
     }
   }
 
-  return c.json({ ok: true, processed: body.data.decisions.length });
+  if (affectedGameSlugs.size) {
+    const cache = (caches as any).default;
+    c.executionCtx.waitUntil(Promise.all([
+      ...[...affectedGameSlugs].map((slug) => cache.delete(new Request(new URL(`/api/games/${slug}`, c.req.url)))),
+      cache.delete(new Request(new URL('/api/home', c.req.url))),
+    ]));
+  }
+  return c.json({ outcomes });
 });
 
 export default reviewRoutes;

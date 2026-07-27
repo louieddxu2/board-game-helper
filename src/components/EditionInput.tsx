@@ -6,9 +6,10 @@ interface EditionInputProps {
   value: string[];
   options: string[];
   onChange(value: string[]): void;
+  disabled?: boolean;
 }
 
-export const EditionInput = ({ value, options, onChange }: EditionInputProps) => {
+export const EditionInput = ({ value, options, onChange, disabled = false }: EditionInputProps) => {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const selected = mergeEditionOptions(value);
@@ -26,12 +27,13 @@ export const EditionInput = ({ value, options, onChange }: EditionInputProps) =>
   return <section className="edition-input">
     <header className="edition-input-heading">
       <span>版本／擴充</span>
-      <button type="button" className="text-action" onClick={() => setAdding(true)}>＋新增版本／擴充</button>
+      <button type="button" className="text-action" disabled={disabled} onClick={() => setAdding(true)}>＋新增版本／擴充</button>
     </header>
     {visibleOptions.length > 0 && <div className="edition-options">
       {visibleOptions.map((option) => {
         const active = Boolean(findEditionOption(selected, option));
         return <button type="button" key={option} className={`edition-option${active ? ' active' : ''}`}
+          disabled={disabled}
           aria-pressed={active} onClick={() => onChange(active
             ? selected.filter((name) => name !== findEditionOption(selected, option))
             : [...selected, option])}>{option}</button>;

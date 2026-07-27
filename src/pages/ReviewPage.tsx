@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { EditionInput } from '../components/EditionInput';
+import { PlayerCountInput } from '../components/PlayerCountInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
@@ -181,7 +183,7 @@ export const ReviewPage = () => {
       <div className="review-proposal-list">
         {proposals.map((proposal) => {
           const draft = drafts[proposal.id] ?? proposal.proposed;
-          const editable = proposal.status === 'pending';
+          const editable = proposal.status === 'pending' || proposal.status === 'conflict';
           return <article className={`review-proposal ${decisions[proposal.id] ? `decision-${decisions[proposal.id]}` : ''}`} key={proposal.id}>
             <header><div><strong>{proposal.gameName}</strong><small>{proposal.batchName ?? '零散提案'}</small></div>
               {editable && <div className="decision-buttons"><button type="button" className={decisions[proposal.id] === 'accept' ? 'selected' : ''} onClick={() => setDecisions((current) => ({ ...current, [proposal.id]: 'accept' }))}>接受</button><button type="button" className={decisions[proposal.id] === 'reject' ? 'selected reject' : ''} onClick={() => setDecisions((current) => ({ ...current, [proposal.id]: 'reject' }))}>拒絕</button></div>}
@@ -192,6 +194,11 @@ export const ReviewPage = () => {
               <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label="建議玩錯情況" rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder="玩錯情況" /></div>
             </div>
             <details><summary>其他欄位</summary><div className="review-detail-grid">
+              <div className="review-wide"><PlayerCountInput value={draft.playerCounts ?? []}
+                disabled={!editable} onChange={(playerCounts) => updateDraft(proposal.id, { playerCounts })} /></div>
+              <div className="review-wide"><EditionInput value={draft.editionNotes ?? (draft.editionNote ? [draft.editionNote] : [])}
+                options={proposal.original.editionNotes ?? (proposal.original.editionNote ? [proposal.original.editionNote] : [])}
+                disabled={!editable} onChange={(editionNotes) => updateDraft(proposal.id, { editionNotes, editionNote: editionNotes[0] ?? null })} /></div>
               <label>Tag<input disabled={!editable} value={draft.tagNames.join('、')} onChange={(event) => updateDraft(proposal.id, { tagNames: event.target.value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean) })} /></label>
               <label>來源名稱<input disabled={!editable} value={value(draft.sourceLabel)} onChange={(event) => updateDraft(proposal.id, { sourceLabel: event.target.value || null })} /></label>
               <label>資料網址<input disabled={!editable} value={value(draft.sourceUrl)} onChange={(event) => updateDraft(proposal.id, { sourceUrl: event.target.value || null })} /></label>

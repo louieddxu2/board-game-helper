@@ -215,7 +215,9 @@ export interface ReviewRuleRow {
   common_mistake: string | null;
   details: string | null;
   flow_stage: FlowStage;
+  player_counts_json: string | null;
   player_count_note: string | null;
+  edition_notes_json: string | null;
   edition_note: string | null;
   source_label: string | null;
   source_url: string | null;
@@ -228,7 +230,9 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
   commonMistake: row.common_mistake,
   details: row.details,
   flowStage: row.flow_stage,
+  playerCounts: parsePlayerCounts(row),
   playerCountNote: row.player_count_note,
+  editionNotes: parseEditionNotes(row),
   editionNote: row.edition_note,
   sourceLabel: row.source_label,
   sourceUrl: row.source_url,
@@ -241,8 +245,8 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
 
 export const reviewRuleSelect = `
   SELECT r.id, r.submission_id, r.game_id, g.display_name game_name, g.slug game_slug,
-    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_count_note,
-    r.edition_note, r.updated_at, r.source_label, r.source_url,
+    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_counts_json, r.player_count_note,
+    r.edition_notes_json, r.edition_note, r.updated_at, r.source_label, r.source_url,
     (SELECT COALESCE(json_group_array(json_object('name', t.name)), '[]')
       FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id
       WHERE rt.rule_id = r.id) AS tags_json

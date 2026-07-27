@@ -1,8 +1,8 @@
 import { REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewFileSchema, type ReviewContent, type ReviewFile } from './review';
 
 const contentFields = [
-  'statement', 'commonMistake', 'details', 'flowStage', 'playerCountNote',
-  'editionNote', 'sourceLabel', 'sourceUrl', 'tagNames',
+  'statement', 'commonMistake', 'details', 'flowStage', 'playerCounts', 'playerCountNote',
+  'editionNotes', 'editionNote', 'sourceLabel', 'sourceUrl', 'tagNames',
 ] as const;
 
 const headers = [
@@ -19,7 +19,7 @@ const csvCell = (input: unknown): string => {
 };
 
 const contentValue = (content: ReviewContent, field: (typeof contentFields)[number]): string => {
-  if (field === 'tagNames') return content.tagNames.join('｜');
+  if (field === 'tagNames' || field === 'editionNotes' || field === 'playerCounts') return (content[field] ?? []).join('｜');
   return String(content[field] ?? '');
 };
 
@@ -86,7 +86,9 @@ const contentFromRow = (row: Record<string, string>, prefix: 'current' | 'propos
   commonMistake: nullable(row[`${prefix}_commonMistake`] ?? ''),
   details: nullable(row[`${prefix}_details`] ?? ''),
   flowStage: (row[`${prefix}_flowStage`] || 'uncategorized') as ReviewContent['flowStage'],
+  playerCounts: (row[`${prefix}_playerCounts`] ?? '').split(/[｜|]/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 8),
   playerCountNote: nullable(row[`${prefix}_playerCountNote`] ?? ''),
+  editionNotes: (row[`${prefix}_editionNotes`] ?? '').split(/[｜|]/).map((value) => value.trim()).filter(Boolean),
   editionNote: nullable(row[`${prefix}_editionNote`] ?? ''),
   sourceLabel: nullable(row[`${prefix}_sourceLabel`] ?? ''),
   sourceUrl: nullable(row[`${prefix}_sourceUrl`] ?? ''),

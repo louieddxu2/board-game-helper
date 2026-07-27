@@ -5,6 +5,7 @@ interface PlayerCountInputProps {
   value: number[];
   onChange(value: number[]): void;
   label?: string;
+  disabled?: boolean;
 }
 
 interface PaintState {
@@ -16,7 +17,7 @@ interface PaintState {
 
 const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
-export const PlayerCountInput = ({ value, onChange, label = '適用人數' }: PlayerCountInputProps) => {
+export const PlayerCountInput = ({ value, onChange, label = '適用人數', disabled = false }: PlayerCountInputProps) => {
   const paintState = useRef<PaintState | undefined>(undefined);
   const normalized = normalizePlayerCounts(value);
 
@@ -45,6 +46,7 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數' }: Pl
     <legend>{label}</legend>
     <div className="player-count-track"
       onPointerDown={(event) => {
+        if (disabled) return;
         const count = countFromElement(event.target as Element);
         if (!count) return;
         event.preventDefault();
@@ -67,6 +69,7 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數' }: Pl
       }}
       onPointerCancel={() => { paintState.current = undefined; }}>
       {PLAYER_COUNTS.map((count) => <button type="button" key={count} data-player-count={count}
+        disabled={disabled}
         className={normalized.includes(count) ? 'selected' : ''} aria-pressed={normalized.includes(count)}
         aria-label={`${count} 人`} onClick={(event) => {
           if (event.detail === 0) toggle(count);

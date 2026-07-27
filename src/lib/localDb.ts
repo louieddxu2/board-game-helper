@@ -6,6 +6,7 @@ type PublicTagsResponse = { tags: TagSummary[] };
 export type CatalogGamesCache = { games: GameSummary[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+const PUBLIC_TAGS_CACHE_KEY = 'publicTags:v2';
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 
@@ -57,8 +58,8 @@ interface RulesDb extends DBSchema {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 2, {
-    upgrade(db) {
+  return openDB<RulesDb>('wrong-board-game-rules', 3, {
+    upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache', { keyPath: 'key' });
@@ -73,6 +74,10 @@ const getDb = () => {
       if (!db.objectStoreNames.contains('rules')) {
         const rules = db.createObjectStore('rules', { keyPath: 'id' });
         rules.createIndex('gameId', 'gameId');
+      }
+      if (oldVersion > 0 && oldVersion < 3) {
+        transaction.objectStore('games').clear();
+        transaction.objectStore('rules').clear();
       }
     },
   });
@@ -234,9 +239,9 @@ export const localDb = {
       cachedAt: Date.now(),
     });
   },
-  cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: 'publicTags', data, cachedAt: Date.now() }),
-  getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>('publicTags', DAY_CACHE_FRESH_MS),
-  invalidatePublicTags: async () => (await getDatabase()).delete('cache', 'publicTags'),
+  cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: PUBLIC_TAGS_CACHE_KEY, data, cachedAt: Date.now() }),
+  getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
+  invalidatePublicTags: async () => (await getDatabase()).delete('cache', PUBLIC_TAGS_CACHE_KEY),
   cacheTagEntities: async (tags: TagSummary[]) => {
     const db = await getDatabase();
     const cachedAt = Date.now();

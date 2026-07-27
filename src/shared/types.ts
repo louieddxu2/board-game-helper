@@ -172,7 +172,9 @@ export interface ReviewContent {
   commonMistake?: string | null;
   details?: string | null;
   flowStage?: FlowStage | null;
+  playerCounts?: number[] | null;
   playerCountNote?: string | null;
+  editionNotes?: string[] | null;
   editionNote?: string | null;
   sourceLabel?: string | null;
   sourceUrl?: string | null;

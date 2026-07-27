@@ -127,7 +127,7 @@ export const api = {
     if (!ids?.length) {
       return cachedRead({
         readCache: localDb.getCachedPublicTags,
-        fetchFresh: () => transportRequest<{ tags: TagSummary[] }>('/api/tags', undefined, 'cache-miss'),
+        fetchFresh: () => transportRequest<{ tags: TagSummary[] }>('/api/tags?v=2', undefined, 'cache-miss'),
         writeCache: async (data) => { await localDb.cachePublicTags(data); await localDb.cacheTagEntities(data.tags); },
       });
     }
@@ -142,7 +142,7 @@ export const api = {
     }
     const missingIds = uniqueIds.filter((id) => !cachedById.has(id));
     if (!missingIds.length) return { tags: uniqueIds.map((id) => cachedById.get(id)!) };
-    const data = await transportRequest<{ tags: TagSummary[] }>(`/api/tags?ids=${encodeURIComponent(missingIds.join(','))}`, undefined, 'cache-miss');
+    const data = await transportRequest<{ tags: TagSummary[] }>(`/api/tags?ids=${encodeURIComponent(missingIds.join(','))}&v=2`, undefined, 'cache-miss');
     await localDb.cacheTagEntities(data.tags).catch(() => undefined);
     return { tags: [...uniqueIds.map((id) => cachedById.get(id)).filter((tag): tag is TagSummary => Boolean(tag)), ...data.tags] };
   },
