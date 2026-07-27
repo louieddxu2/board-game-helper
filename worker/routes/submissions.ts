@@ -7,7 +7,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -25,6 +25,7 @@ const submissionSchema = z.object({
     flowStage: z.enum(FLOW_STAGES).optional(),
     playerCounts: z.array(z.number().int().min(1).max(8)).max(8).optional(),
     playerCountNote: z.string().trim().max(300).optional(),
+    editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     editionNote: z.string().trim().max(300).optional(),
     sourceLabel: z.string().trim().max(300).optional(),
     sourceUrl: z.url().max(2000).optional().or(z.literal('')),
@@ -69,13 +70,14 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
   }
   for (const input of parsed.data.rules) {
     const ruleId = createId('rule');
+    const editionNotes = cleanEditionNotes(input.editionNotes ?? (input.editionNote ? [input.editionNote] : []));
     ruleIds.push(ruleId);
     statements.push(getDatabase(c).statement(`
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
-        flow_stage, player_counts_json, player_count_note, edition_note, source_label, source_url,
+        flow_stage, player_counts_json, player_count_note, edition_notes_json, edition_note, source_label, source_url,
         status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, submissionId, parsed.data.gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
@@ -83,7 +85,7 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
       input.flowStage ?? 'uncategorized',
       JSON.stringify(Array.from(new Set(input.playerCounts ?? [])).sort((a, b) => a - b)),
       cleanOptional(input.playerCountNote, 300) ?? null,
-      cleanOptional(input.editionNote, 300) ?? null,
+      JSON.stringify(editionNotes), editionNotes[0] ?? null,
       cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
       user.id, timestamp, timestamp,

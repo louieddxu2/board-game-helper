@@ -3,12 +3,14 @@ import { collectEditionOptions, findEditionOption, mergeEditionOptions } from '.
 
 describe('edition options', () => {
   test('aggregates repeated values and places common choices first', () => {
-    expect(collectEditionOptions([
+    const options = collectEditionOptions([
       { editionNote: '挪威人擴充' },
       { editionNote: '修訂版' },
-      { editionNote: '挪威人擴充' },
+      { editionNotes: ['挪威人擴充', '農夫擴充'] },
       { editionNote: '  ' },
-    ])).toEqual(['挪威人擴充', '修訂版']);
+    ]);
+    expect(options[0]).toBe('挪威人擴充');
+    expect(new Set(options)).toEqual(new Set(['挪威人擴充', '修訂版', '農夫擴充']));
   });
 
   test('deduplicates harmless input differences', () => {

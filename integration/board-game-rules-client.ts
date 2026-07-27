@@ -28,6 +28,7 @@ export interface RulesGameDetail extends RulesGameSummary {
     flowStage: string;
     playerCounts?: number[];
     playerCountNote?: string;
+    editionNotes?: string[];
     editionNote?: string;
     sourceLabel?: string;
     sourceUrl?: string;
@@ -58,6 +59,7 @@ export interface RulesSubmissionInput {
     flowStage?: string;
     playerCounts?: number[];
     playerCountNote?: string;
+    editionNotes?: string[];
     editionNote?: string;
     tagNames?: string[];
   }>;

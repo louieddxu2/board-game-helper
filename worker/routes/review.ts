@@ -360,10 +360,11 @@ reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('admin'), as
       `).bind(revisionId, row.target_rule_id, JSON.stringify(currentContent), user.id, decision.reason || 'review_import', timestamp),
       getDatabase(c).statement(`
         UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-          player_count_note = ?, edition_note = ?, updated_at = ? WHERE id = ?
+          player_count_note = ?, edition_notes_json = ?, edition_note = ?, updated_at = ? WHERE id = ?
       `).bind(
         proposed.statement, proposed.commonMistake || null, proposed.details || null, proposed.flowStage,
-        proposed.playerCountNote || null, proposed.editionNote || null, timestamp, row.target_rule_id,
+        proposed.playerCountNote || null, JSON.stringify(proposed.editionNote ? [proposed.editionNote] : []),
+        proposed.editionNote || null, timestamp, row.target_rule_id,
       ),
       getDatabase(c).statement(`
       UPDATE rules SET source_label = ?, source_url = ? WHERE id = ?

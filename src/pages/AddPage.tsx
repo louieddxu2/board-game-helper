@@ -11,7 +11,7 @@ import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOption
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
+type RuleInput = { id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -49,7 +49,12 @@ export const AddPage = () => {
         setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
         setGameQuery(draft.gameQuery);
         setEnglishName(draft.game?.englishName ?? draft.englishName ?? '');
-        const restoredRules = draft.rules.length ? draft.rules.map((rule) => ({ ...rule, sourceLabel: rule.sourceLabel ?? draft.sourceLabel, sourceUrl: rule.sourceUrl ?? draft.sourceUrl })) : [blankRule()];
+        const restoredRules = draft.rules.length ? draft.rules.map((rule) => ({
+          ...rule,
+          editionNotes: rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []),
+          sourceLabel: rule.sourceLabel ?? draft.sourceLabel,
+          sourceUrl: rule.sourceUrl ?? draft.sourceUrl,
+        })) : [blankRule()];
         setRules(restoredRules);
         setActiveRuleId(restoredRules[0].id);
         setPlayedOn(draft.playedOn || today()); setPrivateNote(draft.privateNote);
@@ -127,7 +132,7 @@ export const AddPage = () => {
         playedOn,
         privateNote: privateNote.trim() || undefined,
         idempotencyKey: crypto.randomUUID(),
-        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, playerCounts: rule.playerCounts, editionNote: rule.editionNote?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
+        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
       };
       await localDb.addPending(payload);
       const result = await api.submit(payload);
@@ -193,8 +198,8 @@ export const AddPage = () => {
             placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
           <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
           <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
-          <EditionInput value={rule.editionNote ?? ''} options={editionOptions}
-            onChange={(editionNote) => setRule(rule.id, { editionNote })} />
+          <EditionInput value={rule.editionNotes ?? []} options={editionOptions}
+            onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
           <div className="two-columns"><label>參考資料<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} placeholder="https://…" /></label></div>
         </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>
           {rule.statement.trim() || '尚未輸入正確規則'}

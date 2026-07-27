@@ -7,7 +7,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, parseEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -16,7 +16,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_counts_json, r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
@@ -36,6 +36,7 @@ const rulePatchSchema = z.object({
   flowStage: z.enum(FLOW_STAGES).optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
   playerCountNote: z.string().trim().max(300).nullable().optional(),
+  editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
   tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
@@ -57,6 +58,15 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const existingTags = await getDatabase(c).statement(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
     .bind(c.req.param('id')).all<{ name: string }>();
   const timestamp = now();
+  const currentEditionNotes = parseEditionNotes({
+    edition_notes_json: typeof row.edition_notes_json === 'string' ? row.edition_notes_json : '[]',
+    edition_note: typeof row.edition_note === 'string' ? row.edition_note : null,
+  });
+  const editionNotes = parsed.data.editionNotes !== undefined
+    ? cleanEditionNotes(parsed.data.editionNotes ?? [])
+    : parsed.data.editionNote !== undefined
+      ? cleanEditionNotes(parsed.data.editionNote ? [parsed.data.editionNote] : [])
+      : currentEditionNotes;
   const updated = {
     statement: parsed.data.statement ?? row.statement,
     commonMistake: parsed.data.commonMistake === undefined ? row.common_mistake : parsed.data.commonMistake,
@@ -64,7 +74,7 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     flowStage: parsed.data.flowStage ?? row.flow_stage,
     playerCounts: parsed.data.playerCounts === undefined ? JSON.parse(String(row.player_counts_json ?? '[]')) as number[] : (parsed.data.playerCounts ?? []),
     playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
-    editionNote: parsed.data.editionNote === undefined ? row.edition_note : parsed.data.editionNote,
+    editionNotes,
     sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
     sourceUrl: parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
   };
@@ -75,12 +85,12 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     getDatabase(c).statement(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-        player_counts_json = ?, player_count_note = ?, edition_note = ?, source_label = ?, source_url = ?,
+        player_counts_json = ?, player_count_note = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
       JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
-      updated.playerCountNote, updated.editionNote, updated.sourceLabel, updated.sourceUrl,
+      updated.playerCountNote, JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
     ),
     ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
@@ -172,10 +182,12 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
       .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), user.id, timestamp),
     getDatabase(c).statement(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_counts_json = ?, player_count_note = ?,
-        edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
+        edition_notes_json = ?, edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
-      previous.player_counts_json ?? '[]', previous.player_count_note ?? null, previous.edition_note ?? null, previous.status ?? 'published',
+      previous.player_counts_json ?? '[]', previous.player_count_note ?? null,
+      previous.edition_notes_json ?? JSON.stringify(cleanEditionNotes(typeof previous.edition_note === 'string' ? [previous.edition_note] : [])),
+      previous.edition_note ?? null, previous.status ?? 'published',
       previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),

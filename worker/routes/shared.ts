@@ -16,7 +16,7 @@ export const setNoCache = (c: AppContext) => {
 
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
@@ -24,7 +24,7 @@ export const ruleSelect = `
 
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
@@ -44,6 +44,7 @@ export interface RuleRow {
   flow_stage: FlowStage;
   player_counts_json: string | null;
   player_count_note: string | null;
+  edition_notes_json: string | null;
   edition_note: string | null;
   status: 'draft' | 'published' | 'hidden';
   source_label?: string | null;
@@ -73,6 +74,21 @@ export const parsePlayerCounts = (row: Pick<RuleRow, 'player_counts_json'>): num
   } catch { return []; }
 };
 
+export const cleanEditionNotes = (values: string[] | undefined): string[] => Array.from(new Map((values ?? [])
+  .map((name) => name.normalize('NFKC').trim().slice(0, 300))
+  .filter(Boolean)
+  .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 20);
+
+export const parseEditionNotes = (row: Pick<RuleRow, 'edition_notes_json' | 'edition_note'>): string[] => {
+  try {
+    const values = JSON.parse(row.edition_notes_json ?? '[]');
+    if (Array.isArray(values) && values.length) {
+      return cleanEditionNotes(values.filter((value): value is string => typeof value === 'string'));
+    }
+  } catch { /* fall back to the legacy single value */ }
+  return cleanEditionNotes(row.edition_note ? [row.edition_note] : []);
+};
+
 export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Map<string, TagSummary>> => {
   const tagIds = Array.from(new Set(rows.flatMap(parseRuleTagIds)));
   if (!tagIds.length) return new Map();
@@ -92,6 +108,7 @@ export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Ma
 
 export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): RuleCard => {
   const tagIds = parseRuleTagIds(row);
+  const editionNotes = parseEditionNotes(row);
   return ({
     id: row.id,
     gameId: row.game_id,
@@ -101,7 +118,8 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): Ru
     flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
     playerCounts: parsePlayerCounts(row),
     playerCountNote: row.player_count_note ?? undefined,
-    editionNote: row.edition_note ?? undefined,
+    editionNotes,
+    editionNote: editionNotes[0],
     sourceLabel: row.source_label ?? undefined,
     sourceUrl: row.source_url ?? undefined,
     sourceLinks: (() => {

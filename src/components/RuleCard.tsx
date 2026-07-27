@@ -92,9 +92,9 @@ export const RuleCard = ({
 
           {/* 屬性：擴充、人數 */}
           <div className="rule-attributes">
-            {rule.editionNote && (
-              <span className="attr-chip edition-chip">📦 {rule.editionNote}</span>
-            )}
+            {(rule.editionNotes?.length ? rule.editionNotes : (rule.editionNote ? [rule.editionNote] : [])).map((edition) => (
+              <span className="attr-chip edition-chip" key={edition}>📦 {edition}</span>
+            ))}
             {(rule.playerCounts?.length || rule.playerCountNote) && (
               <span className="attr-chip player-chip">👥 {rule.playerCounts?.length ? formatPlayerCounts(rule.playerCounts) : rule.playerCountNote}</span>
             )}

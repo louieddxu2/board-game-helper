@@ -99,6 +99,7 @@ export interface RuleCard {
   flowStage?: FlowStage | null;
   playerCounts?: number[];
   playerCountNote?: string;
+  editionNotes?: string[];
   editionNote?: string;
   sourceLabel?: string;
   sourceUrl?: string;
@@ -149,6 +150,7 @@ export interface SubmissionRuleInput {
   flowStage?: FlowStage;
   playerCounts?: number[];
   playerCountNote?: string;
+  editionNotes?: string[];
   editionNote?: string;
   sourceLabel?: string;
   sourceUrl?: string;

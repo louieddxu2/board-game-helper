@@ -3,22 +3,23 @@ import { findEditionOption, mergeEditionOptions } from '../lib/editionOptions';
 import { TextInputDialog } from './TextInputDialog';
 
 interface EditionInputProps {
-  value: string;
+  value: string[];
   options: string[];
-  onChange(value: string): void;
+  onChange(value: string[]): void;
 }
 
 export const EditionInput = ({ value, options, onChange }: EditionInputProps) => {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
-  const visibleOptions = mergeEditionOptions(options, [value]);
-  const selected = findEditionOption(visibleOptions, value) ?? value.trim();
+  const selected = mergeEditionOptions(value);
+  const visibleOptions = mergeEditionOptions(options, selected);
 
   const close = useCallback(() => { setAdding(false); setNewName(''); }, []);
   const add = () => {
     const name = newName.normalize('NFKC').trim();
     if (!name) return;
-    onChange(findEditionOption(visibleOptions, name) ?? name);
+    const option = findEditionOption(visibleOptions, name) ?? name;
+    if (!findEditionOption(selected, option)) onChange([...selected, option]);
     close();
   };
 
@@ -29,9 +30,11 @@ export const EditionInput = ({ value, options, onChange }: EditionInputProps) =>
     </header>
     {visibleOptions.length > 0 && <div className="edition-options">
       {visibleOptions.map((option) => {
-        const active = option === selected;
+        const active = Boolean(findEditionOption(selected, option));
         return <button type="button" key={option} className={`edition-option${active ? ' active' : ''}`}
-          aria-pressed={active} onClick={() => onChange(active ? '' : option)}>{option}</button>;
+          aria-pressed={active} onClick={() => onChange(active
+            ? selected.filter((name) => name !== findEditionOption(selected, option))
+            : [...selected, option])}>{option}</button>;
       })}
     </div>}
     <TextInputDialog open={adding} title="新增版本／擴充" label="版本／擴充名稱" value={newName}
