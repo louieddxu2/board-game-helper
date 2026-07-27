@@ -4,7 +4,6 @@ import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
-import { detectDeterministicTags } from '../lib/tagDetector';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
@@ -124,7 +123,6 @@ export const AddPage = () => {
     <div className="rule-input-list">
       <div className="list-heading"><h2>本次發現的錯誤</h2><span>{validRules.length} 條</span></div>
       {rules.map((rule, index) => {
-        const detected = detectDeterministicTags({ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }, { gameTags: [] }, rule.tagNames);
         return <div className="rule-input" key={rule.id}>
         <span className="rule-number">{index + 1}</span>
         <div>
@@ -138,7 +136,7 @@ export const AddPage = () => {
           <details><summary>常見錯法</summary><textarea rows={2} value={rule.commonMistake ?? ''}
             aria-label={`第 ${index + 1} 條的常見錯法`} placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} />
             <div className="two-columns"><label>來源說明<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>來源網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} placeholder="https://…" /></label></div>
-            <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} detectedSuggestions={detected} /></details>
+            <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} /></details>
         </div>
         <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`刪除第 ${index + 1} 條`}>×</button>
       </div>})}

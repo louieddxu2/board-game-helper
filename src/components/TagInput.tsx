@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
+import { detectDeterministicTags, type DetectionInput } from '../lib/tagDetector';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSummary } from '../shared/types';
 
@@ -57,6 +58,7 @@ interface TagInputProps {
   label?: string;
   detectedSuggestions?: string[];
   availableTags?: TagSummary[];
+  detectionInput?: DetectionInput;
 }
 
 export const TagInput = ({
@@ -66,13 +68,28 @@ export const TagInput = ({
   label = '標籤',
   detectedSuggestions = [],
   availableTags,
+  detectionInput,
 }: TagInputProps) => {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
+  const [publicTags, setPublicTags] = useState<TagSummary[]>([]);
   const [open, setOpen] = useState(false);
   const debouncedQuery = useDebouncedValue(query.trim());
+
+  useEffect(() => {
+    let active = true;
+    void getPublicTags().then((tags) => {
+      if (active) setPublicTags(tags);
+    }).catch(() => { if (active) setPublicTags([]); });
+    return () => { active = false; };
+  }, []);
+
+  const candidateTags = useMemo(() => {
+    const combined = [...(availableTags ?? []), ...publicTags];
+    return Array.from(new Map(combined.map((tag) => [tag.name.trim().toLocaleLowerCase(), tag])).values());
+  }, [availableTags, publicTags]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,16 +106,8 @@ export const TagInput = ({
 
   useEffect(() => {
     if (!open) return;
-    let active = true;
-    if (availableTags) {
-      setSuggestions(filterTags(availableTags, debouncedQuery, value));
-      return () => { active = false; };
-    }
-    void getPublicTags().then((tags) => {
-      if (active) setSuggestions(filterTags(tags, debouncedQuery, value));
-    }).catch(() => { if (active) setSuggestions([]); });
-    return () => { active = false; };
-  }, [availableTags, debouncedQuery, open, value]);
+    setSuggestions(filterTags(candidateTags, debouncedQuery, value));
+  }, [candidateTags, debouncedQuery, open, value]);
   const add = (name: string) => {
     const cleaned = name.trim().replace(/^#/, '');
     if (!cleaned || value.some((selected) => selected.toLocaleLowerCase() === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
@@ -117,7 +126,10 @@ export const TagInput = ({
 
   const recommendations = useMemo(() => {
     const selectedNames = new Set(value.map((name) => name.toLocaleLowerCase()));
-    const detected = Array.from(new Map(detectedSuggestions
+    const inferredFromText = detectionInput
+      ? detectDeterministicTags(detectionInput, { gameTags: candidateTags }, value)
+      : [];
+    const detected = Array.from(new Map([...detectedSuggestions, ...inferredFromText]
       .map((tag) => tag.trim().replace(/^#/, ''))
       .filter((tag) => tag && !selectedNames.has(tag.toLocaleLowerCase()))
       .map((tag) => [tag.toLocaleLowerCase(), tag])).values()).slice(0, 6);
@@ -125,7 +137,7 @@ export const TagInput = ({
     const common = getCommonTagSuggestions(availableTags ?? [], value)
       .filter((tag) => !detectedNames.has(tag.name.toLocaleLowerCase()));
     return { detected, common };
-  }, [availableTags, detectedSuggestions, value]);
+  }, [availableTags, candidateTags, detectedSuggestions, detectionInput, value]);
   const showRecommendations = value.length < 8 && (recommendations.detected.length > 0 || recommendations.common.length > 0);
 
   return <div className="tag-input" ref={containerRef}>
