@@ -42,20 +42,10 @@ export interface AccountRevisionSummary {
   editedAt: number;
 }
 
-export interface AccountViewedRuleSummary {
-  ruleId: string;
-  gameName: string;
-  gameSlug: string;
-  statement: string;
-  viewedAt: number;
-  viewCount: number;
-}
-
 export interface AccountPayload {
   user: SessionUser;
   createdRules: AccountRuleSummary[];
   modifiedRules: AccountRevisionSummary[];
-  viewedRules: AccountViewedRuleSummary[];
 }
 
 export interface GameSummary {

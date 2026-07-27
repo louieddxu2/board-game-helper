@@ -24,7 +24,7 @@ authRoutes.get('/api/session', (c) => c.json({
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
-  const [createdResult, modifiedResult, viewedResult] = await Promise.all([
+  const [createdResult, modifiedResult] = await Promise.all([
     getDatabase(c).statement(`
       SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
         r.status, r.created_at, r.updated_at
@@ -52,20 +52,6 @@ authRoutes.get('/api/account', requireUser, async (c) => {
       id: string; rule_id: string; game_name: string; game_slug: string;
       current_statement: string; previous_json: string; reason: string | null;
       edited_at: number; edited_by_name: string | null;
-    }>(),
-    getDatabase(c).statement(`
-      SELECT dv.rule_id, g.display_name game_name, g.slug game_slug,
-        r.statement, MAX(dv.created_at) viewed_at, COUNT(*) view_count
-      FROM daily_views dv
-      JOIN rules r ON r.id = dv.rule_id
-      JOIN games g ON g.id = r.game_id
-      WHERE dv.user_id = ? AND dv.rule_id <> ''
-      GROUP BY dv.rule_id
-      ORDER BY viewed_at DESC
-      LIMIT 100
-    `).bind(user.id).all<{
-      rule_id: string; game_name: string; game_slug: string; statement: string;
-      viewed_at: number; view_count: number;
     }>(),
   ]);
 
@@ -96,16 +82,8 @@ authRoutes.get('/api/account', requireUser, async (c) => {
       editedAt: row.edited_at,
     };
   });
-  const viewedRules = (viewedResult.results ?? []).map((row) => ({
-    ruleId: row.rule_id,
-    gameName: row.game_name,
-    gameSlug: row.game_slug,
-    statement: row.statement,
-    viewedAt: row.viewed_at,
-    viewCount: row.view_count,
-  }));
 
-  return c.json({ user, createdRules, modifiedRules, viewedRules });
+  return c.json({ user, createdRules, modifiedRules });
 });
 
 authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
