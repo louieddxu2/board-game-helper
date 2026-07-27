@@ -83,6 +83,25 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
           </tr>)}
         </tbody>
       </table>
+      <div className="catalog-mobile-rules">
+        {visibleRules.length === 0 && <p className="catalog-mobile-empty">沒有符合目前標籤篩選的規則。</p>}
+        {visibleRules.map((rule) => <article className="catalog-mobile-rule-card" key={rule.id}>
+          <div className="catalog-mobile-rule-main">
+            <strong className="catalog-mobile-rule-statement">{rule.statement}</strong>
+            {rule.commonMistake && <div className="catalog-mobile-rule-section"><span>常見錯法</span><p>{rule.commonMistake}</p></div>}
+            {rule.details && <div className="catalog-mobile-rule-section"><span>補充</span><p>{rule.details}</p></div>}
+          </div>
+          <aside className="catalog-mobile-rule-meta">
+            <div className="catalog-mobile-rule-actions">
+              <span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span>
+              <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>
+            </div>
+            <div><span>來源</span><p>{sourceCell(rule)}</p></div>
+            <div><span>Tag</span><p>{rule.tags.length ? rule.tags.map((tag) => `#${tag.name}`).join(' ') : '—'}</p></div>
+            <div><span>更新於</span><time dateTime={new Date(rule.updatedAt || game.updatedAt).toISOString()}>{formatDate(rule.updatedAt || game.updatedAt)}</time></div>
+          </aside>
+        </article>)}
+      </div>
     </div>
   </div>;
 };
