@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { findEditionOption } from '../lib/editionOptions';
+import { findEditionOption, mergeEditionOptions } from '../lib/editionOptions';
 import { TextInputDialog } from './TextInputDialog';
 
 interface EditionInputProps {
@@ -11,13 +11,14 @@ interface EditionInputProps {
 export const EditionInput = ({ value, options, onChange }: EditionInputProps) => {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
-  const selected = findEditionOption(options, value) ?? value.trim();
+  const visibleOptions = mergeEditionOptions(options, [value]);
+  const selected = findEditionOption(visibleOptions, value) ?? value.trim();
 
   const close = useCallback(() => { setAdding(false); setNewName(''); }, []);
   const add = () => {
     const name = newName.normalize('NFKC').trim();
     if (!name) return;
-    onChange(findEditionOption(options, name) ?? name);
+    onChange(findEditionOption(visibleOptions, name) ?? name);
     close();
   };
 
@@ -26,8 +27,8 @@ export const EditionInput = ({ value, options, onChange }: EditionInputProps) =>
       <span>版本／擴充</span>
       <button type="button" className="text-action" onClick={() => setAdding(true)}>＋新增版本／擴充</button>
     </header>
-    {options.length > 0 && <div className="edition-options">
-      {options.map((option) => {
+    {visibleOptions.length > 0 && <div className="edition-options">
+      {visibleOptions.map((option) => {
         const active = option === selected;
         return <button type="button" key={option} className={`edition-option${active ? ' active' : ''}`}
           aria-pressed={active} onClick={() => onChange(active ? '' : option)}>{option}</button>;

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { EditionInput } from './EditionInput';
 
@@ -19,15 +20,18 @@ describe('EditionInput', () => {
   });
 
   test('adds a new option through the internal dialog', () => {
-    const onChange = vi.fn();
-    render(<EditionInput value="" options={['修訂版']} onChange={onChange} />);
+    const ControlledInput = () => {
+      const [value, setValue] = useState('');
+      return <EditionInput value={value} options={['修訂版']} onChange={setValue} />;
+    };
+    render(<ControlledInput />);
 
     fireEvent.click(screen.getByRole('button', { name: '＋新增版本／擴充' }));
     expect(screen.getByRole('dialog', { name: '新增版本／擴充' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('版本／擴充名稱'), { target: { value: ' 挪威人擴充 ' } });
     fireEvent.click(screen.getByRole('button', { name: '新增' }));
 
-    expect(onChange).toHaveBeenCalledWith('挪威人擴充');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '挪威人擴充' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
