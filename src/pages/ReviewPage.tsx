@@ -13,7 +13,7 @@ const stageNames: Record<FlowStage, string> = {
 const value = (input: string | null | undefined) => input ?? '';
 
 export const ReviewPage = () => {
-  const { canEdit, loading } = useSession();
+  const { isAdmin, loading } = useSession();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
   const [flowStage, setFlowStage] = useState('');
@@ -46,7 +46,7 @@ export const ReviewPage = () => {
     setDrafts(Object.fromEntries(proposalData.proposals.map((proposal) => [proposal.id, proposal.proposed])));
     setDecisions({});
   };
-  useEffect(() => { if (canEdit) void load(); }, [canEdit, status, batchId]);
+  useEffect(() => { if (isAdmin) void load(); }, [isAdmin, status, batchId]);
 
   const loadMore = async () => {
     if (!nextCursor || busy) return;
@@ -137,7 +137,7 @@ export const ReviewPage = () => {
     } finally { setBusy(false); }
   };
 
-  if (!loading && !canEdit) return <Navigate to="/" replace />;
+  if (!loading && !isAdmin) return <Navigate to="/" replace />;
   return <section className="review-page">
     <header><p className="eyebrow">校稿工作臺</p><h1>匯出、校稿、再確認</h1></header>
     {message && <div className="success-banner" role="status">{message}</div>}

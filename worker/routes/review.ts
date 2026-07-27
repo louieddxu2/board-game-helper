@@ -11,7 +11,7 @@ import { setNoCache, ruleSelect, cleanTagNames, tagWriteStatements, reviewConten
 
 const reviewRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
-reviewRoutes.get('/api/admin/review/export', requireRole('editor'), async (c) => {
+reviewRoutes.get('/api/admin/review/export', requireRole('admin'), async (c) => {
   const gameIds = (c.req.query('gameIds') ?? c.req.query('gameId') ?? '')
     .split(',').map((value) => value.trim()).filter(Boolean).slice(0, 50);
   const flowStages = (c.req.query('flowStages') ?? c.req.query('flowStage') ?? '')
@@ -100,7 +100,7 @@ const reviewImportSchema = z.union([
   z.object({ file: z.unknown() }),
   z.object({ format: z.literal('csv'), content: z.string().min(1).max(3 * 1024 * 1024) }),
 ]);
-reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) => {
+reviewRoutes.post('/api/admin/review/import', requireRole('admin'), async (c) => {
   const contentLength = Number(c.req.header('content-length') ?? 0);
   if (contentLength > 3 * 1024 * 1024) return c.json({ error: 'request_too_large' }, 413);
   const body = reviewImportSchema.safeParse(await c.req.json());
@@ -191,7 +191,7 @@ reviewRoutes.post('/api/admin/review/import', requireRole('editor'), async (c) =
   return c.json({ batchId, imported: proposals.length, skipped });
 });
 
-reviewRoutes.get('/api/admin/review/batches', requireRole('editor'), async (c) => {
+reviewRoutes.get('/api/admin/review/batches', requireRole('admin'), async (c) => {
   const result = await getDatabase(c).statement(`
     SELECT b.id, b.name, b.source_type, b.base_dataset_version, b.proposal_count, b.pending_count,
       b.created_by, b.created_at, b.updated_at, COALESCE(u.nickname, u.display_name) created_by_name
@@ -219,7 +219,7 @@ reviewRoutes.get('/api/admin/review/batches', requireRole('editor'), async (c) =
   });
 });
 
-reviewRoutes.get('/api/admin/review/proposals', requireRole('editor'), async (c) => {
+reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) => {
   const status = c.req.query('status') as ReviewProposal['status'] | undefined;
   const batchId = (c.req.query('batchId') ?? '').trim();
   const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 20) || 20));
@@ -294,7 +294,7 @@ const decisionSchema = z.object({
     reason: z.string().trim().max(300).optional(),
   })).min(1).max(100),
 });
-reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('editor'), async (c) => {
+reviewRoutes.post('/api/admin/review/proposals/decide', requireRole('admin'), async (c) => {
   const body = decisionSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'invalid_payload' }, 400);
 
