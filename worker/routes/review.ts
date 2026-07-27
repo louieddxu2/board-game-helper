@@ -386,11 +386,11 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
       `).bind(revisionId, row.target_id, JSON.stringify(currentContent), user.id, 'manual_review', timestamp),
       getDatabase(c).statement(`
         UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-          player_counts_json = ?, player_count_note = ?, edition_notes_json = ?, edition_note = ?,
+          player_counts_json = ?, edition_notes_json = ?, edition_note = ?,
           source_label = ?, source_url = ?, updated_at = ? WHERE id = ?
       `).bind(
         proposed.statement, proposed.commonMistake || null, proposed.details || null, proposed.flowStage,
-        JSON.stringify(proposed.playerCounts ?? []), proposed.playerCountNote || null,
+        JSON.stringify(proposed.playerCounts ?? []),
         JSON.stringify(editionNotes), editionNotes[0] ?? null,
         proposed.sourceLabel || null, proposed.sourceUrl || null, timestamp, row.target_id,
       ),

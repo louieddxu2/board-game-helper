@@ -16,7 +16,7 @@ export const setNoCache = (c: AppContext) => {
 
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
@@ -24,7 +24,7 @@ export const ruleSelect = `
 
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
@@ -43,7 +43,6 @@ export interface RuleRow {
   details: string | null;
   flow_stage: FlowStage;
   player_counts_json: string | null;
-  player_count_note: string | null;
   edition_notes_json: string | null;
   edition_note: string | null;
   status: 'draft' | 'published' | 'hidden';
@@ -117,7 +116,6 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): Ru
     details: row.details ?? undefined,
     flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
     playerCounts: parsePlayerCounts(row),
-    playerCountNote: row.player_count_note ?? undefined,
     editionNotes,
     editionNote: editionNotes[0],
     sourceLabel: row.source_label ?? undefined,
@@ -216,7 +214,6 @@ export interface ReviewRuleRow {
   details: string | null;
   flow_stage: FlowStage;
   player_counts_json: string | null;
-  player_count_note: string | null;
   edition_notes_json: string | null;
   edition_note: string | null;
   source_label: string | null;
@@ -231,7 +228,6 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
   details: row.details,
   flowStage: row.flow_stage,
   playerCounts: parsePlayerCounts(row),
-  playerCountNote: row.player_count_note,
   editionNotes: parseEditionNotes(row),
   editionNote: row.edition_note,
   sourceLabel: row.source_label,
@@ -245,7 +241,7 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
 
 export const reviewRuleSelect = `
   SELECT r.id, r.submission_id, r.game_id, g.display_name game_name, g.slug game_slug,
-    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_counts_json, r.player_count_note,
+    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_counts_json,
     r.edition_notes_json, r.edition_note, r.updated_at, r.source_label, r.source_url,
     (SELECT COALESCE(json_group_array(json_object('name', t.name)), '[]')
       FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id

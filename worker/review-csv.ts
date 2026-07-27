@@ -1,7 +1,7 @@
 import { REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewFileSchema, type ReviewContent, type ReviewFile } from './review';
 
 const contentFields = [
-  'statement', 'commonMistake', 'details', 'flowStage', 'playerCounts', 'playerCountNote',
+  'statement', 'commonMistake', 'details', 'flowStage', 'playerCounts',
   'editionNotes', 'editionNote', 'sourceLabel', 'sourceUrl', 'tagNames',
 ] as const;
 
@@ -87,7 +87,6 @@ const contentFromRow = (row: Record<string, string>, prefix: 'current' | 'propos
   details: nullable(row[`${prefix}_details`] ?? ''),
   flowStage: (row[`${prefix}_flowStage`] || 'uncategorized') as ReviewContent['flowStage'],
   playerCounts: (row[`${prefix}_playerCounts`] ?? '').split(/[｜|]/).map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 8),
-  playerCountNote: nullable(row[`${prefix}_playerCountNote`] ?? ''),
   editionNotes: (row[`${prefix}_editionNotes`] ?? '').split(/[｜|]/).map((value) => value.trim()).filter(Boolean),
   editionNote: nullable(row[`${prefix}_editionNote`] ?? ''),
   sourceLabel: nullable(row[`${prefix}_sourceLabel`] ?? ''),

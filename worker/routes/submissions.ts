@@ -24,7 +24,6 @@ const submissionSchema = z.object({
     details: z.string().trim().max(5000).optional(),
     flowStage: z.enum(FLOW_STAGES).optional(),
     playerCounts: z.array(z.number().int().min(1).max(8)).max(8).optional(),
-    playerCountNote: z.string().trim().max(300).optional(),
     editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     editionNote: z.string().trim().max(300).optional(),
     sourceLabel: z.string().trim().max(300).optional(),
@@ -75,16 +74,15 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
     statements.push(getDatabase(c).statement(`
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
-        flow_stage, player_counts_json, player_count_note, edition_notes_json, edition_note, source_label, source_url,
+        flow_stage, player_counts_json, edition_notes_json, edition_note, source_label, source_url,
         status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, submissionId, parsed.data.gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
       cleanOptional(input.details, 5000) ?? null,
       input.flowStage ?? 'uncategorized',
       JSON.stringify(Array.from(new Set(input.playerCounts ?? [])).sort((a, b) => a - b)),
-      cleanOptional(input.playerCountNote, 300) ?? null,
       JSON.stringify(editionNotes), editionNotes[0] ?? null,
       cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,

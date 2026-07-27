@@ -95,8 +95,8 @@ export const RuleCard = ({
             {(rule.editionNotes?.length ? rule.editionNotes : (rule.editionNote ? [rule.editionNote] : [])).map((edition) => (
               <span className="attr-chip edition-chip" key={edition}>📦 {edition}</span>
             ))}
-            {(rule.playerCounts?.length || rule.playerCountNote) && (
-              <span className="attr-chip player-chip">👥 {rule.playerCounts?.length ? formatPlayerCounts(rule.playerCounts) : rule.playerCountNote}</span>
+            {Boolean(rule.playerCounts?.length) && (
+              <span className="attr-chip player-chip">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
             )}
           </div>
         </div>

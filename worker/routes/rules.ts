@@ -16,7 +16,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_counts_json, r.player_count_note, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
@@ -35,7 +35,6 @@ const rulePatchSchema = z.object({
   details: z.string().trim().max(5000).nullable().optional(),
   flowStage: z.enum(FLOW_STAGES).optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
-  playerCountNote: z.string().trim().max(300).nullable().optional(),
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
@@ -73,7 +72,6 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     details: parsed.data.details === undefined ? row.details : parsed.data.details,
     flowStage: parsed.data.flowStage ?? row.flow_stage,
     playerCounts: parsed.data.playerCounts === undefined ? JSON.parse(String(row.player_counts_json ?? '[]')) as number[] : (parsed.data.playerCounts ?? []),
-    playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
     editionNotes,
     sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
     sourceUrl: parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
@@ -85,12 +83,12 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     getDatabase(c).statement(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-        player_counts_json = ?, player_count_note = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
+        player_counts_json = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
       JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
-      updated.playerCountNote, JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
+      JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
     ),
     ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
@@ -122,9 +120,9 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
       INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('rev'), id, JSON.stringify(row), user.id, status === 'hidden' ? 'hide' : 'restore', timestamp),
-    getDatabase(c).statement(`
-      UPDATE rules SET status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
-    `).bind(status, status === 'hidden' ? timestamp : null, status === 'hidden' ? user.id : null, timestamp, id),
+    getDatabase(c).statement('UPDATE rules SET status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?')
+      .bind(status, status === 'hidden' ? timestamp : null, status === 'hidden' ? user.id : null, timestamp, id),
+    getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
   const cache = (caches as any).default;
   const gameSlug = await getDatabase(c).statement('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(id).first<{ slug: string }>();
@@ -141,33 +139,30 @@ rulesRoutes.post('/api/rules/:id/hide', requireRole('editor'), (c) => changeRule
 rulesRoutes.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeRuleVisibility(c, 'published'));
 
 rulesRoutes.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
-  const result = await getDatabase(c).statement(`
-    SELECT rr.id, rr.previous_json, rr.reason, rr.created_at, u.email editor_email, r.created_by
-    FROM rule_revisions rr
-    JOIN rules r ON r.id = rr.rule_id
-    LEFT JOIN users u ON u.id = rr.edited_by
-    WHERE rr.rule_id = ? ORDER BY rr.created_at DESC LIMIT 30
-  `).bind(c.req.param('id')).all<{ id: string; previous_json: string; reason: string | null; created_at: number; editor_email: string | null; created_by: string | null }>();
-  const user = c.get('user')!;
-  const isAdmin = user.roles.includes('admin');
-  const firstRow = (result.results ?? [])[0];
-  if (!isAdmin && firstRow && firstRow.created_by !== user.id) {
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  return c.json({ revisions: (result.results ?? []).map((row) => {
-    let previousStatement = '先前版本';
-    try { previousStatement = String((JSON.parse(row.previous_json) as Record<string, unknown>).statement ?? previousStatement); } catch { /* retain fallback */ }
-    return { id: row.id, reason: row.reason ?? 'edit', createdAt: row.created_at, editorEmail: row.editor_email ?? undefined, previousStatement };
-  }) });
+  const revisions = await getDatabase(c).statement(`
+    SELECT r.id, r.reason, r.created_at, r.previous_json, u.email editor_email
+    FROM rule_revisions r
+    LEFT JOIN users u ON u.id = r.edited_by
+    WHERE r.rule_id = ?
+    ORDER BY r.created_at DESC
+  `).bind(c.req.param('id')).all<{ id: string; reason: string; created_at: number; previous_json: string; editor_email: string | null }>();
+
+  return c.json({
+    revisions: (revisions.results ?? []).map((row) => {
+      let previousStatement = '';
+      try { previousStatement = (JSON.parse(row.previous_json) as { statement?: string }).statement ?? ''; } catch { /* ignore */ }
+      return { id: row.id, reason: row.reason, createdAt: row.created_at, editorEmail: row.editor_email ?? undefined, previousStatement };
+    }),
+  });
 });
 
 rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), async (c) => {
-  const [current, revision] = await Promise.all([
-    getDatabase(c).statement('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>(),
-    getDatabase(c).statement('SELECT previous_json FROM rule_revisions WHERE id = ? AND rule_id = ?')
-      .bind(c.req.param('revisionId'), c.req.param('id')).first<{ previous_json: string }>(),
-  ]);
-  if (!current || !revision) return c.json({ error: 'revision_not_found' }, 404);
+  const revision = await getDatabase(c).statement(`
+    SELECT * FROM rule_revisions WHERE id = ? AND rule_id = ?
+  `).bind(c.req.param('revisionId'), c.req.param('id')).first<{ previous_json: string }>();
+  if (!revision) return c.json({ error: 'revision_not_found' }, 404);
+  const current = await getDatabase(c).statement('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>();
+  if (!current) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
   const isAdmin = user.roles.includes('admin');
   if (!isAdmin && current.created_by !== user.id) {
@@ -181,11 +176,11 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
     getDatabase(c).statement(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
       .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), user.id, timestamp),
     getDatabase(c).statement(`
-      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_counts_json = ?, player_count_note = ?,
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_counts_json = ?,
         edition_notes_json = ?, edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
-      previous.player_counts_json ?? '[]', previous.player_count_note ?? null,
+      previous.player_counts_json ?? '[]',
       previous.edition_notes_json ?? JSON.stringify(cleanEditionNotes(typeof previous.edition_note === 'string' ? [previous.edition_note] : [])),
       previous.edition_note ?? null, previous.status ?? 'published',
       previous.hidden_at ?? null,

@@ -284,13 +284,13 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
     getDatabase(c).statement(`
       INSERT INTO rules (
         id, game_id, submission_id, statement, common_mistake, details,
-        flow_stage, player_count_note, edition_notes_json, edition_note, source_label, source_url,
+        flow_stage, edition_notes_json, edition_note, source_label, source_url,
         status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, gameId, submissionId, row.suggested_statement,
       row.suggested_common_mistake || null, row.suggested_details || null,
-      row.suggested_flow_stage, row.suggested_player_count_note || null,
+      row.suggested_flow_stage,
       JSON.stringify(row.suggested_edition_note ? [row.suggested_edition_note] : []),
       row.suggested_edition_note || null, row.raw_source_label || null, row.raw_source_url || null,
       user.id, timestamp, timestamp,

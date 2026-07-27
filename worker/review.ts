@@ -11,7 +11,6 @@ export const reviewContentSchema = z.object({
   details: z.string().trim().max(5000).nullable().optional(),
   flowStage: z.enum(FLOW_STAGES).nullable().optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
-  playerCountNote: z.string().trim().max(300).nullable().optional(),
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
@@ -53,7 +52,6 @@ export const normalizedReviewContent = (content: ReviewContent): ReviewContent =
   details: content.details?.trim() || null,
   flowStage: (content.flowStage ?? 'uncategorized') as FlowStage,
   playerCounts: Array.from(new Set(content.playerCounts ?? [])).sort((a, b) => a - b),
-  playerCountNote: content.playerCountNote?.trim() || null,
   editionNotes: Array.from(new Map((content.editionNotes ?? (content.editionNote ? [content.editionNote] : []))
     .map((name) => name.normalize('NFKC').trim()).filter(Boolean)
     .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 20),
