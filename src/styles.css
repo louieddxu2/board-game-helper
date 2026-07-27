@@ -345,7 +345,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-rules-table a { color: var(--orange); font-weight: 700; }
 .catalog-update-cell { display: grid; gap: 5px; justify-items: start; }
 .catalog-update-cell .text-action { padding: 0; }
-.catalog-rule-tag-list { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.catalog-rule-tag-list { display: flex; flex-wrap: wrap; gap: 2px 6px; }
 .catalog-status { display: inline-flex; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .catalog-status-published { background: #d9e9e1; color: var(--green); }
 .catalog-status-hidden { background: #f7d8d1; color: #842d20; }
@@ -452,6 +452,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .catalog-mobile-rule-section { padding-top: 8px; border-top: 1px solid var(--line); }
   .catalog-mobile-rule-section > span, .catalog-mobile-rule-meta > div > span { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 800; }
   .catalog-mobile-rule-section p, .catalog-mobile-rule-meta p { margin: 0; }
+  .catalog-mobile-rule-meta .catalog-rule-tag-list { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: 2px; }
   .catalog-mobile-rule-meta { display: grid; align-content: start; gap: 10px; padding-left: 9px; border-left: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
   .catalog-mobile-rule-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
   .catalog-mobile-rule-actions .catalog-status { font-size: 10px; }
