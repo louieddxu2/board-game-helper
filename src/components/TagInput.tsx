@@ -136,9 +136,19 @@ export const TagInput = ({
     const detectedNames = new Set(detected.map((name) => name.toLocaleLowerCase()));
     const common = getCommonTagSuggestions(availableTags ?? [], value)
       .filter((tag) => !detectedNames.has(tag.name.toLocaleLowerCase()));
-    return { detected, common };
+    const commonNames = new Set(common.map((tag) => tag.name.toLocaleLowerCase()));
+    const publicFallback = publicTags
+      .filter((tag) => {
+        const name = tag.name.toLocaleLowerCase();
+        return !selectedNames.has(name) && !detectedNames.has(name) && !commonNames.has(name);
+      })
+      .sort((left, right) => (right.usageCount ?? 0) - (left.usageCount ?? 0)
+        || left.name.localeCompare(right.name, 'zh-Hant'))
+      .slice(0, 6);
+    return { detected, common, publicFallback };
   }, [availableTags, candidateTags, detectedSuggestions, detectionInput, value]);
-  const showRecommendations = value.length < 8 && (recommendations.detected.length > 0 || recommendations.common.length > 0);
+  const showRecommendations = value.length < 8 && (recommendations.detected.length > 0
+    || recommendations.common.length > 0 || recommendations.publicFallback.length > 0);
 
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
@@ -165,6 +175,13 @@ export const TagInput = ({
         <small>這款遊戲常用</small>
         <div className="recommended-tag-chips">
           {recommendations.common.map((tag) => <button type="button" key={tag.id || tag.name} className="tag-chip"
+            aria-label={`加入標籤 ${tag.name}`} onClick={() => add(tag.name)}>＋ #{tag.name}</button>)}
+        </div>
+      </div>}
+      {recommendations.publicFallback.length > 0 && <div className="tag-recommendation-group">
+        <small>公共標籤</small>
+        <div className="recommended-tag-chips">
+          {recommendations.publicFallback.map((tag) => <button type="button" key={tag.id || tag.name} className="tag-chip"
             aria-label={`加入標籤 ${tag.name}`} onClick={() => add(tag.name)}>＋ #{tag.name}</button>)}
         </div>
       </div>}

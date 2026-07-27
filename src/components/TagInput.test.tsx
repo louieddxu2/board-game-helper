@@ -58,4 +58,12 @@ describe('TagInput recommendations', () => {
     expect(await view.findByRole('option', { name: '#計分' })).toBeInTheDocument();
     expect(view.getByRole('option', { name: '#回合' })).toBeInTheDocument();
   });
+
+  test('shows public tag buttons even when text inference finds no match', async () => {
+    const view = render(<TagInput value={[]} onChange={vi.fn()} availableTags={[]} detectionInput={{ statement: '沒有對應標籤的內容' }} />);
+
+    expect(await view.findByText('公共標籤')).toBeInTheDocument();
+    expect(view.getByRole('button', { name: '加入標籤 計分' })).toBeInTheDocument();
+    expect(view.getByRole('button', { name: '加入標籤 設置' })).toBeInTheDocument();
+  });
 });
