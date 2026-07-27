@@ -11,6 +11,7 @@ import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorte
 import { useToast } from '../context/ToastContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
+import { canUserEditRule } from '../lib/rulePermissions';
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
@@ -22,7 +23,7 @@ export const GamePage = () => {
   const { identifier = '' } = useParams();
   const location = useLocation();
   const { canEdit, user, isAdmin } = useSession();
-  const canEditRule = (rule: RuleCardType) => isAdmin || (canEdit && Boolean(rule.createdBy && user?.id && rule.createdBy === user.id));
+  const canEditRule = (rule: RuleCardType) => canUserEditRule(rule, user, isAdmin);
   const { showToast } = useToast();
   const [viewMode, setViewMode] = useState<'index' | 'briefing'>('index');
   const [game, setGame] = useState<GameDetail>();

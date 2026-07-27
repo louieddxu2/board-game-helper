@@ -5,6 +5,7 @@ import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
+import { canUserEditRule } from '../lib/rulePermissions';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
 import { RuleEditor } from './GamePage';
 
@@ -22,6 +23,10 @@ const sourceCell = (rule: RuleCard) => {
   const label = rule.sourceLabel || '未填寫';
   return rule.sourceUrl ? <a href={rule.sourceUrl} target="_blank" rel="noreferrer">{label} ↗</a> : label;
 };
+
+const ruleTagNames = (rule: RuleCard) => rule.tags.length
+  ? <span className="catalog-rule-tag-list">{rule.tags.map((tag) => <span key={tag.id}>#{tag.name}</span>)}</span>
+  : '—';
 
 const ScrollableGameName = ({ name, emphasized = false }: { name: string; emphasized?: boolean }) => {
   const scrollerRef = useRef<HTMLSpanElement>(null);
@@ -41,11 +46,12 @@ const ScrollableGameName = ({ name, emphasized = false }: { name: string; emphas
   </span>;
 };
 
-const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
+const RulesSheet = ({ game, activeTags, onTagsChange, onEdit, canEditRule }: {
   game: GameDetail;
   activeTags: string[];
   onTagsChange(tags: string[]): void;
   onEdit(rule: RuleCard): void;
+  canEditRule(rule: RuleCard): boolean;
 }) => {
   const availableTags = Array.from(new Set(game.rules.flatMap((rule) => rule.tags.map((tag) => tag.name))))
     .sort((left, right) => left.localeCompare(right, 'zh-Hant'));
@@ -78,8 +84,8 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
             <td data-label="常見錯法" className="catalog-text-cell">{rule.commonMistake || '—'}</td>
             <td data-label="補充" className="catalog-text-cell">{rule.details || '—'}</td>
             <td data-label="來源" className="catalog-rule-side catalog-rule-source">{sourceCell(rule)}</td>
-            <td data-label="Tag" className="catalog-rule-side catalog-rule-tags">{rule.tags.length ? rule.tags.map((tag) => `#${tag.name}`).join(' ') : '—'}</td>
-            <td data-label="更新於" className="catalog-rule-side catalog-update-cell"><span>{formatDate(rule.updatedAt || game.updatedAt)}</span><button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button></td>
+            <td data-label="Tag" className="catalog-rule-side catalog-rule-tags">{ruleTagNames(rule)}</td>
+            <td data-label="更新於" className="catalog-rule-side catalog-update-cell"><span>{formatDate(rule.updatedAt || game.updatedAt)}</span>{canEditRule(rule) && <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>}</td>
           </tr>)}
         </tbody>
       </table>
@@ -94,10 +100,10 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
           <aside className="catalog-mobile-rule-meta">
             <div className="catalog-mobile-rule-actions">
               <span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span>
-              <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>
+              {canEditRule(rule) && <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>}
             </div>
             <div><span>來源</span><p>{sourceCell(rule)}</p></div>
-            <div><span>Tag</span><p>{rule.tags.length ? rule.tags.map((tag) => `#${tag.name}`).join(' ') : '—'}</p></div>
+            <div><span>Tag</span><p>{ruleTagNames(rule)}</p></div>
             <div><span>更新於</span><time dateTime={new Date(rule.updatedAt || game.updatedAt).toISOString()}>{formatDate(rule.updatedAt || game.updatedAt)}</time></div>
           </aside>
         </article>)}
@@ -107,7 +113,8 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
 };
 
 export const CatalogPage = () => {
-  const { canEdit, loading } = useSession();
+  const { canEdit, loading, user, isAdmin } = useSession();
+  const canEditRule = (rule: RuleCard) => canUserEditRule(rule, user, isAdmin);
   const [games, setGames] = useState<GameSummary[]>([]);
   const [gameQuery, setGameQuery] = useState('');
   const [expandedGameId, setExpandedGameId] = useState<string>();
@@ -240,11 +247,11 @@ export const CatalogPage = () => {
               <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}</td>
               <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
-            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} /> : null}</td></tr>}
+            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} canEditRule={canEditRule} /> : null}</td></tr>}
           </Fragment>)}
         </tbody>
       </table>
     </div>
-    {expandedGame && editingRule && <RuleEditor game={expandedGame} rule={editingRule} onClose={() => setEditingRule(undefined)} onSaved={refreshEditedRule} />}
+    {expandedGame && editingRule && canEditRule(editingRule) && <RuleEditor game={expandedGame} rule={editingRule} onClose={() => setEditingRule(undefined)} onSaved={refreshEditedRule} />}
   </section>;
 };
