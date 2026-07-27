@@ -26,6 +26,7 @@ export interface RulesGameDetail extends RulesGameSummary {
     commonMistake?: string;
     details?: string;
     flowStage: string;
+    playerCounts?: number[];
     playerCountNote?: string;
     editionNote?: string;
     sourceLabel?: string;
@@ -55,6 +56,7 @@ export interface RulesSubmissionInput {
     commonMistake?: string;
     details?: string;
     flowStage?: string;
+    playerCounts?: number[];
     playerCountNote?: string;
     editionNote?: string;
     tagNames?: string[];

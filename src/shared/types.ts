@@ -97,6 +97,7 @@ export interface RuleCard {
   commonMistake?: string;
   details?: string;
   flowStage?: FlowStage | null;
+  playerCounts?: number[];
   playerCountNote?: string;
   editionNote?: string;
   sourceLabel?: string;
@@ -146,6 +147,7 @@ export interface SubmissionRuleInput {
   commonMistake?: string;
   details?: string;
   flowStage?: FlowStage;
+  playerCounts?: number[];
   playerCountNote?: string;
   editionNote?: string;
   sourceLabel?: string;

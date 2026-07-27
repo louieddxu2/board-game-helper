@@ -16,7 +16,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      r.player_counts_json, r.player_count_note, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
@@ -34,6 +34,7 @@ const rulePatchSchema = z.object({
   commonMistake: z.string().trim().max(2000).nullable().optional(),
   details: z.string().trim().max(5000).nullable().optional(),
   flowStage: z.enum(FLOW_STAGES).optional(),
+  playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
   playerCountNote: z.string().trim().max(300).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
@@ -61,6 +62,7 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     commonMistake: parsed.data.commonMistake === undefined ? row.common_mistake : parsed.data.commonMistake,
     details: parsed.data.details === undefined ? row.details : parsed.data.details,
     flowStage: parsed.data.flowStage ?? row.flow_stage,
+    playerCounts: parsed.data.playerCounts === undefined ? JSON.parse(String(row.player_counts_json ?? '[]')) as number[] : (parsed.data.playerCounts ?? []),
     playerCountNote: parsed.data.playerCountNote === undefined ? row.player_count_note : parsed.data.playerCountNote,
     editionNote: parsed.data.editionNote === undefined ? row.edition_note : parsed.data.editionNote,
     sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
@@ -73,10 +75,11 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     getDatabase(c).statement(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
-        player_count_note = ?, edition_note = ?, source_label = ?, source_url = ?,
+        player_counts_json = ?, player_count_note = ?, edition_note = ?, source_label = ?, source_url = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
+      JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
       updated.playerCountNote, updated.editionNote, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
     ),
@@ -168,11 +171,11 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
     getDatabase(c).statement(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
       .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), user.id, timestamp),
     getDatabase(c).statement(`
-      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_count_note = ?,
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_counts_json = ?, player_count_note = ?,
         edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
-      previous.player_count_note ?? null, previous.edition_note ?? null, previous.status ?? 'published',
+      previous.player_counts_json ?? '[]', previous.player_count_note ?? null, previous.edition_note ?? null, previous.status ?? 'published',
       previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),

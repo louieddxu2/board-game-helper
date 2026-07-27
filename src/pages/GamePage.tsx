@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { RuleCard } from '../components/RuleCard';
+import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
@@ -191,7 +192,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
   const [details, setDetails] = useState(rule.details ?? '');
-  const [playerCountNote, setPlayerCountNote] = useState(rule.playerCountNote ?? '');
+  const [playerCounts, setPlayerCounts] = useState(rule.playerCounts ?? []);
   const [editionNote, setEditionNote] = useState(rule.editionNote ?? '');
   const [tagNames, setTagNames] = useState(rule.tags.map((tag) => tag.name));
   const [sourceLabel, setSourceLabel] = useState(rule.sourceLabel ?? '');
@@ -206,7 +207,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCountNote: playerCountNote || null, editionNote: editionNote || null, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCounts, editionNote: editionNote || null, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -217,7 +218,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
-      <div className="two-columns"><label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label>
+      <div className="rule-attribute-fields"><PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
         <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectionInput={{ statement, commonMistake, details }} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>

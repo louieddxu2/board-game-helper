@@ -183,6 +183,15 @@ footer a { color: inherit; }
 textarea, input, select { width: 100%; border: 1px solid var(--line); border-radius: 11px; background: var(--white); color: var(--ink); padding: 12px 13px; outline: none; }
 textarea { resize: vertical; line-height: 1.6; }
 textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
+.rule-attribute-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(160px, 1fr); gap: 15px; align-items: start; }
+.rule-attribute-fields > label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.player-count-input { min-width: 0; margin: 0; padding: 0; border: 0; }
+.player-count-input legend { margin-bottom: 7px; font-size: 13px; font-weight: 700; }
+.player-count-track { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 13px; background: var(--cream); touch-action: none; user-select: none; }
+.player-count-track button { min-width: 0; min-height: 44px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: var(--white); color: var(--green); font-weight: 800; cursor: pointer; }
+.player-count-track button.selected { border-color: var(--green); background: var(--green); color: var(--white); }
+.player-count-track button:focus-visible { outline: 3px solid rgba(233,180,76,.45); outline-offset: 1px; }
+.player-count-input output { display: block; min-height: 20px; margin-top: 6px; color: var(--muted); font-size: 12px; }
 .tag-input { position: relative; display: grid; gap: 8px; margin-top: 10px; }
 .tag-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
 .tag-composer:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
@@ -401,6 +410,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .game-rules .rule-card { padding-right: 58px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
   .record-game-fields { grid-template-columns: 1fr; }
+  .rule-attribute-fields { grid-template-columns: 1fr; }
+  .rule-attribute-fields .player-count-input { margin-left: -38px; margin-right: -40px; }
+  .player-count-track { gap: 2px; padding: 3px; }
   .narrow-page { width: calc(100% - 28px); padding-top: 42px; }
   .more-fields, .two-columns { grid-template-columns: 1fr; }
   .sticky-submit { bottom: 7px; }

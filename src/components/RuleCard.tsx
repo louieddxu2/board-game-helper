@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { SessionContext } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
 import { api } from '../lib/api';
+import { formatPlayerCounts } from '../lib/playerCounts';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -94,8 +95,8 @@ export const RuleCard = ({
             {rule.editionNote && (
               <span className="attr-chip edition-chip">📦 {rule.editionNote}</span>
             )}
-            {rule.playerCountNote && (
-              <span className="attr-chip player-chip">👥 {rule.playerCountNote}</span>
+            {(rule.playerCounts?.length || rule.playerCountNote) && (
+              <span className="attr-chip player-chip">👥 {rule.playerCounts?.length ? formatPlayerCounts(rule.playerCounts) : rule.playerCountNote}</span>
             )}
           </div>
         </div>

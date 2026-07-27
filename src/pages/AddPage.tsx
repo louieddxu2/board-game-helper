@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
+type RuleInput = { id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -106,7 +107,7 @@ export const AddPage = () => {
         playedOn,
         privateNote: privateNote.trim() || undefined,
         idempotencyKey: crypto.randomUUID(),
-        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
+        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, playerCounts: rule.playerCounts, editionNote: rule.editionNote?.trim() || undefined, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
       };
       await localDb.addPending(payload);
       const result = await api.submit(payload);
@@ -158,6 +159,10 @@ export const AddPage = () => {
           <label>玩錯情況<textarea rows={2} value={rule.commonMistake ?? ''}
             placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
           <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
+          <div className="rule-attribute-fields">
+            <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
+            <label>版本／擴充<input value={rule.editionNote ?? ''} onChange={(event) => setRule(rule.id, { editionNote: event.target.value })} /></label>
+          </div>
           <div className="two-columns"><label>參考資料<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} placeholder="https://…" /></label></div>
         </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>
           {rule.statement.trim() || '尚未輸入正確規則'}

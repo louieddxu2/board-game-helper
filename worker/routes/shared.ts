@@ -16,7 +16,7 @@ export const setNoCache = (c: AppContext) => {
 
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_count_note, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
@@ -24,7 +24,7 @@ export const ruleSelect = `
 
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_count_note, r.edition_note, r.status,
+    r.flow_stage, r.player_counts_json, r.player_count_note, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
@@ -42,6 +42,7 @@ export interface RuleRow {
   common_mistake: string | null;
   details: string | null;
   flow_stage: FlowStage;
+  player_counts_json: string | null;
   player_count_note: string | null;
   edition_note: string | null;
   status: 'draft' | 'published' | 'hidden';
@@ -61,6 +62,15 @@ export const parseRuleTagIds = (row: Pick<RuleRow, 'tag_ids_json'>): string[] =>
   } catch {
     return [];
   }
+};
+
+export const parsePlayerCounts = (row: Pick<RuleRow, 'player_counts_json'>): number[] => {
+  try {
+    const value = JSON.parse(row.player_counts_json ?? '[]');
+    return Array.isArray(value)
+      ? Array.from(new Set(value.filter((count): count is number => Number.isInteger(count) && count >= 1 && count <= 8))).sort((a, b) => a - b)
+      : [];
+  } catch { return []; }
 };
 
 export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Map<string, TagSummary>> => {
@@ -89,6 +99,7 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): Ru
     commonMistake: row.common_mistake ?? undefined,
     details: row.details ?? undefined,
     flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
+    playerCounts: parsePlayerCounts(row),
     playerCountNote: row.player_count_note ?? undefined,
     editionNote: row.edition_note ?? undefined,
     sourceLabel: row.source_label ?? undefined,
