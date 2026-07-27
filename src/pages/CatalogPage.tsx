@@ -23,6 +23,24 @@ const sourceCell = (rule: RuleCard) => {
   return rule.sourceUrl ? <a href={rule.sourceUrl} target="_blank" rel="noreferrer">{label} ↗</a> : label;
 };
 
+const ScrollableGameName = ({ name, emphasized = false }: { name: string; emphasized?: boolean }) => {
+  const scrollerRef = useRef<HTMLSpanElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const update = () => setOverflowing(scroller.scrollWidth > scroller.clientWidth + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [name]);
+  return <span className="catalog-name-viewport" title={name}>
+    <span ref={scrollerRef} className="catalog-name-scroller" tabIndex={overflowing ? 0 : undefined}>{emphasized ? <strong>{name}</strong> : name}</span>
+    {overflowing && <span className="catalog-name-ellipsis" aria-hidden="true">…</span>}
+  </span>;
+};
+
 const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
   game: GameDetail;
   activeTags: string[];
@@ -55,13 +73,13 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit }: {
         <tbody>
           {visibleRules.length === 0 && <tr><td colSpan={7} className="catalog-empty-cell">沒有符合篩選條件的規則。</td></tr>}
           {visibleRules.map((rule) => <tr key={rule.id}>
-            <td data-label="狀態"><span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span></td>
+            <td data-label="狀態" className="catalog-rule-status-cell"><span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span></td>
             <td data-label="規則" className="catalog-text-cell catalog-rule-statement"><strong>{rule.statement}</strong></td>
             <td data-label="常見錯法" className="catalog-text-cell">{rule.commonMistake || '—'}</td>
             <td data-label="補充" className="catalog-text-cell">{rule.details || '—'}</td>
-            <td data-label="來源">{sourceCell(rule)}</td>
-            <td data-label="Tag">{rule.tags.length ? rule.tags.map((tag) => `#${tag.name}`).join(' ') : '—'}</td>
-            <td data-label="更新／操作" className="catalog-update-cell"><span>{formatDate(rule.updatedAt || game.updatedAt)}</span><button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button></td>
+            <td data-label="來源" className="catalog-rule-side catalog-rule-source">{sourceCell(rule)}</td>
+            <td data-label="Tag" className="catalog-rule-side catalog-rule-tags">{rule.tags.length ? rule.tags.map((tag) => `#${tag.name}`).join(' ') : '—'}</td>
+            <td data-label="更新於" className="catalog-rule-side catalog-update-cell"><span>{formatDate(rule.updatedAt || game.updatedAt)}</span><button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button></td>
           </tr>)}
         </tbody>
       </table>
@@ -198,10 +216,10 @@ export const CatalogPage = () => {
               }}
             >
               <td className="catalog-expand-cell"><span className="catalog-expand-icon" aria-hidden="true">{expandedGameId === game.id ? '−' : '+'}</span></td>
-              <td className="catalog-game-name"><strong>{game.displayName}</strong></td>
-              <td data-label="英文名稱" className="catalog-game-english">{game.englishName || '—'}</td>
-              <td data-label="規則數" className="catalog-game-count">{game.ruleCount}</td>
-              <td data-label="最後更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
+              <td className="catalog-game-name"><ScrollableGameName name={game.displayName} emphasized /></td>
+              <td data-label="英文名稱" className="catalog-game-english">{game.englishName ? <ScrollableGameName name={game.englishName} /> : '—'}</td>
+              <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}</td>
+              <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
             {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} /> : null}</td></tr>}
           </Fragment>)}

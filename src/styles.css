@@ -319,6 +319,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-game-row:focus-visible td { outline: 2px solid var(--orange); outline-offset: -2px; }
 .catalog-game-row:hover td { background: #fffaf0; }
 .catalog-game-row.expanded td { background: var(--cream); }
+.catalog-name-viewport, .catalog-name-scroller { min-width: 0; }
+.catalog-name-ellipsis { display: none; }
 .catalog-expand-cell { width: 48px; padding-right: 8px !important; padding-left: 8px !important; text-align: center; }
 .catalog-expand-icon { display: inline-grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); font-size: 18px; line-height: 1; }
 .catalog-detail-cell { padding: 0 !important; background: var(--paper); }
@@ -414,14 +416,22 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .catalog-table, .catalog-rules-table { min-width: 0; table-layout: auto; }
   .catalog-table colgroup, .catalog-rules-table colgroup, .catalog-table thead, .catalog-rules-table thead { display: none; }
   .catalog-table, .catalog-table tbody { display: block; }
-  .catalog-game-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 8px; padding: 13px 12px 13px 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+  .catalog-game-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) clamp(78px, 22vw, 96px); gap: 4px 8px; margin-bottom: 8px; padding: 13px 12px 13px 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
   .catalog-game-row td { display: block; padding: 0 !important; border: 0 !important; background: transparent !important; }
   .catalog-game-row:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-  .catalog-game-name { grid-column: 1 / -1; font-size: 15px; }
-  .catalog-game-english { grid-column: 1 / -1; color: var(--muted); }
-  .catalog-game-count, .catalog-game-updated { color: var(--muted); font-size: 12px; }
-  .catalog-game-updated { grid-column: 1 / -1; }
-  .catalog-game-count::before, .catalog-game-updated::before { content: attr(data-label) '：'; }
+  .catalog-game-name, .catalog-game-english { grid-column: 1; min-width: 0; overflow: hidden; }
+  .catalog-game-name { grid-row: 1; font-size: 15px; }
+  .catalog-game-english { grid-row: 2; color: var(--muted); }
+  .catalog-game-count, .catalog-game-updated { grid-column: 2; min-width: 0; color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+  .catalog-game-count { grid-row: 1; }
+  .catalog-game-updated { grid-row: 2; }
+  .catalog-game-count::before, .catalog-game-updated::before { content: attr(data-mobile-label) '：'; }
+  .catalog-name-viewport { position: relative; display: block; min-width: 0; overflow: hidden; }
+  .catalog-name-scroller { display: block; overflow-x: auto; white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .catalog-name-scroller::-webkit-scrollbar { display: none; }
+  .catalog-name-scroller:focus { outline: 1px dashed var(--orange); outline-offset: 1px; }
+  .catalog-name-ellipsis { position: absolute; display: block; right: 0; top: 0; padding-left: 10px; background: linear-gradient(90deg, transparent, var(--white) 45%); pointer-events: none; }
+  .catalog-name-viewport:focus-within .catalog-name-ellipsis { opacity: 0; }
   .catalog-expand-cell { position: absolute; left: 12px; top: 14px; width: 26px; }
   .catalog-detail-row { display: block; margin: -2px 0 12px; }
   .catalog-detail-row > td { display: block; border: 0 !important; }
@@ -431,15 +441,20 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .catalog-tag-filters { flex-wrap: nowrap; margin: 0 -14px; padding: 0 14px 4px; overflow-x: auto; scrollbar-width: none; }
   .catalog-tag-filters button { flex: 0 0 auto; }
   .catalog-rules-table, .catalog-rules-table tbody { display: block; }
-  .catalog-rules-table tbody tr { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
-  .catalog-rules-table tbody td { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 10px; padding: 0; border: 0; white-space: normal; }
+  .catalog-rules-table tbody tr { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) clamp(76px, 24vw, 94px); gap: 8px 8px; margin-bottom: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+  .catalog-rules-table tbody td { grid-column: 1; display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 10px; padding: 0; border: 0; white-space: normal; }
   .catalog-rules-table tbody td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 800; }
   .catalog-rules-table tbody .catalog-status { justify-self: start; }
+  .catalog-rules-table tbody .catalog-rule-status-cell { position: absolute; top: 11px; right: 47px; display: block; width: auto; }
+  .catalog-rules-table tbody .catalog-rule-status-cell::before { display: none; }
   .catalog-rules-table tbody .catalog-rule-statement { display: block; padding-bottom: 8px; border-bottom: 1px solid var(--line); font-size: 15px; }
   .catalog-rules-table tbody .catalog-rule-statement::before { display: none; }
   .catalog-rules-table tbody .catalog-empty-cell { display: block; }
+  .catalog-rules-table tbody .catalog-rule-side { grid-column: 2; display: block; align-self: start; padding-left: 9px; border-left: 1px solid var(--line); overflow-wrap: anywhere; }
+  .catalog-rules-table tbody .catalog-rule-side::before { display: block; margin-bottom: 3px; }
+  .catalog-rules-table tbody .catalog-rule-source { margin-top: 30px; }
   .catalog-update-cell { justify-items: stretch; }
-  .catalog-update-cell .text-action { justify-self: start; }
+  .catalog-update-cell .text-action { position: absolute; top: 11px; right: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
