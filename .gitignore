@@ -9,5 +9,7 @@ playwright-report/
 test-results/
 imports/private/
 imports/generated/
+參考資料/*
+!參考資料/README.md
 *.local.sqlite*
 玩錯的桌遊規則紀錄.xlsx
