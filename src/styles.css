@@ -172,6 +172,7 @@ footer a { color: inherit; }
 .list-heading h2 { font-family: inherit; font-size: 17px; letter-spacing: 0; }
 .list-heading > span { font-size: 12px; background: var(--cream); border-radius: 100px; padding: 5px 10px; }
 .rule-input { display: grid; grid-template-columns: 34px 1fr 30px; gap: 8px; margin-bottom: 13px; }
+.rule-input + .rule-input { border-top: 1px dashed #b9b1a4; padding-top: 16px; margin-top: 16px; }
 .rule-input-fields { display: grid; gap: 8px; min-width: 0; }
 .rule-input-fields > label, .record-game-fields > label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
 .rule-input.collapsed { align-items: center; }
