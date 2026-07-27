@@ -90,7 +90,8 @@ gamesRoutes.post('/api/games/:id/view', async (c) => {
 
 gamesRoutes.get('/api/games/:identifier', async (c) => {
   const identifier = c.req.param('identifier');
-  const includePrivate = Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
+  const includePrivate = c.req.query('includePrivate') === '1'
+    && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,

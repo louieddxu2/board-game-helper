@@ -71,11 +71,17 @@ type ApiRule = RuleCard & { gameName: string; gameSlug: string };
 
 type GameResponse = { game: GameDetail; rulesComplete?: boolean };
 
-const fetchGame = (identifier: string, fresh: boolean) => transportRequest<GameResponse>(
-  `/api/games/${encodeURIComponent(identifier)}${fresh ? `?fresh=${encodeURIComponent(crypto.randomUUID())}` : ''}`,
-  fresh ? { cache: 'no-store' } : undefined,
-  'cache-miss',
-);
+const fetchGame = (identifier: string, fresh: boolean, includePrivate: boolean) => {
+  const params = new URLSearchParams();
+  if (fresh) params.set('fresh', crypto.randomUUID());
+  if (includePrivate) params.set('includePrivate', '1');
+  const query = params.size ? `?${params.toString()}` : '';
+  return transportRequest<GameResponse>(
+    `/api/games/${encodeURIComponent(identifier)}${query}`,
+    fresh ? { cache: 'no-store' } : undefined,
+    'cache-miss',
+  );
+};
 
 const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
   if (includePrivate) return game;
@@ -152,7 +158,7 @@ export const api = {
       const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
       if (cached) return { game: cached.data };
     }
-    const response = await fetchGame(identifier, fresh);
+    const response = await fetchGame(identifier, fresh, includePrivate);
     const rulesComplete = Boolean(response.rulesComplete);
     await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
     if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);

@@ -58,6 +58,20 @@ describe('api game refresh', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('explicitly requests the complete rule set after an editor cache miss', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ game: { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], rules: [], ruleCount: 0, updatedAt: 1 }, rulesComplete: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+
+    await api.game('game-1', false, true);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/games/game-1?includePrivate=1', expect.any(Object));
+  });
+
   test('writes a freshly fetched game through the API cache boundary', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

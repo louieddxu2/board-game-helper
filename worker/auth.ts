@@ -25,6 +25,16 @@ export interface IntegrationSession {
   user: SessionUser;
 }
 
+export const isPublicReadRequest = (method: string, requestUrl: string): boolean => {
+  if (method !== 'GET') return false;
+  const url = new URL(requestUrl);
+  const path = url.pathname;
+  const isPublicGameDetail = /^\/api\/games\/[^/]+$/.test(path)
+    && url.searchParams.get('includePrivate') !== '1';
+  return ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
+    || isPublicGameDetail;
+};
+
 const googleAudiences = (env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>): string[] => Array.from(new Set([
   env.GOOGLE_CLIENT_ID,
   ...(env.GOOGLE_CLIENT_IDS ?? '').split(','),
@@ -87,11 +97,7 @@ export const sessionMiddleware: MiddlewareHandler<{
   Bindings: RouteEnv;
   Variables: AppVariables;
 }> = async (c, next) => {
-  const path = new URL(c.req.url).pathname;
-  const isPublicRead = c.req.method === 'GET' && (
-    ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
-    || /^\/api\/games\/[^/]+$/.test(path)
-  );
+  const isPublicRead = isPublicReadRequest(c.req.method, c.req.url);
   if (isPublicRead) { await next(); return; }
   const authorization = c.req.header('Authorization');
   const bearer = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
