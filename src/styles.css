@@ -685,40 +685,48 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   text-decoration: underline;
 }
 
-/* ===== Detected Tag Light-up Panel ===== */
-.detected-tags-panel {
+/* ===== Tag recommendations ===== */
+.tag-recommendations {
   margin-top: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: var(--cream);
   border: 1px dashed var(--line);
   border-radius: 6px;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.tag-recommendation-group {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
 }
 
-.detected-tags-panel small {
+.tag-recommendation-group small {
   font-size: 0.75rem;
   color: var(--muted);
 }
 
-.detected-chips {
+.recommended-tag-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
 }
 
-.tag-chip.light-up {
+.tag-recommendations .tag-chip {
   background: var(--paper);
   color: var(--ink);
-  border: 1px solid var(--green);
   cursor: pointer;
   font-size: 0.8125rem;
   padding: 0.25rem 0.5rem;
   transition: all 150ms ease;
 }
 
-.tag-chip.light-up:hover {
+.tag-recommendations .tag-chip.inferred {
+  border-color: var(--green);
+}
+
+.tag-recommendations .tag-chip:hover {
   background: var(--green);
   color: var(--white);
   transform: translateY(-1px);

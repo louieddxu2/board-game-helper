@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
@@ -23,11 +23,31 @@ export const clearPublicTagCache = () => {
 
 const filterTags = (tags: TagSummary[], query: string, selected: string[]) => {
   const normalizedQuery = query.toLocaleLowerCase();
-  return tags.filter((tag) => {
-    if (selected.includes(tag.name)) return false;
+  const selectedNames = new Set(selected.map((name) => name.toLocaleLowerCase()));
+  const matched = tags.filter((tag) => {
+    if (selectedNames.has(tag.name.toLocaleLowerCase())) return false;
     if (!normalizedQuery) return true;
     return [tag.name, ...(tag.aliases ?? [])].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
   });
+  return Array.from(new Map(matched.map((tag) => [tag.id || tag.name.toLocaleLowerCase(), tag])).values());
+};
+
+export const getCommonTagSuggestions = (tags: TagSummary[], selected: string[], limit = 6): TagSummary[] => {
+  const selectedNames = new Set(selected.map((name) => name.toLocaleLowerCase()));
+  const counts = new Map<string, { tag: TagSummary; count: number }>();
+  for (const tag of tags) {
+    const key = tag.name.trim().toLocaleLowerCase();
+    if (!key || selectedNames.has(key)) continue;
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { tag, count: 1 });
+  }
+  return Array.from(counts.values())
+    .sort((left, right) => right.count - left.count
+      || (right.tag.usageCount ?? 0) - (left.tag.usageCount ?? 0)
+      || left.tag.name.localeCompare(right.tag.name, 'zh-Hant'))
+    .slice(0, limit)
+    .map(({ tag }) => tag);
 };
 
 interface TagInputProps {
@@ -81,7 +101,7 @@ export const TagInput = ({
   }, [availableTags, debouncedQuery, open, value]);
   const add = (name: string) => {
     const cleaned = name.trim().replace(/^#/, '');
-    if (!cleaned || value.includes(cleaned) || value.length >= 8) return;
+    if (!cleaned || value.some((selected) => selected.toLocaleLowerCase() === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
     onChange([...value, cleaned]); setQuery(''); setOpen(false);
   };
   const commitQuery = () => {
@@ -95,7 +115,18 @@ export const TagInput = ({
     }
   };
 
-  const unselectedDetected = detectedSuggestions.filter((tag) => !value.includes(tag));
+  const recommendations = useMemo(() => {
+    const selectedNames = new Set(value.map((name) => name.toLocaleLowerCase()));
+    const detected = Array.from(new Map(detectedSuggestions
+      .map((tag) => tag.trim().replace(/^#/, ''))
+      .filter((tag) => tag && !selectedNames.has(tag.toLocaleLowerCase()))
+      .map((tag) => [tag.toLocaleLowerCase(), tag])).values()).slice(0, 6);
+    const detectedNames = new Set(detected.map((name) => name.toLocaleLowerCase()));
+    const common = getCommonTagSuggestions(availableTags ?? [], value)
+      .filter((tag) => !detectedNames.has(tag.name.toLocaleLowerCase()));
+    return { detected, common };
+  }, [availableTags, detectedSuggestions, value]);
+  const showRecommendations = value.length < 8 && (recommendations.detected.length > 0 || recommendations.common.length > 0);
 
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
@@ -110,25 +141,22 @@ export const TagInput = ({
         }} />
     </div>
 
-    {/* 確信命中點亮區面板 */}
-    {unselectedDetected.length > 0 && (
-      <div className="detected-tags-panel">
-        <small className="muted">內文提及的常用標籤：</small>
-        <div className="detected-chips">
-          {unselectedDetected.map((tagName) => (
-            <button
-              type="button"
-              key={tagName}
-              className="tag-chip light-up"
-              onClick={() => add(tagName)}
-              title="點擊新增此標籤"
-            >
-              ＋ #{tagName}
-            </button>
-          ))}
+    {showRecommendations && <div className="tag-recommendations">
+      {recommendations.detected.length > 0 && <div className="tag-recommendation-group">
+        <small>根據規則內容</small>
+        <div className="recommended-tag-chips">
+          {recommendations.detected.map((tagName) => <button type="button" key={tagName} className="tag-chip inferred"
+            aria-label={`加入標籤 ${tagName}`} onClick={() => add(tagName)}>＋ #{tagName}</button>)}
         </div>
-      </div>
-    )}
+      </div>}
+      {recommendations.common.length > 0 && <div className="tag-recommendation-group">
+        <small>這款遊戲常用</small>
+        <div className="recommended-tag-chips">
+          {recommendations.common.map((tag) => <button type="button" key={tag.id || tag.name} className="tag-chip"
+            aria-label={`加入標籤 ${tag.name}`} onClick={() => add(tag.name)}>＋ #{tag.name}</button>)}
+        </div>
+      </div>}
+    </div>}
 
     {open && (suggestions.length > 0 || (canCreate && query.trim())) && <div className="tag-suggestions" id={`${id}-list`} role="listbox">
       {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}{tag.usageCount !== undefined && <small>{tag.usageCount} 條</small>}</button>)}
