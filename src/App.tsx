@@ -11,6 +11,7 @@ import { LoginPage } from './pages/LoginPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 
 const ErrorFallback = () => (
   <section className="narrow-page">
@@ -37,4 +38,4 @@ const router = createBrowserRouter([
   ] },
 ]);
 
-export const App = () => <SessionProvider><ToastProvider><RouterProvider router={router} /></ToastProvider></SessionProvider>;
+export const App = () => <SessionProvider><ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider></SessionProvider>;

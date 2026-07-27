@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { GameSummary, RuleSearchResult } from '../shared/types';
@@ -75,17 +75,30 @@ export function formatGameSearchDisplay(
 
 export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...' }: Props) => {
   const inputId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
   const query = useDebouncedValue(value.trim());
   const [games, setGames] = useState<GameSummary[]>([]);
   const [rules, setRules] = useState<RuleSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [open, setOpen] = useState(false);
   const { canEdit } = useSession();
   const navigate = useNavigate();
 
   const isEnglishOnly = Boolean(query && /^[a-zA-Z0-9\s\-_'.]+$/.test(query));
   const isMinLengthSatisfied = isEnglishOnly ? query.length >= 2 : query.length >= 1;
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setActiveIndex(-1);
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, []);
 
   useEffect(() => {
     if (!query || selectedId || !isMinLengthSatisfied) {
@@ -162,11 +175,11 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     else handleCreateOrLogin();
   };
 
-  return <div className="game-search">
+  return <div className="game-search" ref={containerRef}>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
-      <input id={inputId} value={value} onChange={(event) => onChange(event.target.value)}
+      <input id={inputId} value={value} onFocus={() => setOpen(true)} onChange={(event) => { onChange(event.target.value); setOpen(true); }}
         placeholder={placeholder} autoComplete="off" aria-label="搜尋遊戲名稱"
-        role="combobox" aria-autocomplete="list" aria-expanded={!selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
+        role="combobox" aria-autocomplete="list" aria-expanded={open && !selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' && optionCount) { event.preventDefault(); setActiveIndex((index) => (index + 1) % optionCount); }
@@ -185,11 +198,11 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
               handleCreateOrLogin();
             }
           }
-          if (event.key === 'Escape') { setGames([]); setRules([]); setActiveIndex(-1); }
+          if (event.key === 'Escape') { setOpen(false); setActiveIndex(-1); }
         }} />
       {selectedId && <span aria-hidden="true">✓</span>}
     </div>
-    {!selectedId && (isEnglishOnly && query.length === 1 || loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
+    {open && !selectedId && (isEnglishOnly && query.length === 1 || loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
       {isEnglishOnly && query.length === 1 && (
         <p className="search-hint muted" style={{ padding: '0.5rem 0.75rem', margin: 0, fontSize: '0.875rem' }}>
           請輸入至少 2 個英文字母進行搜尋

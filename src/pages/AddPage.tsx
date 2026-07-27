@@ -4,6 +4,7 @@ import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
@@ -20,6 +21,7 @@ export const AddPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { canEdit, isAdmin, loading } = useSession();
+  const { confirm } = useConfirm();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
   const [englishName, setEnglishName] = useState('');
@@ -127,6 +129,19 @@ export const AddPage = () => {
       setError(caught instanceof ApiError && caught.status === 401 ? '登入已過期，草稿已保留，請重新登入。' : '尚未成功同步；內容已保存在這台裝置。');
     } finally { setSaving(false); }
   };
+  const requestSubmit = async () => {
+    if (!game) {
+      const name = gameQuery.trim();
+      if (!name) return;
+      const confirmed = await confirm({
+        title: '建立新遊戲？',
+        message: `你的遊戲名稱「${name}」尚不在資料庫中，確定要創建新的遊戲條目嗎？`,
+        confirmLabel: '建立遊戲',
+      });
+      if (!confirmed) return;
+    }
+    await submit();
+  };
   if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
   return <section className="add-page narrow-page">
     <header><h1>記錄玩錯的規則</h1></header>
@@ -178,6 +193,6 @@ export const AddPage = () => {
     </div>}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="sticky-submit"><p>{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : gameQuery.trim() ? `待建立：${gameQuery.trim()}` : '請先輸入遊戲名稱'}・${validRules.length} 條可儲存`}</p>
-      <button className="button primary" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving} onClick={() => void submit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
+      <button className="button primary" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving} onClick={() => void requestSubmit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
   </section>;
 };

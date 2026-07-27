@@ -72,6 +72,7 @@ footer a { color: inherit; }
 .button:disabled { cursor: not-allowed; opacity: .45; transform: none; }
 .button.primary { background: var(--orange); color: white; }
 .button.secondary { background: transparent; border-color: currentColor; color: inherit; }
+.button.danger { background: #a52f23; color: white; }
 .hero-search { width: 100%; max-width: 760px; position: relative; z-index: 2; margin-bottom: 24px; }
 .hero-search label { color: #dfe8e4; }
 .hero-search .search-input { background: white; border-radius: 24px; }
@@ -238,6 +239,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .checkbox input { width: auto; }
 .modal-actions { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
 .modal-actions > div { display: flex; gap: 8px; }
+.confirm-dialog { width: min(480px, 100%); gap: 24px; }
+.confirm-dialog-copy { display: grid; gap: 10px; }
+.confirm-dialog-copy h2, .confirm-dialog-copy p { margin: 0; }
+.confirm-dialog-copy p { color: var(--muted); line-height: 1.7; }
+.confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .danger-link { border: 0; background: none; color: #a52f23; font-weight: 700; cursor: pointer; }
 
 .login-page { text-align: center; max-width: 560px; }

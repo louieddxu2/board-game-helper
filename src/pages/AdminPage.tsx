@@ -7,10 +7,12 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import type { GameSummary, RuleCard, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 export const AdminPage = () => {
   const { realIsAdmin, mockRole, setMockRole, loading } = useSession();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const [editors, setEditors] = useState<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>({ users: [], invitations: [] });
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [hiddenRules, setHiddenRules] = useState<RuleCard[]>([]);
@@ -40,7 +42,7 @@ export const AdminPage = () => {
   useEffect(() => { if (realIsAdmin) void load(); }, [realIsAdmin]);
 
   const handleClearLocalData = async () => {
-    if (window.confirm('確定要清除本機快取嗎？（不會影響雲端資料庫，也不會刪除草稿或待送出資料）')) {
+    if (await confirm({ title: '清除本機快取？', message: '不會影響雲端資料庫，也不會刪除草稿或待送出資料。', confirmLabel: '清除快取', tone: 'danger' })) {
       await localDb.clearCache({ includeTags: true });
       localStorage.clear();
       clearSearchCache();
@@ -155,7 +157,7 @@ export const AdminPage = () => {
                 {String(row.role)}{row.revoked_at ? '・已撤銷' : ''}
               </small>
             </span>
-            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => { if (window.confirm(`撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`)) void api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); }}>撤銷</button>}
+            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); })}>撤銷</button>}
           </div>)}
           {editors.invitations.map((row) => <div key={String(row.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
@@ -206,7 +208,7 @@ export const AdminPage = () => {
         <div className="merge-arrow">↓ 合併到</div>
         <GameSearch value={targetQuery} selectedId={targetGame?.id} onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
         <button type="button" className="button primary full-button" disabled={!sourceGame || !targetGame || sourceGame.id === targetGame.id}
-          onClick={() => { if (sourceGame && targetGame && window.confirm(`將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`)) void api.mergeGame(sourceGame.id, targetGame.id).then(async () => { await localDb.invalidateGame(sourceGame.slug); await localDb.invalidateGame(targetGame.slug); await localDb.invalidateHome(); clearSearchCache(); showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }}>合併遊戲</button>
+          onClick={() => { if (sourceGame && targetGame) void confirm({ title: '合併遊戲？', message: `將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`, confirmLabel: '合併遊戲', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.mergeGame(sourceGame.id, targetGame.id).then(async () => { await localDb.invalidateGame(sourceGame.slug); await localDb.invalidateGame(targetGame.slug); await localDb.invalidateHome(); clearSearchCache(); showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }); }}>合併遊戲</button>
       </section>
 
       <section className="admin-card"><div className="list-heading"><h2>已隱藏規則</h2><span>{hiddenRules.length} 條</span></div>

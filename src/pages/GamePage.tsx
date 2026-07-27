@@ -10,6 +10,7 @@ import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCardType, type RuleRevision } from '../shared/types';
 import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorter';
 import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
@@ -189,6 +190,7 @@ export const GamePage = () => {
 
 export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {
   const { isAdmin } = useSession();
+  const { confirm } = useConfirm();
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
   const [details, setDetails] = useState(rule.details ?? '');
@@ -211,7 +213,11 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       await onSaved();
     } finally { setSaving(false); }
   };
-  const hide = async () => { if (window.confirm('隱藏這條規則？之後仍可從管理頁恢復。')) { await api.hideRule(rule.id); await onSaved(); } };
+  const hide = async () => {
+    if (await confirm({ title: '隱藏規則？', message: '隱藏後仍可從管理頁恢復。', confirmLabel: '隱藏規則', tone: 'danger' })) {
+      await api.hideRule(rule.id); await onSaved();
+    }
+  };
   return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
@@ -226,7 +232,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
           <span><strong>{revision.previousStatement}</strong><small>{new Date(revision.createdAt).toLocaleString('zh-TW')}・{revision.reason}</small></span>
-          <button type="button" className="text-action" onClick={() => { if (window.confirm('恢復到這個版本？目前內容也會保留在版本紀錄中。')) void api.restoreRevision(rule.id, revision.id).then(onSaved); }}>恢復</button>
+          <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
       </section>
       <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>隱藏</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
