@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { assertMutationOrigin, cleanOptional, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
 
 describe('worker utilities', () => {
   test('normalizes names and email consistently', () => {
@@ -11,6 +11,14 @@ describe('worker utilities', () => {
     expect(slugify('Whistle Mountain 汽笛山脈')).toBe('whistle-mountain-汽笛山脈');
     expect(cleanOptional('  abcdef  ', 3)).toBe('abc');
     expect(cleanOptional('   ', 10)).toBeUndefined();
+  });
+
+  test('keeps only distinct aliases that differ from canonical names', () => {
+    expect(cleanAliases(
+      ['盛譽學園', 'Alma Mater', 'Alma-Mater', '學園盛譽', ' 學園盛譽 '],
+      '盛譽學園',
+      'Alma Mater',
+    )).toEqual(['學園盛譽']);
   });
 
   test('validates nickname character and weighted length limits', () => {

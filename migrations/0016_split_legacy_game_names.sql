@@ -1,5 +1,5 @@
 -- Split legacy "English 中文" display names into the existing display_name and english_name columns.
--- Slugs stay unchanged so existing links remain valid; the mixed names remain searchable aliases.
+-- Slugs stay unchanged so existing links remain valid. Canonical and mixed names are not aliases.
 
 CREATE TABLE migration_0016_game_name_splits (
   key TEXT PRIMARY KEY,
@@ -52,25 +52,27 @@ WHERE EXISTS (
     AND COALESCE(games.english_name, '') = ''
 );
 
-INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-SELECT 'alias_split_' || split.key || '_mixed', split.game_id, split.mixed_name,
-  split.normalized_mixed_name, 'legacy', CAST(strftime('%s', 'now') AS INTEGER) * 1000
-FROM migration_0016_game_name_splits split
-JOIN games game ON game.id = split.game_id
-WHERE game.display_name = split.display_name AND game.english_name = split.english_name;
+DELETE FROM game_aliases
+WHERE EXISTS (
+  SELECT 1
+  FROM games game
+  WHERE game.id = game_aliases.game_id
+    AND (
+      game_aliases.normalized_alias = game.normalized_name
+      OR (game.english_name IS NOT NULL AND game_aliases.alias = game.english_name COLLATE NOCASE)
+    )
+);
 
-INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-SELECT 'alias_split_' || split.key || '_display', split.game_id, split.display_name,
-  split.normalized_display_name, 'official', CAST(strftime('%s', 'now') AS INTEGER) * 1000
-FROM migration_0016_game_name_splits split
-JOIN games game ON game.id = split.game_id
-WHERE game.display_name = split.display_name AND game.english_name = split.english_name;
-
-INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-SELECT 'alias_split_' || split.key || '_english', split.game_id, split.english_name,
-  split.normalized_english_name, 'alias', CAST(strftime('%s', 'now') AS INTEGER) * 1000
-FROM migration_0016_game_name_splits split
-JOIN games game ON game.id = split.game_id
-WHERE game.display_name = split.display_name AND game.english_name = split.english_name;
+DELETE FROM game_aliases
+WHERE EXISTS (
+  SELECT 1
+  FROM migration_0016_game_name_splits split
+  WHERE split.game_id = game_aliases.game_id
+    AND game_aliases.normalized_alias IN (
+      split.normalized_mixed_name,
+      split.normalized_display_name,
+      split.normalized_english_name
+    )
+);
 
 DROP TABLE migration_0016_game_name_splits;

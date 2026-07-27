@@ -8,6 +8,20 @@ export const normalizeText = (value: string): string => value
   .toLocaleLowerCase('zh-Hant')
   .replace(/[\s\p{P}\p{S}]+/gu, '');
 
+export const cleanAliases = (aliases: string[], displayName: string, englishName?: string): string[] => {
+  const canonicalNames = new Set([displayName, englishName]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(normalizeText));
+  const unique = new Map<string, string>();
+  for (const alias of aliases) {
+    const trimmed = alias.trim();
+    const normalized = normalizeText(trimmed);
+    if (!normalized || canonicalNames.has(normalized) || unique.has(normalized)) continue;
+    unique.set(normalized, trimmed);
+  }
+  return [...unique.values()];
+};
+
 export const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
 const hanCharacter = /^\p{Script=Han}$/u;

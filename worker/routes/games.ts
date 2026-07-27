@@ -4,7 +4,7 @@ import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type Ho
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
@@ -155,11 +155,7 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   const baseSlug = slugify(parsed.data.englishName || parsed.data.displayName);
   const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
   const slug = slugExists ? `${baseSlug}-${id.slice(-6)}` : baseSlug;
-  const aliases = new Set([
-    parsed.data.displayName,
-    parsed.data.englishName,
-    ...(parsed.data.aliases ?? []),
-  ].filter((value): value is string => Boolean(value?.trim())));
+  const aliases = cleanAliases(parsed.data.aliases ?? [], parsed.data.displayName, parsed.data.englishName);
   const statements: DatabaseStatement[] = [
     getDatabase(c).statement(`
       INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
@@ -183,8 +179,7 @@ gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
     .bind(c.req.param('id')).first<{ id: string; slug: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
-  const aliases = new Set([parsed.data.displayName, parsed.data.englishName, ...(parsed.data.aliases ?? [])]
-    .filter((value): value is string => Boolean(value?.trim())));
+  const aliases = cleanAliases(parsed.data.aliases ?? [], parsed.data.displayName, parsed.data.englishName);
   const statements: DatabaseStatement[] = [
     getDatabase(c).statement(`
       UPDATE games SET display_name = ?, english_name = ?, normalized_name = ?, updated_at = ? WHERE id = ?

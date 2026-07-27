@@ -260,16 +260,10 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
       const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
       if (slugExists) gameSlug = `${baseSlug}-${gameId.slice(-6)}`;
 
-      await getDatabase(c).batch([
-        getDatabase(c).statement(`
-          INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(gameId, gameSlug, row.suggested_display_name, row.suggested_english_name || null, normalizeText(row.suggested_display_name), user.id, timestamp, timestamp),
-        getDatabase(c).statement(`
-          INSERT INTO game_aliases (id, game_id, alias, normalized_alias, created_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(createId('alias'), gameId, row.suggested_display_name, normalizeText(row.suggested_display_name), timestamp),
-      ]);
+      await getDatabase(c).statement(`
+        INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(gameId, gameSlug, row.suggested_display_name, row.suggested_english_name || null, normalizeText(row.suggested_display_name), user.id, timestamp, timestamp).run();
     }
   } else {
       const matched = await getDatabase(c).statement('SELECT slug FROM games WHERE id = ?').bind(gameId).first<{ slug: string }>();
