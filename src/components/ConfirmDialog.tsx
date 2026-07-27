@@ -23,12 +23,17 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onCancel(); };
-    document.addEventListener('keydown', closeOnEscape);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape, true);
     document.body.style.overflow = 'hidden';
     window.setTimeout(() => confirmRef.current?.focus(), 0);
     return () => {
-      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('keydown', closeOnEscape, true);
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
+import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import type { GameSummary, SubmissionInput } from '../shared/types';
 
@@ -24,6 +26,7 @@ export const AddPage = () => {
   const { confirm } = useConfirm();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
+  const [gameEditionOptions, setGameEditionOptions] = useState<{ gameId: string; options: string[] }>();
   const [englishName, setEnglishName] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
   const [activeRuleId, setActiveRuleId] = useState(() => rules[0].id);
@@ -35,6 +38,7 @@ export const AddPage = () => {
   const [savedAt, setSavedAt] = useState<number>();
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string; englishName?: string }>>([]);
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const selectedGameId = game?.id;
   useEffect(() => {
     let active = true;
     void Promise.all([localDb.getDraft(), localDb.recentGames()]).then(async ([draft, recent]) => {
@@ -65,6 +69,16 @@ export const AddPage = () => {
     return () => { active = false; };
   }, [searchParams]);
   useEffect(() => {
+    if (!selectedGameId) { setGameEditionOptions(undefined); return; }
+    let active = true;
+    const gameId = selectedGameId;
+    setGameEditionOptions((current) => current?.gameId === gameId ? current : { gameId, options: [] });
+    void api.game(gameId, false, true).then(({ game: detail }) => {
+      if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules) });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [selectedGameId]);
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       const draft: Omit<DraftRecord, 'id'> = {
         game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
@@ -75,6 +89,10 @@ export const AddPage = () => {
     return () => window.clearTimeout(timer);
   }, [englishName, game, gameQuery, rules, playedOn, privateNote]);
   const validRules = useMemo(() => rules.filter((rule) => rule.statement.trim()), [rules]);
+  const editionOptions = useMemo(() => mergeEditionOptions(
+    selectedGameId && gameEditionOptions?.gameId === selectedGameId ? gameEditionOptions.options : [],
+    collectEditionOptions(rules),
+  ), [selectedGameId, gameEditionOptions, rules]);
   const setRule = (id: string, patch: Partial<RuleInput>) => setRules((current) => current.map((rule) => rule.id === id ? { ...rule, ...patch } : rule));
   const addRuleAfter = (id?: string) => {
     const next = blankRule();
@@ -174,10 +192,9 @@ export const AddPage = () => {
           <label>玩錯情況<textarea rows={2} value={rule.commonMistake ?? ''}
             placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
           <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
-          <div className="rule-attribute-fields">
-            <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
-            <label>版本／擴充<input value={rule.editionNote ?? ''} onChange={(event) => setRule(rule.id, { editionNote: event.target.value })} /></label>
-          </div>
+          <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
+          <EditionInput value={rule.editionNote ?? ''} options={editionOptions}
+            onChange={(editionNote) => setRule(rule.id, { editionNote })} />
           <div className="two-columns"><label>參考資料<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} placeholder="https://…" /></label></div>
         </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>
           {rule.statement.trim() || '尚未輸入正確規則'}

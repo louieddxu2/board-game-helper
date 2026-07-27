@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { RuleCard } from '../components/RuleCard';
+import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
@@ -14,6 +15,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
+import { collectEditionOptions } from '../lib/editionOptions';
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／階段', action: '玩家行動與效果',
@@ -201,6 +203,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [revisions, setRevisions] = useState<RuleRevision[]>();
+  const editionOptions = useMemo(() => collectEditionOptions(game.rules), [game.rules]);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     document.addEventListener('keydown', closeOnEscape); document.body.style.overflow = 'hidden';
@@ -224,9 +227,9 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
-      <div className="rule-attribute-fields"><PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
-        <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectionInput={{ statement, commonMistake, details }} />
+      <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
+      <EditionInput value={editionNote} options={editionOptions} onChange={setEditionNote} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
