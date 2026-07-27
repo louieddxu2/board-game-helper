@@ -128,7 +128,7 @@ footer a { color: inherit; }
 .statement-text { font-size: 16px; line-height: 1.6; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
 .details-toggle { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 4px; }
 
-/* 第四行：玩錯版本 (支援換行 pre-line) */
+/* 第四行：玩錯情況 (支援換行 pre-line) */
 .mistake { background-color: #fdf5f3; border: 1px solid rgba(183, 70, 47, 0.3); border-left: 4px solid var(--orange); padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px 0; }
 .mistake .mistake-badge { background-color: var(--orange); color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; align-self: flex-start; font-weight: 700; }
 .mistake .mistake-text { color: #5a2a22; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-line; word-break: break-word; }
@@ -161,18 +161,27 @@ footer a { color: inherit; }
 .narrow-page > header { margin-bottom: 38px; }
 .narrow-page h1 { font-size: clamp(38px, 6vw, 62px); }
 .narrow-page header > p:last-child, .login-page > p { color: var(--muted); line-height: 1.7; }
-.add-page .game-search { margin-bottom: 34px; }
+.record-game-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 15px; margin-bottom: 34px; }
+.record-game-name-field { min-width: 0; }
+.field-label-row { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+.field-label-row > span { font-size: 13px; font-weight: 700; }
+.field-label-row .text-action { padding: 0; }
+.record-game-fields input[readonly] { background: var(--cream); color: var(--muted); }
 .rule-input-list { border-top: 1px solid var(--line); padding-top: 25px; }
 .list-heading { display: flex; align-items: center; justify-content: space-between; }
 .list-heading h2 { font-family: inherit; font-size: 17px; letter-spacing: 0; }
 .list-heading > span { font-size: 12px; background: var(--cream); border-radius: 100px; padding: 5px 10px; }
 .rule-input { display: grid; grid-template-columns: 34px 1fr 30px; gap: 8px; margin-bottom: 13px; }
+.rule-input-fields { display: grid; gap: 8px; min-width: 0; }
+.rule-input-fields > label, .record-game-fields > label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.rule-input.collapsed { align-items: center; }
+.rule-input.collapsed .rule-number { margin-top: 0; }
+.rule-input-summary { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; border: 1px solid var(--line); border-radius: 11px; background: var(--white); color: var(--ink); padding: 12px 13px; cursor: pointer; }
+.rule-input-summary:hover { border-color: var(--yellow); }
 .rule-number { width: 28px; height: 28px; border-radius: 50%; background: var(--green); color: white; display: grid; place-items: center; font-size: 12px; font-weight: 800; margin-top: 10px; }
 textarea, input, select { width: 100%; border: 1px solid var(--line); border-radius: 11px; background: var(--white); color: var(--ink); padding: 12px 13px; outline: none; }
 textarea { resize: vertical; line-height: 1.6; }
 textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
-.rule-input details { margin-top: 4px; }
-.rule-input summary { color: var(--muted); font-size: 12px; cursor: pointer; padding: 5px; }
 .tag-input { position: relative; display: grid; gap: 8px; margin-top: 10px; }
 .tag-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
 .tag-composer:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
@@ -390,6 +399,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .rule-card { padding: 20px; }
   .game-rules .rule-card { padding-right: 58px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
+  .record-game-fields { grid-template-columns: 1fr; }
   .narrow-page { width: calc(100% - 28px); padding-top: 42px; }
   .more-fields, .two-columns { grid-template-columns: 1fr; }
   .sticky-submit { bottom: 7px; }

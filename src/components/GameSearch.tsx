@@ -144,7 +144,8 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       g.aliases?.some((a) => a.toLowerCase() === query.toLowerCase())
   );
   
-  const showCreateOption = Boolean(canEdit || onCreate) && Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
+  const showCreateOption = Boolean(allowCreate && (canEdit || onCreate))
+    && Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
   const optionCount = games.length + rules.length + (showCreateOption ? 1 : 0);
 
   const handleCreateOrLogin = () => {

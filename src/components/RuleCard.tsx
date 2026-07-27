@@ -167,10 +167,10 @@ export const RuleCard = ({
         )}
       </div>
 
-      {/* 第四行：玩錯版本 */}
+      {/* 第四行：玩錯情況 */}
       {rule.commonMistake && (
         <div className="mistake">
-          <strong className="mistake-badge">⚠️ 玩錯版本</strong>
+          <strong className="mistake-badge">⚠️ 玩錯情況</strong>
           <p className="mistake-text">{rule.commonMistake}</p>
         </div>
       )}

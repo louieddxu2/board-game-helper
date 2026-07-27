@@ -35,8 +35,9 @@ export interface CachedRuleRow extends RuleCard {
 
 export interface DraftRecord {
   id: string;
-  game?: { id: string; slug: string; displayName: string };
+  game?: { id: string; slug: string; displayName: string; englishName?: string };
   gameQuery: string;
+  englishName?: string;
   rules: Array<{ id: string; statement: string; commonMistake?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] }>;
   sourceLabel?: string;
   sourceUrl?: string;
@@ -49,7 +50,7 @@ interface RulesDb extends DBSchema {
   drafts: { key: string; value: DraftRecord };
   pending: { key: string; value: { id: string; payload: SubmissionInput; createdAt: number } };
   cache: { key: string; value: { key: string; data: unknown; cachedAt: number } };
-  recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; viewedAt: number }; indexes: { viewedAt: number } };
+  recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; englishName?: string; viewedAt: number }; indexes: { viewedAt: number } };
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
 }
@@ -281,7 +282,7 @@ export const localDb = {
       rulesComplete,
       rulesVersion: game.latestRuleUpdatedAt,
     } as CachedGameRow);
-    await tx.objectStore('recentGames').put({ id: game.id, slug: game.slug, displayName: game.displayName, viewedAt: cachedAt });
+    await tx.objectStore('recentGames').put({ id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName, viewedAt: cachedAt });
     await tx.done;
   },
   getCachedGame: async (identifier: string, includePrivate = false) => {
@@ -315,16 +316,16 @@ export const localDb = {
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
     const recentRecords = all.reverse().slice(0, 8);
     const resolved = await Promise.all(recentRecords.map(async (r: any) => {
-      if (r.slug && r.displayName) {
-        return { id: r.id, slug: r.slug, displayName: r.displayName };
-      }
       const game = await findCachedGame(db, r.id);
+      if (r.slug && r.displayName) {
+        return { id: r.id, slug: r.slug, displayName: r.displayName, englishName: r.englishName ?? game?.englishName };
+      }
       if (game) {
-        return { id: r.id, slug: game.slug, displayName: game.displayName };
+        return { id: r.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName };
       }
       return null;
     }));
-    return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string }>;
+    return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string; englishName?: string }>;
   },
   clearCache: async (options: { includeTags?: boolean } = {}) => {
     searchMemoryCache.clear();

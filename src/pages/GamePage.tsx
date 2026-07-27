@@ -215,12 +215,12 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
-      <label>常見錯法<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
+      <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
       <div className="two-columns"><label>適用人數<input value={playerCountNote} onChange={(event) => setPlayerCountNote(event.target.value)} /></label>
         <label>版本／擴充<input value={editionNote} onChange={(event) => setEditionNote(event.target.value)} /></label></div>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectionInput={{ statement, commonMistake, details }} />
-      <div className="two-columns"><label>這條規則的來源<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>這條規則的來源網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
+      <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
