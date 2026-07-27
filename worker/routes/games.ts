@@ -230,6 +230,29 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
       SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
     `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+    getDatabase(c).statement(`
+      UPDATE OR REPLACE daily_views
+      SET created_at = MAX(
+            daily_views.created_at,
+            COALESCE((
+              SELECT target_view.created_at
+              FROM daily_views target_view
+              WHERE target_view.game_id = ?
+                AND target_view.rule_id = daily_views.rule_id
+                AND target_view.user_id = daily_views.user_id
+                AND target_view.view_date = daily_views.view_date
+            ), daily_views.created_at)
+          ),
+          game_id = ?
+      WHERE rowid IN (
+        SELECT rowid
+        FROM daily_views
+        WHERE view_date >= DATE('now', '-37 days')
+        ORDER BY view_date DESC, created_at DESC
+        LIMIT 100
+      )
+        AND game_id = ?
+    `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
     getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
