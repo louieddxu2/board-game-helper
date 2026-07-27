@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
-import type { AccountPayload, AccountRevisionSummary, AccountRuleSummary, AccountViewedRuleSummary } from '../shared/types';
+import type { AccountPayload, AccountRevisionSummary, AccountRuleSummary } from '../shared/types';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -33,13 +33,6 @@ const ModifiedRuleItem = ({ revision }: { revision: AccountRevisionSummary }) =>
     <RuleLink gameSlug={revision.gameSlug} ruleId={revision.ruleId} gameName={revision.gameName} statement={revision.currentStatement} />
     <small>{revision.editedByName ? `由 ${revision.editedByName} ` : '由其他編輯者 '}修改於 {formatDate(revision.editedAt)}・{revision.reason}</small>
     {revision.previousStatement && <div className="account-change"><span>修改前：{revision.previousStatement}</span><span>現在：{revision.currentStatement}</span></div>}
-  </li>
-);
-
-const ViewedRuleItem = ({ rule }: { rule: AccountViewedRuleSummary }) => (
-  <li className="account-item">
-    <RuleLink gameSlug={rule.gameSlug} ruleId={rule.ruleId} gameName={rule.gameName} statement={rule.statement} />
-    <small>最近看過：{formatDate(rule.viewedAt)}・記錄 {rule.viewCount} 次</small>
   </li>
 );
 
@@ -100,7 +93,7 @@ export const AccountPage = () => {
     <header>
       <p className="eyebrow">帳號</p>
       <h1>登入後管理你的規則足跡</h1>
-      <p className="muted">登入後可以查看你建立的規則、其他編輯者對你規則的修改，以及你看過的規則。</p>
+      <p className="muted">登入後可以查看你建立的規則與其他編輯者對你規則的修改。</p>
     </header>
     <Link className="button primary" to="/login">登入帳號</Link>
   </section>;
@@ -137,12 +130,6 @@ export const AccountPage = () => {
         <div className="account-section-heading"><h2>我的規則修改紀錄</h2><span>{account.modifiedRules.length} 筆</span></div>
         <p className="account-help">這裡只顯示其他編輯者修改你建立的規則；你自己修改的內容不會列在這裡。</p>
         {account.modifiedRules.length > 0 ? <ul className="account-list">{account.modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他編輯者修改你規則的紀錄。</p>}
-      </section>
-
-      <section className="account-card">
-        <div className="account-section-heading"><h2>我看過的規則</h2><span>{account.viewedRules.length} 筆</span></div>
-        <p className="account-help">目前以點開規則詳細內容作為「看過」的紀錄。</p>
-        {account.viewedRules.length > 0 ? <ul className="account-list">{account.viewedRules.map((rule) => <ViewedRuleItem key={rule.ruleId} rule={rule} />)}</ul> : <p className="muted">目前還沒有規則閱讀紀錄。</p>}
       </section>
     </div>}
   </section>;
