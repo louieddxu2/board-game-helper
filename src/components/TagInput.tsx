@@ -72,6 +72,7 @@ export const TagInput = ({
 }: TagInputProps) => {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const pendingCompositionEnterRef = useRef(false);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
   const [publicTags, setPublicTags] = useState<TagSummary[]>([]);
@@ -113,8 +114,8 @@ export const TagInput = ({
     if (!cleaned || value.some((selected) => selected.toLocaleLowerCase() === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
     onChange([...value, cleaned]); setQuery(''); setOpen(false);
   };
-  const commitQuery = () => {
-    const cleaned = query.trim().replace(/^#/, '');
+  const commitQuery = (rawValue = query) => {
+    const cleaned = rawValue.trim().replace(/^#/, '');
     if (!cleaned || value.includes(cleaned) || value.length >= 8) return;
     const exact = suggestions.find((tag) => tag.name.toLocaleLowerCase() === cleaned.toLocaleLowerCase());
     if (exact) {
@@ -155,11 +156,22 @@ export const TagInput = ({
     <div className="tag-composer">
       {value.map((name) => <span className="tag-chip selected" key={name}>#{name}<button type="button" aria-label={`移除標籤 ${name}`} onClick={() => onChange(value.filter((item) => item !== name))}>×</button></span>)}
       <input id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
-        role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off"
+        role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
         onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={(event) => {
-          if ((event.key === 'Enter' || event.key === ',') && !event.nativeEvent.isComposing) { event.preventDefault(); commitQuery(); }
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.nativeEvent.isComposing) pendingCompositionEnterRef.current = true;
+            else { pendingCompositionEnterRef.current = false; commitQuery(event.currentTarget.value); }
+          }
+          if (event.key === ',' && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); commitQuery(event.currentTarget.value); }
           if (event.key === 'Escape') setOpen(false);
+        }}
+        onCompositionEnd={(event) => {
+          if (!pendingCompositionEnterRef.current) return;
+          pendingCompositionEnterRef.current = false;
+          commitQuery(event.currentTarget.value);
         }} />
     </div>
 

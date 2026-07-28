@@ -18,6 +18,22 @@ beforeEach(() => {
 });
 
 describe('TagInput recommendations', () => {
+  test('commits a composed mobile tag on Enter instead of advancing focus', () => {
+    const onChange = vi.fn();
+    const parentKeyDown = vi.fn();
+    const view = render(<div onKeyDown={parentKeyDown}><TagInput value={[]} onChange={onChange} /></div>);
+    const input = view.getByRole('combobox');
+
+    fireEvent.change(input, { target: { value: '計分' } });
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: true });
+    input.dispatchEvent(enter);
+    fireEvent.compositionEnd(input, { data: '計分' });
+
+    expect(enter.defaultPrevented).toBe(true);
+    expect(parentKeyDown).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith(['計分']);
+  });
+
   test('ranks frequently used game tags without another data request', () => {
     const turn = tag('turn', '回合流程');
     const scoring = tag('scoring', '計分');
