@@ -48,6 +48,14 @@ if (!/game:\s*async\s*\(identifier:\s*string,\s*includePrivate\s*=\s*false\)/.te
 if (/fetchGame\s*=\s*[^\n]*(?:fresh|force)/.test(apiSource)) {
   violations.push('src/lib/api.ts: fetchGame must not accept a fresh/force cache bypass');
 }
+if (/\b(?:fresh|force)\b/.test(apiSource)) {
+  violations.push('src/lib/api.ts: cache reads must not expose fresh/force bypass identifiers; invalidate first, then use the cache-first function');
+}
+
+const workerIndexSource = fs.readFileSync(path.resolve('worker/index.ts'), 'utf8');
+if (/query\(\s*['"]fresh['"]\s*\)/.test(workerIndexSource)) {
+  violations.push('worker/index.ts: URL parameters must not disable response caching');
+}
 
 const clientFiles = ['src/pages', 'src/components'];
 for (const directory of clientFiles) {
@@ -85,9 +93,9 @@ if (/\/api\/(?:games\/search|search)\?q=/.test(apiSource)) {
 }
 
 if (violations.length > 0) {
-  console.error('Direct D1 access is forbidden outside worker/data:');
+  console.error('D1/cache boundary check failed:');
   violations.forEach((violation) => console.error(`- ${violation}`));
   process.exit(1);
 }
 
-console.log('D1 boundary check passed: direct D1 access is confined to worker/data.');
+console.log('D1/cache boundary check passed: direct D1 access is confined and cache bypasses are forbidden.');

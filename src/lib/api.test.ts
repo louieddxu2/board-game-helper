@@ -203,3 +203,36 @@ describe('api daily game catalog boundary', () => {
     expect(upsert).toHaveBeenCalledWith(game);
   });
 });
+
+describe('api editor catalog cache boundary', () => {
+  const response = {
+    games: [{ id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], ruleCount: 2, updatedAt: 1 }],
+  };
+
+  test('does not let an extra caller argument bypass a valid catalog cache', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedCatalogGames').mockResolvedValue({ key: 'games:list:editor', data: response, cachedAt: 1 });
+
+    const result = await (api.editorCatalogGames as (...args: unknown[]) => Promise<typeof response>)(true);
+
+    expect(result).toEqual(response);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('reloads by invalidating first and then entering the cache-first reader', async () => {
+    const invalidate = vi.spyOn(localDb, 'invalidateCatalogGames').mockResolvedValue(undefined);
+    const readCache = vi.spyOn(localDb, 'getCachedCatalogGames').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheCatalogGames').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => response });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await api.reloadEditorCatalogGames();
+
+    expect(result).toEqual(response);
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(readCache).toHaveBeenCalledOnce();
+    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(readCache.mock.invocationCallOrder[0]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});

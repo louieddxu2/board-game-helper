@@ -89,7 +89,7 @@ app.use('/api/*', async (c, next) => {
     c.header('X-API-Version', '1');
   }
   const path = new URL(c.req.url).pathname;
-  if (!isPublicCacheableRequest(c.req.method, path) || c.req.query('fresh') === '1') {
+  if (!isPublicCacheableRequest(c.req.method, path)) {
     c.header('Cache-Control', 'no-store');
   }
 });

@@ -139,19 +139,27 @@ export const CatalogPage = () => {
       : summary));
   };
 
-  const loadGames = async (forceRefresh = false) => {
+  const loadGames = async () => {
     setError('');
     try {
-      const data = await api.editorCatalogGames(forceRefresh);
+      const data = await api.editorCatalogGames();
       setGames(data.games);
-      if (forceRefresh) {
-        detailRequestId.current += 1;
-        setExpandedGameId(undefined);
-        setExpandedGame(undefined);
-        setActiveTags([]);
-        setEditingRule(undefined);
-        setLoadingGameId(undefined);
-      }
+    } catch {
+      setError('列表載入失敗，請重新整理後再試。');
+    }
+  };
+
+  const reloadGames = async () => {
+    setError('');
+    try {
+      const data = await api.reloadEditorCatalogGames();
+      setGames(data.games);
+      detailRequestId.current += 1;
+      setExpandedGameId(undefined);
+      setExpandedGame(undefined);
+      setActiveTags([]);
+      setEditingRule(undefined);
+      setLoadingGameId(undefined);
     } catch {
       setError('列表載入失敗，請重新整理後再試。');
     }
@@ -214,7 +222,7 @@ export const CatalogPage = () => {
         <p className="eyebrow">Editor / Admin</p>
         <h1>遊戲列表</h1>
       </div>
-      <button type="button" className="button secondary" onClick={() => void loadGames(true)}>重新整理</button>
+      <button type="button" className="button secondary" onClick={() => void reloadGames()}>重新整理</button>
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">

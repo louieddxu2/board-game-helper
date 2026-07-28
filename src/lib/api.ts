@@ -37,12 +37,9 @@ const readThrough = async <T>(
   readCache: () => Promise<{ data: T } | undefined>,
   fetchFresh: () => Promise<T>,
   writeCache: (data: T) => Promise<unknown>,
-  force = false,
 ): Promise<T> => {
-  if (!force) {
-    const cached = await readCache().catch(() => undefined);
-    if (cached) return cached.data;
-  }
+  const cached = await readCache().catch(() => undefined);
+  if (cached) return cached.data;
   const data = await fetchFresh();
   await writeCache(data).catch(() => undefined);
   return data;
@@ -53,13 +50,12 @@ type CachedRead<T> = {
   readCache: () => Promise<CacheEntry<T> | undefined>;
   fetchFresh: () => Promise<T>;
   writeCache: (data: T) => Promise<unknown>;
-  force?: boolean;
 };
 
 // Every cacheable read must enter here. Pages and components do not get to
 // choose whether a network request is made.
-const cachedRead = <T>({ readCache, fetchFresh, writeCache, force = false }: CachedRead<T>) =>
-  readThrough(readCache, fetchFresh, writeCache, force);
+const cachedRead = <T>({ readCache, fetchFresh, writeCache }: CachedRead<T>) =>
+  readThrough(readCache, fetchFresh, writeCache);
 
 // GET endpoints that intentionally are not cached must explain why. This
 // keeps an accidental uncached read visible during review.
@@ -110,6 +106,17 @@ const gameCatalog = async (): Promise<GameCatalogPayload> => {
   })();
   try { return await gameCatalogRequest; }
   finally { gameCatalogRequest = undefined; }
+};
+
+const editorCatalogGames = () => cachedRead({
+  readCache: async () => (await localDb.getCachedCatalogGames()) as { data: { games: GameSummary[] } } | undefined,
+  fetchFresh: () => transportRequest<{ games: GameSummary[] }>('/api/editor/catalog/games', undefined, 'cache-miss'),
+  writeCache: localDb.cacheCatalogGames,
+});
+
+const reloadEditorCatalogGames = async () => {
+  await localDb.invalidateCatalogGames();
+  return editorCatalogGames();
 };
 
 export const api = {
@@ -170,12 +177,8 @@ export const api = {
     if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
     return { game: presentGame(response.game, includePrivate) };
   },
-  editorCatalogGames: (fresh = false) => cachedRead({
-    readCache: async () => (await localDb.getCachedCatalogGames()) as { data: { games: GameSummary[] } } | undefined,
-    fetchFresh: () => transportRequest<{ games: GameSummary[] }>('/api/editor/catalog/games', undefined, 'cache-miss'),
-    writeCache: localDb.cacheCatalogGames,
-    force: fresh,
-  }),
+  editorCatalogGames,
+  reloadEditorCatalogGames,
   recordView: (gameId: string, ruleId?: string) => mutation<{ success: boolean }>(`/api/games/${gameId}/view${ruleId ? `?ruleId=${ruleId}` : ''}`, { method: 'POST', body: '{}' }),
   createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ game: GameSummary }>('/api/games', {
