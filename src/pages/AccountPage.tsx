@@ -42,6 +42,7 @@ export const AccountPage = () => {
   const [account, setAccount] = useState<AccountPayload>();
   const [error, setError] = useState('');
   const [nickname, setNickname] = useState('');
+  const [showNickname, setShowNickname] = useState(false);
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [nicknameError, setNicknameError] = useState('');
   const [nicknameSaved, setNicknameSaved] = useState(false);
@@ -57,6 +58,7 @@ export const AccountPage = () => {
       if (active) {
         setAccount(data);
         setNickname(data.user.nickname ?? '');
+        setShowNickname(Boolean(data.user.showNickname));
       }
     }).catch(() => {
       if (active) setError('帳號資料暫時無法載入，請稍後再試。');
@@ -70,9 +72,10 @@ export const AccountPage = () => {
     setNicknameError('');
     setNicknameSaved(false);
     try {
-      const response = await api.updateNickname(nickname);
+      const response = await api.updateNickname(nickname, showNickname);
       setAccount((current) => current ? { ...current, user: response.user } : current);
       setNickname(response.user.nickname ?? '');
+      setShowNickname(Boolean(response.user.showNickname));
       await refresh();
       setNicknameSaved(true);
     } catch (caught) {
@@ -114,6 +117,10 @@ export const AccountPage = () => {
       <p className="account-help">設定一個會顯示在你的帳號活動中的暱稱。限中文字或英文字母，中文字最多 6 個、英文字母最多 12 個，且不可與他人重複。</p>
       <form onSubmit={(event) => { event.preventDefault(); void saveNickname(); }}>
         <label htmlFor="account-nickname">暱稱<input id="account-nickname" value={nickname} maxLength={12} onChange={(event) => setNickname(event.target.value)} placeholder="輸入暱稱" /></label>
+        <label className="checkbox-row" htmlFor="account-show-nickname">
+          <input id="account-show-nickname" type="checkbox" checked={showNickname} disabled={!nickname.trim()} onChange={(event) => setShowNickname(event.target.checked)} />
+          顯示暱稱（規則卡片會顯示你建立或修改過）
+        </label>
         {nicknameError && <p className="form-error" role="alert">{nicknameError}</p>}
         {nicknameSaved && <p className="form-success" role="status">暱稱已更新。</p>}
         <button className="button primary" type="submit" disabled={!nickname.trim() || nicknameSaving}>{nicknameSaving ? '儲存中…' : '儲存暱稱'}</button>

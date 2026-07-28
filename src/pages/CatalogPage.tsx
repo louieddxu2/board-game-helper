@@ -173,7 +173,7 @@ export const CatalogPage = () => {
     setLoadingGameId(game.id);
     setError('');
     try {
-      const data = await api.game(game.id, false, true);
+      const data = await api.game(game.id, true);
       const hydratedGame = await hydrateGameTags(data.game);
       if (requestId !== detailRequestId.current) return;
       setExpandedGame(hydratedGame);
@@ -196,7 +196,7 @@ export const CatalogPage = () => {
     await localDb.invalidateGame(game.id);
     clearSearchCache();
     try {
-      const data = await api.game(game.id, true, true);
+      const data = await api.game(game.id, true);
       const hydratedGame = await hydrateGameTags(data.game);
       setExpandedGame(hydratedGame);
       updateGameSummary(hydratedGame);

@@ -18,4 +18,16 @@ describe('RuleCard', () => {
     expect(screen.getByRole('link', { name: /查看依據/ })).toHaveAttribute('href', 'https://example.com/rules');
     expect(container.querySelector('a a')).toBeNull();
   });
+
+  test('shows only public creator and editor nicknames', () => {
+    render(<MemoryRouter><RuleCard
+      rule={{
+        id: 'rule_credits', gameId: 'game_1', statement: '公開規則', status: 'published',
+        createdByNickname: '小明', editedByNicknames: ['小華', '阿德'], tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    expect(screen.getByText('建立：小明')).toBeInTheDocument();
+    expect(screen.getByText('修改：小華、阿德')).toBeInTheDocument();
+  });
 });

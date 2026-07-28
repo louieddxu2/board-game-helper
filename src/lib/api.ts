@@ -9,7 +9,7 @@ export class ApiError extends Error {
 
 type RequestAccess = 'cache-miss' | 'uncached-read' | 'mutation';
 
-const transportRequest = async <T>(path: string, init: RequestInit | undefined, access: RequestAccess): Promise<T> => {
+const transportResponse = async <T>(path: string, init: RequestInit | undefined, access: RequestAccess): Promise<{ data: T; response: Response }> => {
   if (access === 'mutation' && (!init?.method || init.method === 'GET')) {
     throw new Error(`Mutation request must specify a non-GET method: ${path}`);
   }
@@ -26,8 +26,11 @@ const transportRequest = async <T>(path: string, init: RequestInit | undefined, 
   });
   const body = await response.json().catch(() => ({})) as T & { error?: string };
   if (!response.ok) throw new ApiError(body.error ?? 'request_failed', response.status);
-  return body;
+  return { data: body, response };
 };
+
+const transportRequest = async <T>(path: string, init: RequestInit | undefined, access: RequestAccess): Promise<T> =>
+  (await transportResponse<T>(path, init, access)).data;
 
 const readThrough = async <T>(
   readCache: () => Promise<{ data: T } | undefined>,
@@ -71,16 +74,16 @@ type ApiRule = RuleCard & { gameName: string; gameSlug: string };
 
 type GameResponse = { game: GameDetail; rulesComplete?: boolean };
 
-const fetchGame = (identifier: string, fresh: boolean, includePrivate: boolean) => {
+const fetchGame = async (identifier: string, includePrivate: boolean) => {
   const params = new URLSearchParams();
-  if (fresh) params.set('fresh', crypto.randomUUID());
   if (includePrivate) params.set('includePrivate', '1');
   const query = params.size ? `?${params.toString()}` : '';
-  return transportRequest<GameResponse>(
+  const result = await transportResponse<GameResponse>(
     `/api/games/${encodeURIComponent(identifier)}${query}`,
-    fresh ? { cache: 'no-store' } : undefined,
+    undefined,
     'cache-miss',
   );
+  return { ...result.data, offlineFallback: result.response.headers.get('X-Offline-Fallback') === '1' };
 };
 
 const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
@@ -92,8 +95,8 @@ const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
-  updateNickname: (nickname: string) => mutation<{ user: SessionUser }>('/api/account/nickname', {
-    method: 'PATCH', body: JSON.stringify({ nickname }),
+  updateNickname: (nickname: string, showNickname = false) => mutation<{ user: SessionUser }>('/api/account/nickname', {
+    method: 'PATCH', body: JSON.stringify({ nickname, showNickname }),
   }),
   googleLogin: (credential: string) => mutation<{ user: SessionUser }>('/api/auth/google', {
     method: 'POST', body: JSON.stringify({ credential }),
@@ -153,14 +156,12 @@ export const api = {
   updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
-  game: async (identifier: string, fresh = false, includePrivate = false) => {
-    if (!fresh) {
-      const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
-      if (cached) return { game: cached.data };
-    }
-    const response = await fetchGame(identifier, fresh, includePrivate);
+  game: async (identifier: string, includePrivate = false) => {
+    const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
+    if (cached) return { game: cached.data };
+    const response = await fetchGame(identifier, includePrivate);
     const rulesComplete = Boolean(response.rulesComplete);
-    await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
+    if (!response.offlineFallback) await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
     if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
     return { game: presentGame(response.game, includePrivate) };
   },

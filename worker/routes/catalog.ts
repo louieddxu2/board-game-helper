@@ -9,6 +9,7 @@ const catalogRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>(
 catalogRoutes.get('/api/editor/catalog/games', requireRole('editor'), async (c) => {
   const result = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      g.rename_owner_id, g.rename_locked,
       g.total_rule_count AS rule_count, g.published_rule_count,
       g.total_rule_count, g.latest_rule_updated_at
     FROM games g

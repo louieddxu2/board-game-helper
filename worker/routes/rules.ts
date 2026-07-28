@@ -7,7 +7,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, parseEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -16,7 +16,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage,
-      r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at,
+      r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
@@ -25,8 +25,9 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
 
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  const nicknameMap = await resolvePublicNicknames(getDatabase(c), [row]);
   setNoCache(c);
-  return c.json({ rule: { ...toRule(row), gameName: row.game_name, gameSlug: row.game_slug } });
+  return c.json({ rule: { ...toRule(row, undefined, nicknameMap), gameName: row.game_name, gameSlug: row.game_slug } });
 });
 
 const rulePatchSchema = z.object({
@@ -195,7 +196,9 @@ rulesRoutes.get('/api/admin/hidden-rules', requireRole('editor'), async (c) => {
   const result = await getDatabase(c).statement(`${ruleSelect}
     WHERE r.status = 'hidden' ORDER BY r.updated_at DESC LIMIT 100
   `).all<RuleRow>();
-  return c.json({ rules: (result.results ?? []).map((row) => toRule(row)) });
+  const rows = result.results ?? [];
+  const nicknameMap = await resolvePublicNicknames(getDatabase(c), rows);
+  return c.json({ rules: rows.map((row) => toRule(row, undefined, nicknameMap)) });
 });
 
 export { rulesRoutes };

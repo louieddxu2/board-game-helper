@@ -78,7 +78,7 @@ export const AddPage = () => {
     let active = true;
     const gameId = selectedGameId;
     setGameEditionOptions((current) => current?.gameId === gameId ? current : { gameId, options: [] });
-    void api.game(gameId, false, true).then(({ game: detail }) => {
+    void api.game(gameId, true).then(({ game: detail }) => {
       if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules) });
     }).catch(() => undefined);
     return () => { active = false; };

@@ -114,6 +114,12 @@ export const RuleCard = ({
             編輯
           </button>
         )}
+        {(rule.createdByNickname || rule.editedByNicknames?.length) && (
+          <small className="rule-credits" aria-label="規則作者資訊">
+            {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
+            {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
+          </small>
+        )}
       </div>
 
       {/* 第二行：標籤列 */}

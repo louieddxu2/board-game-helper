@@ -7,7 +7,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const gamesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -94,6 +94,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      g.rename_owner_id, g.rename_locked,
       ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,
       g.published_rule_count, g.total_rule_count, g.latest_rule_updated_at
     FROM games g
@@ -117,11 +118,12 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     `).bind(game.id).all<RuleRow>(),
   ]);
   const ruleRows = rulesResult.results ?? [];
+  const nicknameMap = await resolvePublicNicknames(getDatabase(c), ruleRows);
   const detail: GameDetail = {
     ...toGame(game),
     ruleCount: ruleRows.length,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
-    rules: ruleRows.map((row) => toRule(row)),
+    rules: ruleRows.map((row) => toRule(row, undefined, nicknameMap)),
   };
   setNoCache(c);
   return c.json({ game: detail, rulesComplete: includePrivate });
@@ -158,9 +160,9 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   const aliases = cleanAliases(parsed.data.aliases ?? [], parsed.data.displayName, parsed.data.englishName);
   const statements: DatabaseStatement[] = [
     getDatabase(c).statement(`
-      INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizedName, user.id, timestamp, timestamp),
+      INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, rename_owner_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizedName, user.id, user.id, timestamp, timestamp),
   ];
   for (const alias of aliases) {
     statements.push(getDatabase(c).statement(`
@@ -175,9 +177,13 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
 gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
-  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL')
-    .bind(c.req.param('id')).first<{ id: string; slug: string }>();
+  const game = await getDatabase(c).statement('SELECT id, slug, rename_owner_id, rename_locked FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+    .bind(c.req.param('id')).first<{ id: string; slug: string; rename_owner_id: string | null; rename_locked: number }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const user = c.get('user')!;
+  if (!user.roles.includes('admin') && (Boolean(game.rename_locked) || game.rename_owner_id !== user.id)) {
+    return c.json({ error: 'game_name_locked' }, 403);
+  }
   const timestamp = now();
   const aliases = cleanAliases(parsed.data.aliases ?? [], parsed.data.displayName, parsed.data.englishName);
   const statements: DatabaseStatement[] = [

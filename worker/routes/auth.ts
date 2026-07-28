@@ -11,7 +11,10 @@ import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWrite
 
 const authRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
-const nicknameSchema = z.object({ nickname: z.string().trim().min(1).max(12) }).refine(
+const nicknameSchema = z.object({
+  nickname: z.string().trim().min(1).max(12),
+  showNickname: z.boolean().optional(),
+}).refine(
   (value) => isValidNickname(value.nickname),
   { message: 'invalid_nickname', path: ['nickname'] },
 );
@@ -83,7 +86,9 @@ authRoutes.get('/api/account', requireUser, async (c) => {
     };
   });
 
-  return c.json({ user, createdRules, modifiedRules });
+  const setting = await getDatabase(c).statement('SELECT show_nickname FROM users WHERE id = ?')
+    .bind(user.id).first<{ show_nickname: number }>();
+  return c.json({ user: { ...user, showNickname: Boolean(setting?.show_nickname) }, createdRules, modifiedRules });
 });
 
 authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
@@ -92,19 +97,20 @@ authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
   const user = c.get('user')!;
   const nickname = parsed.data.nickname.normalize('NFKC').trim();
   const nicknameNormalized = normalizeNickname(nickname);
+  if (parsed.data.showNickname && !nickname) return c.json({ error: 'nickname_required' }, 400);
   const existing = await getDatabase(c).statement(
     'SELECT id FROM users WHERE nickname_normalized = ? AND id <> ?',
   ).bind(nicknameNormalized, user.id).first<{ id: string }>();
   if (existing) return c.json({ error: 'nickname_taken' }, 409);
   try {
     await getDatabase(c).statement(
-      'UPDATE users SET nickname = ?, nickname_normalized = ? WHERE id = ?',
-    ).bind(nickname, nicknameNormalized, user.id).run();
+      'UPDATE users SET nickname = ?, nickname_normalized = ?, show_nickname = ? WHERE id = ?',
+    ).bind(nickname, nicknameNormalized, parsed.data.showNickname ? 1 : 0, user.id).run();
   } catch (error) {
     if (String(error).toLowerCase().includes('unique')) return c.json({ error: 'nickname_taken' }, 409);
     throw error;
   }
-  return c.json({ user: { ...user, nickname } });
+  return c.json({ user: { ...user, nickname, showNickname: Boolean(parsed.data.showNickname) } });
 });
 
 authRoutes.post('/api/auth/google', async (c) => {

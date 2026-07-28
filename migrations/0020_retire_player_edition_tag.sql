@@ -19,7 +19,8 @@ SELECT
   CAST(strftime('%s', 'now') AS INTEGER) * 1000,
   CAST(strftime('%s', 'now') AS INTEGER) * 1000
 FROM rule_tags
-WHERE tag_id = 'tag_stage_edition';
+WHERE tag_id = 'tag_stage_edition'
+HAVING COUNT(*) > 0;
 
 WITH affected AS (
   SELECT r.*

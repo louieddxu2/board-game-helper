@@ -16,6 +16,7 @@ export interface SessionUser {
   email: string;
   displayName?: string;
   nickname?: string;
+  showNickname?: boolean;
   avatarUrl?: string;
   roles: UserRole[];
 }
@@ -59,6 +60,8 @@ export interface GameSummary {
   totalRuleCount?: number;
   latestRuleUpdatedAt?: number;
   updatedAt: number;
+  renameOwnerId?: string;
+  renameLocked?: boolean;
 }
 
 export interface RuleSearchResult {
@@ -95,6 +98,8 @@ export interface RuleCard {
   sourceLinks: Array<{ label?: string; url: string }>;
   status: 'draft' | 'published' | 'hidden';
   createdBy?: string;
+  createdByNickname?: string;
+  editedByNicknames?: string[];
   createdAt?: number;
   updatedAt?: number;
   tagIds?: string[];

@@ -48,7 +48,7 @@ export const GamePage = () => {
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
     try {
-      const response = await api.game(identifier, true);
+      const response = await api.game(identifier);
       const hydratedGame = await hydrateGameTags(response.game);
       setGame(hydratedGame);
     } finally { setLoading(false); }
@@ -57,7 +57,7 @@ export const GamePage = () => {
     let active = true;
     setLoading(true);
     const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
-    void api.game(identifier, justAdded).then(async (response) => {
+    void (justAdded ? localDb.invalidateGame(identifier) : Promise.resolve()).then(() => api.game(identifier)).then(async (response) => {
       const hydratedGame = await hydrateGameTags(response.game);
       if (active) setGame(hydratedGame);
     }).finally(() => { if (active) setLoading(false); });
@@ -98,7 +98,10 @@ export const GamePage = () => {
     <header className="game-hero">
       <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
         <p>{game.ruleCount} 條易錯規則紀錄</p></div>
-      {canEdit && <div className="inline-actions"><button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button><Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></div>}
+      {canEdit && <div className="inline-actions">{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
+        ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
+        : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
+        <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></div>}
     </header>
     <div className="view-mode-header">
       <div className="view-mode-switcher" role="tablist" aria-label="檢視模式切換">

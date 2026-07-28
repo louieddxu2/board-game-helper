@@ -715,6 +715,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   animation: cardFadeIn 300ms ease-out backwards;
 }
 
+.rule-credits { margin-left: auto; display: grid; justify-items: end; color: var(--muted); opacity: .58; font-size: 11px; line-height: 1.35; }
+.game-name-locked { align-self: center; font-size: 13px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.checkbox-row input { width: auto; }
+
 @keyframes cardFadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

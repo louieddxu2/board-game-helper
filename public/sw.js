@@ -59,14 +59,16 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (/^\/api\/games\/[^/]+$/.test(url.pathname)) {
-    if (url.searchParams.has('fresh')) {
-      event.respondWith(fetch(request));
-      return;
-    }
     event.respondWith(fetch(request).then(async (response) => {
       if (response.ok) void (await caches.open(PUBLIC_CACHE)).put(request, response.clone());
       return response;
-    }).catch(() => caches.match(request)));
+    }).catch(async () => {
+      const cached = await caches.match(request);
+      if (!cached) return Response.error();
+      const headers = new Headers(cached.headers);
+      headers.set('X-Offline-Fallback', '1');
+      return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers });
+    }));
     return;
   }
 

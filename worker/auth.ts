@@ -50,14 +50,15 @@ const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> =
 
 const userById = async (db: Database, userId: string): Promise<SessionUser | undefined> => {
   const row = await db.statement(`
-    SELECT id, email, display_name, nickname, avatar_url FROM users WHERE id = ?
-  `).bind(userId).first<{ id: string; email: string; display_name: string | null; nickname: string | null; avatar_url: string | null }>();
+    SELECT id, email, display_name, nickname, show_nickname, avatar_url FROM users WHERE id = ?
+  `).bind(userId).first<{ id: string; email: string; display_name: string | null; nickname: string | null; show_nickname: number; avatar_url: string | null }>();
   if (!row) return undefined;
   return {
     id: row.id,
     email: row.email,
     displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
+    showNickname: Boolean(row.show_nickname),
     avatarUrl: row.avatar_url ?? undefined,
     roles: await rolesForUser(db, row.id),
   };
@@ -66,7 +67,7 @@ const userById = async (db: Database, userId: string): Promise<SessionUser | und
 const sessionUser = async (db: Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
   const row = await db.statement(`
-    SELECT u.id, u.email, u.display_name, u.nickname, u.avatar_url, s.expires_at
+    SELECT u.id, u.email, u.display_name, u.nickname, u.show_nickname, u.avatar_url, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.id_hash = ?
   `).bind(tokenHash).first<{
@@ -74,6 +75,7 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
     email: string;
     display_name: string | null;
     nickname: string | null;
+    show_nickname: number;
     avatar_url: string | null;
     expires_at: number;
   }>();
@@ -88,6 +90,7 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
     email: row.email,
     displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
+    showNickname: Boolean(row.show_nickname),
     avatarUrl: row.avatar_url ?? undefined,
     roles,
   };

@@ -17,7 +17,7 @@ export const setNoCache = (c: AppContext) => {
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
-    r.created_by, r.created_at, r.updated_at,
+    r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
 `;
@@ -25,7 +25,7 @@ export const ruleSelect = `
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
-    r.created_by, r.created_at, r.updated_at, r.tag_ids_json,
+    r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
 `;
@@ -49,6 +49,7 @@ export interface RuleRow {
   source_label?: string | null;
   source_url?: string | null;
   created_by: string | null;
+  editor_ids_json?: string | null;
   created_at: number;
   updated_at: number;
   tag_ids_json: string | null;
@@ -105,9 +106,34 @@ export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Ma
   }]));
 };
 
-export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): RuleCard => {
+export const publicNicknameIds = (rows: RuleRow[]): string[] => Array.from(new Set(rows.flatMap((row) => {
+  let editorIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.editor_ids_json ?? '[]');
+    if (Array.isArray(parsed)) editorIds = parsed.filter((id): id is string => typeof id === 'string');
+  } catch { /* malformed historical metadata is treated as empty */ }
+  return [...(row.created_by ? [row.created_by] : []), ...editorIds];
+})));
+
+export const resolvePublicNicknames = async (db: Database, rows: RuleRow[]): Promise<Map<string, string>> => {
+  const ids = publicNicknameIds(rows);
+  if (!ids.length) return new Map();
+  const result = await db.statement(`
+    SELECT id, nickname FROM users
+    WHERE show_nickname = 1 AND nickname IS NOT NULL
+      AND id IN (${ids.map(() => '?').join(',')})
+  `).bind(...ids).all<{ id: string; nickname: string }>();
+  return new Map((result.results ?? []).map((user) => [user.id, user.nickname]));
+};
+
+export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nicknameMap = new Map<string, string>()): RuleCard => {
   const tagIds = parseRuleTagIds(row);
   const editionNotes = parseEditionNotes(row);
+  let editorIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.editor_ids_json ?? '[]');
+    if (Array.isArray(parsed)) editorIds = parsed.filter((id): id is string => typeof id === 'string');
+  } catch { /* malformed historical metadata is treated as empty */ }
   return ({
     id: row.id,
     gameId: row.game_id,
@@ -128,6 +154,8 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>()): Ru
     })(),
     status: row.status,
     createdBy: row.created_by ?? undefined,
+    createdByNickname: row.created_by ? nicknameMap.get(row.created_by) : undefined,
+    editedByNicknames: Array.from(new Set(editorIds.map((id) => nicknameMap.get(id)).filter((name): name is string => Boolean(name)))),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     tagIds,
@@ -188,6 +216,8 @@ export interface GameRow {
   total_rule_count?: number | null;
   latest_rule_updated_at?: number | null;
   updated_at: number;
+  rename_owner_id?: string | null;
+  rename_locked?: number | null;
 }
 
 export const toGame = (row: GameRow): GameSummary => ({
@@ -201,6 +231,8 @@ export const toGame = (row: GameRow): GameSummary => ({
   totalRuleCount: Number(row.total_rule_count ?? row.rule_count ?? 0),
   latestRuleUpdatedAt: row.latest_rule_updated_at ?? undefined,
   updatedAt: row.updated_at,
+  renameOwnerId: row.rename_owner_id ?? undefined,
+  renameLocked: Boolean(row.rename_locked),
 });
 
 export interface ReviewRuleRow {
