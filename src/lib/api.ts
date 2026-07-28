@@ -1,5 +1,6 @@
-import type { AccountPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb } from './localDb';
+import { filterGameCatalog } from './gameCatalog';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -69,7 +70,6 @@ const uncachedRead = <T>(path: string, reason: string) => {
 
 const mutation = <T>(path: string, init: RequestInit) => transportRequest<T>(path, init, 'mutation');
 
-const searchKey = (kind: 'games' | 'all', query: string) => `${kind}:${query.toLocaleLowerCase()}`;
 type ApiRule = RuleCard & { gameName: string; gameSlug: string };
 
 type GameResponse = { game: GameDetail; rulesComplete?: boolean };
@@ -92,6 +92,26 @@ const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
   return { ...game, rules, ruleCount: game.publishedRuleCount ?? rules.length };
 };
 
+let gameCatalogRequest: Promise<GameCatalogPayload> | undefined;
+const gameCatalog = async (): Promise<GameCatalogPayload> => {
+  const cached = await localDb.getCachedGameCatalog().catch(() => undefined);
+  if (cached) return cached.data;
+  if (gameCatalogRequest) return gameCatalogRequest;
+  gameCatalogRequest = (async () => {
+    try {
+      const response = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
+      await localDb.cacheGameCatalog(response).catch(() => undefined);
+      return (await localDb.getLatestGameCatalog().catch(() => undefined))?.data ?? response;
+    } catch (error) {
+      const stale = await localDb.getLatestGameCatalog().catch(() => undefined);
+      if (stale) return stale.data;
+      throw error;
+    }
+  })();
+  try { return await gameCatalogRequest; }
+  finally { gameCatalogRequest = undefined; }
+};
+
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
@@ -108,23 +128,8 @@ export const api = {
     fetchFresh: () => transportRequest<HomePayload>('/api/home', undefined, 'cache-miss'),
     writeCache: localDb.cacheHome,
   }),
-  searchGames: (query: string) => {
-    const key = searchKey('games', query);
-    return cachedRead({
-      readCache: async () => (await localDb.getCachedSearch(key)) as { data: { games: GameSummary[]; rules: RuleSearchResult[] } } | undefined,
-      fetchFresh: () => transportRequest<{ games: GameSummary[] }>(`/api/games/search?q=${encodeURIComponent(query)}`, undefined, 'cache-miss'),
-      writeCache: (data) => localDb.cacheSearch(key, { games: data.games, rules: [] }),
-    });
-  },
-  search: (query: string) => {
-    const key = searchKey('all', query);
-    return cachedRead({
-      readCache: async () => (await localDb.getCachedSearch(key)) as { data: { games: GameSummary[]; rules: RuleSearchResult[] } } | undefined,
-      fetchFresh: () => transportRequest<{ games: GameSummary[]; rules: RuleSearchResult[] }>(`/api/search?q=${encodeURIComponent(query)}`, undefined, 'cache-miss'),
-      writeCache: (data) => localDb.cacheSearch(key, data),
-    });
-  },
-  searchCachedPrefix: (prefix: string, targetKey: string) => localDb.getCachedSearchPrefix(prefix, targetKey),
+  searchGames: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 20) }),
+  search: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 8), rules: [] as RuleSearchResult[] }),
   invalidateSearchCache: () => localDb.invalidateSearch(),
   tags: async (ids?: string[]) => {
     if (!ids?.length) {

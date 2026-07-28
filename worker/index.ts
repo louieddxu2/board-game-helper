@@ -3,6 +3,7 @@ import { sessionMiddleware } from './auth';
 import type { Env } from './env';
 import { assertMutationOrigin, trustedOrigins } from './utils';
 import { createDatabase } from './data/database';
+import { rebuildGameCatalog } from './data/gameCatalog';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -22,7 +23,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/game-catalog', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
@@ -121,4 +122,9 @@ app.route('/', submissionsRoutes);
 app.route('/', reviewRoutes);
 app.route('/', catalogRoutes);
 
-export default app;
+const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
+  await rebuildGameCatalog(createDatabase(env), controller.scheduledTime);
+};
+
+export { app, scheduled };
+export default Object.assign(app, { scheduled });

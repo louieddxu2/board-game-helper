@@ -8,27 +8,28 @@ import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeE
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { gameCatalogPayload, queryGameCatalog } from '../data/gameCatalog';
+import { filterGameCatalog } from '../../src/lib/gameCatalog';
+import { logD1Query } from './shared';
 
 const gamesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 gamesRoutes.get('/api/games/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (rawQuery.length < 1) return c.json({ games: [] });
-  const query = normalizeText(rawQuery);
-  const result = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
-    FROM games g
-    LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL
-      AND (g.normalized_name LIKE ? OR LOWER(g.english_name) LIKE ? OR a.normalized_alias LIKE ?)
-    GROUP BY g.id
-    ORDER BY CASE WHEN g.normalized_name = ? THEN 0 ELSE 1 END,
-      g.display_name
-    LIMIT 20
-  `).bind(`%${query}%`, `%${query}%`, `%${query}%`, query).all<GameRow>();
+  const result = logD1Query(c, 'game_search_catalog', await queryGameCatalog(getDatabase(c)));
+  const row = result.results?.[0];
+  if (!row) return c.json({ error: 'game_catalog_unavailable' }, 503);
   setNoCache(c);
-  return c.json({ games: (result.results ?? []).map(toGame) });
+  return c.json({ games: filterGameCatalog(gameCatalogPayload(row).games, rawQuery, 20) });
+});
+
+gamesRoutes.get('/api/game-catalog', async (c) => {
+  const result = logD1Query(c, 'game_catalog', await queryGameCatalog(getDatabase(c)));
+  const row = result.results?.[0];
+  if (!row) return c.json({ error: 'game_catalog_unavailable' }, 503);
+  setNoCache(c);
+  return c.json(gameCatalogPayload(row));
 });
 
 gamesRoutes.get('/api/games/resolve', async (c) => {

@@ -129,3 +129,77 @@ describe('api game cache boundary', () => {
     expect(cacheGame).not.toHaveBeenCalled();
   });
 });
+
+describe('api daily game catalog boundary', () => {
+  const catalog = {
+    catalogDate: '2026-07-29',
+    generatedAt: 1,
+    games: [
+      { id: 'game-1', slug: 'emberleaf', displayName: '火葉', englishName: 'Emberleaf', aliases: ['燼葉'], ruleCount: 2, updatedAt: 1 },
+    ],
+  };
+
+  test('filters a same-day IndexedDB catalog without a network request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedGameCatalog').mockResolvedValue({ key: 'games:list:public:v1', data: catalog, cachedAt: 1 });
+
+    const result = await api.searchGames('Ember');
+
+    expect(result.games.map((game) => game.id)).toEqual(['game-1']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('fetches the one-row catalog only once, then uses the stored catalog for later queries', async () => {
+    let cached: { key: string; data: typeof catalog; cachedAt: number } | undefined;
+    vi.spyOn(localDb, 'getCachedGameCatalog').mockImplementation(async () => cached);
+    vi.spyOn(localDb, 'getLatestGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheGameCatalog').mockImplementation(async (data) => {
+      cached = { key: 'games:list:public:v1', data: data as typeof catalog, cachedAt: 1 };
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => catalog,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.searchGames('火葉');
+    await api.searchGames('燼葉');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith('/api/game-catalog', expect.any(Object));
+  });
+
+  test('uses an older local catalog offline without marking it as today', async () => {
+    vi.spyOn(localDb, 'getCachedGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGameCatalog').mockResolvedValue({ key: 'games:list:public:v1', data: catalog, cachedAt: 1 });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+
+    const result = await api.searchGames('火葉');
+
+    expect(result.games.map((game) => game.id)).toEqual(['game-1']);
+  });
+
+  test('deduplicates concurrent first searches into one catalog request', async () => {
+    vi.spyOn(localDb, 'getCachedGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheGameCatalog').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => catalog });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await Promise.all([api.searchGames('火葉'), api.searchGames('Ember')]);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  test('stores a newly created game into the local catalog overlay', async () => {
+    const game = { id: 'game-2', slug: 'new-game', displayName: '新遊戲', ruleCount: 0, updatedAt: 2 };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game }) }));
+    const upsert = vi.spyOn(localDb, 'upsertGameSummary').mockResolvedValue(undefined);
+
+    await api.createGame({ displayName: '新遊戲' });
+
+    expect(upsert).toHaveBeenCalledWith(game);
+  });
+});

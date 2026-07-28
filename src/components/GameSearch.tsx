@@ -104,8 +104,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     if (!query || selectedId || !isMinLengthSatisfied) {
       setGames([]); setRules([]); setSearchError(false); return;
     }
-    const cacheKey = `${includeRules ? 'all' : 'games'}:${query.toLocaleLowerCase()}`;
-    const prefix = `${includeRules ? 'all' : 'games'}:`;
     let active = true;
     setLoading(true);
     setSearchError(false);
@@ -117,35 +115,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
     };
 
-    const loadCached = async () => {
-      try {
-        const progressive = await api.searchCachedPrefix(prefix, cacheKey);
-        if (!active) return;
-        if (progressive) {
-          const qLower = query.toLowerCase();
-          const filteredGames = progressive.data.games.filter((game) =>
-            game.displayName.toLowerCase().includes(qLower) ||
-            game.englishName?.toLowerCase().includes(qLower) ||
-            game.aliases?.some((alias) => alias.toLowerCase().includes(qLower)),
-          );
-          const filteredRules = progressive.data.rules.filter((rule) =>
-            rule.statement.toLowerCase().includes(qLower) ||
-            rule.gameName.toLowerCase().includes(qLower),
-          );
-          setGames(filteredGames);
-          setRules(filteredRules);
-          setActiveIndex(-1);
-          setLoading(false);
-          setSearchError(false);
-          return;
-        }
-
-        fetchApi();
-      } catch {
-        if (active) fetchApi();
-      }
-    };
-    void loadCached();
+    fetchApi();
 
     return () => { active = false; };
   }, [includeRules, isMinLengthSatisfied, query, selectedId]);

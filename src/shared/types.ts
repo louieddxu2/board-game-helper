@@ -64,6 +64,12 @@ export interface GameSummary {
   renameLocked?: boolean;
 }
 
+export interface GameCatalogPayload {
+  catalogDate: string;
+  generatedAt: number;
+  games: GameSummary[];
+}
+
 export interface RuleSearchResult {
   ruleId: string;
   gameId: string;

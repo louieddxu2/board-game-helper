@@ -66,9 +66,22 @@ for (const directory of clientFiles) {
 }
 
 const gamesRouteSource = fs.readFileSync(path.resolve('worker/routes/games.ts'), 'utf8');
+const tagsRouteSource = fs.readFileSync(path.resolve('worker/routes/tags.ts'), 'utf8');
 const patchGameHandler = gamesRouteSource.split("gamesRoutes.patch('/api/games/:id'")[1]?.split('const mergeSchema')[0] ?? '';
 if (/\bFROM\s+rules\b/i.test(patchGameHandler)) {
   violations.push('worker/routes/games.ts: game rename authorization must not scan rules');
+}
+
+const publicGameSearchHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/search'")[1]?.split("gamesRoutes.get('/api/game-catalog'")[0] ?? '';
+const combinedSearchHandler = tagsRouteSource.split("tagsRoutes.get('/api/search'")[1]?.split("tagsRoutes.get('/api/tags'")[0] ?? '';
+if (/\bFROM\s+(?:games|game_aliases)\b/i.test(publicGameSearchHandler + combinedSearchHandler)) {
+  violations.push('worker routes: public search handlers must read the one-row game catalog, not games or aliases');
+}
+if (!apiSource.includes("transportRequest<GameCatalogPayload>('/api/game-catalog'")) {
+  violations.push('src/lib/api.ts: public game search must enter through the daily one-row game catalog endpoint');
+}
+if (/\/api\/(?:games\/search|search)\?q=/.test(apiSource)) {
+  violations.push('src/lib/api.ts: per-query server game search is forbidden; filter the daily catalog locally');
 }
 
 if (violations.length > 0) {

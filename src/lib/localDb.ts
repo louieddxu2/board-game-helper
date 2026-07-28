@@ -1,5 +1,6 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
+import type { GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
+import { mergeGameCatalogEntries, taipeiDateKey, upsertGameCatalogEntry } from './gameCatalog';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 type PublicTagsResponse = { tags: TagSummary[] };
@@ -7,8 +8,11 @@ export type CatalogGamesCache = { games: GameSummary[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:v2';
+const PUBLIC_GAME_CATALOG_KEY = 'games:list:public:v1';
+const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
+let gameCatalogMemoryCache: CacheRecord<GameCatalogPayload> | undefined;
 
 const getFreshCache = async <T>(key: string, maxAge: number): Promise<CacheRecord<T> | undefined> => {
   const cached = await (await getDatabase()).get('cache', key) as CacheRecord<T> | undefined;
@@ -183,6 +187,35 @@ export const localDb = {
       }
     }
   },
+  cacheGameCatalog: async (data: GameCatalogPayload) => {
+    const db = await getDatabase();
+    const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
+    const mergedData = { ...data, games: mergeGameCatalogEntries(data.games, overrides?.data ?? []) };
+    const record = { key: PUBLIC_GAME_CATALOG_KEY, data: mergedData, cachedAt: Date.now() } satisfies CacheRecord<GameCatalogPayload>;
+    gameCatalogMemoryCache = record;
+    await db.put('cache', record);
+    if (overrides) {
+      const remaining = overrides.data.filter((override) => {
+        const serverGame = data.games.find((game) => game.id === override.id);
+        return !serverGame || override.updatedAt > serverGame.updatedAt;
+      });
+      if (remaining.length) await db.put('cache', { ...overrides, data: remaining });
+      else await db.delete('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY);
+    }
+  },
+  getCachedGameCatalog: async (catalogDate = taipeiDateKey()) => {
+    if (gameCatalogMemoryCache?.data.catalogDate === catalogDate) return gameCatalogMemoryCache;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    if (!cached || cached.data.catalogDate !== catalogDate) return undefined;
+    gameCatalogMemoryCache = cached;
+    return cached;
+  },
+  getLatestGameCatalog: async () => {
+    if (gameCatalogMemoryCache) return gameCatalogMemoryCache;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    if (cached) gameCatalogMemoryCache = cached;
+    return cached;
+  },
   cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => getFreshCache<HomePayload>('home', HOUR_CACHE_FRESH_MS),
   cacheHomeIDs: async (data: HomeIDPayload) => (await getDatabase()).put('cache', { key: 'home_ids', data, cachedAt: Date.now() }),
@@ -238,6 +271,18 @@ export const localDb = {
       aliases: game.aliases ?? existing?.aliases ?? [],
       cachedAt: Date.now(),
     });
+    const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
+    await db.put('cache', {
+      key: LOCAL_GAME_CATALOG_OVERRIDES_KEY,
+      data: upsertGameCatalogEntry(overrides?.data ?? [], game),
+      cachedAt: Date.now(),
+    });
+    const catalog = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    if (catalog?.data.catalogDate === taipeiDateKey()) {
+      const updated = { ...catalog, data: { ...catalog.data, games: upsertGameCatalogEntry(catalog.data.games, game) } };
+      gameCatalogMemoryCache = updated;
+      await db.put('cache', updated);
+    }
   },
   cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: PUBLIC_TAGS_CACHE_KEY, data, cachedAt: Date.now() }),
   getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
@@ -334,6 +379,7 @@ export const localDb = {
   },
   clearCache: async (options: { includeTags?: boolean } = {}) => {
     searchMemoryCache.clear();
+    gameCatalogMemoryCache = undefined;
     const db = await getDatabase();
     const keys = await db.getAllKeys('cache');
     for (const key of keys) {
