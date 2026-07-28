@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { RuleCard } from './RuleCard';
 
 describe('RuleCard', () => {
@@ -19,15 +19,36 @@ describe('RuleCard', () => {
     expect(container.querySelector('a a')).toBeNull();
   });
 
-  test('shows only public creator and editor nicknames', () => {
-    render(<MemoryRouter><RuleCard
+  test('places tags and public credits before the edit button in one header row', () => {
+    const { container } = render(<MemoryRouter><RuleCard
+      onEdit={vi.fn()}
       rule={{
         id: 'rule_credits', gameId: 'game_1', statement: '公開規則', status: 'published',
-        createdByNickname: '小明', editedByNicknames: ['小華', '阿德'], tags: [], sourceLinks: [],
+        createdByNickname: '小明', editedByNicknames: ['小華', '阿德'],
+        tags: [{ id: 'tag_1', slug: 'setup', name: '設置' }], sourceLinks: [],
       }}
     /></MemoryRouter>);
 
     expect(screen.getByText('建立：小明')).toBeInTheDocument();
     expect(screen.getByText('修改：小華、阿德')).toBeInTheDocument();
+    const header = container.querySelector('.rule-card-header');
+    expect(header?.querySelector('.rule-tags')).toContainElement(screen.getByText('#設置'));
+    expect(Array.from(header?.children ?? []).map((element) => element.className)).toEqual([
+      'rule-card-title-group', 'rule-credits', 'text-action edit-btn',
+    ]);
+  });
+
+  test('does not show a game title or zero when a single-game card has no public credits', () => {
+    const { container } = render(<MemoryRouter><RuleCard
+      gameName="不應重複顯示的遊戲"
+      rule={{
+        id: 'rule_plain', gameId: 'game_1', statement: '一般規則', status: 'published',
+        editedByNicknames: [], tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    expect(screen.queryByText('不應重複顯示的遊戲')).not.toBeInTheDocument();
+    expect(container.querySelector('.rule-credits')).toBeNull();
+    expect(container).not.toHaveTextContent('0');
   });
 });

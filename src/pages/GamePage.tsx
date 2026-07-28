@@ -133,7 +133,7 @@ export const GamePage = () => {
         </div>
         <div className="game-rules">
           {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
+            <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
           ))}
         </div>
       </>
@@ -178,7 +178,7 @@ export const GamePage = () => {
               </h2>
               <div className="game-rules">
                 {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} gameId={game.id} gameName={game.displayName} englishName={game.englishName} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
+                  <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
                 ))}
               </div>
             </section>

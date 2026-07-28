@@ -31,6 +31,7 @@ export const RuleCard = ({
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
   const user = session?.user;
+  const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
 
   const effectiveEnglishName = englishName || (rule as any).englishName;
 
@@ -63,10 +64,8 @@ export const RuleCard = ({
     }
   };
 
-  const titleText = gameName
+  const titleText = gameHref && gameName
     ? `${gameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
-    : effectiveEnglishName
-    ? `(${effectiveEnglishName})`
     : undefined;
 
   return (
@@ -99,7 +98,34 @@ export const RuleCard = ({
               <span className="attr-chip player-chip">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
             )}
           </div>
+
+          {Boolean(rule.tags?.length) && (
+            <div className="rule-tags" aria-label="主題標籤">
+              {rule.tags.map((tag) => onTagClick ? (
+                <button
+                  type="button"
+                  className="tag-chip"
+                  key={tag.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTagClick(tag.name);
+                  }}
+                >
+                  #{tag.name}
+                </button>
+              ) : (
+                <span className="tag-chip" key={tag.id}>#{tag.name}</span>
+              ))}
+            </div>
+          )}
         </div>
+
+        {hasCredits && (
+          <small className="rule-credits" aria-label="規則作者資訊">
+            {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
+            {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
+          </small>
+        )}
 
         {/* 右上角編輯按鈕 (僅當傳入 onEdit 且具有權限時顯示) */}
         {onEdit && (
@@ -114,38 +140,7 @@ export const RuleCard = ({
             編輯
           </button>
         )}
-        {(rule.createdByNickname || rule.editedByNicknames?.length) && (
-          <small className="rule-credits" aria-label="規則作者資訊">
-            {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
-            {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
-          </small>
-        )}
       </div>
-
-      {/* 第二行：標籤列 */}
-      {rule.tags && rule.tags.length > 0 && (
-        <div className="rule-tags" aria-label="主題標籤">
-          {rule.tags.map((tag) =>
-            onTagClick ? (
-              <button
-                type="button"
-                className="tag-chip"
-                key={tag.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTagClick(tag.name);
-                }}
-              >
-                #{tag.name}
-              </button>
-            ) : (
-              <span className="tag-chip" key={tag.id}>
-                #{tag.name}
-              </span>
-            )
-          )}
-        </div>
-      )}
 
       {/* 第三行：正確規則 */}
       <div className="rule-statement-section">

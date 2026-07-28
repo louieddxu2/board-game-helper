@@ -115,14 +115,14 @@ footer a { color: inherit; }
 .rule-title-link:hover { text-decoration: underline; }
 
 /* 第一行：標題 + 屬性 + 編輯按鈕 */
-.rule-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
-.rule-card-title-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.rule-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.rule-card-title-group { min-width: 0; flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .rule-game-title { font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--ink); margin: 0; }
 .rule-attributes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .attr-chip { display: inline-flex; align-items: center; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 
-/* 第二行：標籤列 */
-.rule-card .rule-tags { margin: 4px 0 12px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+/* 標籤與作者、編輯按鈕共用卡片標頭 */
+.rule-card .rule-tags { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 
 /* 第三行：正確規則 (支援換行 pre-line) */
 .rule-statement-section { margin-bottom: 12px; }
@@ -421,7 +421,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .game-hero .button { width: 100%; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
-  .game-rules .rule-card { padding-right: 58px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
   .record-game-fields { grid-template-columns: 1fr; }
   .rule-input-fields > .player-count-input { margin-left: -38px; margin-right: -40px; }
@@ -715,7 +714,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   animation: cardFadeIn 300ms ease-out backwards;
 }
 
-.rule-credits { margin-left: auto; display: grid; justify-items: end; color: var(--muted); opacity: .58; font-size: 11px; line-height: 1.35; }
+.rule-credits { flex: 0 0 auto; display: grid; justify-items: end; color: var(--muted); opacity: .58; font-size: 11px; line-height: 1.35; }
 .game-name-locked { align-self: center; font-size: 13px; }
 .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .checkbox-row input { width: auto; }
