@@ -149,17 +149,19 @@ export const CatalogPage = () => {
     }
   };
 
-  const reloadGames = async () => {
+  const syncGames = async () => {
     setError('');
     try {
-      const data = await api.reloadEditorCatalogGames();
+      const data = await api.syncEditorCatalogGames();
       setGames(data.games);
-      detailRequestId.current += 1;
-      setExpandedGameId(undefined);
-      setExpandedGame(undefined);
-      setActiveTags([]);
-      setEditingRule(undefined);
-      setLoadingGameId(undefined);
+      if (expandedGameId && !data.games.some((game) => game.id === expandedGameId)) {
+        detailRequestId.current += 1;
+        setExpandedGameId(undefined);
+        setExpandedGame(undefined);
+        setActiveTags([]);
+        setEditingRule(undefined);
+        setLoadingGameId(undefined);
+      }
     } catch {
       setError('列表載入失敗，請重新整理後再試。');
     }
@@ -222,7 +224,7 @@ export const CatalogPage = () => {
         <p className="eyebrow">Editor / Admin</p>
         <h1>遊戲列表</h1>
       </div>
-      <button type="button" className="button secondary" onClick={() => void reloadGames()}>重新整理</button>
+      <button type="button" className="button secondary" onClick={() => void syncGames()}>同步目錄</button>
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">

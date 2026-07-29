@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
-import { gameCatalogPayload, queryGameCatalog } from '../data/gameCatalog';
+import { gameCatalogPayload, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 
@@ -17,12 +17,12 @@ const tagsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 tagsRoutes.get('/api/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (!rawQuery) return c.json({ games: [], rules: [] });
-  const result = logD1Query(c, 'game_search_catalog', await queryGameCatalog(getDatabase(c)));
-  const row = result.results?.[0];
-  if (!row) return c.json({ error: 'game_catalog_unavailable' }, 503);
+  const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
+  logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
+  logD1Query(c, 'game_catalog_snapshot_chunks', snapshot.chunks);
   setNoCache(c);
   return c.json({
-    games: filterGameCatalog(gameCatalogPayload(row).games, rawQuery, 8),
+    games: filterGameCatalog(gameCatalogPayload(snapshot).games, rawQuery, 8),
     rules: [],
   });
 });

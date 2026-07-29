@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeE
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
-import { gameCatalogPayload, queryGameCatalog } from '../data/gameCatalog';
+import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 
@@ -17,19 +17,28 @@ const gamesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 gamesRoutes.get('/api/games/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
   if (rawQuery.length < 1) return c.json({ games: [] });
-  const result = logD1Query(c, 'game_search_catalog', await queryGameCatalog(getDatabase(c)));
-  const row = result.results?.[0];
-  if (!row) return c.json({ error: 'game_catalog_unavailable' }, 503);
+  const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
+  logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
+  logD1Query(c, 'game_catalog_snapshot_chunks', snapshot.chunks);
   setNoCache(c);
-  return c.json({ games: filterGameCatalog(gameCatalogPayload(row).games, rawQuery, 20) });
+  return c.json({ games: filterGameCatalog(gameCatalogPayload(snapshot).games, rawQuery, 20) });
 });
 
 gamesRoutes.get('/api/game-catalog', async (c) => {
-  const result = logD1Query(c, 'game_catalog', await queryGameCatalog(getDatabase(c)));
-  const row = result.results?.[0];
-  if (!row) return c.json({ error: 'game_catalog_unavailable' }, 503);
+  const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
+  logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
+  logD1Query(c, 'game_catalog_snapshot_chunks', snapshot.chunks);
   setNoCache(c);
-  return c.json(gameCatalogPayload(row));
+  return c.json(gameCatalogPayload(snapshot));
+});
+
+gamesRoutes.get('/api/game-catalog/changes', async (c) => {
+  const rawAfter = c.req.query('after') ?? '0';
+  const after = Number(rawAfter);
+  if (!Number.isSafeInteger(after) || after < 0) return c.json({ error: 'invalid_catalog_version' }, 400);
+  const result = logD1Query(c, 'game_catalog_changes', await queryGameCatalogChanges(getDatabase(c), after));
+  setNoCache(c);
+  return c.json(gameCatalogChangesPayload(result, after));
 });
 
 gamesRoutes.get('/api/games/resolve', async (c) => {

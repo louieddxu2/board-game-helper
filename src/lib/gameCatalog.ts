@@ -1,4 +1,4 @@
-import type { GameSummary } from '../shared/types';
+import type { GameCatalogChange, GameSummary } from '../shared/types';
 
 export const taipeiDateKey = (timestamp = Date.now()): string =>
   new Date(timestamp + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -41,3 +41,12 @@ export const mergeGameCatalogEntries = (base: GameSummary[], overrides: GameSumm
       ? games
       : upsertGameCatalogEntry(games, override);
   }, base);
+
+export const applyGameCatalogChanges = (games: GameSummary[], changes: GameCatalogChange[]): GameSummary[] => {
+  const byId = new Map(games.map((game) => [game.id, game]));
+  for (const change of changes) {
+    if (change.deleted) byId.delete(change.gameId);
+    else if (change.game) byId.set(change.gameId, change.game);
+  }
+  return Array.from(byId.values()).sort((left, right) => left.displayName.localeCompare(right.displayName, 'zh-Hant'));
+};

@@ -7,7 +7,7 @@ const games: GameSummary[] = [
   { id: '1', slug: 'brass-lancashire', displayName: '工業革命：蘭開夏', englishName: 'Brass: Lancashire', aliases: ['蘭開夏'], ruleCount: 2, updatedAt: 1 },
 ];
 
-describe('daily game catalog search', () => {
+describe('local versioned game catalog', () => {
   test('searches display names, English names, and aliases locally', () => {
     expect(filterGameCatalog(games, 'Birmingham').map((game) => game.id)).toEqual(['2']);
     expect(filterGameCatalog(games, '伯明翰').map((game) => game.id)).toEqual(['2']);

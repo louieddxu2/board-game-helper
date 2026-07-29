@@ -6,8 +6,9 @@ describe('public read authentication boundary', () => {
     expect(isPublicReadRequest('GET', 'https://rules.example/api/games/emberleaf')).toBe(true);
   });
 
-  test('keeps the one-row game catalog on the public fast path', () => {
+  test('keeps the weekly catalog snapshot and version changes on the public fast path', () => {
     expect(isPublicReadRequest('GET', 'https://rules.example/api/game-catalog')).toBe(true);
+    expect(isPublicReadRequest('GET', 'https://rules.example/api/game-catalog/changes?after=12')).toBe(true);
   });
 
   test('authenticates explicit editor game detail requests', () => {

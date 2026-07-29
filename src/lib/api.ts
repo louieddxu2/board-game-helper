@@ -1,4 +1,4 @@
-import type { AccountPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 
@@ -89,15 +89,35 @@ const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
 };
 
 let gameCatalogRequest: Promise<GameCatalogPayload> | undefined;
+
+const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<GameCatalogPayload> => {
+  let afterVersion = catalog.throughVersion;
+  while (true) {
+    const changes = await transportRequest<GameCatalogChangesPayload>(
+      `/api/game-catalog/changes?after=${afterVersion}`,
+      undefined,
+      'cache-miss',
+    );
+    if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('game_catalog_sync_stalled');
+    await localDb.cacheGameCatalogChanges(changes);
+    afterVersion = changes.throughVersion;
+    if (!changes.hasMore) break;
+  }
+  return (await localDb.getLatestGameCatalog())?.data ?? catalog;
+};
+
 const gameCatalog = async (): Promise<GameCatalogPayload> => {
-  const cached = await localDb.getCachedGameCatalog().catch(() => undefined);
+  const cached = await localDb.getSynchronizedGameCatalog().catch(() => undefined);
   if (cached) return cached.data;
   if (gameCatalogRequest) return gameCatalogRequest;
   gameCatalogRequest = (async () => {
     try {
-      const response = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
-      await localDb.cacheGameCatalog(response).catch(() => undefined);
-      return (await localDb.getLatestGameCatalog().catch(() => undefined))?.data ?? response;
+      let base = (await localDb.getLatestGameCatalog().catch(() => undefined))?.data;
+      if (!base) {
+        base = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
+        await localDb.cacheGameCatalog(base);
+      }
+      return await synchronizeGameCatalog(base);
     } catch (error) {
       const stale = await localDb.getLatestGameCatalog().catch(() => undefined);
       if (stale) return stale.data;
@@ -108,14 +128,15 @@ const gameCatalog = async (): Promise<GameCatalogPayload> => {
   finally { gameCatalogRequest = undefined; }
 };
 
-const editorCatalogGames = () => cachedRead({
-  readCache: async () => (await localDb.getCachedCatalogGames()) as { data: { games: GameSummary[] } } | undefined,
-  fetchFresh: () => transportRequest<{ games: GameSummary[] }>('/api/editor/catalog/games', undefined, 'cache-miss'),
-  writeCache: localDb.cacheCatalogGames,
+const editorCatalogGames = async () => ({
+  games: (await gameCatalog()).games.map((game) => ({
+    ...game,
+    ruleCount: game.totalRuleCount ?? game.ruleCount,
+  })),
 });
 
-const reloadEditorCatalogGames = async () => {
-  await localDb.invalidateCatalogGames();
+const syncEditorCatalogGames = async () => {
+  await localDb.invalidateGameCatalogSync();
   return editorCatalogGames();
 };
 
@@ -178,7 +199,7 @@ export const api = {
     return { game: presentGame(response.game, includePrivate) };
   },
   editorCatalogGames,
-  reloadEditorCatalogGames,
+  syncEditorCatalogGames,
   recordView: (gameId: string, ruleId?: string) => mutation<{ success: boolean }>(`/api/games/${gameId}/view${ruleId ? `?ruleId=${ruleId}` : ''}`, { method: 'POST', body: '{}' }),
   createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ game: GameSummary }>('/api/games', {
@@ -213,7 +234,7 @@ export const api = {
     const response = await mutation<{ ok: true }>(`/api/games/${id}/merge`, {
       method: 'POST', body: JSON.stringify({ targetGameId }),
     });
-    await localDb.invalidateCatalogGames().catch(() => undefined);
+    await localDb.invalidateGameCatalogSync().catch(() => undefined);
     return response;
   },
   editors: () => uncachedRead<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>('/api/admin/editors', 'editor administration is private and intentionally always current'),

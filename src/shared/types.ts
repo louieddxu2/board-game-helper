@@ -65,9 +65,23 @@ export interface GameSummary {
 }
 
 export interface GameCatalogPayload {
-  catalogDate: string;
+  generation: number;
+  throughVersion: number;
   generatedAt: number;
   games: GameSummary[];
+}
+
+export interface GameCatalogChange {
+  gameId: string;
+  catalogVersion: number;
+  deleted: boolean;
+  game?: GameSummary;
+}
+
+export interface GameCatalogChangesPayload {
+  changes: GameCatalogChange[];
+  throughVersion: number;
+  hasMore: boolean;
 }
 
 export interface RuleSearchResult {

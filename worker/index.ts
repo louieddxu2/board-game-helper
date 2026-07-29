@@ -13,7 +13,6 @@ import { tagsRoutes } from './routes/tags';
 import adminRoutes from './routes/admin';
 import { submissionsRoutes } from './routes/submissions';
 import reviewRoutes from './routes/review';
-import { catalogRoutes } from './routes/catalog';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -23,7 +22,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/game-catalog', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/game-catalog', '/api/game-catalog/changes', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
@@ -120,7 +119,6 @@ app.route('/', tagsRoutes);
 app.route('/', adminRoutes);
 app.route('/', submissionsRoutes);
 app.route('/', reviewRoutes);
-app.route('/', catalogRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   await rebuildGameCatalog(createDatabase(env), controller.scheduledTime);
