@@ -6,7 +6,8 @@ import { applyPublicTagCatalogChanges } from './tagCatalog';
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const CATALOG_SYNC_FRESH_MS = 10 * 60 * 1000;
-const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
+export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v3';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
@@ -296,7 +297,7 @@ export const localDb = {
       await db.put('cache', updated);
     }
   },
-  getCachedPublicTags: async () => getFreshCache<PublicTagCatalogPayload>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
+  getCachedPublicTags: async () => getFreshCache<PublicTagCatalogPayload>(PUBLIC_TAGS_CACHE_KEY, PUBLIC_TAG_CATALOG_FRESH_MS),
   getLatestPublicTags: async () => (await getDatabase()).get('cache', PUBLIC_TAGS_CACHE_KEY) as Promise<CacheRecord<PublicTagCatalogPayload> | undefined>,
   cachePublicTagCatalogChanges: async (data: PublicTagCatalogChangesPayload) => {
     const db = await getDatabase();
@@ -322,7 +323,7 @@ export const localDb = {
     await Promise.all(tags.map((tag) => db.put('cache', { key: `tag:${tag.id}`, data: tag, cachedAt })));
   },
   getCachedTagEntities: async (ids: string[]) => {
-    const records = await Promise.all(ids.map((id) => getFreshCache<TagSummary>(`tag:${id}`, DAY_CACHE_FRESH_MS)));
+    const records = await Promise.all(ids.map((id) => getFreshCache<TagSummary>(`tag:${id}`, TAG_ENTITY_CACHE_FRESH_MS)));
     return records.filter((record): record is TagCacheRecord => Boolean(record));
   },
   getLatestTagEntities: async (ids: string[]) => {

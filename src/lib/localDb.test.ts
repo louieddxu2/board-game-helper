@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isCachedRuleSetUsable, type CachedGameRow } from './localDb';
+import { isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, type CachedGameRow } from './localDb';
 
 const now = 10_000_000;
 
@@ -36,5 +36,11 @@ describe('normalized game rule cache freshness', () => {
 
   test('expires a matching rule collection after one hour', () => {
     expect(isCachedRuleSetUsable(cachedGame({ rulesFetchedAt: now - 60 * 60 * 1000 }), false, now)).toBe(false);
+  });
+});
+
+describe('public tag catalog freshness', () => {
+  test('checks version updates once per week', () => {
+    expect(PUBLIC_TAG_CATALOG_FRESH_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });
