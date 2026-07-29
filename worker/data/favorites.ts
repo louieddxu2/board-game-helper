@@ -29,15 +29,11 @@ export const queryPersonalHome = async (db: Database, userId: string): Promise<P
   const favoriteResult = await db.statement(`
       SELECT g.id, g.slug, g.display_name, f.seen_rule_updated_at,
         latest.id latest_rule_id, latest.statement latest_rule_statement,
-        latest.updated_at latest_rule_updated_at
+        head.updated_at latest_rule_updated_at
       FROM user_game_favorites f
       JOIN games g ON g.id = f.game_id AND g.merged_into_game_id IS NULL
-      LEFT JOIN rules latest ON latest.id = (
-        SELECT r.id FROM rules r
-        WHERE r.game_id = g.id AND r.status = 'published'
-        ORDER BY r.updated_at DESC, r.id DESC
-        LIMIT 1
-      )
+      LEFT JOIN game_public_rule_heads head ON head.game_id = g.id
+      LEFT JOIN rules latest ON latest.id = head.rule_id
       WHERE f.user_id = ?
       ORDER BY f.created_at DESC, g.id
       LIMIT 6
@@ -45,19 +41,13 @@ export const queryPersonalHome = async (db: Database, userId: string): Promise<P
   const favorites = (favoriteResult.results ?? []).map((row) => toHomeGame(row, true));
   if (favorites.length === 0) return { favorites: [], recentUpdates: [] };
   const recentResult = await db.statement(`
-      WITH ranked AS (
-        SELECT r.id, r.game_id, r.statement, r.updated_at,
-          ROW_NUMBER() OVER (PARTITION BY r.game_id ORDER BY r.updated_at DESC, r.id DESC) position
-        FROM rules r
-        WHERE r.status = 'published'
-      )
       SELECT g.id, g.slug, g.display_name,
-        ranked.id latest_rule_id, ranked.statement latest_rule_statement,
-        ranked.updated_at latest_rule_updated_at
-      FROM ranked
-      JOIN games g ON g.id = ranked.game_id AND g.merged_into_game_id IS NULL
-      WHERE ranked.position = 1
-      ORDER BY ranked.updated_at DESC, ranked.id DESC
+        latest.id latest_rule_id, latest.statement latest_rule_statement,
+        head.updated_at latest_rule_updated_at
+      FROM game_public_rule_heads head
+      JOIN games g ON g.id = head.game_id AND g.merged_into_game_id IS NULL
+      JOIN rules latest ON latest.id = head.rule_id
+      ORDER BY head.updated_at DESC, head.rule_id DESC
       LIMIT 6
     `).all<FavoriteHomeRow>();
   return {
@@ -81,10 +71,10 @@ export const queryFavoriteStatus = async (db: Database, userId: string, gameId: 
 
 export const addFavorite = async (db: Database, userId: string, gameId: string, timestamp: number): Promise<FavoriteMutationPayload> => {
   const game = await db.statement(`
-    SELECT g.id, COALESCE((
-      SELECT MAX(r.updated_at) FROM rules r WHERE r.game_id = g.id AND r.status = 'published'
-    ), 0) current_version
-    FROM games g WHERE g.id = ? AND g.merged_into_game_id IS NULL
+    SELECT g.id, COALESCE(head.updated_at, 0) current_version
+    FROM games g
+    LEFT JOIN game_public_rule_heads head ON head.game_id = g.id
+    WHERE g.id = ? AND g.merged_into_game_id IS NULL
   `).bind(gameId).first<{ id: string; current_version: number }>();
   if (!game) throw new Error('game_not_found');
   const current = await queryFavoriteStatus(db, userId, gameId);
@@ -116,7 +106,7 @@ export const markFavoriteSeen = async (db: Database, userId: string, gameId: str
   await db.statement(`
     UPDATE user_game_favorites
     SET seen_rule_updated_at = COALESCE((
-      SELECT MAX(r.updated_at) FROM rules r WHERE r.game_id = ? AND r.status = 'published'
+      SELECT head.updated_at FROM game_public_rule_heads head WHERE head.game_id = ?
     ), 0)
     WHERE user_id = ? AND game_id = ?
   `).bind(gameId, userId, gameId).run();

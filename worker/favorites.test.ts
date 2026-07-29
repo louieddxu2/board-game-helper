@@ -26,7 +26,8 @@ describe('favorite home data', () => {
 
     expect(payload.favorites[0]).toMatchObject({ id: 'g1', hasUpdates: true, latestRule: { id: 'r1' } });
     expect(payload.recentUpdates.map((game) => game.id)).toEqual(['g1', 'g2']);
-    expect(db.statement).toHaveBeenCalledWith(expect.stringMatching(/status = 'published'/));
+    expect(db.statement).toHaveBeenCalledWith(expect.stringMatching(/FROM game_public_rule_heads head/));
+    expect(db.statement).not.toHaveBeenCalledWith(expect.stringMatching(/ROW_NUMBER|FROM rules r\s+WHERE r\.status/));
   });
 
   test('does not scan recent rules for an account without favorites', async () => {
