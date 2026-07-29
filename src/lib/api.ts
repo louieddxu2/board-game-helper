@@ -1,6 +1,7 @@
 import type { AccountPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
+import { homeContentKey } from './homeCache';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -140,6 +141,31 @@ const syncEditorCatalogGames = async () => {
   return editorCatalogGames();
 };
 
+let homeRefreshRequest: Promise<HomePayload> | undefined;
+const refreshHome = async (): Promise<HomePayload> => {
+  if (homeRefreshRequest) return homeRefreshRequest;
+  homeRefreshRequest = (async () => {
+    const result = await transportResponse<HomePayload>('/api/home', undefined, 'cache-miss');
+    if (result.response.headers.get('X-Offline-Fallback') !== '1') {
+      await localDb.cacheHome(result.data).catch(() => undefined);
+    }
+    return result.data;
+  })();
+  try { return await homeRefreshRequest; }
+  finally { homeRefreshRequest = undefined; }
+};
+
+const home = async (onUpdated?: (data: HomePayload) => void): Promise<HomePayload> => {
+  const cached = await localDb.getCachedHome().catch(() => undefined);
+  if (cached) return cached.data;
+  const stale = await localDb.getLatestHome().catch(() => undefined);
+  if (!stale) return refreshHome();
+  void refreshHome().then((updated) => {
+    if (homeContentKey(updated) !== homeContentKey(stale.data)) onUpdated?.(updated);
+  }).catch(() => undefined);
+  return stale.data;
+};
+
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
@@ -151,11 +177,7 @@ export const api = {
   }),
   devLogin: () => mutation<{ user: SessionUser }>('/api/auth/dev', { method: 'POST', body: '{}' }),
   logout: () => mutation<{ ok: true }>('/api/logout', { method: 'POST', body: '{}' }),
-  home: () => cachedRead({
-    readCache: localDb.getCachedHome,
-    fetchFresh: () => transportRequest<HomePayload>('/api/home', undefined, 'cache-miss'),
-    writeCache: localDb.cacheHome,
-  }),
+  home,
   searchGames: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 20) }),
   search: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 8), rules: [] as RuleSearchResult[] }),
   invalidateSearchCache: () => localDb.invalidateSearch(),

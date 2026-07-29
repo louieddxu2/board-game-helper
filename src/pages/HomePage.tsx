@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
+import { homeContentKey } from '../lib/homeCache';
 import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
 import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
@@ -18,64 +19,78 @@ export const HomePage = () => {
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
+  const [resolvingHome, setResolvingHome] = useState(false);
+  const homeGeneratedAt = useRef(0);
+  const homeKey = useRef('');
 
   useEffect(() => {
     let active = true;
-    void api.home().then((data) => { if (active) setHome(data); }).catch(() => undefined);
+    const adoptHome = (data: HomePayload, rendered = false) => {
+      if (!active || data.generatedAt < homeGeneratedAt.current) return;
+      const nextKey = homeContentKey(data);
+      homeGeneratedAt.current = data.generatedAt;
+      if (nextKey === homeKey.current) return;
+      homeKey.current = nextKey;
+      setHome(data);
+      if (rendered) {
+        setResolvedCards(data.featuredRules ?? []);
+        setResolvedRecentCards(data.recentRules ?? []);
+      }
+    };
+    void (async () => {
+      const rendered = await localDb.getLatestHomeView().catch(() => undefined);
+      if (rendered) adoptHome(rendered.data, true);
+      const current = await api.home((updated) => adoptHome(updated));
+      adoptHome(current);
+    })().catch(() => undefined);
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
     return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (!home?.featured?.length) return;
+    if (!home) return;
     let active = true;
-    const resolve = async () => {
-      const cards: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
-      for (const ref of home.featured) {
-        if (!ref?.ruleId) continue;
-        try {
-          const response = await api.rule(ref.ruleId);
-          const rule = response?.rule;
-          if (rule) {
-            cards.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
-          }
-        } catch { /* skip failed rules */ }
+    setResolvingHome(true);
+    const resolveFeatured = async () => {
+      if (home.featuredRules?.length) return hydrateRuleTags(home.featuredRules);
+      const rules: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
+      for (const ref of home.featured ?? []) {
+        if (ref?.ruleId) {
+          try {
+            const rule = (await api.rule(ref.ruleId))?.rule;
+            if (rule) rules.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
+          } catch { /* retain the previous rendered snapshot while unavailable */ }
+        }
       }
-      const hydratedCards = await hydrateRuleTags(cards);
-      await Promise.all(hydratedCards.map((rule) => localDb.cacheRuleEntity(rule)));
-      if (active) setResolvedCards(hydratedCards);
+      return hydrateRuleTags(rules);
     };
-    void resolve();
-    return () => { active = false; };
-  }, [home?.featured]);
-
-  useEffect(() => {
-    if (!home?.recentRuleIds?.length && !home?.recentRules?.length) return;
-    if (home.recentRules?.length) {
-      setResolvedRecentCards(home.recentRules);
-      return;
-    }
-    let active = true;
-    const resolve = async () => {
-      const cards: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
-      for (const ruleId of home.recentRuleIds!) {
-        if (!ruleId) continue;
-        try {
-          const response = await api.rule(ruleId);
-          const rule = response?.rule;
-          if (rule) {
-            cards.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
-          }
-        } catch { /* skip failed rules */ }
+    const resolveRecent = async () => {
+      if (home.recentRules?.length) return hydrateRuleTags(home.recentRules);
+      const rules: (RuleCardModel & { gameName: string; gameSlug: string })[] = [];
+      for (const ruleId of home.recentRuleIds ?? []) {
+        if (ruleId) {
+          try {
+            const rule = (await api.rule(ruleId))?.rule;
+            if (rule) rules.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
+          } catch { /* retain the previous rendered snapshot while unavailable */ }
+        }
       }
-      const hydratedCards = await hydrateRuleTags(cards);
-      await Promise.all(hydratedCards.map((rule) => localDb.cacheRuleEntity(rule)));
-      if (active) setResolvedRecentCards(hydratedCards);
+      return hydrateRuleTags(rules);
     };
-    void resolve();
+    void Promise.all([resolveFeatured(), resolveRecent()]).then(async ([featuredRules, recentRules]) => {
+      if (!active) return;
+      const expectedFeatured = (home.featured ?? []).filter((ref) => ref.ruleId).length || home.featuredRules?.length || 0;
+      const expectedRecent = home.recentRules?.length || (home.recentRuleIds ?? []).filter(Boolean).length;
+      const featuredComplete = featuredRules.length === expectedFeatured;
+      const recentComplete = recentRules.length === expectedRecent;
+      if (featuredComplete) setResolvedCards(featuredRules);
+      if (recentComplete) setResolvedRecentCards(recentRules);
+      await Promise.all([...featuredRules, ...recentRules].map((rule) => localDb.cacheRuleEntity(rule)));
+      if (featuredComplete && recentComplete) await localDb.cacheHomeView({ ...home, featuredRules, recentRules });
+    }).catch(() => undefined).finally(() => { if (active) setResolvingHome(false); });
     return () => { active = false; };
-  }, [home?.recentRuleIds, home?.recentRules]);
+  }, [home]);
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
 
@@ -105,7 +120,14 @@ export const HomePage = () => {
             <div className="skeleton-line short" />
           </div>
         ))}
-        {home && displayedFeaturedRules.length === 0 && <p className="empty-state">內容正在整理中。</p>}
+        {home && resolvingHome && displayedFeaturedRules.length === 0 && Array.from({ length: 3 }, (_, index) => (
+          <div className="skeleton-card" key={`resolving-${index}`}>
+            <div className="skeleton-line title" />
+            <div className="skeleton-line" />
+            <div className="skeleton-line medium" />
+          </div>
+        ))}
+        {home && !resolvingHome && displayedFeaturedRules.length === 0 && <p className="empty-state">內容正在整理中。</p>}
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />

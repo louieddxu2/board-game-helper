@@ -54,7 +54,12 @@ self.addEventListener('fetch', (event) => {
       fetch(request).then((response) => {
         if (response.ok) void cache.put(request, response.clone());
         return response;
-      }).catch(() => cache.match(request).then((cached) => cached || Response.error()))));
+      }).catch(() => cache.match(request).then((cached) => {
+        if (!cached) return Response.error();
+        const headers = new Headers(cached.headers);
+        headers.set('X-Offline-Fallback', '1');
+        return new Response(cached.body, { status: cached.status, statusText: cached.statusText, headers });
+      }))));
     return;
   }
 

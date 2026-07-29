@@ -10,6 +10,7 @@ const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:v2';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
+const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 let gameCatalogMemoryCache: CacheRecord<GameCatalogPayload> | undefined;
@@ -247,6 +248,9 @@ export const localDb = {
   },
   cacheHome: async (data: HomePayload) => (await getDatabase()).put('cache', { key: 'home', data, cachedAt: Date.now() }),
   getCachedHome: async () => getFreshCache<HomePayload>('home', HOUR_CACHE_FRESH_MS),
+  getLatestHome: async () => (await getDatabase()).get('cache', 'home') as Promise<CacheRecord<HomePayload> | undefined>,
+  cacheHomeView: async (data: HomePayload) => (await getDatabase()).put('cache', { key: HOME_VIEW_CACHE_KEY, data, cachedAt: Date.now() }),
+  getLatestHomeView: async () => (await getDatabase()).get('cache', HOME_VIEW_CACHE_KEY) as Promise<CacheRecord<HomePayload> | undefined>,
   cacheHomeIDs: async (data: HomeIDPayload) => (await getDatabase()).put('cache', { key: 'home_ids', data, cachedAt: Date.now() }),
   getCachedHomeIDs: async () => getFreshCache<HomeIDPayload>('home_ids', HOUR_CACHE_FRESH_MS),
   invalidateHome: async () => {

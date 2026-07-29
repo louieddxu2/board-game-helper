@@ -216,3 +216,33 @@ describe('api editor catalog cache boundary', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/game-catalog/changes?after=10', expect.any(Object));
   });
 });
+
+describe('api home stale-while-revalidate boundary', () => {
+  const stale = {
+    generatedAt: 1,
+    featured: [{ gameSlug: 'old', gameName: 'Old', ruleId: 'old-rule' }],
+    featuredRules: [],
+    recentRules: [],
+    popularGames: [],
+  };
+  const fresh = {
+    generatedAt: 2,
+    featured: [{ gameSlug: 'new', gameName: 'New', ruleId: 'new-rule' }],
+    featuredRules: [],
+    recentRules: [],
+    popularGames: [],
+  };
+
+  test('returns an expired home cache immediately and publishes a changed background response', async () => {
+    vi.spyOn(localDb, 'getCachedHome').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestHome').mockResolvedValue({ key: 'home', data: stale, cachedAt: 1 });
+    vi.spyOn(localDb, 'cacheHome').mockResolvedValue('home');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => fresh }));
+    const onUpdated = vi.fn();
+
+    const initial = await api.home(onUpdated);
+
+    expect(initial).toEqual(stale);
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(fresh));
+  });
+});
