@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
-import type { AccountPayload, AccountRevisionSummary, AccountRuleSummary } from '../shared/types';
+import type { AccountDeletionSummary, AccountPayload, AccountRevisionSummary, AccountRuleSummary } from '../shared/types';
 import { useConfirm } from '../context/ConfirmContext';
 import { writeHomeMode } from '../lib/homeMode';
+import { localDb } from '../lib/localDb';
+import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -41,7 +43,7 @@ const ModifiedRuleItem = ({ revision }: { revision: AccountRevisionSummary }) =>
 export const AccountPage = () => {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
-  const { user, loading, logout, canEdit, refresh } = useSession();
+  const { user, realUser, loading, logout, canEdit, refresh } = useSession();
   const [account, setAccount] = useState<AccountPayload>();
   const [error, setError] = useState('');
   const [nickname, setNickname] = useState('');
@@ -51,6 +53,13 @@ export const AccountPage = () => {
   const [nicknameSaved, setNicknameSaved] = useState(false);
   const [favoritesClearing, setFavoritesClearing] = useState(false);
   const [favoritesCleared, setFavoritesCleared] = useState(false);
+  const [importanceClearing, setImportanceClearing] = useState(false);
+  const [importanceCleared, setImportanceCleared] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletionSummary, setDeletionSummary] = useState<AccountDeletionSummary>();
+  const [deletionSummaryLoading, setDeletionSummaryLoading] = useState(false);
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [accountDeletionError, setAccountDeletionError] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -110,6 +119,57 @@ export const AccountPage = () => {
     finally { setFavoritesClearing(false); }
   };
 
+  const clearImportance = async () => {
+    const confirmed = await confirm({
+      title: '清除所有「重要」投票？',
+      message: '這會撤回你在所有規則上的「重要！／我也玩錯過」投票，不會刪除規則。',
+      confirmLabel: '清除投票',
+      tone: 'danger',
+    });
+    if (!confirmed || !realUser) return;
+    setImportanceClearing(true);
+    setImportanceCleared(false);
+    try {
+      await api.clearRuleImportance();
+      await Promise.all([
+        localDb.clearCachedRuleImportance(realUser.id),
+        localDb.invalidateAllGames(),
+      ]);
+      setImportanceCleared(true);
+    } catch { setError('目前無法清除投票，請稍後再試。'); }
+    finally { setImportanceClearing(false); }
+  };
+
+  const openDeleteAccount = async () => {
+    setDeleteDialogOpen(true);
+    setDeletionSummary(undefined);
+    setAccountDeletionError('');
+    setDeletionSummaryLoading(true);
+    try { setDeletionSummary(await api.accountDeletionSummary()); }
+    catch { setAccountDeletionError('目前無法確認帳號資料，請稍後再試。'); }
+    finally { setDeletionSummaryLoading(false); }
+  };
+
+  const deleteCurrentAccount = async (deleteOwnUnmodifiedRules: boolean) => {
+    if (!realUser || accountDeleting) return;
+    setAccountDeleting(true);
+    setAccountDeletionError('');
+    try {
+      await api.deleteAccount(deleteOwnUnmodifiedRules);
+      await Promise.all([
+        localDb.clearCachedRuleImportance(realUser.id),
+        localDb.invalidateAllGames(),
+      ]).catch(() => undefined);
+      writeHomeMode('explore');
+      await refresh();
+      navigate('/', { replace: true });
+    } catch (caught) {
+      setAccountDeletionError(caught instanceof ApiError && caught.code === 'last_admin_account'
+        ? '這是目前最後一個管理員帳號，請先授予另一個帳號管理員權限。'
+        : '帳號刪除失敗，沒有完成任何部分；請稍後再試。');
+    } finally { setAccountDeleting(false); }
+  };
+
   if (loading) return <section className="account-page narrow-page">
     <p className="eyebrow">帳號</p>
     <h1>正在確認登入狀態…</h1>
@@ -155,6 +215,19 @@ export const AccountPage = () => {
       {favoritesCleared && <p className="form-success" role="status">所有收藏已清除。</p>}
       <button type="button" className="button secondary" disabled={favoritesClearing} onClick={() => void clearFavorites()}>{favoritesClearing ? '清除中…' : '清除所有收藏'}</button>
     </section>
+    <section className="account-card account-settings">
+      <div className="account-section-heading"><h2>投票資料</h2></div>
+      <p className="account-help">可一次撤回你在所有規則上的「重要！／我也玩錯過」投票。</p>
+      {importanceCleared && <p className="form-success" role="status">所有投票已清除。</p>}
+      <button type="button" className="button secondary" disabled={importanceClearing} onClick={() => void clearImportance()}>
+        {importanceClearing ? '清除中…' : '清除所有投票'}
+      </button>
+    </section>
+    <section className="account-card account-settings account-danger-zone">
+      <div className="account-section-heading"><h2>刪除帳號</h2></div>
+      <p className="account-help">永久移除登入、角色、收藏與投票資料。公開規則預設保留，你可以在確認時選擇刪除符合條件的規則。</p>
+      <button type="button" className="button danger" onClick={() => void openDeleteAccount()}>刪除帳號</button>
+    </section>
     {!account && !error && <p className="muted">正在載入帳號資料…</p>}
     {canEdit && account && <div className="account-sections">
       <section className="account-card">
@@ -168,5 +241,14 @@ export const AccountPage = () => {
         {account.modifiedRules.length > 0 ? <ul className="account-list">{account.modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他編輯者修改你規則的紀錄。</p>}
       </section>
     </div>}
+    <DeleteAccountDialog
+      open={deleteDialogOpen}
+      summary={deletionSummary}
+      loading={deletionSummaryLoading}
+      busy={accountDeleting}
+      error={accountDeletionError}
+      onCancel={() => { if (!accountDeleting) setDeleteDialogOpen(false); }}
+      onConfirm={(deleteRules) => void deleteCurrentAccount(deleteRules)}
+    />
   </section>;
 };

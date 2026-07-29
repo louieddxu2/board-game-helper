@@ -151,6 +151,40 @@ describe('api rule importance cache boundary', () => {
       method: 'PUT', body: JSON.stringify({ important: true }),
     }));
   });
+
+  test('clears all personal votes through an explicit account mutation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, headers: new Headers(), json: async () => ({ cleared: 5 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.clearRuleImportance()).resolves.toEqual({ cleared: 5 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/rule-importance', expect.objectContaining({ method: 'DELETE' }));
+  });
+});
+
+describe('api account deletion boundary', () => {
+  test('loads a current private summary only when requested', async () => {
+    const payload = { deletableRuleCount: 2, retainedRuleCount: 1, isLastAdmin: false };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => payload });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.accountDeletionSummary()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/deletion-summary', expect.any(Object));
+  });
+
+  test('sends both an explicit confirmation and the safe-rule choice', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, headers: new Headers(), json: async () => ({ ok: true, deletedRuleCount: 2 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.deleteAccount(true)).resolves.toEqual({ ok: true, deletedRuleCount: 2 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/account', expect.objectContaining({
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: '刪除帳號', deleteOwnUnmodifiedRules: true }),
+    }));
+  });
 });
 
 describe('api versioned game catalog boundary', () => {

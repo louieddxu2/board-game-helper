@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
-import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
+import { clearUserRuleImportance, queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -58,12 +58,24 @@ rulesRoutes.get('/api/games/:gameId/rule-importance', requireUser, async (c) => 
 const ruleImportanceSchema = z.object({ important: z.boolean() });
 
 rulesRoutes.put('/api/rules/:id/importance', requireUser, async (c) => {
+  const user = c.get('user')!;
+  const accountLimit = await c.env.WRITE_RATE_LIMITER.limit({ key: `rule-importance:${user.id}` });
+  if (!accountLimit.success) {
+    c.header('Retry-After', '60');
+    return c.json({ error: 'rate_limited' }, 429);
+  }
   const parsed = ruleImportanceSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_importance' }, 400);
   const result = await setRuleImportance(
-    getDatabase(c), c.get('user')!.id, c.req.param('id'), parsed.data.important, now(),
+    getDatabase(c), user.id, c.req.param('id'), parsed.data.important, now(),
   );
   if (!result) return c.json({ error: 'rule_not_found' }, 404);
+  setNoCache(c);
+  return c.json(result);
+});
+
+rulesRoutes.delete('/api/account/rule-importance', requireUser, async (c) => {
+  const result = await clearUserRuleImportance(getDatabase(c), c.get('user')!.id);
   setNoCache(c);
   return c.json(result);
 });

@@ -15,6 +15,14 @@ export const queryUserRuleImportance = async (db: Database, userId: string, game
   return { ruleIds: (result.results ?? []).map((row) => row.rule_id) };
 };
 
+export const clearUserRuleImportance = async (db: Database, userId: string) => {
+  const result = await db.statement(`
+    DELETE FROM rule_importance_votes
+    WHERE user_id = ?
+  `).bind(userId).run();
+  return { cleared: Number(result.meta?.changes ?? 0) };
+};
+
 export const setRuleImportance = async (
   db: Database,
   userId: string,

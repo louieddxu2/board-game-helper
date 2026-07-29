@@ -310,6 +310,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .confirm-dialog-copy h2, .confirm-dialog-copy p { margin: 0; }
 .confirm-dialog-copy p { color: var(--muted); line-height: 1.7; }
 .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.delete-account-dialog { max-height: calc(100dvh - 36px); overflow-y: auto; }
+.delete-account-dialog > label:not(.checkbox-row) { display: grid; gap: 8px; font-weight: 700; }
+.delete-account-rules { align-items: flex-start; line-height: 1.55; }
+.account-danger-zone { border-color: #e6b8b2; }
+.account-danger-zone h2 { color: #8c271f; }
 .danger-link { border: 0; background: none; color: #a52f23; font-weight: 700; cursor: pointer; }
 
 .login-page { text-align: center; max-width: 560px; }

@@ -14,6 +14,7 @@ const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
+const ruleImportanceCachePrefix = (userId: string) => `ruleImportance:${userId}:`;
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
@@ -414,6 +415,14 @@ export const localDb = {
     const existing = await db.get('cache', key);
     if (existing) await db.put('cache', { key, data: { ruleIds: [...new Set(ruleIds)].sort() }, cachedAt: existing.cachedAt });
   },
+  clearCachedRuleImportance: async (userId: string) => {
+    const db = await getDatabase();
+    const prefix = ruleImportanceCachePrefix(userId);
+    const keys = await db.getAllKeys('cache');
+    await Promise.all(keys
+      .filter((key) => typeof key === 'string' && key.startsWith(prefix))
+      .map((key) => db.delete('cache', key)));
+  },
   updateRuleImportanceCount: async (ruleId: string, count: number) => {
     const db = await getDatabase();
     const rule = await db.get('rules', ruleId);
@@ -423,6 +432,16 @@ export const localDb = {
     const db = await getDatabase();
     const game = await findCachedGame(db, identifier);
     if (game) await db.put('games', { ...game, rulesFetchedAt: 0 });
+  },
+  invalidateAllGames: async () => {
+    const db = await getDatabase();
+    const tx = db.transaction('games', 'readwrite');
+    let cursor = await tx.store.openCursor();
+    while (cursor) {
+      await cursor.update({ ...cursor.value, rulesFetchedAt: 0 });
+      cursor = await cursor.continue();
+    }
+    await tx.done;
   },
   recentGameIds: async () => {
     const db = await getDatabase();

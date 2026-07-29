@@ -1,4 +1,4 @@
-import type { AccountPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountDeletionSummary, AccountPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -250,6 +250,11 @@ export const api = {
   addFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'POST', body: '{}' }),
   removeFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'DELETE', body: '{}' }),
   clearFavorites: () => mutation<FavoriteMutationPayload>('/api/account/favorites', { method: 'DELETE', body: '{}' }),
+  clearRuleImportance: () => mutation<{ cleared: number }>('/api/account/rule-importance', { method: 'DELETE', body: '{}' }),
+  accountDeletionSummary: () => uncachedRead<AccountDeletionSummary>('/api/account/deletion-summary', 'account deletion preview is private and must be current'),
+  deleteAccount: (deleteOwnUnmodifiedRules: boolean) => mutation<{ ok: true; deletedRuleCount: number }>('/api/account', {
+    method: 'DELETE', body: JSON.stringify({ confirmation: '刪除帳號', deleteOwnUnmodifiedRules }),
+  }),
   markFavoriteSeen: (gameId: string) => mutation<{ ok: true }>(`/api/account/favorites/${encodeURIComponent(gameId)}/seen`, { method: 'POST', body: '{}' }),
   ruleImportance: async (gameId: string, userId: string, onUpdated?: (data: RuleImportancePayload) => void) => {
     const cached = await localDb.getCachedRuleImportance(userId, gameId).catch(() => undefined);

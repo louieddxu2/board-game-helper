@@ -94,6 +94,8 @@ const tagsRouteSource = fs.readFileSync(path.resolve('worker/routes/tags.ts'), '
 const rulesRouteSource = fs.readFileSync(path.resolve('worker/routes/rules.ts'), 'utf8');
 const importanceDataSource = fs.readFileSync(path.resolve('worker/data/ruleImportance.ts'), 'utf8');
 const importanceMigrationSource = fs.readFileSync(path.resolve('migrations/0030_rule_importance_votes.sql'), 'utf8');
+const accountDeletionSource = fs.readFileSync(path.resolve('worker/data/accountDeletion.ts'), 'utf8');
+const accountDeletionMigrationSource = fs.readFileSync(path.resolve('migrations/0031_account_deletion.sql'), 'utf8');
 const editorCatalogRoutePath = path.resolve('worker/routes/catalog.ts');
 const editorCatalogRouteSource = fs.existsSync(editorCatalogRoutePath) ? fs.readFileSync(editorCatalogRoutePath, 'utf8') : '';
 const patchGameHandler = gamesRouteSource.split("gamesRoutes.patch('/api/games/:id'")[1]?.split('const mergeSchema')[0] ?? '';
@@ -124,6 +126,33 @@ if (/importance[\s\S]{0,300}updated_at|updated_at[\s\S]{0,300}importance/i.test(
 if (!rulesRouteSource.includes("get('/api/games/:gameId/rule-importance', requireUser")
   || !rulesRouteSource.includes("put('/api/rules/:id/importance', requireUser")) {
   violations.push('worker/routes/rules.ts: both personal vote reads and writes must require authentication');
+}
+if (!/rule-importance:\$\{user\.id\}/.test(rulesRouteSource)) {
+  violations.push('worker/routes/rules.ts: vote writes require an account-scoped limiter in addition to the IP limiter');
+}
+if (!/DELETE FROM rule_importance_votes\s+WHERE user_id = \?/i.test(importanceDataSource)) {
+  violations.push('worker/data/ruleImportance.ts: clearing votes must remain scoped to the account primary-key prefix');
+}
+if (!/DELETE FROM rules[\s\S]*created_by = \?[\s\S]*NOT EXISTS[\s\S]*rr\.rule_id = rules\.id AND rr\.edited_by <> \?/i.test(accountDeletionSource)) {
+  violations.push('worker/data/accountDeletion.ts: optional rule deletion must recheck creator and all revision authors atomically');
+}
+if (!/UPDATE rules\s+SET created_by = \? WHERE created_by = \?/i.test(accountDeletionSource)
+  || !/DELETE FROM users WHERE id = \?/i.test(accountDeletionSource)) {
+  violations.push('worker/data/accountDeletion.ts: retained rules must be anonymized before the original account row is removed');
+}
+const requiredDeletionIndexes = [
+  'idx_rule_revisions_edited_by', 'idx_tags_created_by', 'idx_rule_tags_created_by',
+  'idx_games_created_by', 'idx_submissions_author', 'idx_review_batches_created_by',
+  'idx_review_proposals_created_by', 'idx_user_roles_active_role', 'idx_rules_submission_id',
+  'idx_sessions_user_id',
+];
+for (const index of requiredDeletionIndexes) {
+  if (!accountDeletionMigrationSource.includes(index)) {
+    violations.push(`0031 migration: account deletion requires ${index} to avoid unrelated-row scans`);
+  }
+}
+if (!/users_prevent_last_admin_delete[\s\S]*RAISE\(ABORT, 'last_admin_account'\)/i.test(accountDeletionMigrationSource)) {
+  violations.push('0031 migration: the database must prevent deletion of the last active administrator');
 }
 if (!apiSource.includes('getCachedRuleImportance(userId, gameId)')) {
   violations.push('src/lib/api.ts: personal vote state must pass through the local cache before network access');

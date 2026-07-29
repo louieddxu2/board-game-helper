@@ -78,6 +78,12 @@ export interface GameSummary {
   renameLocked?: boolean;
 }
 
+export interface AccountDeletionSummary {
+  deletableRuleCount: number;
+  retainedRuleCount: number;
+  isLastAdmin: boolean;
+}
+
 export interface GameCatalogPayload {
   generation: number;
   throughVersion: number;

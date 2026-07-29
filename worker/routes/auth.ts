@@ -8,6 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normali
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { deleteAccount, queryAccountDeletionSummary } from '../data/accountDeletion';
 
 const authRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -114,6 +115,34 @@ authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
     throw error;
   }
   return c.json({ user: { ...user, nickname, showNickname: Boolean(parsed.data.showNickname) } });
+});
+
+authRoutes.get('/api/account/deletion-summary', requireUser, async (c) => {
+  setNoCache(c);
+  return c.json(await queryAccountDeletionSummary(getDatabase(c), c.get('user')!.id));
+});
+
+const accountDeletionSchema = z.object({
+  confirmation: z.literal('刪除帳號'),
+  deleteOwnUnmodifiedRules: z.boolean(),
+});
+
+authRoutes.delete('/api/account', requireUser, async (c) => {
+  const parsed = accountDeletionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'invalid_account_deletion' }, 400);
+  try {
+    const result = await deleteAccount(
+      getDatabase(c), c.get('user')!.id, parsed.data.deleteOwnUnmodifiedRules,
+    );
+    await signOut(c);
+    setNoCache(c);
+    return c.json({ ok: true as const, ...result });
+  } catch (error) {
+    if (String(error).includes('last_admin_account')) {
+      return c.json({ error: 'last_admin_account' }, 409);
+    }
+    throw error;
+  }
 });
 
 authRoutes.post('/api/auth/google', async (c) => {
