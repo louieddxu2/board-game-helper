@@ -103,6 +103,24 @@ export interface TagSummary {
   aliases?: string[];
 }
 
+export interface PublicTagCatalogChange {
+  tagId: string;
+  catalogVersion: number;
+  deleted: boolean;
+  tag?: TagSummary;
+}
+
+export interface PublicTagCatalogPayload {
+  tags: TagSummary[];
+  throughVersion: number;
+}
+
+export interface PublicTagCatalogChangesPayload {
+  changes: PublicTagCatalogChange[];
+  throughVersion: number;
+  hasMore: boolean;
+}
+
 export interface RuleCard {
   id: string;
   gameId: string;

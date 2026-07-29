@@ -104,6 +104,13 @@ if (/\/api\/editor\/catalog\/games/.test(apiSource) || /\bFROM\s+games\b/i.test(
 if (!apiSource.includes('/api/game-catalog/changes?after=')) {
   violations.push('src/lib/api.ts: cached catalogs must synchronize through the version-indexed changes endpoint');
 }
+if (!apiSource.includes('/api/tags/changes?after=')) {
+  violations.push('src/lib/api.ts: public tags must synchronize through the version-indexed changes endpoint');
+}
+const publicTagHandlers = tagsRouteSource.split("tagsRoutes.get('/api/tags'")[1]?.split('const tagAdminSchema')[0] ?? '';
+if (/GROUP_CONCAT|JOIN\s+tag_aliases/i.test(publicTagHandlers)) {
+  violations.push('worker/routes/tags.ts: public tag reads must use precomputed version entries without alias joins or grouping');
+}
 
 if (violations.length > 0) {
   console.error('D1/cache boundary check failed:');

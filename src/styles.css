@@ -265,6 +265,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .admin-list { margin-top: 22px; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
 .admin-list > div { display: grid; background: var(--white); padding: 10px; }
 .admin-list span { color: var(--muted); font-size: 11px; }
+.admin-tag-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.admin-tag-editor { background: var(--white); padding: 12px; }
+.admin-tag-editor .inline-actions { justify-content: flex-end; }
 .import-card article { border-top: 1px solid var(--line); padding: 15px 0; }
 .import-card article p { white-space: pre-wrap; line-height: 1.55; font-size: 13px; margin: 7px 0; }
 .import-card article small { color: var(--muted); }

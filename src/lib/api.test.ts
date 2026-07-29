@@ -294,16 +294,29 @@ describe('api public entity stale-while-revalidate boundary', () => {
   });
 
   test('returns expired public tags while refreshing them in the background', async () => {
-    const stale = { tags: [{ id: 't1', slug: 'old', name: 'Old', updatedAt: 1 }] };
-    const fresh = { tags: [{ id: 't1', slug: 'new', name: 'New', updatedAt: 2 }] };
+    const stale = { tags: [{ id: 't1', slug: 'old', name: 'Old', updatedAt: 1 }], throughVersion: 1 };
+    const fresh = { tags: [{ id: 't1', slug: 'new', name: 'New', updatedAt: 2 }], throughVersion: 2 };
     vi.spyOn(localDb, 'getCachedPublicTags').mockResolvedValue(undefined);
-    vi.spyOn(localDb, 'getLatestPublicTags').mockResolvedValue({ key: 'publicTags:v2', data: stale, cachedAt: 1 });
-    vi.spyOn(localDb, 'cachePublicTags').mockResolvedValue('publicTags:v2');
+    vi.spyOn(localDb, 'getLatestPublicTags')
+      .mockResolvedValueOnce({ key: 'publicTags:versioned:v3', data: stale, cachedAt: 1 })
+      .mockResolvedValueOnce({ key: 'publicTags:versioned:v3', data: stale, cachedAt: 1 })
+      .mockResolvedValue({ key: 'publicTags:versioned:v3', data: fresh, cachedAt: 2 });
+    vi.spyOn(localDb, 'cachePublicTagCatalogChanges').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'cacheTagEntities').mockResolvedValue(undefined);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => fresh }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({
+        changes: [{ tagId: 't1', catalogVersion: 2, deleted: false, tag: fresh.tags[0] }],
+        throughVersion: 2,
+        hasMore: false,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
     const onUpdated = vi.fn();
 
     expect((await api.tags(undefined, onUpdated)).tags[0].name).toBe('Old');
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(fresh));
+    expect(fetchMock).toHaveBeenCalledWith('/api/tags/changes?after=1', expect.any(Object));
   });
 });

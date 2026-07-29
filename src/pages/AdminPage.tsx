@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { AdminTagEditor } from '../components/AdminTagEditor';
 import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
@@ -67,6 +68,14 @@ export const AdminPage = () => {
     await localDb.invalidateTagEntity(tag.id);
     clearPublicTagCache();
     showToast(`已將 #${tag.name} 設定為 ${!tag.isPublic ? '公共 Tag' : '非公共 Tag'}`);
+    await load();
+  };
+
+  const handleUpdateTagDetails = async (tag: TagSummary, input: { name: string; aliases: string[] }) => {
+    await api.updateAdminTag(tag.id, input);
+    await localDb.invalidateTagEntity(tag.id);
+    clearPublicTagCache();
+    showToast(`已更新 #${input.name}`);
     await load();
   };
 
@@ -172,7 +181,7 @@ export const AdminPage = () => {
       </section>
 
       <section className="admin-card">
-        <div className="list-heading"><h2>公共 Tag 管理</h2><span>{tags.length} 個</span></div>
+        <div className="list-heading"><h2>Tag 管理</h2><span>{tags.length} 個</span></div>
         <p className="muted">公共 Tag 可供所有遊戲選用。非公共 Tag 為遊戲專屬自訂標籤。</p>
         <form onSubmit={(e) => void handleCreatePublicTag(e)} style={{ marginBottom: '1rem' }}>
           <label>新增公共 Tag 名稱<input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="例如：玩家互動、盲拍" required /></label>
@@ -182,16 +191,12 @@ export const AdminPage = () => {
         <label>搜尋 Tag<input type="search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder="搜尋 Tag 名稱…" /></label>
         <div className="admin-list" style={{ maxHeight: '350px', overflowY: 'auto' }}>
           {filteredTags.map((tag) => (
-            <div key={tag.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong>#{tag.name}</strong>
-                {tag.isPublic ? <span className="tag-chip active" style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>公共</span> : <span className="tag-chip" style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>專屬</span>}
-                <small style={{ display: 'block' }}>使用數: {tag.usageCount ?? 0} 條 {tag.description && `・${tag.description}`}</small>
-              </div>
-              <button type="button" className="text-action" onClick={() => void handleTogglePublic(tag)}>
-                {tag.isPublic ? '設為專屬' : '設為公共'}
-              </button>
-            </div>
+            <AdminTagEditor
+              key={tag.id}
+              tag={tag}
+              onSave={(input) => handleUpdateTagDetails(tag, input)}
+              onTogglePublic={handleTogglePublic}
+            />
           ))}
         </div>
       </section>

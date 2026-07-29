@@ -1,13 +1,13 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
+import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
+import { applyPublicTagCatalogChanges } from './tagCatalog';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
-type PublicTagsResponse = { tags: TagSummary[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const CATALOG_SYNC_FRESH_MS = 10 * 60 * 1000;
 const DAY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
-const PUBLIC_TAGS_CACHE_KEY = 'publicTags:v2';
+const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v3';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
@@ -296,10 +296,26 @@ export const localDb = {
       await db.put('cache', updated);
     }
   },
-  cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: PUBLIC_TAGS_CACHE_KEY, data, cachedAt: Date.now() }),
-  getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
-  getLatestPublicTags: async () => (await getDatabase()).get('cache', PUBLIC_TAGS_CACHE_KEY) as Promise<CacheRecord<PublicTagsResponse> | undefined>,
-  invalidatePublicTags: async () => (await getDatabase()).delete('cache', PUBLIC_TAGS_CACHE_KEY),
+  getCachedPublicTags: async () => getFreshCache<PublicTagCatalogPayload>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
+  getLatestPublicTags: async () => (await getDatabase()).get('cache', PUBLIC_TAGS_CACHE_KEY) as Promise<CacheRecord<PublicTagCatalogPayload> | undefined>,
+  cachePublicTagCatalogChanges: async (data: PublicTagCatalogChangesPayload) => {
+    const db = await getDatabase();
+    const cached = await db.get('cache', PUBLIC_TAGS_CACHE_KEY) as CacheRecord<PublicTagCatalogPayload> | undefined;
+    const current = cached?.data ?? { tags: [], throughVersion: 0 };
+    await db.put('cache', {
+      key: PUBLIC_TAGS_CACHE_KEY,
+      data: {
+        tags: applyPublicTagCatalogChanges(current.tags, data.changes),
+        throughVersion: Math.max(current.throughVersion, data.throughVersion),
+      },
+      cachedAt: data.hasMore ? (cached?.cachedAt ?? 0) : Date.now(),
+    });
+  },
+  invalidatePublicTags: async () => {
+    const db = await getDatabase();
+    const cached = await db.get('cache', PUBLIC_TAGS_CACHE_KEY) as CacheRecord<PublicTagCatalogPayload> | undefined;
+    if (cached) await db.put('cache', { ...cached, cachedAt: 0 });
+  },
   cacheTagEntities: async (tags: TagSummary[]) => {
     const db = await getDatabase();
     const cachedAt = Date.now();

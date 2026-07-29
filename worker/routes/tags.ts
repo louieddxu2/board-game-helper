@@ -11,6 +11,7 @@ import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWrite
 import { gameCatalogPayload, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
+import { publicTagCatalogChangesPayload, queryPublicTagCatalogChanges } from '../data/tagCatalog';
 
 const tagsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -51,26 +52,22 @@ tagsRoutes.get('/api/tags', async (c) => {
     });
   }
 
-  const result = await getDatabase(c).statement(`
-    SELECT t.id, t.slug, t.name, t.is_public, t.updated_at,
-      GROUP_CONCAT(DISTINCT ta.alias) AS aliases_str
-    FROM tags t
-    LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
-    WHERE t.status = 'active' AND t.is_public = 1
-    GROUP BY t.id
-    ORDER BY t.name
-  `).all<{ id: string; slug: string; name: string; is_public: number; updated_at: number; aliases_str: string | null }>();
-  c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+  const result = logD1Query(c, 'public_tag_catalog_bootstrap', await queryPublicTagCatalogChanges(getDatabase(c), 0));
+  const payload = publicTagCatalogChangesPayload(result, 0);
+  setNoCache(c);
   return c.json({
-    tags: (result.results ?? []).map((tag) => ({
-      id: tag.id,
-      slug: tag.slug,
-      name: tag.name,
-      isPublic: Boolean(tag.is_public),
-      updatedAt: tag.updated_at,
-      aliases: tag.aliases_str ? tag.aliases_str.split(',') : [],
-    })),
+    tags: payload.changes.flatMap((change) => change.deleted || !change.tag ? [] : [change.tag]),
+    throughVersion: payload.throughVersion,
   });
+});
+
+tagsRoutes.get('/api/tags/changes', async (c) => {
+  const rawAfter = c.req.query('after') ?? '0';
+  const after = Number(rawAfter);
+  if (!Number.isSafeInteger(after) || after < 0) return c.json({ error: 'invalid_catalog_version' }, 400);
+  const result = logD1Query(c, 'public_tag_catalog_changes', await queryPublicTagCatalogChanges(getDatabase(c), after));
+  setNoCache(c);
+  return c.json(publicTagCatalogChangesPayload(result, after));
 });
 
 const tagAdminSchema = z.object({

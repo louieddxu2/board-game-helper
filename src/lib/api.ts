@@ -1,4 +1,4 @@
-import type { AccountPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -167,20 +167,35 @@ const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
   rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.tagIds,
 ]);
 
-let publicTagsRefreshRequest: Promise<{ tags: TagSummary[] }> | undefined;
+let publicTagsRefreshRequest: Promise<PublicTagCatalogPayload> | undefined;
 const refreshPublicTags = async () => {
   if (publicTagsRefreshRequest) return publicTagsRefreshRequest;
-  publicTagsRefreshRequest = transportRequest<{ tags: TagSummary[] }>('/api/tags?v=2', undefined, 'cache-miss')
-    .then(async (data) => {
-      await localDb.cachePublicTags(data);
-      await localDb.cacheTagEntities(data.tags);
-      return data;
-    });
+  publicTagsRefreshRequest = (async () => {
+    const existing = (await localDb.getLatestPublicTags().catch(() => undefined))?.data
+      ?? { tags: [], throughVersion: 0 };
+    let afterVersion = existing.throughVersion;
+    while (true) {
+      const changes = await transportRequest<PublicTagCatalogChangesPayload>(
+        `/api/tags/changes?after=${afterVersion}`,
+        undefined,
+        'cache-miss',
+      );
+      if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('public_tag_catalog_sync_stalled');
+      await localDb.cachePublicTagCatalogChanges(changes);
+      afterVersion = changes.throughVersion;
+      if (!changes.hasMore) break;
+    }
+    const updated = (await localDb.getLatestPublicTags())?.data ?? existing;
+    await localDb.cacheTagEntities(updated.tags);
+    return updated;
+  })();
   try { return await publicTagsRefreshRequest; }
   finally { publicTagsRefreshRequest = undefined; }
 };
 
-const tagCollectionKey = (tags: TagSummary[]) => JSON.stringify(tags.map((tag) => [tag.id, tag.updatedAt, tag.name, tag.usageCount]));
+const tagCollectionKey = (tags: TagSummary[]) => JSON.stringify(tags.map((tag) => [
+  tag.id, tag.updatedAt, tag.slug, tag.name, tag.isPublic, tag.usageCount, tag.aliases,
+]));
 
 let homeRefreshRequest: Promise<HomePayload> | undefined;
 const refreshHome = async (): Promise<HomePayload> => {

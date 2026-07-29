@@ -22,7 +22,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/game-catalog', '/api/game-catalog/changes', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/tags/changes', '/api/game-catalog', '/api/game-catalog/changes', '/api/games/search', '/api/games/resolve', '/api/export/public'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
