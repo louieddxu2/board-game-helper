@@ -14,6 +14,5 @@ export const writeHomeMode = (mode: HomeMode) => {
 };
 
 export const resolveHomeMode = (favoriteCount: number, savedMode = readHomeMode()): HomeMode => {
-  if (favoriteCount === 0) return 'explore';
-  return savedMode ?? 'personal';
+  return savedMode ?? (favoriteCount > 0 ? 'personal' : 'explore');
 };

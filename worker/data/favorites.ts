@@ -39,7 +39,6 @@ export const queryPersonalHome = async (db: Database, userId: string): Promise<P
       LIMIT 6
     `).bind(userId).all<FavoriteHomeRow>();
   const favorites = (favoriteResult.results ?? []).map((row) => toHomeGame(row, true));
-  if (favorites.length === 0) return { favorites: [], recentUpdates: [] };
   const recentResult = await db.statement(`
       SELECT g.id, g.slug, g.display_name,
         latest.id latest_rule_id, latest.statement latest_rule_statement,

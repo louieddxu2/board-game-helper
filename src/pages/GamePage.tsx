@@ -123,9 +123,8 @@ export const GamePage = () => {
     setFavoriteSaving(true);
     try {
       if (favorite) {
-        const result = await api.removeFavorite(game.id);
+        await api.removeFavorite(game.id);
         setFavorite(false);
-        if (result.favoriteCount === 0) writeHomeMode('explore');
         showToast('已從我的收藏移除。');
       } else {
         const result = await api.addFavorite(game.id);

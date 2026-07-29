@@ -4,9 +4,13 @@ import { HOME_MODE_STORAGE_KEY, readHomeMode, resolveHomeMode, writeHomeMode } f
 afterEach(() => localStorage.clear());
 
 describe('home mode preference', () => {
-  test('forces exploration until the account has a favorite', () => {
-    writeHomeMode('personal');
+  test('defaults an account without favorites to exploration', () => {
     expect(resolveHomeMode(0)).toBe('explore');
+  });
+
+  test('preserves a personal-home choice without favorites', () => {
+    writeHomeMode('personal');
+    expect(resolveHomeMode(0)).toBe('personal');
   });
 
   test('defaults accounts with favorites to the personal home', () => {

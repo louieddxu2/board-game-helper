@@ -30,12 +30,18 @@ describe('favorite home data', () => {
     expect(db.statement).not.toHaveBeenCalledWith(expect.stringMatching(/ROW_NUMBER|FROM rules r\s+WHERE r\.status/));
   });
 
-  test('does not scan recent rules for an account without favorites', async () => {
+  test('still provides bounded recent updates for an account without favorites', async () => {
     const favorites = statement({ all: vi.fn().mockResolvedValue({ results: [] }) });
-    const db = { statement: vi.fn().mockReturnValueOnce(favorites), batch: vi.fn() } as unknown as Database;
+    const recent = statement({ all: vi.fn().mockResolvedValue({ results: [{
+      id: 'g2', slug: 'splendor', display_name: '璀璨寶石', latest_rule_id: 'r2',
+      latest_rule_statement: '拿取寶石後不得超過十枚。', latest_rule_updated_at: 19,
+    }] }) });
+    const db = { statement: vi.fn().mockReturnValueOnce(favorites).mockReturnValueOnce(recent), batch: vi.fn() } as unknown as Database;
 
-    await expect(queryPersonalHome(db, 'u1')).resolves.toEqual({ favorites: [], recentUpdates: [] });
-    expect(db.statement).toHaveBeenCalledOnce();
+    await expect(queryPersonalHome(db, 'u1')).resolves.toMatchObject({
+      favorites: [], recentUpdates: [{ id: 'g2', hasUpdates: false }],
+    });
+    expect(db.statement).toHaveBeenCalledTimes(2);
   });
 
   test('initializes the first favorite at the latest public rule version', async () => {
