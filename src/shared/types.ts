@@ -117,6 +117,13 @@ export interface TagSummary {
   aliases?: string[];
   categoryHints?: RuleCategory[];
   detectionKeywords?: string[];
+  unresolved?: boolean;
+}
+
+export interface TagSelection {
+  id?: string;
+  name: string;
+  unresolved?: boolean;
 }
 
 export interface PublicTagCatalogChange {
@@ -204,6 +211,8 @@ export interface SubmissionRuleInput {
   sourceLabel?: string;
   sourceUrl?: string;
   tagNames?: string[];
+  tagIds?: string[];
+  newTagNames?: string[];
 }
 
 export interface SubmissionInput {

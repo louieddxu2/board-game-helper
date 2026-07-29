@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, type CachedGameRow } from './localDb';
+import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
 
 const now = 10_000_000;
 
@@ -42,6 +42,18 @@ describe('normalized game rule cache freshness', () => {
 describe('public tag catalog freshness', () => {
   test('checks version updates once per week', () => {
     expect(PUBLIC_TAG_CATALOG_FRESH_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe('normalized rule tag storage', () => {
+  test('stores tag IDs as the source of truth without duplicating hydrated tag text', () => {
+    const stored = toStoredRule({
+      id: 'rule-1', gameId: 'game-1', statement: '測試規則', sourceLinks: [], status: 'published',
+      tagIds: ['tag-score'], tags: [{ id: 'tag-score', slug: 'score', name: '計分' }],
+    });
+
+    expect(stored.tagIds).toEqual(['tag-score']);
+    expect(stored.tags).toEqual([]);
   });
 });
 

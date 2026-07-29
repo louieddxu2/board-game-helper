@@ -101,7 +101,7 @@ export const RuleCard = ({
 
           {Boolean(rule.tags?.length) && (
             <div className="rule-tags" aria-label="主題標籤">
-              {rule.tags.map((tag) => onTagClick ? (
+              {rule.tags.map((tag) => onTagClick && !tag.unresolved ? (
                 <button
                   type="button"
                   className="tag-chip"

@@ -51,4 +51,21 @@ describe('RuleCard', () => {
     expect(container.querySelector('.rule-credits')).toBeNull();
     expect(container).not.toHaveTextContent('0');
   });
+
+  test('shows an unresolved tag ID as non-interactive 未知標籤', () => {
+    const onTagClick = vi.fn();
+    render(<MemoryRouter><RuleCard
+      onTagClick={onTagClick}
+      rule={{
+        id: 'rule_unknown_tag', gameId: 'game_1', statement: '一般規則', status: 'published',
+        tagIds: ['tag_missing'],
+        tags: [{ id: 'tag_missing', slug: 'tag_missing', name: '未知標籤', unresolved: true }],
+        sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    expect(screen.getByText('#未知標籤')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '#未知標籤' })).not.toBeInTheDocument();
+    expect(onTagClick).not.toHaveBeenCalled();
+  });
 });

@@ -47,7 +47,7 @@ describe('TagInput recommendations', () => {
 
     expect(enter.defaultPrevented).toBe(true);
     expect(parentKeyDown).not.toHaveBeenCalled();
-    expect(onChange).toHaveBeenCalledWith(['計分']);
+    expect(onChange).toHaveBeenCalledWith([{ name: '計分' }]);
   });
 
   test('ranks frequently used game tags without another data request', () => {
@@ -69,7 +69,22 @@ describe('TagInput recommendations', () => {
     expect(screen.getAllByRole('button', { name: '加入標籤 設置' })).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: '加入標籤 計分' }));
-    expect(onChange).toHaveBeenCalledWith(['計分']);
+    expect(onChange).toHaveBeenCalledWith([{ id: 'scoring', name: '計分' }]);
+  });
+
+  test('preserves a known tag ID and keeps only genuinely new text as a name', async () => {
+    const onKnownChange = vi.fn();
+    const knownView = render(<TagInput value={[]} onChange={onKnownChange} availableTags={[tag('known-score', '計分')]} />);
+    fireEvent.click(knownView.getByRole('button', { name: '加入標籤 計分' }));
+    expect(onKnownChange).toHaveBeenCalledWith([{ id: 'known-score', name: '計分' }]);
+    knownView.unmount();
+
+    const onNewChange = vi.fn();
+    const newView = render(<TagInput value={[]} onChange={onNewChange} availableTags={[]} />);
+    const input = newView.getByRole('combobox');
+    fireEvent.change(input, { target: { value: '新標籤' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onNewChange).toHaveBeenCalledWith([{ name: '新標籤' }]);
   });
 
   test('keeps duplicate game usage for ranking but deduplicates the search menu', async () => {

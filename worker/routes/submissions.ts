@@ -30,6 +30,10 @@ const submissionSchema = z.object({
     sourceLabel: z.string().trim().max(300).optional(),
     sourceUrl: z.url().max(2000).optional().or(z.literal('')),
     tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+    tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
+    newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
+    message: '最多只能選擇 8 個標籤',
   })).min(1).max(20),
 });
 
@@ -90,7 +94,9 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
       user.id, timestamp, timestamp,
     ));
-    statements.push(...await tagWriteStatements(c, ruleId, input.tagNames ?? [], user.id, timestamp, false));
+    statements.push(...await tagWriteStatements(
+      c, ruleId, input.newTagNames ?? input.tagNames ?? [], user.id, timestamp, false, input.tagIds ?? [],
+    ));
   }
   statements.push(getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
   await getDatabase(c).batch(statements);

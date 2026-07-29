@@ -196,33 +196,48 @@ export const cleanTagNames = (names: string[] | undefined): string[] => Array.fr
   .filter(Boolean)
   .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 8);
 
-export const tagWriteStatements = async (c: AppContext, ruleId: string, names: string[], userId: string, timestamp: number, replace = true) => {
+export const cleanTagIds = (ids: string[] | undefined): string[] => Array.from(new Set(
+  (ids ?? []).map((id) => id.trim()).filter(Boolean),
+)).slice(0, 8);
+
+export const tagWriteStatements = async (
+  c: AppContext,
+  ruleId: string,
+  names: string[],
+  userId: string,
+  timestamp: number,
+  replace = true,
+  referencedTagIds: string[] = [],
+) => {
   const statements: DatabaseStatement[] = replace
     ? [getDatabase(c).statement('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
     : [];
-  const tagIds: string[] = [];
+  const tagIds = cleanTagIds(referencedTagIds);
   const userRoles = c.get('user')?.roles ?? [];
   const canCreate = userRoles.includes('admin') || userRoles.includes('editor');
-  for (const name of cleanTagNames(names)) {
+  const cleanedNames = cleanTagNames(names);
+  const normalizedNames = cleanedNames.map((name) => normalizeText(name)).filter(Boolean);
+  const existingByName = new Map<string, string>();
+  if (normalizedNames.length) {
+    const existing = await getDatabase(c).statement(`
+      SELECT id, normalized_name FROM tags
+      WHERE normalized_name IN (${normalizedNames.map(() => '?').join(',')})
+    `).bind(...normalizedNames).all<{ id: string; normalized_name: string }>();
+    for (const tag of existing.results ?? []) existingByName.set(tag.normalized_name, tag.id);
+  }
+  for (const name of cleanedNames) {
     const normalized = normalizeText(name);
     if (!normalized) continue;
-    const existing = await getDatabase(c).statement(`
-      SELECT t.id FROM tags t LEFT JOIN tag_aliases ta ON ta.tag_id = t.id
-      WHERE (t.normalized_name = ? OR ta.normalized_alias = ?) LIMIT 1
-    `).bind(normalized, normalized).first<{ id: string }>();
+    const existingId = existingByName.get(normalized);
     const suffix = (await sha256Hex(normalized)).slice(0, 20);
-    const tagId = existing?.id ?? `tag_${suffix}`;
-    if (!existing && !canCreate) throw new Error('unknown_tag');
+    const tagId = existingId ?? `tag_${suffix}`;
+    if (!existingId && !canCreate) throw new Error('unknown_tag');
     if (!tagIds.includes(tagId)) tagIds.push(tagId);
-    if (!existing) {
+    if (!existingId) {
       statements.push(getDatabase(c).statement(`
         INSERT OR IGNORE INTO tags (id, slug, name, normalized_name, created_by, created_at, updated_at, is_public)
         VALUES (?, ?, ?, ?, ?, ?, ?, 0)
       `).bind(tagId, slugify(name), name, normalized, userId, timestamp, timestamp));
-      statements.push(getDatabase(c).statement(`
-        INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(`ta_${suffix}`, tagId, name, normalized, timestamp));
     }
     statements.push(getDatabase(c).statement(`
       INSERT OR IGNORE INTO rule_tags (rule_id, tag_id, created_by, created_at) VALUES (?, ?, ?, ?)

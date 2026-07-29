@@ -8,7 +8,7 @@ import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type RuleRevision, type TagSummary } from '../shared/types';
+import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type RuleRevision, type TagSelection, type TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
@@ -171,7 +171,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [categories, setCategories] = useState(rule.categories ?? []);
   const [playerCounts, setPlayerCounts] = useState(rule.playerCounts ?? []);
   const [editionNotes, setEditionNotes] = useState(rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []));
-  const [tagNames, setTagNames] = useState(rule.tags.map((tag) => tag.name));
+  const [tagSelections, setTagSelections] = useState<TagSelection[]>(rule.tags.map((tag) => ({ id: tag.id, name: tag.name, unresolved: tag.unresolved })));
   const [sourceLabel, setSourceLabel] = useState(rule.sourceLabel ?? '');
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
   const [saving, setSaving] = useState(false);
@@ -185,7 +185,12 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, categories, playerCounts, editionNotes, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      await api.patchRule(rule.id, {
+        statement, commonMistake: commonMistake || null, details: details || null, categories, playerCounts, editionNotes,
+        tagIds: tagSelections.flatMap((tag) => tag.id ? [tag.id] : []),
+        newTagNames: tagSelections.flatMap((tag) => tag.id ? [] : [tag.name]),
+        sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null,
+      });
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -200,7 +205,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <label>規則結論<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
-      <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectionInput={{ statement, commonMistake, details }} />
+      <TagInput value={tagSelections} onChange={setTagSelections} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags).filter((tag) => !tag.unresolved)} detectionInput={{ statement, commonMistake, details }} />
       <RuleCategoryInput value={categories} onChange={setCategories} />
       <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
       <EditionInput value={editionNotes} options={editionOptions} onChange={setEditionNotes} />

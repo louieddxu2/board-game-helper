@@ -3,25 +3,28 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { detectDeterministicTags, type DetectionInput } from '../lib/tagDetector';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
-import type { TagSummary } from '../shared/types';
+import type { TagSelection, TagSummary } from '../shared/types';
 
 export const clearPublicTagCache = () => {
   void localDb.invalidatePublicTags().catch(() => undefined);
 };
 
-const filterTags = (tags: TagSummary[], query: string, selected: string[]) => {
+const selectionName = (selection: TagSelection) => selection.name.trim().toLocaleLowerCase();
+
+const filterTags = (tags: TagSummary[], query: string, selected: TagSelection[]) => {
   const normalizedQuery = query.toLocaleLowerCase();
-  const selectedNames = new Set(selected.map((name) => name.toLocaleLowerCase()));
+  const selectedIds = new Set(selected.flatMap((tag) => tag.id ? [tag.id] : []));
+  const selectedNames = new Set(selected.map(selectionName));
   const matched = tags.filter((tag) => {
-    if (selectedNames.has(tag.name.toLocaleLowerCase())) return false;
+    if (selectedIds.has(tag.id) || selectedNames.has(tag.name.toLocaleLowerCase())) return false;
     if (!normalizedQuery) return true;
     return tag.name.toLocaleLowerCase().includes(normalizedQuery);
   });
   return Array.from(new Map(matched.map((tag) => [tag.id || tag.name.toLocaleLowerCase(), tag])).values());
 };
 
-export const getCommonTagSuggestions = (tags: TagSummary[], selected: string[], limit = 6): TagSummary[] => {
-  const selectedNames = new Set(selected.map((name) => name.toLocaleLowerCase()));
+export const getCommonTagSuggestions = (tags: TagSummary[], selected: TagSelection[], limit = 6): TagSummary[] => {
+  const selectedNames = new Set(selected.map(selectionName));
   const counts = new Map<string, { tag: TagSummary; count: number }>();
   for (const tag of tags) {
     const key = tag.name.trim().toLocaleLowerCase();
@@ -39,8 +42,8 @@ export const getCommonTagSuggestions = (tags: TagSummary[], selected: string[], 
 };
 
 interface TagInputProps {
-  value: string[];
-  onChange(value: string[]): void;
+  value: TagSelection[];
+  onChange(value: TagSelection[]): void;
   canCreate?: boolean;
   label?: string;
   detectedSuggestions?: string[];
@@ -96,26 +99,28 @@ export const TagInput = ({
     if (!open) return;
     setSuggestions(filterTags(candidateTags, debouncedQuery, value));
   }, [candidateTags, debouncedQuery, open, value]);
-  const add = (name: string) => {
-    const cleaned = name.trim().replace(/^#/, '');
-    if (!cleaned || value.some((selected) => selected.toLocaleLowerCase() === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
-    onChange([...value, cleaned]); setQuery(''); setOpen(false);
+  const add = (selection: TagSelection) => {
+    const cleaned = selection.name.trim().replace(/^#/, '');
+    if (!cleaned || value.some((selected) => (selection.id && selected.id === selection.id)
+      || selectionName(selected) === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
+    onChange([...value, { ...selection, name: cleaned }]); setQuery(''); setOpen(false);
   };
   const commitQuery = (rawValue = query) => {
     const cleaned = rawValue.trim().replace(/^#/, '');
-    if (!cleaned || value.includes(cleaned) || value.length >= 8) return;
-    const exact = suggestions.find((tag) => tag.name.toLocaleLowerCase() === cleaned.toLocaleLowerCase());
+    if (!cleaned || value.some((tag) => selectionName(tag) === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
+    const exact = candidateTags.find((tag) => tag.name.toLocaleLowerCase() === cleaned.toLocaleLowerCase());
     if (exact) {
-      add(exact.name);
+      add({ id: exact.id, name: exact.name });
     } else {
-      add(cleaned);
+      add({ name: cleaned });
     }
   };
 
   const recommendations = useMemo(() => {
-    const selectedNames = new Set(value.map((name) => name.toLocaleLowerCase()));
+    const selectedNames = new Set(value.map(selectionName));
+    const selectedNameValues = value.map((tag) => tag.name);
     const inferredFromText = detectionInput
-      ? detectDeterministicTags(detectionInput, { gameTags: candidateTags }, value)
+      ? detectDeterministicTags(detectionInput, { gameTags: candidateTags }, selectedNameValues)
       : [];
     const detected = Array.from(new Map([...detectedSuggestions, ...inferredFromText]
       .map((tag) => tag.trim().replace(/^#/, ''))
@@ -141,7 +146,7 @@ export const TagInput = ({
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
     <div className="tag-composer">
-      {value.map((name) => <span className="tag-chip selected" key={name}>#{name}<button type="button" aria-label={`移除標籤 ${name}`} onClick={() => onChange(value.filter((item) => item !== name))}>×</button></span>)}
+      {value.map((tag) => <span className="tag-chip selected" key={tag.id ?? tag.name}>#{tag.name}<button type="button" aria-label={`移除標籤 ${tag.name}`} onClick={() => onChange(value.filter((item) => item !== tag))}>×</button></span>)}
       <input id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
         role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
         onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
@@ -167,28 +172,31 @@ export const TagInput = ({
         <small>根據規則內容</small>
         <div className="recommended-tag-chips">
           {recommendations.detected.map((tagName) => <button type="button" key={tagName} className="tag-chip inferred"
-            aria-label={`加入標籤 ${tagName}`} onClick={() => add(tagName)}>＋ #{tagName}</button>)}
+            aria-label={`加入標籤 ${tagName}`} onClick={() => {
+              const known = candidateTags.find((tag) => tag.name.toLocaleLowerCase() === tagName.toLocaleLowerCase());
+              add(known ? { id: known.id, name: known.name } : { name: tagName });
+            }}>＋ #{tagName}</button>)}
         </div>
       </div>}
       {recommendations.common.length > 0 && <div className="tag-recommendation-group">
         <small>這款遊戲常用</small>
         <div className="recommended-tag-chips">
           {recommendations.common.map((tag) => <button type="button" key={tag.id || tag.name} className="tag-chip"
-            aria-label={`加入標籤 ${tag.name}`} onClick={() => add(tag.name)}>＋ #{tag.name}</button>)}
+            aria-label={`加入標籤 ${tag.name}`} onClick={() => add({ id: tag.id, name: tag.name })}>＋ #{tag.name}</button>)}
         </div>
       </div>}
       {recommendations.publicFallback.length > 0 && <div className="tag-recommendation-group">
         <small>公共標籤</small>
         <div className="recommended-tag-chips">
           {recommendations.publicFallback.map((tag) => <button type="button" key={tag.id || tag.name} className="tag-chip"
-            aria-label={`加入標籤 ${tag.name}`} onClick={() => add(tag.name)}>＋ #{tag.name}</button>)}
+            aria-label={`加入標籤 ${tag.name}`} onClick={() => add({ id: tag.id, name: tag.name })}>＋ #{tag.name}</button>)}
         </div>
       </div>}
     </div>}
 
     {open && (suggestions.length > 0 || (canCreate && query.trim())) && <div className="tag-suggestions" id={`${id}-list`} role="listbox">
-      {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add(tag.name)}>#{tag.name}{tag.usageCount !== undefined && <small>{tag.usageCount} 條</small>}</button>)}
-      {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add(query)}>＋建立「{query.trim()}」</button>}
+      {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add({ id: tag.id, name: tag.name })}>#{tag.name}{tag.usageCount !== undefined && <small>{tag.usageCount} 條</small>}</button>)}
+      {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add({ name: query })}>＋建立「{query.trim()}」</button>}
     </div>}
   </div>;
 };

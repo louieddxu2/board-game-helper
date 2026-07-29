@@ -41,8 +41,12 @@ const rulePatchSchema = z.object({
   editionNote: z.string().trim().max(300).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
   tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
+  newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
   sourceUrl: z.url().max(2000).nullable().optional().or(z.literal('')),
+}).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
+  message: '最多只能選擇 8 個標籤',
 });
 
 rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
@@ -59,6 +63,16 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const existingTags = await getDatabase(c).statement(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
     .bind(c.req.param('id')).all<{ name: string }>();
   const timestamp = now();
+  const requestedTagNames = parsed.data.newTagNames ?? parsed.data.tagNames;
+  const requestedTagIds = parsed.data.tagIds ?? [];
+  const currentTagIds = (() => {
+    try { return JSON.parse(String(row.tag_ids_json ?? '[]')) as string[]; }
+    catch { return []; }
+  })();
+  const tagsRequested = requestedTagNames !== undefined || parsed.data.tagIds !== undefined;
+  const tagIdsUnchanged = requestedTagNames?.length === 0
+    && requestedTagIds.length === currentTagIds.length
+    && requestedTagIds.every((id) => currentTagIds.includes(id));
   const currentEditionNotes = parseEditionNotes({
     edition_notes_json: typeof row.edition_notes_json === 'string' ? row.edition_notes_json : '[]',
     edition_note: typeof row.edition_note === 'string' ? row.edition_note : null,
@@ -97,7 +111,9 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
       JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
     ),
-    ...(parsed.data.tagNames === undefined ? [] : await tagWriteStatements(c, c.req.param('id'), parsed.data.tagNames, user.id, timestamp)),
+    ...(!tagsRequested || tagIdsUnchanged ? [] : await tagWriteStatements(
+      c, c.req.param('id'), requestedTagNames ?? [], user.id, timestamp, true, requestedTagIds,
+    )),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
   const cache = (caches as any).default;

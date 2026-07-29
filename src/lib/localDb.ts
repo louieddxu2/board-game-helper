@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, RuleCategory, TagSummary } from '../shared/types';
+import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
@@ -44,6 +44,8 @@ export interface TagCacheRecord {
 
 export type RuleEntity = RuleCard;
 
+export const toStoredRule = <T extends RuleCard>(rule: T): T => ({ ...rule, tags: [] });
+
 export interface CachedGameRow extends GameSummary {
   aliases: string[];
   cachedAt: number;
@@ -61,7 +63,7 @@ export interface DraftRecord {
   game?: { id: string; slug: string; displayName: string; englishName?: string };
   gameQuery: string;
   englishName?: string;
-  rules: Array<{ id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] }>;
+  rules: Array<{ id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] }>;
   sourceLabel?: string;
   sourceUrl?: string;
   playedOn: string;
@@ -346,7 +348,7 @@ export const localDb = {
     return records.filter((record): record is TagCacheRecord => Boolean(record));
   },
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
-  cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('rules', { ...rule, cachedAt: Date.now() }),
+  cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('rules', { ...toStoredRule(rule), cachedAt: Date.now() }),
   getCachedRuleEntity: async (ruleId: string) => {
     const rule = await (await getDatabase()).get('rules', ruleId);
     return rule && Date.now() - rule.cachedAt < HOUR_CACHE_FRESH_MS
@@ -374,7 +376,7 @@ export const localDb = {
     const previousRules = await rulesStore.index('gameId').getAll(game.id);
     await Promise.all(previousRules.map((rule) => rulesStore.delete(rule.id)));
     for (const rule of game.rules) {
-      await rulesStore.put({ ...rule, cachedAt });
+      await rulesStore.put({ ...toStoredRule(rule), cachedAt });
     }
     const { rules: _rules, ...gameSummary } = game;
     await tx.objectStore('games').put({

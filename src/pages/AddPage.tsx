@@ -10,9 +10,9 @@ import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
-import type { GameDetail, GameSummary, RuleCategory, SubmissionInput } from '../shared/types';
+import type { GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
+type RuleInput = { id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -52,6 +52,8 @@ export const AddPage = () => {
         setEnglishName(draft.game?.englishName ?? draft.englishName ?? '');
         const restoredRules = draft.rules.length ? draft.rules.map((rule) => ({
           ...rule,
+          tagSelections: rule.tagSelections ?? rule.tagNames?.map((name) => ({ name })) ?? [],
+          tagNames: undefined,
           editionNotes: rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []),
           sourceLabel: rule.sourceLabel ?? draft.sourceLabel,
           sourceUrl: rule.sourceUrl ?? draft.sourceUrl,
@@ -137,7 +139,13 @@ export const AddPage = () => {
         playedOn,
         privateNote: privateNote.trim() || undefined,
         idempotencyKey: crypto.randomUUID(),
-        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, categories: rule.categories, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
+        rules: validRules.map((rule) => ({
+          statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined,
+          categories: rule.categories, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes,
+          sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined,
+          tagIds: rule.tagSelections?.flatMap((tag) => tag.id ? [tag.id] : []),
+          newTagNames: rule.tagSelections?.flatMap((tag) => tag.id ? [] : [tag.name]),
+        })),
       };
       await localDb.addPending(payload);
       const result = await api.submit(payload);
@@ -201,7 +209,7 @@ export const AddPage = () => {
             }} />
           <label>玩錯情況<textarea rows={2} value={rule.commonMistake ?? ''}
             placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
-          <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
+          <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
           <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
           <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
           <EditionInput value={rule.editionNotes ?? []} options={editionOptions}

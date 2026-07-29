@@ -111,6 +111,11 @@ const publicTagHandlers = tagsRouteSource.split("tagsRoutes.get('/api/tags'")[1]
 if (/GROUP_CONCAT|JOIN\s+tag_aliases/i.test(publicTagHandlers)) {
   violations.push('worker/routes/tags.ts: public tag reads must use precomputed version entries without alias joins or grouping');
 }
+const sharedRouteSource = fs.readFileSync(path.resolve('worker/routes/shared.ts'), 'utf8');
+const tagWriteHelper = sharedRouteSource.split('export const tagWriteStatements')[1]?.split('export interface GameRow')[0] ?? '';
+if (/JOIN\s+tag_aliases|normalized_alias/i.test(tagWriteHelper)) {
+  violations.push('worker/routes/shared.ts: rule tag writes must use submitted IDs or indexed canonical names; alias-table lookup is forbidden');
+}
 
 if (violations.length > 0) {
   console.error('D1/cache boundary check failed:');

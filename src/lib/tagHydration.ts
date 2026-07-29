@@ -3,6 +3,13 @@ import type { GameDetail, RuleCard, TagSummary } from '../shared/types';
 
 const tagBatchPromises = new Map<string, Promise<TagSummary[]>>();
 
+const unresolvedTag = (id: string): TagSummary => ({
+  id,
+  slug: id,
+  name: '未知標籤',
+  unresolved: true,
+});
+
 const uniqueTagIds = (rules: RuleCard[]) => Array.from(new Set(
   rules.flatMap((rule) => rule.tagIds ?? []),
 ));
@@ -37,7 +44,7 @@ export const hydrateRuleTags = async <T extends RuleCard>(rules: T[]): Promise<T
 
   return rules.map((rule) => ({
     ...rule,
-    tags: (rule.tagIds ?? []).map((id) => tagMap.get(id)).filter((tag): tag is TagSummary => Boolean(tag)),
+    tags: (rule.tagIds ?? []).map((id) => tagMap.get(id) ?? unresolvedTag(id)),
   }));
 };
 
