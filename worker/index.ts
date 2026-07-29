@@ -114,6 +114,8 @@ app.use('/api/*', async (c, next) => {
   await next();
 });
 
+app.get('/api/health', (c) => c.json({ ok: true }));
+
 app.route('/', authRoutes);
 app.route('/', homeRoutes);
 app.route('/', rulesRoutes);
