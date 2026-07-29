@@ -215,6 +215,29 @@ export interface SubmissionRuleInput {
   newTagNames?: string[];
 }
 
+export interface PersonalHomeGame {
+  id: string;
+  slug: string;
+  displayName: string;
+  latestRule?: {
+    id: string;
+    statement: string;
+    updatedAt: number;
+  };
+  hasUpdates: boolean;
+}
+
+export interface PersonalHomePayload {
+  favorites: PersonalHomeGame[];
+  recentUpdates: PersonalHomeGame[];
+}
+
+export interface FavoriteMutationPayload {
+  favorite: boolean;
+  favoriteCount: number;
+  wasFirst?: boolean;
+}
+
 export interface SubmissionInput {
   gameId: string;
   playedOn?: string;

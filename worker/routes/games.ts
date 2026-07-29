@@ -269,6 +269,27 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       )
         AND game_id = ?
     `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
+    getDatabase(c).statement(`
+      UPDATE user_game_favorites
+      SET seen_rule_updated_at = MAX(seen_rule_updated_at, COALESCE((
+            SELECT source.seen_rule_updated_at FROM user_game_favorites source
+            WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
+          ), seen_rule_updated_at)),
+          created_at = MAX(created_at, COALESCE((
+            SELECT source.created_at FROM user_game_favorites source
+            WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
+          ), created_at))
+      WHERE game_id = ?
+    `).bind(c.req.param('id'), c.req.param('id'), parsed.data.targetGameId),
+    getDatabase(c).statement(`
+      DELETE FROM user_game_favorites
+      WHERE game_id = ? AND EXISTS (
+        SELECT 1 FROM user_game_favorites target
+        WHERE target.user_id = user_game_favorites.user_id AND target.game_id = ?
+      )
+    `).bind(c.req.param('id'), parsed.data.targetGameId),
+    getDatabase(c).statement('UPDATE user_game_favorites SET game_id = ? WHERE game_id = ?')
+      .bind(parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
     getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),

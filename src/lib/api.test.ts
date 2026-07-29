@@ -348,3 +348,27 @@ describe('api public entity stale-while-revalidate boundary', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/tags/changes?after=1', expect.any(Object));
   });
 });
+
+describe('api favorite boundary', () => {
+  test('keeps favorite reads user-specific and uncached', async () => {
+    const payload = { favorites: [], recentUpdates: [] };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => payload });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.personalHome()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/account/home', expect.objectContaining({ credentials: 'same-origin' }));
+  });
+
+  test('uses explicit mutations for favorite changes and seen state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ favorite: true, favoriteCount: 1, wasFirst: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.addFavorite('game/1');
+    await api.removeFavorite('game/1');
+    await api.markFavoriteSeen('game/1');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/account/favorites/game%2F1', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/account/favorites/game%2F1', expect.objectContaining({ method: 'DELETE' }));
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/account/favorites/game%2F1/seen', expect.objectContaining({ method: 'POST' }));
+  });
+});

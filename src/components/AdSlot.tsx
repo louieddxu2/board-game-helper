@@ -1,5 +1,5 @@
 interface AdSlotProps {
-  placement: 'home-after-game-exploration' | 'game-rule-list';
+  placement: 'home-after-game-exploration' | 'personal-home-after-favorites' | 'game-rule-list';
 }
 
 export const AdSlot = ({ placement }: AdSlotProps) => <aside

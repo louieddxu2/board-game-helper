@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { RuleCard } from '../components/RuleCard';
 import { EditionInput } from '../components/EditionInput';
@@ -15,6 +15,10 @@ import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { collectEditionOptions } from '../lib/editionOptions';
+import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
+import { ApiError } from '../lib/api';
+import { writeHomeMode } from '../lib/homeMode';
+import type { PersonalHomeGame } from '../shared/types';
 import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 
 export const GamePage = () => {
@@ -32,6 +36,10 @@ export const GamePage = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
+  const [favorite, setFavorite] = useState<boolean>();
+  const [favoriteSaving, setFavoriteSaving] = useState(false);
+  const [favoriteLimitGames, setFavoriteLimitGames] = useState<PersonalHomeGame[]>();
+  const [removingFavoriteId, setRemovingFavoriteId] = useState<string>();
   const [activeTags, setActiveTags] = useState<string[]>(() => {
     const searchParams = new URLSearchParams(location.search);
     const tagParam = searchParams.get('tag') || searchParams.get('tags');
@@ -86,6 +94,19 @@ export const GamePage = () => {
       localStorage.setItem(storageKey, '1');
     }
   }, [game, user]);
+  useEffect(() => {
+    if (!game || !user) { setFavorite(undefined); return; }
+    let active = true;
+    setFavorite(undefined);
+    void api.favoriteStatus(game.id).then((result) => {
+      if (active) setFavorite(result.favorite);
+    }).catch(() => { if (active) setFavorite(false); });
+    return () => { active = false; };
+  }, [game?.id, user?.id]);
+  useEffect(() => {
+    if (!game || !user || !favorite) return;
+    void api.markFavoriteSeen(game.id).catch(() => undefined);
+  }, [game?.id, user?.id, favorite]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
   const visibleRules = filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags).filter((rule) =>
@@ -96,16 +117,55 @@ export const GamePage = () => {
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
   }, []); // 只在 mount 時執行一次
+  const toggleFavorite = async () => {
+    if (!game || !user || favoriteSaving) return;
+    setFavoriteSaving(true);
+    try {
+      if (favorite) {
+        const result = await api.removeFavorite(game.id);
+        setFavorite(false);
+        if (result.favoriteCount === 0) writeHomeMode('explore');
+        showToast('已從我的收藏移除。');
+      } else {
+        const result = await api.addFavorite(game.id);
+        setFavorite(true);
+        if (result.wasFirst) writeHomeMode('personal');
+        showToast(result.wasFirst ? '已加入收藏，下次回首頁會顯示在我的收藏。' : '已加入我的收藏。');
+      }
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === 'favorite_limit_reached') {
+        try {
+          const home = await api.personalHome();
+          setFavoriteLimitGames(home.favorites);
+        } catch { showToast('收藏暫時無法載入，請稍後再試。'); }
+      } else showToast('收藏狀態暫時無法更新，請稍後再試。');
+    } finally { setFavoriteSaving(false); }
+  };
+  const removeFavoriteForSpace = async (favoriteGame: PersonalHomeGame) => {
+    if (removingFavoriteId) return;
+    setRemovingFavoriteId(favoriteGame.id);
+    try {
+      await api.removeFavorite(favoriteGame.id);
+      setFavoriteLimitGames(undefined);
+      showToast(`已移除「${favoriteGame.displayName}」，現在可以收藏這款遊戲。`);
+    } catch { showToast('暫時無法移除收藏，請稍後再試。'); }
+    finally { setRemovingFavoriteId(undefined); }
+  };
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   return <section className="game-page">
     <header className="game-hero">
       <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
         <p>{game.ruleCount} 條易錯規則紀錄</p></div>
-      {canEdit && <div className="inline-actions">{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
-        ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
-        : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
-        <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></div>}
+      {(user || canEdit) && <div className="inline-actions">
+        {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
+          {favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}
+        </button>}
+        {canEdit && <Fragment>{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
+          ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
+          : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
+          <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></Fragment>}
+      </div>}
     </header>
     <section className="rule-filters" aria-label="篩選規則">
       <div className="rule-category-filter" role="tablist" aria-label="規則分類">
@@ -159,6 +219,8 @@ export const GamePage = () => {
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateRuleEntity(editing.id); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); clearSearchCache(); await load(); }} />}
+    {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
+      onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}
   </section>;
 };
 

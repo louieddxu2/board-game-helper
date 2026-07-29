@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
@@ -8,9 +8,11 @@ import { api } from '../lib/api';
 import { homeContentKey } from '../lib/homeCache';
 import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
-import type { HomePayload, RuleCard as RuleCardModel } from '../shared/types';
+import { PersonalHomeCard } from '../components/PersonalHomeCard';
+import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
+import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
-export const HomePage = () => {
+const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const navigate = useNavigate();
   const { canEdit } = useSession();
   const [home, setHome] = useState<HomePayload>();
@@ -104,6 +106,7 @@ export const HomePage = () => {
 
   return <>
     <section className="hero">
+      {onShowPersonal && <button type="button" className="home-mode-button explore-mode-button" onClick={onShowPersonal}>我的收藏</button>}
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
         <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={canEdit ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
@@ -145,4 +148,83 @@ export const HomePage = () => {
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
     </section>}
   </>;
+};
+
+const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onShowExplore(): void }) => {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
+    return () => { active = false; };
+  }, []);
+
+  return <div className="personal-home">
+    <section className="personal-home-search">
+      <div className="personal-home-toolbar">
+        <h1>我的桌遊</h1>
+        <button type="button" className="home-mode-button" onClick={onShowExplore}>探索</button>
+      </div>
+      <GameSearch value={query} onChange={setQuery} includeRules
+        onSelect={(game) => navigate(`/games/${game.slug}`)}
+        onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
+      {recentGames.length > 0 && <div className="personal-home-recents">
+        <span>最近看過</span>
+        <div>{recentGames.slice(0, 5).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>
+      </div>}
+    </section>
+
+    <section className="personal-home-section" aria-labelledby="favorite-games-heading">
+      <div className="personal-home-heading"><h2 id="favorite-games-heading">我的收藏</h2><span>{data.favorites.length}/6</span></div>
+      <div className="personal-home-grid">{data.favorites.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
+    </section>
+
+    <AdSlot placement="personal-home-after-favorites" />
+
+    {data.recentUpdates.length > 0 && <section className="personal-home-section" aria-labelledby="recent-updates-heading">
+      <div className="personal-home-heading"><h2 id="recent-updates-heading">近期新增與修改</h2></div>
+      <div className="personal-home-grid">{data.recentUpdates.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
+    </section>}
+  </div>;
+};
+
+export const HomePage = () => {
+  const { user, loading } = useSession();
+  const [personalHome, setPersonalHome] = useState<PersonalHomePayload>();
+  const [mode, setMode] = useState<HomeMode>('explore');
+
+  useEffect(() => {
+    if (!user) {
+      setPersonalHome(undefined);
+      setMode('explore');
+      return;
+    }
+    let active = true;
+    void api.personalHome().then((data) => {
+      if (!active) return;
+      setPersonalHome(data);
+      const resolved = resolveHomeMode(data.favorites.length, readHomeMode());
+      setMode(resolved);
+      if (data.favorites.length === 0) writeHomeMode('explore');
+    }).catch(() => {
+      if (active) {
+        setPersonalHome(undefined);
+        setMode('explore');
+      }
+    });
+    return () => { active = false; };
+  }, [user]);
+
+  const selectMode = (nextMode: HomeMode) => {
+    writeHomeMode(nextMode);
+    setMode(nextMode);
+  };
+
+  const hasFavorites = Boolean(personalHome?.favorites.length);
+  if (!loading && user && hasFavorites && mode === 'personal') {
+    return <PersonalHome data={personalHome!} onShowExplore={() => selectMode('explore')} />;
+  }
+  return <ExploreHome onShowPersonal={user && hasFavorites ? () => selectMode('personal') : undefined} />;
 };

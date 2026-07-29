@@ -13,6 +13,7 @@ import { tagsRoutes } from './routes/tags';
 import adminRoutes from './routes/admin';
 import { submissionsRoutes } from './routes/submissions';
 import reviewRoutes from './routes/review';
+import { favoriteRoutes } from './routes/favorites';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -119,6 +120,7 @@ app.route('/', tagsRoutes);
 app.route('/', adminRoutes);
 app.route('/', submissionsRoutes);
 app.route('/', reviewRoutes);
+app.route('/', favoriteRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   await rebuildGameCatalog(createDatabase(env), controller.scheduledTime);
