@@ -135,7 +135,7 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
   englishName: game.englishName,
   updatedAt: game.updatedAt,
   latestRuleUpdatedAt: game.latestRuleUpdatedAt,
-  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status]),
+  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status, rule.categories]),
 });
 
 const gameRefreshRequests = new Map<string, Promise<{ game: GameDetail }>>();
@@ -169,7 +169,7 @@ const refreshRule = (id: string): Promise<ApiRule> => {
 };
 
 const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
-  rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.tagIds,
+  rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.categories, rule.tagIds,
 ]);
 
 let publicTagsRefreshRequest: Promise<PublicTagCatalogPayload> | undefined;
@@ -199,7 +199,7 @@ const refreshPublicTags = async () => {
 };
 
 const tagCollectionKey = (tags: TagSummary[]) => JSON.stringify(tags.map((tag) => [
-  tag.id, tag.updatedAt, tag.slug, tag.name, tag.isPublic, tag.usageCount, tag.aliases,
+  tag.id, tag.updatedAt, tag.slug, tag.name, tag.isPublic, tag.usageCount, tag.aliases, tag.categoryHints,
 ]));
 
 let homeRefreshRequest: Promise<HomePayload> | undefined;
@@ -287,10 +287,10 @@ export const api = {
     return { tags: [...uniqueIds.map((id) => cachedById.get(id)).filter((tag): tag is TagSummary => Boolean(tag)), ...data.tags] };
   },
   adminTags: () => uncachedRead<{ tags: TagSummary[] }>('/api/admin/tags', 'admin tag management is private and intentionally always current'),
-  createAdminTag: (input: { name: string; description?: string; isPublic?: boolean; aliases?: string[] }) => mutation<{ ok: true; tagId: string }>('/api/admin/tags', {
+  createAdminTag: (input: { name: string; description?: string; isPublic?: boolean; aliases?: string[]; categoryHints?: TagSummary['categoryHints'] }) => mutation<{ ok: true; tagId: string }>('/api/admin/tags', {
     method: 'POST', body: JSON.stringify(input),
   }),
-  updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
+  updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[]; categoryHints?: TagSummary['categoryHints'] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
   game: async (identifier: string, includePrivate = false, onUpdated?: (data: { game: GameDetail }) => void) => {

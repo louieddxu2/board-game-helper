@@ -18,8 +18,13 @@ describe('AdminTagEditor', () => {
     await user.type(screen.getByLabelText('Tag 名稱'), '遊戲設置');
     await user.clear(screen.getByLabelText('別名'));
     await user.type(screen.getByLabelText('別名'), '準備, 開局');
+    await user.click(screen.getByRole('checkbox', { name: '教學、設置、開局' }));
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
-    expect(onSave).toHaveBeenCalledWith({ name: '遊戲設置', aliases: ['準備', '開局'] });
+    expect(onSave).toHaveBeenCalledWith({
+      name: '遊戲設置',
+      aliases: ['準備', '開局'],
+      categoryHints: ['teaching_setup_opening'],
+    });
   });
 });

@@ -143,7 +143,10 @@ reviewRoutes.post('/api/admin/review/import', requireRole('admin'), async (c) =>
     const row = currentRows.get(item.target.id);
     if (!row) { skipped += 1; continue; }
     const original = reviewContentFromRow(row);
-    const proposed = normalizedReviewContent(item.proposed);
+    const proposed = normalizedReviewContent({
+      ...item.proposed,
+      categories: item.proposed.categories ?? original.categories,
+    });
     if (item.action !== 'hide' && sameReviewContent(original, proposed)) { skipped += 1; continue; }
     const currentHash = await reviewContentHash(original);
     proposals.push({
@@ -266,24 +269,31 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) 
   const items = hasMore ? rows.slice(0, limit) : rows;
   setNoCache(c);
   return c.json({
-    proposals: items.map((row): ReviewProposal => ({
-      id: row.id,
-      batchId: row.batch_id,
-      targetId: row.target_id,
-      gameId: '',
-      gameName: row.game_name,
-      gameSlug: row.game_slug,
-      operation: row.operation,
-      status: row.status as ReviewProposal['status'],
-      reason: row.reason ?? undefined,
-      baseUpdatedAt: row.base_updated_at,
-      original: normalizedReviewContent(JSON.parse(row.original_json) as ReviewContent),
-      proposed: normalizedReviewContent(JSON.parse(row.proposed_json) as ReviewContent),
-      version: row.version,
-      claimedBy: row.claimed_by ?? undefined,
-      claimedUntil: row.claimed_until ?? undefined,
-      createdAt: row.created_at,
-    })),
+    proposals: items.map((row): ReviewProposal => {
+      const original = normalizedReviewContent(JSON.parse(row.original_json) as ReviewContent);
+      const proposedInput = JSON.parse(row.proposed_json) as ReviewContent;
+      return {
+        id: row.id,
+        batchId: row.batch_id,
+        targetId: row.target_id,
+        gameId: '',
+        gameName: row.game_name,
+        gameSlug: row.game_slug,
+        operation: row.operation,
+        status: row.status as ReviewProposal['status'],
+        reason: row.reason ?? undefined,
+        baseUpdatedAt: row.base_updated_at,
+        original,
+        proposed: normalizedReviewContent({
+          ...proposedInput,
+          categories: proposedInput.categories ?? original.categories,
+        }),
+        version: row.version,
+        claimedBy: row.claimed_by ?? undefined,
+        claimedUntil: row.claimed_until ?? undefined,
+        createdAt: row.created_at,
+      };
+    }),
     nextCursor: hasMore ? items[items.length - 1].id : undefined,
   });
 });
@@ -369,13 +379,17 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
       continue;
     }
 
-    const proposed = normalizedReviewContent(decision.proposed ?? JSON.parse(row.proposed_json) as ReviewContent);
     const existingRule = await getDatabase(c).statement(`${reviewRuleSelect} WHERE r.id = ?`).bind(row.target_id).first<ReviewRuleRow>();
     if (!existingRule) {
       outcomes.push({ proposalId: row.id, status: 'stale' });
       continue;
     }
     const currentContent = reviewContentFromRow(existingRule);
+    const proposedInput = decision.proposed ?? JSON.parse(row.proposed_json) as ReviewContent;
+    const proposed = normalizedReviewContent({
+      ...proposedInput,
+      categories: proposedInput.categories ?? currentContent.categories,
+    });
     const revisionId = createId('rev');
     const editionNotes = proposed.editionNotes ?? (proposed.editionNote ? [proposed.editionNote] : []);
 
@@ -385,11 +399,12 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
         VALUES (?, ?, ?, ?, ?, ?)
       `).bind(revisionId, row.target_id, JSON.stringify(currentContent), user.id, 'manual_review', timestamp),
       getDatabase(c).statement(`
-        UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
+        UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, categories_json = ?,
           player_counts_json = ?, edition_notes_json = ?, edition_note = ?,
           source_label = ?, source_url = ?, updated_at = ? WHERE id = ?
       `).bind(
         proposed.statement, proposed.commonMistake || null, proposed.details || null, proposed.flowStage,
+        JSON.stringify(proposed.categories ?? []),
         JSON.stringify(proposed.playerCounts ?? []),
         JSON.stringify(editionNotes), editionNotes[0] ?? null,
         proposed.sourceLabel || null, proposed.sourceUrl || null, timestamp, row.target_id,

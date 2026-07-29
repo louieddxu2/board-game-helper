@@ -6,7 +6,7 @@ import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import type { GameSummary, RuleCard, TagSummary } from '../shared/types';
+import type { GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 
@@ -71,7 +71,7 @@ export const AdminPage = () => {
     await load();
   };
 
-  const handleUpdateTagDetails = async (tag: TagSummary, input: { name: string; aliases: string[] }) => {
+  const handleUpdateTagDetails = async (tag: TagSummary, input: { name: string; aliases: string[]; categoryHints: RuleCategory[] }) => {
     await api.updateAdminTag(tag.id, input);
     await localDb.invalidateTagEntity(tag.id);
     clearPublicTagCache();

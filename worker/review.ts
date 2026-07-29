@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage } from '../src/shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage } from '../src/shared/types';
 import { normalizeText, sha256Hex } from './utils';
 
 export const REVIEW_FORMAT = 'wrong-board-game-rules-review';
@@ -10,6 +10,7 @@ export const reviewContentSchema = z.object({
   commonMistake: z.string().trim().max(2000).nullable().optional(),
   details: z.string().trim().max(5000).nullable().optional(),
   flowStage: z.enum(FLOW_STAGES).nullable().optional(),
+  categories: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
@@ -51,6 +52,7 @@ export const normalizedReviewContent = (content: ReviewContent): ReviewContent =
   commonMistake: content.commonMistake?.trim() || null,
   details: content.details?.trim() || null,
   flowStage: (content.flowStage ?? 'uncategorized') as FlowStage,
+  categories: RULE_CATEGORIES.filter((category) => content.categories?.includes(category)),
   playerCounts: Array.from(new Set(content.playerCounts ?? [])).sort((a, b) => a - b),
   editionNotes: Array.from(new Map((content.editionNotes ?? (content.editionNote ? [content.editionNote] : []))
     .map((name) => name.normalize('NFKC').trim()).filter(Boolean)

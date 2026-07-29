@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanRuleCategories, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { gameCatalogPayload, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
@@ -36,10 +36,10 @@ tagsRoutes.get('/api/tags', async (c) => {
   if (requestedIds.length > 0) {
     const placeholders = requestedIds.map(() => '?').join(',');
     const result = await getDatabase(c).statement(`
-      SELECT t.id, t.slug, t.name, t.is_public, t.updated_at
+      SELECT t.id, t.slug, t.name, t.is_public, t.updated_at, t.category_hints_json
       FROM tags t
       WHERE t.id IN (${placeholders})
-    `).bind(...requestedIds).all<{ id: string; slug: string; name: string; is_public: number; updated_at: number }>();
+    `).bind(...requestedIds).all<{ id: string; slug: string; name: string; is_public: number; updated_at: number; category_hints_json: string | null }>();
     c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     return c.json({
       tags: (result.results ?? []).map((tag) => ({
@@ -48,6 +48,7 @@ tagsRoutes.get('/api/tags', async (c) => {
         name: tag.name,
         isPublic: Boolean(tag.is_public),
         updatedAt: tag.updated_at,
+        categoryHints: (() => { try { return cleanRuleCategories(JSON.parse(tag.category_hints_json ?? '[]')); } catch { return []; } })(),
       })),
     });
   }
@@ -75,17 +76,18 @@ const tagAdminSchema = z.object({
   description: z.string().max(200).optional().nullable(),
   isPublic: z.boolean().default(true),
   aliases: z.array(z.string()).optional(),
+  categoryHints: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
 });
 
 tagsRoutes.get('/api/admin/tags', requireRole('editor'), async (c) => {
     const result = await getDatabase(c).statement(`
-    SELECT t.id, t.slug, t.name, t.description, t.is_public, COUNT(DISTINCT rt.rule_id) AS usage_count
+    SELECT t.id, t.slug, t.name, t.description, t.is_public, t.category_hints_json, COUNT(DISTINCT rt.rule_id) AS usage_count
     FROM tags t
     LEFT JOIN rule_tags rt ON rt.tag_id = t.id
     WHERE t.status = 'active'
     GROUP BY t.id
     ORDER BY t.is_public DESC, usage_count DESC, t.name
-  `).all<{ id: string; slug: string; name: string; description: string | null; is_public: number; usage_count: number }>();
+  `).all<{ id: string; slug: string; name: string; description: string | null; is_public: number; category_hints_json: string | null; usage_count: number }>();
 
   const aliasesResult = await getDatabase(c).statement(`SELECT tag_id, alias FROM tag_aliases ORDER BY alias`).all<{ tag_id: string; alias: string }>();
   const aliasMap = new Map<string, string[]>();
@@ -104,6 +106,7 @@ tagsRoutes.get('/api/admin/tags', requireRole('editor'), async (c) => {
       isPublic: Boolean(tag.is_public),
       usageCount: tag.usage_count,
       aliases: aliasMap.get(tag.id) ?? [],
+      categoryHints: (() => { try { return cleanRuleCategories(JSON.parse(tag.category_hints_json ?? '[]')); } catch { return []; } })(),
     })),
   });
 });
@@ -112,7 +115,7 @@ tagsRoutes.post('/api/admin/tags', requireRole('admin'), async (c) => {
   const parsed = tagAdminSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
 
-  const { name, description, isPublic, aliases } = parsed.data;
+  const { name, description, isPublic, aliases, categoryHints } = parsed.data;
   const normalized = normalizeText(name);
   const existing = await getDatabase(c).statement(`
     SELECT id FROM tags WHERE status = 'active' AND normalized_name = ? LIMIT 1
@@ -123,8 +126,10 @@ tagsRoutes.post('/api/admin/tags', requireRole('admin'), async (c) => {
 
   if (existing) {
     await getDatabase(c).statement(`
-      UPDATE tags SET is_public = ?, description = COALESCE(?, description), updated_at = ? WHERE id = ?
-    `).bind(isPublic ? 1 : 0, description || null, timestamp, existing.id).run();
+      UPDATE tags SET is_public = ?, description = COALESCE(?, description),
+        category_hints_json = COALESCE(?, category_hints_json), updated_at = ? WHERE id = ?
+    `).bind(isPublic ? 1 : 0, description || null,
+      categoryHints === undefined ? null : JSON.stringify(cleanRuleCategories(categoryHints)), timestamp, existing.id).run();
     return c.json({ ok: true, tagId: existing.id });
   }
 
@@ -133,9 +138,10 @@ tagsRoutes.post('/api/admin/tags', requireRole('admin'), async (c) => {
 
   const statements: DatabaseStatement[] = [
     getDatabase(c).statement(`
-      INSERT INTO tags (id, slug, name, normalized_name, description, is_public, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(tagId, slugify(name), name, normalized, description || null, isPublic ? 1 : 0, userId, timestamp, timestamp),
+      INSERT INTO tags (id, slug, name, normalized_name, description, is_public, category_hints_json, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(tagId, slugify(name), name, normalized, description || null, isPublic ? 1 : 0,
+      JSON.stringify(cleanRuleCategories(categoryHints)), userId, timestamp, timestamp),
   ];
 
   for (const alias of cleanTagNames(aliases)) {
@@ -176,6 +182,10 @@ tagsRoutes.patch('/api/admin/tags/:id', requireRole('admin'), async (c) => {
   if (parsed.data.isPublic !== undefined) {
     updates.push('is_public = ?');
     bindings.push(parsed.data.isPublic ? 1 : 0);
+  }
+  if (parsed.data.categoryHints !== undefined) {
+    updates.push('category_hints_json = ?');
+    bindings.push(JSON.stringify(cleanRuleCategories(parsed.data.categoryHints)));
   }
 
   bindings.push(tagId);

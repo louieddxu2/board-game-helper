@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, TagSummary } from '../shared/types';
+import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
@@ -8,7 +8,7 @@ const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const CATALOG_SYNC_FRESH_MS = 10 * 60 * 1000;
 const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
-const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v3';
+const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v4';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
@@ -61,7 +61,7 @@ export interface DraftRecord {
   game?: { id: string; slug: string; displayName: string; englishName?: string };
   gameQuery: string;
   englishName?: string;
-  rules: Array<{ id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] }>;
+  rules: Array<{ id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] }>;
   sourceLabel?: string;
   sourceUrl?: string;
   playedOn: string;

@@ -25,6 +25,7 @@ const file: ReviewFile = {
       commonMistake: null,
       details: null,
       flowStage: 'action',
+      categories: ['action_effect_detail'],
       playerCounts: [],
       editionNotes: [],
       editionNote: null,
@@ -37,6 +38,7 @@ const file: ReviewFile = {
       commonMistake: '任意選擇',
       details: null,
       flowStage: 'action',
+      categories: ['action_effect_detail', 'flow_endgame_scoring'],
       playerCounts: [],
       editionNotes: [],
       editionNote: null,
@@ -69,6 +71,24 @@ describe('review exchange files', () => {
   test('rejects a CSV whose protected base hash is missing', () => {
     const csv = serializeReviewCsv(file).replace('a'.repeat(64), '');
     expect(() => parseReviewCsv(csv)).toThrow();
+  });
+
+  test('keeps categories absent when importing an older CSV without category columns', () => {
+    const headers = [
+      '__format', '__schema_version', '__dataset_version', '__exported_at', '__scope_json', '__batch_name',
+      'action', 'reason', 'rule_id', 'game_id', 'game_name', 'game_slug',
+      'base_updated_at', 'base_content_hash',
+      'current_statement', 'current_tagNames', 'proposed_statement', 'proposed_tagNames',
+    ];
+    const values = [
+      'wrong-board-game-rules-review', '1', 'dataset-1', '1700000000000', '{}', 'legacy',
+      'propose', '', 'rule-1', 'game-1', 'Legacy Game', 'legacy-game',
+      '123', 'a'.repeat(64), 'Current statement', '', 'Proposed statement', '',
+    ];
+    const csv = `${headers.join(',')}\r\n${values.join(',')}`;
+    const parsed = parseReviewCsv(csv);
+    expect(parsed.items[0].current.categories).toBeUndefined();
+    expect(parsed.items[0].proposed.categories).toBeUndefined();
   });
 
   test('neutralizes spreadsheet formulas without changing imported text', () => {

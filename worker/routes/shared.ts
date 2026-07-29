@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type TagSummary, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type RuleCategory, type TagSummary, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { Database, DatabaseStatement, D1Result } from '../data/database';
 import { getDatabase } from '../data/database';
@@ -16,7 +16,7 @@ export const setNoCache = (c: AppContext) => {
 
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
+    r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
@@ -24,7 +24,7 @@ export const ruleSelect = `
 
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
-    r.flow_stage, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
+    r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
@@ -42,6 +42,7 @@ export interface RuleRow {
   common_mistake: string | null;
   details: string | null;
   flow_stage: FlowStage;
+  categories_json: string | null;
   player_counts_json: string | null;
   edition_notes_json: string | null;
   edition_note: string | null;
@@ -63,6 +64,16 @@ export const parseRuleTagIds = (row: Pick<RuleRow, 'tag_ids_json'>): string[] =>
   } catch {
     return [];
   }
+};
+
+export const cleanRuleCategories = (values: unknown): RuleCategory[] => Array.from(new Set(
+  (Array.isArray(values) ? values : []).filter((value): value is RuleCategory =>
+    typeof value === 'string' && RULE_CATEGORIES.includes(value as RuleCategory)),
+));
+
+export const parseRuleCategories = (row: Pick<RuleRow, 'categories_json'>): RuleCategory[] => {
+  try { return cleanRuleCategories(JSON.parse(row.categories_json ?? '[]')); }
+  catch { return []; }
 };
 
 export const parsePlayerCounts = (row: Pick<RuleRow, 'player_counts_json'>): number[] => {
@@ -94,15 +105,19 @@ export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Ma
   if (!tagIds.length) return new Map();
   const placeholders = tagIds.map(() => '?').join(',');
   const result = await db.statement(`
-    SELECT t.id, t.slug, t.name, t.is_public
+    SELECT t.id, t.slug, t.name, t.is_public, t.category_hints_json
     FROM tags t
     WHERE t.id IN (${placeholders})
-  `).bind(...tagIds).all<{ id: string; slug: string; name: string; is_public: number | null }>();
+  `).bind(...tagIds).all<{ id: string; slug: string; name: string; is_public: number | null; category_hints_json: string | null }>();
   return new Map((result.results ?? []).map((tag) => [tag.id, {
     id: tag.id,
     slug: tag.slug,
     name: tag.name,
     isPublic: Boolean(tag.is_public),
+    categoryHints: (() => {
+      try { return cleanRuleCategories(JSON.parse(tag.category_hints_json ?? '[]')); }
+      catch { return []; }
+    })(),
   }]));
 };
 
@@ -141,6 +156,7 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nic
     commonMistake: row.common_mistake ?? undefined,
     details: row.details ?? undefined,
     flowStage: row.flow_stage && row.flow_stage !== 'uncategorized' ? row.flow_stage : undefined,
+    categories: parseRuleCategories(row),
     playerCounts: parsePlayerCounts(row),
     editionNotes,
     editionNote: editionNotes[0],
@@ -245,6 +261,7 @@ export interface ReviewRuleRow {
   common_mistake: string | null;
   details: string | null;
   flow_stage: FlowStage;
+  categories_json: string | null;
   player_counts_json: string | null;
   edition_notes_json: string | null;
   edition_note: string | null;
@@ -259,6 +276,10 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
   commonMistake: row.common_mistake,
   details: row.details,
   flowStage: row.flow_stage,
+  categories: (() => {
+    try { return cleanRuleCategories(JSON.parse(row.categories_json ?? '[]')); }
+    catch { return []; }
+  })(),
   playerCounts: parsePlayerCounts(row),
   editionNotes: parseEditionNotes(row),
   editionNote: row.edition_note,
@@ -273,7 +294,7 @@ export const reviewContentFromRow = (row: ReviewRuleRow): ReviewContent => norma
 
 export const reviewRuleSelect = `
   SELECT r.id, r.submission_id, r.game_id, g.display_name game_name, g.slug game_slug,
-    r.statement, r.common_mistake, r.details, r.flow_stage, r.player_counts_json,
+    r.statement, r.common_mistake, r.details, r.flow_stage, r.categories_json, r.player_counts_json,
     r.edition_notes_json, r.edition_note, r.updated_at, r.source_label, r.source_url,
     (SELECT COALESCE(json_group_array(json_object('name', t.name)), '[]')
       FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id

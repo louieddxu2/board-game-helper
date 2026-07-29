@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
@@ -23,6 +23,7 @@ const submissionSchema = z.object({
     commonMistake: z.string().trim().max(2000).optional(),
     details: z.string().trim().max(5000).optional(),
     flowStage: z.enum(FLOW_STAGES).optional(),
+    categories: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
     playerCounts: z.array(z.number().int().min(1).max(8)).max(8).optional(),
     editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     editionNote: z.string().trim().max(300).optional(),
@@ -74,14 +75,15 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
     statements.push(getDatabase(c).statement(`
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
-        flow_stage, player_counts_json, edition_notes_json, edition_note, source_label, source_url,
+        flow_stage, categories_json, player_counts_json, edition_notes_json, edition_note, source_label, source_url,
         status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
     `).bind(
       ruleId, submissionId, parsed.data.gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
       cleanOptional(input.details, 5000) ?? null,
       input.flowStage ?? 'uncategorized',
+      JSON.stringify(Array.from(new Set(input.categories ?? []))),
       JSON.stringify(Array.from(new Set(input.playerCounts ?? [])).sort((a, b) => a - b)),
       JSON.stringify(editionNotes), editionNotes[0] ?? null,
       cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,

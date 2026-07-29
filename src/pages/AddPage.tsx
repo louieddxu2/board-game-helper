@@ -4,14 +4,15 @@ import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
+import { RuleCategoryInput } from '../components/RuleCategoryInput';
 import { useSession } from '../context/SessionContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
-import type { GameDetail, GameSummary, SubmissionInput } from '../shared/types';
+import type { GameDetail, GameSummary, RuleCategory, SubmissionInput } from '../shared/types';
 
-type RuleInput = { id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
+type RuleInput = { id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 const today = () => {
   const date = new Date();
@@ -136,7 +137,7 @@ export const AddPage = () => {
         playedOn,
         privateNote: privateNote.trim() || undefined,
         idempotencyKey: crypto.randomUUID(),
-        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
+        rules: validRules.map((rule) => ({ statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined, categories: rule.categories, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes, sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined, tagNames: rule.tagNames })),
       };
       await localDb.addPending(payload);
       const result = await api.submit(payload);
@@ -201,6 +202,7 @@ export const AddPage = () => {
           <label>玩錯情況<textarea rows={2} value={rule.commonMistake ?? ''}
             placeholder="我們當時怎麼玩錯？" onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
           <TagInput value={rule.tagNames ?? []} onChange={(tagNames) => setRule(rule.id, { tagNames })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
+          <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
           <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
           <EditionInput value={rule.editionNotes ?? []} options={editionOptions}
             onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />

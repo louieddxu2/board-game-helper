@@ -1,27 +1,21 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { AdSlot } from '../components/AdSlot';
 import { RuleCard } from '../components/RuleCard';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
+import { RuleCategoryInput } from '../components/RuleCategoryInput';
 import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type RuleCard as RuleCardType, type RuleRevision } from '../shared/types';
-import { groupRulesUniversally, classifyRuleUniversally } from '../lib/ruleSorter';
+import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type RuleRevision } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { collectEditionOptions } from '../lib/editionOptions';
-
-const stageNames: Record<FlowStage, string> = {
-  setup: '設置', round: '回合／階段', action: '玩家行動與效果',
-  end_scoring: '結束與計分', edition_player_count: '人數／版本／擴充',
-  always: '全程適用', uncategorized: '未分類',
-};
+import { filterRulesByCategory } from '../lib/ruleCategories';
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -29,7 +23,10 @@ export const GamePage = () => {
   const { canEdit, user, isAdmin } = useSession();
   const canEditRule = (rule: RuleCardType) => canUserEditRule(rule, user, isAdmin);
   const { showToast } = useToast();
-  const [viewMode, setViewMode] = useState<'index' | 'briefing'>('index');
+  const [activeCategory, setActiveCategory] = useState<'all' | RuleCategory>(() => {
+    const category = new URLSearchParams(location.search).get('category');
+    return RULE_CATEGORIES.includes(category as RuleCategory) ? category as RuleCategory : 'all';
+  });
   const [game, setGame] = useState<GameDetail>();
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
@@ -84,16 +81,10 @@ export const GamePage = () => {
   }, [game, user]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = game?.rules.filter((rule) =>
+  const visibleRules = filterRulesByCategory(game?.rules ?? [], activeCategory).filter((rule) =>
     (activeTags.length === 0 || activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName))) &&
     (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
   ) ?? [];
-  const groupedSections = useMemo(() => groupRulesUniversally(visibleRules), [visibleRules]);
-  const briefingRules = useMemo(() => {
-    if (!game) return [];
-    const highlights = game.rules.filter((rule) => classifyRuleUniversally(rule) === 'highlight');
-    return highlights.length > 0 ? highlights : game.rules.slice(0, 3);
-  }, [game]);
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
@@ -109,44 +100,23 @@ export const GamePage = () => {
         : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
         <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></div>}
     </header>
-    <div className="view-mode-header">
-      <div className="view-mode-switcher" role="tablist" aria-label="檢視模式切換">
-        <button
+    <section className="rule-filters" aria-label="篩選規則">
+      <div className="rule-category-filter" role="tablist" aria-label="規則分類">
+        <button type="button" role="tab" aria-selected={activeCategory === 'all'} className={activeCategory === 'all' ? 'active' : ''} onClick={() => setActiveCategory('all')}>
+          全部 <small>{game.rules.length}</small>
+        </button>
+        {RULE_CATEGORIES.map((category) => <button
           type="button"
           role="tab"
-          aria-selected={viewMode === 'index'}
-          className={viewMode === 'index' ? 'active' : ''}
-          onClick={() => setViewMode('index')}
+          aria-selected={activeCategory === category}
+          className={activeCategory === category ? 'active' : ''}
+          key={category}
+          onClick={() => setActiveCategory(category)}
         >
-          📚 完整索引
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={viewMode === 'briefing'}
-          className={viewMode === 'briefing' ? 'active' : ''}
-          onClick={() => setViewMode('briefing')}
-        >
-          ⚡ 30 秒速覽
-        </button>
+          {RULE_CATEGORY_LABELS[category]} <small>{game.rules.filter((rule) => rule.categories?.includes(category)).length}</small>
+        </button>)}
       </div>
-    </div>
-    {viewMode === 'briefing' ? (
-      <>
-        <div className="briefing-notice">
-          <h2>⚡ 30 秒速覽</h2>
-          <p>整理本遊戲常被誤解的重點規則。</p>
-        </div>
-        <div className="game-rules">
-          {briefingRules.map((rule) => (
-            <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
-          ))}
-        </div>
-      </>
-    ) : (
-      <>
-        <section className="rule-filters" aria-label="篩選規則">
-          <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
+      <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
           {availableTags.length > 0 && (
             <div className="tag-filter" aria-label="依標籤篩選">
               {availableTags.map((tag) => {
@@ -174,25 +144,11 @@ export const GamePage = () => {
               )}
             </div>
           )}
-        </section>
-        <div className="grouped-rules-container">
-          {groupedSections.map((group) => (
-            <section key={group.id} className="rule-group-section">
-              <h2 className="rule-group-heading">
-                <span>{group.icon} {group.title}</span>
-                <span className="group-count">{group.rules.length}</span>
-              </h2>
-              <div className="game-rules">
-                {group.rules.map((rule) => (
-                  <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />
-                ))}
-              </div>
-            </section>
-          ))}
-          {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
-        </div>
-      </>
-    )}
+    </section>
+    <div className="game-rules">
+      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />)}
+      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
+    </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateRuleEntity(editing.id); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); await localDb.invalidateHome(); clearSearchCache(); await load(); }} />}
@@ -205,6 +161,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
   const [details, setDetails] = useState(rule.details ?? '');
+  const [categories, setCategories] = useState(rule.categories ?? []);
   const [playerCounts, setPlayerCounts] = useState(rule.playerCounts ?? []);
   const [editionNotes, setEditionNotes] = useState(rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []));
   const [tagNames, setTagNames] = useState(rule.tags.map((tag) => tag.name));
@@ -221,7 +178,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, playerCounts, editionNotes, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
+      await api.patchRule(rule.id, { statement, commonMistake: commonMistake || null, details: details || null, categories, playerCounts, editionNotes, tagNames, sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null });
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -237,6 +194,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
       <TagInput value={tagNames} onChange={setTagNames} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags)} detectionInput={{ statement, commonMistake, details }} />
+      <RuleCategoryInput value={categories} onChange={setCategories} />
       <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
       <EditionInput value={editionNotes} options={editionOptions} onChange={setEditionNotes} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>

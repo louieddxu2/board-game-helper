@@ -14,7 +14,7 @@ describe('versioned public tag catalog', () => {
   test('reads only catalog versions newer than the client cursor without joining source tables', async () => {
     const all = vi.fn().mockResolvedValue({ results: [{
       tag_id: 'tag_draw', catalog_version: 8,
-      entry_json: JSON.stringify({ id: 'tag_draw', slug: 'draw', name: '抽牌', aliases: ['補牌'], isPublic: true, updatedAt: 10 }),
+      entry_json: JSON.stringify({ id: 'tag_draw', slug: 'draw', name: '抽牌', aliases: ['補牌'], categoryHints: ['action_effect_detail'], isPublic: true, updatedAt: 10 }),
       deleted: 0,
     }], meta: { rows_read: 1 } });
     const prepared = statement({ all });
@@ -29,7 +29,7 @@ describe('versioned public tag catalog', () => {
     expect(sql).not.toMatch(/\b(?:tags|tag_aliases)\b/);
     expect(prepared.bind).toHaveBeenCalledWith(7, 1000);
     expect(payload).toEqual({
-      changes: [{ tagId: 'tag_draw', catalogVersion: 8, deleted: false, tag: expect.objectContaining({ name: '抽牌', aliases: ['補牌'] }) }],
+      changes: [{ tagId: 'tag_draw', catalogVersion: 8, deleted: false, tag: expect.objectContaining({ name: '抽牌', aliases: ['補牌'], categoryHints: ['action_effect_detail'] }) }],
       throughVersion: 8,
       hasMore: false,
     });

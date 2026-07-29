@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -15,7 +15,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const id = c.req.param('id');
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
-      r.statement, r.common_mistake, r.details, r.flow_stage,
+      r.statement, r.common_mistake, r.details, r.flow_stage, r.categories_json,
       r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
@@ -35,6 +35,7 @@ const rulePatchSchema = z.object({
   commonMistake: z.string().trim().max(2000).nullable().optional(),
   details: z.string().trim().max(5000).nullable().optional(),
   flowStage: z.enum(FLOW_STAGES).optional(),
+  categories: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).nullable().optional(),
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
@@ -72,6 +73,9 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
     commonMistake: parsed.data.commonMistake === undefined ? row.common_mistake : parsed.data.commonMistake,
     details: parsed.data.details === undefined ? row.details : parsed.data.details,
     flowStage: parsed.data.flowStage ?? row.flow_stage,
+    categories: parsed.data.categories === undefined
+      ? (() => { try { return cleanRuleCategories(JSON.parse(String(row.categories_json ?? '[]'))); } catch { return []; } })()
+      : cleanRuleCategories(parsed.data.categories),
     playerCounts: parsed.data.playerCounts === undefined ? JSON.parse(String(row.player_counts_json ?? '[]')) as number[] : (parsed.data.playerCounts ?? []),
     editionNotes,
     sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
@@ -83,11 +87,12 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     getDatabase(c).statement(`
-      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?,
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, categories_json = ?,
         player_counts_json = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
         updated_at = ? WHERE id = ?
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
+      JSON.stringify(updated.categories),
       JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
       JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
       timestamp, c.req.param('id'),
@@ -177,10 +182,11 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
     getDatabase(c).statement(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
       .bind(createId('rev'), c.req.param('id'), JSON.stringify(current), user.id, timestamp),
     getDatabase(c).statement(`
-      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, player_counts_json = ?,
+      UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, categories_json = ?, player_counts_json = ?,
         edition_notes_json = ?, edition_note = ?, status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?
     `).bind(
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
+      previous.categories_json ?? JSON.stringify(cleanRuleCategories(previous.categories)),
       previous.player_counts_json ?? '[]',
       previous.edition_notes_json ?? JSON.stringify(cleanEditionNotes(typeof previous.edition_note === 'string' ? [previous.edition_note] : [])),
       previous.edition_note ?? null, previous.status ?? 'published',

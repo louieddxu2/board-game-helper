@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
+import { RuleCategoryInput } from '../components/RuleCategoryInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
@@ -194,6 +195,8 @@ export const ReviewPage = () => {
               <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label="建議玩錯情況" rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder="玩錯情況" /></div>
             </div>
             <details><summary>其他欄位</summary><div className="review-detail-grid">
+              <div className="review-wide"><RuleCategoryInput value={draft.categories ?? []}
+                disabled={!editable} onChange={(categories) => updateDraft(proposal.id, { categories })} /></div>
               <div className="review-wide"><PlayerCountInput value={draft.playerCounts ?? []}
                 disabled={!editable} onChange={(playerCounts) => updateDraft(proposal.id, { playerCounts })} /></div>
               <div className="review-wide"><EditionInput value={draft.editionNotes ?? (draft.editionNote ? [draft.editionNote] : [])}

@@ -9,6 +9,20 @@ export const FLOW_STAGES = [
 ] as const;
 
 export type FlowStage = (typeof FLOW_STAGES)[number];
+
+export const RULE_CATEGORIES = [
+  'teaching_setup_opening',
+  'action_effect_detail',
+  'flow_endgame_scoring',
+] as const;
+
+export type RuleCategory = (typeof RULE_CATEGORIES)[number];
+
+export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
+  teaching_setup_opening: '教學、設置、開局',
+  action_effect_detail: '行動、效果、細節',
+  flow_endgame_scoring: '流程、終局、計分',
+};
 export type UserRole = 'admin' | 'editor';
 
 export interface SessionUser {
@@ -101,6 +115,7 @@ export interface TagSummary {
   updatedAt?: number;
   description?: string;
   aliases?: string[];
+  categoryHints?: RuleCategory[];
 }
 
 export interface PublicTagCatalogChange {
@@ -128,6 +143,7 @@ export interface RuleCard {
   commonMistake?: string;
   details?: string;
   flowStage?: FlowStage | null;
+  categories?: RuleCategory[];
   playerCounts?: number[];
   editionNotes?: string[];
   editionNote?: string;
@@ -180,6 +196,7 @@ export interface SubmissionRuleInput {
   commonMistake?: string;
   details?: string;
   flowStage?: FlowStage;
+  categories?: RuleCategory[];
   playerCounts?: number[];
   editionNotes?: string[];
   editionNote?: string;
@@ -203,6 +220,7 @@ export interface ReviewContent {
   commonMistake?: string | null;
   details?: string | null;
   flowStage?: FlowStage | null;
+  categories?: RuleCategory[];
   playerCounts?: number[] | null;
   editionNotes?: string[] | null;
   editionNote?: string | null;
