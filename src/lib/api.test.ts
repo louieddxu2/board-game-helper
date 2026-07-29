@@ -117,7 +117,7 @@ describe('api versioned game catalog boundary', () => {
   const catalog = {
     generation: 1,
     throughVersion: 10,
-    generatedAt: 1,
+    generatedAt: Date.now(),
     games: [{ id: 'game-1', slug: 'emberleaf', displayName: '葉嶼', englishName: 'Emberleaf', aliases: ['葉島'], ruleCount: 2, updatedAt: 1 }],
   };
   const noChanges = { changes: [], throughVersion: 10, hasMore: false };
@@ -203,6 +203,34 @@ describe('api versioned game catalog boundary', () => {
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ games: [updated.games[1]] }));
   });
 
+  test('replaces a full snapshot downloaded more than one week ago before requesting deltas', async () => {
+    const now = Date.UTC(2026, 6, 29, 12);
+    const old = { ...catalog, generatedAt: now - 8 * 24 * 60 * 60 * 1000 };
+    const fresh = { ...catalog, generation: 2, throughVersion: 20, generatedAt: now };
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGameCatalog')
+      .mockResolvedValueOnce({ key: 'games:list:versioned:v2', data: old, cachedAt: 1, snapshotFetchedAt: now - 8 * 24 * 60 * 60 * 1000 })
+      .mockResolvedValue({ key: 'games:list:versioned:v2', data: fresh, cachedAt: now, snapshotFetchedAt: now });
+    const cacheSnapshot = vi.spyOn(localDb, 'cacheGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheGameCatalogChanges').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => path === '/api/game-catalog'
+        ? fresh
+        : { changes: [], throughVersion: 20, hasMore: false },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.searchGames('Ember');
+    await vi.waitFor(() => expect(cacheSnapshot).toHaveBeenCalledWith(fresh));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/game-catalog', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/game-catalog/changes?after=20', expect.any(Object));
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/game-catalog/changes?after=10', expect.any(Object));
+  });
+
   test('stores a newly created game into the local catalog overlay', async () => {
     const newGame = { id: 'game-2', slug: 'new-game', displayName: '新遊戲', ruleCount: 0, updatedAt: 2 };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: newGame }) }));
@@ -218,7 +246,7 @@ describe('api editor catalog cache boundary', () => {
   const catalog = {
     generation: 1,
     throughVersion: 10,
-    generatedAt: 1,
+    generatedAt: Date.now(),
     games: [{ id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], ruleCount: 1, totalRuleCount: 2, updatedAt: 1 }],
   };
 
@@ -233,7 +261,7 @@ describe('api editor catalog cache boundary', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test('manual sync expires only the ten-minute cursor and requests only version changes', async () => {
+  test('manual sync requests only version changes while the weekly snapshot is still current', async () => {
     const invalidate = vi.spyOn(localDb, 'invalidateGameCatalogSync').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestGameCatalog').mockResolvedValue({ key: 'games:list:versioned:v2', data: catalog, cachedAt: 1 });

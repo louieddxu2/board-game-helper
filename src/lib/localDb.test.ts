@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, type CachedGameRow } from './localDb';
+import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, type CachedGameRow } from './localDb';
 
 const now = 10_000_000;
 
@@ -42,5 +42,24 @@ describe('normalized game rule cache freshness', () => {
 describe('public tag catalog freshness', () => {
   test('checks version updates once per week', () => {
     expect(PUBLIC_TAG_CATALOG_FRESH_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe('weekly game catalog snapshot age', () => {
+  test('delta checks refresh the sync cursor without extending the full-snapshot lifetime', () => {
+    const snapshotFetchedAt = 100;
+    const updated = applyGameCatalogChangesToCache({
+      key: 'games:list:versioned:v2',
+      data: { generation: 1, throughVersion: 5, generatedAt: 90, games: [] },
+      cachedAt: 110,
+      snapshotFetchedAt,
+    }, {
+      changes: [],
+      throughVersion: 5,
+      hasMore: false,
+    }, 200);
+
+    expect(updated.cachedAt).toBe(200);
+    expect(updated.snapshotFetchedAt).toBe(snapshotFetchedAt);
   });
 });

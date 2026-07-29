@@ -1,5 +1,5 @@
 import type { AccountPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
-import { localDb } from './localDb';
+import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
 
@@ -66,6 +66,10 @@ const presentGame = (game: GameDetail, includePrivate: boolean): GameDetail => {
 };
 
 let gameCatalogRequest: Promise<GameCatalogPayload> | undefined;
+export const GAME_CATALOG_SNAPSHOT_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+const isGameCatalogSnapshotExpired = (record: GameCatalogCacheRecord, currentTime = Date.now()) =>
+  currentTime - (record.snapshotFetchedAt ?? record.data.generatedAt) >= GAME_CATALOG_SNAPSHOT_FRESH_MS;
 
 const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<GameCatalogPayload> => {
   let afterVersion = catalog.throughVersion;
@@ -83,11 +87,12 @@ const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<Game
   return (await localDb.getLatestGameCatalog())?.data ?? catalog;
 };
 
-const refreshGameCatalog = async (knownBase?: GameCatalogPayload | null): Promise<GameCatalogPayload> => {
+const refreshGameCatalog = async (knownBase?: GameCatalogCacheRecord | null): Promise<GameCatalogPayload> => {
   if (gameCatalogRequest) return gameCatalogRequest;
   gameCatalogRequest = (async () => {
-    let base = knownBase === null ? undefined : knownBase ?? (await localDb.getLatestGameCatalog().catch(() => undefined))?.data;
-    if (!base) {
+    const existing = knownBase === null ? undefined : knownBase ?? await localDb.getLatestGameCatalog().catch(() => undefined);
+    let base = existing?.data;
+    if (!base || (existing && isGameCatalogSnapshotExpired(existing))) {
       base = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
       await localDb.cacheGameCatalog(base);
     }
@@ -102,7 +107,7 @@ const gameCatalog = async (onUpdated?: (data: GameCatalogPayload) => void): Prom
   if (cached) return cached.data;
   const stale = await localDb.getLatestGameCatalog().catch(() => undefined);
   if (!stale) return refreshGameCatalog(null);
-  void refreshGameCatalog(stale.data).then((updated) => {
+  void refreshGameCatalog(stale).then((updated) => {
     if (updated.throughVersion !== stale.data.throughVersion) onUpdated?.(updated);
   }).catch(() => undefined);
   return stale.data;

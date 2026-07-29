@@ -13,8 +13,24 @@ const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
+export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
-let gameCatalogMemoryCache: CacheRecord<GameCatalogPayload> | undefined;
+let gameCatalogMemoryCache: GameCatalogCacheRecord | undefined;
+
+export const applyGameCatalogChangesToCache = (
+  cached: GameCatalogCacheRecord,
+  data: GameCatalogChangesPayload,
+  currentTime = Date.now(),
+): GameCatalogCacheRecord => ({
+  key: PUBLIC_GAME_CATALOG_KEY,
+  data: {
+    ...cached.data,
+    throughVersion: Math.max(cached.data.throughVersion, data.throughVersion),
+    games: applyGameCatalogChanges(cached.data.games, data.changes),
+  },
+  cachedAt: data.hasMore ? cached.cachedAt : currentTime,
+  snapshotFetchedAt: cached.snapshotFetchedAt ?? cached.data.generatedAt,
+});
 
 const getFreshCache = async <T>(key: string, maxAge: number): Promise<CacheRecord<T> | undefined> => {
   const cached = await (await getDatabase()).get('cache', key) as CacheRecord<T> | undefined;
@@ -207,7 +223,13 @@ export const localDb = {
     const db = await getDatabase();
     const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
     const mergedData = { ...data, games: mergeGameCatalogEntries(data.games, overrides?.data ?? []) };
-    const record = { key: PUBLIC_GAME_CATALOG_KEY, data: mergedData, cachedAt: Date.now() } satisfies CacheRecord<GameCatalogPayload>;
+    const cachedAt = Date.now();
+    const record = {
+      key: PUBLIC_GAME_CATALOG_KEY,
+      data: mergedData,
+      cachedAt,
+      snapshotFetchedAt: cachedAt,
+    } satisfies GameCatalogCacheRecord;
     gameCatalogMemoryCache = record;
     await db.put('cache', record);
     if (overrides) {
@@ -221,30 +243,22 @@ export const localDb = {
   },
   getSynchronizedGameCatalog: async () => {
     if (gameCatalogMemoryCache && Date.now() - gameCatalogMemoryCache.cachedAt < CATALOG_SYNC_FRESH_MS) return gameCatalogMemoryCache;
-    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (!cached || Date.now() - cached.cachedAt >= CATALOG_SYNC_FRESH_MS) return undefined;
     gameCatalogMemoryCache = cached;
     return cached;
   },
   getLatestGameCatalog: async () => {
     if (gameCatalogMemoryCache) return gameCatalogMemoryCache;
-    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (cached) gameCatalogMemoryCache = cached;
     return cached;
   },
   cacheGameCatalogChanges: async (data: GameCatalogChangesPayload) => {
     const db = await getDatabase();
-    const cached = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    const cached = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (!cached) throw new Error('game_catalog_cache_missing');
-    const updated: CacheRecord<GameCatalogPayload> = {
-      key: PUBLIC_GAME_CATALOG_KEY,
-      data: {
-        ...cached.data,
-        throughVersion: Math.max(cached.data.throughVersion, data.throughVersion),
-        games: applyGameCatalogChanges(cached.data.games, data.changes),
-      },
-      cachedAt: data.hasMore ? cached.cachedAt : Date.now(),
-    };
+    const updated = applyGameCatalogChangesToCache(cached, data);
     gameCatalogMemoryCache = updated;
     await db.put('cache', updated);
     const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
@@ -257,7 +271,7 @@ export const localDb = {
   },
   invalidateGameCatalogSync: async () => {
     const db = await getDatabase();
-    const cached = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    const cached = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (!cached) return;
     const invalidated = { ...cached, cachedAt: 0 };
     gameCatalogMemoryCache = invalidated;
@@ -290,7 +304,7 @@ export const localDb = {
       data: upsertGameCatalogEntry(overrides?.data ?? [], game),
       cachedAt: Date.now(),
     });
-    const catalog = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as CacheRecord<GameCatalogPayload> | undefined;
+    const catalog = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (catalog) {
       const updated = { ...catalog, data: { ...catalog.data, games: upsertGameCatalogEntry(catalog.data.games, game) } };
       gameCatalogMemoryCache = updated;
