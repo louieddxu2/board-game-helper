@@ -15,7 +15,7 @@ const filterTags = (tags: TagSummary[], query: string, selected: string[]) => {
   const matched = tags.filter((tag) => {
     if (selectedNames.has(tag.name.toLocaleLowerCase())) return false;
     if (!normalizedQuery) return true;
-    return [tag.name, ...(tag.aliases ?? [])].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+    return tag.name.toLocaleLowerCase().includes(normalizedQuery);
   });
   return Array.from(new Map(matched.map((tag) => [tag.id || tag.name.toLocaleLowerCase(), tag])).values());
 };

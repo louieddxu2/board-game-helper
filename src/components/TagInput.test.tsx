@@ -18,6 +18,22 @@ beforeEach(() => {
 });
 
 describe('TagInput recommendations', () => {
+  test('does not use public tag aliases for manual tag search', async () => {
+    const draw = { ...tag('public-draw', 'Draw'), aliases: ['Refill'] };
+    const view = render(<TagInput value={[]} onChange={vi.fn()} availableTags={[draw]}
+      detectionInput={{ statement: 'Refill the market before drawing.' }} />);
+
+    expect(await view.findByRole('button', { name: /Draw/ })).toBeInTheDocument();
+
+    const input = view.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'Refill' } });
+
+    await vi.waitFor(() => {
+      expect(view.queryByRole('option', { name: '#Draw' })).not.toBeInTheDocument();
+    });
+  });
+
   test('commits a composed mobile tag on Enter instead of advancing focus', () => {
     const onChange = vi.fn();
     const parentKeyDown = vi.fn();
