@@ -42,8 +42,8 @@ const walk = (directory) => {
 walk(root);
 
 const apiSource = fs.readFileSync(path.resolve('src/lib/api.ts'), 'utf8');
-if (!/game:\s*async\s*\(identifier:\s*string,\s*includePrivate\s*=\s*false\)/.test(apiSource)) {
-  violations.push('src/lib/api.ts: api.game must expose only identifier and includePrivate; cache bypass parameters are forbidden');
+if (!/game:\s*async\s*\(identifier:\s*string,\s*includePrivate\s*=\s*false,\s*onUpdated\?:/.test(apiSource)) {
+  violations.push('src/lib/api.ts: api.game may expose only identity, privacy scope, and an update callback; cache bypass parameters are forbidden');
 }
 if (/fetchGame\s*=\s*[^\n]*(?:fresh|force)/.test(apiSource)) {
   violations.push('src/lib/api.ts: fetchGame must not accept a fresh/force cache bypass');

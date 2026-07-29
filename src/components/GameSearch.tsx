@@ -109,7 +109,12 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     setSearchError(false);
     
     const fetchApi = () => {
-      const request = includeRules ? api.search(query) : api.searchGames(query).then((result) => ({ ...result, rules: [] }));
+      const applyUpdated = (response: { games: GameSummary[]; rules: RuleSearchResult[] }) => {
+        if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
+      };
+      const request = includeRules
+        ? api.search(query, applyUpdated)
+        : api.searchGames(query, (result) => applyUpdated({ ...result, rules: [] })).then((result) => ({ ...result, rules: [] }));
       request.then((response) => {
         if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
       }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });

@@ -58,7 +58,11 @@ export const HomePage = () => {
       for (const ref of home.featured ?? []) {
         if (ref?.ruleId) {
           try {
-            const rule = (await api.rule(ref.ruleId))?.rule;
+            const rule = (await api.rule(ref.ruleId, (updated) => {
+              void hydrateRuleTags([{ ...updated.rule, gameName: ref.gameName, gameSlug: ref.gameSlug }]).then(([hydrated]) => {
+                if (active) setResolvedCards((current) => current.map((item) => item.id === hydrated.id ? hydrated : item));
+              });
+            }))?.rule;
             if (rule) rules.push({ ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug });
           } catch { /* retain the previous rendered snapshot while unavailable */ }
         }
@@ -71,7 +75,11 @@ export const HomePage = () => {
       for (const ruleId of home.recentRuleIds ?? []) {
         if (ruleId) {
           try {
-            const rule = (await api.rule(ruleId))?.rule;
+            const rule = (await api.rule(ruleId, (updated) => {
+              void hydrateRuleTags([{ ...updated.rule, gameName: updated.rule.gameName ?? '', gameSlug: updated.rule.gameSlug ?? '' }]).then(([hydrated]) => {
+                if (active) setResolvedRecentCards((current) => current.map((item) => item.id === hydrated.id ? hydrated : item));
+              });
+            }))?.rule;
             if (rule) rules.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
           } catch { /* retain the previous rendered snapshot while unavailable */ }
         }

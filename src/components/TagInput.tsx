@@ -5,20 +5,7 @@ import { detectDeterministicTags, type DetectionInput } from '../lib/tagDetector
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSummary } from '../shared/types';
 
-let publicTagsPromise: Promise<TagSummary[]> | undefined;
-
-const loadPublicTags = async (): Promise<TagSummary[]> => {
-  const result = await api.tags();
-  return result.tags;
-};
-
-const getPublicTags = () => {
-  publicTagsPromise ??= loadPublicTags().finally(() => { publicTagsPromise = undefined; });
-  return publicTagsPromise;
-};
-
 export const clearPublicTagCache = () => {
-  publicTagsPromise = undefined;
   void localDb.invalidatePublicTags().catch(() => undefined);
 };
 
@@ -81,8 +68,8 @@ export const TagInput = ({
 
   useEffect(() => {
     let active = true;
-    void getPublicTags().then((tags) => {
-      if (active) setPublicTags(tags);
+    void api.tags(undefined, (updated) => { if (active) setPublicTags(updated.tags); }).then((result) => {
+      if (active) setPublicTags(result.tags);
     }).catch(() => { if (active) setPublicTags([]); });
     return () => { active = false; };
   }, []);

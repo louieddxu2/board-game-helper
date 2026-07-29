@@ -97,6 +97,20 @@ describe('api game cache boundary', () => {
 
     expect(cacheGame).not.toHaveBeenCalled();
   });
+
+  test('returns an expired game immediately and publishes a changed background response', async () => {
+    const updated = { ...game, displayName: 'Updated Emberleaf', updatedAt: 2 };
+    vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGame').mockResolvedValue({ key: 'game:game-1', data: game, cachedAt: 1 });
+    vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: updated, rulesComplete: true }) }));
+    const onUpdated = vi.fn();
+
+    const initial = await api.game('emberleaf', false, onUpdated);
+
+    expect(initial.game).toEqual(game);
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ game: updated }));
+  });
 });
 
 describe('api versioned game catalog boundary', () => {
@@ -169,6 +183,26 @@ describe('api versioned game catalog boundary', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  test('returns an expired catalog immediately and publishes synchronized changes in the background', async () => {
+    const updated = { ...catalog, throughVersion: 11, games: [...catalog.games, { id: 'game-2', slug: 'new', displayName: 'New', aliases: [], ruleCount: 0, updatedAt: 2 }] };
+    vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGameCatalog')
+      .mockResolvedValueOnce({ key: 'games:list:versioned:v2', data: catalog, cachedAt: 1 })
+      .mockResolvedValue({ key: 'games:list:versioned:v2', data: updated, cachedAt: 2 });
+    vi.spyOn(localDb, 'cacheGameCatalogChanges').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({
+      changes: [{ gameId: 'game-2', catalogVersion: 11, deleted: false, game: updated.games[1] }],
+      throughVersion: 11,
+      hasMore: false,
+    }) }));
+    const onUpdated = vi.fn();
+
+    const initial = await api.searchGames('New', onUpdated);
+
+    expect(initial.games).toEqual([]);
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ games: [updated.games[1]] }));
+  });
+
   test('stores a newly created game into the local catalog overlay', async () => {
     const newGame = { id: 'game-2', slug: 'new-game', displayName: '新遊戲', ruleCount: 0, updatedAt: 2 };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: newGame }) }));
@@ -201,7 +235,7 @@ describe('api editor catalog cache boundary', () => {
 
   test('manual sync expires only the ten-minute cursor and requests only version changes', async () => {
     const invalidate = vi.spyOn(localDb, 'invalidateGameCatalogSync').mockResolvedValue(undefined);
-    const readCache = vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestGameCatalog').mockResolvedValue({ key: 'games:list:versioned:v2', data: catalog, cachedAt: 1 });
     vi.spyOn(localDb, 'cacheGameCatalogChanges').mockResolvedValue(undefined);
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ changes: [], throughVersion: 10, hasMore: false }) });
@@ -211,8 +245,6 @@ describe('api editor catalog cache boundary', () => {
 
     expect(result.games[0].ruleCount).toBe(2);
     expect(invalidate).toHaveBeenCalledOnce();
-    expect(readCache).toHaveBeenCalledOnce();
-    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(readCache.mock.invocationCallOrder[0]);
     expect(fetchMock).toHaveBeenCalledWith('/api/game-catalog/changes?after=10', expect.any(Object));
   });
 });
@@ -243,6 +275,35 @@ describe('api home stale-while-revalidate boundary', () => {
     const initial = await api.home(onUpdated);
 
     expect(initial).toEqual(stale);
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(fresh));
+  });
+});
+
+describe('api public entity stale-while-revalidate boundary', () => {
+  test('returns an expired rule while refreshing it in the background', async () => {
+    const staleRule = { id: 'r1', gameId: 'g1', gameName: 'Game', gameSlug: 'game', statement: 'Old', status: 'published' as const, sourceLinks: [], tags: [], updatedAt: 1 };
+    const freshRule = { ...staleRule, statement: 'New', updatedAt: 2 };
+    vi.spyOn(localDb, 'getCachedRuleEntity').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestRuleEntity').mockResolvedValue({ key: 'rule:r1', data: { ...staleRule, cachedAt: 1 }, cachedAt: 1 });
+    vi.spyOn(localDb, 'cacheRuleEntity').mockResolvedValue('r1');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ rule: freshRule }) }));
+    const onUpdated = vi.fn();
+
+    expect((await api.rule('r1', onUpdated)).rule.statement).toBe('Old');
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ rule: freshRule }));
+  });
+
+  test('returns expired public tags while refreshing them in the background', async () => {
+    const stale = { tags: [{ id: 't1', slug: 'old', name: 'Old', updatedAt: 1 }] };
+    const fresh = { tags: [{ id: 't1', slug: 'new', name: 'New', updatedAt: 2 }] };
+    vi.spyOn(localDb, 'getCachedPublicTags').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestPublicTags').mockResolvedValue({ key: 'publicTags:v2', data: stale, cachedAt: 1 });
+    vi.spyOn(localDb, 'cachePublicTags').mockResolvedValue('publicTags:v2');
+    vi.spyOn(localDb, 'cacheTagEntities').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => fresh }));
+    const onUpdated = vi.fn();
+
+    expect((await api.tags(undefined, onUpdated)).tags[0].name).toBe('Old');
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(fresh));
   });
 });

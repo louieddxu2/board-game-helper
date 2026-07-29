@@ -34,30 +34,6 @@ const transportResponse = async <T>(path: string, init: RequestInit | undefined,
 const transportRequest = async <T>(path: string, init: RequestInit | undefined, access: RequestAccess): Promise<T> =>
   (await transportResponse<T>(path, init, access)).data;
 
-const readThrough = async <T>(
-  readCache: () => Promise<{ data: T } | undefined>,
-  fetchFresh: () => Promise<T>,
-  writeCache: (data: T) => Promise<unknown>,
-): Promise<T> => {
-  const cached = await readCache().catch(() => undefined);
-  if (cached) return cached.data;
-  const data = await fetchFresh();
-  await writeCache(data).catch(() => undefined);
-  return data;
-};
-
-type CacheEntry<T> = { data: T };
-type CachedRead<T> = {
-  readCache: () => Promise<CacheEntry<T> | undefined>;
-  fetchFresh: () => Promise<T>;
-  writeCache: (data: T) => Promise<unknown>;
-};
-
-// Every cacheable read must enter here. Pages and components do not get to
-// choose whether a network request is made.
-const cachedRead = <T>({ readCache, fetchFresh, writeCache }: CachedRead<T>) =>
-  readThrough(readCache, fetchFresh, writeCache);
-
 // GET endpoints that intentionally are not cached must explain why. This
 // keeps an accidental uncached read visible during review.
 const uncachedRead = <T>(path: string, reason: string) => {
@@ -107,39 +83,104 @@ const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<Game
   return (await localDb.getLatestGameCatalog())?.data ?? catalog;
 };
 
-const gameCatalog = async (): Promise<GameCatalogPayload> => {
-  const cached = await localDb.getSynchronizedGameCatalog().catch(() => undefined);
-  if (cached) return cached.data;
+const refreshGameCatalog = async (knownBase?: GameCatalogPayload | null): Promise<GameCatalogPayload> => {
   if (gameCatalogRequest) return gameCatalogRequest;
   gameCatalogRequest = (async () => {
-    try {
-      let base = (await localDb.getLatestGameCatalog().catch(() => undefined))?.data;
-      if (!base) {
-        base = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
-        await localDb.cacheGameCatalog(base);
-      }
-      return await synchronizeGameCatalog(base);
-    } catch (error) {
-      const stale = await localDb.getLatestGameCatalog().catch(() => undefined);
-      if (stale) return stale.data;
-      throw error;
+    let base = knownBase === null ? undefined : knownBase ?? (await localDb.getLatestGameCatalog().catch(() => undefined))?.data;
+    if (!base) {
+      base = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
+      await localDb.cacheGameCatalog(base);
     }
+    return synchronizeGameCatalog(base);
   })();
   try { return await gameCatalogRequest; }
   finally { gameCatalogRequest = undefined; }
 };
 
-const editorCatalogGames = async () => ({
-  games: (await gameCatalog()).games.map((game) => ({
+const gameCatalog = async (onUpdated?: (data: GameCatalogPayload) => void): Promise<GameCatalogPayload> => {
+  const cached = await localDb.getSynchronizedGameCatalog().catch(() => undefined);
+  if (cached) return cached.data;
+  const stale = await localDb.getLatestGameCatalog().catch(() => undefined);
+  if (!stale) return refreshGameCatalog(null);
+  void refreshGameCatalog(stale.data).then((updated) => {
+    if (updated.throughVersion !== stale.data.throughVersion) onUpdated?.(updated);
+  }).catch(() => undefined);
+  return stale.data;
+};
+
+const toEditorCatalog = (catalog: GameCatalogPayload) => ({
+  games: catalog.games.map((game) => ({
     ...game,
     ruleCount: game.totalRuleCount ?? game.ruleCount,
   })),
 });
 
+const editorCatalogGames = async (onUpdated?: (data: { games: GameSummary[] }) => void) =>
+  toEditorCatalog(await gameCatalog((updated) => onUpdated?.(toEditorCatalog(updated))));
+
 const syncEditorCatalogGames = async () => {
   await localDb.invalidateGameCatalogSync();
-  return editorCatalogGames();
+  return toEditorCatalog(await refreshGameCatalog());
 };
+
+const gameContentKey = (game: GameDetail): string => JSON.stringify({
+  id: game.id,
+  slug: game.slug,
+  displayName: game.displayName,
+  englishName: game.englishName,
+  updatedAt: game.updatedAt,
+  latestRuleUpdatedAt: game.latestRuleUpdatedAt,
+  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status]),
+});
+
+const gameRefreshRequests = new Map<string, Promise<{ game: GameDetail }>>();
+const refreshGame = (identifier: string, includePrivate: boolean): Promise<{ game: GameDetail }> => {
+  const key = `${identifier}:${includePrivate ? 'private' : 'public'}`;
+  const existing = gameRefreshRequests.get(key);
+  if (existing) return existing;
+  const request = (async () => {
+    const response = await fetchGame(identifier, includePrivate);
+    const rulesComplete = Boolean(response.rulesComplete);
+    if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
+    if (!response.offlineFallback) await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
+    return { game: presentGame(response.game, includePrivate) };
+  })().finally(() => { if (gameRefreshRequests.get(key) === request) gameRefreshRequests.delete(key); });
+  gameRefreshRequests.set(key, request);
+  return request;
+};
+
+const ruleRefreshRequests = new Map<string, Promise<ApiRule>>();
+const refreshRule = (id: string): Promise<ApiRule> => {
+  const existing = ruleRefreshRequests.get(id);
+  if (existing) return existing;
+  const request = transportRequest<{ rule: ApiRule }>(`/api/rules/${id}`, undefined, 'cache-miss')
+    .then(async (response) => {
+      await localDb.cacheRuleEntity(response.rule).catch(() => undefined);
+      return response.rule;
+    })
+    .finally(() => { if (ruleRefreshRequests.get(id) === request) ruleRefreshRequests.delete(id); });
+  ruleRefreshRequests.set(id, request);
+  return request;
+};
+
+const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
+  rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.tagIds,
+]);
+
+let publicTagsRefreshRequest: Promise<{ tags: TagSummary[] }> | undefined;
+const refreshPublicTags = async () => {
+  if (publicTagsRefreshRequest) return publicTagsRefreshRequest;
+  publicTagsRefreshRequest = transportRequest<{ tags: TagSummary[] }>('/api/tags?v=2', undefined, 'cache-miss')
+    .then(async (data) => {
+      await localDb.cachePublicTags(data);
+      await localDb.cacheTagEntities(data.tags);
+      return data;
+    });
+  try { return await publicTagsRefreshRequest; }
+  finally { publicTagsRefreshRequest = undefined; }
+};
+
+const tagCollectionKey = (tags: TagSummary[]) => JSON.stringify(tags.map((tag) => [tag.id, tag.updatedAt, tag.name, tag.usageCount]));
 
 let homeRefreshRequest: Promise<HomePayload> | undefined;
 const refreshHome = async (): Promise<HomePayload> => {
@@ -178,16 +219,24 @@ export const api = {
   devLogin: () => mutation<{ user: SessionUser }>('/api/auth/dev', { method: 'POST', body: '{}' }),
   logout: () => mutation<{ ok: true }>('/api/logout', { method: 'POST', body: '{}' }),
   home,
-  searchGames: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 20) }),
-  search: async (query: string) => ({ games: filterGameCatalog((await gameCatalog()).games, query, 8), rules: [] as RuleSearchResult[] }),
+  searchGames: async (query: string, onUpdated?: (data: { games: GameSummary[] }) => void) => ({
+    games: filterGameCatalog((await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 20) }))).games, query, 20),
+  }),
+  search: async (query: string, onUpdated?: (data: { games: GameSummary[]; rules: RuleSearchResult[] }) => void) => ({
+    games: filterGameCatalog((await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 8), rules: [] }))).games, query, 8),
+    rules: [] as RuleSearchResult[],
+  }),
   invalidateSearchCache: () => localDb.invalidateSearch(),
-  tags: async (ids?: string[]) => {
+  tags: async (ids?: string[], onUpdated?: (data: { tags: TagSummary[] }) => void) => {
     if (!ids?.length) {
-      return cachedRead({
-        readCache: localDb.getCachedPublicTags,
-        fetchFresh: () => transportRequest<{ tags: TagSummary[] }>('/api/tags?v=2', undefined, 'cache-miss'),
-        writeCache: async (data) => { await localDb.cachePublicTags(data); await localDb.cacheTagEntities(data.tags); },
-      });
+      const cached = await localDb.getCachedPublicTags().catch(() => undefined);
+      if (cached) return cached.data;
+      const stale = await localDb.getLatestPublicTags().catch(() => undefined);
+      if (!stale) return refreshPublicTags();
+      void refreshPublicTags().then((updated) => {
+        if (tagCollectionKey(updated.tags) !== tagCollectionKey(stale.data.tags)) onUpdated?.(updated);
+      }).catch(() => undefined);
+      return stale.data;
     }
     const uniqueIds = Array.from(new Set(ids));
     const cached = await localDb.getCachedTagEntities(uniqueIds).catch(() => []);
@@ -199,8 +248,21 @@ export const api = {
       await localDb.cacheTagEntities(matchingPublicTags).catch(() => undefined);
     }
     const missingIds = uniqueIds.filter((id) => !cachedById.has(id));
+    const stale = await localDb.getLatestTagEntities(missingIds).catch(() => []);
+    stale.forEach((record) => cachedById.set(record.data.id, record.data));
+    const unavailableIds = uniqueIds.filter((id) => !cachedById.has(id));
     if (!missingIds.length) return { tags: uniqueIds.map((id) => cachedById.get(id)!) };
-    const data = await transportRequest<{ tags: TagSummary[] }>(`/api/tags?ids=${encodeURIComponent(missingIds.join(','))}&v=2`, undefined, 'cache-miss');
+    if (!unavailableIds.length) {
+      void transportRequest<{ tags: TagSummary[] }>(`/api/tags?ids=${encodeURIComponent(missingIds.join(','))}&v=2`, undefined, 'cache-miss')
+        .then(async (data) => {
+          await localDb.cacheTagEntities(data.tags);
+          const updated = uniqueIds.map((id) => data.tags.find((tag) => tag.id === id) ?? cachedById.get(id)!).filter(Boolean);
+          const previous = uniqueIds.map((id) => cachedById.get(id)!).filter(Boolean);
+          if (tagCollectionKey(updated) !== tagCollectionKey(previous)) onUpdated?.({ tags: updated });
+        }).catch(() => undefined);
+      return { tags: uniqueIds.map((id) => cachedById.get(id)!) };
+    }
+    const data = await transportRequest<{ tags: TagSummary[] }>(`/api/tags?ids=${encodeURIComponent(unavailableIds.join(','))}&v=2`, undefined, 'cache-miss');
     await localDb.cacheTagEntities(data.tags).catch(() => undefined);
     return { tags: [...uniqueIds.map((id) => cachedById.get(id)).filter((tag): tag is TagSummary => Boolean(tag)), ...data.tags] };
   },
@@ -211,14 +273,15 @@ export const api = {
   updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
-  game: async (identifier: string, includePrivate = false) => {
+  game: async (identifier: string, includePrivate = false, onUpdated?: (data: { game: GameDetail }) => void) => {
     const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
     if (cached) return { game: cached.data };
-    const response = await fetchGame(identifier, includePrivate);
-    const rulesComplete = Boolean(response.rulesComplete);
-    if (!response.offlineFallback) await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
-    if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
-    return { game: presentGame(response.game, includePrivate) };
+    const stale = await localDb.getLatestGame(identifier, includePrivate).catch(() => undefined);
+    if (!stale) return refreshGame(identifier, includePrivate);
+    void refreshGame(identifier, includePrivate).then((updated) => {
+      if (gameContentKey(updated.game) !== gameContentKey(stale.data)) onUpdated?.(updated);
+    }).catch(() => undefined);
+    return { game: stale.data };
   },
   editorCatalogGames,
   syncEditorCatalogGames,
@@ -240,11 +303,16 @@ export const api = {
   submit: (input: SubmissionInput) => mutation<{ submissionId: string; ruleIds?: string[]; reused: boolean }>('/api/submissions', {
     method: 'POST', body: JSON.stringify(input),
   }),
-  rule: async (id: string) => ({ rule: await cachedRead<ApiRule>({
-    readCache: async () => (await localDb.getCachedRuleEntity(id)) as { data: ApiRule } | undefined,
-    fetchFresh: () => transportRequest<{ rule: ApiRule }>(`/api/rules/${id}`, undefined, 'cache-miss').then((response) => response.rule),
-    writeCache: localDb.cacheRuleEntity,
-  }) }),
+  rule: async (id: string, onUpdated?: (data: { rule: ApiRule }) => void) => {
+    const cached = await localDb.getCachedRuleEntity(id).catch(() => undefined) as { data: ApiRule } | undefined;
+    if (cached) return { rule: cached.data };
+    const stale = await localDb.getLatestRuleEntity(id).catch(() => undefined) as { data: ApiRule } | undefined;
+    if (!stale) return { rule: await refreshRule(id) };
+    void refreshRule(id).then((updated) => {
+      if (ruleContentKey(updated) !== ruleContentKey(stale.data)) onUpdated?.({ rule: updated });
+    }).catch(() => undefined);
+    return { rule: stale.data };
+  },
   patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),

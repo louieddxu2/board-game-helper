@@ -142,7 +142,7 @@ export const CatalogPage = () => {
   const loadGames = async () => {
     setError('');
     try {
-      const data = await api.editorCatalogGames();
+      const data = await api.editorCatalogGames((updated) => setGames(updated.games));
       setGames(data.games);
     } catch {
       setError('列表載入失敗，請重新整理後再試。');
@@ -183,7 +183,13 @@ export const CatalogPage = () => {
     setLoadingGameId(game.id);
     setError('');
     try {
-      const data = await api.game(game.id, true);
+      const applyUpdated = async (updated: { game: GameDetail }) => {
+        const hydrated = await hydrateGameTags(updated.game);
+        if (requestId !== detailRequestId.current) return;
+        setExpandedGame(hydrated);
+        updateGameSummary(hydrated);
+      };
+      const data = await api.game(game.id, true, (updated) => { void applyUpdated(updated); });
       const hydratedGame = await hydrateGameTags(data.game);
       if (requestId !== detailRequestId.current) return;
       setExpandedGame(hydratedGame);
@@ -206,7 +212,12 @@ export const CatalogPage = () => {
     await localDb.invalidateGame(game.id);
     clearSearchCache();
     try {
-      const data = await api.game(game.id, true);
+      const data = await api.game(game.id, true, (updated) => {
+        void hydrateGameTags(updated.game).then((hydrated) => {
+          setExpandedGame(hydrated);
+          updateGameSummary(hydrated);
+        });
+      });
       const hydratedGame = await hydrateGameTags(data.game);
       setExpandedGame(hydratedGame);
       updateGameSummary(hydratedGame);

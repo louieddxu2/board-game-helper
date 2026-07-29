@@ -121,6 +121,22 @@ const notifyPending = () => {
 const findCachedGame = async (db: Awaited<ReturnType<typeof getDatabase>>, identifier: string) =>
   (await db.get('games', identifier)) ?? (await db.getFromIndex('games', 'slug', identifier));
 
+const readCachedGameDetail = async (
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  identifier: string,
+  includePrivate: boolean,
+  requireFresh: boolean,
+) => {
+  const game = await findCachedGame(db, identifier);
+  if (!game || (requireFresh && !isCachedRuleSetUsable(game, includePrivate)) || (includePrivate && !game.rulesComplete)) return undefined;
+  const storedRules = await db.getAllFromIndex('rules', 'gameId', game.id);
+  const rules = sortRules(storedRules.filter((rule) => includePrivate || rule.status === 'published'), includePrivate);
+  const { cachedAt: _cachedAt, rulesFetchedAt = 0, rulesComplete: _rulesComplete, rulesVersion: _rulesVersion, ...summary } = game;
+  const ruleCount = includePrivate ? game.totalRuleCount ?? rules.length : game.publishedRuleCount ?? rules.length;
+  const detail: GameDetail = { ...summary, rules, ruleCount };
+  return { key: `game:${game.id}`, data: detail, cachedAt: rulesFetchedAt };
+};
+
 const publicRuleOrder: Record<string, number> = {
   setup: 1, round: 2, action: 3, always: 4, end_scoring: 5, edition_player_count: 6, uncategorized: 7,
 };
@@ -282,6 +298,7 @@ export const localDb = {
   },
   cachePublicTags: async (data: PublicTagsResponse) => (await getDatabase()).put('cache', { key: PUBLIC_TAGS_CACHE_KEY, data, cachedAt: Date.now() }),
   getCachedPublicTags: async () => getFreshCache<PublicTagsResponse>(PUBLIC_TAGS_CACHE_KEY, DAY_CACHE_FRESH_MS),
+  getLatestPublicTags: async () => (await getDatabase()).get('cache', PUBLIC_TAGS_CACHE_KEY) as Promise<CacheRecord<PublicTagsResponse> | undefined>,
   invalidatePublicTags: async () => (await getDatabase()).delete('cache', PUBLIC_TAGS_CACHE_KEY),
   cacheTagEntities: async (tags: TagSummary[]) => {
     const db = await getDatabase();
@@ -292,6 +309,11 @@ export const localDb = {
     const records = await Promise.all(ids.map((id) => getFreshCache<TagSummary>(`tag:${id}`, DAY_CACHE_FRESH_MS)));
     return records.filter((record): record is TagCacheRecord => Boolean(record));
   },
+  getLatestTagEntities: async (ids: string[]) => {
+    const db = await getDatabase();
+    const records = await Promise.all(ids.map((id) => db.get('cache', `tag:${id}`) as Promise<TagCacheRecord | undefined>));
+    return records.filter((record): record is TagCacheRecord => Boolean(record));
+  },
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
   cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('rules', { ...rule, cachedAt: Date.now() }),
   getCachedRuleEntity: async (ruleId: string) => {
@@ -299,6 +321,10 @@ export const localDb = {
     return rule && Date.now() - rule.cachedAt < HOUR_CACHE_FRESH_MS
       ? { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt }
       : undefined;
+  },
+  getLatestRuleEntity: async (ruleId: string) => {
+    const rule = await (await getDatabase()).get('rules', ruleId);
+    return rule ? { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt } : undefined;
   },
   invalidateRuleEntity: async (ruleId: string) => {
     const db = await getDatabase();
@@ -333,20 +359,10 @@ export const localDb = {
   },
   getCachedGame: async (identifier: string, includePrivate = false) => {
     const db = await getDatabase();
-    const game = await findCachedGame(db, identifier);
-    if (!game || !isCachedRuleSetUsable(game, includePrivate)) return undefined;
-    const storedRules = await db.getAllFromIndex('rules', 'gameId', game.id);
-    const rules = sortRules(
-      storedRules.filter((rule) => includePrivate || rule.status === 'published'),
-      includePrivate,
-    );
-    const { cachedAt: _cachedAt, rulesFetchedAt, rulesComplete: _rulesComplete, rulesVersion: _rulesVersion, ...summary } = game;
-    const ruleCount = includePrivate
-      ? game.totalRuleCount ?? rules.length
-      : game.publishedRuleCount ?? rules.length;
-    const detail: GameDetail = { ...summary, rules, ruleCount };
-    return { key: `game:${game.id}`, data: detail, cachedAt: rulesFetchedAt };
+    return readCachedGameDetail(db, identifier, includePrivate, true);
   },
+  getLatestGame: async (identifier: string, includePrivate = false) =>
+    readCachedGameDetail(await getDatabase(), identifier, includePrivate, false),
   invalidateGame: async (identifier: string) => {
     const db = await getDatabase();
     const game = await findCachedGame(db, identifier);

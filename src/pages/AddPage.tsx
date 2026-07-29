@@ -9,7 +9,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
-import type { GameSummary, SubmissionInput } from '../shared/types';
+import type { GameDetail, GameSummary, SubmissionInput } from '../shared/types';
 
 type RuleInput = { id: string; statement: string; commonMistake?: string; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagNames?: string[] };
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
@@ -63,7 +63,10 @@ export const AddPage = () => {
       const requestedGame = searchParams.get('game');
       const nameParam = searchParams.get('name') || searchParams.get('gameName');
       if (requestedGame) {
-        const response = await api.game(requestedGame);
+        const response = await api.game(requestedGame, false, (updated) => {
+          if (!active) return;
+          setGame(updated.game); setGameQuery(updated.game.displayName); setEnglishName(updated.game.englishName ?? '');
+        });
         if (!active) return;
         setGame(response.game); setGameQuery(response.game.displayName); setEnglishName(response.game.englishName ?? '');
         window.setTimeout(() => inputRefs.current[rules[0].id]?.focus(), 0);
@@ -78,9 +81,10 @@ export const AddPage = () => {
     let active = true;
     const gameId = selectedGameId;
     setGameEditionOptions((current) => current?.gameId === gameId ? current : { gameId, options: [] });
-    void api.game(gameId, true).then(({ game: detail }) => {
+    const applyOptions = ({ game: detail }: { game: GameDetail }) => {
       if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules) });
-    }).catch(() => undefined);
+    };
+    void api.game(gameId, true, applyOptions).then(applyOptions).catch(() => undefined);
     return () => { active = false; };
   }, [selectedGameId]);
   useEffect(() => {

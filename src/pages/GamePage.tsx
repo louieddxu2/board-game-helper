@@ -48,7 +48,9 @@ export const GamePage = () => {
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
     try {
-      const response = await api.game(identifier);
+      const response = await api.game(identifier, false, (updated) => {
+        void hydrateGameTags(updated.game).then(setGame);
+      });
       const hydratedGame = await hydrateGameTags(response.game);
       setGame(hydratedGame);
     } finally { setLoading(false); }
@@ -57,7 +59,11 @@ export const GamePage = () => {
     let active = true;
     setLoading(true);
     const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
-    void (justAdded ? localDb.invalidateGame(identifier) : Promise.resolve()).then(() => api.game(identifier)).then(async (response) => {
+    const applyUpdated = async (updated: { game: GameDetail }) => {
+      const hydratedGame = await hydrateGameTags(updated.game);
+      if (active) setGame(hydratedGame);
+    };
+    void (justAdded ? localDb.invalidateGame(identifier) : Promise.resolve()).then(() => api.game(identifier, false, (updated) => { void applyUpdated(updated); })).then(async (response) => {
       const hydratedGame = await hydrateGameTags(response.game);
       if (active) setGame(hydratedGame);
     }).finally(() => { if (active) setLoading(false); });
