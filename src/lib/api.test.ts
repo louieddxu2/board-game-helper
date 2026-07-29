@@ -255,9 +255,20 @@ describe('api editor catalog cache boundary', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue({ key: 'games:list:versioned:v2', data: catalog, cachedAt: 1 });
 
-    const result = await (api.editorCatalogGames as (...args: unknown[]) => ReturnType<typeof api.editorCatalogGames>)(true);
+    const result = await (api.catalogGames as (...args: unknown[]) => ReturnType<typeof api.catalogGames>)(true);
 
     expect(result.games[0].ruleCount).toBe(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('reuses the same cache while hiding private rule counts from ordinary users', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue({ key: 'games:list:versioned:v2', data: catalog, cachedAt: 1 });
+
+    const result = await api.catalogGames(false);
+
+    expect(result.games[0].ruleCount).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -269,7 +280,7 @@ describe('api editor catalog cache boundary', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ changes: [], throughVersion: 10, hasMore: false }) });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await api.syncEditorCatalogGames();
+    const result = await api.syncCatalogGames(true);
 
     expect(result.games[0].ruleCount).toBe(2);
     expect(invalidate).toHaveBeenCalledOnce();

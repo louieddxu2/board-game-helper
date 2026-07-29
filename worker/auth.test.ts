@@ -15,6 +15,10 @@ describe('public read authentication boundary', () => {
     expect(isPublicReadRequest('GET', 'https://rules.example/api/games/game-1?includePrivate=1')).toBe(false);
   });
 
+  test('requires an authenticated administrator for the full dataset export', () => {
+    expect(isPublicReadRequest('GET', 'https://rules.example/api/export/public')).toBe(false);
+  });
+
   test('does not classify mutations as public reads', () => {
     expect(isPublicReadRequest('POST', 'https://rules.example/api/games/game-1')).toBe(false);
   });

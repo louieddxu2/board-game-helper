@@ -7,13 +7,14 @@ servers:
 paths:
   /api/export/public:
     get:
-      summary: 下載全部公開遊戲與規則快照
+      summary: 管理員下載全部公開遊戲與規則快照
+      security: [{ bearerAuth: [] }]
       parameters:
         - in: header
           name: If-None-Match
           schema: { type: string }
       responses:
-        "200": { description: 公開 JSON 快照，含 ETag }
+        "200": { description: 管理員用 JSON 快照，含 ETag }
         "304": { description: 本機快照仍是最新版 }
   /api/games/resolve:
     get:

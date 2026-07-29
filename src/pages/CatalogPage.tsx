@@ -6,8 +6,9 @@ import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
-import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
+import { RULE_CATEGORY_LABELS, type GameDetail, type GameSummary, type RuleCard, type TagSummary } from '../shared/types';
 import { RuleEditor } from './GamePage';
+import { effectiveRuleCategories } from '../lib/ruleCategories';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -28,6 +29,13 @@ const ruleTagNames = (rule: RuleCard) => rule.tags.length
   ? <span className="catalog-rule-tag-list">{rule.tags.map((tag) => <span key={tag.id}>#{tag.name}</span>)}</span>
   : '—';
 
+const ruleCategoryNames = (rule: RuleCard, publicTags: TagSummary[]) => {
+  const categories = effectiveRuleCategories(rule, publicTags);
+  return categories.length
+    ? <span className="catalog-rule-category-list">{categories.map((category) => <span key={category}>{RULE_CATEGORY_LABELS[category]}</span>)}</span>
+    : '—';
+};
+
 const ScrollableGameName = ({ name, emphasized = false }: { name: string; emphasized?: boolean }) => {
   const scrollerRef = useRef<HTMLSpanElement>(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -46,8 +54,9 @@ const ScrollableGameName = ({ name, emphasized = false }: { name: string; emphas
   </span>;
 };
 
-const RulesSheet = ({ game, activeTags, onTagsChange, onEdit, canEditRule }: {
+const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEditRule }: {
   game: GameDetail;
+  publicTags: TagSummary[];
   activeTags: string[];
   onTagsChange(tags: string[]): void;
   onEdit(rule: RuleCard): void;
@@ -72,18 +81,19 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit, canEditRule }: {
     </div>
     <div className="catalog-detail-scroll">
       <table className="catalog-rules-table">
-        <colgroup><col className="catalog-col-status" /><col className="catalog-col-rule" /><col className="catalog-col-mistake" /><col className="catalog-col-details" /><col className="catalog-col-source" /><col className="catalog-col-tags" /><col className="catalog-col-updated" /></colgroup>
+        <colgroup><col className="catalog-col-status" /><col className="catalog-col-rule" /><col className="catalog-col-mistake" /><col className="catalog-col-details" /><col className="catalog-col-source" /><col className="catalog-col-category" /><col className="catalog-col-tags" /><col className="catalog-col-updated" /></colgroup>
         <thead>
-          <tr><th>狀態</th><th>規則</th><th>玩錯情況</th><th>補充</th><th>來源</th><th>Tag</th><th>更新／操作</th></tr>
+          <tr><th>狀態</th><th>規則</th><th>玩錯情況</th><th>補充</th><th>來源</th><th>分類</th><th>Tag</th><th>更新／操作</th></tr>
         </thead>
         <tbody>
-          {visibleRules.length === 0 && <tr><td colSpan={7} className="catalog-empty-cell">沒有符合篩選條件的規則。</td></tr>}
+          {visibleRules.length === 0 && <tr><td colSpan={8} className="catalog-empty-cell">沒有符合篩選條件的規則。</td></tr>}
           {visibleRules.map((rule) => <tr key={rule.id}>
             <td data-label="狀態" className="catalog-rule-status-cell"><span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span></td>
             <td data-label="規則" className="catalog-text-cell catalog-rule-statement"><strong>{rule.statement}</strong></td>
             <td data-label="玩錯情況" className="catalog-text-cell">{rule.commonMistake || '—'}</td>
             <td data-label="補充" className="catalog-text-cell">{rule.details || '—'}</td>
             <td data-label="來源" className="catalog-rule-side catalog-rule-source">{sourceCell(rule)}</td>
+            <td data-label="分類" className="catalog-rule-side catalog-rule-categories">{ruleCategoryNames(rule, publicTags)}</td>
             <td data-label="Tag" className="catalog-rule-side catalog-rule-tags">{ruleTagNames(rule)}</td>
             <td data-label="更新於" className="catalog-rule-side catalog-update-cell"><span>{formatDate(rule.updatedAt || game.updatedAt)}</span>{canEditRule(rule) && <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>}</td>
           </tr>)}
@@ -103,6 +113,7 @@ const RulesSheet = ({ game, activeTags, onTagsChange, onEdit, canEditRule }: {
               {canEditRule(rule) && <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>}
             </div>
             <div><span>來源</span><p>{sourceCell(rule)}</p></div>
+            <div><span>分類</span><p>{ruleCategoryNames(rule, publicTags)}</p></div>
             <div><span>Tag</span><p>{ruleTagNames(rule)}</p></div>
             <div><span>更新於</span><time dateTime={new Date(rule.updatedAt || game.updatedAt).toISOString()}>{formatDate(rule.updatedAt || game.updatedAt)}</time></div>
           </aside>
@@ -123,6 +134,7 @@ export const CatalogPage = () => {
   const [editingRule, setEditingRule] = useState<RuleCard>();
   const [loadingGameId, setLoadingGameId] = useState<string>();
   const [error, setError] = useState('');
+  const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
   const detailRequestId = useRef(0);
 
   const filteredGames = useMemo(() => {
@@ -142,7 +154,7 @@ export const CatalogPage = () => {
   const loadGames = async () => {
     setError('');
     try {
-      const data = await api.editorCatalogGames((updated) => setGames(updated.games));
+      const data = await api.catalogGames(canEdit, (updated) => setGames(updated.games));
       setGames(data.games);
     } catch {
       setError('列表載入失敗，請重新整理後再試。');
@@ -152,7 +164,7 @@ export const CatalogPage = () => {
   const syncGames = async () => {
     setError('');
     try {
-      const data = await api.syncEditorCatalogGames();
+      const data = await api.syncCatalogGames(canEdit);
       setGames(data.games);
       if (expandedGameId && !data.games.some((game) => game.id === expandedGameId)) {
         detailRequestId.current += 1;
@@ -167,7 +179,14 @@ export const CatalogPage = () => {
     }
   };
 
-  useEffect(() => { if (canEdit) void loadGames(); }, [canEdit]);
+  useEffect(() => { if (user) void loadGames(); }, [user?.id, canEdit]);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const apply = (data: { tags: TagSummary[] }) => { if (active) setClassificationTags(data.tags); };
+    void api.tags(undefined, apply).then(apply).catch(() => undefined);
+    return () => { active = false; };
+  }, [user?.id]);
 
   const toggleGame = async (game: GameSummary) => {
     const requestId = ++detailRequestId.current;
@@ -189,7 +208,7 @@ export const CatalogPage = () => {
         setExpandedGame(hydrated);
         updateGameSummary(hydrated);
       };
-      const data = await api.game(game.id, true, (updated) => { void applyUpdated(updated); });
+      const data = await api.game(game.id, canEdit, (updated) => { void applyUpdated(updated); });
       const hydratedGame = await hydrateGameTags(data.game);
       if (requestId !== detailRequestId.current) return;
       setExpandedGame(hydratedGame);
@@ -212,7 +231,7 @@ export const CatalogPage = () => {
     await localDb.invalidateGame(game.id);
     clearSearchCache();
     try {
-      const data = await api.game(game.id, true, (updated) => {
+      const data = await api.game(game.id, canEdit, (updated) => {
         void hydrateGameTags(updated.game).then((hydrated) => {
           setExpandedGame(hydrated);
           updateGameSummary(hydrated);
@@ -227,15 +246,15 @@ export const CatalogPage = () => {
   };
 
   if (loading) return <section className="catalog-page"><p className="eyebrow">列表</p><h1>正在確認權限…</h1></section>;
-  if (!canEdit) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/login" replace />;
 
   return <section className="catalog-page">
     <header className="catalog-header">
       <div>
-        <p className="eyebrow">Editor / Admin</p>
+        <p className="eyebrow">{canEdit ? 'Editor / Admin' : '已登入帳號'}</p>
         <h1>遊戲列表</h1>
       </div>
-      <button type="button" className="button secondary" onClick={() => void syncGames()}>同步目錄</button>
+      {canEdit && <button type="button" className="button secondary" onClick={() => void syncGames()}>同步目錄</button>}
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">
@@ -268,7 +287,7 @@ export const CatalogPage = () => {
               <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}</td>
               <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
-            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入全部規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} canEditRule={canEditRule} /> : null}</td></tr>}
+            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} canEditRule={canEditRule} /> : null}</td></tr>}
           </Fragment>)}
         </tbody>
       </table>

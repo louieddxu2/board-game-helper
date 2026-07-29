@@ -125,7 +125,7 @@ footer a { color: inherit; }
 .personal-home-search .search-input { box-shadow: 0 12px 32px rgba(4,22,17,.22); }
 .personal-home-recents { display: flex; align-items: center; gap: 9px; margin-top: 12px; color: #b9c9c3; font-size: 12px; }
 .personal-home-recents > div { display: flex; flex-wrap: wrap; gap: 6px; }
-.personal-home-recents a { border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 4px 10px; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; }
+.personal-home-recents a { display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; min-height: 26px; padding: 4px 10px; line-height: 1.2; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; }
 .personal-home-recents a:hover { background: rgba(255,255,255,.22); }
 .personal-home-content { padding: 38px 0 18px; }
 .personal-home-section { width: 100%; }
@@ -210,6 +210,9 @@ footer a { color: inherit; }
 .narrow-page { width: min(760px, calc(100% - 40px)); margin: 0 auto; padding: 70px 0 120px; }
 .narrow-page > header { margin-bottom: 38px; }
 .narrow-page h1 { font-size: clamp(38px, 6vw, 62px); }
+.add-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.add-page-heading h1 { margin: 0; }
+.rule-draft-import { flex: none; cursor: pointer; }
 .narrow-page header > p:last-child, .login-page > p { color: var(--muted); line-height: 1.7; }
 .record-game-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 15px; margin-bottom: 34px; }
 .record-game-name-field { min-width: 0; }
@@ -320,6 +323,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .import-card article { border-top: 1px solid var(--line); padding: 15px 0; }
 .import-card article p { white-space: pre-wrap; line-height: 1.55; font-size: 13px; margin: 7px 0; }
 .import-card article small { color: var(--muted); }
+.admin-tag-merge { display: grid; gap: 10px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.admin-tag-merge h3, .admin-tag-merge p { margin: 0; }
+.admin-tag-merge label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+.admin-tag-merge .button { justify-self: start; }
 .inline-actions { display: flex; gap: 14px; margin-top: 8px; }
 .merge-arrow { text-align: center; padding: 11px; color: var(--muted); font-size: 12px; }
 .full-button { width: 100%; margin-top: 18px; }
@@ -503,6 +510,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
+  .add-page-heading { align-items: flex-end; margin-bottom: 28px !important; }
+  .add-page-heading h1 { font-size: 34px; }
+  .rule-draft-import { min-height: 42px; padding: 0 13px; white-space: nowrap; }
   .record-game-fields { grid-template-columns: 1fr; }
   .rule-input-fields > .player-count-input { margin-left: -38px; margin-right: -40px; }
   .player-count-track { gap: 2px; padding: 3px; }

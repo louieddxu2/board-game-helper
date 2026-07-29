@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { api } from '../lib/api';
-import { localDb } from '../lib/localDb';
 import type { SessionUser } from '../shared/types';
-import { clearSearchCache } from '../components/GameSearch';
+import { flushPendingSubmissions } from '../lib/pendingSync';
 
 export type MockRole = 'unauthenticated' | 'user' | 'editor' | 'admin' | null;
 
@@ -61,21 +60,10 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     if (!user?.roles.some((role) => role === 'admin' || role === 'editor')) return;
-    void localDb.getPending().then(async (pendingItems) => {
-      for (const item of pendingItems) {
-        try {
-          await api.submit(item.payload);
-          await localDb.removePending(item.id);
-          const draft = await localDb.getDraft();
-          const sameDraft = draft?.game?.id === item.payload.gameId
-            && draft.rules.filter((rule) => rule.statement.trim()).map((rule) => rule.statement.trim()).join('\n')
-              === item.payload.rules.map((rule) => rule.statement.trim()).join('\n');
-          if (sameDraft) await localDb.clearDraft();
-          await localDb.clearCache();
-          clearSearchCache();
-        } catch { /* the queue remains available for the next online session */ }
-      }
-    });
+    const synchronize = () => { void flushPendingSubmissions(); };
+    synchronize();
+    window.addEventListener('online', synchronize);
+    return () => window.removeEventListener('online', synchronize);
   }, [user]);
 
   const realIsAdmin = Boolean(user?.roles.includes('admin'));

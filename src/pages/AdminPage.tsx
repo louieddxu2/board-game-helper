@@ -27,6 +27,8 @@ export const AdminPage = () => {
   const [newTagName, setNewTagName] = useState('');
   const [newTagDesc, setNewTagDesc] = useState('');
   const [tagQuery, setTagQuery] = useState('');
+  const [sourceTagId, setSourceTagId] = useState('');
+  const [targetTagId, setTargetTagId] = useState('');
 
   const load = async () => {
     const [editorData, importData, hiddenData, tagData] = await Promise.all([
@@ -76,6 +78,27 @@ export const AdminPage = () => {
     await localDb.invalidateTagEntity(tag.id);
     clearPublicTagCache();
     showToast(`已更新 #${input.name}`);
+    await load();
+  };
+
+  const handleMergeTags = async () => {
+    const source = tags.find((tag) => tag.id === sourceTagId);
+    const target = tags.find((tag) => tag.id === targetTagId);
+    if (!source || !target || source.id === target.id) return;
+    const approved = await confirm({
+      title: '合併 Tag？',
+      message: `所有 #${source.name} 的規則會改用 #${target.name}，原名稱會保留為別名。`,
+      confirmLabel: '合併 Tag',
+      tone: 'danger',
+    });
+    if (!approved) return;
+    await api.mergeAdminTag(source.id, target.id);
+    await localDb.clearCache({ includeTags: true });
+    clearPublicTagCache();
+    clearSearchCache();
+    setSourceTagId('');
+    setTargetTagId('');
+    showToast(`已將 #${source.name} 合併到 #${target.name}`);
     await load();
   };
 
@@ -200,6 +223,13 @@ export const AdminPage = () => {
               onTogglePublic={handleTogglePublic}
             />
           ))}
+        </div>
+        <div className="admin-tag-merge">
+          <h3>合併重複 Tag</h3>
+          <p className="muted">規則會統一改用目標 Tag；來源名稱與既有別名仍可供內容偵測與舊輸入對應。</p>
+          <label>來源 Tag<select value={sourceTagId} onChange={(event) => setSourceTagId(event.target.value)}><option value="">請選擇</option>{tags.map((tag) => <option key={tag.id} value={tag.id}>#{tag.name}（{tag.usageCount ?? 0}）</option>)}</select></label>
+          <label>合併到<select value={targetTagId} onChange={(event) => setTargetTagId(event.target.value)}><option value="">請選擇</option>{tags.filter((tag) => tag.id !== sourceTagId).map((tag) => <option key={tag.id} value={tag.id}>#{tag.name}（{tag.usageCount ?? 0}）</option>)}</select></label>
+          <button type="button" className="button secondary" disabled={!sourceTagId || !targetTagId || sourceTagId === targetTagId} onClick={() => void handleMergeTags()}>合併 Tag</button>
         </div>
       </section>
 

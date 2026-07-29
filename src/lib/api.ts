@@ -113,19 +113,19 @@ const gameCatalog = async (onUpdated?: (data: GameCatalogPayload) => void): Prom
   return stale.data;
 };
 
-const toEditorCatalog = (catalog: GameCatalogPayload) => ({
+const toCatalog = (catalog: GameCatalogPayload, includePrivate: boolean) => ({
   games: catalog.games.map((game) => ({
     ...game,
-    ruleCount: game.totalRuleCount ?? game.ruleCount,
+    ruleCount: includePrivate ? game.totalRuleCount ?? game.ruleCount : game.publishedRuleCount ?? game.ruleCount,
   })),
 });
 
-const editorCatalogGames = async (onUpdated?: (data: { games: GameSummary[] }) => void) =>
-  toEditorCatalog(await gameCatalog((updated) => onUpdated?.(toEditorCatalog(updated))));
+const catalogGames = async (includePrivate: boolean, onUpdated?: (data: { games: GameSummary[] }) => void) =>
+  toCatalog(await gameCatalog((updated) => onUpdated?.(toCatalog(updated, includePrivate))), includePrivate);
 
-const syncEditorCatalogGames = async () => {
+const syncCatalogGames = async (includePrivate: boolean) => {
   await localDb.invalidateGameCatalogSync();
-  return toEditorCatalog(await refreshGameCatalog());
+  return toCatalog(await refreshGameCatalog(), includePrivate);
 };
 
 const gameContentKey = (game: GameDetail): string => JSON.stringify({
@@ -299,6 +299,9 @@ export const api = {
   updateAdminTag: (id: string, input: { name?: string; description?: string; isPublic?: boolean; aliases?: string[]; categoryHints?: TagSummary['categoryHints']; detectionKeywords?: string[] }) => mutation<{ ok: true }>(`/api/admin/tags/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
+  mergeAdminTag: (sourceTagId: string, targetTagId: string) => mutation<{ ok: true; sourceTagId: string; targetTagId: string }>(`/api/admin/tags/${sourceTagId}/merge`, {
+    method: 'POST', body: JSON.stringify({ targetTagId }),
+  }),
   game: async (identifier: string, includePrivate = false, onUpdated?: (data: { game: GameDetail }) => void) => {
     const cached = await localDb.getCachedGame(identifier, includePrivate).catch(() => undefined);
     if (cached) return { game: cached.data };
@@ -309,8 +312,8 @@ export const api = {
     }).catch(() => undefined);
     return { game: stale.data };
   },
-  editorCatalogGames,
-  syncEditorCatalogGames,
+  catalogGames,
+  syncCatalogGames,
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
   createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ game: GameSummary }>('/api/games', {

@@ -24,7 +24,7 @@ describe('integration CORS', () => {
     expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
   });
 
-  test('allows public snapshot revalidation from other apps without credentials', async () => {
+  test('does not expose the administrator snapshot to unrelated origins', async () => {
     const response = await app.request('https://rules.example.com/api/export/public', {
       method: 'OPTIONS',
       headers: {
@@ -34,9 +34,8 @@ describe('integration CORS', () => {
       },
     }, env);
 
-    expect(response.status).toBe(204);
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
-    expect(response.headers.get('Access-Control-Allow-Headers')).toContain('If-None-Match');
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
 
   test('rejects preflight from unrelated sites', async () => {

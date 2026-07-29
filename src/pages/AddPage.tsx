@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
@@ -10,6 +10,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
+import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import type { GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
 
 type RuleInput = { id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] };
@@ -122,6 +123,46 @@ export const AddPage = () => {
     setRules(nextRules);
     if (activeRuleId === id) setActiveRuleId(nextRules[0].id);
   };
+  const importRuleDraft = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError('');
+    try {
+      const imported = parseRuleDraftImport(await file.text());
+      if (validRules.length > 0) {
+        const approved = await confirm({
+          title: '取代目前草稿？',
+          message: `匯入 ${imported.rules.length} 條規則會取代目前尚未送出的內容。`,
+          confirmLabel: '取代並匯入',
+        });
+        if (!approved) return;
+      }
+      const importedRules: RuleInput[] = imported.rules.map((rule) => ({
+        ...rule,
+        id: crypto.randomUUID(),
+        tagSelections: rule.tagNames?.map((name) => ({ name })) ?? [],
+        tagNames: undefined,
+      }));
+      const importedGame = imported.game.id && imported.game.slug ? {
+        id: imported.game.id,
+        slug: imported.game.slug,
+        displayName: imported.game.displayName,
+        englishName: imported.game.englishName,
+        ruleCount: 0,
+        updatedAt: Date.now(),
+      } : undefined;
+      setGame(importedGame);
+      setGameQuery(imported.game.displayName);
+      setEnglishName(imported.game.englishName ?? '');
+      setRules(importedRules);
+      setActiveRuleId(importedRules[0].id);
+      setPlayedOn(imported.playedOn ?? today());
+      setPrivateNote(imported.privateNote ?? '');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '無法匯入規則清單');
+    }
+  };
   const submit = async () => {
     if (validRules.length === 0 || saving || (!game && !gameQuery.trim())) return;
     setSaving(true); setError('');
@@ -180,7 +221,7 @@ export const AddPage = () => {
   };
   if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
   return <section className="add-page narrow-page">
-    <header><h1>記錄玩錯的規則</h1></header>
+    <header className="add-page-heading"><h1>記錄玩錯的規則</h1><label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label></header>
     <div className="record-game-fields">
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); window.setTimeout(() => document.querySelector<HTMLInputElement>('.record-game-name-field input')?.focus(), 0); }}>編輯</button>}</div>

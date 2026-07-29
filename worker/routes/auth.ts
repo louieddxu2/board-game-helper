@@ -27,6 +27,9 @@ authRoutes.get('/api/session', (c) => c.json({
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
+  if (!user.roles.some((role) => role === 'editor' || role === 'admin')) {
+    return c.json({ user, createdRules: [], modifiedRules: [] });
+  }
   const [createdResult, modifiedResult] = await Promise.all([
     getDatabase(c).statement(`
       SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,

@@ -220,8 +220,10 @@ export const tagWriteStatements = async (
   const existingByName = new Map<string, string>();
   if (normalizedNames.length) {
     const existing = await getDatabase(c).statement(`
-      SELECT id, normalized_name FROM tags
-      WHERE normalized_name IN (${normalizedNames.map(() => '?').join(',')})
+      SELECT CASE WHEN status = 'merged' THEN merged_into_tag_id ELSE id END AS id, normalized_name
+      FROM tags
+      WHERE status IN ('active', 'merged')
+        AND normalized_name IN (${normalizedNames.map(() => '?').join(',')})
     `).bind(...normalizedNames).all<{ id: string; normalized_name: string }>();
     for (const tag of existing.results ?? []) existingByName.set(tag.normalized_name, tag.id);
   }

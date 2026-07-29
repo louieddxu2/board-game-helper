@@ -221,5 +221,48 @@ tagsRoutes.patch('/api/admin/tags/:id', requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
+const mergeTagSchema = z.object({ targetTagId: z.string().min(1).max(100) });
+
+tagsRoutes.post('/api/admin/tags/:id/merge', requireRole('admin'), async (c) => {
+  const sourceTagId = c.req.param('id');
+  const parsed = mergeTagSchema.safeParse(await c.req.json());
+  if (!parsed.success || parsed.data.targetTagId === sourceTagId) return c.json({ error: 'invalid_input' }, 400);
+  const targetTagId = parsed.data.targetTagId;
+  const rows = await getDatabase(c).statement(`
+    SELECT id, name, normalized_name FROM tags
+    WHERE id IN (?, ?) AND status = 'active'
+  `).bind(sourceTagId, targetTagId).all<{ id: string; name: string; normalized_name: string }>();
+  const source = rows.results?.find((tag) => tag.id === sourceTagId);
+  const target = rows.results?.find((tag) => tag.id === targetTagId);
+  if (!source || !target) return c.json({ error: 'tag_not_found' }, 404);
+
+  const timestamp = Date.now();
+  const aliasSuffix = (await sha256Hex(source.normalized_name)).slice(0, 20);
+  await getDatabase(c).batch([
+    getDatabase(c).statement(`
+      INSERT OR IGNORE INTO rule_tags (rule_id, tag_id, created_by, created_at)
+      SELECT rule_id, ?, created_by, created_at FROM rule_tags WHERE tag_id = ?
+    `).bind(targetTagId, sourceTagId),
+    getDatabase(c).statement(`
+      UPDATE rules SET tag_ids_json = COALESCE((
+        SELECT json_group_array(tag_id) FROM rule_tags
+        WHERE rule_id = rules.id AND tag_id <> ?
+      ), '[]')
+      WHERE id IN (SELECT rule_id FROM rule_tags WHERE tag_id = ?)
+    `).bind(sourceTagId, sourceTagId),
+    getDatabase(c).statement('DELETE FROM rule_tags WHERE tag_id = ?').bind(sourceTagId),
+    getDatabase(c).statement('UPDATE tag_aliases SET tag_id = ? WHERE tag_id = ?').bind(targetTagId, sourceTagId),
+    getDatabase(c).statement(`
+      INSERT OR IGNORE INTO tag_aliases (id, tag_id, alias, normalized_alias, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(`ta_${aliasSuffix}`, targetTagId, source.name, source.normalized_name, timestamp),
+    getDatabase(c).statement(`
+      UPDATE tags SET status = 'merged', merged_into_tag_id = ?, is_public = 0, updated_at = ? WHERE id = ?
+    `).bind(targetTagId, timestamp, sourceTagId),
+    getDatabase(c).statement('UPDATE tags SET updated_at = ? WHERE id = ?').bind(timestamp, targetTagId),
+  ]);
+  return c.json({ ok: true, sourceTagId, targetTagId });
+});
+
 
 export { tagsRoutes };

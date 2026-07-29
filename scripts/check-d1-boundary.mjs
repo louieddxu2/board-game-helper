@@ -56,6 +56,17 @@ const workerIndexSource = fs.readFileSync(path.resolve('worker/index.ts'), 'utf8
 if (/query\(\s*['"]fresh['"]\s*\)/.test(workerIndexSource)) {
   violations.push('worker/index.ts: URL parameters must not disable response caching');
 }
+const authSource = fs.readFileSync(path.resolve('worker/auth.ts'), 'utf8');
+const adminRouteSource = fs.readFileSync(path.resolve('worker/routes/admin.ts'), 'utf8');
+if (/isPublicCacheableRequest[\s\S]*?export\/public/.test(workerIndexSource)) {
+  violations.push('worker/index.ts: full dataset export must never be a public cacheable request');
+}
+if (/isPublicReadRequest[\s\S]*?export\/public/.test(authSource)) {
+  violations.push('worker/auth.ts: full dataset export must remain outside the public authentication fast path');
+}
+if (!/get\('\/api\/export\/public',\s*requireRole\('admin'\)/.test(adminRouteSource)) {
+  violations.push('worker/routes/admin.ts: full dataset export must remain administrator-only');
+}
 
 const productionConfigSource = fs.readFileSync(path.resolve('wrangler.production.jsonc'), 'utf8');
 if (!productionConfigSource.includes('"crons": ["0 16 * * *"]')) {
@@ -115,6 +126,16 @@ const sharedRouteSource = fs.readFileSync(path.resolve('worker/routes/shared.ts'
 const tagWriteHelper = sharedRouteSource.split('export const tagWriteStatements')[1]?.split('export interface GameRow')[0] ?? '';
 if (/JOIN\s+tag_aliases|normalized_alias/i.test(tagWriteHelper)) {
   violations.push('worker/routes/shared.ts: rule tag writes must use submitted IDs or indexed canonical names; alias-table lookup is forbidden');
+}
+if (!/status\s*=\s*'merged'[\s\S]*merged_into_tag_id/.test(tagWriteHelper)) {
+  violations.push('worker/routes/shared.ts: canonical names of merged tags must resolve to their active target');
+}
+const accountRouteSource = fs.readFileSync(path.resolve('worker/routes/auth.ts'), 'utf8');
+const accountHandler = accountRouteSource.split("authRoutes.get('/api/account'")[1]?.split("authRoutes.patch('/api/account/nickname'")[0] ?? '';
+const ordinaryUserReturn = accountHandler.indexOf('createdRules: [], modifiedRules: []');
+const accountRuleRead = accountHandler.indexOf('FROM rules r');
+if (ordinaryUserReturn < 0 || accountRuleRead < 0 || ordinaryUserReturn > accountRuleRead) {
+  violations.push('worker/routes/auth.ts: ordinary users must return before editor rule-activity queries');
 }
 
 if (violations.length > 0) {

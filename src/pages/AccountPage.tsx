@@ -156,7 +156,7 @@ export const AccountPage = () => {
       <button type="button" className="button secondary" disabled={favoritesClearing} onClick={() => void clearFavorites()}>{favoritesClearing ? '清除中…' : '清除所有收藏'}</button>
     </section>
     {!account && !error && <p className="muted">正在載入帳號資料…</p>}
-    {account && <div className="account-sections">
+    {canEdit && account && <div className="account-sections">
       <section className="account-card">
         <div className="account-section-heading"><h2>我建立的規則</h2><span>{account.createdRules.length} 筆</span></div>
         {account.createdRules.length > 0 ? <ul className="account-list">{account.createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前還沒有建立規則。</p>}
