@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
+import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, RULE_IMPORTANCE_CACHE_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
 
 const now = 10_000_000;
 
@@ -42,6 +42,12 @@ describe('normalized game rule cache freshness', () => {
 describe('public tag catalog freshness', () => {
   test('checks version updates once per week', () => {
     expect(PUBLIC_TAG_CATALOG_FRESH_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe('rule importance cache freshness', () => {
+  test('checks the signed-in vote list every ten minutes', () => {
+    expect(RULE_IMPORTANCE_CACHE_FRESH_MS).toBe(10 * 60 * 1000);
   });
 });
 

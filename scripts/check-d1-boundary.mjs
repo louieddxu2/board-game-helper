@@ -91,11 +91,42 @@ for (const directory of clientFiles) {
 
 const gamesRouteSource = fs.readFileSync(path.resolve('worker/routes/games.ts'), 'utf8');
 const tagsRouteSource = fs.readFileSync(path.resolve('worker/routes/tags.ts'), 'utf8');
+const rulesRouteSource = fs.readFileSync(path.resolve('worker/routes/rules.ts'), 'utf8');
+const importanceDataSource = fs.readFileSync(path.resolve('worker/data/ruleImportance.ts'), 'utf8');
+const importanceMigrationSource = fs.readFileSync(path.resolve('migrations/0030_rule_importance_votes.sql'), 'utf8');
 const editorCatalogRoutePath = path.resolve('worker/routes/catalog.ts');
 const editorCatalogRouteSource = fs.existsSync(editorCatalogRoutePath) ? fs.readFileSync(editorCatalogRoutePath, 'utf8') : '';
 const patchGameHandler = gamesRouteSource.split("gamesRoutes.patch('/api/games/:id'")[1]?.split('const mergeSchema')[0] ?? '';
 if (/\bFROM\s+rules\b/i.test(patchGameHandler)) {
   violations.push('worker/routes/games.ts: game rename authorization must not scan rules');
+}
+const publicGameDetailHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/:identifier'")[1]?.split("gamesRoutes.post('/api/games'")[0] ?? '';
+if (/rule_importance_votes|COUNT\s*\(/i.test(publicGameDetailHandler)) {
+  violations.push('worker/routes/games.ts: public game detail must carry the pre-aggregated count and never scan/count vote rows');
+}
+if (!/WHERE\s+user_id\s*=\s*\?\s+AND\s+game_id\s*=\s*\?/i.test(importanceDataSource)) {
+  violations.push('worker/data/ruleImportance.ts: personal vote reads must use the user_id + game_id composite boundary');
+}
+if (/COUNT\s*\(|JOIN\s+rule_importance_votes/i.test(importanceDataSource)) {
+  violations.push('worker/data/ruleImportance.ts: vote operations must not count or join vote history');
+}
+if (!/PRIMARY KEY\s*\(user_id,\s*rule_id\)/i.test(importanceMigrationSource)
+  || !/idx_rule_importance_votes_user_game[\s\S]*\(user_id,\s*game_id,\s*rule_id\)/i.test(importanceMigrationSource)) {
+  violations.push('0030 migration: votes require unique user-rule identity and indexed user-game reads');
+}
+if (!/AFTER INSERT ON rule_importance_votes[\s\S]*importance_count\s*=\s*importance_count\s*\+\s*1/i.test(importanceMigrationSource)
+  || !/AFTER DELETE ON rule_importance_votes[\s\S]*importance_count\s*=\s*MAX\(0,\s*importance_count\s*-\s*1\)/i.test(importanceMigrationSource)) {
+  violations.push('0030 migration: aggregate vote counts must be maintained atomically by insert/delete triggers');
+}
+if (/importance[\s\S]{0,300}updated_at|updated_at[\s\S]{0,300}importance/i.test(importanceDataSource)) {
+  violations.push('worker/data/ruleImportance.ts: voting must not churn rule content versions');
+}
+if (!rulesRouteSource.includes("get('/api/games/:gameId/rule-importance', requireUser")
+  || !rulesRouteSource.includes("put('/api/rules/:id/importance', requireUser")) {
+  violations.push('worker/routes/rules.ts: both personal vote reads and writes must require authentication');
+}
+if (!apiSource.includes('getCachedRuleImportance(userId, gameId)')) {
+  violations.push('src/lib/api.ts: personal vote state must pass through the local cache before network access');
 }
 
 const publicGameSearchHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/search'")[1]?.split("gamesRoutes.get('/api/game-catalog'")[0] ?? '';

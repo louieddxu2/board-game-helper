@@ -113,6 +113,46 @@ describe('api game cache boundary', () => {
   });
 });
 
+describe('api rule importance cache boundary', () => {
+  test('uses a fresh per-user game vote cache without a network request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedRuleImportance').mockResolvedValue({
+      key: 'ruleImportance:u1:g1', data: { ruleIds: ['r1'] }, cachedAt: Date.now(),
+    });
+
+    await expect(api.ruleImportance('g1', 'u1')).resolves.toEqual({ ruleIds: ['r1'] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('returns an expired vote cache first and refreshes it in the background', async () => {
+    vi.spyOn(localDb, 'getCachedRuleImportance').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestRuleImportance').mockResolvedValue({
+      key: 'ruleImportance:u1:g1', data: { ruleIds: ['r1'] }, cachedAt: 1,
+    });
+    vi.spyOn(localDb, 'cacheRuleImportance').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, headers: new Headers(), json: async () => ({ ruleIds: ['r1', 'r2'] }),
+    }));
+    const onUpdated = vi.fn();
+
+    await expect(api.ruleImportance('g1', 'u1', onUpdated)).resolves.toEqual({ ruleIds: ['r1'] });
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ ruleIds: ['r1', 'r2'] }));
+  });
+
+  test('updates one rule through an explicit PUT mutation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, headers: new Headers(), json: async () => ({ important: true, count: 4 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.setRuleImportance('r1', true)).resolves.toEqual({ important: true, count: 4 });
+    expect(fetchMock).toHaveBeenCalledWith('/api/rules/r1/importance', expect.objectContaining({
+      method: 'PUT', body: JSON.stringify({ important: true }),
+    }));
+  });
+});
+
 describe('api versioned game catalog boundary', () => {
   const catalog = {
     generation: 1,

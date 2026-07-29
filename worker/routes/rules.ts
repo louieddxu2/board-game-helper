@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -16,7 +17,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   const row = await getDatabase(c).statement(`
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage, r.categories_json,
-      r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
+      r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count,
       r.tag_ids_json, r.source_label, r.source_url
     FROM rules r
     JOIN games g ON g.id = r.game_id
@@ -47,6 +48,24 @@ const rulePatchSchema = z.object({
   sourceUrl: z.url().max(2000).nullable().optional().or(z.literal('')),
 }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
   message: '最多只能選擇 8 個標籤',
+});
+
+rulesRoutes.get('/api/games/:gameId/rule-importance', requireUser, async (c) => {
+  setNoCache(c);
+  return c.json(await queryUserRuleImportance(getDatabase(c), c.get('user')!.id, c.req.param('gameId')));
+});
+
+const ruleImportanceSchema = z.object({ important: z.boolean() });
+
+rulesRoutes.put('/api/rules/:id/importance', requireUser, async (c) => {
+  const parsed = ruleImportanceSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_importance' }, 400);
+  const result = await setRuleImportance(
+    getDatabase(c), c.get('user')!.id, c.req.param('id'), parsed.data.important, now(),
+  );
+  if (!result) return c.json({ error: 'rule_not_found' }, 404);
+  setNoCache(c);
+  return c.json(result);
 });
 
 rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {

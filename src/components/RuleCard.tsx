@@ -11,6 +11,9 @@ export interface RuleCardProps {
   gameHref?: string;
   onEdit?: () => void;
   onTagClick?: (tag: string) => void;
+  importanceVoted?: boolean;
+  importanceSaving?: boolean;
+  onToggleImportance?: () => void;
 }
 
 export const RuleCard = ({
@@ -20,6 +23,9 @@ export const RuleCard = ({
   gameHref,
   onEdit,
   onTagClick,
+  importanceVoted = false,
+  importanceSaving = false,
+  onToggleImportance,
 }: RuleCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
@@ -183,14 +189,29 @@ export const RuleCard = ({
           )}
         </div>
 
-        <button
-          type="button"
-          className="text-action copy-link-btn"
-          onClick={copyRuleLink}
-          title="複製這條規則的分享連結"
-        >
-          分享此規則 🔗
-        </button>
+        <div className="rule-card-footer-actions">
+          {(onToggleImportance || (rule.importanceCount ?? 0) > 0) && (onToggleImportance ? <button
+            type="button"
+            className={importanceVoted ? 'importance-button active' : 'importance-button'}
+            aria-pressed={importanceVoted}
+            disabled={importanceSaving}
+            onClick={(event) => { event.stopPropagation(); onToggleImportance(); }}
+            title={importanceVoted ? '取消「我也玩錯過」' : '將這條規則標為重要'}
+          >
+            {importanceSaving ? '處理中…' : importanceVoted ? '✓ 我也玩錯過' : '重要！我也玩錯過'}
+            <span aria-label={`${rule.importanceCount ?? 0} 票`}>{rule.importanceCount ?? 0}</span>
+          </button> : <span className="importance-count" aria-label={`${rule.importanceCount ?? 0} 票`}>
+            重要 · {rule.importanceCount}
+          </span>)}
+          <button
+            type="button"
+            className="text-action copy-link-btn"
+            onClick={copyRuleLink}
+            title="複製這條規則的分享連結"
+          >
+            分享此規則 🔗
+          </button>
+        </div>
       </div>
     </article>
   );

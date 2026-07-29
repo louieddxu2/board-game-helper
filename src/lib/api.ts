@@ -1,4 +1,4 @@
-import type { AccountPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -172,6 +172,21 @@ const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
   rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.categories, rule.tagIds,
 ]);
 
+const ruleImportanceRequests = new Map<string, Promise<RuleImportancePayload>>();
+const refreshRuleImportance = (gameId: string, userId: string) => {
+  const key = `${userId}:${gameId}`;
+  const existing = ruleImportanceRequests.get(key);
+  if (existing) return existing;
+  const request = transportRequest<RuleImportancePayload>(
+    `/api/games/${encodeURIComponent(gameId)}/rule-importance`, undefined, 'cache-miss',
+  ).then(async (data) => {
+    await localDb.cacheRuleImportance(userId, gameId, data).catch(() => undefined);
+    return data;
+  }).finally(() => { if (ruleImportanceRequests.get(key) === request) ruleImportanceRequests.delete(key); });
+  ruleImportanceRequests.set(key, request);
+  return request;
+};
+
 let publicTagsRefreshRequest: Promise<PublicTagCatalogPayload> | undefined;
 const refreshPublicTags = async () => {
   if (publicTagsRefreshRequest) return publicTagsRefreshRequest;
@@ -236,6 +251,20 @@ export const api = {
   removeFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'DELETE', body: '{}' }),
   clearFavorites: () => mutation<FavoriteMutationPayload>('/api/account/favorites', { method: 'DELETE', body: '{}' }),
   markFavoriteSeen: (gameId: string) => mutation<{ ok: true }>(`/api/account/favorites/${encodeURIComponent(gameId)}/seen`, { method: 'POST', body: '{}' }),
+  ruleImportance: async (gameId: string, userId: string, onUpdated?: (data: RuleImportancePayload) => void) => {
+    const cached = await localDb.getCachedRuleImportance(userId, gameId).catch(() => undefined);
+    if (cached) return cached.data;
+    const stale = await localDb.getLatestRuleImportance(userId, gameId).catch(() => undefined);
+    if (!stale) return refreshRuleImportance(gameId, userId);
+    void refreshRuleImportance(gameId, userId).then((updated) => {
+      if (JSON.stringify(updated.ruleIds) !== JSON.stringify(stale.data.ruleIds)) onUpdated?.(updated);
+    }).catch(() => undefined);
+    return stale.data;
+  },
+  setRuleImportance: (ruleId: string, important: boolean) => mutation<RuleImportanceMutationPayload>(
+    `/api/rules/${encodeURIComponent(ruleId)}/importance`,
+    { method: 'PUT', body: JSON.stringify({ important }) },
+  ),
   updateNickname: (nickname: string, showNickname = false) => mutation<{ user: SessionUser }>('/api/account/nickname', {
     method: 'PATCH', body: JSON.stringify({ nickname, showNickname }),
   }),

@@ -164,6 +164,7 @@ export interface RuleCard {
   editedByNicknames?: string[];
   createdAt?: number;
   updatedAt?: number;
+  importanceCount?: number;
   tagIds?: string[];
   tags: TagSummary[];
 }
@@ -213,6 +214,15 @@ export interface SubmissionRuleInput {
   tagNames?: string[];
   tagIds?: string[];
   newTagNames?: string[];
+}
+
+export interface RuleImportancePayload {
+  ruleIds: string[];
+}
+
+export interface RuleImportanceMutationPayload {
+  important: boolean;
+  count: number;
 }
 
 export interface PersonalHomeGame {

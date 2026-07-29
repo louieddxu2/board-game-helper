@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { RuleCard } from './RuleCard';
@@ -67,5 +67,36 @@ describe('RuleCard', () => {
     expect(screen.getByText('#未知標籤')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '#未知標籤' })).not.toBeInTheDocument();
     expect(onTagClick).not.toHaveBeenCalled();
+  });
+
+  test('exposes a reversible importance vote with its aggregate count', () => {
+    const onToggleImportance = vi.fn();
+    render(<MemoryRouter><RuleCard
+      importanceVoted
+      onToggleImportance={onToggleImportance}
+      rule={{
+        id: 'rule_vote', gameId: 'game_1', statement: '容易玩錯', status: 'published',
+        importanceCount: 3, tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    const button = screen.getByRole('button', { name: /我也玩錯過/ });
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('3 票')).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(onToggleImportance).toHaveBeenCalledOnce();
+  });
+
+  test('shows a non-interactive aggregate to signed-out readers only when votes exist', () => {
+    const { rerender } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_vote', gameId: 'game_1', statement: '容易玩錯', status: 'published',
+      importanceCount: 2, tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+    expect(screen.getByText('重要 · 2')).toBeInTheDocument();
+    rerender(<MemoryRouter><RuleCard rule={{
+      id: 'rule_zero', gameId: 'game_1', statement: '一般規則', status: 'published',
+      importanceCount: 0, tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+    expect(screen.queryByText(/重要 ·/)).not.toBeInTheDocument();
   });
 });

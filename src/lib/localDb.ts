@@ -6,12 +6,14 @@ import { applyPublicTagCatalogChanges } from './tagCatalog';
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const CATALOG_SYNC_FRESH_MS = 10 * 60 * 1000;
+export const RULE_IMPORTANCE_CACHE_FRESH_MS = 10 * 60 * 1000;
 const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v5';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
+const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
@@ -396,6 +398,27 @@ export const localDb = {
   },
   getLatestGame: async (identifier: string, includePrivate = false) =>
     readCachedGameDetail(await getDatabase(), identifier, includePrivate, false),
+  getCachedRuleImportance: async (userId: string, gameId: string) =>
+    getFreshCache<{ ruleIds: string[] }>(ruleImportanceCacheKey(userId, gameId), RULE_IMPORTANCE_CACHE_FRESH_MS),
+  getLatestRuleImportance: async (userId: string, gameId: string) => {
+    const key = ruleImportanceCacheKey(userId, gameId);
+    return await (await getDatabase()).get('cache', key) as CacheRecord<{ ruleIds: string[] }> | undefined;
+  },
+  cacheRuleImportance: async (userId: string, gameId: string, data: { ruleIds: string[] }) => {
+    const key = ruleImportanceCacheKey(userId, gameId);
+    await (await getDatabase()).put('cache', { key, data: { ruleIds: [...new Set(data.ruleIds)].sort() }, cachedAt: Date.now() });
+  },
+  updateCachedRuleImportance: async (userId: string, gameId: string, ruleIds: string[]) => {
+    const key = ruleImportanceCacheKey(userId, gameId);
+    const db = await getDatabase();
+    const existing = await db.get('cache', key);
+    if (existing) await db.put('cache', { key, data: { ruleIds: [...new Set(ruleIds)].sort() }, cachedAt: existing.cachedAt });
+  },
+  updateRuleImportanceCount: async (ruleId: string, count: number) => {
+    const db = await getDatabase();
+    const rule = await db.get('rules', ruleId);
+    if (rule) await db.put('rules', { ...rule, importanceCount: Math.max(0, count) });
+  },
   invalidateGame: async (identifier: string) => {
     const db = await getDatabase();
     const game = await findCachedGame(db, identifier);

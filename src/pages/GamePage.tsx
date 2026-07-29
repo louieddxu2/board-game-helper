@@ -20,6 +20,7 @@ import { ApiError } from '../lib/api';
 import { writeHomeMode } from '../lib/homeMode';
 import type { PersonalHomeGame } from '../shared/types';
 import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
+import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -40,6 +41,9 @@ export const GamePage = () => {
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [favoriteLimitGames, setFavoriteLimitGames] = useState<PersonalHomeGame[]>();
   const [removingFavoriteId, setRemovingFavoriteId] = useState<string>();
+  const [importantRuleIds, setImportantRuleIds] = useState<string[]>([]);
+  const [importanceReady, setImportanceReady] = useState(false);
+  const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
   const [activeTags, setActiveTags] = useState<string[]>(() => {
     const searchParams = new URLSearchParams(location.search);
     const tagParam = searchParams.get('tag') || searchParams.get('tags');
@@ -108,12 +112,30 @@ export const GamePage = () => {
     if (!game || !user || !favorite) return;
     void api.markFavoriteSeen(game.id).catch(() => undefined);
   }, [game?.id, user?.id, favorite]);
+  useEffect(() => {
+    if (!game || !user) {
+      setImportantRuleIds([]);
+      setImportanceReady(false);
+      return;
+    }
+    let active = true;
+    setImportanceReady(false);
+    const apply = (data: { ruleIds: string[] }) => {
+      if (!active) return;
+      setImportantRuleIds(data.ruleIds);
+      setImportanceReady(true);
+    };
+    void api.ruleImportance(game.id, user.id, apply).then(apply).catch(() => {
+      if (active) setImportanceReady(false);
+    });
+    return () => { active = false; };
+  }, [game?.id, user?.id]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags).filter((rule) =>
+  const visibleRules = sortRulesByImportance(filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags).filter((rule) =>
     (activeTags.length === 0 || activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName))) &&
     (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
-  ) ?? [];
+  ));
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
@@ -150,6 +172,33 @@ export const GamePage = () => {
       showToast(`已移除「${favoriteGame.displayName}」，現在可以收藏這款遊戲。`);
     } catch { showToast('暫時無法移除收藏，請稍後再試。'); }
     finally { setRemovingFavoriteId(undefined); }
+  };
+  const toggleRuleImportance = async (rule: RuleCardType) => {
+    if (!game || !user || !importanceReady || importanceSaving.has(rule.id)) return;
+    const wasImportant = importantRuleIds.includes(rule.id);
+    const important = !wasImportant;
+    const previousCount = rule.importanceCount ?? 0;
+    const optimisticCount = Math.max(0, previousCount + (important ? 1 : -1));
+    const nextRuleIds = applyRuleImportance(importantRuleIds, rule.id, important);
+    setImportantRuleIds(nextRuleIds);
+    setGame((current) => current ? { ...current, rules: updateRuleImportanceCount(current.rules, rule.id, optimisticCount) } : current);
+    setImportanceSaving((current) => new Set(current).add(rule.id));
+    try {
+      const result = await api.setRuleImportance(rule.id, important);
+      const confirmedRuleIds = applyRuleImportance(nextRuleIds, rule.id, result.important);
+      setImportantRuleIds(confirmedRuleIds);
+      setGame((current) => current ? { ...current, rules: updateRuleImportanceCount(current.rules, rule.id, result.count) } : current);
+      await Promise.all([
+        localDb.updateCachedRuleImportance(user.id, game.id, confirmedRuleIds),
+        localDb.updateRuleImportanceCount(rule.id, result.count),
+      ]);
+    } catch {
+      setImportantRuleIds((current) => applyRuleImportance(current, rule.id, wasImportant));
+      setGame((current) => current ? { ...current, rules: updateRuleImportanceCount(current.rules, rule.id, previousCount) } : current);
+      showToast('投票狀態暫時無法更新，請稍後再試。');
+    } finally {
+      setImportanceSaving((current) => { const next = new Set(current); next.delete(rule.id); return next; });
+    }
   };
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
@@ -213,7 +262,9 @@ export const GamePage = () => {
           )}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />)}
+      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
+        importanceVoted={importantRuleIds.includes(rule.id)} importanceSaving={importanceSaving.has(rule.id)}
+        onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined} />)}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}

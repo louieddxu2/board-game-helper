@@ -17,7 +17,7 @@ export const setNoCache = (c: AppContext) => {
 export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
-    r.created_by, r.created_at, r.updated_at, r.editor_ids_json,
+    r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
 `;
@@ -25,7 +25,7 @@ export const ruleSelect = `
 export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
-    r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.tag_ids_json,
+    r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count, r.tag_ids_json,
     r.source_label, r.source_url
   FROM rules r
 `;
@@ -53,6 +53,7 @@ export interface RuleRow {
   editor_ids_json?: string | null;
   created_at: number;
   updated_at: number;
+  importance_count: number;
   tag_ids_json: string | null;
   sources_json?: string | null;
 }
@@ -186,6 +187,7 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nic
     editedByNicknames: Array.from(new Set(editorIds.map((id) => nicknameMap.get(id)).filter((name): name is string => Boolean(name)))),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    importanceCount: Number(row.importance_count ?? 0),
     tagIds,
     tags: tagIds.map((tagId) => tagMap.get(tagId)).filter((tag): tag is TagSummary => Boolean(tag)),
   });

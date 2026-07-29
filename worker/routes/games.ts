@@ -295,6 +295,8 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     `).bind(c.req.param('id'), parsed.data.targetGameId),
     getDatabase(c).statement('UPDATE user_game_favorites SET game_id = ? WHERE game_id = ?')
       .bind(parsed.data.targetGameId, c.req.param('id')),
+    getDatabase(c).statement('UPDATE rule_importance_votes SET game_id = ? WHERE game_id = ?')
+      .bind(parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
     getDatabase(c).statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
     getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
