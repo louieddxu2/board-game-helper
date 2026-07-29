@@ -80,9 +80,10 @@ describe('RuleCard', () => {
       }}
     /></MemoryRouter>);
 
-    const button = screen.getByRole('button', { name: /我也玩錯過/ });
+    const button = screen.getByRole('button', { name: '取消公開投票，目前 3 票' });
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('3 票')).toBeInTheDocument();
+    expect(button).toHaveAccessibleName('取消公開投票，目前 3 票');
+    expect(screen.getByText('公開投票')).toBeInTheDocument();
     fireEvent.click(button);
     expect(onToggleImportance).toHaveBeenCalledOnce();
   });
@@ -92,11 +93,12 @@ describe('RuleCard', () => {
       id: 'rule_vote', gameId: 'game_1', statement: '容易玩錯', status: 'published',
       importanceCount: 2, tags: [], sourceLinks: [],
     }} /></MemoryRouter>);
-    expect(screen.getByText('重要 · 2')).toBeInTheDocument();
+    expect(screen.getByText('公開票數')).toBeInTheDocument();
+    expect(screen.getByText('2 票')).toBeInTheDocument();
     rerender(<MemoryRouter><RuleCard rule={{
       id: 'rule_zero', gameId: 'game_1', statement: '一般規則', status: 'published',
       importanceCount: 0, tags: [], sourceLinks: [],
     }} /></MemoryRouter>);
-    expect(screen.queryByText(/重要 ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText('公開票數')).not.toBeInTheDocument();
   });
 });

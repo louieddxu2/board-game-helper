@@ -152,15 +152,6 @@ describe('api rule importance cache boundary', () => {
     }));
   });
 
-  test('clears all personal votes through an explicit account mutation', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true, headers: new Headers(), json: async () => ({ cleared: 5 }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(api.clearRuleImportance()).resolves.toEqual({ cleared: 5 });
-    expect(fetchMock).toHaveBeenCalledWith('/api/account/rule-importance', expect.objectContaining({ method: 'DELETE' }));
-  });
 });
 
 describe('api account deletion boundary', () => {

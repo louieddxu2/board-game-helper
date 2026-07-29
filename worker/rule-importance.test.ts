@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { Database, DatabaseStatement } from './data/database';
-import { clearUserRuleImportance, queryUserRuleImportance, setRuleImportance } from './data/ruleImportance';
+import { queryUserRuleImportance, setRuleImportance } from './data/ruleImportance';
 
 const statement = (overrides: Partial<DatabaseStatement> = {}): DatabaseStatement => ({
   bind: vi.fn(function (this: DatabaseStatement) { return this; }),
@@ -37,12 +37,4 @@ describe('rule importance data boundary', () => {
     expect(remove.bind).toHaveBeenCalledWith('u1', 'r1');
   });
 
-  test('clears only one account votes through the primary-key prefix', async () => {
-    const remove = statement({ run: vi.fn().mockResolvedValue({ meta: { changes: 6 } }) });
-    const db = { statement: vi.fn().mockReturnValue(remove), batch: vi.fn() } as unknown as Database;
-
-    await expect(clearUserRuleImportance(db, 'u1')).resolves.toEqual({ cleared: 6 });
-    expect(db.statement).toHaveBeenCalledWith(expect.stringMatching(/DELETE FROM rule_importance_votes\s+WHERE user_id = \?/));
-    expect(remove.bind).toHaveBeenCalledWith('u1');
-  });
 });

@@ -191,12 +191,19 @@ footer a { color: inherit; }
 
 .copy-link-btn { border: 0; background: none; color: var(--orange); font-weight: 700; cursor: pointer; font-size: 12px; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
 .rule-card-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; flex-wrap: wrap; }
-.importance-button { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; border: 1px solid #d9c59d; border-radius: 999px; padding: 5px 10px; background: #fffaf0; color: #765716; font: inherit; font-weight: 800; cursor: pointer; }
+.importance-button { display: inline-flex; align-items: stretch; min-height: 42px; border: 1px solid #d9c59d; border-radius: 12px; padding: 0; overflow: hidden; background: #fffaf0; color: #765716; font: inherit; cursor: pointer; }
 .importance-button:hover { border-color: var(--orange); background: #fdf0d2; }
 .importance-button.active { border-color: #d49a22; background: #f5dfad; color: #5f481a; }
 .importance-button:disabled { opacity: .65; cursor: wait; }
-.importance-button span { display: inline-grid; place-items: center; min-width: 21px; height: 21px; border-radius: 999px; padding: 0 5px; background: rgba(255,255,255,.72); font-size: 11px; }
-.importance-count { color: #765716; font-weight: 800; }
+.importance-action-copy { display: grid; align-content: center; justify-items: start; gap: 1px; padding: 5px 9px; }
+.importance-action-copy small { font-size: 10px; line-height: 1; color: #8c733e; font-weight: 700; }
+.importance-action-copy strong { font-size: 12px; white-space: nowrap; }
+.importance-tally { display: grid; min-width: 43px; align-content: center; justify-items: center; padding: 4px 8px; border-left: 1px solid #d9c59d; background: rgba(255,255,255,.72); line-height: 1; }
+.importance-tally strong { font-size: 16px; }
+.importance-tally small { margin-top: 2px; font-size: 10px; font-weight: 700; }
+.importance-count { display: inline-grid; justify-items: center; gap: 2px; min-width: 58px; padding: 5px 9px; border: 1px solid #d9c59d; border-radius: 10px; background: #fffaf0; color: #765716; }
+.importance-count small { font-size: 10px; }
+.importance-count strong { font-size: 13px; }
 
 .text-action { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; }
 .edit-btn { font-size: 13px; flex-shrink: 0; }

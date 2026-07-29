@@ -130,9 +130,6 @@ if (!rulesRouteSource.includes("get('/api/games/:gameId/rule-importance', requir
 if (!/rule-importance:\$\{user\.id\}/.test(rulesRouteSource)) {
   violations.push('worker/routes/rules.ts: vote writes require an account-scoped limiter in addition to the IP limiter');
 }
-if (!/DELETE FROM rule_importance_votes\s+WHERE user_id = \?/i.test(importanceDataSource)) {
-  violations.push('worker/data/ruleImportance.ts: clearing votes must remain scoped to the account primary-key prefix');
-}
 if (!/DELETE FROM rules[\s\S]*created_by = \?[\s\S]*NOT EXISTS[\s\S]*rr\.rule_id = rules\.id AND rr\.edited_by <> \?/i.test(accountDeletionSource)) {
   violations.push('worker/data/accountDeletion.ts: optional rule deletion must recheck creator and all revision authors atomically');
 }

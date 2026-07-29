@@ -53,8 +53,6 @@ export const AccountPage = () => {
   const [nicknameSaved, setNicknameSaved] = useState(false);
   const [favoritesClearing, setFavoritesClearing] = useState(false);
   const [favoritesCleared, setFavoritesCleared] = useState(false);
-  const [importanceClearing, setImportanceClearing] = useState(false);
-  const [importanceCleared, setImportanceCleared] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletionSummary, setDeletionSummary] = useState<AccountDeletionSummary>();
   const [deletionSummaryLoading, setDeletionSummaryLoading] = useState(false);
@@ -117,27 +115,6 @@ export const AccountPage = () => {
       setFavoritesCleared(true);
     } catch { setError('收藏暫時無法清除，請稍後再試。'); }
     finally { setFavoritesClearing(false); }
-  };
-
-  const clearImportance = async () => {
-    const confirmed = await confirm({
-      title: '清除所有「重要」投票？',
-      message: '這會撤回你在所有規則上的「重要！／我也玩錯過」投票，不會刪除規則。',
-      confirmLabel: '清除投票',
-      tone: 'danger',
-    });
-    if (!confirmed || !realUser) return;
-    setImportanceClearing(true);
-    setImportanceCleared(false);
-    try {
-      await api.clearRuleImportance();
-      await Promise.all([
-        localDb.clearCachedRuleImportance(realUser.id),
-        localDb.invalidateAllGames(),
-      ]);
-      setImportanceCleared(true);
-    } catch { setError('目前無法清除投票，請稍後再試。'); }
-    finally { setImportanceClearing(false); }
   };
 
   const openDeleteAccount = async () => {
@@ -214,14 +191,6 @@ export const AccountPage = () => {
       <p className="account-help">收藏的遊戲與已讀版本會跟著帳號同步。最近查看與首頁顯示模式只保存在目前裝置。</p>
       {favoritesCleared && <p className="form-success" role="status">所有收藏已清除。</p>}
       <button type="button" className="button secondary" disabled={favoritesClearing} onClick={() => void clearFavorites()}>{favoritesClearing ? '清除中…' : '清除所有收藏'}</button>
-    </section>
-    <section className="account-card account-settings">
-      <div className="account-section-heading"><h2>投票資料</h2></div>
-      <p className="account-help">可一次撤回你在所有規則上的「重要！／我也玩錯過」投票。</p>
-      {importanceCleared && <p className="form-success" role="status">所有投票已清除。</p>}
-      <button type="button" className="button secondary" disabled={importanceClearing} onClick={() => void clearImportance()}>
-        {importanceClearing ? '清除中…' : '清除所有投票'}
-      </button>
     </section>
     <section className="account-card account-settings account-danger-zone">
       <div className="account-section-heading"><h2>刪除帳號</h2></div>

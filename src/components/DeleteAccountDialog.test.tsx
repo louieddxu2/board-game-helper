@@ -28,7 +28,7 @@ describe('DeleteAccountDialog', () => {
     const onConfirm = vi.fn();
     render(<DeleteAccountDialog open summary={summary} loading={false} busy={false} onCancel={vi.fn()} onConfirm={onConfirm} />);
 
-    await user.click(screen.getByRole('checkbox', { name: /也刪除僅由此帳號建立/ }));
+    await user.click(screen.getByRole('checkbox', { name: /也刪除由我建立且未經過他人修改/ }));
     await user.type(screen.getByLabelText(/請輸入/), '刪除帳號');
     await user.click(screen.getByRole('button', { name: '永久刪除帳號' }));
     expect(onConfirm).toHaveBeenCalledWith(true);

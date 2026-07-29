@@ -68,7 +68,7 @@ export const DeleteAccountDialog = ({
           disabled={busy || summary.deletableRuleCount === 0}
           onChange={(event) => setDeleteRules(event.target.checked)}
         />
-        也刪除僅由此帳號建立且無經他人修改過的規則（{summary.deletableRuleCount} 條）
+        也刪除由我建立且未經過他人修改的規則（{summary.deletableRuleCount} 條）
       </label>}
       {summary && summary.retainedRuleCount > 0 && <p className="account-help">
         另有 {summary.retainedRuleCount} 條規則曾由其他人修改，為保留共同貢獻，不會刪除。

@@ -250,7 +250,6 @@ export const api = {
   addFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'POST', body: '{}' }),
   removeFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'DELETE', body: '{}' }),
   clearFavorites: () => mutation<FavoriteMutationPayload>('/api/account/favorites', { method: 'DELETE', body: '{}' }),
-  clearRuleImportance: () => mutation<{ cleared: number }>('/api/account/rule-importance', { method: 'DELETE', body: '{}' }),
   accountDeletionSummary: () => uncachedRead<AccountDeletionSummary>('/api/account/deletion-summary', 'account deletion preview is private and must be current'),
   deleteAccount: (deleteOwnUnmodifiedRules: boolean) => mutation<{ ok: true; deletedRuleCount: number }>('/api/account', {
     method: 'DELETE', body: JSON.stringify({ confirmation: '刪除帳號', deleteOwnUnmodifiedRules }),

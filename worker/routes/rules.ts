@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
-import { clearUserRuleImportance, queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
+import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -70,12 +70,6 @@ rulesRoutes.put('/api/rules/:id/importance', requireUser, async (c) => {
     getDatabase(c), user.id, c.req.param('id'), parsed.data.important, now(),
   );
   if (!result) return c.json({ error: 'rule_not_found' }, 404);
-  setNoCache(c);
-  return c.json(result);
-});
-
-rulesRoutes.delete('/api/account/rule-importance', requireUser, async (c) => {
-  const result = await clearUserRuleImportance(getDatabase(c), c.get('user')!.id);
   setNoCache(c);
   return c.json(result);
 });

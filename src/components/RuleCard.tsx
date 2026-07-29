@@ -194,14 +194,18 @@ export const RuleCard = ({
             type="button"
             className={importanceVoted ? 'importance-button active' : 'importance-button'}
             aria-pressed={importanceVoted}
+            aria-label={`${importanceVoted ? '取消公開投票' : '公開投票：重要／我也玩錯過'}，目前 ${rule.importanceCount ?? 0} 票`}
             disabled={importanceSaving}
             onClick={(event) => { event.stopPropagation(); onToggleImportance(); }}
             title={importanceVoted ? '取消「我也玩錯過」' : '將這條規則標為重要'}
           >
-            {importanceSaving ? '處理中…' : importanceVoted ? '✓ 我也玩錯過' : '重要！我也玩錯過'}
-            <span aria-label={`${rule.importanceCount ?? 0} 票`}>{rule.importanceCount ?? 0}</span>
+            <span className="importance-action-copy" aria-hidden="true">
+              <small>公開投票</small>
+              <strong>{importanceSaving ? '處理中…' : importanceVoted ? '✓ 我也玩錯過' : '重要／我也玩錯過'}</strong>
+            </span>
+            <span className="importance-tally" aria-hidden="true"><strong>{rule.importanceCount ?? 0}</strong><small>票</small></span>
           </button> : <span className="importance-count" aria-label={`${rule.importanceCount ?? 0} 票`}>
-            重要 · {rule.importanceCount}
+            <small>公開票數</small><strong>{rule.importanceCount} 票</strong>
           </span>)}
           <button
             type="button"
