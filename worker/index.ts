@@ -4,6 +4,7 @@ import type { Env } from './env';
 import { assertMutationOrigin, trustedOrigins } from './utils';
 import { createDatabase } from './data/database';
 import { rebuildGameCatalog } from './data/gameCatalog';
+import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -123,7 +124,11 @@ app.route('/', reviewRoutes);
 app.route('/', favoriteRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
-  await rebuildGameCatalog(createDatabase(env), controller.scheduledTime);
+  const db = createDatabase(env);
+  await cleanupGameViewData(db, controller.scheduledTime);
+  if (isWeeklyCatalogRun(controller.scheduledTime)) {
+    await rebuildGameCatalog(db, controller.scheduledTime);
+  }
 };
 
 export { app, scheduled };

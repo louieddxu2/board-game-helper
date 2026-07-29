@@ -20,39 +20,15 @@ homeRoutes.get('/api/home', async (c) => {
     return res;
   };
 
-  const windowResult = track('home:window-start', await getDatabase(c).statement(`
-    WITH recent_games AS (
-      SELECT game_id, MIN(view_date) as min_date, MAX(created_at) as last_seen
-      FROM daily_views
-      WHERE view_date >= DATE('now', '-30 days')
-      GROUP BY game_id
-      ORDER BY last_seen DESC
-      LIMIT 6
-    )
-    SELECT MIN(min_date) as window_start FROM recent_games;
-  `).all<{ window_start: string | null }>());
+  // Views are gated by login, but only anonymous browser-day aggregates reach this query.
 
-  const windowRow = windowResult.results?.[0];
-  let startDateStr = '';
-  if (windowRow && windowRow.window_start) {
-    startDateStr = new Date(new Date(windowRow.window_start).getTime() - 7 * 86400000).toISOString().slice(0, 10);
-  }
-  const viewDateCondition = startDateStr ? `view_date >= '${startDateStr}'` : `view_date >= DATE('now', '-7 days')`;
-
-  // 2. 統計階段 (100% 只查 daily_views，加上 LIMIT 100 硬上限熔斷保護)
   const [popularGameIdsRaw, recentRaw] = await Promise.all([
     getDatabase(c).statement(`
-      WITH scoped_views AS (
-        SELECT game_id, user_id, created_at
-        FROM daily_views
-        WHERE ${viewDateCondition}
-        ORDER BY view_date DESC, created_at DESC
-        LIMIT 100
-      )
-      SELECT game_id, COUNT(DISTINCT user_id) AS view_count
-      FROM scoped_views
+      SELECT game_id, SUM(view_count) AS view_count
+      FROM game_daily_view_counts
+      WHERE view_date >= DATE('now', '-6 days')
       GROUP BY game_id
-      ORDER BY view_count DESC, MAX(created_at) DESC
+      ORDER BY view_count DESC, MAX(last_view_at) DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
     getDatabase(c).statement(`
@@ -95,17 +71,9 @@ homeRoutes.get('/api/home', async (c) => {
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
 
   const featuredRuleIdsResult = track('home:featured-rule-ids', await getDatabase(c).statement(`
-    WITH scoped_views AS (
-      SELECT game_id, rule_id, user_id, created_at
-      FROM daily_views
-      WHERE game_id IN (${placeholders}) AND rule_id != '' AND ${viewDateCondition}
-      ORDER BY view_date DESC, created_at DESC
-      LIMIT 100
-    )
-    SELECT game_id, rule_id, COUNT(DISTINCT user_id) AS view_count
-    FROM scoped_views
-    GROUP BY game_id, rule_id
-    ORDER BY view_count DESC, MAX(created_at) DESC
+    SELECT game_id, rule_id
+    FROM game_public_rule_heads
+    WHERE game_id IN (${placeholders})
   `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>());
 
   const featuredRuleIdByGame = new Map<string, string>();
@@ -116,17 +84,8 @@ homeRoutes.get('/api/home', async (c) => {
   });
 
   const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
-  const featuredPromises = popularGameIds.map(async (id) => {
-    let ruleId = featuredRuleIdByGame.get(id);
-    if (!ruleId) {
-      const fallback = track('home:fallback-rule-id', await getDatabase(c).statement(`
-        SELECT id FROM rules
-        WHERE game_id = ? AND status = 'published'
-        ORDER BY created_at DESC
-        LIMIT 1
-      `).bind(id).all<{ id: string }>());
-      ruleId = fallback.results?.[0]?.id ?? '';
-    }
+  const featured = popularGameIds.map((id) => {
+    const ruleId = featuredRuleIdByGame.get(id) ?? '';
     return {
       gameSlug: gameMap.get(id)?.slug ?? '',
       gameName: gameMap.get(id)?.displayName ?? '',
@@ -134,7 +93,6 @@ homeRoutes.get('/api/home', async (c) => {
     };
   });
 
-  const featured = await Promise.all(featuredPromises);
   const featuredRuleIds = featured.map((f) => f.ruleId).filter(Boolean);
 
   setNoCache(c);

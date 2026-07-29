@@ -88,10 +88,11 @@ export const GamePage = () => {
   useEffect(() => {
     if (!game || !user) return;
     const today = new Date().toISOString().slice(0, 10);
-    const storageKey = `viewed:game:${game.id}:${today}`;
-    if (!localStorage.getItem(storageKey)) {
-      api.recordView(game.id).catch(() => undefined);
-      localStorage.setItem(storageKey, '1');
+    const storageKey = `viewed:game:${game.id}`;
+    if (localStorage.getItem(storageKey) !== today) {
+      void api.recordView(game.id)
+        .then(() => localStorage.setItem(storageKey, today))
+        .catch(() => undefined);
     }
   }, [game, user]);
   useEffect(() => {
@@ -213,7 +214,7 @@ export const GamePage = () => {
           )}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} gameId={game.id} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />)}
+      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined} />)}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}

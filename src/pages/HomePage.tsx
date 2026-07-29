@@ -119,10 +119,10 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <Link to="/add">繼續記錄 →</Link>
     </section>}
     <section id="discover" className="content-section">
-      <div className="section-heading"><div><h2>近期常被查閱的遊戲/規則</h2></div></div>
+      <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       <div className="rule-grid">
         {displayedFeaturedRules.map((rule) =>
-          <RuleCard key={rule.id} rule={rule} gameId={(rule as any).gameId} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}
+          <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}
         {!home && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />

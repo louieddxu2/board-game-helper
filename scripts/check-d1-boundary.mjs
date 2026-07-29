@@ -58,8 +58,8 @@ if (/query\(\s*['"]fresh['"]\s*\)/.test(workerIndexSource)) {
 }
 
 const productionConfigSource = fs.readFileSync(path.resolve('wrangler.production.jsonc'), 'utf8');
-if (!productionConfigSource.includes('"crons": ["0 16 * * SUN"]')) {
-  violations.push('wrangler.production.jsonc: catalog snapshot and cleanup must share the single weekly Taipei-midnight trigger');
+if (!productionConfigSource.includes('"crons": ["0 16 * * *"]')) {
+  violations.push('wrangler.production.jsonc: anonymous view cleanup requires the single daily Taipei-midnight trigger');
 }
 
 const clientFiles = ['src/pages', 'src/components'];

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
@@ -11,6 +12,14 @@ import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTa
 import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
+import {
+  anonymousGameViewKey,
+  dailyViewToken,
+  GAME_VIEW_COOKIE,
+  recordAnonymousGameView,
+  secondsUntilNextUtcDay,
+  utcDate,
+} from '../data/gameViews';
 
 const gamesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -82,20 +91,28 @@ gamesRoutes.post('/api/games/:id/view', async (c) => {
   const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ?').bind(c.req.param('id')).first();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
-  const ruleId = c.req.query('ruleId') || null;
-  if (ruleId) {
-    const rule = await getDatabase(c).statement('SELECT id FROM rules WHERE id = ? AND game_id = ?').bind(ruleId, game.id).first();
-    if (!rule) return c.json({ error: 'rule_not_found' }, 404);
-  }
-
   const timestamp = now();
-  const viewDate = new Date(timestamp).toISOString().slice(0, 10);
-  await getDatabase(c).statement(`
-    INSERT INTO daily_views (game_id, rule_id, user_id, view_date, created_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(game_id, rule_id, user_id, view_date) DO NOTHING
-  `).bind(game.id, ruleId ?? '', user.id, viewDate, timestamp).run();
-  return c.json({ success: true });
+  const viewDate = utcDate(timestamp);
+  const viewToken = dailyViewToken(getCookie(c, GAME_VIEW_COOKIE), timestamp);
+  if (viewToken.created) {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname);
+    setCookie(c, GAME_VIEW_COOKIE, viewToken.token, {
+      httpOnly: true,
+      secure: !isLocalhost,
+      sameSite: 'Lax',
+      path: '/api/games',
+      maxAge: secondsUntilNextUtcDay(timestamp),
+    });
+  }
+  const gameId = String(game.id);
+  const counted = await recordAnonymousGameView(
+    getDatabase(c),
+    gameId,
+    viewDate,
+    await anonymousGameViewKey(viewToken.token, gameId, viewDate),
+    timestamp,
+  );
+  return c.json({ success: true, counted });
 });
 
 gamesRoutes.get('/api/games/:identifier', async (c) => {
@@ -247,28 +264,16 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
     `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
     getDatabase(c).statement(`
-      UPDATE OR REPLACE daily_views
-      SET created_at = MAX(
-            daily_views.created_at,
-            COALESCE((
-              SELECT target_view.created_at
-              FROM daily_views target_view
-              WHERE target_view.game_id = ?
-                AND target_view.rule_id = daily_views.rule_id
-                AND target_view.user_id = daily_views.user_id
-                AND target_view.view_date = daily_views.view_date
-            ), daily_views.created_at)
-          ),
-          game_id = ?
-      WHERE rowid IN (
-        SELECT rowid
-        FROM daily_views
-        WHERE view_date >= DATE('now', '-37 days')
-        ORDER BY view_date DESC, created_at DESC
-        LIMIT 100
-      )
-        AND game_id = ?
-    `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
+      INSERT INTO game_daily_view_counts (game_id, view_date, view_count, last_view_at)
+      SELECT ?, view_date, view_count, last_view_at
+      FROM game_daily_view_counts
+      WHERE game_id = ?
+      ON CONFLICT(game_id, view_date) DO UPDATE SET
+        view_count = game_daily_view_counts.view_count + excluded.view_count,
+        last_view_at = MAX(game_daily_view_counts.last_view_at, excluded.last_view_at)
+    `).bind(parsed.data.targetGameId, c.req.param('id')),
+    getDatabase(c).statement('DELETE FROM game_daily_view_counts WHERE game_id = ?').bind(c.req.param('id')),
+    getDatabase(c).statement('DELETE FROM game_view_dedup WHERE game_id = ?').bind(c.req.param('id')),
     getDatabase(c).statement(`
       UPDATE user_game_favorites
       SET seen_rule_updated_at = MAX(seen_rule_updated_at, COALESCE((

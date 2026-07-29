@@ -311,7 +311,7 @@ export const api = {
   },
   editorCatalogGames,
   syncEditorCatalogGames,
-  recordView: (gameId: string, ruleId?: string) => mutation<{ success: boolean }>(`/api/games/${gameId}/view${ruleId ? `?ruleId=${ruleId}` : ''}`, { method: 'POST', body: '{}' }),
+  recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
   createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ game: GameSummary }>('/api/games', {
       method: 'POST', body: JSON.stringify(input),

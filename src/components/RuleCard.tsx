@@ -1,9 +1,7 @@
 import { useContext, useState } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
-import { SessionContext } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
-import { api } from '../lib/api';
 import { formatPlayerCounts } from '../lib/playerCounts';
 
 export interface RuleCardProps {
@@ -13,7 +11,6 @@ export interface RuleCardProps {
   gameHref?: string;
   onEdit?: () => void;
   onTagClick?: (tag: string) => void;
-  gameId?: string;
 }
 
 export const RuleCard = ({
@@ -23,14 +20,11 @@ export const RuleCard = ({
   gameHref,
   onEdit,
   onTagClick,
-  gameId,
 }: RuleCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
-  const session = useContext(SessionContext);
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
-  const user = session?.user;
   const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
 
   const effectiveEnglishName = englishName || (rule as any).englishName;
@@ -153,14 +147,6 @@ export const RuleCard = ({
             className="text-action details-toggle"
             onClick={(e) => {
               e.stopPropagation();
-              if (!expanded && user && gameId) {
-                const today = new Date().toISOString().slice(0, 10);
-                const storageKey = `viewed_rule:${rule.id}:${today}`;
-                if (!localStorage.getItem(storageKey)) {
-                  api.recordView(gameId, rule.id).catch(() => undefined);
-                  localStorage.setItem(storageKey, '1');
-                }
-              }
               setExpanded((prev) => !prev);
             }}
           >
