@@ -71,7 +71,7 @@ export const AdminPage = () => {
     await load();
   };
 
-  const handleUpdateTagDetails = async (tag: TagSummary, input: { name: string; aliases: string[]; categoryHints: RuleCategory[] }) => {
+  const handleUpdateTagDetails = async (tag: TagSummary, input: { name: string; aliases: string[]; categoryHints: RuleCategory[]; detectionKeywords: string[] }) => {
     await api.updateAdminTag(tag.id, input);
     await localDb.invalidateTagEntity(tag.id);
     clearPublicTagCache();
@@ -79,7 +79,9 @@ export const AdminPage = () => {
     await load();
   };
 
-  const filteredTags = tags.filter((t) => !tagQuery || t.name.includes(tagQuery) || (t.aliases && t.aliases.some((a) => a.includes(tagQuery))));
+  const filteredTags = tags.filter((t) => !tagQuery || t.name.includes(tagQuery)
+    || t.aliases?.some((alias) => alias.includes(tagQuery))
+    || t.detectionKeywords?.some((keyword) => keyword.includes(tagQuery)));
 
   if (!loading && !realIsAdmin) return <Navigate to="/" replace />;
   return <section className="admin-page">
@@ -182,7 +184,7 @@ export const AdminPage = () => {
 
       <section className="admin-card">
         <div className="list-heading"><h2>Tag 管理</h2><span>{tags.length} 個</span></div>
-        <p className="muted">公共 Tag 可供所有遊戲選用。非公共 Tag 為遊戲專屬自訂標籤。</p>
+        <p className="muted">公共 Tag 可供所有遊戲選用，分類關鍵字也會隨公共目錄同步；非公共 Tag 為遊戲專屬自訂標籤。</p>
         <form onSubmit={(e) => void handleCreatePublicTag(e)} style={{ marginBottom: '1rem' }}>
           <label>新增公共 Tag 名稱<input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="例如：玩家互動、盲拍" required /></label>
           <label>標籤說明 (可選)<input value={newTagDesc} onChange={(e) => setNewTagDesc(e.target.value)} placeholder="說明此標籤適用的機制或時機" /></label>

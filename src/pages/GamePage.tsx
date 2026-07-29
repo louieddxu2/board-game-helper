@@ -8,14 +8,14 @@ import { TagInput } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type RuleRevision } from '../shared/types';
+import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type RuleRevision, type TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { collectEditionOptions } from '../lib/editionOptions';
-import { filterRulesByCategory } from '../lib/ruleCategories';
+import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -28,6 +28,7 @@ export const GamePage = () => {
     return RULE_CATEGORIES.includes(category as RuleCategory) ? category as RuleCategory : 'all';
   });
   const [game, setGame] = useState<GameDetail>();
+  const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
@@ -67,6 +68,12 @@ export const GamePage = () => {
     return () => { active = false; };
   }, [identifier, location.state]);
   useEffect(() => {
+    let active = true;
+    const applyTags = (data: { tags: TagSummary[] }) => { if (active) setClassificationTags(data.tags); };
+    void api.tags(undefined, applyTags).then(applyTags).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     if (!game || !location.hash) return;
     window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }, [game, location.hash]);
@@ -81,7 +88,7 @@ export const GamePage = () => {
   }, [game, user]);
   const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = filterRulesByCategory(game?.rules ?? [], activeCategory).filter((rule) =>
+  const visibleRules = filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags).filter((rule) =>
     (activeTags.length === 0 || activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName))) &&
     (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
   ) ?? [];
@@ -113,7 +120,7 @@ export const GamePage = () => {
           key={category}
           onClick={() => setActiveCategory(category)}
         >
-          {RULE_CATEGORY_LABELS[category]} <small>{game.rules.filter((rule) => rule.categories?.includes(category)).length}</small>
+          {RULE_CATEGORY_LABELS[category]} <small>{game.rules.filter((rule) => effectiveRuleCategories(rule, classificationTags).includes(category)).length}</small>
         </button>)}
       </div>
       <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>

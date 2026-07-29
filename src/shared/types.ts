@@ -116,6 +116,7 @@ export interface TagSummary {
   description?: string;
   aliases?: string[];
   categoryHints?: RuleCategory[];
+  detectionKeywords?: string[];
 }
 
 export interface PublicTagCatalogChange {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { cleanRuleCategories, parseRuleCategories } from './routes/shared';
+import { cleanDetectionKeywords, cleanRuleCategories, parseRuleCategories } from './routes/shared';
 
 describe('rule category persistence', () => {
   test('keeps only supported unique category identifiers', () => {
@@ -13,5 +13,9 @@ describe('rule category persistence', () => {
 
   test('treats malformed historical JSON as unclassified', () => {
     expect(parseRuleCategories({ categories_json: '{broken' })).toEqual([]);
+  });
+
+  test('normalizes and limits duplicate detection keywords', () => {
+    expect(cleanDetectionKeywords([' 勝利點 ', '勝利點', '最高分', 123])).toEqual(['勝利點', '最高分']);
   });
 });

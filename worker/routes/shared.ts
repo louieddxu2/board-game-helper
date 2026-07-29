@@ -71,6 +71,14 @@ export const cleanRuleCategories = (values: unknown): RuleCategory[] => Array.fr
     typeof value === 'string' && RULE_CATEGORIES.includes(value as RuleCategory)),
 ));
 
+export const cleanDetectionKeywords = (values: unknown): string[] => Array.from(new Map(
+  (Array.isArray(values) ? values : [])
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.normalize('NFKC').trim().slice(0, 80))
+    .filter(Boolean)
+    .map((value) => [normalizeText(value), value] as const),
+).values()).slice(0, 50);
+
 export const parseRuleCategories = (row: Pick<RuleRow, 'categories_json'>): RuleCategory[] => {
   try { return cleanRuleCategories(JSON.parse(row.categories_json ?? '[]')); }
   catch { return []; }
@@ -105,10 +113,10 @@ export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Ma
   if (!tagIds.length) return new Map();
   const placeholders = tagIds.map(() => '?').join(',');
   const result = await db.statement(`
-    SELECT t.id, t.slug, t.name, t.is_public, t.category_hints_json
+    SELECT t.id, t.slug, t.name, t.is_public, t.category_hints_json, t.detection_keywords_json
     FROM tags t
     WHERE t.id IN (${placeholders})
-  `).bind(...tagIds).all<{ id: string; slug: string; name: string; is_public: number | null; category_hints_json: string | null }>();
+  `).bind(...tagIds).all<{ id: string; slug: string; name: string; is_public: number | null; category_hints_json: string | null; detection_keywords_json: string | null }>();
   return new Map((result.results ?? []).map((tag) => [tag.id, {
     id: tag.id,
     slug: tag.slug,
@@ -116,6 +124,10 @@ export const resolveRuleTags = async (db: Database, rows: RuleRow[]): Promise<Ma
     isPublic: Boolean(tag.is_public),
     categoryHints: (() => {
       try { return cleanRuleCategories(JSON.parse(tag.category_hints_json ?? '[]')); }
+      catch { return []; }
+    })(),
+    detectionKeywords: (() => {
+      try { return cleanDetectionKeywords(JSON.parse(tag.detection_keywords_json ?? '[]')); }
       catch { return []; }
     })(),
   }]));
