@@ -69,6 +69,23 @@ describe('RuleCard', () => {
     expect(onTagClick).not.toHaveBeenCalled();
   });
 
+  test('renders supplementary details as a separate subdued section', () => {
+    const { container } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_details', gameId: 'game_1', statement: '先執行主要行動',
+      commonMistake: '誤以為可以略過', details: '只有第一位玩家需要執行',
+      status: 'published', tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+
+    const statement = container.querySelector('.statement-text');
+    const mistake = container.querySelector('.mistake');
+    const details = container.querySelector('.rule-details-note');
+    expect(statement).toHaveTextContent('先執行主要行動');
+    expect(statement).not.toHaveTextContent('只有第一位玩家需要執行');
+    expect(mistake).toHaveTextContent('玩錯情況');
+    expect(details).toHaveTextContent('補充說明');
+    expect(details).toHaveTextContent('只有第一位玩家需要執行');
+  });
+
   test('exposes a reversible importance vote with its aggregate count', () => {
     const onToggleImportance = vi.fn();
     render(<MemoryRouter><RuleCard

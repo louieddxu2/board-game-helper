@@ -27,7 +27,8 @@ export const RuleCard = ({
   importanceSaving = false,
   onToggleImportance,
 }: RuleCardProps) => {
-  const [expanded, setExpanded] = useState(false);
+  const [statementExpanded, setStatementExpanded] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
@@ -35,15 +36,14 @@ export const RuleCard = ({
 
   const effectiveEnglishName = englishName || (rule as any).englishName;
 
-  // 結合 statement 與 details
-  const fullContent = rule.details
-    ? `${rule.statement}\n${rule.details}`
+  const isLongStatement = rule.statement.length > 80;
+  const displayStatement = isLongStatement && !statementExpanded
+    ? `${rule.statement.slice(0, 80)}...`
     : rule.statement;
-
-  const isLongContent = fullContent.length > 80;
-  const displayContent = isLongContent && !expanded
-    ? `${fullContent.slice(0, 80)}...`
-    : fullContent;
+  const isLongDetails = Boolean(rule.details && rule.details.length > 80);
+  const displayDetails = isLongDetails && !detailsExpanded
+    ? `${rule.details!.slice(0, 80)}...`
+    : rule.details;
 
   const copyRuleLink = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -145,18 +145,18 @@ export const RuleCard = ({
       {/* 第三行：正確規則 */}
       <div className="rule-statement-section">
         <p className="statement-text">
-          {displayContent}
+          {displayStatement}
         </p>
-        {isLongContent && (
+        {isLongStatement && (
           <button
             type="button"
             className="text-action details-toggle"
             onClick={(e) => {
               e.stopPropagation();
-              setExpanded((prev) => !prev);
+              setStatementExpanded((prev) => !prev);
             }}
           >
-            {expanded ? '收合' : '展開詳細'}
+            {statementExpanded ? '收合' : '展開詳細'}
           </button>
         )}
       </div>
@@ -166,6 +166,25 @@ export const RuleCard = ({
         <div className="mistake">
           <strong className="mistake-badge">⚠️ 玩錯情況</strong>
           <p className="mistake-text">{rule.commonMistake}</p>
+        </div>
+      )}
+
+      {rule.details && (
+        <div className="rule-details-note">
+          <strong className="details-badge">補充說明</strong>
+          <p className="details-text">{displayDetails}</p>
+          {isLongDetails && (
+            <button
+              type="button"
+              className="text-action details-toggle"
+              onClick={(event) => {
+                event.stopPropagation();
+                setDetailsExpanded((previous) => !previous);
+              }}
+            >
+              {detailsExpanded ? '收合補充' : '展開補充'}
+            </button>
+          )}
         </div>
       )}
 
