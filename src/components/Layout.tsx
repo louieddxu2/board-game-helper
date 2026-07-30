@@ -32,6 +32,7 @@ export const Layout = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const [headerAction, setHeaderAction] = useState<React.ReactNode>(null);
   const adminLabel = mockRole ? `管理 (${mockLabels[mockRole] || mockRole})` : '管理';
 
   return <div className="app-shell">
@@ -41,6 +42,7 @@ export const Layout = () => {
         <span className="brand-mark">✓</span>
         <span><strong>玩錯的桌遊規則</strong><small>這次玩對，或是下次玩對。</small></span>
       </NavLink>
+      {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <NavLink to="/">探索</NavLink>
         {canEdit && <NavLink to="/add" className="nav-primary">＋記錄</NavLink>}
@@ -50,7 +52,7 @@ export const Layout = () => {
         <NavLink to={user ? '/account' : '/login'}>{user ? '帳號' : '登入'}</NavLink>
       </nav>
     </header>
-    <main id="main-content"><Outlet /></main>
+    <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     <nav className="mobile-nav" aria-label="手機主要導覽">
       <NavLink to="/" end><span aria-hidden="true">⌂</span><small>探索</small></NavLink>
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span><small>搜尋</small></button>

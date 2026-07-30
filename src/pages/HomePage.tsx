@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
@@ -279,6 +279,8 @@ const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onS
 
 export const HomePage = () => {
   const { user, loading } = useSession();
+  const outletContext = useOutletContext<{ setHeaderAction?: (action: React.ReactNode) => void }>();
+  const setHeaderAction = outletContext?.setHeaderAction;
   const [personalHome, setPersonalHome] = useState<PersonalHomePayload>();
   const [mode, setMode] = useState<HomeMode>('explore');
 
@@ -307,6 +309,26 @@ export const HomePage = () => {
     writeHomeMode(nextMode);
     setMode(nextMode);
   };
+
+  useEffect(() => {
+    if (!setHeaderAction) return;
+    if (user && mode === 'personal') {
+      setHeaderAction(
+        <button type="button" className="home-mode-button header-mode-button" onClick={() => selectMode('explore')}>
+          探索
+        </button>
+      );
+    } else if (user) {
+      setHeaderAction(
+        <button type="button" className="home-mode-button header-mode-button" onClick={() => selectMode('personal')}>
+          我的收藏
+        </button>
+      );
+    } else {
+      setHeaderAction(null);
+    }
+    return () => { setHeaderAction(null); };
+  }, [user, mode, setHeaderAction]);
 
   if (!loading && user && mode === 'personal') {
     return <PersonalHome data={personalHome} onShowExplore={() => selectMode('explore')} />;

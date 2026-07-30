@@ -31,6 +31,9 @@ h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacin
 .brand-mark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: var(--yellow); font-weight: 900; }
 .brand strong { display: block; font-size: 15px; }
 .brand small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+.site-header-action { display: flex; align-items: center; margin-left: auto; margin-right: 16px; }
+.site-header-action .header-mode-button { min-height: 34px; height: 34px; padding: 0 14px; font-size: 13px; border: 1px solid var(--green); background: var(--white); color: var(--green); font-weight: 800; cursor: pointer; border-radius: 999px; }
+.site-header-action .header-mode-button:hover { background: var(--cream); }
 .site-header nav { display: flex; align-items: center; gap: 9px; }
 .site-header nav a, .link-button { border: 0; background: none; text-decoration: none; color: var(--ink); font-size: 14px; font-weight: 600; padding: 10px 12px; border-radius: 100px; cursor: pointer; }
 .site-header nav a.active:not(.nav-primary) { background: var(--cream); }
@@ -518,7 +521,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .brand small { display: none; }
   .brand-mark { width: 34px; height: 34px; }
   .desktop-nav { display: none !important; }
-  .explore-mode-button, .personal-explore-btn { position: fixed; top: 15px; right: 14px; z-index: 30; min-height: 34px; height: 34px; padding: 0 14px; font-size: 13px; border-color: rgba(22,53,47,.3); background: var(--green); color: white; }
+  .site-header-action { margin-left: auto; margin-right: 0; }
+  .site-header-action .header-mode-button { min-height: 34px; height: 34px; padding: 0 13px; font-size: 13px; border-color: rgba(22,53,47,.3); background: var(--green); color: white; }
   .personal-home-hero { padding: 20px 16px 18px; }
   .personal-home-search-row { display: block; }
   .mobile-nav { position: fixed; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); left: 0; right: 0; bottom: 0; z-index: 60; background: rgba(255,253,248,.97); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)); backdrop-filter: blur(14px); }
