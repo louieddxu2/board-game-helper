@@ -63,7 +63,7 @@ export const Layout = () => {
       <NavLink to={user ? '/account' : '/login'}><span aria-hidden="true">◎</span><small>{user ? '帳號' : '登入'}</small></NavLink>
     </nav>
     <footer>
-      <span>把踩過的坑，留給下一次更好的開桌。</span>
+      <span>把踩過的坑，化為下次的提醒。</span>
       <NavLink to="/privacy">隱私與資料</NavLink>
     </footer>
     <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
