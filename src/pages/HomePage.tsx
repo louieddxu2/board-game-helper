@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
 import { useSession } from '../context/SessionContext';
+import { ToastContext } from '../context/ToastContext';
 import { api } from '../lib/api';
 import { homeContentKey } from '../lib/homeCache';
 import { localDb } from '../lib/localDb';
@@ -14,7 +15,9 @@ import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from
 
 const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const navigate = useNavigate();
-  const { canEdit } = useSession();
+  const { user, canEdit } = useSession();
+  const toastState = useContext(ToastContext);
+  const showToast = toastState?.showToast;
   const [home, setHome] = useState<HomePayload>();
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<{ game?: { displayName: string }; rules: Array<unknown> }>();
@@ -22,6 +25,8 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvingHome, setResolvingHome] = useState(false);
+  const [votedRuleIds, setVotedRuleIds] = useState<Set<string>>(new Set());
+  const [savingRuleIds, setSavingRuleIds] = useState<Set<string>>(new Set());
   const homeGeneratedAt = useRef(0);
   const homeKey = useRef('');
 
@@ -104,6 +109,74 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
 
+  useEffect(() => {
+    if (!user) {
+      setVotedRuleIds(new Set());
+      return;
+    }
+    let active = true;
+    const gameIds = Array.from(new Set([
+      ...displayedFeaturedRules.map((r) => r.gameId).filter(Boolean),
+      ...resolvedRecentCards.map((r) => r.gameId).filter(Boolean),
+    ]));
+    if (!gameIds.length) return;
+    void Promise.all(gameIds.map((gameId) => api.ruleImportance(gameId, user.id))).then((results) => {
+      if (!active) return;
+      setVotedRuleIds(new Set(results.flatMap((r) => r.ruleIds)));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [user?.id, displayedFeaturedRules, resolvedRecentCards]);
+
+  const toggleRuleImportance = async (rule: RuleCardModel & { gameName: string; gameSlug: string }) => {
+    if (!user) {
+      showToast?.('登入後即可標記「我也玩錯過」！', 'info');
+      return;
+    }
+    if (savingRuleIds.has(rule.id)) return;
+    const wasVoted = votedRuleIds.has(rule.id);
+    const nextVoted = !wasVoted;
+    const previousCount = rule.importanceCount ?? 0;
+    const optimisticCount = Math.max(0, previousCount + (nextVoted ? 1 : -1));
+
+    setVotedRuleIds((current) => {
+      const next = new Set(current);
+      if (nextVoted) next.add(rule.id); else next.delete(rule.id);
+      return next;
+    });
+    setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: optimisticCount } : item));
+    setResolvedRecentCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: optimisticCount } : item));
+    setSavingRuleIds((current) => new Set(current).add(rule.id));
+
+    try {
+      const result = await api.setRuleImportance(rule.id, nextVoted);
+      setVotedRuleIds((current) => {
+        const next = new Set(current);
+        if (result.important) next.add(rule.id); else next.delete(rule.id);
+        return next;
+      });
+      setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: result.count } : item));
+      setResolvedRecentCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: result.count } : item));
+      if (rule.gameId) {
+        await localDb.updateRuleImportanceCount(rule.id, result.count).catch(() => undefined);
+      }
+    } catch {
+      setVotedRuleIds((current) => {
+        const next = new Set(current);
+        if (wasVoted) next.add(rule.id); else next.delete(rule.id);
+        return next;
+      });
+      setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: previousCount } : item));
+      setResolvedRecentCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: previousCount } : item));
+      showToast?.('投票狀態暫時無法更新，請稍後再試。');
+    } finally {
+      setSavingRuleIds((current) => {
+        const next = new Set(current);
+        next.delete(rule.id);
+        return next;
+      });
+    }
+  };
+
   return <>
     <section className="hero">
       <div className="hero-bg" aria-hidden="true" />
@@ -123,7 +196,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       <div className="rule-grid">
         {displayedFeaturedRules.map((rule) =>
-          <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}
+          <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}
         {!home && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />
@@ -146,7 +219,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     {resolvedRecentCards.length > 0 && <section className="content-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{resolvedRecentCards.map((rule) =>
-        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} />)}</div>
+        <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}</div>
     </section>}
   </>;
 };
