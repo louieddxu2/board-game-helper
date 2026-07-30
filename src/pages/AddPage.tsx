@@ -221,7 +221,7 @@ export const AddPage = () => {
   };
   if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
   return <section className="add-page narrow-page">
-    <header className="add-page-heading"><h1>記錄玩錯的規則</h1><label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label></header>
+    <header className="add-page-heading"><h1>記錄玩錯的規則</h1>{isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}</header>
     <div className="record-game-fields">
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); window.setTimeout(() => document.querySelector<HTMLInputElement>('.record-game-name-field input')?.focus(), 0); }}>編輯</button>}</div>
