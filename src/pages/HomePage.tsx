@@ -111,7 +111,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
         <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={canEdit ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
-        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 5).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
+        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
       </div>
       </div>
     </section>
@@ -174,7 +174,7 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
         onSelect={(game) => navigate(`/games/${game.slug}`)}
         onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
       {recentGames.length > 0 && <div className="personal-home-recents">
-        <div>{recentGames.slice(0, 5).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>
+        <div>{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>
       </div>}
       </div>
     </section>
