@@ -240,13 +240,12 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
     <section className="personal-home-hero">
       <div className="personal-home-hero-bg" aria-hidden="true" />
       <div className="personal-home-search">
-      <div className="personal-home-toolbar">
-        <h1>我的桌遊</h1>
-        <button type="button" className="home-mode-button" onClick={onShowExplore}>探索</button>
+      <div className="personal-home-search-row">
+        <GameSearch value={query} onChange={setQuery} includeRules
+          onSelect={(game) => navigate(`/games/${game.slug}`)}
+          onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
+        <button type="button" className="home-mode-button personal-explore-btn" onClick={onShowExplore}>探索</button>
       </div>
-      <GameSearch value={query} onChange={setQuery} includeRules
-        onSelect={(game) => navigate(`/games/${game.slug}`)}
-        onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
       {recentGames.length > 0 && <div className="personal-home-recents">
         <div>{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>
       </div>}
