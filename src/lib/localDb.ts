@@ -58,6 +58,8 @@ export interface CachedGameRow extends GameSummary {
 }
 
 export interface CachedRuleRow extends RuleCard {
+  gameName?: string;
+  gameSlug?: string;
   cachedAt: number;
 }
 
@@ -351,16 +353,44 @@ export const localDb = {
     return records.filter((record): record is TagCacheRecord => Boolean(record));
   },
   invalidateTagEntity: async (id: string) => (await getDatabase()).delete('cache', `tag:${id}`),
-  cacheRuleEntity: async (rule: RuleEntity) => (await getDatabase()).put('rules', { ...toStoredRule(rule), cachedAt: Date.now() }),
+  cacheRuleEntity: async (rule: RuleEntity & { gameName?: string; gameSlug?: string }) => {
+    const db = await getDatabase();
+    let gameName = rule.gameName;
+    let gameSlug = rule.gameSlug;
+    if (!gameName || !gameSlug) {
+      const game = await db.get('games', rule.gameId);
+      if (game) {
+        gameName = gameName || game.displayName;
+        gameSlug = gameSlug || game.slug;
+      }
+    }
+    await db.put('rules', { ...toStoredRule(rule), gameName, gameSlug, cachedAt: Date.now() });
+  },
   getCachedRuleEntity: async (ruleId: string) => {
-    const rule = await (await getDatabase()).get('rules', ruleId);
-    return rule && Date.now() - rule.cachedAt < HOUR_CACHE_FRESH_MS
-      ? { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt }
-      : undefined;
+    const db = await getDatabase();
+    const rule = await db.get('rules', ruleId);
+    if (!rule || Date.now() - rule.cachedAt >= HOUR_CACHE_FRESH_MS) return undefined;
+    if (!rule.gameName || !rule.gameSlug) {
+      const game = await db.get('games', rule.gameId);
+      if (game) {
+        rule.gameName = rule.gameName || game.displayName;
+        rule.gameSlug = rule.gameSlug || game.slug;
+      }
+    }
+    return { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt };
   },
   getLatestRuleEntity: async (ruleId: string) => {
-    const rule = await (await getDatabase()).get('rules', ruleId);
-    return rule ? { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt } : undefined;
+    const db = await getDatabase();
+    const rule = await db.get('rules', ruleId);
+    if (!rule) return undefined;
+    if (!rule.gameName || !rule.gameSlug) {
+      const game = await db.get('games', rule.gameId);
+      if (game) {
+        rule.gameName = rule.gameName || game.displayName;
+        rule.gameSlug = rule.gameSlug || game.slug;
+      }
+    }
+    return { key: `rule:${ruleId}`, data: rule, cachedAt: rule.cachedAt };
   },
   invalidateRuleEntity: async (ruleId: string) => {
     const db = await getDatabase();
@@ -379,7 +409,12 @@ export const localDb = {
     const previousRules = await rulesStore.index('gameId').getAll(game.id);
     await Promise.all(previousRules.map((rule) => rulesStore.delete(rule.id)));
     for (const rule of game.rules) {
-      await rulesStore.put({ ...toStoredRule(rule), cachedAt });
+      await rulesStore.put({
+        ...toStoredRule(rule),
+        gameName: (rule as any).gameName || game.displayName,
+        gameSlug: (rule as any).gameSlug || game.slug,
+        cachedAt,
+      });
     }
     const { rules: _rules, ...gameSummary } = game;
     await tx.objectStore('games').put({

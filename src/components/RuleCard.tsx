@@ -34,6 +34,9 @@ export const RuleCard = ({
   const showToast = toastState?.showToast ?? (() => undefined);
   const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
 
+  const effectiveGameName = gameName || (rule as any).gameName;
+  const effectiveGameSlug = (gameHref ? gameHref.replace('/games/', '') : undefined) || (rule as any).gameSlug;
+  const effectiveGameHref = gameHref || (effectiveGameSlug ? `/games/${effectiveGameSlug}` : undefined);
   const effectiveEnglishName = englishName || (rule as any).englishName;
 
   const isLongStatement = rule.statement.length > 80;
@@ -47,7 +50,7 @@ export const RuleCard = ({
 
   const copyRuleLink = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const targetPath = gameHref ? `${gameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
+    const targetPath = effectiveGameHref ? `${effectiveGameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
     const fullUrl = `${window.location.origin}${targetPath}`;
     void navigator.clipboard.writeText(fullUrl).then(() => {
       showToast('已複製這條規則的直接連結 🔗', 'info');
@@ -59,18 +62,18 @@ export const RuleCard = ({
     if (target.closest('button, a, input, textarea, select, label')) {
       return;
     }
-    if (gameHref) {
-      navigate(`${gameHref}#rule-${rule.id}`);
+    if (effectiveGameHref) {
+      navigate(`${effectiveGameHref}#rule-${rule.id}`);
     }
   };
 
-  const titleText = gameHref && gameName
-    ? `${gameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
+  const titleText = effectiveGameHref && effectiveGameName
+    ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
 
   return (
     <article
-      className={gameHref ? 'rule-card clickable' : 'rule-card'}
+      className={effectiveGameHref ? 'rule-card clickable' : 'rule-card'}
       id={`rule-${rule.id}`}
       onClick={handleCardClick}
     >
@@ -79,8 +82,8 @@ export const RuleCard = ({
         <div className="rule-card-title-group">
           {titleText && (
             <h3 className="rule-game-title">
-              {gameHref ? (
-                <Link className="rule-title-link" to={gameHref} onClick={(e) => e.stopPropagation()}>
+              {effectiveGameHref ? (
+                <Link className="rule-title-link" to={effectiveGameHref} onClick={(e) => e.stopPropagation()}>
                   {titleText}
                 </Link>
               ) : (

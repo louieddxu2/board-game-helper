@@ -389,7 +389,7 @@ describe('api public entity stale-while-revalidate boundary', () => {
     const freshRule = { ...staleRule, statement: 'New', updatedAt: 2 };
     vi.spyOn(localDb, 'getCachedRuleEntity').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestRuleEntity').mockResolvedValue({ key: 'rule:r1', data: { ...staleRule, cachedAt: 1 }, cachedAt: 1 });
-    vi.spyOn(localDb, 'cacheRuleEntity').mockResolvedValue('r1');
+    vi.spyOn(localDb, 'cacheRuleEntity').mockResolvedValue(undefined);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ rule: freshRule }) }));
     const onUpdated = vi.fn();
 

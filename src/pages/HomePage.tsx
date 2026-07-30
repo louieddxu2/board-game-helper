@@ -87,7 +87,18 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
                 if (active) setResolvedRecentCards((current) => current.map((item) => item.id === hydrated.id ? hydrated : item));
               });
             }))?.rule;
-            if (rule) rules.push({ ...rule, gameName: rule.gameName ?? '', gameSlug: rule.gameSlug ?? '' });
+            if (rule) {
+              let gName = rule.gameName;
+              let gSlug = rule.gameSlug;
+              if (!gName || !gSlug) {
+                const cachedGame = await localDb.getCachedGame(rule.gameId).catch(() => undefined);
+                if (cachedGame?.data) {
+                  gName = gName || cachedGame.data.displayName;
+                  gSlug = gSlug || cachedGame.data.slug;
+                }
+              }
+              rules.push({ ...rule, gameName: gName ?? '', gameSlug: gSlug ?? '' });
+            }
           } catch { /* retain the previous rendered snapshot while unavailable */ }
         }
       }
