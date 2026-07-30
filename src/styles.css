@@ -496,22 +496,26 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-tag-filters { display: flex; flex-wrap: wrap; gap: 6px; min-height: 29px; }
 .catalog-tag-filters button { border: 1px solid var(--line); border-radius: 999px; background: var(--white); padding: 5px 9px; color: var(--muted); cursor: pointer; font-size: 12px; }
 .catalog-tag-filters button:hover, .catalog-tag-filters button.active { border-color: var(--green); background: var(--green); color: var(--white); }
-.catalog-rules-table { min-width: 1050px; table-layout: fixed; }
+.catalog-rules-table { width: 100%; min-width: 1120px; table-layout: fixed; border-collapse: collapse; }
 .catalog-mobile-rules { display: none; }
-.catalog-col-status { width: 82px; }
-.catalog-col-rule { width: 25%; }
-.catalog-col-mistake, .catalog-col-details { width: 17%; }
+.catalog-col-status { width: 76px; }
+.catalog-col-rule { width: 28%; }
+.catalog-col-mistake { width: 18%; }
+.catalog-col-details { width: 15%; }
 .catalog-col-source { width: 120px; }
-.catalog-col-tags { width: 145px; }
-.catalog-col-updated { width: 125px; }
-.catalog-rules-table th { position: static; }
-.catalog-rules-table td { line-height: 1.5; }
+.catalog-col-category { width: 120px; }
+.catalog-col-tags { width: 120px; }
+.catalog-col-updated { width: 100px; }
+.catalog-rules-table th { position: static; white-space: nowrap; padding: 10px 12px; }
+.catalog-rules-table td { line-height: 1.5; vertical-align: top; }
 .catalog-text-cell { white-space: pre-wrap; overflow-wrap: anywhere; }
 .catalog-rules-table td:first-child { white-space: nowrap; }
 .catalog-rules-table a { color: var(--orange); font-weight: 700; }
 .catalog-update-cell > span { display: block; }
 .catalog-update-cell .text-action { display: block; margin-top: 5px; padding: 0; }
-.catalog-rule-tag-list { display: flex; flex-wrap: wrap; gap: 2px 6px; }
+.catalog-rule-category-list, .catalog-rule-tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.catalog-rule-category-list span, .catalog-rule-tag-list span { display: inline-block; padding: 2px 7px; border-radius: 4px; background: rgba(22, 53, 47, 0.07); color: var(--green); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.catalog-rule-tag-list span { background: rgba(233, 180, 76, 0.15); color: #7a5814; }
 .catalog-status { display: inline-flex; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .catalog-status-published { background: #d9e9e1; color: var(--green); }
 .catalog-status-hidden { background: #f7d8d1; color: #842d20; }
