@@ -946,11 +946,42 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   font-weight: 700;
   cursor: pointer;
   padding: 6px 10px;
-  margin-left: 6px;
+  margin-left: auto;
   align-self: center;
 }
 .clear-tags-btn:hover {
   text-decoration: underline;
+}
+
+.special-tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.special-chip {
+  background: var(--cream);
+  border-color: #d7cebc;
+  color: var(--ink);
+  font-weight: 600;
+}
+.special-chip:hover {
+  background: #e3dccf;
+}
+.selected-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--cream);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.selected-tags-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-right: 2px;
 }
 
 /* ===== Tag recommendations ===== */

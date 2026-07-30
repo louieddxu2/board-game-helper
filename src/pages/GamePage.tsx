@@ -44,6 +44,8 @@ export const GamePage = () => {
   const [importantRuleIds, setImportantRuleIds] = useState<string[]>([]);
   const [importanceReady, setImportanceReady] = useState(false);
   const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
+  const [activePlayerCounts, setActivePlayerCounts] = useState<number[]>([]);
+  const [activeEditions, setActiveEditions] = useState<string[]>([]);
   const [activeTags, setActiveTags] = useState<string[]>(() => {
     const searchParams = new URLSearchParams(location.search);
     const tagParam = searchParams.get('tag') || searchParams.get('tags');
@@ -55,6 +57,23 @@ export const GamePage = () => {
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
+  const togglePlayerCount = (count: number) => {
+    setActivePlayerCounts((prev) =>
+      prev.includes(count) ? prev.filter((c) => c !== count) : [...prev, count]
+    );
+  };
+  const toggleEdition = (edition: string) => {
+    setActiveEditions((prev) =>
+      prev.includes(edition) ? prev.filter((e) => e !== edition) : [...prev, edition]
+    );
+  };
+  const clearAllFilters = () => {
+    setActiveTags([]);
+    setActivePlayerCounts([]);
+    setActiveEditions([]);
+    setRuleQuery('');
+  };
+
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
     try {
@@ -130,12 +149,93 @@ export const GamePage = () => {
     });
     return () => { active = false; };
   }, [game?.id, user?.id]);
-  const availableTags = useMemo(() => Array.from(new Set(game?.rules.flatMap((rule) => rule.tags.map((tag) => tag.name)) ?? [])).sort(), [game]);
+
+  const rulesByCategory = useMemo(() => {
+    return filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags);
+  }, [game?.rules, activeCategory, classificationTags]);
+
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const visibleRules = sortRulesByImportance(filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags).filter((rule) =>
-    (activeTags.length === 0 || activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName))) &&
-    (!normalizedQuery || [rule.statement, rule.commonMistake, rule.details, ...rule.tags.map((tag) => tag.name)].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)))
-  ));
+  const rulesByQuery = useMemo(() => {
+    if (!normalizedQuery) return rulesByCategory;
+    return rulesByCategory.filter((rule) => {
+      const haystack = [
+        rule.statement,
+        rule.commonMistake,
+        rule.details,
+        ...(rule.playerCounts ? rule.playerCounts.map((c) => `${c}人`) : []),
+        ...(rule.editionNotes ?? []),
+        ...rule.tags.map((t) => t.name),
+      ].join(' ').toLocaleLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [rulesByCategory, normalizedQuery]);
+
+  const rulesBySpecial = useMemo(() => {
+    return rulesByQuery.filter((rule) => {
+      if (activePlayerCounts.length > 0) {
+        const counts = rule.playerCounts ?? [];
+        const hasMatch = activePlayerCounts.some((c) => counts.includes(c));
+        if (!hasMatch) return false;
+      }
+      if (activeEditions.length > 0) {
+        const editions = rule.editionNotes ?? [];
+        const hasMatch = activeEditions.some((e) => editions.includes(e));
+        if (!hasMatch) return false;
+      }
+      return true;
+    });
+  }, [rulesByQuery, activePlayerCounts, activeEditions]);
+
+  const visibleRules = useMemo(() => {
+    const filtered = rulesBySpecial.filter((rule) => {
+      if (activeTags.length === 0) return true;
+      return activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName));
+    });
+    return sortRulesByImportance(filtered);
+  }, [rulesBySpecial, activeTags]);
+
+  const allGamePlayerCounts = useMemo(() => {
+    const set = new Set<number>();
+    game?.rules.forEach((r) => r.playerCounts?.forEach((c) => set.add(c)));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [game?.rules]);
+
+  const allGameEditions = useMemo(() => {
+    const set = new Set<string>();
+    game?.rules.forEach((r) => r.editionNotes?.forEach((e) => e && set.add(e)));
+    return Array.from(set).sort();
+  }, [game?.rules]);
+
+  const availablePlayerCounts = useMemo(() => {
+    const validSet = new Set<number>();
+    rulesByQuery.forEach((r) => r.playerCounts?.forEach((c) => validSet.add(c)));
+    return allGamePlayerCounts.filter((c) => activePlayerCounts.includes(c) || validSet.has(c));
+  }, [rulesByQuery, allGamePlayerCounts, activePlayerCounts]);
+
+  const availableEditions = useMemo(() => {
+    const validSet = new Set<string>();
+    rulesByQuery.forEach((r) => r.editionNotes?.forEach((e) => e && validSet.add(e)));
+    return allGameEditions.filter((e) => activeEditions.includes(e) || validSet.has(e));
+  }, [rulesByQuery, allGameEditions, activeEditions]);
+
+  const candidateUnselectedTags = useMemo(() => {
+    const set = new Set<string>();
+    visibleRules.forEach((rule) => {
+      rule.tags.forEach((t) => {
+        if (!activeTags.includes(t.name)) {
+          set.add(t.name);
+        }
+      });
+    });
+    let list = Array.from(set).sort();
+    if (normalizedQuery) {
+      list = list.filter((tag) => tag.toLocaleLowerCase().includes(normalizedQuery));
+    }
+    return list.slice(0, 6);
+  }, [visibleRules, activeTags, normalizedQuery]);
+
+  const hasSpecialOptions = availablePlayerCounts.length > 0 || availableEditions.length > 0;
+  const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0 || Boolean(ruleQuery);
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
@@ -217,6 +317,7 @@ export const GamePage = () => {
       </div>}
     </header>
     <section className="rule-filters" aria-label="篩選規則">
+      {/* 第一列：規則分類 (Category Tabs) */}
       <div className="rule-category-filter" role="tablist" aria-label="規則分類">
         <button type="button" role="tab" aria-selected={activeCategory === 'all'} className={activeCategory === 'all' ? 'active' : ''} onClick={() => setActiveCategory('all')}>
           全部 <small>{game.rules.length}</small>
@@ -232,34 +333,87 @@ export const GamePage = () => {
           {RULE_CATEGORY_LABELS[category]} <small>{game.rules.filter((rule) => effectiveRuleCategories(rule, classificationTags).includes(category)).length}</small>
         </button>)}
       </div>
-      <label className="rule-search">在這款遊戲中搜尋<input type="search" value={ruleQuery} onChange={(event) => setRuleQuery(event.target.value)} placeholder="例如：補牌、平手、三人局" /></label>
-          {availableTags.length > 0 && (
-            <div className="tag-filter" aria-label="依標籤篩選">
-              {availableTags.map((tag) => {
-                const isSelected = activeTags.includes(tag);
-                return (
-                  <button
-                    type="button"
-                    aria-pressed={isSelected}
-                    className={isSelected ? 'tag-chip active' : 'tag-chip'}
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                  >
-                    {isSelected ? '✓ ' : ''}#{tag}
-                  </button>
-                );
-              })}
-              {activeTags.length > 0 && (
-                <button
-                  type="button"
-                  className="clear-tags-btn"
-                  onClick={() => setActiveTags([])}
-                >
-                  清除篩選 ✕
-                </button>
-              )}
-            </div>
-          )}
+
+      {/* 第二列：人數 / 版本 特殊 Tag (若有) */}
+      {hasSpecialOptions && (
+        <div className="special-tag-filter" aria-label="依人數或版本篩選">
+          {availablePlayerCounts.map((count) => {
+            const isSelected = activePlayerCounts.includes(count);
+            return (
+              <button
+                type="button"
+                key={`player-${count}`}
+                aria-pressed={isSelected}
+                className={isSelected ? 'tag-chip active special-chip' : 'tag-chip special-chip'}
+                onClick={() => togglePlayerCount(count)}
+              >
+                {isSelected ? '✓ ' : ''}👥 {count}人
+              </button>
+            );
+          })}
+          {availableEditions.map((edition) => {
+            const isSelected = activeEditions.includes(edition);
+            return (
+              <button
+                type="button"
+                key={`edition-${edition}`}
+                aria-pressed={isSelected}
+                className={isSelected ? 'tag-chip active special-chip' : 'tag-chip special-chip'}
+                onClick={() => toggleEdition(edition)}
+              >
+                {isSelected ? '✓ ' : ''}📦 {edition}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 第三列：搜尋框 */}
+      <div className="rule-search">
+        <input
+          type="search"
+          value={ruleQuery}
+          onChange={(event) => setRuleQuery(event.target.value)}
+          placeholder="輸入關鍵字搜尋"
+          aria-label="關鍵字搜尋"
+        />
+      </div>
+
+      {/* 第四列：已選取的 Tag (獨立成一行) */}
+      {hasActiveFilters && (
+        <div className="selected-tags-row" aria-label="已選標籤">
+          <span className="selected-tags-label">已選：</span>
+          {activePlayerCounts.map((count) => (
+            <button type="button" key={`sel-player-${count}`} className="tag-chip active" onClick={() => togglePlayerCount(count)}>
+              👥 {count}人 ✕
+            </button>
+          ))}
+          {activeEditions.map((edition) => (
+            <button type="button" key={`sel-edition-${edition}`} className="tag-chip active" onClick={() => toggleEdition(edition)}>
+              📦 {edition} ✕
+            </button>
+          ))}
+          {activeTags.map((tag) => (
+            <button type="button" key={`sel-tag-${tag}`} className="tag-chip active" onClick={() => toggleTag(tag)}>
+              #{tag} ✕
+            </button>
+          ))}
+          <button type="button" className="clear-tags-btn" onClick={clearAllFilters}>
+            清除篩選 ✕
+          </button>
+        </div>
+      )}
+
+      {/* 第五列：剩餘標籤 Tag (上限 6 個，隨搜尋文字與目前相容規則過濾) */}
+      {candidateUnselectedTags.length > 0 && (
+        <div className="tag-filter" aria-label="候選標籤">
+          {candidateUnselectedTags.map((tag) => (
+            <button type="button" className="tag-chip" key={tag} onClick={() => toggleTag(tag)}>
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
     <div className="game-rules">
       {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
