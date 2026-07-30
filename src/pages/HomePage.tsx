@@ -225,7 +225,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   </>;
 };
 
-const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onShowExplore(): void }) => {
+const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onShowExplore(): void }) => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
@@ -235,6 +235,9 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
     return () => { active = false; };
   }, []);
+
+  const favorites = data?.favorites ?? [];
+  const recentUpdates = data?.recentUpdates ?? [];
 
   return <div className="personal-home">
     <section className="personal-home-hero">
@@ -254,9 +257,9 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
 
     <div className="personal-home-content">
       <section className="personal-home-section" aria-labelledby="favorite-games-heading">
-        <div className="personal-home-heading"><h2 id="favorite-games-heading">我的收藏</h2><span>{data.favorites.length} / 6</span></div>
-        {data.favorites.length > 0
-          ? <div className="personal-home-grid">{data.favorites.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
+        <div className="personal-home-heading"><h2 id="favorite-games-heading">我的收藏</h2><span>{favorites.length} / 6</span></div>
+        {favorites.length > 0
+          ? <div className="personal-home-grid">{favorites.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
           : <div className="personal-home-empty">
               <span className="personal-home-empty-icon" aria-hidden="true">☆</span>
               <div><strong>把常玩的遊戲放在這裡</strong><p>前往遊戲頁按下「收藏」，最多可以加入 6 款遊戲。</p></div>
@@ -267,9 +270,9 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
 
     <AdSlot placement="personal-home-after-favorites" />
 
-    {data.recentUpdates.length > 0 && <div className="personal-home-content"><section className="personal-home-section" aria-labelledby="recent-updates-heading">
+    {recentUpdates.length > 0 && <div className="personal-home-content"><section className="personal-home-section" aria-labelledby="recent-updates-heading">
       <div className="personal-home-heading"><h2 id="recent-updates-heading">近期新增與修改</h2><span>規則動態</span></div>
-      <div className="personal-home-grid">{data.recentUpdates.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
+      <div className="personal-home-grid">{recentUpdates.map((game) => <PersonalHomeCard key={game.id} game={game} />)}</div>
     </section></div>}
   </div>;
 };
@@ -305,8 +308,8 @@ export const HomePage = () => {
     setMode(nextMode);
   };
 
-  if (!loading && user && personalHome && mode === 'personal') {
-    return <PersonalHome data={personalHome!} onShowExplore={() => selectMode('explore')} />;
+  if (!loading && user && mode === 'personal') {
+    return <PersonalHome data={personalHome} onShowExplore={() => selectMode('explore')} />;
   }
-  return <ExploreHome onShowPersonal={user && personalHome ? () => selectMode('personal') : undefined} />;
+  return <ExploreHome onShowPersonal={user ? () => selectMode('personal') : undefined} />;
 };
