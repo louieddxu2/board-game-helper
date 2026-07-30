@@ -109,23 +109,24 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
 
+  const gameIdsKey = Array.from(new Set([
+    ...displayedFeaturedRules.map((r) => r.gameId).filter(Boolean),
+    ...resolvedRecentCards.map((r) => r.gameId).filter(Boolean),
+  ])).sort().join(',');
+
   useEffect(() => {
-    if (!user) {
+    if (!user || !gameIdsKey) {
       setVotedRuleIds(new Set());
       return;
     }
     let active = true;
-    const gameIds = Array.from(new Set([
-      ...displayedFeaturedRules.map((r) => r.gameId).filter(Boolean),
-      ...resolvedRecentCards.map((r) => r.gameId).filter(Boolean),
-    ]));
-    if (!gameIds.length) return;
+    const gameIds = gameIdsKey.split(',').filter(Boolean);
     void Promise.all(gameIds.map((gameId) => api.ruleImportance(gameId, user.id))).then((results) => {
       if (!active) return;
       setVotedRuleIds(new Set(results.flatMap((r) => r.ruleIds)));
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [user?.id, displayedFeaturedRules, resolvedRecentCards]);
+  }, [user?.id, gameIdsKey]);
 
   const toggleRuleImportance = async (rule: RuleCardModel & { gameName: string; gameSlug: string }) => {
     if (!user) {
