@@ -41,7 +41,7 @@ export const LoginPage = () => {
   }, [googleClientId, googleLogin, navigate]);
   if (user) return <Navigate to="/account" replace />;
   return <section className="login-page narrow-page">
-    <p className="eyebrow">編輯者登入</p><h1>公開閱讀，授權編輯</h1>
+    <p className="eyebrow">帳號登入</p><h1>公開閱讀，授權編輯</h1>
     <p>Google只用來確認你是哪個帳號；本站不要求存取 Drive、試算表、Gmail 或其他 Google 資料。</p>
     <div ref={buttonRef} className="google-button" />
     {!googleClientId && !localDevLogin && <p className="muted">Google 登入尚未設定。</p>}

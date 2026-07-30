@@ -306,15 +306,16 @@ export const GamePage = () => {
     <header className="game-hero">
       <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
         <p>{game.ruleCount} 條易錯規則紀錄</p></div>
-      {(user || canEdit) && <div className="inline-actions">
+      <div className="inline-actions">
         {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
           {favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}
         </button>}
-        {canEdit && <Fragment>{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
+        {canEdit ? <Fragment>{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
           ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
           : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
-          <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></Fragment>}
-      </div>}
+          <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></Fragment>
+          : <Link className="button secondary" to={`/add?game=${game.slug}`}>＋新增規則</Link>}
+      </div>
     </header>
     <section className="rule-filters" aria-label="篩選規則">
       {/* 第一列：規則分類 (Category Tabs) */}

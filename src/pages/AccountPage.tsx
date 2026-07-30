@@ -155,8 +155,8 @@ export const AccountPage = () => {
   if (!user) return <section className="account-page narrow-page">
     <header>
       <p className="eyebrow">帳號</p>
-      <h1>登入後管理你的規則足跡</h1>
-      <p className="muted">登入後可以查看你建立的規則與其他編輯者對你規則的修改。</p>
+      <h1>登入後解鎖個人化功能</h1>
+      <p className="muted">登入後即可收藏常玩的遊戲，並對玩錯過的規則進行投票標記。</p>
     </header>
     <Link className="button primary" to="/login">登入帳號</Link>
   </section>;
@@ -172,6 +172,11 @@ export const AccountPage = () => {
     </header>
 
     {error && <p className="form-error" role="alert">{error}</p>}
+    {!canEdit && <section className="account-card account-settings">
+      <div className="account-section-heading"><h2>編輯權限</h2></div>
+      <p className="account-help">當前身分：一般會員（可收藏遊戲與投票對應）。本站規則為公共財，目前採用授權邀請與申請制。</p>
+      <Link className="button secondary" to="/add">如何申請編輯權限？</Link>
+    </section>}
     {canEdit && <section className="account-card account-settings">
       <div className="account-section-heading"><h2>帳號設定</h2></div>
       <p className="account-help">設定一個會顯示在你的帳號活動中的暱稱。限中文字或英文字母，中文字最多 6 個、英文字母最多 12 個，且不可與他人重複。</p>

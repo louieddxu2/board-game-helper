@@ -219,7 +219,25 @@ export const AddPage = () => {
     }
     await submit();
   };
-  if (!loading && !canEdit) return <section className="narrow-page"><h1>需要編輯權限</h1><p>此頁只開放給已授權的編輯者。</p></section>;
+  if (!loading && !canEdit) return <section className="add-page narrow-page">
+    <header className="add-page-heading">
+      <p className="eyebrow">貢獻與編輯</p>
+      <h1>如何成為規則編輯者？</h1>
+    </header>
+    <div className="account-card" style={{ marginBottom: '1rem' }}>
+      <p style={{ marginTop: 0, marginBottom: 0 }}>本站規則記錄均視為公共財。為了維持內容精準與排版品質，目前採用授權邀請與申請機制。</p>
+    </div>
+    <div className="account-card">
+      <h3 style={{ marginTop: 0 }}>✉️ 申請編輯權限方式</h3>
+      <p>如果你平常也有紀錄玩錯規則的習慣，且願意協助補充規則，歡迎申請編輯權限：</p>
+      <ol style={{ paddingLeft: '1.2rem', lineHeight: '1.7' }}>
+        <li><strong>登入帳號：</strong>請先使用 Google 登入本站（以便授權信箱）。</li>
+        <li><strong>準備範例：</strong>準備 1～2 條你近期玩錯或想補充的規則細節（含遊戲名稱與玩錯情況）。</li>
+        <li><strong>聯繫作者：</strong>將你的登入信箱與規則範例傳遞訊息給我，我會綜合評估表達能力後開通權限。</li>
+      </ol>
+      <p className="muted" style={{ marginBottom: 0 }}>（提示：若你平常經營桌遊部落格、專欄或已有撰文習慣，請附上連結，會優先獲得授權。）</p>
+    </div>
+  </section>;
   return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1>{isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}</header>
     <div className="record-game-fields">
