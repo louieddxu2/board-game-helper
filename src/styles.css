@@ -350,7 +350,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .filter-summary { min-height: 24px; color: var(--muted); font-size: 13px; display: flex; gap: 12px; align-items: center; }
 .filter-summary button { border: 0; background: none; color: var(--orange); font-weight: 700; cursor: pointer; }
 .game-rules { display: grid; gap: 14px; }
-.game-rules .rule-card { padding-right: 72px; }
 .alias-box { margin-top: 35px; border-top: 1px solid var(--line); padding-top: 22px; color: var(--muted); font-size: 13px; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(10,25,21,.62); display: grid; place-items: center; padding: 18px; }
