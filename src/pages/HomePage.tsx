@@ -106,6 +106,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
   return <>
     <section className="hero">
+      <div className="hero-bg" aria-hidden="true" />
       {onShowPersonal && <button type="button" className="home-mode-button explore-mode-button" onClick={onShowPersonal}>我的收藏</button>}
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
@@ -163,6 +164,7 @@ const PersonalHome = ({ data, onShowExplore }: { data: PersonalHomePayload; onSh
 
   return <div className="personal-home">
     <section className="personal-home-hero">
+      <div className="personal-home-hero-bg" aria-hidden="true" />
       <div className="personal-home-search">
       <div className="personal-home-toolbar">
         <h1>我的桌遊</h1>
