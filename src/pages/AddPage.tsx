@@ -221,21 +221,21 @@ export const AddPage = () => {
   };
   if (!loading && !canEdit) return <section className="add-page narrow-page">
     <header className="add-page-heading">
-      <p className="eyebrow">貢獻與編輯</p>
-      <h1>如何成為規則編輯者？</h1>
+      <h1>記錄玩錯的規則</h1>
     </header>
-    <div className="account-card" style={{ marginBottom: '1rem' }}>
-      <p style={{ marginTop: 0, marginBottom: 0 }}>本站規則記錄均視為公共財。為了維持內容精準與排版品質，目前採用授權邀請與申請機制。</p>
-    </div>
     <div className="account-card">
-      <h3 style={{ marginTop: 0 }}>✉️ 申請編輯權限方式</h3>
-      <p>如果你平常也有紀錄玩錯規則的習慣，且願意協助補充規則，歡迎申請編輯權限：</p>
-      <ol style={{ paddingLeft: '1.2rem', lineHeight: '1.7' }}>
-        <li><strong>登入帳號：</strong>請先使用 Google 登入本站（以便授權信箱）。</li>
-        <li><strong>準備範例：</strong>準備 1～2 條你近期玩錯或想補充的規則細節（含遊戲名稱與玩錯情況）。</li>
-        <li><strong>聯繫作者：</strong>將你的登入信箱與規則範例傳遞訊息給我，我會綜合評估表達能力後開通權限。</li>
+      <h2 style={{ marginTop: 0, fontSize: '1.2rem', marginBottom: '0.75rem' }}>如何申請編輯權限？</h2>
+      <p>如果你平常也有記錄玩錯規則的習慣，覺得記錄在此網頁方便自用，且分享給大家也不錯，歡迎申請編輯權限：</p>
+      <p style={{ margin: '0.75rem 0' }}>
+        到Facebook上聯繫我：<a href="https://www.facebook.com/huang.shao.dong.238497" target="_blank" rel="noopener noreferrer">黃紹東</a><br />
+        <span className="muted" style={{ fontSize: '0.9em' }}>或任何其他聯繫方式也行。</span>
+      </p>
+      <ol style={{ paddingLeft: '1.2rem', lineHeight: '1.7', margin: '0.75rem 0' }}>
+        <li>提供你的Gmail帳號，我授權之後你登入就會獲得權限。</li>
+        <li>提供一筆你此刻想添加的規則內容，我會用我的標準評估文字表達能力來決定是否授權，或者說評估心態上的嚴謹程度。</li>
+        <li>或是如果你有經營桌遊相關的部落格、粉絲專頁、Youtube等等，我大概會直接授權(因為這表示你有基礎的文字表達能力，並且會顧及自身的聲望)；或是我認識你，了解你的文字表達能力/嚴謹程度可以信任，那或許也行。</li>
       </ol>
-      <p className="muted" style={{ marginBottom: 0 }}>（提示：若你平常經營桌遊部落格、專欄或已有撰文習慣，請附上連結，會優先獲得授權。）</p>
+      <p className="muted" style={{ marginBottom: 0 }}>白話來說，讓我確定你是善意、穩定的使用者。</p>
     </div>
   </section>;
   return <section className="add-page narrow-page">
