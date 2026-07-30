@@ -68,6 +68,8 @@ h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacin
 .site-header nav a, .link-button { border: 0; background: none; text-decoration: none; color: var(--ink); font-size: 14px; font-weight: 600; padding: 10px 12px; border-radius: 100px; cursor: pointer; }
 .site-header nav a.active:not(.nav-primary) { background: var(--cream); }
 .site-header nav .nav-primary { background: var(--orange); color: white; }
+.faint-red-lock { color: #ef5350; opacity: 0.8; display: inline-block; vertical-align: -1px; margin-left: 3px; flex-shrink: 0; }
+.site-header nav .nav-primary .faint-red-lock { color: #ffcdd2; opacity: 0.9; }
 main { flex: 1; }
 .skip-link { position: fixed; left: 12px; top: 8px; z-index: 999; background: var(--white); color: var(--ink); padding: 10px 14px; border-radius: 8px; transform: translateY(-150%); }
 .skip-link:focus { transform: translateY(0); }
