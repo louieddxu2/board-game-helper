@@ -45,7 +45,7 @@ export const Layout = () => {
       {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <NavLink to="/">探索</NavLink>
-        {canEdit && <NavLink to="/add" className="nav-primary">＋記錄</NavLink>}
+        <NavLink to="/add" className="nav-primary">＋記錄</NavLink>
         {isAdmin && <NavLink to="/review">校稿</NavLink>}
         {user && <NavLink to="/catalog">列表</NavLink>}
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
@@ -56,7 +56,7 @@ export const Layout = () => {
     <nav className="mobile-nav" aria-label="手機主要導覽">
       <NavLink to="/" end><span aria-hidden="true">⌂</span><small>探索</small></NavLink>
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span><small>搜尋</small></button>
-      {canEdit && <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋</span><small>記錄{pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>}
+      <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋</span><small>記錄{pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
       {isAdmin && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}
       {user && <NavLink to="/catalog"><span aria-hidden="true">列</span><small>列表</small></NavLink>}
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>{adminLabel}</small></NavLink>}
