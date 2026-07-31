@@ -14,19 +14,29 @@ export const RuleCategoryInput = ({
   label = '規則分類',
 }: RuleCategoryInputProps) => {
   const selected = new Set(value);
+  const toggle = (category: RuleCategory) => {
+    onChange(
+      selected.has(category)
+        ? value.filter((item) => item !== category)
+        : [...value, category]
+    );
+  };
   return <fieldset className="rule-category-input" disabled={disabled}>
     <legend>{label}</legend>
-    <div className="rule-category-options">
-      {RULE_CATEGORIES.map((category) => <label key={category}>
-        <input
-          type="checkbox"
-          checked={selected.has(category)}
-          onChange={(event) => onChange(event.target.checked
-            ? [...value, category]
-            : value.filter((item) => item !== category))}
-        />
-        <span>{RULE_CATEGORY_LABELS[category]}</span>
-      </label>)}
+    <div className="rule-category-track">
+      {RULE_CATEGORIES.map((category) => {
+        const isSelected = selected.has(category);
+        return <button
+          type="button"
+          key={category}
+          disabled={disabled}
+          className={isSelected ? 'category-btn selected' : 'category-btn'}
+          aria-pressed={isSelected}
+          onClick={() => toggle(category)}
+        >
+          {RULE_CATEGORY_LABELS[category]}
+        </button>;
+      })}
     </div>
   </fieldset>;
 };

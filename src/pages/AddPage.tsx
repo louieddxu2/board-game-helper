@@ -222,12 +222,19 @@ export const AddPage = () => {
   const handleCancel = async () => {
     const hasUnsavedContent = validRules.some((r) => r.statement.trim() || r.commonMistake?.trim()) || Boolean(game);
     if (hasUnsavedContent) {
-      const confirmed = await confirm({
-        title: '放棄未儲存的草稿？',
-        message: '你輸入的規則內容尚未儲存，確定要離開嗎？',
-        confirmLabel: '離開頁面',
+      const result = await confirm({
+        title: '離開頁面？',
+        message: '你輸入的內容尚未儲存。你可以選擇保留草稿離開、捨棄草稿，或繼續編輯。',
+        confirmLabel: '保留草稿離開',
+        cancelLabel: '繼續編輯',
+        discardLabel: '捨棄草稿',
       });
-      if (!confirmed) return;
+      if (result === 'discard') {
+        await localDb.clearDraft();
+        navigate(-1);
+        return;
+      }
+      if (!result) return;
     }
     navigate(-1);
   };
@@ -252,7 +259,7 @@ export const AddPage = () => {
   </section>;
   return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1>{isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}</header>
-    <div className="record-game-fields">
+    <div className={game ? 'record-game-fields two-columns' : 'record-game-fields'}>
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); window.setTimeout(() => document.querySelector<HTMLInputElement>('.record-game-name-field input')?.focus(), 0); }}>編輯</button>}</div>
         {game

@@ -5,6 +5,7 @@ export interface ConfirmDialogOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  discardLabel?: string;
   tone?: 'default' | 'danger';
 }
 
@@ -12,9 +13,10 @@ interface ConfirmDialogProps extends ConfirmDialogOptions {
   open: boolean;
   onConfirm(): void;
   onCancel(): void;
+  onDiscard?(): void;
 }
 
-export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', cancelLabel = '取消', tone = 'default', onConfirm, onCancel }: ConfirmDialogProps) => {
+export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', cancelLabel = '取消', discardLabel, tone = 'default', onConfirm, onCancel, onDiscard }: ConfirmDialogProps) => {
   const titleId = useId();
   const messageId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -42,6 +44,9 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
   if (!open) return null;
   return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <section className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId}>
+      {discardLabel && onDiscard && <div className="confirm-dialog-top">
+        <button type="button" className="confirm-discard-btn" onClick={onDiscard}>{discardLabel}</button>
+      </div>}
       <div className="confirm-dialog-copy"><h2 id={titleId}>{title}</h2><p id={messageId}>{message}</p></div>
       <div className="confirm-dialog-actions">
         <button type="button" className="button secondary" onClick={onCancel}>{cancelLabel}</button>

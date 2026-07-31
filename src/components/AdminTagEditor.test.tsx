@@ -18,7 +18,7 @@ describe('AdminTagEditor', () => {
     await user.type(screen.getByLabelText('Tag 名稱'), '遊戲設置');
     await user.clear(screen.getByLabelText('別名'));
     await user.type(screen.getByLabelText('別名'), '準備, 開局');
-    await user.click(screen.getByRole('checkbox', { name: '教學、設置、開局' }));
+    await user.click(screen.getByRole('button', { name: '教學、設置、開局' }));
     await user.type(screen.getByLabelText(/自動偵測關鍵字/), '準備階段, 初始資源');
     await user.click(screen.getByRole('button', { name: '儲存' }));
 
