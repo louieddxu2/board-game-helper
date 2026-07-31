@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { localDb } from '../lib/localDb';
 import { SearchModal } from './SearchModal';
+import { ScrollToTop } from './ScrollToTop';
 
 const mockLabels: Record<string, string> = {
   unauthenticated: '未登入',
@@ -44,6 +45,7 @@ export const Layout = () => {
   const adminLabel = mockRole ? `管理 (${mockLabels[mockRole] || mockRole})` : '管理';
 
   return <div className="app-shell">
+    <ScrollToTop />
     <a className="skip-link" href="#main-content">跳至主要內容</a>
     <header className="site-header">
       <NavLink to="/" className="brand" aria-label="玩錯的桌遊規則首頁">

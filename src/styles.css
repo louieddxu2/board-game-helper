@@ -86,7 +86,7 @@ footer a { color: inherit; }
 
 .hero { min-height: 55vh; padding: 0 24px; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 10; background: var(--green); color: #fffdf8; }
 .hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.hero-bg::after, .hero::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
+.hero-bg::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
 .eyebrow { color: var(--orange); font-size: 12px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; margin-bottom: 14px; }
 .hero .eyebrow { color: var(--yellow); text-align: center; }
 .hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
@@ -149,7 +149,7 @@ footer a { color: inherit; }
 .personal-home { min-height: 70vh; padding-bottom: 74px; background: var(--paper); }
 .personal-home-hero { position: relative; z-index: 10; padding: 30px 24px 28px; background: var(--green); color: var(--white); }
 .personal-home-hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.personal-home-hero-bg::after, .personal-home-hero::after { content: ''; position: absolute; width: 360px; height: 360px; right: max(-150px, calc((100% - 1480px) / 2)); top: -210px; border: 52px solid rgba(233,180,76,.09); border-radius: 50%; pointer-events: none; }
+.personal-home-hero-bg::after { content: ''; position: absolute; width: 360px; height: 360px; right: max(-150px, calc((100% - 1480px) / 2)); top: -210px; border: 52px solid rgba(233,180,76,.09); border-radius: 50%; pointer-events: none; }
 .personal-home-search, .personal-home-content { width: min(1132px, 100%); margin: 0 auto; }
 .personal-home-search { position: relative; z-index: 2; }
 .personal-home-search-row { display: flex; align-items: center; gap: 12px; }
@@ -192,7 +192,8 @@ footer a { color: inherit; }
 .section-heading h2 { font-size: clamp(30px, 4vw, 48px); margin-bottom: 0; }
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rule-card { height: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
+.rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
+.rule-card-footer, .rule-card-footer-actions, .importance-button { min-width: 0; max-width: 100%; }
 .rule-card.clickable { cursor: pointer; }
 .rule-card.clickable:hover, .rule-card:has(.rule-title-link:hover) { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(23,47,40,.1); border-color: var(--green); }
 .rule-title-link { color: inherit; text-decoration: none; }
@@ -529,7 +530,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .hero { min-height: auto; padding: 50px 18px 40px; }
   .hero-inner { grid-template-columns: 1fr; gap: 30px; }
   .hero h1 { font-size: clamp(1.5rem, 7vw, 2.25rem); margin-bottom: 16px; text-wrap: balance; word-break: keep-all; max-width: 14ch; }
-  .hero::after { width: 320px; height: 320px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .hero-bg::after { width: 320px; height: 320px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   .hero-copy { font-size: 17px; line-height: 1.6; text-align: center; margin-bottom: 30px; }
   .hero-actions { flex-wrap: wrap; margin: 18px 0 22px; justify-content: center; }
   .hero-actions .button { flex: 1; white-space: nowrap; max-width: 240px; }
