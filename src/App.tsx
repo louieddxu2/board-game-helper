@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, useRouteError } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { SessionProvider } from './context/SessionContext';
 import { AddPage } from './pages/AddPage';
@@ -29,7 +29,7 @@ const router = createBrowserRouter([
     { index: true, element: <HomePage /> },
     { path: 'add', element: <AddPage /> },
     { path: 'games/:identifier', element: <GamePage /> },
-    { path: 'login', element: <LoginPage /> },
+    { path: 'login', element: <AccountPage /> },
     { path: 'account', element: <AccountPage /> },
     { path: 'catalog', element: <CatalogPage /> },
     { path: 'privacy', element: <PrivacyPage /> },

@@ -1,0 +1,1 @@
+UPDATE games SET english_name = NULL WHERE lower(display_name) = lower(english_name) AND merged_into_game_id IS NULL;

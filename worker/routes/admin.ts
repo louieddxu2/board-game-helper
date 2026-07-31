@@ -4,7 +4,7 @@ import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { createId, normalizeEmail, normalizeText, now, slugify } from '../utils';
+import { createId, hashEmail, maskEmail, normalizeEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
@@ -93,39 +93,52 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
 adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
   const [users, invites] = await Promise.all([
     getDatabase(c).statement(`
-      SELECT u.id, u.email, u.email_normalized, u.display_name, ur.role, ur.granted_at, ur.revoked_at
+      SELECT u.id, u.masked_email, u.display_name, ur.role, ur.granted_at, ur.revoked_at
       FROM user_roles ur JOIN users u ON u.id = ur.user_id
       ORDER BY ur.revoked_at IS NOT NULL, ur.granted_at DESC
-    `).all<{ id: string; email: string; email_normalized?: string; display_name: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
+    `).all<{ id: string; masked_email: string | null; display_name: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
     getDatabase(c).statement(`
-      SELECT id, email_normalized email, role, invited_at, claimed_at, revoked_at
+      SELECT id, masked_email, note, role, invited_at, claimed_at, revoked_at
       FROM editor_invitations
       WHERE claimed_at IS NULL AND revoked_at IS NULL
       ORDER BY invited_at DESC
-    `).all<{ id: string; email: string; role: string; invited_at: number; claimed_at: number | null; revoked_at: number | null }>(),
+    `).all<{ id: string; masked_email: string | null; note: string | null; role: string; invited_at: number; claimed_at: number | null; revoked_at: number | null }>(),
   ]);
 
-  const activeUserEmails = new Set(
-    (users.results ?? [])
-      .filter((u) => !u.revoked_at)
-      .map((u) => u.email_normalized || normalizeEmail(u.email))
-  );
-
-  const filteredInvites = (invites.results ?? []).filter(
-    (inv) => !activeUserEmails.has(normalizeEmail(inv.email))
-  );
-
-  return c.json({ users: users.results ?? [], invitations: filteredInvites });
+  return c.json({
+    users: (users.results ?? []).map((u) => ({
+      id: u.id,
+      maskedEmail: u.masked_email ?? '已保護個資',
+      displayName: u.display_name,
+      role: u.role,
+      grantedAt: u.granted_at,
+      revokedAt: u.revoked_at,
+    })),
+    invitations: (invites.results ?? []).map((inv) => ({
+      id: inv.id,
+      maskedEmail: inv.masked_email ?? '已保護個資',
+      note: inv.note ?? undefined,
+      role: inv.role,
+      invitedAt: inv.invited_at,
+    })),
+  });
 });
 
-const inviteSchema = z.object({ email: z.string().email(), role: z.enum(['admin', 'editor']) });
+const inviteSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['admin', 'editor']),
+  note: z.string().trim().max(100).optional(),
+});
+
 adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) => {
   const body = inviteSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'invalid_email' }, 400);
-  const email = normalizeEmail(body.data.email);
-
-  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_normalized = ?').bind(email).first<{ id: string }>();
+  const emailHash = await hashEmail(body.data.email);
+  const maskedEmail = maskEmail(body.data.email);
+  const note = body.data.note?.trim() || null;
   const timestamp = now();
+
+  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash = ?').bind(emailHash).first<{ id: string }>();
   if (existingUser) {
     await getDatabase(c).statement(`
       INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
@@ -135,19 +148,19 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
     return c.json({ ok: true, userId: existingUser.id });
   }
 
-  const existingInvite = await getDatabase(c).statement('SELECT id FROM editor_invitations WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(email).first<{ id: string }>();
+  const existingInvite = await getDatabase(c).statement('SELECT id FROM editor_invitations WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(emailHash).first<{ id: string }>();
   if (existingInvite) {
     await getDatabase(c).statement(`
-      UPDATE editor_invitations SET role = ?, invited_by = ?, invited_at = ? WHERE id = ?
-    `).bind(body.data.role, c.get('user')!.id, timestamp, existingInvite.id).run();
+      UPDATE editor_invitations SET role = ?, note = ?, invited_by = ?, invited_at = ? WHERE id = ?
+    `).bind(body.data.role, note, c.get('user')!.id, timestamp, existingInvite.id).run();
     return c.json({ ok: true, invitationId: existingInvite.id });
   }
 
   const id = createId('invite');
   await getDatabase(c).statement(`
-    INSERT INTO editor_invitations (id, email_normalized, role, invited_by, invited_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(id, email, body.data.role, c.get('user')!.id, timestamp).run();
+    INSERT INTO editor_invitations (id, email_hash, masked_email, note, role, invited_by, invited_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp).run();
   return c.json({ ok: true, invitationId: id });
 });
 

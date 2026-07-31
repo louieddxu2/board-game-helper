@@ -24,6 +24,22 @@ export const cleanAliases = (aliases: string[], displayName: string, englishName
 
 export const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
+export const hashEmail = async (email: string, salt: string = 'board_game_helper_salt'): Promise<string> => {
+  const normalized = normalizeEmail(email);
+  return sha256Hex(`${normalized}:${salt}`);
+};
+
+export const maskEmail = (email: string): string => {
+  const normalized = normalizeEmail(email);
+  const parts = normalized.split('@');
+  if (parts.length !== 2) return '***';
+  const [user, domain] = parts;
+  if (user.length <= 2) {
+    return `${user[0] ?? ''}*@${domain}`;
+  }
+  return `${user[0]}***${user[user.length - 1]}@${domain}`;
+};
+
 const hanCharacter = /^\p{Script=Han}$/u;
 const latinCharacter = /^[A-Za-z]$/;
 

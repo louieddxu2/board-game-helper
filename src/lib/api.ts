@@ -390,8 +390,8 @@ export const api = {
     return response;
   },
   editors: () => uncachedRead<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>('/api/admin/editors', 'editor administration is private and intentionally always current'),
-  inviteEditor: (email: string, role: 'admin' | 'editor') => mutation<{ ok: true }>('/api/admin/editors/invite', {
-    method: 'POST', body: JSON.stringify({ email, role }),
+  inviteEditor: (email: string, role: 'admin' | 'editor', note?: string) => mutation<{ ok: true }>('/api/admin/editors/invite', {
+    method: 'POST', body: JSON.stringify({ email, role, note }),
   }),
   revokeEditor: (userId: string, role: 'admin' | 'editor') => mutation<{ ok: true }>(`/api/admin/editors/${userId}?role=${role}`, { method: 'DELETE', body: '{}' }),
   revokeInvitation: (id: string) => mutation<{ ok: true }>(`/api/admin/editors/invitations/${id}`, { method: 'DELETE', body: '{}' }),

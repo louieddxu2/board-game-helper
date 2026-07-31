@@ -219,6 +219,18 @@ export const AddPage = () => {
     }
     await submit();
   };
+  const handleCancel = async () => {
+    const hasUnsavedContent = validRules.some((r) => r.statement.trim() || r.commonMistake?.trim()) || Boolean(game);
+    if (hasUnsavedContent) {
+      const confirmed = await confirm({
+        title: '放棄未儲存的草稿？',
+        message: '你輸入的規則內容尚未儲存，確定要離開嗎？',
+        confirmLabel: '離開頁面',
+      });
+      if (!confirmed) return;
+    }
+    navigate(-1);
+  };
   if (!loading && !canEdit) return <section className="add-page narrow-page">
     <header className="add-page-heading">
       <h1>記錄玩錯的規則</h1>
@@ -287,7 +299,10 @@ export const AddPage = () => {
         <label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}
     </div>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="sticky-submit"><p>{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : gameQuery.trim() ? `待建立：${gameQuery.trim()}` : '請先輸入遊戲名稱'}・${validRules.length} 條可儲存`}</p>
-      <button className="button primary" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving} onClick={() => void requestSubmit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button></div>
+    <div className="sticky-submit">
+      <button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button>
+      <p className="submit-info-text">{savedAt ? `已自動保存 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `${game ? game.displayName : gameQuery.trim() ? `待建立：${gameQuery.trim()}` : '請先輸入遊戲名稱'}・${validRules.length} 條可儲存`}</p>
+      <button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving} onClick={() => void requestSubmit()}>{saving ? '儲存中…' : `儲存 ${validRules.length} 條規則`}</button>
+    </div>
   </section>;
 };

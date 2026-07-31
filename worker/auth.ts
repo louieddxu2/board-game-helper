@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { SessionUser, UserRole } from '../src/shared/types';
 import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
-import { createId, normalizeEmail, now, sha256Hex } from './utils';
+import { createId, hashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const SESSION_COOKIE = 'wbr_session';
@@ -50,12 +50,12 @@ const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> =
 
 const userById = async (db: Database, userId: string): Promise<SessionUser | undefined> => {
   const row = await db.statement(`
-    SELECT id, email, display_name, nickname, show_nickname, avatar_url FROM users WHERE id = ?
-  `).bind(userId).first<{ id: string; email: string; display_name: string | null; nickname: string | null; show_nickname: number; avatar_url: string | null }>();
+    SELECT id, masked_email, display_name, nickname, show_nickname, avatar_url FROM users WHERE id = ?
+  `).bind(userId).first<{ id: string; masked_email: string | null; display_name: string | null; nickname: string | null; show_nickname: number; avatar_url: string | null }>();
   if (!row) return undefined;
   return {
     id: row.id,
-    email: row.email,
+    maskedEmail: row.masked_email ?? undefined,
     displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
@@ -67,12 +67,12 @@ const userById = async (db: Database, userId: string): Promise<SessionUser | und
 const sessionUser = async (db: Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
   const row = await db.statement(`
-    SELECT u.id, u.email, u.display_name, u.nickname, u.show_nickname, u.avatar_url, s.expires_at
+    SELECT u.id, u.masked_email, u.display_name, u.nickname, u.show_nickname, u.avatar_url, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.id_hash = ?
   `).bind(tokenHash).first<{
     id: string;
-    email: string;
+    masked_email: string | null;
     display_name: string | null;
     nickname: string | null;
     show_nickname: number;
@@ -87,7 +87,7 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
   const roles = await rolesForUser(db, row.id);
   return {
     id: row.id,
-    email: row.email,
+    maskedEmail: row.masked_email ?? undefined,
     displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
@@ -143,9 +143,10 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   picture?: string;
 }): Promise<string> => {
   const timestamp = now();
-  const emailNormalized = normalizeEmail(profile.email);
-  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_normalized = ?')
-    .bind(profile.sub, emailNormalized)
+  const emailHash = await hashEmail(profile.email);
+  const maskedEmail = maskEmail(profile.email);
+  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_hash = ?')
+    .bind(profile.sub, emailHash)
     .first<{ id: string; google_sub: string }>();
   if (existing && existing.google_sub !== profile.sub) {
     throw new Error('google_identity_conflict');
@@ -153,23 +154,24 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   const userId = existing?.id ?? createId('usr');
   await getDatabase(c).statement(`
     INSERT INTO users (
-      id, google_sub, email, email_normalized, email_verified,
+      id, google_sub, email_hash, masked_email, email_verified,
       display_name, avatar_url, created_at, last_login_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       google_sub = excluded.google_sub,
-      email = excluded.email,
-      email_normalized = excluded.email_normalized,
+      email_hash = excluded.email_hash,
+      masked_email = excluded.masked_email,
       email_verified = excluded.email_verified,
       display_name = excluded.display_name,
       avatar_url = excluded.avatar_url,
       last_login_at = excluded.last_login_at
   `).bind(
-    userId, profile.sub, profile.email, emailNormalized, profile.emailVerified ? 1 : 0,
+    userId, profile.sub, emailHash, maskedEmail, profile.emailVerified ? 1 : 0,
     profile.name ?? null, profile.picture ?? null, timestamp, timestamp,
   ).run();
 
-  if (normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '') === emailNormalized) {
+  const bootstrapAdminHash = await hashEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '');
+  if (bootstrapAdminHash && bootstrapAdminHash === emailHash) {
     const existingAdmin = await getDatabase(c).statement(
       `SELECT 1 FROM user_roles WHERE role = 'admin' AND revoked_at IS NULL LIMIT 1`
     ).first();
@@ -184,8 +186,8 @@ const upsertGoogleUser = async (c: AppContext, profile: {
 
   const invites = await getDatabase(c).statement(`
     SELECT id, role FROM editor_invitations
-    WHERE email_normalized = ? AND claimed_at IS NULL AND revoked_at IS NULL
-  `).bind(emailNormalized).all<{ id: string; role: UserRole }>();
+    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
+  `).bind(emailHash).all<{ id: string; role: UserRole }>();
   for (const invite of invites.results ?? []) {
     await getDatabase(c).batch([
       getDatabase(c).statement(`
@@ -257,7 +259,7 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
   });
   return {
     id: userId,
-    email,
+    maskedEmail: maskEmail(email),
     displayName: '本機管理員',
     roles: await rolesForUser(getDatabase(c), userId),
   };

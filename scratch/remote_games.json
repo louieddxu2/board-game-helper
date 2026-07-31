@@ -1,0 +1,428 @@
+[
+  {
+    "id": "game_04e027e4990a203f4899",
+    "slug": "bus-3f4899",
+    "display_name": "Bus",
+    "english_name": null
+  },
+  {
+    "id": "game_037e0f3314195ac0dfa1",
+    "slug": "carson-city-c0dfa1",
+    "display_name": "Carson City",
+    "english_name": null
+  },
+  {
+    "id": "game_303f65261fb608e7510f",
+    "slug": "cascadero-e7510f",
+    "display_name": "Cascadero",
+    "english_name": null
+  },
+  {
+    "id": "game_1577dbab30fcc678ebe9",
+    "slug": "dokojong-78ebe9",
+    "display_name": "Dokojong",
+    "english_name": null
+  },
+  {
+    "id": "game_f1cfad0788a94bca858f49ff281e51dd",
+    "slug": "emberleaf",
+    "display_name": "Emberleaf",
+    "english_name": null
+  },
+  {
+    "id": "game_2ec79151342ce54d54ad",
+    "slug": "keyper-4d54ad",
+    "display_name": "Keyper",
+    "english_name": null
+  },
+  {
+    "id": "game_97739eadc0273e188ff4",
+    "slug": "loot-of-lima-188ff4",
+    "display_name": "Loot of Lima",
+    "english_name": null
+  },
+  {
+    "id": "game_7f41f30c5507cccef21c",
+    "slug": "lovelace-babbage-cef21c",
+    "display_name": "Lovelace & Babbage",
+    "english_name": null
+  },
+  {
+    "id": "game_4d3971de62245c94cd3d",
+    "slug": "park-94cd3d",
+    "display_name": "PARKS 國家公園",
+    "english_name": "PARKS"
+  },
+  {
+    "id": "game_ce619002ee9795da3cd5",
+    "slug": "race-to-the-raft-da3cd5",
+    "display_name": "Race to the Raft",
+    "english_name": null
+  },
+  {
+    "id": "game_a1c38db3091a9231100d",
+    "slug": "railroad-ink-challenge-31100d",
+    "display_name": "Railroad Ink Challenge",
+    "english_name": null
+  },
+  {
+    "id": "game_66ebf4cc3b2f37b4475f",
+    "slug": "sonora-b4475f",
+    "display_name": "Sonora",
+    "english_name": null
+  },
+  {
+    "id": "game_a0d89024390f36d09023",
+    "slug": "taxi-derby-d09023",
+    "display_name": "Taxi Derby",
+    "english_name": null
+  },
+  {
+    "id": "game_6abb8e5cc1738b717a7d",
+    "slug": "tiletum-717a7d",
+    "display_name": "Tiletum",
+    "english_name": null
+  },
+  {
+    "id": "game_273c8068d3668a8fa0a5",
+    "slug": "voyages-8fa0a5",
+    "display_name": "Voyages",
+    "english_name": null
+  },
+  {
+    "id": "game_35cd32810b574864961a300dca6b48b9",
+    "slug": "the-elder-scrolls-betrayal-of-the-second-era",
+    "display_name": "上古卷軸 第二紀元的背叛者",
+    "english_name": "The Elder Scrolls: Betrayal of the Second Era"
+  },
+  {
+    "id": "game_531a0dc4453f98df4dad",
+    "slug": "clinic-主題診所-df4dad",
+    "display_name": "主題診所",
+    "english_name": "Clinic"
+  },
+  {
+    "id": "game_90eaf35d30c1bd0a5ea1",
+    "slug": "pampero-0a5ea1",
+    "display_name": "乘風起",
+    "english_name": "Pampero"
+  },
+  {
+    "id": "game_0deb628a72fa06dc35cc",
+    "slug": "兵馬俑-dc35cc",
+    "display_name": "兵馬俑",
+    "english_name": "Terracotta Army"
+  },
+  {
+    "id": "game_065d8fb1d5357aa97fe2",
+    "slug": "whistle-mountain-汽笛山脈-a97fe2",
+    "display_name": "呼嘯山脈",
+    "english_name": "Whistle Mountain"
+  },
+  {
+    "id": "game_8491bf47690da7c17185",
+    "slug": "coffee-trader-咖啡商人-c17185",
+    "display_name": "咖啡商人",
+    "english_name": "Coffee Trader"
+  },
+  {
+    "id": "game_440369c78c3532781465",
+    "slug": "hamlet-781465",
+    "display_name": "哈姆小村",
+    "english_name": "Hamlet"
+  },
+  {
+    "id": "game_a650a4e8029c40c5146e",
+    "slug": "hadrian-s-wall-哈德良長城-c5146e",
+    "display_name": "哈德良長城",
+    "english_name": "Hadrian's Wall"
+  },
+  {
+    "id": "game_8292bf1c24947afe4aa0",
+    "slug": "wealth-of-nations-國富論-fe4aa0",
+    "display_name": "國富論",
+    "english_name": "Wealth of Nations"
+  },
+  {
+    "id": "game_bba34ef47e1dccb322e3",
+    "slug": "trajan-圖拉真-b322e3",
+    "display_name": "圖拉真",
+    "english_name": "Trajan"
+  },
+  {
+    "id": "game_c60bfdcbe524ea95e1ca",
+    "slug": "forum-trajanum-圖拉真廣場-95e1ca",
+    "display_name": "圖拉真廣場",
+    "english_name": "Forum Trajanum"
+  },
+  {
+    "id": "game_839250d9e1eaa9d1124a",
+    "slug": "terminus-d1124a",
+    "display_name": "地鐵終點站",
+    "english_name": "Terminus"
+  },
+  {
+    "id": "game_68f09ad50de290ce193e",
+    "slug": "十分錢公園-ce193e",
+    "display_name": "坦帕尼樂園",
+    "english_name": "Tenpenny Parks"
+  },
+  {
+    "id": "game_9ab402e88adc91cf7bc2",
+    "slug": "紐西蘭開拓史-cf7bc2",
+    "display_name": "大西部開拓者 : 紐西蘭開拓史",
+    "english_name": "Great Western Trail: New Zealand"
+  },
+  {
+    "id": "game_91279ecd97ec9e72afeb",
+    "slug": "great-western-trail-大西部之旅-72afeb",
+    "display_name": "大西部開拓者：美利堅開拓史",
+    "english_name": "Great Western Trail"
+  },
+  {
+    "id": "game_89d06dbb36089642bcc1",
+    "slug": "天堂與麥酒-42bcc1",
+    "display_name": "天堂與麥酒",
+    "english_name": "Heaven & Ale"
+  },
+  {
+    "id": "game_682417b70a88f7b073e2",
+    "slug": "planta-nubo-b073e2",
+    "display_name": "天空植物園",
+    "english_name": "Planta Nubo"
+  },
+  {
+    "id": "game_239b0d21452b789fb8e6",
+    "slug": "charterstone-契約石-9fb8e6",
+    "display_name": "契約石",
+    "english_name": "Charterstone"
+  },
+  {
+    "id": "game_b5e824037bf6ac4b8f2e",
+    "slug": "nefertiti-娜芙蒂蒂-4b8f2e",
+    "display_name": "娜芙蒂蒂",
+    "english_name": "Nefertiti"
+  },
+  {
+    "id": "game_35562d5e2703242be0ad",
+    "slug": "small-city-2be0ad",
+    "display_name": "小城市",
+    "english_name": "Small City"
+  },
+  {
+    "id": "game_ef9feefda18c88865117",
+    "slug": "factor-funner-865117",
+    "display_name": "工廠樂翻天",
+    "english_name": "Factory Funner"
+  },
+  {
+    "id": "game_f399aaa279bd4d1f5f26",
+    "slug": "barrage-水壩-1f5f26",
+    "display_name": "強國爭壩",
+    "english_name": "Barrage"
+  },
+  {
+    "id": "game_188f6b31d9b1b4888025",
+    "slug": "food-chain-magnate-快餐連鎖店-888025",
+    "display_name": "快餐連鎖大亨",
+    "english_name": "Food Chain Magnate"
+  },
+  {
+    "id": "game_ff46bcb10a652f1a1eae",
+    "slug": "smartphone-inc-手機帝國-1a1eae",
+    "display_name": "手機帝國",
+    "english_name": "Smartphone Inc."
+  },
+  {
+    "id": "game_cd04743016436ccdede0",
+    "slug": "手機帝國2-商戰-cdede0",
+    "display_name": "手機帝國2：商戰",
+    "english_name": "Mobile Markets: A Smartphone Inc. Game"
+  },
+  {
+    "id": "game_6919d2bb19d1c5b5d865",
+    "slug": "las-vegas-royale-拉斯維加斯豪華版-b5d865",
+    "display_name": "拉斯維加斯豪華版",
+    "english_name": "Las Vegas Royale"
+  },
+  {
+    "id": "game_3af13dd1c0551173191a",
+    "slug": "斯凱島-73191a",
+    "display_name": "斯凱島",
+    "english_name": "Isle of Skye: From Chieftain to King"
+  },
+  {
+    "id": "game_db98b5b57e133b1b1719",
+    "slug": "evolution-新演化論-1b1719",
+    "display_name": "新演化論",
+    "english_name": "Evolution"
+  },
+  {
+    "id": "game_85ddc459ae54d272356d",
+    "slug": "tekhenu-obelisk-of-the-sun-方尖碑-72356d",
+    "display_name": "方尖碑",
+    "english_name": "Tekhenu: Obelisk of the Sun"
+  },
+  {
+    "id": "game_e9dbfaa19cbab47e2ee8",
+    "slug": "方舟動物園-7e2ee8",
+    "display_name": "方舟動物園",
+    "english_name": "Ark Nova"
+  },
+  {
+    "id": "game_af1c6f0ccbf43ddee8f3",
+    "slug": "glen-more-ii-chronicles-格蘭摩爾2-dee8f3",
+    "display_name": "格蘭摩爾2",
+    "english_name": "Glen More II: Chronicles"
+  },
+  {
+    "id": "game_fa48b9030bdc156c3836",
+    "slug": "殖民火星-6c3836",
+    "display_name": "殖民火星",
+    "english_name": "Terraforming Mars"
+  },
+  {
+    "id": "game_3b77f7f4b22d03184c5b",
+    "slug": "熊熊公園-184c5b",
+    "display_name": "熊熊公園",
+    "english_name": "Bärenpark"
+  },
+  {
+    "id": "game_291449cf7ff8e2b54bd0",
+    "slug": "furnace-熔爐革命-b54bd0",
+    "display_name": "熔爐革命",
+    "english_name": "Furnace"
+  },
+  {
+    "id": "game_2d21c9b5ad184cbaa6988b5ca351a59a",
+    "slug": "璀璨寶石-對決",
+    "display_name": "璀璨寶石：對決",
+    "english_name": "Splendor Duel"
+  },
+  {
+    "id": "game_46e879fce99158a36d99",
+    "slug": "甲蟲相撲-a36d99",
+    "display_name": "甲蟲相撲",
+    "english_name": "Kabuto Sumo"
+  },
+  {
+    "id": "game_cea0d8b83eee06e0f2d8",
+    "slug": "alma-mater-盛譽學園-e0f2d8",
+    "display_name": "盛譽學園",
+    "english_name": "Alma Mater"
+  },
+  {
+    "id": "game_f9e9320a86f3d19591c4",
+    "slug": "coimbra-科英布拉-9591c4",
+    "display_name": "科英布拉",
+    "english_name": "Coimbra"
+  },
+  {
+    "id": "game_76564f630f5af7fadd25",
+    "slug": "it-s-a-wonderful-world-fadd25",
+    "display_name": "美麗新世界",
+    "english_name": "It's a Wonderful World"
+  },
+  {
+    "id": "game_ece22ff7f8cc887f560d",
+    "slug": "santa-maria-聖瑪利亞號-7f560d",
+    "display_name": "聖瑪利亞號",
+    "english_name": "Santa Maria"
+  },
+  {
+    "id": "game_6cf70b189967a8a715bf",
+    "slug": "聖瓦西里大教堂-a715bf",
+    "display_name": "聖瓦西里大教堂",
+    "english_name": "The Red Cathedral"
+  },
+  {
+    "id": "game_5cf5b5d26d0f9e5b881b",
+    "slug": "船廠-5b881b",
+    "display_name": "船廠",
+    "english_name": "Shipyard"
+  },
+  {
+    "id": "game_f6111657f5ff4844ffd4",
+    "slug": "the-magnificent-華麗開演-44ffd4",
+    "display_name": "華麗開演",
+    "english_name": "The Magnificent"
+  },
+  {
+    "id": "game_5d29e35371b488f2af8e",
+    "slug": "first-rat-萌鼠拆月-f2af8e",
+    "display_name": "萌鼠拆月",
+    "english_name": "First Rat"
+  },
+  {
+    "id": "game_80662fb19bd1dad5f51a",
+    "slug": "imperial-steam-d5f51a",
+    "display_name": "蒸汽帝國",
+    "english_name": "Imperial Steam"
+  },
+  {
+    "id": "game_ed273ed757f26dd483b8",
+    "slug": "paladins-of-the-west-kingdom-西方王國聖騎士-d483b8",
+    "display_name": "西方王國聖騎士",
+    "english_name": "Paladins of the West Kingdom"
+  },
+  {
+    "id": "game_529afe5dfdbf06141803",
+    "slug": "arkham-horror-the-card-game-詭鎮奇談lcg-141803",
+    "display_name": "詭鎮奇談LCG",
+    "english_name": "Arkham Horror: The Card Game"
+  },
+  {
+    "id": "game_4586c3b82c9bfe840937",
+    "slug": "city-of-kings-840937",
+    "display_name": "諸王之城",
+    "english_name": "City of Kings"
+  },
+  {
+    "id": "game_b15d4fc19d211eed9da8",
+    "slug": "諾亞星球-ed9da8",
+    "display_name": "諾亞星球",
+    "english_name": "Ktizo: An Ecosystem Building Cardgame"
+  },
+  {
+    "id": "game_ac8643a25d35feb53388",
+    "slug": "roads-boats-路與船-b53388",
+    "display_name": "路與船",
+    "english_name": "Roads & Boats"
+  },
+  {
+    "id": "game_72f3ca8f795a40d3ab8df914292cf402",
+    "slug": "農家樂",
+    "display_name": "農家樂",
+    "english_name": "Agricola"
+  },
+  {
+    "id": "game_c208fb0d657ac491df4e",
+    "slug": "達爾文之旅-91df4e",
+    "display_name": "達爾文之旅",
+    "english_name": "Darwin's Journey"
+  },
+  {
+    "id": "game_b9d5d8eaf27e55734042",
+    "slug": "qe-734042",
+    "display_name": "量化寬鬆",
+    "english_name": "QE"
+  },
+  {
+    "id": "game_dd592e70d22552e3aa1c",
+    "slug": "領國者-e3aa1c",
+    "display_name": "領國者",
+    "english_name": "Hegemony: Lead Your Class to Victory"
+  },
+  {
+    "id": "game_d23674b15c14a9707f4b",
+    "slug": "marco-polo-ii-in-the-service-of-the-khan-馬可波羅2-707f4b",
+    "display_name": "馬可波羅2",
+    "english_name": "Marco Polo II: In the Service of the Khan"
+  },
+  {
+    "id": "game_e93681b393644145994dfcf71ee62b67",
+    "slug": "trickerion-legends-of-illusion",
+    "display_name": "魔幻傳奇",
+    "english_name": "Trickerion: Legends of Illusion"
+  }
+]

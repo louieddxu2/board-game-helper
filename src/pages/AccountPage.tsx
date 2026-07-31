@@ -6,6 +6,7 @@ import type { AccountDeletionSummary, AccountPayload, AccountRevisionSummary, Ac
 import { useConfirm } from '../context/ConfirmContext';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
+import { LoginPage } from './LoginPage';
 import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-TW', {
@@ -152,21 +153,14 @@ export const AccountPage = () => {
     <h1>正在確認登入狀態…</h1>
   </section>;
 
-  if (!user) return <section className="account-page narrow-page">
-    <header>
-      <p className="eyebrow">帳號</p>
-      <h1>登入後解鎖個人化功能</h1>
-      <p className="muted">登入後即可收藏常玩的遊戲，並對玩錯過的規則進行投票標記。</p>
-    </header>
-    <Link className="button primary" to="/login">登入帳號</Link>
-  </section>;
+  if (!user) return <LoginPage />;
 
   return <section className="account-page narrow-page">
     <header className="account-header">
       <div>
         <p className="eyebrow">帳號</p>
         <h1>{user?.nickname || user?.displayName || '我的帳號'}</h1>
-        <p className="muted">{user?.email}</p>
+        <p className="muted">{user?.maskedEmail || user?.email}</p>
       </div>
       <button type="button" className="button secondary" onClick={() => void logout().then(() => navigate('/'))}>登出</button>
     </header>

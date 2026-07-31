@@ -19,19 +19,24 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   useEffect(() => {
-    if (!googleClientId || !buttonRef.current) return;
+    if (user || !googleClientId || !buttonRef.current) return;
     const setup = () => {
-      if (!window.google || !buttonRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        use_fedcm_for_prompt: true,
-        auto_select: true,
-        callback: (response) => {
-          void googleLogin(response.credential).then(() => navigate('/account')).catch(() => setError('Google 登入失敗，請再試一次。'));
-        },
-      });
-      window.google.accounts.id.renderButton(buttonRef.current, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });
-      window.google.accounts.id.prompt();
+      const google = window.google;
+      const target = buttonRef.current;
+      if (!google || !target) return;
+      try {
+        google.accounts.id.initialize({
+          client_id: googleClientId,
+          use_fedcm_for_prompt: false,
+          auto_select: false,
+          callback: (response) => {
+            void googleLogin(response.credential).then(() => navigate('/account')).catch(() => setError('Google 登入失敗，請再試一次。'));
+          },
+        });
+        google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });
+      } catch {
+        /* ignore Google SDK prompt error on mobile safari */
+      }
     };
     const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity]');
     if (existing) { if (window.google) setup(); else existing.addEventListener('load', setup, { once: true }); return; }
@@ -39,11 +44,18 @@ export const LoginPage = () => {
     script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.dataset.googleIdentity = 'true'; script.addEventListener('load', setup, { once: true });
     document.head.append(script);
   }, [googleClientId, googleLogin, navigate]);
-  if (user) return <Navigate to="/account" replace />;
   return <section className="login-page narrow-page">
-    <p className="eyebrow">帳號登入</p><h1>公開閱讀，授權編輯</h1>
-    <p>Google只用來確認你是哪個帳號；本站不要求存取 Drive、試算表、Gmail 或其他 Google 資料。</p>
-    <div ref={buttonRef} className="google-button" />
+    <p className="eyebrow">帳號</p>
+    <h1>登入後可以：</h1>
+    <ol className="login-benefits">
+      <li>查看遊戲列表。</li>
+      <li>收藏遊戲至個人首頁。</li>
+      <li>投票玩錯的規則。</li>
+    </ol>
+    <div className="login-action-container">
+      <div ref={buttonRef} className="google-button" />
+      <p className="login-disclaimer">Google登入僅用來識別身份，本站不會要求存取 Drive、Gmail等其他權限。</p>
+    </div>
     {!googleClientId && !localDevLogin && <p className="muted">Google 登入尚未設定。</p>}
     {localDevLogin && <button type="button" className="button primary" onClick={() => void devLogin().then(() => navigate('/account')).catch(() => setError('本機登入失敗，請確認 migrations 已套用。'))}>以本機管理員登入</button>}
     {error && <p className="form-error">{error}</p>}

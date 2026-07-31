@@ -23,6 +23,7 @@ export const AdminPage = () => {
   const [sourceQuery, setSourceQuery] = useState('');
   const [targetQuery, setTargetQuery] = useState('');
   const [email, setEmail] = useState('');
+  const [note, setNote] = useState('');
   const [role, setRole] = useState<'editor' | 'admin'>('editor');
   const [newTagName, setNewTagName] = useState('');
   const [newTagDesc, setNewTagDesc] = useState('');
@@ -176,26 +177,29 @@ export const AdminPage = () => {
     </section>
 
     <div className="admin-grid">
-      <section className="admin-card"><h2>編輯者</h2>
+      <section className="admin-card">
+        <div className="list-heading"><h2>編輯權限管理</h2><span>{editors.users.length + editors.invitations.length} 人</span></div>
         <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
-        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role).then(() => { setEmail(''); showToast('已建立編輯者授權。'); return load(); }); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role, note).then(() => { setEmail(''); setNote(''); showToast('已建立編輯者授權。'); return load(); }); }}>
           <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
+          <label>授權備註 (選填)<input type="text" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：黃紹東 (FB聯繫)" /></label>
           <label>角色<select value={role} onChange={(event) => setRole(event.target.value as 'editor' | 'admin')}><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
           <button className="button primary" type="submit">新增／邀請</button>
         </form>
         <div className="admin-list">
           {editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.email)}</strong>
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.displayName || row.maskedEmail || '編輯者')}</strong>
+              {Boolean(row.maskedEmail) && Boolean(row.displayName) && <small style={{ marginRight: '0.5rem', color: 'var(--muted)' }}>({String(row.maskedEmail)})</small>}
               <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
                 {String(row.role)}{row.revoked_at ? '・已撤銷' : ''}
               </small>
             </span>
-            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${String(row.email)} 的 ${String(row.role)} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); })}>撤銷</button>}
+            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${String(row.displayName || row.maskedEmail)} 的 ${String(row.role)} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); })}>撤銷</button>}
           </div>)}
           {editors.invitations.map((row) => <div key={String(row.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.email)}</strong>
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.note ? `${row.note} (${row.maskedEmail})` : row.maskedEmail)}</strong>
               <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
                 {String(row.role)}・{row.revoked_at ? '已撤銷' : '等待首次登入'}
               </small>

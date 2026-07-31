@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { localDb } from '../lib/localDb';
 import { SearchModal } from './SearchModal';
@@ -21,13 +21,18 @@ const FaintRedLock = () => (
 );
 
 export const Layout = () => {
+  const location = useLocation();
   const { user, canEdit, isAdmin, realIsAdmin, mockRole, logout } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
+  const isAddFormPage = location.pathname === '/add' && canEdit;
+
   useEffect(() => {
-    const refresh = () => void localDb.getPending().then((items) => setPendingCount(items.length));
-    refresh(); window.addEventListener('rules-pending-change', refresh);
-    return () => window.removeEventListener('rules-pending-change', refresh);
+    let active = true;
+    void localDb.getPending().then((pending) => {
+      if (active) setPendingCount(pending.length);
+    });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -44,7 +49,7 @@ export const Layout = () => {
   const [headerAction, setHeaderAction] = useState<React.ReactNode>(null);
   const adminLabel = mockRole ? `管理 (${mockLabels[mockRole] || mockRole})` : '管理';
 
-  return <div className="app-shell">
+  return <div className={isAddFormPage ? 'app-shell is-add-page' : 'app-shell'}>
     <ScrollToTop />
     <a className="skip-link" href="#main-content">跳至主要內容</a>
     <header className="site-header">
@@ -63,7 +68,7 @@ export const Layout = () => {
       </nav>
     </header>
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
-    <nav className="mobile-nav" aria-label="手機主要導覽">
+    {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">
       <NavLink to="/" end><span aria-hidden="true">⌂</span><small>探索</small></NavLink>
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span><small>搜尋</small></button>
       <NavLink to="/add" className="mobile-primary"><span aria-hidden="true">＋{!canEdit && <FaintRedLock />}</span><small>記錄{canEdit && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
@@ -71,7 +76,7 @@ export const Layout = () => {
       {user && <NavLink to="/catalog"><span aria-hidden="true">列</span><small>列表</small></NavLink>}
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true">◎</span><small>{adminLabel}</small></NavLink>}
       <NavLink to={user ? '/account' : '/login'}><span aria-hidden="true">◎</span><small>{user ? '帳號' : '登入'}</small></NavLink>
-    </nav>
+    </nav>}
     <footer>
       <span>把踩過的坑，化為下次的提醒。</span>
       <NavLink to="/privacy">隱私與資料</NavLink>
