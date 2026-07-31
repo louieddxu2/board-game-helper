@@ -326,9 +326,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .confirm-discard-btn { border: 0; background: transparent; color: #d32f2f; font-size: 13px; font-weight: 600; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; opacity: 0.85; }
 .confirm-discard-btn:hover { opacity: 1; color: #b71c1c; }
 
-.rule-category-input { min-width: 0; margin: 0; padding: 0; border: 0; width: 100%; }
+.rule-category-input { min-width: 0; margin: 0; padding: 0; border: 0; }
 .rule-category-input legend { margin-bottom: 7px; font-size: 13px; font-weight: 700; color: var(--ink); }
-.rule-category-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 13px; background: var(--cream); width: 100%; }
+.rule-category-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 13px; background: var(--cream); }
 .category-btn { min-width: 0; min-height: 44px; padding: 0 4px; border: 1px solid transparent; border-radius: 9px; background: var(--white); color: var(--green); font-size: 13px; font-weight: 800; cursor: pointer; text-align: center; transition: all 0.15s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: center; }
 .category-btn:hover { border-color: var(--green); }
 .category-btn.selected { border-color: var(--orange); background: var(--orange); color: white; box-shadow: 0 2px 8px rgba(229,115,0,.35); }
