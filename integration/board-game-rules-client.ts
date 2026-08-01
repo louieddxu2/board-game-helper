@@ -48,10 +48,8 @@ export interface RulesPublicSnapshot {
 export interface RulesSubmissionInput {
   gameId: string;
   idempotencyKey: string;
-  playedOn?: string;
   sourceLabel?: string;
   sourceUrl?: string;
-  privateNote?: string;
   rules: Array<{
     statement: string;
     commonMistake?: string;

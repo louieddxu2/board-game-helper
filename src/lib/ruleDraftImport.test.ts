@@ -50,6 +50,19 @@ describe('rule draft import', () => {
     })).rules).toHaveLength(20);
   });
 
+  test('ignores legacy play-date and private-note fields', () => {
+    const parsed = parseRuleDraftImport(JSON.stringify({
+      format: RULE_DRAFT_IMPORT_FORMAT,
+      schemaVersion: 1,
+      game: { displayName: '遊戲' },
+      playedOn: '2026-08-02',
+      privateNote: '舊版私人備註',
+      rules: [{ statement: '規則' }],
+    }));
+    expect(parsed).not.toHaveProperty('playedOn');
+    expect(parsed).not.toHaveProperty('privateNote');
+  });
+
   test('rejects malformed JSON and files larger than the server request limit', () => {
     expect(() => parseRuleDraftImport('{')).toThrow('檔案不是有效的 JSON');
     expect(() => parseRuleDraftImport('x'.repeat(64 * 1024 + 1))).toThrow('匯入檔不可超過 64 KB');

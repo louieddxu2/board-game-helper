@@ -296,15 +296,6 @@ describe('api versioned game catalog boundary', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/game-catalog/changes?after=10', expect.any(Object));
   });
 
-  test('stores a newly created game into the local catalog overlay', async () => {
-    const newGame = { id: 'game-2', slug: 'new-game', displayName: '新遊戲', ruleCount: 0, updatedAt: 2 };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: newGame }) }));
-    const upsert = vi.spyOn(localDb, 'upsertGameSummary').mockResolvedValue(undefined);
-
-    await api.createGame({ displayName: '新遊戲' });
-
-    expect(upsert).toHaveBeenCalledWith(newGame);
-  });
 });
 
 describe('api editor catalog cache boundary', () => {

@@ -18,10 +18,8 @@ export const submissionSchema = z.object({
     displayName: z.string().trim().min(1).max(120),
     englishName: z.string().trim().max(120).optional(),
   }).optional(),
-  playedOn: z.string().max(20).optional(),
   sourceLabel: z.string().trim().max(300).optional(),
   sourceUrl: z.url().max(2000).optional().or(z.literal('')),
-  privateNote: z.string().trim().max(2000).optional(),
   idempotencyKey: z.string().min(8).max(120),
   rules: z.array(z.object({
     statement: z.string().trim().min(1).max(2000),
@@ -131,15 +129,13 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   const ruleIds: string[] = [];
   statements.push(getDatabase(c).statement(`
     INSERT INTO submissions (
-      id, game_id, author_id, idempotency_key, played_on, source_label,
-      source_url, private_note, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, game_id, author_id, idempotency_key, source_label,
+      source_url, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).bind(
     submissionId, gameId, user.id, parsed.data.idempotencyKey,
-    cleanOptional(parsed.data.playedOn, 20) ?? null,
     cleanOptional(parsed.data.sourceLabel, 300) ?? null,
     cleanOptional(parsed.data.sourceUrl, 2000) ?? null,
-    cleanOptional(parsed.data.privateNote, 2000) ?? null,
     timestamp,
   ));
   if (parsed.data.sourceUrl) {

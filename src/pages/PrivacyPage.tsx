@@ -146,7 +146,6 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
       <li>所屬遊戲</li>
       <li>建立者</li>
       <li>參考來源</li>
-      <li>遊玩日期</li>
       <li>建立及更新時間</li>
       <li>審核狀態、審核者及審核時間</li>
     </ul>

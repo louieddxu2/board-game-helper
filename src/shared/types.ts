@@ -291,10 +291,8 @@ export interface SubmissionInput {
     displayName: string;
     englishName?: string;
   };
-  playedOn?: string;
   sourceLabel?: string;
   sourceUrl?: string;
-  privateNote?: string;
   idempotencyKey: string;
   rules: SubmissionRuleInput[];
 }

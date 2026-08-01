@@ -353,13 +353,6 @@ export const api = {
   catalogGames,
   syncCatalogGames,
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
-  createGame: async (input: { displayName: string; englishName?: string; aliases?: string[] }) => {
-    const response = await mutation<{ game: GameSummary }>('/api/games', {
-      method: 'POST', body: JSON.stringify(input),
-    });
-    await localDb.upsertGameSummary(response.game).catch(() => undefined);
-    return response;
-  },
   patchGame: async (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ ok: true; game: GameSummary }>(`/api/games/${id}`, {
       method: 'PATCH', body: JSON.stringify(input),

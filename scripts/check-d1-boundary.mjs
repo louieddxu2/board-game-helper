@@ -102,7 +102,7 @@ const patchGameHandler = gamesRouteSource.split("gamesRoutes.patch('/api/games/:
 if (/\bFROM\s+rules\b/i.test(patchGameHandler)) {
   violations.push('worker/routes/games.ts: game rename authorization must not scan rules');
 }
-const publicGameDetailHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/:identifier'")[1]?.split("gamesRoutes.post('/api/games'")[0] ?? '';
+const publicGameDetailHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/:identifier'")[1]?.split("gamesRoutes.patch('/api/games/:id'")[0] ?? '';
 if (/rule_importance_votes|COUNT\s*\(/i.test(publicGameDetailHandler)) {
   violations.push('worker/routes/games.ts: public game detail must carry the pre-aggregated count and never scan/count vote rows');
 }

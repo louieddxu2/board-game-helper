@@ -71,8 +71,6 @@ export interface DraftRecord {
   rules: Array<{ id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] }>;
   sourceLabel?: string;
   sourceUrl?: string;
-  playedOn: string;
-  privateNote: string;
   updatedAt: number;
 }
 

@@ -22,6 +22,17 @@ describe('contribution submission contract', () => {
     }).success).toBe(false);
   });
 
+  test('drops the removed play-date and private-note fields from new submissions', () => {
+    const parsed = submissionSchema.parse({
+      ...base,
+      gameId: 'game-1',
+      playedOn: '2026-08-02',
+      privateNote: 'legacy private note',
+    });
+    expect(parsed).not.toHaveProperty('playedOn');
+    expect(parsed).not.toHaveProperty('privateNote');
+  });
+
   test('keeps the trusted editor batch boundary at twenty rules', () => {
     expect(submissionSchema.safeParse({ ...base, gameId: 'game-1', rules: Array.from({ length: 20 }, (_, index) => ({ statement: `Rule ${index}` })) }).success).toBe(true);
     expect(submissionSchema.safeParse({ ...base, gameId: 'game-1', rules: Array.from({ length: 21 }, (_, index) => ({ statement: `Rule ${index}` })) }).success).toBe(false);

@@ -5,7 +5,7 @@ import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type Ho
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
@@ -162,45 +162,6 @@ const gameSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   englishName: z.string().trim().max(120).optional(),
   aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
-});
-
-gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
-  const parsed = gameSchema.safeParse(await c.req.json());
-  if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
-  const normalizedName = normalizeText(parsed.data.displayName);
-  const existing = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      g.published_rule_count AS rule_count, g.published_rule_count,
-      g.total_rule_count, g.latest_rule_updated_at
-    FROM games g
-    LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL
-      AND (g.normalized_name = ? OR a.normalized_alias = ?)
-    GROUP BY g.id
-    LIMIT 1
-  `).bind(normalizedName, normalizedName).first<GameRow>();
-  if (existing) return c.json({ game: toGame(existing), reused: true });
-  const user = c.get('user')!;
-  const id = createId('game');
-  const timestamp = now();
-  const baseSlug = slugify(parsed.data.englishName || parsed.data.displayName);
-  const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
-  const slug = slugExists ? `${baseSlug}-${id.slice(-6)}` : baseSlug;
-  const aliases = cleanAliases(parsed.data.aliases ?? [], parsed.data.displayName, parsed.data.englishName);
-  const statements: DatabaseStatement[] = [
-    getDatabase(c).statement(`
-      INSERT INTO games (id, slug, display_name, english_name, normalized_name, created_by, rename_owner_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, slug, parsed.data.displayName, parsed.data.englishName ?? null, normalizedName, user.id, user.id, timestamp, timestamp),
-  ];
-  for (const alias of aliases) {
-    statements.push(getDatabase(c).statement(`
-      INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(createId('alias'), id, alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
-  }
-  await getDatabase(c).batch(statements);
-  return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, publishedRuleCount: 0, totalRuleCount: 0, updatedAt: timestamp } }, 201);
 });
 
 gamesRoutes.patch('/api/games/:id', requireUser, async (c) => {

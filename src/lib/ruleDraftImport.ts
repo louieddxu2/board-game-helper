@@ -50,8 +50,6 @@ export interface RuleDraftImportFile {
   format: typeof RULE_DRAFT_IMPORT_FORMAT;
   schemaVersion: typeof RULE_DRAFT_IMPORT_SCHEMA_VERSION;
   game: { id?: string; slug?: string; displayName: string; englishName?: string };
-  playedOn?: string;
-  privateNote?: string;
   sourceLabel?: string;
   sourceUrl?: string;
   rules: RuleDraftImportRule[];
@@ -67,8 +65,9 @@ export const parseRuleDraftImport = (text: string): RuleDraftImportFile => {
     const issue = parsed.error.issues[0];
     throw new Error(`匯入格式錯誤：${issue.path.join('.') || 'root'} ${issue.message}`);
   }
+  const { playedOn: _playedOn, privateNote: _privateNote, ...data } = parsed.data;
   return {
-    ...parsed.data,
+    ...data,
     rules: parsed.data.rules.map((rule) => ({
       ...rule,
       categories: rule.categories ? Array.from(new Set(rule.categories)) : undefined,

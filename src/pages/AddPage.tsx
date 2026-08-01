@@ -28,12 +28,6 @@ type RuleInput = {
 };
 
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
-const today = () => {
-  const date = new Date();
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
-};
-
 export const AddPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -46,9 +40,6 @@ export const AddPage = () => {
   const [englishName, setEnglishName] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
   const [activeRuleId, setActiveRuleId] = useState(() => rules[0].id);
-  const [playedOn, setPlayedOn] = useState(today());
-  const [privateNote, setPrivateNote] = useState('');
-  const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState<number>();
@@ -100,8 +91,6 @@ export const AddPage = () => {
         })) : [blankRule()];
         setRules(restored);
         setActiveRuleId(restored[0].id);
-        setPlayedOn(draft.playedOn || today());
-        setPrivateNote(draft.privateNote);
         return;
       }
       const requestedGame = searchParams.get('game');
@@ -129,12 +118,12 @@ export const AddPage = () => {
     const timer = window.setTimeout(() => {
       const draft: Omit<DraftRecord, 'id'> = {
         game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
-        gameQuery, englishName, rules, playedOn, privateNote, updatedAt: Date.now(),
+        gameQuery, englishName, rules, updatedAt: Date.now(),
       };
       void localDb.saveDraft(draft).then(() => setSavedAt(Date.now()));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [game, gameQuery, englishName, rules, playedOn, privateNote]);
+  }, [game, gameQuery, englishName, rules]);
 
   const validRules = useMemo(() => rules.filter((rule) => rule.statement.trim()), [rules]);
   const editionOptions = useMemo(() => mergeEditionOptions(
@@ -182,7 +171,6 @@ export const AddPage = () => {
       const importedRules = imported.rules.map((rule) => ({ ...rule, id: crypto.randomUUID(), tagSelections: rule.tagNames?.map((name) => ({ name })) ?? [], tagNames: undefined }));
       setGame(importedGame); setGameQuery(imported.game.displayName); setEnglishName(imported.game.englishName ?? '');
       setRules(importedRules); setActiveRuleId(importedRules[0]?.id ?? blankRule().id);
-      setPlayedOn(imported.playedOn ?? today()); setPrivateNote(imported.privateNote ?? '');
     } catch (caught) { setError(caught instanceof Error ? caught.message : '無法匯入草稿。'); }
   };
 
@@ -195,7 +183,7 @@ export const AddPage = () => {
     setSaving(true); setError('');
     const payload: SubmissionInput = {
       ...(game ? { gameId: game.id } : { newGame: { displayName: gameQuery.trim(), englishName: englishName.trim() || undefined } }),
-      playedOn, privateNote: privateNote.trim() || undefined, idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
       rules: validRules.map((rule) => ({
         statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined,
         categories: rule.categories, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes,
@@ -275,7 +263,6 @@ export const AddPage = () => {
       })}
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增一條規則</button>
     </div>
-    {game && <div className="shared-fields"><button type="button" className="text-action" onClick={() => setShowMore((value) => !value)}>{showMore ? '收起補充資料' : '補充日期與私人備註'}</button>{showMore && <div className="more-fields"><label>遊玩日期<input type="date" value={playedOn} onChange={(event) => setPlayedOn(event.target.value)} /></label><label>私人備註<textarea rows={2} value={privateNote} onChange={(event) => setPrivateNote(event.target.value)} /></label></div>}</div>}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="sticky-submit"><button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button><p className="submit-info-text">{savedAt ? `草稿已儲存於 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `目前 ${validRules.length} 條規則`}</p><button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving || ruleEntryLocked} onClick={() => void requestSubmit()}>{saving ? '送出中…' : `送出 ${validRules.length} 條規則`}</button></div>
   </section>;

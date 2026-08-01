@@ -77,7 +77,7 @@ export const ContributionsPage = () => {
       <h2>如何申請完整的編輯/審核權限？</h2>
       <p>若你願意協助校對投稿、整理遊戲或維護既有規則，請透過 <a href="https://www.facebook.com/huang.shao.dong.238497" target="_blank" rel="noopener noreferrer">黃紹東的 Facebook</a> 聯絡管理員。</p>
       <ol className="contribution-application-list">
-        <li>請提供你在本站使用的公開暱稱，讓管理員能確認要授權的帳號。</li>
+        <li>請向管理員說明你希望申請完整的編輯／審核權限；公開暱稱可在取得權限後、實際參與審核前再設定。</li>
         <li>請附上既有投稿，或簡短說明你熟悉、願意協助維護的遊戲與規則資料。</li>
         <li>審核工作需要比對規則書與來源；若資料有爭議，會優先保留可追溯的來源與討論空間。</li>
       </ol>
