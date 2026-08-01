@@ -78,7 +78,7 @@ export interface DraftRecord {
 
 interface RulesDb extends DBSchema {
   drafts: { key: string; value: DraftRecord };
-  pending: { key: string; value: { id: string; payload: SubmissionInput; createdAt: number } };
+  pending: { key: string; value: { id: string; userId: string; payload: SubmissionInput; createdAt: number } };
   cache: { key: string; value: { key: string; data: unknown; cachedAt: number } };
   recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; englishName?: string; viewedAt: number }; indexes: { viewedAt: number } };
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
@@ -185,9 +185,9 @@ export const localDb = {
   getDraft: async () => (await getDatabase()).get('drafts', 'active'),
   saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await getDatabase()).put('drafts', { ...draft, id: 'active' }),
   clearDraft: async () => (await getDatabase()).delete('drafts', 'active'),
-  addPending: async (payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, payload, createdAt: Date.now() }); notifyPending(); return result; },
+  addPending: async (userId: string, payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, userId, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
-  getPending: async () => (await getDatabase()).getAll('pending'),
+  getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),
   cacheSearch: async (key: string, data: SearchResponse) => {
     const record = { key: `search:${key}`, data, cachedAt: Date.now() } satisfies CacheRecord<SearchResponse>;
     if (searchMemoryCache.size >= 100 && !searchMemoryCache.has(key)) {

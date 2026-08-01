@@ -24,17 +24,20 @@ homeRoutes.get('/api/home', async (c) => {
 
   const [popularGameIdsRaw, recentRaw] = await Promise.all([
     getDatabase(c).statement(`
-      SELECT game_id, SUM(view_count) AS view_count
-      FROM game_daily_view_counts
-      WHERE view_date >= DATE('now', '-6 days')
-      GROUP BY game_id
+      SELECT views.game_id, SUM(views.view_count) AS view_count
+      FROM game_daily_view_counts views
+      JOIN games g ON g.id = views.game_id
+      WHERE views.view_date >= DATE('now', '-6 days')
+        AND g.visibility = 'public' AND g.merged_into_game_id IS NULL
+      GROUP BY views.game_id
       ORDER BY view_count DESC, MAX(last_view_at) DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
     getDatabase(c).statement(`
-      SELECT id FROM rules
-      WHERE status = 'published'
-      ORDER BY created_at DESC LIMIT 6
+      SELECT r.id FROM rules r
+      JOIN games g ON g.id = r.game_id
+      WHERE r.status = 'published' AND g.visibility = 'public'
+      ORDER BY r.created_at DESC LIMIT 6
     `).all<{ id: string }>(),
   ]);
 
@@ -46,7 +49,7 @@ homeRoutes.get('/api/home', async (c) => {
   if (popularGameIds.length < 6) {
     const fallbackGameIdsResult = track('home:fallback-games', await getDatabase(c).statement(`
       SELECT g.id FROM games g
-      WHERE g.merged_into_game_id IS NULL
+      WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
       ORDER BY g.updated_at DESC LIMIT 6
     `).all<{ id: string }>());
     const extraIds = (fallbackGameIdsResult.results ?? []).map((g) => g.id);
@@ -65,7 +68,7 @@ homeRoutes.get('/api/home', async (c) => {
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
       0 AS rule_count
     FROM games g
-    WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL
+    WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
   `).bind(...popularGameIds).all<GameRow>());
 
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));

@@ -4,6 +4,32 @@ import { describe, expect, test, vi } from 'vitest';
 import { RuleCard } from './RuleCard';
 
 describe('RuleCard', () => {
+  test('shows a pending contribution as unreviewed', () => {
+    render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_pending', gameId: 'game_1', statement: '待審核規則', status: 'published',
+      reviewStatus: 'pending', tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+    expect(screen.getByText('未審核')).toBeInTheDocument();
+  });
+
+  test('shows the public reviewer name after review', () => {
+    render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_reviewed', gameId: 'game_1', statement: '已審核規則', status: 'published',
+      reviewStatus: 'reviewed', reviewedByNickname: '東東', tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+    expect(screen.getByText('審核：東東')).toBeInTheDocument();
+  });
+
+  test('does not render a review row for editor-created content', () => {
+    const { container } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_trusted', gameId: 'game_1', statement: '正式規則', status: 'published',
+      reviewStatus: 'not_required', tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+    expect(container.querySelector('.rule-credits')).toBeNull();
+    expect(container).not.toHaveTextContent('未審核');
+    expect(container).not.toHaveTextContent(/審核/);
+  });
+
   test('keeps the game link and source link as separate valid anchors', () => {
     const { container } = render(<MemoryRouter><RuleCard
       gameName="船廠"

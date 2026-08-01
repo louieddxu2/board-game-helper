@@ -88,7 +88,7 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
         <tbody>
           {visibleRules.length === 0 && <tr><td colSpan={8} className="catalog-empty-cell">沒有符合篩選條件的規則。</td></tr>}
           {visibleRules.map((rule) => <tr key={rule.id}>
-            <td data-label="狀態" className="catalog-rule-status-cell"><span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span></td>
+            <td data-label="狀態" className="catalog-rule-status-cell"><span className={`catalog-status catalog-status-${rule.status}`}>{rule.reviewStatus === 'pending' ? '未審核' : statusLabel[rule.status]}</span></td>
             <td data-label="規則" className="catalog-text-cell catalog-rule-statement"><strong>{rule.statement}</strong></td>
             <td data-label="玩錯情況" className="catalog-text-cell">{rule.commonMistake || '—'}</td>
             <td data-label="補充" className="catalog-text-cell">{rule.details || '—'}</td>
@@ -109,7 +109,7 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
           </div>
           <aside className="catalog-mobile-rule-meta">
             <div className="catalog-mobile-rule-actions">
-              <span className={`catalog-status catalog-status-${rule.status}`}>{statusLabel[rule.status]}</span>
+              <span className={`catalog-status catalog-status-${rule.status}`}>{rule.reviewStatus === 'pending' ? '未審核' : statusLabel[rule.status]}</span>
               {canEditRule(rule) && <button type="button" className="text-action" onClick={() => onEdit(rule)}>編輯</button>}
             </div>
             <div><span>來源</span><p>{sourceCell(rule)}</p></div>
@@ -135,14 +135,20 @@ export const CatalogPage = () => {
   const [loadingGameId, setLoadingGameId] = useState<string>();
   const [error, setError] = useState('');
   const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
+  const [pendingRuleCounts, setPendingRuleCounts] = useState<Record<string, number>>({});
+  const [pendingGameIds, setPendingGameIds] = useState<string[]>([]);
+  const [onlyPending, setOnlyPending] = useState(false);
   const detailRequestId = useRef(0);
 
   const filteredGames = useMemo(() => {
     const query = gameQuery.trim().toLocaleLowerCase();
-    if (!query) return games;
-    return games.filter((game) => [game.displayName, game.englishName, ...(game.aliases ?? [])]
-      .some((name) => name?.toLocaleLowerCase().includes(query)));
-  }, [gameQuery, games]);
+    return games.filter((game) => {
+      if (onlyPending && !(pendingRuleCounts[game.id] || pendingGameIds.includes(game.id))) return false;
+      if (!query) return true;
+      return [game.displayName, game.englishName, ...(game.aliases ?? [])]
+        .some((name) => name?.toLocaleLowerCase().includes(query));
+    });
+  }, [gameQuery, games, onlyPending, pendingRuleCounts, pendingGameIds]);
 
   const updateGameSummary = (detail: GameDetail) => {
     const { rules: _rules, ...gameSummary } = detail;
@@ -180,6 +186,13 @@ export const CatalogPage = () => {
   };
 
   useEffect(() => { if (user) void loadGames(); }, [user?.id, canEdit]);
+  useEffect(() => {
+    if (!canEdit) { setPendingRuleCounts({}); setPendingGameIds([]); return; }
+    void api.editorContributions().then((data) => {
+      setPendingRuleCounts(Object.fromEntries(data.games.map((row) => [row.gameId, row.pendingRuleCount])));
+      setPendingGameIds(data.pendingGameIds);
+    }).catch(() => undefined);
+  }, [canEdit]);
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -259,6 +272,7 @@ export const CatalogPage = () => {
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">
       <label className="catalog-game-filter">篩選遊戲名稱<input type="search" value={gameQuery} onChange={(event) => setGameQuery(event.target.value)} placeholder="輸入中文或英文名稱" /></label>
+      {canEdit && <label className="checkbox-row"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} />只顯示待審核內容</label>}
       <strong>{gameQuery.trim() ? `${filteredGames.length} / ${games.length}` : games.length} 款遊戲</strong>
     </div>
     <div className="catalog-sheet-scroll">
@@ -284,7 +298,7 @@ export const CatalogPage = () => {
               <td className="catalog-expand-cell"><span className="catalog-expand-icon" aria-hidden="true">{expandedGameId === game.id ? '−' : '+'}</span></td>
               <td className="catalog-game-name"><ScrollableGameName name={game.displayName} emphasized /></td>
               <td data-label="英文名稱" className="catalog-game-english">{game.englishName ? <ScrollableGameName name={game.englishName} /> : '—'}</td>
-              <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}</td>
+              <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}{canEdit && Boolean(pendingRuleCounts[game.id]) && <small>・待審核 {pendingRuleCounts[game.id]}</small>}{canEdit && pendingGameIds.includes(game.id) && <small>・新遊戲待審核</small>}</td>
               <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
             {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} canEditRule={canEditRule} /> : null}</td></tr>}

@@ -9,6 +9,7 @@ import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewCo
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
+import { canEditContributionRule } from '../contributions';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -18,10 +19,10 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
     SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
       r.statement, r.common_mistake, r.details, r.flow_stage, r.categories_json,
       r.player_counts_json, r.edition_notes_json, r.edition_note, r.status, r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count,
-      r.tag_ids_json, r.source_label, r.source_url
+      r.tag_ids_json, r.source_label, r.source_url, r.review_status, r.reviewed_by, r.reviewed_by_nickname, r.reviewed_at
     FROM rules r
     JOIN games g ON g.id = r.game_id
-    WHERE r.id = ? AND r.status = 'published'
+    WHERE r.id = ? AND r.status = 'published' AND g.visibility = 'public'
     LIMIT 1
   `).bind(id).first<RuleRow & { game_name: string; game_slug: string }>();
 
@@ -74,15 +75,18 @@ rulesRoutes.put('/api/rules/:id/importance', requireUser, async (c) => {
   return c.json(result);
 });
 
-rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
+rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
   const parsed = rulePatchSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_rule', issues: parsed.error.issues }, 400);
   const row = await getDatabase(c).statement('SELECT r.* FROM rules r WHERE r.id = ?')
     .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
-  const isAdmin = user.roles.includes('admin');
-  if (!isAdmin && row.created_by !== user.id) {
+  if (!canEditContributionRule(row as {
+    created_by: string | null;
+    review_status: 'not_required' | 'pending' | 'reviewed';
+    status: string;
+  }, user)) {
     return c.json({ error: 'forbidden' }, 403);
   }
   const existingTags = await getDatabase(c).statement(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
@@ -90,6 +94,9 @@ rulesRoutes.patch('/api/rules/:id', requireRole('editor'), async (c) => {
   const timestamp = now();
   const requestedTagNames = parsed.data.newTagNames ?? parsed.data.tagNames;
   const requestedTagIds = parsed.data.tagIds ?? [];
+  if (!user.roles.some((role) => role === 'editor' || role === 'admin') && requestedTagNames?.length) {
+    return c.json({ error: 'new_tags_require_editor' }, 403);
+  }
   const currentTagIds = (() => {
     try { return JSON.parse(String(row.tag_ids_json ?? '[]')) as string[]; }
     catch { return []; }
@@ -157,8 +164,11 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
   const row = await getDatabase(c).statement('SELECT * FROM rules WHERE id = ?').bind(id).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
-  const isAdmin = user.roles.includes('admin');
-  if (!isAdmin && row.created_by !== user.id) {
+  if (!canEditContributionRule(row as {
+    created_by: string | null;
+    review_status: 'not_required' | 'pending' | 'reviewed';
+    status: string;
+  }, user)) {
     return c.json({ error: 'forbidden' }, 403);
   }
   const timestamp = now();
@@ -169,6 +179,11 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
     `).bind(createId('rev'), id, JSON.stringify(row), user.id, status === 'hidden' ? 'hide' : 'restore', timestamp),
     getDatabase(c).statement('UPDATE rules SET status = ?, hidden_at = ?, hidden_by = ?, updated_at = ? WHERE id = ?')
       .bind(status, status === 'hidden' ? timestamp : null, status === 'hidden' ? user.id : null, timestamp, id),
+    ...(status === 'hidden' ? [getDatabase(c).statement(`
+      UPDATE games SET visibility = 'hidden', updated_at = ?
+      WHERE id = ? AND review_status = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM rules WHERE game_id = ? AND status = 'published')
+    `).bind(timestamp, row.game_id as string, row.game_id as string)] : []),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
   const cache = (caches as any).default;
@@ -182,8 +197,35 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
   return c.json({ ok: true });
 };
 
-rulesRoutes.post('/api/rules/:id/hide', requireRole('editor'), (c) => changeRuleVisibility(c, 'hidden'));
+rulesRoutes.post('/api/rules/:id/hide', requireUser, (c) => changeRuleVisibility(c, 'hidden'));
 rulesRoutes.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeRuleVisibility(c, 'published'));
+
+rulesRoutes.post('/api/rules/:id/review', requireRole('editor'), async (c) => {
+  const user = c.get('user')!;
+  const reviewer = await getDatabase(c).statement(`
+    SELECT nickname FROM users
+    WHERE id = ? AND show_nickname = 1 AND nickname IS NOT NULL
+  `).bind(user.id).first<{ nickname: string }>();
+  if (!reviewer) return c.json({ error: 'reviewer_nickname_required' }, 409);
+  const rule = await getDatabase(c).statement(`
+    SELECT id, game_id, review_status FROM rules WHERE id = ?
+  `).bind(c.req.param('id')).first<{ id: string; game_id: string; review_status: string }>();
+  if (!rule) return c.json({ error: 'rule_not_found' }, 404);
+  if (rule.review_status !== 'pending') return c.json({ error: 'rule_not_pending_review' }, 409);
+  const timestamp = now();
+  await getDatabase(c).statement(`
+    UPDATE rules SET review_status = 'reviewed', reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
+    WHERE id = ? AND review_status = 'pending'
+  `).bind(user.id, reviewer.nickname, timestamp, rule.id).run();
+  const gameSlug = await getDatabase(c).statement('SELECT slug FROM games WHERE id = ?')
+    .bind(rule.game_id).first<{ slug: string }>();
+  const cache = (caches as any).default;
+  if (gameSlug) c.executionCtx.waitUntil(Promise.all([
+    cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
+    cache.delete(new Request(new URL('/api/home', c.req.url))),
+  ]));
+  return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
+});
 
 rulesRoutes.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
   const revisions = await getDatabase(c).statement(`
@@ -211,8 +253,11 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
   const current = await getDatabase(c).statement('SELECT * FROM rules WHERE id = ?').bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!current) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
-  const isAdmin = user.roles.includes('admin');
-  if (!isAdmin && current.created_by !== user.id) {
+  if (!canEditContributionRule(current as {
+    created_by: string | null;
+    review_status: 'not_required' | 'pending' | 'reviewed';
+    status: string;
+  }, user)) {
     return c.json({ error: 'forbidden' }, 403);
   }
   let previous: Record<string, unknown>;

@@ -33,6 +33,7 @@ export const RuleCard = ({
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
   const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
+  const hasReviewMeta = (rule.reviewStatus ?? 'not_required') !== 'not_required';
 
   const effectiveGameName = gameName || (rule as any).gameName;
   const effectiveGameSlug = (gameHref ? gameHref.replace('/games/', '') : undefined) || (rule as any).gameSlug;
@@ -123,10 +124,12 @@ export const RuleCard = ({
           )}
         </div>
 
-        {hasCredits && (
+        {(hasCredits || hasReviewMeta) && (
           <small className="rule-credits" aria-label="規則作者資訊">
             {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
             {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
+            {rule.reviewStatus === 'pending' && <span>未審核</span>}
+            {rule.reviewStatus === 'reviewed' && <span>{rule.reviewedByNickname ? `審核：${rule.reviewedByNickname}` : '審核完成'}</span>}
           </small>
         )}
 

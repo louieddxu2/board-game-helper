@@ -16,6 +16,7 @@ import adminRoutes from './routes/admin';
 import { submissionsRoutes } from './routes/submissions';
 import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
+import { contributionRoutes } from './routes/contributions';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -125,6 +126,7 @@ app.route('/', adminRoutes);
 app.route('/', submissionsRoutes);
 app.route('/', reviewRoutes);
 app.route('/', favoriteRoutes);
+app.route('/', contributionRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   const db = createDatabase(env);

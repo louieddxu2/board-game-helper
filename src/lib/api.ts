@@ -1,4 +1,4 @@
-import type { AccountDeletionSummary, AccountPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountDeletionSummary, AccountPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -135,7 +135,9 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
   englishName: game.englishName,
   updatedAt: game.updatedAt,
   latestRuleUpdatedAt: game.latestRuleUpdatedAt,
-  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status, rule.categories]),
+  reviewStatus: game.reviewStatus,
+  reviewedByNickname: game.reviewedByNickname,
+  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status, rule.categories, rule.reviewStatus, rule.reviewedByNickname]),
 });
 
 const gameRefreshRequests = new Map<string, Promise<{ game: GameDetail }>>();
@@ -170,6 +172,7 @@ const refreshRule = (id: string): Promise<ApiRule> => {
 
 const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
   rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.categories, rule.tagIds,
+  rule.reviewStatus, rule.reviewedByNickname, rule.reviewedAt,
 ]);
 
 const ruleImportanceRequests = new Map<string, Promise<RuleImportancePayload>>();
@@ -245,6 +248,8 @@ const home = async (onUpdated?: (data: HomePayload) => void): Promise<HomePayloa
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
+  contributions: () => uncachedRead<ContributionsPayload>('/api/account/contributions', 'contribution quota and history are user-specific'),
+  editorContributions: () => uncachedRead<{ games: Array<{ gameId: string; pendingRuleCount: number }>; pendingGameIds: string[] }>('/api/editor/contributions', 'review queue is editor-specific'),
   personalHome: () => uncachedRead<PersonalHomePayload>('/api/account/home', 'favorite data is user-specific'),
   favoriteStatus: (gameId: string) => uncachedRead<{ favorite: boolean; favoriteCount: number }>(`/api/account/favorites/${encodeURIComponent(gameId)}`, 'favorite status is user-specific'),
   addFavorite: (gameId: string) => mutation<FavoriteMutationPayload>(`/api/account/favorites/${encodeURIComponent(gameId)}`, { method: 'POST', body: '{}' }),
@@ -362,7 +367,7 @@ export const api = {
     await localDb.upsertGameSummary(response.game).catch(() => undefined);
     return response;
   },
-  submit: (input: SubmissionInput) => mutation<{ submissionId: string; ruleIds?: string[]; reused: boolean }>('/api/submissions', {
+  submit: (input: SubmissionInput) => mutation<{ submissionId: string; ruleIds?: string[]; gameId: string; gameSlug: string; gameCreated: boolean; quota?: ContributionQuota; reused: boolean }>('/api/submissions', {
     method: 'POST', body: JSON.stringify(input),
   }),
   rule: async (id: string, onUpdated?: (data: { rule: ApiRule }) => void) => {
@@ -378,6 +383,8 @@ export const api = {
   patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }),
+  reviewRule: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/rules/${id}/review`, { method: 'POST', body: '{}' }),
+  reviewGame: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/games/${id}/review`, { method: 'POST', body: '{}' }),
   hideRule: (id: string) => mutation<{ ok: true }>(`/api/rules/${id}/hide`, { method: 'POST', body: '{}' }),
   restoreRule: (id: string) => mutation<{ ok: true }>(`/api/rules/${id}/restore`, { method: 'POST', body: '{}' }),
   ruleRevisions: (id: string) => uncachedRead<{ revisions: RuleRevision[] }>(`/api/rules/${id}/revisions`, 'revision history is a private editor view'),

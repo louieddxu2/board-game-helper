@@ -24,6 +24,7 @@ export const RULE_CATEGORY_LABELS: Record<RuleCategory, string> = {
   flow_endgame_scoring: '流程、終局、計分',
 };
 export type UserRole = 'admin' | 'editor';
+export type ContributionReviewStatus = 'not_required' | 'pending' | 'reviewed';
 
 export interface SessionUser {
   id: string;
@@ -98,6 +99,11 @@ export interface GameSummary {
   updatedAt: number;
   renameOwnerId?: string;
   renameLocked?: boolean;
+  visibility?: 'public' | 'hidden';
+  reviewStatus?: ContributionReviewStatus;
+  reviewedByNickname?: string;
+  reviewedAt?: number;
+  pendingRuleCount?: number;
 }
 
 export interface AccountDeletionSummary {
@@ -190,6 +196,9 @@ export interface RuleCard {
   createdBy?: string;
   createdByNickname?: string;
   editedByNicknames?: string[];
+  reviewStatus?: ContributionReviewStatus;
+  reviewedByNickname?: string;
+  reviewedAt?: number;
   createdAt?: number;
   updatedAt?: number;
   importanceCount?: number;
@@ -277,13 +286,57 @@ export interface FavoriteMutationPayload {
 }
 
 export interface SubmissionInput {
-  gameId: string;
+  gameId?: string;
+  newGame?: {
+    displayName: string;
+    englishName?: string;
+  };
   playedOn?: string;
   sourceLabel?: string;
   sourceUrl?: string;
   privateNote?: string;
   idempotencyKey: string;
   rules: SubmissionRuleInput[];
+}
+
+export interface ContributionQuota {
+  pendingRules: number;
+  ruleLimit: number;
+  remainingRules: number;
+  pendingGames: number;
+  gameLimit: number;
+  remainingGames: number;
+}
+
+export interface ContributionRuleSummary {
+  id: string;
+  gameId: string;
+  gameName: string;
+  gameSlug: string;
+  statement: string;
+  status: RuleCard['status'];
+  reviewStatus: ContributionReviewStatus;
+  reviewedByNickname?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ContributionGameSummary {
+  id: string;
+  slug: string;
+  displayName: string;
+  visibility: 'public' | 'hidden';
+  reviewStatus: ContributionReviewStatus;
+  reviewedByNickname?: string;
+  mergedIntoGameId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ContributionsPayload {
+  quota: ContributionQuota;
+  rules: ContributionRuleSummary[];
+  games: ContributionGameSummary[];
 }
 
 export interface ReviewContent {

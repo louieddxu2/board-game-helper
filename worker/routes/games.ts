@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
@@ -12,6 +12,7 @@ import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTa
 import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
+import { canEditContributionGame } from '../contributions';
 import {
   anonymousGameViewKey,
   dailyViewToken,
@@ -60,7 +61,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL
+    WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
       AND (g.normalized_name = ? OR a.normalized_alias = ?)
     GROUP BY g.id
     LIMIT 1
@@ -75,7 +76,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL
+    WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
       AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
     GROUP BY g.id
     ORDER BY g.display_name
@@ -88,7 +89,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
 gamesRoutes.post('/api/games/:id/view', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ error: 'unauthorized' }, 401);
-  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ?').bind(c.req.param('id')).first();
+  const game = await getDatabase(c).statement("SELECT id FROM games WHERE id = ? AND visibility = 'public'").bind(c.req.param('id')).first();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
   const timestamp = now();
@@ -121,13 +122,14 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      g.rename_owner_id, g.rename_locked,
+      g.rename_owner_id, g.rename_locked, g.visibility, g.review_status, g.reviewed_by_nickname, g.reviewed_at,
       ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,
       g.published_rule_count, g.total_rule_count, g.latest_rule_updated_at
     FROM games g
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
+      AND (g.visibility = 'public' OR ? = 1)
     LIMIT 1
-  `).bind(identifier, identifier).first<GameRow>();
+  `).bind(identifier, identifier, includePrivate ? 1 : 0).first<GameRow>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
   setNoCache(c);
@@ -201,14 +203,16 @@ gamesRoutes.post('/api/games', requireRole('editor'), async (c) => {
   return c.json({ game: { id, slug, displayName: parsed.data.displayName, englishName: parsed.data.englishName, ruleCount: 0, publishedRuleCount: 0, totalRuleCount: 0, updatedAt: timestamp } }, 201);
 });
 
-gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
+gamesRoutes.patch('/api/games/:id', requireUser, async (c) => {
   const parsed = gameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_game', issues: parsed.error.issues }, 400);
-  const game = await getDatabase(c).statement('SELECT id, slug, rename_owner_id, rename_locked FROM games WHERE id = ? AND merged_into_game_id IS NULL')
-    .bind(c.req.param('id')).first<{ id: string; slug: string; rename_owner_id: string | null; rename_locked: number }>();
+  const game = await getDatabase(c).statement('SELECT id, slug, created_by, rename_owner_id, rename_locked, review_status, visibility FROM games WHERE id = ? AND merged_into_game_id IS NULL')
+    .bind(c.req.param('id')).first<{ id: string; slug: string; created_by: string | null; rename_owner_id: string | null; rename_locked: number; review_status: 'not_required' | 'pending' | 'reviewed'; visibility: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const user = c.get('user')!;
-  if (!user.roles.includes('admin') && (Boolean(game.rename_locked) || game.rename_owner_id !== user.id)) {
+  if (!canEditContributionGame(game, user)
+    || (game.review_status === 'not_required' && !user.roles.includes('admin')
+      && (Boolean(game.rename_locked) || game.rename_owner_id !== user.id))) {
     return c.json({ error: 'game_name_locked' }, 403);
   }
   const timestamp = now();
@@ -242,6 +246,32 @@ gamesRoutes.patch('/api/games/:id', requireRole('editor'), async (c) => {
     GROUP BY g.id
   `).bind(c.req.param('id')).first<GameRow>();
   return c.json({ ok: true, game: toGame(updatedGame!) });
+});
+
+gamesRoutes.post('/api/games/:id/review', requireRole('editor'), async (c) => {
+  const user = c.get('user')!;
+  const reviewer = await getDatabase(c).statement(`
+    SELECT nickname FROM users
+    WHERE id = ? AND show_nickname = 1 AND nickname IS NOT NULL
+  `).bind(user.id).first<{ nickname: string }>();
+  if (!reviewer) return c.json({ error: 'reviewer_nickname_required' }, 409);
+  const game = await getDatabase(c).statement(`
+    SELECT id, slug, review_status FROM games WHERE id = ? AND merged_into_game_id IS NULL
+  `).bind(c.req.param('id')).first<{ id: string; slug: string; review_status: string }>();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  if (game.review_status !== 'pending') return c.json({ error: 'game_not_pending_review' }, 409);
+  const timestamp = now();
+  await getDatabase(c).statement(`
+    UPDATE games SET review_status = 'reviewed', reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
+    WHERE id = ? AND review_status = 'pending'
+  `).bind(user.id, reviewer.nickname, timestamp, game.id).run();
+  const cache = (caches as any).default;
+  c.executionCtx.waitUntil(Promise.all([
+    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
+    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
+    cache.delete(new Request(new URL('/api/home', c.req.url))),
+  ]));
+  return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
 });
 
 const mergeSchema = z.object({ targetGameId: z.string().min(1), reason: z.string().max(300).optional() });

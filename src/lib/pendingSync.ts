@@ -2,7 +2,7 @@ import { clearSearchCache } from '../components/GameSearch';
 import { api } from './api';
 import { localDb } from './localDb';
 
-let activeFlush: Promise<number> | undefined;
+const activeFlushes = new Map<string, Promise<number>>();
 
 const sameDraftAsSubmission = (
   draft: Awaited<ReturnType<typeof localDb.getDraft>>,
@@ -12,10 +12,11 @@ const sameDraftAsSubmission = (
   && draft.rules.filter((rule) => rule.statement.trim()).map((rule) => rule.statement.trim()).join('\n')
     === statements.map((statement) => statement.trim()).join('\n');
 
-export const flushPendingSubmissions = (): Promise<number> => {
-  if (activeFlush) return activeFlush;
-  activeFlush = (async () => {
-    const pendingItems = await localDb.getPending();
+export const flushPendingSubmissions = (userId: string): Promise<number> => {
+  const current = activeFlushes.get(userId);
+  if (current) return current;
+  const request = (async () => {
+    const pendingItems = await localDb.getPending(userId);
     let synchronized = 0;
     for (const item of pendingItems) {
       try {
@@ -24,11 +25,11 @@ export const flushPendingSubmissions = (): Promise<number> => {
         const draft = await localDb.getDraft();
         if (sameDraftAsSubmission(
           draft,
-          item.payload.gameId,
+          item.payload.gameId ?? '',
           item.payload.rules.map((rule) => rule.statement),
         )) await localDb.clearDraft();
         await Promise.all([
-          localDb.invalidateGame(item.payload.gameId),
+          item.payload.gameId ? localDb.invalidateGame(item.payload.gameId) : Promise.resolve(),
           localDb.invalidateHome(),
         ]);
         synchronized += 1;
@@ -38,6 +39,7 @@ export const flushPendingSubmissions = (): Promise<number> => {
     }
     if (synchronized) clearSearchCache();
     return synchronized;
-  })().finally(() => { activeFlush = undefined; });
-  return activeFlush;
+  })().finally(() => { activeFlushes.delete(userId); });
+  activeFlushes.set(userId, request);
+  return request;
 };

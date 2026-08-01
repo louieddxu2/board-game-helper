@@ -59,8 +59,8 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    if (!user?.roles.some((role) => role === 'admin' || role === 'editor')) return;
-    const synchronize = () => { void flushPendingSubmissions(); };
+    if (!user) return;
+    const synchronize = () => { void flushPendingSubmissions(user.id); };
     synchronize();
     window.addEventListener('online', synchronize);
     return () => window.removeEventListener('online', synchronize);

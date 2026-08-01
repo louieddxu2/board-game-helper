@@ -100,6 +100,8 @@ export const deleteAccount = async (
     statement(db, 'UPDATE submissions SET author_id = ?, private_note = NULL, idempotency_key = NULL WHERE author_id = ?', DELETED_ACCOUNT_ID, userId),
     statement(db, 'UPDATE rules SET created_by = ? WHERE created_by = ?', DELETED_ACCOUNT_ID, userId),
     statement(db, 'UPDATE rules SET hidden_by = NULL WHERE hidden_by = ?', userId),
+    statement(db, 'UPDATE rules SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?', DELETED_ACCOUNT_ID, '已刪除帳號', userId),
+    statement(db, 'UPDATE games SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?', DELETED_ACCOUNT_ID, '已刪除帳號', userId),
     statement(db, 'UPDATE rule_revisions SET edited_by = ? WHERE edited_by = ?', DELETED_ACCOUNT_ID, userId),
     statement(db, 'UPDATE tags SET created_by = ? WHERE created_by = ?', DELETED_ACCOUNT_ID, userId),
     statement(db, 'UPDATE rule_tags SET created_by = ? WHERE created_by = ?', DELETED_ACCOUNT_ID, userId),

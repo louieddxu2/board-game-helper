@@ -10,6 +10,7 @@ import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { ReviewPage } from './pages/ReviewPage';
+import { ContributionsPage } from './pages/ContributionsPage';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
     { path: 'login', element: <AccountPage /> },
     { path: 'account', element: <AccountPage /> },
     { path: 'catalog', element: <CatalogPage /> },
+    { path: 'contributions', element: <ContributionsPage /> },
     { path: 'privacy', element: <PrivacyPage /> },
     { path: 'review', element: <ReviewPage /> },
     { path: 'admin', element: <AdminPage /> },

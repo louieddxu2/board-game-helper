@@ -1,18 +1,23 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { contributionErrorCode, initialReviewStatus, isTrustedEditor, queryContributionQuota } from '../contributions';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
-const submissionSchema = z.object({
-  gameId: z.string().min(1).max(100),
+export const submissionSchema = z.object({
+  gameId: z.string().min(1).max(100).optional(),
+  newGame: z.object({
+    displayName: z.string().trim().min(1).max(120),
+    englishName: z.string().trim().max(120).optional(),
+  }).optional(),
   playedOn: z.string().max(20).optional(),
   sourceLabel: z.string().trim().max(300).optional(),
   sourceUrl: z.url().max(2000).optional().or(z.literal('')),
@@ -35,37 +40,108 @@ const submissionSchema = z.object({
   }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
     message: '最多只能選擇 8 個標籤',
   })).min(1).max(20),
+}).refine((value) => Boolean(value.gameId) !== Boolean(value.newGame), {
+  message: 'exactly_one_game_target_required',
 });
 
-submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
+submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   const contentLength = Number(c.req.header('content-length') ?? 0);
   if (contentLength > 64 * 1024) return c.json({ error: 'request_too_large' }, 413);
   const parsed = submissionSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_submission', issues: parsed.error.issues }, 400);
   const user = c.get('user')!;
-  const existing = await getDatabase(c).statement(`
-    SELECT id FROM submissions WHERE author_id = ? AND idempotency_key = ?
-  `).bind(user.id, parsed.data.idempotencyKey).first<{ id: string }>();
-  if (existing) return c.json({ submissionId: existing.id, reused: true });
-  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL')
-    .bind(parsed.data.gameId).first();
-  if (!game) return c.json({ error: 'game_not_found' }, 404);
-  const submissionId = createId('sub');
+  const findExisting = () => getDatabase(c).statement(`
+    SELECT s.id, s.game_id, g.slug game_slug
+    FROM submissions s JOIN games g ON g.id = s.game_id
+    WHERE s.author_id = ? AND s.idempotency_key = ?
+  `).bind(user.id, parsed.data.idempotencyKey).first<{ id: string; game_id: string; game_slug: string }>();
+  const existing = await findExisting();
+  if (existing) return c.json({
+    submissionId: existing.id, gameId: existing.game_id, gameSlug: existing.game_slug,
+    gameCreated: false, reused: true,
+  });
+  const accountLimit = await c.env.WRITE_RATE_LIMITER.limit({ key: `contribution:${user.id}` });
+  if (!accountLimit.success) {
+    c.header('Retry-After', '60');
+    return c.json({ error: 'rate_limited' }, 429);
+  }
+  const trusted = isTrustedEditor(user);
+  if (!trusted && parsed.data.rules.some((rule) => (rule.newTagNames?.length ?? rule.tagNames?.length ?? 0) > 0)) {
+    return c.json({ error: 'new_tags_require_editor' }, 403);
+  }
+  const quota = trusted ? undefined : await queryContributionQuota(getDatabase(c), user.id);
+  if (quota && parsed.data.rules.length > quota.remainingRules) {
+    return c.json({ error: 'PENDING_RULE_LIMIT_REACHED', quota }, 409);
+  }
+
+  let gameId = parsed.data.gameId;
+  let gameSlug: string | undefined;
+  let gameCreated = false;
   const timestamp = now();
+  const statements: DatabaseStatement[] = [];
+  if (gameId) {
+    const game = await getDatabase(c).statement(`
+      SELECT id, slug FROM games
+      WHERE id = ? AND merged_into_game_id IS NULL AND visibility = 'public'
+    `).bind(gameId).first<{ id: string; slug: string }>();
+    if (!game) return c.json({ error: 'game_not_found' }, 404);
+    gameSlug = game.slug;
+  } else {
+    const requested = parsed.data.newGame!;
+    const normalizedName = normalizeText(requested.displayName);
+    const existingGame = await getDatabase(c).statement(`
+      SELECT g.id, g.slug FROM games g
+      LEFT JOIN game_aliases a ON a.game_id = g.id
+      WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
+        AND (g.normalized_name = ? OR a.normalized_alias = ?)
+      LIMIT 1
+    `).bind(normalizedName, normalizedName).first<{ id: string; slug: string }>();
+    if (existingGame) {
+      gameId = existingGame.id;
+      gameSlug = existingGame.slug;
+    } else {
+      if (quota && quota.remainingGames < 1) {
+        return c.json({ error: 'PENDING_GAME_LIMIT_REACHED', quota }, 409);
+      }
+      gameId = createId('game');
+      const baseSlug = slugify(requested.englishName || requested.displayName);
+      const slugExists = await getDatabase(c).statement('SELECT 1 found FROM games WHERE slug = ?').bind(baseSlug).first();
+      gameSlug = slugExists ? `${baseSlug}-${gameId.slice(-6)}` : baseSlug;
+      const gameReviewStatus = initialReviewStatus(user);
+      statements.push(getDatabase(c).statement(`
+        INSERT INTO games (
+          id, slug, display_name, english_name, normalized_name, created_by, rename_owner_id,
+          created_at, updated_at, visibility, review_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', ?)
+      `).bind(
+        gameId, gameSlug, requested.displayName, cleanOptional(requested.englishName, 120) ?? null,
+        normalizedName, user.id, user.id, timestamp, timestamp, gameReviewStatus,
+      ));
+      for (const alias of cleanAliases([], requested.displayName, requested.englishName)) {
+        statements.push(getDatabase(c).statement(`
+          INSERT INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(createId('alias'), gameId, alias, normalizeText(alias), alias === requested.displayName ? 'official' : 'alias', timestamp));
+      }
+      gameCreated = true;
+    }
+  }
+  if (!gameId) return c.json({ error: 'game_not_found' }, 404);
+  const submissionId = createId('sub');
   const ruleIds: string[] = [];
-  const statements: DatabaseStatement[] = [getDatabase(c).statement(`
+  statements.push(getDatabase(c).statement(`
     INSERT INTO submissions (
       id, game_id, author_id, idempotency_key, played_on, source_label,
       source_url, private_note, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    submissionId, parsed.data.gameId, user.id, parsed.data.idempotencyKey,
+    submissionId, gameId, user.id, parsed.data.idempotencyKey,
     cleanOptional(parsed.data.playedOn, 20) ?? null,
     cleanOptional(parsed.data.sourceLabel, 300) ?? null,
     cleanOptional(parsed.data.sourceUrl, 2000) ?? null,
     cleanOptional(parsed.data.privateNote, 2000) ?? null,
     timestamp,
-  )];
+  ));
   if (parsed.data.sourceUrl) {
     statements.push(getDatabase(c).statement(`
       INSERT INTO submission_sources (id, submission_id, label, url, position, created_at)
@@ -80,10 +156,10 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
         flow_stage, categories_json, player_counts_json, edition_notes_json, edition_note, source_label, source_url,
-        status, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?)
+        status, created_by, created_at, updated_at, review_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)
     `).bind(
-      ruleId, submissionId, parsed.data.gameId, input.statement,
+      ruleId, submissionId, gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
       cleanOptional(input.details, 5000) ?? null,
       input.flowStage ?? 'uncategorized',
@@ -92,15 +168,29 @@ submissionsRoutes.post('/api/submissions', requireRole('editor'), async (c) => {
       JSON.stringify(editionNotes), editionNotes[0] ?? null,
       cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
-      user.id, timestamp, timestamp,
+      user.id, timestamp, timestamp, initialReviewStatus(user),
     ));
     statements.push(...await tagWriteStatements(
       c, ruleId, input.newTagNames ?? input.tagNames ?? [], user.id, timestamp, false, input.tagIds ?? [],
     ));
   }
-  statements.push(getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.gameId));
-  await getDatabase(c).batch(statements);
-  return c.json({ submissionId, ruleIds, reused: false }, 201);
+  statements.push(getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, gameId));
+  try {
+    await getDatabase(c).batch(statements);
+  } catch (error) {
+    const code = contributionErrorCode(error);
+    if (code) return c.json({ error: code }, 409);
+    if (String(error).toLowerCase().includes('unique')) {
+      const raced = await findExisting();
+      if (raced) return c.json({
+        submissionId: raced.id, gameId: raced.game_id, gameSlug: raced.game_slug,
+        gameCreated: false, reused: true,
+      });
+    }
+    throw error;
+  }
+  const updatedQuota = trusted ? undefined : await queryContributionQuota(getDatabase(c), user.id);
+  return c.json({ submissionId, ruleIds, gameId, gameSlug, gameCreated, quota: updatedQuota, reused: false }, 201);
 });
 
 

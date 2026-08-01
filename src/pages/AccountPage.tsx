@@ -167,9 +167,9 @@ export const AccountPage = () => {
 
     {error && <p className="form-error" role="alert">{error}</p>}
     {!canEdit && <section className="account-card account-settings">
-      <div className="account-section-heading"><h2>編輯權限</h2></div>
-      <p className="account-help">當前身分：一般會員（可收藏遊戲與投票對應）。本站規則為公共財，目前採用授權邀請與申請制。</p>
-      <Link className="button secondary" to="/add">如何申請編輯權限？</Link>
+      <div className="account-section-heading"><h2>投稿狀態與權限</h2></div>
+      <p className="account-help">你可以投稿規則與建立遊戲，並在這裡查看額度和處理狀態。</p>
+      <Link className="button secondary" to="/contributions">查看投稿狀態與完整的編輯/審核權限說明</Link>
     </section>}
     {canEdit && <section className="account-card account-settings">
       <div className="account-section-heading"><h2>帳號設定</h2></div>

@@ -13,7 +13,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import { hydrateGameTags } from '../lib/tagHydration';
-import { canUserEditRule } from '../lib/rulePermissions';
+import { canUserEditRule, canUserReviewRule } from '../lib/rulePermissions';
 import { collectEditionOptions } from '../lib/editionOptions';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
 import { ApiError } from '../lib/api';
@@ -310,10 +310,12 @@ export const GamePage = () => {
         {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
           {favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}
         </button>}
-        {canEdit && <Fragment>{(isAdmin || (!game.renameLocked && game.renameOwnerId === user?.id))
+        {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
+        {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
           ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
           : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
-          <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link></Fragment>}
+          {game.reviewStatus === 'pending' && <button type="button" className="button secondary" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
+        {user && <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link>}
       </div>}
     </header>
     <section className="rule-filters" aria-label="篩選規則">
@@ -430,8 +432,9 @@ export const GamePage = () => {
 };
 
 export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {
-  const { isAdmin } = useSession();
+  const { isAdmin, canEdit, user } = useSession();
   const { confirm } = useConfirm();
+  const { showToast } = useToast();
   const [statement, setStatement] = useState(rule.statement);
   const [commonMistake, setCommonMistake] = useState(rule.commonMistake ?? '');
   const [details, setDetails] = useState(rule.details ?? '');
@@ -466,6 +469,18 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       await api.hideRule(rule.id); await onSaved();
     }
   };
+  const review = async () => {
+    setSaving(true);
+    try {
+      await api.reviewRule(rule.id);
+      await localDb.invalidateHome();
+      await onSaved();
+    } catch (caught) {
+      showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required'
+        ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。'
+        : '審核失敗，請稍後再試。');
+    } finally { setSaving(false); }
+  };
   return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
@@ -477,14 +492,14 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
       <EditionInput value={editionNotes} options={editionOptions} onChange={setEditionNotes} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
-      <section className="revision-panel">
+      {canEdit && <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
           <span><strong>{revision.previousStatement}</strong><small>{new Date(revision.createdAt).toLocaleString('zh-TW')}・{revision.reason}</small></span>
           <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
-      </section>
-      <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>隱藏</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
+      </section>}
+      <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>{canEdit ? '隱藏' : '撤回投稿'}</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button>{canUserReviewRule(rule, user) && <button type="button" className="button secondary" disabled={saving} onClick={() => void review()}>審核</button>}<button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
     </div>
   </div>;
 };

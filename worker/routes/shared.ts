@@ -18,6 +18,7 @@ export const ruleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count,
+    r.review_status, r.reviewed_by, r.reviewed_by_nickname, r.reviewed_at,
     r.tag_ids_json, r.source_label, r.source_url
   FROM rules r
 `;
@@ -26,6 +27,7 @@ export const gameRuleSelect = `
   SELECT r.id, r.game_id, r.statement, r.common_mistake, r.details,
     r.flow_stage, r.categories_json, r.player_counts_json, r.edition_notes_json, r.edition_note, r.status,
     r.created_by, r.created_at, r.updated_at, r.editor_ids_json, r.importance_count, r.tag_ids_json,
+    r.review_status, r.reviewed_by, r.reviewed_by_nickname, r.reviewed_at,
     r.source_label, r.source_url
   FROM rules r
 `;
@@ -51,6 +53,10 @@ export interface RuleRow {
   source_url?: string | null;
   created_by: string | null;
   editor_ids_json?: string | null;
+  review_status?: 'not_required' | 'pending' | 'reviewed' | null;
+  reviewed_by?: string | null;
+  reviewed_by_nickname?: string | null;
+  reviewed_at?: number | null;
   created_at: number;
   updated_at: number;
   importance_count: number;
@@ -140,7 +146,7 @@ export const publicNicknameIds = (rows: RuleRow[]): string[] => Array.from(new S
     const parsed = JSON.parse(row.editor_ids_json ?? '[]');
     if (Array.isArray(parsed)) editorIds = parsed.filter((id): id is string => typeof id === 'string');
   } catch { /* malformed historical metadata is treated as empty */ }
-  return [...(row.created_by ? [row.created_by] : []), ...editorIds];
+  return [...(row.created_by ? [row.created_by] : []), ...(row.reviewed_by ? [row.reviewed_by] : []), ...editorIds];
 })));
 
 export const resolvePublicNicknames = async (db: Database, rows: RuleRow[]): Promise<Map<string, string>> => {
@@ -185,6 +191,9 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nic
     createdBy: row.created_by ?? undefined,
     createdByNickname: row.created_by ? nicknameMap.get(row.created_by) : undefined,
     editedByNicknames: Array.from(new Set(editorIds.map((id) => nicknameMap.get(id)).filter((name): name is string => Boolean(name)))),
+    reviewStatus: row.review_status ?? 'not_required',
+    reviewedByNickname: row.reviewed_by_nickname ?? (row.reviewed_by ? nicknameMap.get(row.reviewed_by) : undefined),
+    reviewedAt: row.reviewed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     importanceCount: Number(row.importance_count ?? 0),
@@ -265,6 +274,11 @@ export interface GameRow {
   updated_at: number;
   rename_owner_id?: string | null;
   rename_locked?: number | null;
+  visibility?: 'public' | 'hidden' | null;
+  review_status?: 'not_required' | 'pending' | 'reviewed' | null;
+  reviewed_by_nickname?: string | null;
+  reviewed_at?: number | null;
+  pending_rule_count?: number | null;
 }
 
 export const toGame = (row: GameRow): GameSummary => ({
@@ -280,6 +294,11 @@ export const toGame = (row: GameRow): GameSummary => ({
   updatedAt: row.updated_at,
   renameOwnerId: row.rename_owner_id ?? undefined,
   renameLocked: Boolean(row.rename_locked),
+  visibility: row.visibility ?? undefined,
+  reviewStatus: row.review_status ?? undefined,
+  reviewedByNickname: row.reviewed_by_nickname ?? undefined,
+  reviewedAt: row.reviewed_at ?? undefined,
+  pendingRuleCount: row.pending_rule_count == null ? undefined : Number(row.pending_rule_count),
 });
 
 export interface ReviewRuleRow {

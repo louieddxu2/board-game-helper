@@ -61,6 +61,8 @@ describe('account deletion data boundary', () => {
     const calls = vi.mocked(db.statement).mock.calls.map(([query]) => query).join('\n');
     expect(calls).toContain('UPDATE rule_revisions SET edited_by = ? WHERE edited_by = ?');
     expect(calls).toContain('UPDATE review_batches SET created_by = ? WHERE created_by = ?');
+    expect(calls).toContain('UPDATE rules SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
+    expect(calls).toContain('UPDATE games SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
     expect(calls).toContain('private_note = NULL, idempotency_key = NULL');
     expect(calls).toContain('DELETE FROM users WHERE id = ?');
     expect(DELETED_ACCOUNT_ID).toBe('usr_deleted');
