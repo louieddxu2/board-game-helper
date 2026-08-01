@@ -1,4 +1,4 @@
-const updatedAt = '2026 年 7 月 30 日';
+const updatedAt = '2026 年 8 月 2 日';
 
 export const PrivacyPage = () => <div className="content-page privacy-page">
   <header>
@@ -44,7 +44,7 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
     <p>登入時，本站會保存：</p>
     <ul>
       <li>Google 帳號識別碼</li>
-      <li>已驗證的電子信箱</li>
+      <li>已驗證電子信箱的雜湊識別值與遮罩顯示值；本站不保存完整電子信箱</li>
       <li>Google 提供的名稱</li>
       <li>Google 提供的頭像</li>
       <li>帳號建立時間</li>

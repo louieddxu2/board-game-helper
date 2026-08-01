@@ -14,7 +14,7 @@ const rule = (createdBy?: string): RuleCard => ({
 
 const user = (id: string, roles: SessionUser['roles']): SessionUser => ({
   id,
-  email: `${id}@example.com`,
+  maskedEmail: `${id[0]}***@example.com`,
   roles,
 });
 

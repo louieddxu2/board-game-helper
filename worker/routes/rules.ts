@@ -187,7 +187,7 @@ rulesRoutes.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeR
 
 rulesRoutes.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
   const revisions = await getDatabase(c).statement(`
-    SELECT r.id, r.reason, r.created_at, r.previous_json, u.email editor_email
+    SELECT r.id, r.reason, r.created_at, r.previous_json, u.masked_email editor_email
     FROM rule_revisions r
     LEFT JOIN users u ON u.id = r.edited_by
     WHERE r.rule_id = ?

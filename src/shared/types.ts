@@ -27,7 +27,6 @@ export type UserRole = 'admin' | 'editor';
 
 export interface SessionUser {
   id: string;
-  email?: string;
   maskedEmail?: string;
   displayName?: string;
   nickname?: string;

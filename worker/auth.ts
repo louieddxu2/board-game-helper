@@ -152,13 +152,16 @@ const upsertGoogleUser = async (c: AppContext, profile: {
     throw new Error('google_identity_conflict');
   }
   const userId = existing?.id ?? createId('usr');
+  const legacyPlaceholder = `redacted-user:${userId}`;
   await getDatabase(c).statement(`
     INSERT INTO users (
-      id, google_sub, email_hash, masked_email, email_verified,
+      id, google_sub, email, email_normalized, email_hash, masked_email, email_verified,
       display_name, avatar_url, created_at, last_login_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       google_sub = excluded.google_sub,
+      email = excluded.email,
+      email_normalized = excluded.email_normalized,
       email_hash = excluded.email_hash,
       masked_email = excluded.masked_email,
       email_verified = excluded.email_verified,
@@ -166,7 +169,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
       avatar_url = excluded.avatar_url,
       last_login_at = excluded.last_login_at
   `).bind(
-    userId, profile.sub, emailHash, maskedEmail, profile.emailVerified ? 1 : 0,
+    userId, profile.sub, legacyPlaceholder, legacyPlaceholder, emailHash, maskedEmail, profile.emailVerified ? 1 : 0,
     profile.name ?? null, profile.picture ?? null, timestamp, timestamp,
   ).run();
 

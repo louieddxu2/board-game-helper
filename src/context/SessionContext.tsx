@@ -72,9 +72,9 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
   const effectiveUser = useMemo<SessionUser | null>(() => {
     if (!activeMockRole) return user;
     if (activeMockRole === 'unauthenticated') return null;
-    if (activeMockRole === 'user') return { id: user?.id || 'mock_user', email: user?.email || 'user@example.com', roles: [] };
-    if (activeMockRole === 'editor') return { id: user?.id || 'mock_editor', email: user?.email || 'editor@example.com', roles: ['editor'] };
-    if (activeMockRole === 'admin') return { id: user?.id || 'mock_admin', email: user?.email || 'admin@example.com', roles: ['admin'] };
+    if (activeMockRole === 'user') return { id: user?.id || 'mock_user', maskedEmail: user?.maskedEmail || 'u***r@example.com', roles: [] };
+    if (activeMockRole === 'editor') return { id: user?.id || 'mock_editor', maskedEmail: user?.maskedEmail || 'e***r@example.com', roles: ['editor'] };
+    if (activeMockRole === 'admin') return { id: user?.id || 'mock_admin', maskedEmail: user?.maskedEmail || 'a***n@example.com', roles: ['admin'] };
     return user;
   }, [user, activeMockRole]);
 

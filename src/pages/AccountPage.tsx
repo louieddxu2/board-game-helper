@@ -160,7 +160,7 @@ export const AccountPage = () => {
       <div>
         <p className="eyebrow">帳號</p>
         <h1>{user?.nickname || user?.displayName || '我的帳號'}</h1>
-        <p className="muted">{user?.maskedEmail || user?.email}</p>
+        <p className="muted">{user?.maskedEmail}</p>
       </div>
       <button type="button" className="button secondary" onClick={() => void logout().then(() => navigate('/'))}>登出</button>
     </header>

@@ -4,7 +4,7 @@ import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { createId, hashEmail, maskEmail, normalizeEmail, normalizeText, now, slugify } from '../utils';
+import { createId, hashEmail, maskEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
@@ -138,7 +138,8 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
   const note = body.data.note?.trim() || null;
   const timestamp = now();
 
-  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash = ?').bind(emailHash).first<{ id: string }>();
+  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash = ?')
+    .bind(emailHash).first<{ id: string }>();
   if (existingUser) {
     await getDatabase(c).statement(`
       INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
@@ -148,19 +149,25 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
     return c.json({ ok: true, userId: existingUser.id });
   }
 
-  const existingInvite = await getDatabase(c).statement('SELECT id FROM editor_invitations WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL').bind(emailHash).first<{ id: string }>();
+  const existingInvite = await getDatabase(c).statement(`
+    SELECT id FROM editor_invitations
+    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
+  `).bind(emailHash).first<{ id: string }>();
   if (existingInvite) {
     await getDatabase(c).statement(`
-      UPDATE editor_invitations SET role = ?, note = ?, invited_by = ?, invited_at = ? WHERE id = ?
-    `).bind(body.data.role, note, c.get('user')!.id, timestamp, existingInvite.id).run();
+      UPDATE editor_invitations
+      SET email_hash = ?, masked_email = ?, role = ?, note = ?, invited_by = ?, invited_at = ?
+      WHERE id = ?
+    `).bind(emailHash, maskedEmail, body.data.role, note, c.get('user')!.id, timestamp, existingInvite.id).run();
     return c.json({ ok: true, invitationId: existingInvite.id });
   }
 
   const id = createId('invite');
+  const legacyPlaceholder = `redacted-invite:${id}`;
   await getDatabase(c).statement(`
-    INSERT INTO editor_invitations (id, email_hash, masked_email, note, role, invited_by, invited_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp).run();
+    INSERT INTO editor_invitations (id, email_normalized, email_hash, masked_email, note, role, invited_by, invited_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, legacyPlaceholder, emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp).run();
   return c.json({ ok: true, invitationId: id });
 });
 

@@ -4,7 +4,7 @@ import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { AdminTagEditor } from '../components/AdminTagEditor';
 import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import type { GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
@@ -23,6 +23,7 @@ export const AdminPage = () => {
   const [sourceQuery, setSourceQuery] = useState('');
   const [targetQuery, setTargetQuery] = useState('');
   const [email, setEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
   const [note, setNote] = useState('');
   const [role, setRole] = useState<'editor' | 'admin'>('editor');
   const [newTagName, setNewTagName] = useState('');
@@ -42,6 +43,24 @@ export const AdminPage = () => {
     setImportRows(importData.rows);
     setHiddenRules(hiddenData.rules);
     setTags(tagData.tags);
+  };
+
+  const inviteEditor = async () => {
+    setInviting(true);
+    try {
+      await api.inviteEditor(email, role, note);
+      setEmail('');
+      setNote('');
+      await load();
+      showToast('已建立編輯者授權。');
+    } catch (caught) {
+      const message = caught instanceof ApiError && caught.code === 'invalid_email'
+        ? 'Google 信箱格式不正確。'
+        : '無法建立編輯者授權，請稍後再試。';
+      showToast(message, 'error');
+    } finally {
+      setInviting(false);
+    }
   };
   useEffect(() => { if (realIsAdmin) void load(); }, [realIsAdmin]);
 
@@ -180,11 +199,11 @@ export const AdminPage = () => {
       <section className="admin-card">
         <div className="list-heading"><h2>編輯權限管理</h2><span>{editors.users.length + editors.invitations.length} 人</span></div>
         <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
-        <form onSubmit={(event) => { event.preventDefault(); void api.inviteEditor(email, role, note).then(() => { setEmail(''); setNote(''); showToast('已建立編輯者授權。'); return load(); }); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void inviteEditor(); }}>
           <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
           <label>授權備註 (選填)<input type="text" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：黃紹東 (FB聯繫)" /></label>
           <label>角色<select value={role} onChange={(event) => setRole(event.target.value as 'editor' | 'admin')}><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
-          <button className="button primary" type="submit">新增／邀請</button>
+          <button className="button primary" type="submit" disabled={inviting}>{inviting ? '建立中…' : '新增／邀請'}</button>
         </form>
         <div className="admin-list">
           {editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
