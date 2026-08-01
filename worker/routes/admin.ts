@@ -340,9 +340,9 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
   const statements: DatabaseStatement[] = [
     ...gameStatements,
     getDatabase(c).statement(`
-      INSERT INTO submissions (id, game_id, raw_input, source_label, source_url, submitter_type, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, 'editor', ?, ?)
-    `).bind(submissionId, gameId, row.raw_statement, row.raw_source_label || null, row.raw_source_url || null, user.id, timestamp),
+      INSERT INTO submissions (id, game_id, author_id, source_label, source_url, legacy_import_row_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(submissionId, gameId, user.id, row.raw_source_label || null, row.raw_source_url || null, row.id),
     getDatabase(c).statement(`
       INSERT INTO rules (
         id, game_id, submission_id, statement, common_mistake, details,

@@ -14,7 +14,6 @@ import {
   prepareLegacyRules,
   sqlValue,
   stableLegacyId,
-  taipeiCalendarDate,
   type LegacyRecord,
 } from './legacy';
 
@@ -98,7 +97,7 @@ for (const record of records) {
   if (status === 'pending') continue;
   const submissionId = stableLegacyId('sub', rowKey);
   const urls = allUrls(record.sourceUrl);
-  lines.push(`INSERT OR IGNORE INTO submissions (id, game_id, played_on, source_label, source_url, source_notes, legacy_import_row_id, created_at) VALUES (${sqlValue(submissionId)}, ${sqlValue(gameId)}, ${sqlValue(taipeiCalendarDate(record.timestamp))}, ${sqlValue(record.sourceLabel)}, ${sqlValue(urls[0])}, ${sqlValue(record.sourceUrl)}, ${sqlValue(rowId)}, ${record.timestampMs});`);
+  lines.push(`INSERT OR IGNORE INTO submissions (id, game_id, source_label, source_url, source_notes, legacy_import_row_id) VALUES (${sqlValue(submissionId)}, ${sqlValue(gameId)}, ${sqlValue(record.sourceLabel)}, ${sqlValue(urls[0])}, ${sqlValue(record.sourceUrl)}, ${sqlValue(rowId)});`);
   urls.forEach((url, index) => lines.push(`INSERT OR IGNORE INTO submission_sources (id, submission_id, label, url, position, created_at) VALUES (${sqlValue(stableLegacyId('source', `${submissionId}:${url}`))}, ${sqlValue(submissionId)}, ${sqlValue(record.sourceLabel)}, ${sqlValue(url)}, ${index}, ${record.timestampMs});`));
   proposed.forEach((draft, index) => {
     const ruleId = stableLegacyId('rule', `${rowKey}:${index}`);

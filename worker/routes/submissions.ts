@@ -130,13 +130,12 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   statements.push(getDatabase(c).statement(`
     INSERT INTO submissions (
       id, game_id, author_id, idempotency_key, source_label,
-      source_url, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      source_url
+    ) VALUES (?, ?, ?, ?, ?, ?)
   `).bind(
     submissionId, gameId, user.id, parsed.data.idempotencyKey,
     cleanOptional(parsed.data.sourceLabel, 300) ?? null,
     cleanOptional(parsed.data.sourceUrl, 2000) ?? null,
-    timestamp,
   ));
   if (parsed.data.sourceUrl) {
     statements.push(getDatabase(c).statement(`

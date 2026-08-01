@@ -63,7 +63,7 @@ describe('account deletion data boundary', () => {
     expect(calls).toContain('UPDATE review_batches SET created_by = ? WHERE created_by = ?');
     expect(calls).toContain('UPDATE rules SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
     expect(calls).toContain('UPDATE games SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
-    expect(calls).toContain('private_note = NULL, idempotency_key = NULL');
+    expect(calls).toContain('UPDATE submissions SET author_id = ?, idempotency_key = NULL WHERE author_id = ?');
     expect(calls).toContain('DELETE FROM users WHERE id = ?');
     expect(DELETED_ACCOUNT_ID).toBe('usr_deleted');
   });

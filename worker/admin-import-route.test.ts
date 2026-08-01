@@ -52,5 +52,8 @@ describe('legacy import game creation', () => {
     expect(ruleIndex).toBeGreaterThan(gameIndex);
     const gameInsert = recorded.find((item) => item.sql.includes('INSERT INTO games'))!;
     expect(gameInsert.run).not.toHaveBeenCalled();
+    const submissionInsert = recorded.find((item) => item.sql.includes('INSERT INTO submissions'))!;
+    expect(submissionInsert.sql).toContain('author_id');
+    expect(submissionInsert.sql).not.toMatch(/raw_input|submitter_type|created_at/);
   });
 });
