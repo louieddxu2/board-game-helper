@@ -4,7 +4,7 @@ import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { createId, hashEmail, maskEmail, normalizeText, now, slugify } from '../utils';
+import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
@@ -109,10 +109,10 @@ adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
     users: (users.results ?? []).map((u) => ({
       id: u.id,
       maskedEmail: u.masked_email ?? '已保護個資',
-      displayName: u.display_name,
+      displayName: u.display_name ?? undefined,
       role: u.role,
       grantedAt: u.granted_at,
-      revokedAt: u.revoked_at,
+      revokedAt: u.revoked_at ?? undefined,
     })),
     invitations: (invites.results ?? []).map((inv) => ({
       id: inv.id,
@@ -133,50 +133,90 @@ const inviteSchema = z.object({
 adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) => {
   const body = inviteSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: 'invalid_email' }, 400);
-  const emailHash = await hashEmail(body.data.email);
+  const emailHash = await hashEmail(body.data.email, c.env.EMAIL_HASH_SECRET);
+  const legacyEmailHash = await legacyHashEmail(body.data.email);
   const maskedEmail = maskEmail(body.data.email);
   const note = body.data.note?.trim() || null;
   const timestamp = now();
 
-  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash = ?')
-    .bind(emailHash).first<{ id: string }>();
+  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash IN (?, ?)')
+    .bind(emailHash, legacyEmailHash).first<{ id: string }>();
   if (existingUser) {
-    await getDatabase(c).statement(`
-      INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
-      VALUES (?, ?, ?, ?, NULL)
-      ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
-    `).bind(existingUser.id, body.data.role, c.get('user')!.id, timestamp).run();
+    await getDatabase(c).batch([
+      getDatabase(c).statement('UPDATE users SET email_hash = ?, masked_email = ? WHERE id = ?')
+        .bind(emailHash, maskedEmail, existingUser.id),
+      getDatabase(c).statement(`
+        INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+        VALUES (?, ?, ?, ?, NULL)
+        ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
+      `).bind(existingUser.id, body.data.role, c.get('user')!.id, timestamp),
+    ]);
     return c.json({ ok: true, userId: existingUser.id });
-  }
-
-  const existingInvite = await getDatabase(c).statement(`
-    SELECT id FROM editor_invitations
-    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
-  `).bind(emailHash).first<{ id: string }>();
-  if (existingInvite) {
-    await getDatabase(c).statement(`
-      UPDATE editor_invitations
-      SET email_hash = ?, masked_email = ?, role = ?, note = ?, invited_by = ?, invited_at = ?
-      WHERE id = ?
-    `).bind(emailHash, maskedEmail, body.data.role, note, c.get('user')!.id, timestamp, existingInvite.id).run();
-    return c.json({ ok: true, invitationId: existingInvite.id });
   }
 
   const id = createId('invite');
   const legacyPlaceholder = `redacted-invite:${id}`;
   await getDatabase(c).statement(`
+    UPDATE editor_invitations
+    SET revoked_at = ?
+    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM editor_invitations protected
+        WHERE protected.email_hash = ? AND protected.claimed_at IS NULL AND protected.revoked_at IS NULL
+      )
+  `).bind(timestamp, legacyEmailHash, emailHash).run();
+  const upgradedLegacy = await getDatabase(c).statement(`
+    UPDATE editor_invitations
+    SET email_hash = ?, masked_email = ?, note = ?, role = ?, invited_by = ?, invited_at = ?
+    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
+    RETURNING id
+  `).bind(emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp, legacyEmailHash)
+    .first<{ id: string }>();
+  if (upgradedLegacy) return c.json({ ok: true, invitationId: upgradedLegacy.id });
+
+  const invitation = await getDatabase(c).statement(`
     INSERT INTO editor_invitations (id, email_normalized, email_hash, masked_email, note, role, invited_by, invited_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, legacyPlaceholder, emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp).run();
-  return c.json({ ok: true, invitationId: id });
+    ON CONFLICT(email_hash) WHERE email_hash IS NOT NULL AND claimed_at IS NULL AND revoked_at IS NULL
+    DO UPDATE SET
+      masked_email = excluded.masked_email,
+      note = excluded.note,
+      role = excluded.role,
+      invited_by = excluded.invited_by,
+      invited_at = excluded.invited_at
+    RETURNING id
+  `).bind(id, legacyPlaceholder, emailHash, maskedEmail, note, body.data.role, c.get('user')!.id, timestamp)
+    .first<{ id: string }>();
+  return c.json({ ok: true, invitationId: invitation?.id ?? id });
 });
 
 adminRoutes.delete('/api/admin/editors/:userId', requireRole('admin'), async (c) => {
   const role = c.req.query('role') as UserRole | undefined;
   if (!role || !['admin', 'editor'].includes(role)) return c.json({ error: 'invalid_role' }, 400);
-  await getDatabase(c).statement(`
-    UPDATE user_roles SET revoked_at = ? WHERE user_id = ? AND role = ? AND revoked_at IS NULL
-  `).bind(now(), c.req.param('userId'), role).run();
+  const userId = c.req.param('userId');
+  if (role === 'admin') {
+    const anotherAdmin = await getDatabase(c).statement(`
+      SELECT 1 present FROM user_roles
+      WHERE role = 'admin' AND revoked_at IS NULL AND user_id <> ?
+      LIMIT 1
+    `).bind(userId).first<{ present: number }>();
+    const targetIsAdmin = await getDatabase(c).statement(`
+      SELECT 1 present FROM user_roles
+      WHERE user_id = ? AND role = 'admin' AND revoked_at IS NULL
+      LIMIT 1
+    `).bind(userId).first<{ present: number }>();
+    if (targetIsAdmin && !anotherAdmin) return c.json({ error: 'last_admin_role' }, 409);
+  }
+  try {
+    await getDatabase(c).statement(`
+      UPDATE user_roles SET revoked_at = ? WHERE user_id = ? AND role = ? AND revoked_at IS NULL
+    `).bind(now(), userId, role).run();
+  } catch (caught) {
+    if (caught instanceof Error && caught.message.includes('last_admin_role')) {
+      return c.json({ error: 'last_admin_role' }, 409);
+    }
+    throw caught;
+  }
   return c.json({ ok: true });
 });
 

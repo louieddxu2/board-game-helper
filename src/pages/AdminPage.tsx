@@ -6,7 +6,7 @@ import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import type { GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
+import type { EditorAccessUser, EditorAdminPayload, GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 
@@ -14,7 +14,8 @@ export const AdminPage = () => {
   const { realIsAdmin, mockRole, setMockRole, loading } = useSession();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const [editors, setEditors] = useState<{ users: Array<Record<string, unknown>>; invitations: Array<Record<string, unknown>> }>({ users: [], invitations: [] });
+  const [editors, setEditors] = useState<EditorAdminPayload>({ users: [], invitations: [] });
+  const [editorLoadError, setEditorLoadError] = useState<string>();
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [hiddenRules, setHiddenRules] = useState<RuleCard[]>([]);
   const [tags, setTags] = useState<TagSummary[]>([]);
@@ -33,13 +34,15 @@ export const AdminPage = () => {
   const [targetTagId, setTargetTagId] = useState('');
 
   const load = async () => {
-    const [editorData, importData, hiddenData, tagData] = await Promise.all([
-      api.editors().catch(() => ({ users: [], invitations: [] })),
+    const [, importData, hiddenData, tagData] = await Promise.all([
+      api.editors().then((editorData) => {
+        setEditors(editorData);
+        setEditorLoadError(undefined);
+      }).catch(() => setEditorLoadError('無法載入編輯權限名單，請重試。')),
       api.importRows().catch(() => ({ rows: [] })),
       api.hiddenRules().catch(() => ({ rules: [] })),
       api.adminTags().catch(() => ({ tags: [] })),
     ]);
-    setEditors(editorData);
     setImportRows(importData.rows);
     setHiddenRules(hiddenData.rules);
     setTags(tagData.tags);
@@ -60,6 +63,29 @@ export const AdminPage = () => {
       showToast(message, 'error');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const revokeEditorAccess = async (row: EditorAccessUser) => {
+    try {
+      await api.revokeEditor(row.id, row.role);
+      await load();
+      showToast('已撤銷權限。');
+    } catch (caught) {
+      const message = caught instanceof ApiError && caught.code === 'last_admin_role'
+        ? '不能撤銷最後一位管理員；請先授予另一個帳號 Admin 權限。'
+        : '無法撤銷權限，請稍後再試。';
+      showToast(message, 'error');
+    }
+  };
+
+  const revokeInvitation = async (id: string) => {
+    try {
+      await api.revokeInvitation(id);
+      await load();
+      showToast('已取消邀請。');
+    } catch {
+      showToast('無法取消邀請，請稍後再試。', 'error');
     }
   };
   useEffect(() => { if (realIsAdmin) void load(); }, [realIsAdmin]);
@@ -199,6 +225,7 @@ export const AdminPage = () => {
       <section className="admin-card">
         <div className="list-heading"><h2>編輯權限管理</h2><span>{editors.users.length + editors.invitations.length} 人</span></div>
         <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
+        {editorLoadError && <p className="form-error">{editorLoadError} <button type="button" className="text-action" onClick={() => void load()}>重試</button></p>}
         <form onSubmit={(event) => { event.preventDefault(); void inviteEditor(); }}>
           <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
           <label>授權備註 (選填)<input type="text" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：黃紹東 (FB聯繫)" /></label>
@@ -208,22 +235,22 @@ export const AdminPage = () => {
         <div className="admin-list">
           {editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.displayName || row.maskedEmail || '編輯者')}</strong>
-              {Boolean(row.maskedEmail) && Boolean(row.displayName) && <small style={{ marginRight: '0.5rem', color: 'var(--muted)' }}>({String(row.maskedEmail)})</small>}
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{row.displayName || row.maskedEmail || '編輯者'}</strong>
+              {row.maskedEmail && row.displayName && <small style={{ marginRight: '0.5rem', color: 'var(--muted)' }}>({row.maskedEmail})</small>}
               <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
-                {String(row.role)}{row.revoked_at ? '・已撤銷' : ''}
+                {row.role}{row.revokedAt ? '・已撤銷' : ''}
               </small>
             </span>
-            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${String(row.displayName || row.maskedEmail)} 的 ${String(row.role)} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.revokeEditor(String(row.id), String(row.role) as 'admin' | 'editor').then(load); })}>撤銷</button>}
+            {!row.revokedAt && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${row.displayName || row.maskedEmail} 的 ${row.role} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return revokeEditorAccess(row); })}>撤銷</button>}
           </div>)}
           {editors.invitations.map((row) => <div key={String(row.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
               <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{String(row.note ? `${row.note} (${row.maskedEmail})` : row.maskedEmail)}</strong>
               <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
-                {String(row.role)}・{row.revoked_at ? '已撤銷' : '等待首次登入'}
+                {row.role}・等待首次登入
               </small>
             </span>
-            {!row.revoked_at && <button type="button" className="danger-link" onClick={() => void api.revokeInvitation(String(row.id)).then(load)}>取消</button>}
+            <button type="button" className="danger-link" onClick={() => void revokeInvitation(row.id)}>取消</button>
           </div>)}
         </div>
       </section>

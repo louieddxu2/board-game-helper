@@ -24,10 +24,20 @@ export const cleanAliases = (aliases: string[], displayName: string, englishName
 
 export const normalizeEmail = (value: string): string => value.trim().toLowerCase();
 
-export const hashEmail = async (email: string, salt: string = 'board_game_helper_salt'): Promise<string> => {
+export const hashEmail = async (email: string, secret: string | undefined): Promise<string> => {
+  if (!secret || secret.length < 32) throw new Error('email_hash_secret_not_configured');
   const normalized = normalizeEmail(email);
-  return sha256Hex(`${normalized}:${salt}`);
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(normalized));
+  return `v1:${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 };
+
+// Transitional lookup only. New writes must always use hashEmail/HMAC.
+export const legacyHashEmail = (email: string): Promise<string> =>
+  sha256Hex(`${normalizeEmail(email)}:board_game_helper_salt`);
 
 export const maskEmail = (email: string): string => {
   const normalized = normalizeEmail(email);

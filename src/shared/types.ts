@@ -35,6 +35,28 @@ export interface SessionUser {
   roles: UserRole[];
 }
 
+export interface EditorAccessUser {
+  id: string;
+  maskedEmail: string;
+  displayName?: string;
+  role: UserRole;
+  grantedAt: number;
+  revokedAt?: number;
+}
+
+export interface EditorInvitation {
+  id: string;
+  maskedEmail: string;
+  note?: string;
+  role: UserRole;
+  invitedAt: number;
+}
+
+export interface EditorAdminPayload {
+  users: EditorAccessUser[];
+  invitations: EditorInvitation[];
+}
+
 export interface AccountRuleSummary {
   id: string;
   gameName: string;

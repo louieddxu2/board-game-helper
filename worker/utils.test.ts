@@ -1,10 +1,20 @@
 import { describe, expect, test } from 'vitest';
-import { assertMutationOrigin, cleanAliases, cleanOptional, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, hashEmail, isValidNickname, legacyHashEmail, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
 
 describe('worker utilities', () => {
   test('normalizes names and email consistently', () => {
     expect(normalizeText(' Smartphone Inc. 手機帝國 ')).toBe('smartphoneinc手機帝國');
     expect(normalizeEmail(' Louie@example.COM ')).toBe('louie@example.com');
+  });
+
+  test('protects email identity with a secret-key HMAC', async () => {
+    const secret = 'test-email-hmac-secret-at-least-32-characters';
+    const first = await hashEmail('Editor@Example.com', secret);
+    const second = await hashEmail(' editor@example.COM ', secret);
+    expect(first).toBe(second);
+    expect(first).toMatch(/^v1:[0-9a-f]{64}$/);
+    expect(await legacyHashEmail('Editor@Example.com')).not.toBe(first);
+    await expect(hashEmail('editor@example.com', 'too-short')).rejects.toThrow('email_hash_secret_not_configured');
   });
 
   test('creates readable slugs and trims optional fields', () => {

@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { SessionUser, UserRole } from '../src/shared/types';
 import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
-import { createId, hashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
+import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const SESSION_COOKIE = 'wbr_session';
@@ -143,10 +143,11 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   picture?: string;
 }): Promise<string> => {
   const timestamp = now();
-  const emailHash = await hashEmail(profile.email);
+  const emailHash = await hashEmail(profile.email, c.env.EMAIL_HASH_SECRET);
+  const legacyEmailHash = await legacyHashEmail(profile.email);
   const maskedEmail = maskEmail(profile.email);
-  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_hash = ?')
-    .bind(profile.sub, emailHash)
+  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_hash IN (?, ?)')
+    .bind(profile.sub, emailHash, legacyEmailHash)
     .first<{ id: string; google_sub: string }>();
   if (existing && existing.google_sub !== profile.sub) {
     throw new Error('google_identity_conflict');
@@ -173,7 +174,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
     profile.name ?? null, profile.picture ?? null, timestamp, timestamp,
   ).run();
 
-  const bootstrapAdminHash = await hashEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '');
+  const bootstrapAdminHash = await hashEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '', c.env.EMAIL_HASH_SECRET);
   if (bootstrapAdminHash && bootstrapAdminHash === emailHash) {
     const existingAdmin = await getDatabase(c).statement(
       `SELECT 1 FROM user_roles WHERE role = 'admin' AND revoked_at IS NULL LIMIT 1`
@@ -189,8 +190,8 @@ const upsertGoogleUser = async (c: AppContext, profile: {
 
   const invites = await getDatabase(c).statement(`
     SELECT id, role FROM editor_invitations
-    WHERE email_hash = ? AND claimed_at IS NULL AND revoked_at IS NULL
-  `).bind(emailHash).all<{ id: string; role: UserRole }>();
+    WHERE email_hash IN (?, ?) AND claimed_at IS NULL AND revoked_at IS NULL
+  `).bind(emailHash, legacyEmailHash).all<{ id: string; role: UserRole }>();
   for (const invite of invites.results ?? []) {
     await getDatabase(c).batch([
       getDatabase(c).statement(`
@@ -199,7 +200,9 @@ const upsertGoogleUser = async (c: AppContext, profile: {
         ON CONFLICT(user_id, role) DO NOTHING
       `).bind(userId, timestamp, invite.id),
       getDatabase(c).statement(`
-        UPDATE editor_invitations SET claimed_by = ?, claimed_at = ? WHERE id = ?
+        UPDATE editor_invitations
+        SET claimed_by = ?, claimed_at = ?, email_hash = NULL, masked_email = NULL
+        WHERE id = ?
       `).bind(userId, timestamp, invite.id),
     ]);
   }

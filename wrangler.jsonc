@@ -34,6 +34,7 @@
   "vars": {
     "APP_ORIGIN": "http://localhost:5173",
     "TRUSTED_APP_ORIGINS": "http://localhost:5174",
-    "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com"
+    "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com",
+    "EMAIL_HASH_SECRET": "local-development-only-email-hmac-key"
   }
 }
