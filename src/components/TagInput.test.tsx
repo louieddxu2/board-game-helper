@@ -64,7 +64,7 @@ describe('TagInput recommendations', () => {
     const setup = tag('setup', '設置');
     render(<TagInput value={[]} onChange={onChange} availableTags={[scoring, setup, scoring]} detectedSuggestions={['設置']} />);
 
-    expect(screen.getByText('根據規則內容')).toBeInTheDocument();
+    expect(screen.getByText('根據正確規則')).toBeInTheDocument();
     expect(screen.getByText('這款遊戲常用')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '加入標籤 設置' })).toHaveLength(1);
 

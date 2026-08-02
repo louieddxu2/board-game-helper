@@ -173,12 +173,12 @@ export const AccountPage = () => {
     </section>}
     {canEdit && <section className="account-card account-settings">
       <div className="account-section-heading"><h2>帳號設定</h2></div>
-      <p className="account-help">設定一個會顯示在你的帳號活動中的暱稱。限中文字或英文字母，中文字最多 6 個、英文字母最多 12 個，且不可與他人重複。</p>
+      <p className="account-help">設定規則卡片使用的公開暱稱。限中文字或英文字母，中文字最多 6 個、英文字母最多 12 個，且不可與他人重複。</p>
       <form onSubmit={(event) => { event.preventDefault(); void saveNickname(); }}>
         <label htmlFor="account-nickname">暱稱<input id="account-nickname" value={nickname} maxLength={12} onChange={(event) => setNickname(event.target.value)} placeholder="輸入暱稱" /></label>
         <label className="checkbox-row" htmlFor="account-show-nickname">
           <input id="account-show-nickname" type="checkbox" checked={showNickname} disabled={!nickname.trim()} onChange={(event) => setShowNickname(event.target.checked)} />
-          顯示暱稱（規則卡片會顯示你建立或修改過）
+          公開顯示暱稱（規則卡片會標示你建立、修改或審核過）
         </label>
         {nicknameError && <p className="form-error" role="alert">{nicknameError}</p>}
         {nicknameSaved && <p className="form-success" role="status">暱稱已更新。</p>}

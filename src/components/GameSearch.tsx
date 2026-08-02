@@ -198,7 +198,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
           </button>
         );
       })}
-      {rules.length > 0 && <p className="result-group-label">規則內容</p>}
+      {rules.length > 0 && <p className="result-group-label">正確規則</p>}
       {rules.map((rule, ruleIndex) => { const index = games.length + ruleIndex; return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} className="rule-result" key={rule.ruleId} onClick={() => onRuleSelect?.(rule)} role="option">
         <strong>{rule.gameName}</strong><span>{rule.statement}</span><small>查看規則 →</small>
       </button>; })}

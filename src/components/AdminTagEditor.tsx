@@ -52,7 +52,7 @@ export const AdminTagEditor = ({ tag, onSave, onTogglePublic }: AdminTagEditorPr
       <label>別名<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="以逗號分隔" /></label>
       <RuleCategoryInput value={categoryHints} onChange={setCategoryHints} label="自動分類提示" />
       <label>自動偵測關鍵字
-        <textarea rows={2} value={detectionKeywords} onChange={(event) => setDetectionKeywords(event.target.value)} placeholder="以逗號或換行分隔；只比對規則內容" />
+        <textarea rows={2} value={detectionKeywords} onChange={(event) => setDetectionKeywords(event.target.value)} placeholder="以逗號或換行分隔；只比對正確規則" />
         <small className="muted">只有規則未手動分類時，命中這些關鍵字才會套用上方分類。只有公共 Tag 會把關鍵字同步給所有讀者。</small>
       </label>
       <div className="inline-actions">

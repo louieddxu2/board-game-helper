@@ -169,7 +169,7 @@ export const TagInput = ({
 
     {showRecommendations && <div className="tag-recommendations">
       {recommendations.detected.length > 0 && <div className="tag-recommendation-group">
-        <small>根據規則內容</small>
+        <small>根據正確規則</small>
         <div className="recommended-tag-chips">
           {recommendations.detected.map((tagName) => <button type="button" key={tagName} className="tag-chip inferred"
             aria-label={`加入標籤 ${tagName}`} onClick={() => {

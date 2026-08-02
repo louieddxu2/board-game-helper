@@ -75,7 +75,7 @@ describe('AddPage contribution constraints', () => {
     fireEvent.click(screen.getByRole('button', { name: /請先選擇一款既有遊戲/ }));
     expect(mocks.showToast).toHaveBeenCalledWith('你目前無法建立新遊戲，請先選擇一款既有遊戲。詳情請查看右上方的投稿說明。', 'info');
     fireEvent.click(screen.getByRole('button', { name: '選擇既有遊戲' }));
-    await waitFor(() => expect(screen.getByLabelText('規則內容 *')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('正確規則 *')).toBeInTheDocument());
   });
 
   test('does not show contribution guidance or quota to editors', () => {

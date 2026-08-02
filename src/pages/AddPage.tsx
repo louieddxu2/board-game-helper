@@ -248,7 +248,7 @@ export const AddPage = () => {
         return <div className={`rule-input ${active ? 'active' : 'collapsed'}`} key={rule.id}>
           <span className="rule-number">{index + 1}</span>
           {active ? <div className="rule-input-fields">
-            <label htmlFor={`rule-${rule.id}`}>規則內容 *</label>
+            <label htmlFor={`rule-${rule.id}`}>正確規則 *</label>
             <textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} onChange={(event) => setRule(rule.id, { statement: event.target.value })} onKeyDown={(event) => {
               const mobile = window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !mobile && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
@@ -259,7 +259,7 @@ export const AddPage = () => {
             <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
             <EditionInput value={rule.editionNotes ?? []} options={editionOptions} onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
             <div className="two-columns"><label>來源名稱<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} /></label></div>
-          </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>{rule.statement.trim() || '新增規則內容'}</button>}
+          </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>{rule.statement.trim() || '新增正確規則'}</button>}
           <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`移除第 ${index + 1} 條`}>×</button>
         </div>;
       })}
