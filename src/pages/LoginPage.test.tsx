@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { LoginPage } from './LoginPage';
+
+afterEach(cleanup);
 
 vi.mock('../context/SessionContext', () => ({
   useSession: () => ({
@@ -15,6 +17,12 @@ vi.mock('../context/SessionContext', () => ({
 }));
 
 describe('LoginPage', () => {
+  test('links to the privacy notice before Google login', () => {
+    render(<MemoryRouter><LoginPage /></MemoryRouter>);
+
+    expect(screen.getByRole('link', { name: '隱私與資料說明' })).toHaveAttribute('href', '/privacy');
+  });
+
   test('lists limited rule creation before voting', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
 

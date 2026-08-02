@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 
 declare global {
@@ -55,7 +55,7 @@ export const LoginPage = () => {
     </ol>
     <div className="login-action-container">
       <div ref={buttonRef} className="google-button" />
-      <p className="login-disclaimer">Google登入僅用來識別身份，本站不會要求存取 Drive、Gmail等其他權限。</p>
+      <p className="login-disclaimer">Google 登入僅用來識別身分，本站不會要求存取 Drive、Gmail 等其他權限。登入前請先閱讀本站的 <Link to="/privacy">隱私與資料說明</Link>。</p>
     </div>
     {!googleClientId && !localDevLogin && <p className="muted">Google 登入尚未設定。</p>}
     {localDevLogin && <button type="button" className="button primary" onClick={() => void devLogin().then(() => navigate('/account')).catch(() => setError('本機登入失敗，請確認 migrations 已套用。'))}>以本機管理員登入</button>}

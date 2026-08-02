@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, test } from 'vitest';
 import { PrivacyPage } from './PrivacyPage';
 
+afterEach(cleanup);
+
 describe('PrivacyPage', () => {
+  test('states the data collector and how users can exercise their rights', () => {
+    render(<PrivacyPage />);
+
+    expect(screen.getByRole('heading', { name: '個人資料告知事項' })).toBeInTheDocument();
+    expect(screen.getByText(/黃紹東/)).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'louieddxu2@gmail.com' })[0]).toHaveAttribute('href', 'mailto:louieddxu2@gmail.com');
+    expect(screen.getByRole('heading', { name: '你的權利與申請方式' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '不提供資料的影響' })).toBeInTheDocument();
+  });
+
   test('describes general contribution limits and editor review permissions', () => {
     render(<PrivacyPage />);
 
