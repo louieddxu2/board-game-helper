@@ -122,10 +122,13 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      g.rename_owner_id, g.rename_locked, g.visibility, g.review_status, g.reviewed_by_nickname, g.reviewed_at,
+      g.rename_owner_id, g.rename_locked, g.visibility, g.review_status,
+      CASE WHEN reviewer.show_nickname = 1 THEN g.reviewed_by_nickname END reviewed_by_nickname,
+      g.reviewed_at,
       ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,
       g.published_rule_count, g.total_rule_count, g.latest_rule_updated_at
     FROM games g
+    LEFT JOIN users reviewer ON reviewer.id = g.reviewed_by
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
       AND (g.visibility = 'public' OR ? = 1)
     LIMIT 1

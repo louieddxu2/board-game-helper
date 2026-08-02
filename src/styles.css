@@ -339,6 +339,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .more-fields, .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .sticky-submit { position: sticky; bottom: 14px; z-index: 10; margin-top: 28px; background: rgba(255,253,248,.95); backdrop-filter: blur(10px); border: 1px solid var(--line); box-shadow: 0 15px 50px rgba(15,34,29,.15); border-radius: 18px; padding: 13px 15px 13px 20px; display: flex; align-items: center; justify-content: space-between; }
 .sticky-submit p { margin: 0; font-size: 13px; color: var(--muted); }
+.submission-privacy-note { margin: 20px 0 -16px; color: var(--muted); font-size: 13px; text-align: center; }
 .mobile-cancel-btn { display: none; }
 .confirm-dialog-top { display: flex; justify-content: flex-start; margin-bottom: 8px; }
 .confirm-discard-btn { border: 0; background: transparent; color: #d32f2f; font-size: 13px; font-weight: 600; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; opacity: 0.85; }

@@ -192,7 +192,9 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nic
     createdByNickname: row.created_by ? nicknameMap.get(row.created_by) : undefined,
     editedByNicknames: Array.from(new Set(editorIds.map((id) => nicknameMap.get(id)).filter((name): name is string => Boolean(name)))),
     reviewStatus: row.review_status ?? 'not_required',
-    reviewedByNickname: row.reviewed_by_nickname ?? (row.reviewed_by ? nicknameMap.get(row.reviewed_by) : undefined),
+    reviewedByNickname: row.reviewed_by && nicknameMap.has(row.reviewed_by)
+      ? (row.reviewed_by_nickname ?? nicknameMap.get(row.reviewed_by))
+      : undefined,
     reviewedAt: row.reviewed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

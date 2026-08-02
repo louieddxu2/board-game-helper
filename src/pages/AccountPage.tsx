@@ -89,7 +89,7 @@ export const AccountPage = () => {
       setAccount((current) => current ? { ...current, user: response.user } : current);
       setNickname(response.user.nickname ?? '');
       setShowNickname(Boolean(response.user.showNickname));
-      await refresh();
+      await Promise.all([refresh(), localDb.invalidateHome(), localDb.invalidateAllGames()]);
       setNicknameSaved(true);
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'nickname_taken') setNicknameError('這個暱稱已被使用。');
@@ -194,6 +194,7 @@ export const AccountPage = () => {
     <section className="account-card account-settings account-danger-zone">
       <div className="account-section-heading"><h2>刪除帳號</h2></div>
       <p className="account-help">永久移除登入、角色、收藏與投票資料。公開規則預設保留，你可以在確認時選擇刪除符合條件的規則。</p>
+      <p className="account-help"><Link to="/privacy">查看隱私、資料保存與權利申請方式</Link></p>
       <button type="button" className="button danger" onClick={() => void openDeleteAccount()}>刪除帳號</button>
     </section>
     {!account && !error && <p className="muted">正在載入帳號資料…</p>}

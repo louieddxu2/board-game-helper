@@ -14,7 +14,9 @@ contributionRoutes.get('/api/account/contributions', requireUser, async (c) => {
     getDatabase(c).statement(`
       SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
         r.statement, r.status, r.review_status, r.created_at, r.updated_at,
-        COALESCE(r.reviewed_by_nickname, CASE WHEN reviewer.show_nickname = 1 THEN reviewer.nickname END) reviewed_by_nickname
+        CASE WHEN reviewer.show_nickname = 1
+          THEN COALESCE(r.reviewed_by_nickname, reviewer.nickname)
+        END reviewed_by_nickname
       FROM rules r
       JOIN games g ON g.id = r.game_id
       LEFT JOIN users reviewer ON reviewer.id = r.reviewed_by
@@ -29,7 +31,9 @@ contributionRoutes.get('/api/account/contributions', requireUser, async (c) => {
     getDatabase(c).statement(`
       SELECT g.id, g.slug, g.display_name, g.visibility, g.review_status,
         g.merged_into_game_id, g.created_at, g.updated_at,
-        COALESCE(g.reviewed_by_nickname, CASE WHEN reviewer.show_nickname = 1 THEN reviewer.nickname END) reviewed_by_nickname
+        CASE WHEN reviewer.show_nickname = 1
+          THEN COALESCE(g.reviewed_by_nickname, reviewer.nickname)
+        END reviewed_by_nickname
       FROM games g
       LEFT JOIN users reviewer ON reviewer.id = g.reviewed_by
       WHERE g.created_by = ?

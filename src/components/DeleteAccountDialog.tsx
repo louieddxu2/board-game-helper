@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { AccountDeletionSummary } from '../shared/types';
 
 interface DeleteAccountDialogProps {
@@ -57,6 +58,7 @@ export const DeleteAccountDialog = ({
         <h2 id={titleId}>永久刪除帳號</h2>
         <p id={descriptionId}>這會刪除登入、角色、收藏、投票及其他帳號資料，而且無法復原。</p>
         <p>若不勾選下方選項，只會去除帳號記錄；你建立或修改過的規則仍會保留於此平台資料庫，作者會改為「已刪除帳號」。</p>
+        <p><Link to="/privacy">查看詳細的資料保留方式</Link></p>
       </div>
 
       {loading && <p className="muted" role="status">正在確認可刪除的規則…</p>}

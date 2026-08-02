@@ -266,6 +266,7 @@ export const AddPage = () => {
       <button type="button" className="add-row-button" onClick={() => addRuleAfter()}>＋新增一條規則</button>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
+    <p className="submission-privacy-note">投稿會公開；帳號資料處理請見 <Link to="/privacy">隱私與資料說明</Link>。</p>
     <div className="sticky-submit"><button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button><p className="submit-info-text">{savedAt ? `草稿已儲存於 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `目前 ${validRules.length} 條規則`}</p><button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving || ruleEntryLocked} onClick={() => void requestSubmit()}>{saving ? '送出中…' : `送出 ${validRules.length} 條規則`}</button></div>
   </section>;
 };

@@ -14,6 +14,10 @@ describe('PrivacyPage', () => {
     expect(screen.getAllByRole('link', { name: 'louieddxu2@gmail.com' })[0]).toHaveAttribute('href', 'mailto:louieddxu2@gmail.com');
     expect(screen.getByRole('heading', { name: '你的權利與申請方式' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '不提供資料的影響' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '編輯者與管理員邀請' })).toBeInTheDocument();
+    expect(screen.getByText(/這些資料不是直接向受邀者蒐集/)).toBeInTheDocument();
+    expect(screen.getByText(/本站不保證資料固定儲存於台灣/)).toBeInTheDocument();
+    expect(screen.getByText(/在遊戲頁取消收藏、在規則卡片撤回投票/)).toBeInTheDocument();
   });
 
   test('describes general contribution limits and editor review permissions', () => {
