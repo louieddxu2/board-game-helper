@@ -268,11 +268,11 @@ footer a { color: inherit; }
 .add-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .add-page-heading h1 { margin: 0; }
 .add-page { position: relative; }
-.add-page-help-link { float: right; margin-top: -28px; }
-.add-page-quota { display: flex; flex-wrap: wrap; gap: 10px; margin: -18px 0 26px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.add-page-help-link { flex: none; white-space: nowrap; }
+.add-page-quota { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .add-page-quota span { padding: 5px 9px; border-radius: 999px; background: var(--cream); }
 .rule-draft-import { flex: none; cursor: pointer; }
-.add-page-actions { display: flex; align-items: center; gap: 10px; }
+.add-page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
 .contribution-quota { display: grid; gap: 12px; }
 .contribution-quota > div { display: flex; justify-content: space-between; gap: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
 .contribution-quota > div:first-of-type { padding-top: 0; border-top: 0; }

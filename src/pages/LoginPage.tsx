@@ -50,6 +50,7 @@ export const LoginPage = () => {
     <ol className="login-benefits">
       <li>查看遊戲列表。</li>
       <li>收藏遊戲至個人首頁。</li>
+      <li>有限度地新增玩錯的規則記錄。</li>
       <li>投票玩錯的規則。</li>
     </ol>
     <div className="login-action-container">

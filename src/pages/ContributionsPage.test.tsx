@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { ContributionsPage } from './ContributionsPage';
 
@@ -14,12 +14,26 @@ describe('ContributionsPage', () => {
     vi.clearAllMocks();
   });
 
-  test('gives signed-out visitors a login action and the full-permission heading', () => {
+  test('gives signed-out visitors only the limited-contribution login prompt', () => {
     useSession.mockReturnValue({ user: null, loading: false, canEdit: false });
     render(<MemoryRouter><ContributionsPage /></MemoryRouter>);
 
     expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login');
-    expect(screen.getByRole('heading', { name: '如何申請完整的編輯/審核權限？' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '使用Google帳戶登入後即可填寫' })).toBeInTheDocument();
+    expect(screen.getByText('登入後可有限度地建立規則。')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '如何申請完整的編輯/審核權限？' })).not.toBeInTheDocument();
+    expect(contributions).not.toHaveBeenCalled();
+  });
+
+  test('redirects editors without loading contribution guidance', () => {
+    useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, loading: false, canEdit: true });
+    render(<MemoryRouter initialEntries={['/contributions']}><Routes>
+      <Route path="/contributions" element={<ContributionsPage />} />
+      <Route path="/add" element={<p>填寫頁</p>} />
+    </Routes></MemoryRouter>);
+
+    expect(screen.getByText('填寫頁')).toBeInTheDocument();
+    expect(screen.queryByText('投稿狀態與權限')).not.toBeInTheDocument();
     expect(contributions).not.toHaveBeenCalled();
   });
 

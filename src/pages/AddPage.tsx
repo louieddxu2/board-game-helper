@@ -221,12 +221,15 @@ export const AddPage = () => {
 
   if (!loading && !user) return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1></header>
-    <div className="account-card"><h2 style={{ marginTop: 0 }}>登入後即可填寫</h2><p>登入後可使用完整的投稿介面，建立規則並查看投稿狀態。</p><Link className="button primary" to="/login">登入</Link></div>
+    <div className="account-card"><h2 style={{ marginTop: 0 }}>使用Google帳戶登入後即可填寫</h2><p>登入後可有限度地建立規則。</p><Link className="button primary" to="/login">登入</Link></div>
   </section>;
 
   return <section className="add-page narrow-page">
-    <Link className="text-action add-page-help-link" to="/contributions">投稿說明</Link>
-    <header className="add-page-heading"><h1>記錄玩錯的規則</h1><div className="add-page-actions">{isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}</div></header>
+    <header className="add-page-heading"><h1>記錄玩錯的規則</h1><div className="add-page-actions">
+      {isGeneralContributor && quota && <div className="add-page-quota" aria-label="投稿額度"><span>未審核規則 {quota.pendingRules} / {quota.ruleLimit}</span><span>未審核遊戲 {quota.pendingGames} / {quota.gameLimit}</span></div>}
+      {isGeneralContributor && <Link className="text-action add-page-help-link" to="/contributions">投稿說明</Link>}
+      {isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}
+    </div></header>
     <div className={game ? 'record-game-fields two-columns' : 'record-game-fields'}>
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); }}>重新選擇</button>}</div>
@@ -234,7 +237,6 @@ export const AddPage = () => {
       </div>
       <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>
     </div>
-    {isGeneralContributor && quota && <div className="add-page-quota" aria-label="投稿額度"><span>未審核規則 {quota.pendingRules} / {quota.ruleLimit}</span><span>未審核遊戲 {quota.pendingGames} / {quota.gameLimit}</span></div>}
     {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => selectGame({ ...recent, ruleCount: 0, updatedAt: Date.now() })}>{recent.displayName}</button>)}</div>}
     <div className="rule-input-list">
       <div className="list-heading"><h2>這次玩錯的規則</h2><span>{validRules.length} 條</span></div>

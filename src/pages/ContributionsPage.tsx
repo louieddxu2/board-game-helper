@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../context/SessionContext';
 import type { ContributionGameSummary, ContributionReviewStatus, ContributionRuleSummary, ContributionsPayload } from '../shared/types';
@@ -30,16 +30,25 @@ export const ContributionsPage = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!user) { setData(undefined); return; }
+    if (!user || canEdit) { setData(undefined); return; }
     let active = true;
     setError('');
     void api.contributions().then((payload) => { if (active) setData(payload); }).catch(() => {
       if (active) setError('暫時無法讀取投稿狀態，請稍後再試。');
     });
     return () => { active = false; };
-  }, [user?.id]);
+  }, [user?.id, canEdit]);
 
   if (loading) return <section className="contributions-page narrow-page"><p className="muted">正在讀取投稿資訊…</p></section>;
+  if (canEdit) return <Navigate to="/add" replace />;
+
+  if (!user) return <section className="contributions-page narrow-page">
+    <section className="account-card contribution-login">
+      <h2>使用Google帳戶登入後即可填寫</h2>
+      <p>登入後可有限度地建立規則。</p>
+      <Link className="button primary" to="/login">登入</Link>
+    </section>
+  </section>;
 
   return <section className="contributions-page narrow-page">
     <header>
@@ -48,30 +57,23 @@ export const ContributionsPage = () => {
       <p>一般登入帳號可使用完整填寫介面投稿；投稿會公開顯示，並由 Editor 或 Admin 審核。</p>
     </header>
 
-    {!user ? <section className="account-card contribution-login">
-      <h2>登入後即可填寫</h2>
-      <p>登入後可投稿規則、查看處理狀態，並在額度內建立新遊戲。</p>
-      <Link className="button primary" to="/login">登入</Link>
-    </section> : <>
-      {!canEdit && data && <section className="account-card contribution-quota">
+    {data && <section className="account-card contribution-quota">
         <h2>目前投稿額度</h2>
         <div><strong>未審核規則 {data.quota.pendingRules} / {data.quota.ruleLimit}</strong><span>可再投稿 {data.quota.remainingRules} 條</span></div>
         <div><strong>未審核遊戲 {data.quota.pendingGames} / {data.quota.gameLimit}</strong><span>可再建立 {data.quota.remainingGames} 款</span></div>
-      </section>}
-      {canEdit && <section className="account-card"><p className="account-help">你具備完整編輯／審核權限，不受一般投稿額度限制。</p></section>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      {!data && !error && <p className="muted">正在讀取投稿狀態…</p>}
-      {data && <div className="contribution-sections">
-        <section className="account-card">
-          <div className="account-section-heading"><h2>我的規則投稿</h2><span>{data.rules.length} 條</span></div>
-          {data.rules.length ? <ul className="account-list">{data.rules.map((rule) => <RuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">尚無規則投稿。</p>}
-        </section>
-        <section className="account-card">
-          <div className="account-section-heading"><h2>我建立的遊戲</h2><span>{data.games.length} 款</span></div>
-          {data.games.length ? <ul className="account-list">{data.games.map((game) => <GameItem key={game.id} game={game} />)}</ul> : <p className="muted">尚無建立的遊戲。</p>}
-        </section>
-      </div>}
-    </>}
+    </section>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {!data && !error && <p className="muted">正在讀取投稿狀態…</p>}
+    {data && <div className="contribution-sections">
+      <section className="account-card">
+        <div className="account-section-heading"><h2>我的規則投稿</h2><span>{data.rules.length} 條</span></div>
+        {data.rules.length ? <ul className="account-list">{data.rules.map((rule) => <RuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">尚無規則投稿。</p>}
+      </section>
+      <section className="account-card">
+        <div className="account-section-heading"><h2>我建立的遊戲</h2><span>{data.games.length} 款</span></div>
+        {data.games.length ? <ul className="account-list">{data.games.map((game) => <GameItem key={game.id} game={game} />)}</ul> : <p className="muted">尚無建立的遊戲。</p>}
+      </section>
+    </div>}
 
     <section className="account-card contribution-help">
       <h2>如何申請完整的編輯/審核權限？</h2>

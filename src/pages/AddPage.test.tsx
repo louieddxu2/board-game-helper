@@ -58,6 +58,8 @@ describe('AddPage contribution constraints', () => {
     mocks.useSession.mockReturnValue({ user: null, canEdit: false, isAdmin: false, loading: false });
     render(<MemoryRouter><AddPage /></MemoryRouter>);
     expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('heading', { name: '使用Google帳戶登入後即可填寫' })).toBeInTheDocument();
+    expect(screen.getByText('登入後可有限度地建立規則。')).toBeInTheDocument();
     expect(screen.queryByText('新增一條規則')).not.toBeInTheDocument();
   });
 
@@ -66,11 +68,23 @@ describe('AddPage contribution constraints', () => {
     mocks.contributions.mockResolvedValue({ quota: { pendingRules: 3, ruleLimit: 6, remainingRules: 3, pendingGames: 1, gameLimit: 1, remainingGames: 0 }, rules: [], games: [] });
     render(<MemoryRouter><AddPage /></MemoryRouter>);
 
-    await screen.findByText('未審核規則 3 / 6');
+    const quota = await screen.findByLabelText('投稿額度');
+    expect(screen.getByRole('link', { name: '投稿說明' })).toHaveAttribute('href', '/contributions');
+    expect(screen.getByRole('heading', { name: '記錄玩錯的規則' }).parentElement).toContainElement(quota);
+    expect(screen.getByText('未審核規則 3 / 6')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /請先選擇一款既有遊戲/ }));
     expect(mocks.showToast).toHaveBeenCalledWith('你目前無法建立新遊戲，請先選擇一款既有遊戲。詳情請查看右上方的投稿說明。', 'info');
     fireEvent.click(screen.getByRole('button', { name: '選擇既有遊戲' }));
     await waitFor(() => expect(screen.getByLabelText('規則內容 *')).toBeInTheDocument());
+  });
+
+  test('does not show contribution guidance or quota to editors', () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+
+    expect(screen.queryByRole('link', { name: '投稿說明' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('投稿額度')).not.toBeInTheDocument();
+    expect(mocks.contributions).not.toHaveBeenCalled();
   });
 
   test('keeps the add button clickable but refuses rows beyond the remaining rule quota', async () => {
