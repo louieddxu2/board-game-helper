@@ -253,7 +253,7 @@ export const AddPage = () => {
               const mobile = window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !mobile && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
             }} />
-            <label>容易玩錯<textarea rows={2} value={rule.commonMistake ?? ''} onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
+            <label>玩錯情況<textarea rows={2} value={rule.commonMistake ?? ''} onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
             <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
             <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
             <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />

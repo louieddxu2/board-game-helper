@@ -84,6 +84,7 @@ describe('AddPage contribution constraints', () => {
 
     expect(screen.queryByRole('link', { name: '投稿說明' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('投稿額度')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('玩錯情況')).toBeInTheDocument();
     expect(mocks.contributions).not.toHaveBeenCalled();
   });
 
