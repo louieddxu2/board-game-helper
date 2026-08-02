@@ -702,15 +702,18 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .catalog-rules-table { display: none; }
   .catalog-mobile-rules { display: grid; gap: 10px; }
   .catalog-mobile-empty { margin: 0; padding: 14px; color: var(--muted); }
-  .catalog-mobile-rule-card { display: grid; grid-template-columns: minmax(0, 1fr) clamp(76px, 24vw, 94px); align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+  .catalog-mobile-rule-card { display: grid; grid-template-columns: minmax(0, 1fr) clamp(88px, 27vw, 108px); align-items: start; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
   .catalog-mobile-rule-main, .catalog-mobile-rule-meta { min-width: 0; }
   .catalog-mobile-rule-main { display: grid; align-content: start; gap: 12px; }
-  .catalog-mobile-rule-statement { font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
+  .catalog-mobile-rule-statement { font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
   .catalog-mobile-rule-section { padding-top: 8px; border-top: 1px solid var(--line); }
   .catalog-mobile-rule-section > span, .catalog-mobile-rule-meta > div > span { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 800; }
-  .catalog-mobile-rule-section p, .catalog-mobile-rule-meta p { margin: 0; }
+  .catalog-mobile-rule-section p, .catalog-mobile-rule-meta p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .catalog-mobile-rule-meta .catalog-rule-tag-list { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: 2px; }
   .catalog-mobile-rule-meta { display: grid; align-content: start; gap: 10px; padding-left: 9px; border-left: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+  .catalog-mobile-rule-meta > div, .catalog-mobile-rule-meta p { min-width: 0; max-width: 100%; }
+  .catalog-mobile-rule-meta .catalog-rule-category-list, .catalog-mobile-rule-meta .catalog-rule-tag-list { width: 100%; min-width: 0; }
+  .catalog-mobile-rule-meta .catalog-rule-category-list span, .catalog-mobile-rule-meta .catalog-rule-tag-list span { box-sizing: border-box; }
   .catalog-mobile-rule-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
   .catalog-mobile-rule-actions .catalog-status { font-size: 10px; }
   .catalog-mobile-rule-actions .text-action { padding: 0; }
