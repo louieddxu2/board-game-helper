@@ -82,8 +82,14 @@ export interface AccountRevisionSummary {
 
 export interface AccountPayload {
   user: SessionUser;
-  createdRules: AccountRuleSummary[];
-  modifiedRules: AccountRevisionSummary[];
+}
+
+export interface AccountCreatedRulesPayload {
+  rules: AccountRuleSummary[];
+}
+
+export interface AccountModifiedRulesPayload {
+  revisions: AccountRevisionSummary[];
 }
 
 export interface GameSummary {

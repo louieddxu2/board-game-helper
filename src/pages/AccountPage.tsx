@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
-import type { AccountDeletionSummary, AccountPayload, AccountRevisionSummary, AccountRuleSummary } from '../shared/types';
+import type { AccountDeletionSummary, AccountRevisionSummary, AccountRuleSummary } from '../shared/types';
 import { useConfirm } from '../context/ConfirmContext';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
@@ -45,7 +45,6 @@ export const AccountPage = () => {
   const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { user, realUser, loading, logout, canEdit, refresh } = useSession();
-  const [account, setAccount] = useState<AccountPayload>();
   const [error, setError] = useState('');
   const [nickname, setNickname] = useState('');
   const [showNickname, setShowNickname] = useState(false);
@@ -59,25 +58,26 @@ export const AccountPage = () => {
   const [deletionSummaryLoading, setDeletionSummaryLoading] = useState(false);
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeletionError, setAccountDeletionError] = useState('');
+  const [createdRulesOpen, setCreatedRulesOpen] = useState(false);
+  const [createdRules, setCreatedRules] = useState<AccountRuleSummary[]>();
+  const [createdRulesLoading, setCreatedRulesLoading] = useState(false);
+  const [createdRulesError, setCreatedRulesError] = useState('');
+  const [modifiedRulesOpen, setModifiedRulesOpen] = useState(false);
+  const [modifiedRules, setModifiedRules] = useState<AccountRevisionSummary[]>();
+  const [modifiedRulesLoading, setModifiedRulesLoading] = useState(false);
+  const [modifiedRulesError, setModifiedRulesError] = useState('');
 
   useEffect(() => {
-    if (!user) {
-      setAccount(undefined);
-      return;
-    }
-    let active = true;
-    setError('');
-    void api.account().then((data) => {
-      if (active) {
-        setAccount(data);
-        setNickname(data.user.nickname ?? '');
-        setShowNickname(Boolean(data.user.showNickname));
-      }
-    }).catch(() => {
-      if (active) setError('帳號資料暫時無法載入，請稍後再試。');
-    });
-    return () => { active = false; };
-  }, [user]);
+    setNickname(user?.nickname ?? '');
+    setShowNickname(Boolean(user?.showNickname));
+  }, [user?.nickname, user?.showNickname]);
+
+  useEffect(() => {
+    setCreatedRules(undefined);
+    setCreatedRulesOpen(false);
+    setModifiedRules(undefined);
+    setModifiedRulesOpen(false);
+  }, [user?.id]);
 
   const saveNickname = async () => {
     if (!canEdit || nicknameSaving) return;
@@ -86,7 +86,6 @@ export const AccountPage = () => {
     setNicknameSaved(false);
     try {
       const response = await api.updateNickname(nickname, showNickname);
-      setAccount((current) => current ? { ...current, user: response.user } : current);
       setNickname(response.user.nickname ?? '');
       setShowNickname(Boolean(response.user.showNickname));
       await Promise.all([refresh(), localDb.invalidateHome(), localDb.invalidateAllGames()]);
@@ -98,6 +97,28 @@ export const AccountPage = () => {
     } finally {
       setNicknameSaving(false);
     }
+  };
+
+  const toggleCreatedRules = async () => {
+    if (createdRulesOpen) { setCreatedRulesOpen(false); return; }
+    setCreatedRulesOpen(true);
+    if (createdRules || createdRulesLoading) return;
+    setCreatedRulesLoading(true);
+    setCreatedRulesError('');
+    try { setCreatedRules((await api.accountCreatedRules()).rules); }
+    catch { setCreatedRulesError('建立紀錄暫時無法載入，請稍後再試。'); }
+    finally { setCreatedRulesLoading(false); }
+  };
+
+  const toggleModifiedRules = async () => {
+    if (modifiedRulesOpen) { setModifiedRulesOpen(false); return; }
+    setModifiedRulesOpen(true);
+    if (modifiedRules || modifiedRulesLoading) return;
+    setModifiedRulesLoading(true);
+    setModifiedRulesError('');
+    try { setModifiedRules((await api.accountModifiedRules()).revisions); }
+    catch { setModifiedRulesError('修改紀錄暫時無法載入，請稍後再試。'); }
+    finally { setModifiedRulesLoading(false); }
   };
 
   const clearFavorites = async () => {
@@ -197,19 +218,34 @@ export const AccountPage = () => {
       <p className="account-help"><Link to="/privacy">查看隱私、資料保存與權利申請方式</Link></p>
       <button type="button" className="button danger" onClick={() => void openDeleteAccount()}>刪除帳號</button>
     </section>
-    {!account && !error && <p className="muted">正在載入帳號資料…</p>}
-    {canEdit && account && <div className="account-sections">
+    <div className="account-sections">
       <section className="account-card">
-        <div className="account-section-heading"><h2>我建立的規則</h2><span>{account.createdRules.length} 筆</span></div>
-        {account.createdRules.length > 0 ? <ul className="account-list">{account.createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前還沒有建立規則。</p>}
+        <button type="button" className="account-section-toggle" aria-expanded={createdRulesOpen} aria-controls="account-created-rules" onClick={() => void toggleCreatedRules()}>
+          <span><strong>我建立的規則</strong><small>{canEdit ? '展開後讀取建立紀錄' : '展開後讀取已通過審核的投稿'}</small></span>
+          <span>{createdRulesOpen ? '收起' : '展開'}{createdRules ? `・${createdRules.length} 筆` : ''}</span>
+        </button>
+        {createdRulesOpen && <div id="account-created-rules" className="account-lazy-content">
+          {createdRulesLoading && <p className="muted" role="status">正在讀取建立紀錄…</p>}
+          {createdRulesError && <p className="form-error" role="alert">{createdRulesError}</p>}
+          {createdRules && (createdRules.length > 0 ? <ul className="account-list">{createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前還沒有可顯示的建立紀錄。</p>)}
+        </div>}
       </section>
 
-      <section className="account-card">
-        <div className="account-section-heading"><h2>我的規則修改紀錄</h2><span>{account.modifiedRules.length} 筆</span></div>
-        <p className="account-help">這裡只顯示其他編輯者修改你建立的規則；你自己修改的內容不會列在這裡。</p>
-        {account.modifiedRules.length > 0 ? <ul className="account-list">{account.modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他編輯者修改你規則的紀錄。</p>}
-      </section>
-    </div>}
+      {canEdit && <section className="account-card">
+        <button type="button" className="account-section-toggle" aria-expanded={modifiedRulesOpen} aria-controls="account-modified-rules" onClick={() => void toggleModifiedRules()}>
+          <span><strong>我的規則修改紀錄</strong><small>展開後讀取其他編輯者的修改</small></span>
+          <span>{modifiedRulesOpen ? '收起' : '展開'}{modifiedRules ? `・${modifiedRules.length} 筆` : ''}</span>
+        </button>
+        {modifiedRulesOpen && <div id="account-modified-rules" className="account-lazy-content">
+          {modifiedRulesLoading && <p className="muted" role="status">正在讀取修改紀錄…</p>}
+          {modifiedRulesError && <p className="form-error" role="alert">{modifiedRulesError}</p>}
+          {modifiedRules && <>
+            <p className="account-help">這裡只顯示其他編輯者修改你建立的規則；你自己修改的內容不會列在這裡。</p>
+            {modifiedRules.length > 0 ? <ul className="account-list">{modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他編輯者修改你規則的紀錄。</p>}
+          </>}
+        </div>}
+      </section>}
+    </div>
     <DeleteAccountDialog
       open={deleteDialogOpen}
       summary={deletionSummary}

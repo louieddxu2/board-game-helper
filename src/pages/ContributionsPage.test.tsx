@@ -37,18 +37,27 @@ describe('ContributionsPage', () => {
     expect(contributions).not.toHaveBeenCalled();
   });
 
-  test('shows a general user quota and review status', async () => {
+  test('shows only pending submissions and omits reviewed content', async () => {
     useSession.mockReturnValue({ user: { id: 'user-1', roles: [] }, loading: false, canEdit: false });
     contributions.mockResolvedValue({
       quota: { pendingRules: 2, ruleLimit: 6, remainingRules: 4, pendingGames: 1, gameLimit: 1, remainingGames: 0 },
-      rules: [{ id: 'rule-1', gameId: 'game-1', gameName: '範例遊戲', gameSlug: 'example', statement: '範例規則', status: 'published', reviewStatus: 'pending', createdAt: 1, updatedAt: 1 }],
-      games: [{ id: 'game-1', slug: 'example', displayName: '範例遊戲', visibility: 'public', reviewStatus: 'reviewed', reviewedByNickname: '東東', createdAt: 1, updatedAt: 1 }],
+      rules: [
+        { id: 'rule-1', gameId: 'game-1', gameName: '範例遊戲', gameSlug: 'example', statement: '待審核規則', status: 'published', reviewStatus: 'pending', createdAt: 1, updatedAt: 1 },
+        { id: 'rule-2', gameId: 'game-2', gameName: '已審核遊戲', gameSlug: 'reviewed', statement: '已審核規則', status: 'published', reviewStatus: 'reviewed', createdAt: 1, updatedAt: 1 },
+      ],
+      games: [
+        { id: 'game-1', slug: 'example', displayName: '待審核遊戲', visibility: 'public', reviewStatus: 'pending', createdAt: 1, updatedAt: 1 },
+        { id: 'game-2', slug: 'reviewed', displayName: '已通過遊戲', visibility: 'public', reviewStatus: 'reviewed', reviewedByNickname: '東東', createdAt: 1, updatedAt: 1 },
+      ],
     });
     render(<MemoryRouter><ContributionsPage /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText('未審核規則 2 / 6')).toBeInTheDocument());
     expect(screen.getByText('可再建立 0 款')).toBeInTheDocument();
-    expect(screen.getByText('未審核')).toBeInTheDocument();
-    expect(screen.getByText('審核：東東')).toBeInTheDocument();
+    expect(screen.getAllByText('未審核')).toHaveLength(2);
+    expect(screen.getByText('待審核規則')).toBeInTheDocument();
+    expect(screen.queryByText('已審核規則')).not.toBeInTheDocument();
+    expect(screen.queryByText('已通過遊戲')).not.toBeInTheDocument();
+    expect(contributions).toHaveBeenCalledOnce();
   });
 });

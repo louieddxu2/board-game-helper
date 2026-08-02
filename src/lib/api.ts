@@ -1,4 +1,4 @@
-import type { AccountDeletionSummary, AccountPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -248,7 +248,9 @@ const home = async (onUpdated?: (data: HomePayload) => void): Promise<HomePayloa
 export const api = {
   session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
-  contributions: () => uncachedRead<ContributionsPayload>('/api/account/contributions', 'contribution quota and history are user-specific'),
+  accountCreatedRules: () => uncachedRead<AccountCreatedRulesPayload>('/api/account/created-rules', 'account rule history is loaded only when expanded'),
+  accountModifiedRules: () => uncachedRead<AccountModifiedRulesPayload>('/api/account/modified-rules', 'account revision history is loaded only when expanded'),
+  contributions: () => uncachedRead<ContributionsPayload>('/api/account/contributions', 'contribution quota and pending submissions are user-specific and must be current'),
   editorContributions: () => uncachedRead<{ games: Array<{ gameId: string; pendingRuleCount: number }>; pendingGameIds: string[] }>('/api/editor/contributions', 'review queue is editor-specific'),
   personalHome: () => uncachedRead<PersonalHomePayload>('/api/account/home', 'favorite data is user-specific'),
   favoriteStatus: (gameId: string) => uncachedRead<{ favorite: boolean; favoriteCount: number }>(`/api/account/favorites/${encodeURIComponent(gameId)}`, 'favorite status is user-specific'),

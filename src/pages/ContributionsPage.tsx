@@ -2,25 +2,19 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../context/SessionContext';
-import type { ContributionGameSummary, ContributionReviewStatus, ContributionRuleSummary, ContributionsPayload } from '../shared/types';
-
-const reviewLabel = (status: ContributionReviewStatus, reviewer?: string) => {
-  if (status === 'pending') return '未審核';
-  if (status === 'reviewed') return reviewer ? `審核：${reviewer}` : '已審核';
-  return '已建立';
-};
+import type { ContributionGameSummary, ContributionRuleSummary, ContributionsPayload } from '../shared/types';
 
 const RuleItem = ({ rule }: { rule: ContributionRuleSummary }) => (
   <li className="contribution-item">
     <Link to={`/games/${rule.gameSlug}#rule-${rule.id}`}><strong>{rule.gameName}</strong><span>{rule.statement}</span></Link>
-    <small>{reviewLabel(rule.reviewStatus, rule.reviewedByNickname)}</small>
+    <small>未審核</small>
   </li>
 );
 
 const GameItem = ({ game }: { game: ContributionGameSummary }) => (
   <li className="contribution-item">
     <Link to={`/games/${game.slug}`}><strong>{game.displayName}</strong></Link>
-    <small>{game.mergedIntoGameId ? '已合併' : game.visibility === 'hidden' ? '已隱藏' : reviewLabel(game.reviewStatus, game.reviewedByNickname)}</small>
+    <small>{game.mergedIntoGameId ? '已合併' : game.visibility === 'hidden' ? '已隱藏' : '未審核'}</small>
   </li>
 );
 
@@ -50,6 +44,9 @@ export const ContributionsPage = () => {
     </section>
   </section>;
 
+  const pendingRules = data?.rules.filter((rule) => rule.reviewStatus !== 'reviewed') ?? [];
+  const pendingGames = data?.games.filter((game) => game.reviewStatus !== 'reviewed') ?? [];
+
   return <section className="contributions-page narrow-page">
     <header>
       <p className="eyebrow">投稿說明</p>
@@ -66,12 +63,12 @@ export const ContributionsPage = () => {
     {!data && !error && <p className="muted">正在讀取投稿狀態…</p>}
     {data && <div className="contribution-sections">
       <section className="account-card">
-        <div className="account-section-heading"><h2>我的規則投稿</h2><span>{data.rules.length} 條</span></div>
-        {data.rules.length ? <ul className="account-list">{data.rules.map((rule) => <RuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">尚無規則投稿。</p>}
+        <div className="account-section-heading"><h2>未審核規則</h2><span>{pendingRules.length} 條</span></div>
+        {pendingRules.length ? <ul className="account-list">{pendingRules.map((rule) => <RuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前沒有未審核規則。</p>}
       </section>
       <section className="account-card">
-        <div className="account-section-heading"><h2>我建立的遊戲</h2><span>{data.games.length} 款</span></div>
-        {data.games.length ? <ul className="account-list">{data.games.map((game) => <GameItem key={game.id} game={game} />)}</ul> : <p className="muted">尚無建立的遊戲。</p>}
+        <div className="account-section-heading"><h2>未審核遊戲</h2><span>{pendingGames.length} 款</span></div>
+        {pendingGames.length ? <ul className="account-list">{pendingGames.map((game) => <GameItem key={game.id} game={game} />)}</ul> : <p className="muted">目前沒有未審核遊戲。</p>}
       </section>
     </div>}
 

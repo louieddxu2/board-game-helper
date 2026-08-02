@@ -28,41 +28,26 @@ authRoutes.get('/api/session', (c) => c.json({
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
-  if (!user.roles.some((role) => role === 'editor' || role === 'admin')) {
-    return c.json({ user, createdRules: [], modifiedRules: [] });
-  }
-  const [createdResult, modifiedResult] = await Promise.all([
-    getDatabase(c).statement(`
-      SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
-        r.status, r.created_at, r.updated_at
-      FROM rules r
-      JOIN games g ON g.id = r.game_id
-      WHERE r.created_by = ?
-      ORDER BY r.created_at DESC, r.id DESC
-      LIMIT 100
-    `).bind(user.id).all<{
-      id: string; game_name: string; game_slug: string; statement: string;
-      status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;
-    }>(),
-    getDatabase(c).statement(`
-      SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,
-        r.statement current_statement, rr.previous_json, rr.reason,
-        rr.created_at edited_at, COALESCE(u.nickname, u.display_name) edited_by_name
-      FROM rule_revisions rr
-      JOIN rules r ON r.id = rr.rule_id
-      JOIN games g ON g.id = r.game_id
-      LEFT JOIN users u ON u.id = rr.edited_by
-      WHERE r.created_by = ? AND rr.edited_by <> ?
-      ORDER BY rr.created_at DESC, rr.id DESC
-      LIMIT 100
-    `).bind(user.id, user.id).all<{
-      id: string; rule_id: string; game_name: string; game_slug: string;
-      current_statement: string; previous_json: string; reason: string | null;
-      edited_at: number; edited_by_name: string | null;
-    }>(),
-  ]);
+  return c.json({ user });
+});
 
-  const createdRules = (createdResult.results ?? []).map((row) => ({
+authRoutes.get('/api/account/created-rules', requireUser, async (c) => {
+  const user = c.get('user')!;
+  const canEdit = user.roles.some((role) => role === 'editor' || role === 'admin');
+  const result = await getDatabase(c).statement(`
+    SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
+      r.status, r.created_at, r.updated_at
+    FROM rules r
+    JOIN games g ON g.id = r.game_id
+    WHERE r.created_by = ?${canEdit ? '' : " AND r.review_status = 'reviewed'"}
+    ORDER BY r.created_at DESC, r.id DESC
+    LIMIT 100
+  `).bind(user.id).all<{
+    id: string; game_name: string; game_slug: string; statement: string;
+    status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;
+  }>();
+  setNoCache(c);
+  return c.json({ rules: (result.results ?? []).map((row) => ({
     id: row.id,
     gameName: row.game_name,
     gameSlug: row.game_slug,
@@ -70,8 +55,30 @@ authRoutes.get('/api/account', requireUser, async (c) => {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
-  const modifiedRules = (modifiedResult.results ?? []).map((row) => {
+  })) });
+});
+
+authRoutes.get('/api/account/modified-rules', requireRole('editor'), async (c) => {
+  const user = c.get('user')!;
+  const result = await getDatabase(c).statement(`
+    SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,
+      r.statement current_statement, rr.previous_json, rr.reason,
+      rr.created_at edited_at,
+      CASE WHEN u.show_nickname = 1 THEN u.nickname END edited_by_name
+    FROM rule_revisions rr
+    JOIN rules r ON r.id = rr.rule_id
+    JOIN games g ON g.id = r.game_id
+    LEFT JOIN users u ON u.id = rr.edited_by
+    WHERE r.created_by = ? AND rr.edited_by <> ?
+    ORDER BY rr.created_at DESC, rr.id DESC
+    LIMIT 100
+  `).bind(user.id, user.id).all<{
+    id: string; rule_id: string; game_name: string; game_slug: string;
+    current_statement: string; previous_json: string; reason: string | null;
+    edited_at: number; edited_by_name: string | null;
+  }>();
+  setNoCache(c);
+  return c.json({ revisions: (result.results ?? []).map((row) => {
     let previousStatement: string | undefined;
     try {
       const previous = JSON.parse(row.previous_json) as { statement?: unknown };
@@ -88,11 +95,7 @@ authRoutes.get('/api/account', requireUser, async (c) => {
       reason: row.reason ?? '修改',
       editedAt: row.edited_at,
     };
-  });
-
-  const setting = await getDatabase(c).statement('SELECT show_nickname FROM users WHERE id = ?')
-    .bind(user.id).first<{ show_nickname: number }>();
-  return c.json({ user: { ...user, showNickname: Boolean(setting?.show_nickname) }, createdRules, modifiedRules });
+  }) });
 });
 
 authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {

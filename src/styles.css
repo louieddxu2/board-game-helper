@@ -472,6 +472,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .account-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .account-section-heading h2 { margin: 0; font-size: 24px; }
 .account-section-heading span { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.account-section-toggle { width: 100%; border: 0; background: transparent; color: var(--ink); padding: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; cursor: pointer; }
+.account-section-toggle > span:first-child { display: grid; gap: 4px; }
+.account-section-toggle strong { font-size: 24px; }
+.account-section-toggle small, .account-section-toggle > span:last-child { color: var(--muted); font-size: 13px; }
+.account-section-toggle > span:last-child { white-space: nowrap; }
+.account-lazy-content { margin-top: 16px; }
 .account-help { margin: -5px 0 14px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .account-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .account-item { border-top: 1px solid var(--line); padding: 12px 0 4px; }

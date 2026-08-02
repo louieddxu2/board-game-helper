@@ -188,11 +188,16 @@ if (!/status\s*=\s*'merged'[\s\S]*merged_into_tag_id/.test(tagWriteHelper)) {
   violations.push('worker/routes/shared.ts: canonical names of merged tags must resolve to their active target');
 }
 const accountRouteSource = fs.readFileSync(path.resolve('worker/routes/auth.ts'), 'utf8');
-const accountHandler = accountRouteSource.split("authRoutes.get('/api/account'")[1]?.split("authRoutes.patch('/api/account/nickname'")[0] ?? '';
-const ordinaryUserReturn = accountHandler.indexOf('createdRules: [], modifiedRules: []');
-const accountRuleRead = accountHandler.indexOf('FROM rules r');
-if (ordinaryUserReturn < 0 || accountRuleRead < 0 || ordinaryUserReturn > accountRuleRead) {
-  violations.push('worker/routes/auth.ts: ordinary users must return before editor rule-activity queries');
+const accountHandler = accountRouteSource.split("authRoutes.get('/api/account'")[1]?.split("authRoutes.get('/api/account/created-rules'")[0] ?? '';
+if (/FROM\s+(?:rules|rule_revisions)\b/i.test(accountHandler)) {
+  violations.push('worker/routes/auth.ts: the base account response must not eagerly read rule history');
+}
+const createdRulesHandler = accountRouteSource.split("authRoutes.get('/api/account/created-rules'")[1]?.split("authRoutes.get('/api/account/modified-rules'")[0] ?? '';
+if (!/canEdit\s*\?\s*''\s*:\s*" AND r\.review_status = 'reviewed'"/.test(createdRulesHandler)) {
+  violations.push('worker/routes/auth.ts: ordinary account history must remain limited to reviewed rules');
+}
+if (!/get\('\/api\/account\/modified-rules',\s*requireRole\('editor'\)/.test(accountRouteSource)) {
+  violations.push('worker/routes/auth.ts: account revision history must remain editor-only');
 }
 
 if (violations.length > 0) {
