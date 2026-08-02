@@ -189,12 +189,16 @@ if (!/status\s*=\s*'merged'[\s\S]*merged_into_tag_id/.test(tagWriteHelper)) {
 }
 const accountRouteSource = fs.readFileSync(path.resolve('worker/routes/auth.ts'), 'utf8');
 const accountHandler = accountRouteSource.split("authRoutes.get('/api/account'")[1]?.split("authRoutes.get('/api/account/created-rules'")[0] ?? '';
-if (/FROM\s+(?:rules|rule_revisions)\b/i.test(accountHandler)) {
-  violations.push('worker/routes/auth.ts: the base account response must not eagerly read rule history');
+if (!/SELECT\s+COUNT\(\*\)\s+total[\s\S]*FROM\s+rules/i.test(accountHandler)
+  || /JOIN\s+|FROM\s+rule_revisions\b/i.test(accountHandler)) {
+  violations.push('worker/routes/auth.ts: the base account response may read only the created-rule count');
 }
 const createdRulesHandler = accountRouteSource.split("authRoutes.get('/api/account/created-rules'")[1]?.split("authRoutes.get('/api/account/modified-rules'")[0] ?? '';
 if (!/canEdit\s*\?\s*''\s*:\s*" AND r\.review_status = 'reviewed'"/.test(createdRulesHandler)) {
   violations.push('worker/routes/auth.ts: ordinary account history must remain limited to reviewed rules');
+}
+if (!/LIMIT\s+20\b/.test(createdRulesHandler)) {
+  violations.push('worker/routes/auth.ts: created-rule history must remain limited to the latest 20 rows');
 }
 if (!/get\('\/api\/account\/modified-rules',\s*requireRole\('editor'\)/.test(accountRouteSource)) {
   violations.push('worker/routes/auth.ts: account revision history must remain editor-only');

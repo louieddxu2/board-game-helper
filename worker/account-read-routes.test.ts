@@ -74,14 +74,16 @@ describe('account read routes', () => {
     expect(payload.games).toHaveLength(1);
   });
 
-  test('does not read history for the base account response', async () => {
+  test('reads only the created-rule count for the base account response', async () => {
     const { db, recorded } = fakeDatabase();
     const app = appFor({ id: 'user-1', roles: [] }, db);
 
     const response = await app.request('https://rules.example/api/account');
 
     expect(response.status).toBe(200);
-    expect(recorded).toHaveLength(0);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].sql).toContain('SELECT COUNT(*) total');
+    expect(recorded[0].sql).not.toContain('JOIN games');
   });
 
   test('limits a general account history to reviewed rules after expansion', async () => {
@@ -93,6 +95,7 @@ describe('account read routes', () => {
     expect(response.status).toBe(200);
     expect(recorded).toHaveLength(1);
     expect(recorded[0].sql).toContain("r.review_status = 'reviewed'");
+    expect(recorded[0].sql).toContain('LIMIT 20');
     expect(recorded[0].bindings).toEqual(['user-1']);
   });
 });

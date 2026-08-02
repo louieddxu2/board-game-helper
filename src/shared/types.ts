@@ -82,6 +82,7 @@ export interface AccountRevisionSummary {
 
 export interface AccountPayload {
   user: SessionUser;
+  createdRuleCount: number;
 }
 
 export interface AccountCreatedRulesPayload {

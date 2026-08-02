@@ -28,7 +28,14 @@ authRoutes.get('/api/session', (c) => c.json({
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
-  return c.json({ user });
+  const canEdit = user.roles.some((role) => role === 'editor' || role === 'admin');
+  const count = await getDatabase(c).statement(`
+    SELECT COUNT(*) total
+    FROM rules
+    WHERE created_by = ?${canEdit ? '' : " AND review_status = 'reviewed'"}
+  `).bind(user.id).first<{ total: number }>();
+  setNoCache(c);
+  return c.json({ user, createdRuleCount: count?.total ?? 0 });
 });
 
 authRoutes.get('/api/account/created-rules', requireUser, async (c) => {
@@ -41,7 +48,7 @@ authRoutes.get('/api/account/created-rules', requireUser, async (c) => {
     JOIN games g ON g.id = r.game_id
     WHERE r.created_by = ?${canEdit ? '' : " AND r.review_status = 'reviewed'"}
     ORDER BY r.created_at DESC, r.id DESC
-    LIMIT 100
+    LIMIT 20
   `).bind(user.id).all<{
     id: string; game_name: string; game_slug: string; statement: string;
     status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;

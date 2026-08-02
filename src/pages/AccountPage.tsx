@@ -59,6 +59,7 @@ export const AccountPage = () => {
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeletionError, setAccountDeletionError] = useState('');
   const [createdRulesOpen, setCreatedRulesOpen] = useState(false);
+  const [createdRuleCount, setCreatedRuleCount] = useState<number>();
   const [createdRules, setCreatedRules] = useState<AccountRuleSummary[]>();
   const [createdRulesLoading, setCreatedRulesLoading] = useState(false);
   const [createdRulesError, setCreatedRulesError] = useState('');
@@ -73,10 +74,20 @@ export const AccountPage = () => {
   }, [user?.nickname, user?.showNickname]);
 
   useEffect(() => {
+    let active = true;
+    setCreatedRuleCount(undefined);
     setCreatedRules(undefined);
     setCreatedRulesOpen(false);
     setModifiedRules(undefined);
     setModifiedRulesOpen(false);
+    if (user?.id) {
+      void api.account().then((payload) => {
+        if (active) setCreatedRuleCount(payload.createdRuleCount);
+      }).catch(() => {
+        if (active) setError('無法讀取建立規則數量，請稍後再試。');
+      });
+    }
+    return () => { active = false; };
   }, [user?.id]);
 
   const saveNickname = async () => {
@@ -221,12 +232,13 @@ export const AccountPage = () => {
     <div className="account-sections">
       <section className="account-card">
         <button type="button" className="account-section-toggle" aria-expanded={createdRulesOpen} aria-controls="account-created-rules" onClick={() => void toggleCreatedRules()}>
-          <span><strong>我建立的規則</strong><small>{canEdit ? '展開後讀取建立紀錄' : '展開後讀取已通過審核的投稿'}</small></span>
-          <span>{createdRulesOpen ? '收起' : '展開'}{createdRules ? `・${createdRules.length} 筆` : ''}</span>
+          <span><strong>我建立的規則{createdRuleCount !== undefined ? `（${createdRuleCount}）` : ''}</strong><small>{canEdit ? '展開後讀取建立紀錄' : '展開後讀取已通過審核的投稿'}</small></span>
+          <span>{createdRulesOpen ? '收起' : '展開'}</span>
         </button>
         {createdRulesOpen && <div id="account-created-rules" className="account-lazy-content">
           {createdRulesLoading && <p className="muted" role="status">正在讀取建立紀錄…</p>}
           {createdRulesError && <p className="form-error" role="alert">{createdRulesError}</p>}
+          {createdRules && createdRuleCount !== undefined && createdRuleCount > 20 && <p className="account-help">共 {createdRuleCount} 筆，只顯示近 20 筆。</p>}
           {createdRules && (createdRules.length > 0 ? <ul className="account-list">{createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前還沒有可顯示的建立紀錄。</p>)}
         </div>}
       </section>
