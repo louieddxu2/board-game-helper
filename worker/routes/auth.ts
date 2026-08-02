@@ -28,14 +28,7 @@ authRoutes.get('/api/session', (c) => c.json({
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
-  const canEdit = user.roles.some((role) => role === 'editor' || role === 'admin');
-  const count = await getDatabase(c).statement(`
-    SELECT COUNT(*) total
-    FROM rules
-    WHERE created_by = ?${canEdit ? '' : " AND review_status = 'reviewed'"}
-  `).bind(user.id).first<{ total: number }>();
-  setNoCache(c);
-  return c.json({ user, createdRuleCount: count?.total ?? 0 });
+  return c.json({ user });
 });
 
 authRoutes.get('/api/account/created-rules', requireUser, async (c) => {

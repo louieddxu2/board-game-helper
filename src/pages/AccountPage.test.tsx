@@ -7,7 +7,6 @@ import { AccountPage } from './AccountPage';
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
-  account: vi.fn(),
   accountCreatedRules: vi.fn(),
   accountModifiedRules: vi.fn(),
   confirm: vi.fn(),
@@ -18,7 +17,6 @@ vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: mock
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error { constructor(public code: string) { super(code); } },
   api: {
-    account: mocks.account,
     accountCreatedRules: mocks.accountCreatedRules,
     accountModifiedRules: mocks.accountModifiedRules,
     updateNickname: vi.fn(), clearFavorites: vi.fn(), accountDeletionSummary: vi.fn(), deleteAccount: vi.fn(),
@@ -44,24 +42,21 @@ describe('AccountPage lazy activity', () => {
     mocks.accountCreatedRules.mockResolvedValue({
       rules: [{ id: 'rule-1', gameName: '範例遊戲', gameSlug: 'example', statement: '範例規則', status: 'published', createdAt: 1, updatedAt: 1 }],
     });
-    mocks.account.mockResolvedValue({ user: { id: 'editor-1', roles: ['editor'] }, createdRuleCount: 21 });
     mocks.accountModifiedRules.mockResolvedValue({ revisions: [] });
   });
 
-  test('loads only the rule count before expansion, then reuses lazily loaded history', async () => {
+  test('does not read rule history until expanded and reuses it after collapsing', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><AccountPage /></MemoryRouter>);
 
     expect(mocks.accountCreatedRules).not.toHaveBeenCalled();
     expect(mocks.accountModifiedRules).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByText('我建立的規則（21）')).toBeInTheDocument());
-    expect(mocks.account).toHaveBeenCalledOnce();
 
     const toggle = screen.getByRole('button', { name: /我建立的規則/ });
     await user.click(toggle);
     await waitFor(() => expect(screen.getByText('範例規則')).toBeInTheDocument());
     expect(mocks.accountCreatedRules).toHaveBeenCalledOnce();
-    expect(screen.getByText('共 21 筆，只顯示近 20 筆。')).toBeInTheDocument();
+    expect(screen.getByText('收起・近期 20 筆')).toBeInTheDocument();
 
     await user.click(toggle);
     await user.click(toggle);
@@ -75,7 +70,6 @@ describe('AccountPage lazy activity', () => {
       user: { id: 'user-1', roles: [] }, realUser: { id: 'user-1', roles: [] },
       loading: false, logout: vi.fn(), canEdit: false, refresh: vi.fn(),
     });
-    mocks.account.mockResolvedValue({ user: { id: 'user-1', roles: [] }, createdRuleCount: 1 });
     render(<MemoryRouter><AccountPage /></MemoryRouter>);
 
     expect(screen.getByText('展開後讀取已通過審核的投稿')).toBeInTheDocument();
