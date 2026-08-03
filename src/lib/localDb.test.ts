@@ -88,7 +88,7 @@ describe('local home references after game mutations', () => {
   const target: GameSummary = { id: 'game-target', slug: 'new-name', displayName: '新名稱', ruleCount: 2, updatedAt: 2 };
   const rule = (overrides: Partial<RuleCard> = {}) => ({
     id: 'rule-1', gameId: source.id, statement: '更新前', sourceLinks: [], status: 'published', tags: [],
-    gameName: source.displayName, gameSlug: source.slug, ...overrides,
+    gameName: source.displayName, gameSlug: source.slug, createdBy: 'user-1', createdByNickname: 'author', ...overrides,
   }) as RuleCard & { gameName: string; gameSlug: string };
   const home = (sourceRule = rule()): HomePayload => ({
     generatedAt: 1,
@@ -113,6 +113,7 @@ describe('local home references after game mutations', () => {
     expect(updated.featured[0]).toMatchObject({ gameSlug: target.slug, gameName: target.displayName });
     expect(updated.featuredRules[0]).toMatchObject({ gameId: target.id, statement: '合併後規則', gameName: target.displayName, gameSlug: target.slug });
     expect(updated.recentRules[0]).toMatchObject({ gameId: target.id, gameName: target.displayName, gameSlug: target.slug });
+    expect(updated.featuredRules[0]).toMatchObject({ createdBy: 'user-1', createdByNickname: 'author' });
     expect(updated.popularGames).toEqual([target]);
   });
 

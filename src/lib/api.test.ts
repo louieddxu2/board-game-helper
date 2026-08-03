@@ -111,6 +111,23 @@ describe('api game cache boundary', () => {
     expect(initial.game).toEqual(game);
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ game: updated }));
   });
+
+  test('publishes creator metadata when only cached rule credits changed', async () => {
+    const staleRule = { id: 'r1', gameId: 'game-1', statement: 'Rule', status: 'published' as const, sourceLinks: [], tags: [], updatedAt: 1, createdBy: 'u1' };
+    const freshRule = { ...staleRule, createdByNickname: 'author' };
+    const staleGame = { ...game, rules: [staleRule] };
+    const freshGame = { ...game, rules: [freshRule] };
+    vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGame').mockResolvedValue({ key: 'game:game-1', data: staleGame, cachedAt: 1 });
+    vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: freshGame, rulesComplete: true }) }));
+    const onUpdated = vi.fn();
+
+    expect((await api.game('game-1', false, onUpdated)).game.rules[0].createdByNickname).toBeUndefined();
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({
+      game: expect.objectContaining({ rules: [freshRule] }),
+    }));
+  });
 });
 
 describe('api rule importance cache boundary', () => {

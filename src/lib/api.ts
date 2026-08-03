@@ -144,7 +144,12 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
   latestRuleUpdatedAt: game.latestRuleUpdatedAt,
   reviewStatus: game.reviewStatus,
   reviewedByNickname: game.reviewedByNickname,
-  rules: game.rules.map((rule) => [rule.id, rule.updatedAt, rule.status, rule.categories, rule.reviewStatus, rule.reviewedByNickname]),
+  rules: game.rules.map((rule) => [
+    rule.id, rule.gameId, rule.createdAt, rule.updatedAt, rule.status, rule.statement,
+    rule.commonMistake, rule.details, rule.categories, rule.playerCounts, rule.editionNotes,
+    rule.tagIds, rule.createdBy, rule.createdByNickname, rule.editedByNicknames,
+    rule.reviewStatus, rule.reviewedByNickname, rule.reviewedAt,
+  ]),
 });
 
 const gameRefreshRequests = new Map<string, Promise<{ game: GameDetail }>>();
@@ -178,7 +183,9 @@ const refreshRule = (id: string): Promise<ApiRule> => {
 };
 
 const ruleContentKey = (rule: ApiRule): string => JSON.stringify([
-  rule.id, rule.updatedAt, rule.status, rule.statement, rule.commonMistake, rule.details, rule.categories, rule.tagIds,
+  rule.id, rule.gameId, rule.gameName, rule.gameSlug, rule.createdAt, rule.updatedAt, rule.status,
+  rule.statement, rule.commonMistake, rule.details, rule.categories, rule.playerCounts, rule.editionNotes,
+  rule.tagIds, rule.createdBy, rule.createdByNickname, rule.editedByNicknames,
   rule.reviewStatus, rule.reviewedByNickname, rule.reviewedAt,
 ]);
 
