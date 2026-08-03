@@ -154,6 +154,42 @@ describe('api rule importance cache boundary', () => {
 
 });
 
+describe('api mutation cache synchronization', () => {
+  const game = { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], ruleCount: 1, updatedAt: 1 };
+  const rule = { id: 'rule-1', gameId: game.id, gameName: game.displayName, gameSlug: game.slug, statement: 'Updated', status: 'published' as const, sourceLinks: [], tags: [], updatedAt: 2 };
+  const sourceGame = { ...game, id: 'game-source', slug: 'old-name', displayName: 'Old name' };
+  const targetGame = { ...game, id: 'game-target', slug: 'new-name', displayName: 'New name' };
+
+  test('updates the local rule entity after editing a rule', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ ok: true, rule }) }));
+    const update = vi.spyOn(localDb, 'updateCachedRuleEntity').mockResolvedValue(undefined);
+
+    await api.patchRule(rule.id, { statement: rule.statement });
+
+    expect(update).toHaveBeenCalledWith(rule);
+  });
+
+  test('updates the local game summary after changing a game name', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ ok: true, game }) }));
+    const update = vi.spyOn(localDb, 'upsertGameSummary').mockResolvedValue(undefined);
+
+    await api.patchGame(game.id, { displayName: game.displayName });
+
+    expect(update).toHaveBeenCalledWith(game);
+  });
+
+  test('merges the local source game cache into the target game cache', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({
+      ok: true, sourceGameId: sourceGame.id, targetGameId: targetGame.id, sourceGame, targetGame,
+    }) }));
+    const merge = vi.spyOn(localDb, 'mergeCachedGame').mockResolvedValue(undefined);
+
+    await api.mergeGame(sourceGame.id, targetGame.id);
+
+    expect(merge).toHaveBeenCalledWith(sourceGame, targetGame);
+  });
+});
+
 describe('api account deletion boundary', () => {
   test('loads a current private summary only when requested', async () => {
     const payload = { deletableRuleCount: 2, retainedRuleCount: 1, isLastAdmin: false };

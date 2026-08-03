@@ -447,6 +447,16 @@ export const localDb = {
       gameSlug: rule.gameSlug ?? game?.slug,
       cachedAt,
     });
+    if (game) {
+      const latestRuleUpdatedAt = Math.max(game.latestRuleUpdatedAt ?? game.rulesVersion ?? 0, rule.updatedAt ?? 0);
+      await tx.objectStore('games').put({
+        ...game,
+        updatedAt: Math.max(game.updatedAt, rule.updatedAt ?? 0),
+        latestRuleUpdatedAt,
+        rulesVersion: latestRuleUpdatedAt,
+        cachedAt,
+      });
+    }
     const ruleUpdates = new Map([[rule.id, rule]]);
     const referenceGame = game
       ? { ...game, displayName: rule.gameName ?? game.displayName, slug: rule.gameSlug ?? game.slug }

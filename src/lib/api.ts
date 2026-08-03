@@ -382,10 +382,10 @@ export const api = {
     }).catch(() => undefined);
     return { rule: stale.data };
   },
-  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule?: ApiRule }>(`/api/rules/${id}`, {
+  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule: ApiRule }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }).then(async (response) => {
-    if (response.rule) await localDb.updateCachedRuleEntity(response.rule).catch(() => undefined);
+    await localDb.updateCachedRuleEntity(response.rule).catch(() => undefined);
     return response;
   }),
   reviewRule: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/rules/${id}/review`, { method: 'POST', body: '{}' }),

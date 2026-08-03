@@ -115,4 +115,20 @@ describe('local home references after game mutations', () => {
     expect(updated.recentRules[0]).toMatchObject({ gameId: target.id, gameName: target.displayName, gameSlug: target.slug });
     expect(updated.popularGames).toEqual([target]);
   });
+
+  test('updates all featured and recent rule snapshots when one rule is edited', () => {
+    const editedRule = rule({ statement: '???隤?嚗?', updatedAt: 4 });
+    const data = home(editedRule);
+    data.featuredRules = Array.from({ length: 6 }, (_, index) => rule({ id: `featured-${index}`, statement: `featured-${index}` }));
+    data.recentRules = Array.from({ length: 6 }, (_, index) => rule({ id: `recent-${index}`, statement: `recent-${index}` }));
+    data.featuredRules[2] = editedRule;
+    data.recentRules[4] = editedRule;
+
+    const updated = applyGameReferenceUpdate(data, undefined, source, new Map([[editedRule.id, editedRule]]));
+
+    expect(updated.featuredRules[2]).toMatchObject({ statement: editedRule.statement, updatedAt: editedRule.updatedAt });
+    expect(updated.recentRules[4]).toMatchObject({ statement: editedRule.statement, updatedAt: editedRule.updatedAt });
+    expect(updated.featuredRules).toHaveLength(6);
+    expect(updated.recentRules).toHaveLength(6);
+  });
 });
