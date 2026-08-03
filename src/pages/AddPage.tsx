@@ -297,10 +297,7 @@ export const AddPage = () => {
           <span className="rule-number">{index + 1}</span>
           {active ? <div className="rule-input-fields">
             <label htmlFor={`rule-${rule.id}`}>{zhTWCopy.terms.correctRule} *</label>
-            <textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} onChange={(event) => setRule(rule.id, { statement: event.target.value })} onKeyDown={(event) => {
-              const mobile = window.matchMedia('(max-width: 800px), (pointer: coarse)').matches;
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !mobile && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
-            }} />
+            <textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} onChange={(event) => setRule(rule.id, { statement: event.target.value })} />
             <label>{zhTWCopy.terms.mistakeSituation}<textarea rows={2} value={rule.commonMistake ?? ''} onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
             <label>補充說明<textarea rows={3} value={rule.details ?? ''} onChange={(event) => setRule(rule.id, { details: event.target.value })} /></label>
             <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: rule.details }} />

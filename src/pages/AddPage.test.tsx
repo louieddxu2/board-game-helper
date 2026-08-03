@@ -102,6 +102,22 @@ describe('AddPage contribution constraints', () => {
     expect(mocks.contributions).not.toHaveBeenCalled();
   });
 
+  test('keeps Enter as a newline in the correct-rule textarea', () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    const { container } = render(<MemoryRouter><AddPage /></MemoryRouter>);
+    const statementTextarea = container.querySelector('.rule-input-fields textarea') as HTMLTextAreaElement;
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: false })) });
+
+    try {
+      fireEvent.change(statementTextarea, { target: { value: 'A correct rule' } });
+      expect(fireEvent.keyDown(statementTextarea, { key: 'Enter', code: 'Enter', charCode: 13 })).toBe(true);
+      expect(container.querySelectorAll('.rule-input')).toHaveLength(1);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
+    }
+  });
+
   test('imports JSON pasted in the modal', async () => {
     mocks.useSession.mockReturnValue({ user: { id: 'admin-1', roles: ['admin'] }, canEdit: true, isAdmin: true, loading: false });
     render(<MemoryRouter><AddPage /></MemoryRouter>);
