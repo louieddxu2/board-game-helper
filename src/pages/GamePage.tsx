@@ -12,6 +12,7 @@ import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard a
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
+import zhTWCopy from '../content/zh-TW.json';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule, canUserReviewRule } from '../lib/rulePermissions';
 import { collectEditionOptions } from '../lib/editionOptions';
@@ -484,8 +485,8 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
-      <label>正確規則<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
-      <label>玩錯情況<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
+      <label>{zhTWCopy.terms.correctRule}<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
+      <label>{zhTWCopy.terms.mistakeSituation}<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
       <TagInput value={tagSelections} onChange={setTagSelections} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags).filter((tag) => !tag.unresolved)} detectionInput={{ statement, commonMistake, details }} />
       <RuleCategoryInput value={categories} onChange={setCategories} />

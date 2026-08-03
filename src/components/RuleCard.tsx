@@ -3,6 +3,7 @@ import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
+import zhTWCopy from '../content/zh-TW.json';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -148,7 +149,7 @@ export const RuleCard = ({
         )}
       </div>
 
-      {/* 第三行：正確規則 */}
+      {/* 第三行：標準規則欄位 */}
       <div className="rule-statement-section">
         <p className="statement-text">
           {displayStatement}
@@ -167,10 +168,10 @@ export const RuleCard = ({
         )}
       </div>
 
-      {/* 第四行：玩錯情況 */}
+      {/* 第四行：常見錯誤欄位 */}
       {rule.commonMistake && (
         <div className="mistake">
-          <strong className="mistake-badge">⚠️ 玩錯情況</strong>
+          <strong className="mistake-badge">⚠️ {zhTWCopy.terms.mistakeSituation}</strong>
           <p className="mistake-text">{rule.commonMistake}</p>
         </div>
       )}

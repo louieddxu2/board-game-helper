@@ -8,6 +8,7 @@ import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { FLOW_STAGES, type FlowStage, type GameSummary, type ReviewBatch, type ReviewContent, type ReviewProposal } from '../shared/types';
+import zhTWCopy from '../content/zh-TW.json';
 
 const stageNames: Record<FlowStage, string> = {
   setup: '設置', round: '回合／輪次', action: '行動', end_scoring: '結束與計分',
@@ -191,8 +192,8 @@ export const ReviewPage = () => {
             </header>
             {proposal.reason && <p className="review-reason">{proposal.reason}</p>}
             <div className="review-compare">
-              <div><span>目前內容</span><p>{proposal.original.statement}</p>{proposal.original.commonMistake && <small>玩錯情況：{proposal.original.commonMistake}</small>}</div>
-              <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label="建議玩錯情況" rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder="玩錯情況" /></div>
+              <div><span>目前內容</span><p>{proposal.original.statement}</p>{proposal.original.commonMistake && <small>{zhTWCopy.terms.mistakeSituation}：{proposal.original.commonMistake}</small>}</div>
+              <div><span>建議內容</span><textarea aria-label="建議規則" rows={3} disabled={!editable} value={draft.statement} onChange={(event) => updateDraft(proposal.id, { statement: event.target.value })} /><textarea aria-label={`建議${zhTWCopy.terms.mistakeSituation}`} rows={2} disabled={!editable} value={value(draft.commonMistake)} onChange={(event) => updateDraft(proposal.id, { commonMistake: event.target.value || null })} placeholder={zhTWCopy.terms.mistakeSituation} /></div>
             </div>
             <details><summary>其他欄位</summary><div className="review-detail-grid">
               <div className="review-wide"><RuleCategoryInput value={draft.categories ?? []}

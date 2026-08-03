@@ -9,6 +9,7 @@ import { canUserEditRule } from '../lib/rulePermissions';
 import { RULE_CATEGORY_LABELS, type GameDetail, type GameSummary, type RuleCard, type TagSummary } from '../shared/types';
 import { RuleEditor } from './GamePage';
 import { effectiveRuleCategories } from '../lib/ruleCategories';
+import zhTWCopy from '../content/zh-TW.json';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -83,14 +84,14 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
       <table className="catalog-rules-table">
         <colgroup><col className="catalog-col-status" /><col className="catalog-col-rule" /><col className="catalog-col-mistake" /><col className="catalog-col-details" /><col className="catalog-col-source" /><col className="catalog-col-category" /><col className="catalog-col-tags" /><col className="catalog-col-updated" /></colgroup>
         <thead>
-          <tr><th>狀態</th><th>規則</th><th>玩錯情況</th><th>補充</th><th>來源</th><th>分類</th><th>Tag</th><th>更新／操作</th></tr>
+          <tr><th>狀態</th><th>規則</th><th>{zhTWCopy.terms.mistakeSituation}</th><th>補充</th><th>來源</th><th>分類</th><th>Tag</th><th>更新／操作</th></tr>
         </thead>
         <tbody>
           {visibleRules.length === 0 && <tr><td colSpan={8} className="catalog-empty-cell">沒有符合篩選條件的規則。</td></tr>}
           {visibleRules.map((rule) => <tr key={rule.id}>
             <td data-label="狀態" className="catalog-rule-status-cell"><span className={`catalog-status catalog-status-${rule.status}`}>{rule.reviewStatus === 'pending' ? '未審核' : statusLabel[rule.status]}</span></td>
             <td data-label="規則" className="catalog-text-cell catalog-rule-statement"><strong>{rule.statement}</strong></td>
-            <td data-label="玩錯情況" className="catalog-text-cell">{rule.commonMistake || '—'}</td>
+            <td data-label={zhTWCopy.terms.mistakeSituation} className="catalog-text-cell">{rule.commonMistake || '—'}</td>
             <td data-label="補充" className="catalog-text-cell">{rule.details || '—'}</td>
             <td data-label="來源" className="catalog-rule-side catalog-rule-source">{sourceCell(rule)}</td>
             <td data-label="分類" className="catalog-rule-side catalog-rule-categories">{ruleCategoryNames(rule, publicTags)}</td>
@@ -104,7 +105,7 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
         {visibleRules.map((rule) => <article className="catalog-mobile-rule-card" key={rule.id}>
           <div className="catalog-mobile-rule-main">
             <strong className="catalog-mobile-rule-statement">{rule.statement}</strong>
-            {rule.commonMistake && <div className="catalog-mobile-rule-section"><span>玩錯情況</span><p>{rule.commonMistake}</p></div>}
+            {rule.commonMistake && <div className="catalog-mobile-rule-section"><span>{zhTWCopy.terms.mistakeSituation}</span><p>{rule.commonMistake}</p></div>}
             {rule.details && <div className="catalog-mobile-rule-section"><span>補充</span><p>{rule.details}</p></div>}
           </div>
           <aside className="catalog-mobile-rule-meta">

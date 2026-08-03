@@ -1,4 +1,7 @@
+import zhTWCopy from '../content/zh-TW.json';
+
 const updatedAt = '2026 年 8 月 2 日';
+const privacyOpeningCopy = zhTWCopy.author.privacyOpening;
 
 export const PrivacyPage = () => <div className="content-page privacy-page">
   <header>
@@ -8,28 +11,25 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
   </header>
 
   <section>
-    <h2>白話文版本</h2>
-    <p>此頁僅為當前版本的說明，後續可能異動，但隱私方面的精神不會有太大變化。</p>
-    <p><strong>未登入：</strong>玩家不用登入也能搜尋遊戲、瀏覽規則。</p>
-    <p><strong>登入：</strong>是串接 Google 帳號自動登入，只取得登入帳號資訊作為驗證，沒有要求任何額外權限（如 Gmail、Google Drive）。</p>
-    <p>目前登入後的好處是：</p>
+    <h2>{privacyOpeningCopy.title}</h2>
+    <p>{privacyOpeningCopy.currentVersion}</p>
+    <p><strong>{privacyOpeningCopy.signedOutLabel}</strong>{privacyOpeningCopy.signedOut}</p>
+    <p><strong>{privacyOpeningCopy.signedInLabel}</strong>{privacyOpeningCopy.signedIn}</p>
+    <p>{privacyOpeningCopy.benefitsIntroduction}</p>
     <ol>
-      <li>查看遊戲列表</li>
-      <li>有限度地建立規則</li>
-      <li>為規則投票「重要！我也玩錯過」</li>
-      <li>收藏一些遊戲放到個人首頁，以便快速連結到常玩的遊戲</li>
+      {privacyOpeningCopy.benefits.map((benefit) => <li key={benefit}>{benefit}</li>)}
     </ol>
-    <p>本網站會額外收集遊戲頁面的每日瀏覽人次（只計算登入玩家的），作為首頁探索遊戲。</p>
-    <p><strong>編輯者（Editor）：</strong>目前只有我授權的帳號才有此權限，可以新增、修改自己與一般登入玩家建立的規則，上傳的規則均為公共可見。</p>
-    <p>有勾選公開暱稱的編輯者可以審核一般登入玩家所建立的規則。</p>
-    <p>具體而言，一般登入玩家只能建立上限6條未審核的規則，建立1款未審核的遊戲名稱。</p>
-    <p>如果任何玩家有興趣，且平常也有這種習慣（紀錄玩錯規則）的話，可以傳訊息給我，請附上你近期想添加的規則是什麼，我會綜合評估……我是指評估文字表達能力。</p>
-    <p>或是如果你是桌遊部落客，平常就有在寫文章，我應該也會願意授權。畢竟這表示你的文筆有一定的程度，且你跟我一樣多少會愛惜自己的羽毛（？）。</p>
-    <p>發布在此網站的規則記錄我將它們視為公共財，未來可能會考慮供任何人下載（或至少編輯者可以下載），此網頁目前唯一營利的意圖即現在能看到的「預留廣告欄位」，未來也不會在此網頁中新增任何其他營利介面。</p>
-    <p>編輯者可以設定公開暱稱；開啟顯示後，規則卡片可能標示由你建立、修改或審核。</p>
-    <p className="muted">（提醒，此網站的核心精神是「玩錯的規則收集」，在此前提下可以稍微擴張成「容易玩錯的、很細節的規則收集」，但請不要當成規則書來建立。）</p>
+    <p>{privacyOpeningCopy.dailyViews}</p>
+    <p><strong>{privacyOpeningCopy.editorLabel}</strong>{privacyOpeningCopy.editor}</p>
+    <p>{privacyOpeningCopy.reviewer}</p>
+    <p>{privacyOpeningCopy.limits}</p>
+    <p>{privacyOpeningCopy.application}</p>
+    <p>{privacyOpeningCopy.blogger}</p>
+    <p>{privacyOpeningCopy.publicGood}</p>
+    <p>{privacyOpeningCopy.publicNickname}</p>
+    <p className="muted">{privacyOpeningCopy.reminder}</p>
     <hr />
-    <p className="muted">下面是比較技術性的隱私說明，我請 AI 根據當前狀態寫的：</p>
+    <p className="muted">{privacyOpeningCopy.technicalIntroduction}</p>
   </section>
 
   <section>

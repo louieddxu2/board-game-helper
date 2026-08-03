@@ -5,6 +5,7 @@ import { localDb } from '../lib/localDb';
 import { detectDeterministicTags, type DetectionInput } from '../lib/tagDetector';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { TagSelection, TagSummary } from '../shared/types';
+import zhTWCopy from '../content/zh-TW.json';
 
 export const clearPublicTagCache = () => {
   void localDb.invalidatePublicTags().catch(() => undefined);
@@ -192,7 +193,7 @@ export const TagInput = ({
 
     {showRecommendations && <div className="tag-recommendations">
       {recommendations.detected.length > 0 && <div className="tag-recommendation-group">
-        <small>根據正確規則</small>
+        <small>根據{zhTWCopy.terms.correctRule}</small>
         <div className="recommended-tag-chips">
           {recommendations.detected.map((tagName) => <button type="button" key={tagName} className="tag-chip inferred"
             aria-label={`加入標籤 ${tagName}`} onClick={() => {

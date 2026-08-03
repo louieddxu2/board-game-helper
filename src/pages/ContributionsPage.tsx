@@ -3,6 +3,9 @@ import { Link, Navigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../context/SessionContext';
 import type { ContributionGameSummary, ContributionRuleSummary, ContributionsPayload } from '../shared/types';
+import zhTWCopy from '../content/zh-TW.json';
+
+const editorApplicationCopy = zhTWCopy.author.editorApplication;
 
 const RuleItem = ({ rule }: { rule: ContributionRuleSummary }) => (
   <li className="contribution-item">
@@ -73,18 +76,16 @@ export const ContributionsPage = () => {
     </div>}
 
     <section className="account-card contribution-help">
-      <h2>如何申請完整的編輯/審核權限？</h2>
-      <p>如果你平常也有記錄玩錯規則的習慣，覺得記錄在此網頁方便自用，且分享給大家也不錯，歡迎申請編輯權限：</p>
+      <h2>{editorApplicationCopy.title}</h2>
+      <p>{editorApplicationCopy.introduction}</p>
       <p>
-        到Facebook上聯繫我：<a href="https://www.facebook.com/huang.shao.dong.238497" target="_blank" rel="noopener noreferrer">黃紹東</a><br />
-        <span className="muted">或任何其他聯繫方式也行。</span>
+        {editorApplicationCopy.contactPrefix}<a href={editorApplicationCopy.contactUrl} target="_blank" rel="noopener noreferrer">{editorApplicationCopy.contactName}</a><br />
+        <span className="muted">{editorApplicationCopy.contactAlternative}</span>
       </p>
       <ol className="contribution-application-list">
-        <li>提供你的Gmail帳號，我授權之後你登入就會獲得權限。</li>
-        <li>提供一筆你此刻想添加的規則內容，我會用我的標準評估文字表達能力來決定是否授權，或者說評估心態上的嚴謹程度。</li>
-        <li>或是如果你有經營桌遊相關的部落格、粉絲專頁、Youtube等等，我大概會直接授權(因為這表示你有基礎的文字表達能力，並且會顧及自身的聲望)；或是我認識你，了解你的文字表達能力/嚴謹程度可以信任，那或許也行。</li>
+        {editorApplicationCopy.steps.map((step) => <li key={step}>{step}</li>)}
       </ol>
-      <p className="muted">白話來說，讓我確定你是善意、穩定的使用者。</p>
+      <p className="muted">{editorApplicationCopy.conclusion}</p>
     </section>
   </section>;
 };

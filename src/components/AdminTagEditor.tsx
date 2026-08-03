@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RULE_CATEGORY_LABELS, type RuleCategory, type TagSummary } from '../shared/types';
 import { RuleCategoryInput } from './RuleCategoryInput';
+import zhTWCopy from '../content/zh-TW.json';
 
 interface AdminTagEditorProps {
   tag: TagSummary;
@@ -52,7 +53,7 @@ export const AdminTagEditor = ({ tag, onSave, onTogglePublic }: AdminTagEditorPr
       <label>別名<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="以逗號分隔" /></label>
       <RuleCategoryInput value={categoryHints} onChange={setCategoryHints} label="自動分類提示" />
       <label>自動偵測關鍵字
-        <textarea rows={2} value={detectionKeywords} onChange={(event) => setDetectionKeywords(event.target.value)} placeholder="以逗號或換行分隔；只比對正確規則" />
+        <textarea rows={2} value={detectionKeywords} onChange={(event) => setDetectionKeywords(event.target.value)} placeholder={`以逗號或換行分隔；只比對${zhTWCopy.terms.correctRule}`} />
         <small className="muted">只有規則未手動分類時，命中這些關鍵字才會套用上方分類。只有公共 Tag 會把關鍵字同步給所有讀者。</small>
       </label>
       <div className="inline-actions">
