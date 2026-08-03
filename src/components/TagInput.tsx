@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
@@ -62,11 +63,14 @@ export const TagInput = ({
 }: TagInputProps) => {
   const id = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const pendingCompositionEnterRef = useRef(false);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<TagSummary[]>([]);
   const [publicTags, setPublicTags] = useState<TagSummary[]>([]);
   const [open, setOpen] = useState(false);
+  const [suggestionPosition, setSuggestionPosition] = useState<{ top: number; left: number; width: number }>();
   const debouncedQuery = useDebouncedValue(query.trim());
 
   useEffect(() => {
@@ -85,7 +89,8 @@ export const TagInput = ({
   useEffect(() => {
     if (!open) return;
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (containerRef.current?.contains(event.target as Node) || suggestionsRef.current?.contains(event.target as Node)) return;
+      if (containerRef.current) {
         setOpen(false);
       }
     };
@@ -142,12 +147,30 @@ export const TagInput = ({
   }, [availableTags, candidateTags, detectedSuggestions, detectionInput, value]);
   const showRecommendations = value.length < 8 && (recommendations.detected.length > 0
     || recommendations.common.length > 0 || recommendations.publicFallback.length > 0);
+  const showSuggestions = open && (suggestions.length > 0 || (canCreate && query.trim()));
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const updatePosition = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(Math.max(rect.width, 220), Math.max(0, window.innerWidth - 16));
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
+      setSuggestionPosition({ top: rect.bottom + 5, left, width });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [showSuggestions]);
 
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
     <div className="tag-composer">
       {value.map((tag) => <span className="tag-chip selected" key={tag.id ?? tag.name}>#{tag.name}<button type="button" aria-label={`移除標籤 ${tag.name}`} onClick={() => onChange(value.filter((item) => item !== tag))}>×</button></span>)}
-      <input id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
+      <input ref={inputRef} id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
         role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
         onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={(event) => {
@@ -194,9 +217,9 @@ export const TagInput = ({
       </div>}
     </div>}
 
-    {open && (suggestions.length > 0 || (canCreate && query.trim())) && <div className="tag-suggestions" id={`${id}-list`} role="listbox">
+    {showSuggestions && suggestionPosition && typeof document !== 'undefined' && createPortal(<div ref={suggestionsRef} className="tag-suggestions tag-suggestions-portal" style={{ top: suggestionPosition.top, left: suggestionPosition.left, width: suggestionPosition.width }} id={`${id}-list`} role="listbox">
       {suggestions.map((tag) => <button type="button" role="option" key={tag.id} onClick={() => add({ id: tag.id, name: tag.name })}>#{tag.name}{tag.usageCount !== undefined && <small>{tag.usageCount} 條</small>}</button>)}
       {canCreate && query.trim() && !suggestions.some((tag) => tag.name === query.trim()) && <button type="button" className="create-tag" onClick={() => add({ name: query })}>＋建立「{query.trim()}」</button>}
-    </div>}
+    </div>, document.body)}
   </div>;
 };

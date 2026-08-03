@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
@@ -76,6 +77,8 @@ export function formatGameSearchDisplay(
 export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...' }: Props) => {
   const inputId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const query = useDebouncedValue(value.trim());
   const [games, setGames] = useState<GameSummary[]>([]);
   const [rules, setRules] = useState<RuleSearchResult[]>([]);
@@ -83,6 +86,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const [searchError, setSearchError] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number }>();
   const { canEdit } = useSession();
   const navigate = useNavigate();
 
@@ -91,7 +95,8 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
 
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (containerRef.current?.contains(event.target as Node) || resultsRef.current?.contains(event.target as Node)) return;
+      if (containerRef.current) {
         setOpen(false);
         setActiveIndex(-1);
       }
@@ -135,6 +140,27 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const showCreateOption = Boolean(allowCreate && (canEdit || onCreate))
     && Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
   const optionCount = games.length + rules.length + (showCreateOption ? 1 : 0);
+  const shouldShowResults = Boolean(
+    open && !selectedId && ((isEnglishOnly && query.length === 1) || loading || searchError
+      || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0),
+  );
+  useEffect(() => {
+    if (!shouldShowResults) return;
+    const updatePosition = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(rect.width, Math.max(0, window.innerWidth - 16));
+      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
+      setMenuPosition({ top: rect.bottom + 8, left, width });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [shouldShowResults]);
 
   const handleCreateOrLogin = () => {
     if (canEdit || onCreate) {
@@ -152,9 +178,9 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
 
   return <div className="game-search" ref={containerRef}>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
-      <input id={inputId} value={value} onFocus={() => setOpen(true)} onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+      <input ref={inputRef} id={inputId} value={value} onFocus={() => setOpen(true)} onChange={(event) => { onChange(event.target.value); setOpen(true); }}
         placeholder={placeholder} autoComplete="off" aria-label="搜尋遊戲名稱"
-        role="combobox" aria-autocomplete="list" aria-expanded={open && !selectedId && (loading || searchError || optionCount > 0)} aria-controls={`${inputId}-results`}
+        role="combobox" aria-autocomplete="list" aria-expanded={shouldShowResults} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' && optionCount) { event.preventDefault(); setActiveIndex((index) => (index + 1) % optionCount); }
@@ -177,7 +203,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         }} />
       {selectedId && <span aria-hidden="true">✓</span>}
     </div>
-    {open && !selectedId && (isEnglishOnly && query.length === 1 || loading || searchError || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0) && <div className="search-results" id={`${inputId}-results`} role="listbox">
+    {shouldShowResults && menuPosition && typeof document !== 'undefined' && createPortal(<div ref={resultsRef} className="search-results search-results-portal" style={{ top: menuPosition.top, left: menuPosition.left, width: menuPosition.width }} id={`${inputId}-results`} role="listbox">
       {isEnglishOnly && query.length === 1 && (
         <p className="search-hint muted" style={{ padding: '0.5rem 0.75rem', margin: 0, fontSize: '0.875rem' }}>
           請輸入至少 2 個英文字母進行搜尋
@@ -205,6 +231,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       {showCreateOption && <button type="button" id={`${inputId}-option-${games.length + rules.length}`} aria-selected={activeIndex === games.length + rules.length} role="option" className="create-result" onClick={handleCreateOrLogin}>
         ＋ 新增「{query}」的第一條玩錯規則
       </button>}
-    </div>}
+    </div>, document.body)}
   </div>;
 };

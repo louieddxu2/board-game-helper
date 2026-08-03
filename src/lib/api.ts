@@ -44,6 +44,14 @@ const uncachedRead = <T>(path: string, reason: string) => {
 const mutation = <T>(path: string, init: RequestInit) => transportRequest<T>(path, init, 'mutation');
 
 type ApiRule = RuleCard & { gameName: string; gameSlug: string };
+type GameMergeResponse = {
+  ok: true;
+  sourceGameId: string;
+  targetGameId: string;
+  movedRuleIds: string[];
+  sourceGame: GameSummary;
+  targetGame: GameSummary;
+};
 
 type GameResponse = { game: GameDetail; rulesComplete?: boolean };
 
@@ -375,8 +383,11 @@ export const api = {
     }).catch(() => undefined);
     return { rule: stale.data };
   },
-  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true }>(`/api/rules/${id}`, {
+  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule?: ApiRule }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
+  }).then(async (response) => {
+    if (response.rule) await localDb.updateCachedRuleEntity(response.rule).catch(() => undefined);
+    return response;
   }),
   reviewRule: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/rules/${id}/review`, { method: 'POST', body: '{}' }),
   reviewGame: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/games/${id}/review`, { method: 'POST', body: '{}' }),
@@ -385,10 +396,10 @@ export const api = {
   ruleRevisions: (id: string) => uncachedRead<{ revisions: RuleRevision[] }>(`/api/rules/${id}/revisions`, 'revision history is a private editor view'),
   restoreRevision: (ruleId: string, revisionId: string) => mutation<{ ok: true }>(`/api/rules/${ruleId}/revisions/${revisionId}/restore`, { method: 'POST', body: '{}' }),
   mergeGame: async (id: string, targetGameId: string) => {
-    const response = await mutation<{ ok: true }>(`/api/games/${id}/merge`, {
+    const response = await mutation<GameMergeResponse>(`/api/games/${id}/merge`, {
       method: 'POST', body: JSON.stringify({ targetGameId }),
     });
-    await localDb.invalidateGameCatalogSync().catch(() => undefined);
+    await localDb.mergeCachedGame(response.sourceGame, response.targetGame, response.movedRuleIds).catch(() => undefined);
     return response;
   },
   editors: () => uncachedRead<EditorAdminPayload>('/api/admin/editors', 'editor administration is private and intentionally always current'),

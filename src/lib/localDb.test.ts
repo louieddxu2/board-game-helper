@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { applyGameCatalogChangesToCache, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, RULE_IMPORTANCE_CACHE_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
+import { applyGameCatalogChangesToCache, applyGameReferenceUpdate, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, RULE_IMPORTANCE_CACHE_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
+import type { GameSummary, HomePayload, RuleCard } from '../shared/types';
 
 const now = 10_000_000;
 
@@ -79,5 +80,39 @@ describe('weekly game catalog snapshot age', () => {
 
     expect(updated.cachedAt).toBe(200);
     expect(updated.snapshotFetchedAt).toBe(snapshotFetchedAt);
+  });
+});
+
+describe('local home references after game mutations', () => {
+  const source: GameSummary = { id: 'game-source', slug: 'old-name', displayName: '舊名稱', ruleCount: 1, updatedAt: 1 };
+  const target: GameSummary = { id: 'game-target', slug: 'new-name', displayName: '新名稱', ruleCount: 2, updatedAt: 2 };
+  const rule = (overrides: Partial<RuleCard> = {}) => ({
+    id: 'rule-1', gameId: source.id, statement: '更新前', sourceLinks: [], status: 'published', tags: [],
+    gameName: source.displayName, gameSlug: source.slug, ...overrides,
+  }) as RuleCard & { gameName: string; gameSlug: string };
+  const home = (sourceRule = rule()): HomePayload => ({
+    generatedAt: 1,
+    featured: [{ gameSlug: source.slug, gameName: source.displayName, ruleId: sourceRule.id }],
+    featuredRules: [sourceRule],
+    recentRules: [sourceRule],
+    popularGames: [source],
+  });
+
+  test('updates every cached home copy when a game is renamed', () => {
+    const updated = applyGameReferenceUpdate(home(), undefined, { ...source, displayName: '新名稱', updatedAt: 3 }, new Map());
+
+    expect(updated.featured[0]).toMatchObject({ gameSlug: source.slug, gameName: '新名稱' });
+    expect(updated.featuredRules[0]).toMatchObject({ gameName: '新名稱', gameSlug: source.slug });
+    expect(updated.recentRules[0]).toMatchObject({ gameName: '新名稱', gameSlug: source.slug });
+  });
+
+  test('moves cached rules and removes the source game after a merge', () => {
+    const updatedRule = rule({ statement: '合併後規則' });
+    const updated = applyGameReferenceUpdate(home(), source, target, new Map([[updatedRule.id, updatedRule]]));
+
+    expect(updated.featured[0]).toMatchObject({ gameSlug: target.slug, gameName: target.displayName });
+    expect(updated.featuredRules[0]).toMatchObject({ gameId: target.id, statement: '合併後規則', gameName: target.displayName, gameSlug: target.slug });
+    expect(updated.recentRules[0]).toMatchObject({ gameId: target.id, gameName: target.displayName, gameSlug: target.slug });
+    expect(updated.popularGames).toEqual([target]);
   });
 });

@@ -7,7 +7,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, resolveRuleTags, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
 import { canEditContributionRule } from '../contributions';
 
@@ -156,7 +156,22 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
       cache.delete(new Request(new URL('/api/home', c.req.url))),
     ]));
   }
-  return c.json({ ok: true, updatedAt: timestamp });
+  const updatedRow = await getDatabase(c).statement(`
+    SELECT r.*, g.display_name AS game_name, g.slug AS game_slug
+    FROM rules r JOIN games g ON g.id = r.game_id
+    WHERE r.id = ?
+  `).bind(c.req.param('id')).first<RuleRow & { game_name: string; game_slug: string }>();
+  if (!updatedRow) return c.json({ error: 'rule_not_found' }, 404);
+  const [tagMap, nicknameMap] = await Promise.all([
+    resolveRuleTags(getDatabase(c), [updatedRow]),
+    resolvePublicNicknames(getDatabase(c), [updatedRow]),
+  ]);
+  setNoCache(c);
+  return c.json({
+    ok: true,
+    updatedAt: timestamp,
+    rule: { ...toRule(updatedRow, tagMap, nicknameMap), gameName: updatedRow.game_name, gameSlug: updatedRow.game_slug },
+  });
 });
 
 const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published') => {

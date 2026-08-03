@@ -247,6 +247,8 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
   ]);
   if (!source || !target) return c.json({ error: 'game_not_found' }, 404);
+  const movedRulesResult = await getDatabase(c).statement('SELECT id FROM rules WHERE game_id = ?').bind(c.req.param('id')).all<{ id: string }>();
+  const movedRuleIds = (movedRulesResult.results ?? []).map((row) => row.id);
   const timestamp = now();
   await getDatabase(c).batch([
     getDatabase(c).statement(`
@@ -296,7 +298,24 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
   ]);
-  return c.json({ ok: true, targetGameId: parsed.data.targetGameId });
+  const updatedTarget = await getDatabase(c).statement(`
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      g.published_rule_count AS rule_count, g.published_rule_count,
+      g.total_rule_count, g.latest_rule_updated_at,
+      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
+    FROM games g
+    LEFT JOIN game_aliases a ON a.game_id = g.id
+    WHERE g.id = ?
+    GROUP BY g.id
+  `).bind(parsed.data.targetGameId).first<GameRow>();
+  return c.json({
+    ok: true,
+    sourceGameId: c.req.param('id'),
+    targetGameId: parsed.data.targetGameId,
+    movedRuleIds,
+    sourceGame: toGame(source as unknown as GameRow),
+    targetGame: toGame(updatedTarget!),
+  });
 });
 
 

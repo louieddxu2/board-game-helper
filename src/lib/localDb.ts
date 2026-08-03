@@ -17,8 +17,52 @@ const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportan
 const ruleImportanceCachePrefix = (userId: string) => `ruleImportance:${userId}:`;
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
+export type CachedRuleUpdate = RuleCard & { gameName?: string; gameSlug?: string };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 let gameCatalogMemoryCache: GameCatalogCacheRecord | undefined;
+
+export const applyGameReferenceUpdate = (
+  home: HomePayload,
+  sourceGame: GameSummary | undefined,
+  targetGame: GameSummary,
+  ruleUpdates: Map<string, CachedRuleUpdate>,
+): HomePayload => {
+  const updateRule = <T extends CachedRuleUpdate>(rule: T): T => {
+    const updated = ruleUpdates.get(rule.id);
+    const next = updated ? { ...rule, ...updated } : { ...rule };
+    const movedFromSource = sourceGame && next.gameId === sourceGame.id;
+    const belongsToTarget = next.gameId === targetGame.id;
+    if (movedFromSource || belongsToTarget) {
+      return { ...next, gameId: targetGame.id, gameName: targetGame.displayName, gameSlug: targetGame.slug } as T;
+    }
+    return next as T;
+  };
+  const sourceSlug = sourceGame?.slug;
+  const targetSlug = targetGame.slug;
+  const updatedFeatured = (home.featured ?? []).map((item) => (
+    (sourceSlug && item.gameSlug === sourceSlug) || item.gameSlug === targetSlug
+      ? { ...item, gameSlug: targetGame.slug, gameName: targetGame.displayName }
+      : item
+  ));
+  const popularGames = home.popularGames ?? [];
+  const hadSourceGame = Boolean(sourceGame && popularGames.some((game) => game.id === sourceGame.id));
+  const updatedPopularGames = popularGames
+    .filter((game) => !sourceGame || game.id !== sourceGame.id)
+    .reduce<GameSummary[]>((games, game) => game.id === targetGame.id ? [...games.filter((item) => item.id !== targetGame.id), targetGame] : [...games, game], []);
+  if (hadSourceGame && !updatedPopularGames.some((game) => game.id === targetGame.id)) updatedPopularGames.push(targetGame);
+  return {
+    ...home,
+    featured: updatedFeatured,
+    featuredRules: (home.featuredRules ?? []).map(updateRule),
+    recentRules: (home.recentRules ?? []).map(updateRule),
+    popularGames: updatedPopularGames,
+  };
+};
+
+const replaceGameInHomeIds = (data: HomeIDPayload, sourceGame: GameSummary | undefined, targetGame: GameSummary): HomeIDPayload => {
+  const replace = (ids: string[]) => Array.from(new Set(ids.map((id) => sourceGame && id === sourceGame.id ? targetGame.id : id)));
+  return { ...data, popularGameIds: replace(data.popularGameIds), recentRuleIds: [...data.recentRuleIds], featuredRuleIds: [...data.featuredRuleIds] };
+};
 
 export const applyGameCatalogChangesToCache = (
   cached: GameCatalogCacheRecord,
@@ -296,25 +340,51 @@ export const localDb = {
   },
   upsertGameSummary: async (game: GameSummary) => {
     const db = await getDatabase();
-    const existing = await db.get('games', game.id);
-    await db.put('games', {
+    const cachedAt = Date.now();
+    const tx = db.transaction(['games', 'rules', 'recentGames', 'cache'], 'readwrite');
+    const existing = await tx.objectStore('games').get(game.id);
+    await tx.objectStore('games').put({
       ...existing,
       ...game,
       aliases: game.aliases ?? existing?.aliases ?? [],
-      cachedAt: Date.now(),
+      cachedAt,
     });
-    const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
-    await db.put('cache', {
+
+    const relatedRules = await tx.objectStore('rules').index('gameId').getAll(game.id);
+    await Promise.all(relatedRules.map((rule) => tx.objectStore('rules').put({
+      ...rule,
+      gameName: game.displayName,
+      gameSlug: game.slug,
+      cachedAt,
+    })));
+
+    const recentGame = await tx.objectStore('recentGames').get(game.id);
+    if (recentGame) await tx.objectStore('recentGames').put({ ...recentGame, slug: game.slug, displayName: game.displayName, englishName: game.englishName });
+
+    const updateHomeRecord = async (key: string, isView: boolean) => {
+      const record = await tx.objectStore('cache').get(key) as CacheRecord<HomePayload> | undefined;
+      if (!record) return;
+      const updated = applyGameReferenceUpdate(record.data, undefined, game, new Map());
+      await tx.objectStore('cache').put({ ...record, data: updated, cachedAt: isView ? cachedAt : record.cachedAt });
+    };
+    await updateHomeRecord('home', false);
+    await updateHomeRecord(HOME_VIEW_CACHE_KEY, true);
+    const homeIds = await tx.objectStore('cache').get('home_ids') as CacheRecord<HomeIDPayload> | undefined;
+    if (homeIds) await tx.objectStore('cache').put({ ...homeIds, data: replaceGameInHomeIds(homeIds.data, undefined, game) });
+
+    const overrides = await tx.objectStore('cache').get(LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
+    await tx.objectStore('cache').put({
       key: LOCAL_GAME_CATALOG_OVERRIDES_KEY,
       data: upsertGameCatalogEntry(overrides?.data ?? [], game),
-      cachedAt: Date.now(),
+      cachedAt,
     });
-    const catalog = await db.get('cache', PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
+    const catalog = await tx.objectStore('cache').get(PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
     if (catalog) {
       const updated = { ...catalog, data: { ...catalog.data, games: upsertGameCatalogEntry(catalog.data.games, game) } };
       gameCatalogMemoryCache = updated;
-      await db.put('cache', updated);
+      await tx.objectStore('cache').put(updated);
     }
+    await tx.done;
   },
   getCachedPublicTags: async () => getFreshCache<PublicTagCatalogPayload>(PUBLIC_TAGS_CACHE_KEY, PUBLIC_TAG_CATALOG_FRESH_MS),
   getLatestPublicTags: async () => (await getDatabase()).get('cache', PUBLIC_TAGS_CACHE_KEY) as Promise<CacheRecord<PublicTagCatalogPayload> | undefined>,
@@ -363,6 +433,118 @@ export const localDb = {
       }
     }
     await db.put('rules', { ...toStoredRule(rule), gameName, gameSlug, cachedAt: Date.now() });
+  },
+  updateCachedRuleEntity: async (rule: CachedRuleUpdate) => {
+    const db = await getDatabase();
+    const cachedAt = Date.now();
+    const tx = db.transaction(['rules', 'games', 'cache'], 'readwrite');
+    const existing = await tx.objectStore('rules').get(rule.id);
+    const game = await tx.objectStore('games').get(rule.gameId);
+    await tx.objectStore('rules').put({
+      ...existing,
+      ...toStoredRule(rule),
+      gameName: rule.gameName ?? game?.displayName,
+      gameSlug: rule.gameSlug ?? game?.slug,
+      cachedAt,
+    });
+    const ruleUpdates = new Map([[rule.id, rule]]);
+    const referenceGame = game
+      ? { ...game, displayName: rule.gameName ?? game.displayName, slug: rule.gameSlug ?? game.slug }
+      : { id: rule.gameId, slug: rule.gameSlug ?? '', displayName: rule.gameName ?? '', ruleCount: 0, updatedAt: rule.updatedAt ?? cachedAt };
+    for (const key of ['home', HOME_VIEW_CACHE_KEY]) {
+      const record = await tx.objectStore('cache').get(key) as CacheRecord<HomePayload> | undefined;
+      if (!record) continue;
+      await tx.objectStore('cache').put({
+        ...record,
+        data: applyGameReferenceUpdate(record.data, undefined, referenceGame, ruleUpdates),
+        cachedAt: key === HOME_VIEW_CACHE_KEY ? cachedAt : record.cachedAt,
+      });
+    }
+    await tx.done;
+  },
+  mergeCachedGame: async (sourceGame: GameSummary, targetGame: GameSummary, movedRuleIds: string[] = []) => {
+    const db = await getDatabase();
+    const cachedAt = Date.now();
+    const tx = db.transaction(['games', 'rules', 'recentGames', 'cache'], 'readwrite');
+    const source = await tx.objectStore('games').get(sourceGame.id);
+    const target = await tx.objectStore('games').get(targetGame.id);
+    const sourceRules = await tx.objectStore('rules').index('gameId').getAll(sourceGame.id);
+    const movedIds = movedRuleIds.length ? new Set(movedRuleIds) : undefined;
+    for (const rule of sourceRules) {
+      if (movedIds && !movedIds.has(rule.id)) continue;
+      await tx.objectStore('rules').put({
+        ...rule,
+        gameId: targetGame.id,
+        gameName: targetGame.displayName,
+        gameSlug: targetGame.slug,
+        cachedAt,
+      });
+    }
+    await tx.objectStore('games').put({
+      ...target,
+      ...targetGame,
+      aliases: targetGame.aliases ?? target?.aliases ?? [],
+      rulesFetchedAt: 0,
+      rulesComplete: false,
+      cachedAt,
+    } as CachedGameRow);
+    await tx.objectStore('games').delete(sourceGame.id);
+
+    const recentSource = await tx.objectStore('recentGames').get(sourceGame.id);
+    if (recentSource) {
+      await tx.objectStore('recentGames').delete(sourceGame.id);
+      const recentTarget = await tx.objectStore('recentGames').get(targetGame.id);
+      if (!recentTarget || recentSource.viewedAt > recentTarget.viewedAt) {
+        await tx.objectStore('recentGames').put({
+          id: targetGame.id,
+          slug: targetGame.slug,
+          displayName: targetGame.displayName,
+          englishName: targetGame.englishName,
+          viewedAt: recentSource.viewedAt,
+        });
+      }
+    }
+
+    const updateHomeRecord = async (key: string, isView: boolean) => {
+      const record = await tx.objectStore('cache').get(key) as CacheRecord<HomePayload> | undefined;
+      if (!record) return;
+      const updated = applyGameReferenceUpdate(record.data, sourceGame, targetGame, new Map());
+      await tx.objectStore('cache').put({ ...record, data: updated, cachedAt: isView ? cachedAt : record.cachedAt });
+    };
+    await updateHomeRecord('home', false);
+    await updateHomeRecord(HOME_VIEW_CACHE_KEY, true);
+    const homeIds = await tx.objectStore('cache').get('home_ids') as CacheRecord<HomeIDPayload> | undefined;
+    if (homeIds) await tx.objectStore('cache').put({ ...homeIds, data: replaceGameInHomeIds(homeIds.data, sourceGame, targetGame) });
+
+    const catalog = await tx.objectStore('cache').get(PUBLIC_GAME_CATALOG_KEY) as GameCatalogCacheRecord | undefined;
+    if (catalog) {
+      const games = catalog.data.games.filter((game) => game.id !== sourceGame.id);
+      const updated = { ...catalog, data: { ...catalog.data, games: upsertGameCatalogEntry(games, targetGame) } };
+      gameCatalogMemoryCache = updated;
+      await tx.objectStore('cache').put(updated);
+    }
+    const overrides = await tx.objectStore('cache').get(LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
+    if (overrides) {
+      const games = overrides.data.filter((game) => game.id !== sourceGame.id);
+      await tx.objectStore('cache').put({ ...overrides, data: upsertGameCatalogEntry(games, targetGame), cachedAt });
+    }
+
+    const keys = await tx.objectStore('cache').getAllKeys();
+    for (const key of keys) {
+      if (typeof key !== 'string' || !key.endsWith(`:${sourceGame.id}`) || !key.startsWith('ruleImportance:')) continue;
+      const sourceImportance = await tx.objectStore('cache').get(key) as CacheRecord<{ ruleIds: string[] }> | undefined;
+      if (!sourceImportance) continue;
+      const targetKey = key.slice(0, -sourceGame.id.length) + targetGame.id;
+      const targetImportance = await tx.objectStore('cache').get(targetKey) as CacheRecord<{ ruleIds: string[] }> | undefined;
+      await tx.objectStore('cache').put({
+        key: targetKey,
+        data: { ruleIds: Array.from(new Set([...(targetImportance?.data.ruleIds ?? []), ...sourceImportance.data.ruleIds])).sort() },
+        cachedAt: Math.max(sourceImportance.cachedAt, targetImportance?.cachedAt ?? 0),
+      });
+      await tx.objectStore('cache').delete(key);
+    }
+    await tx.done;
+    searchMemoryCache.clear();
   },
   getCachedRuleEntity: async (ruleId: string) => {
     const db = await getDatabase();
