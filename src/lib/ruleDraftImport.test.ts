@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { parseRuleDraftImport, RULE_DRAFT_IMPORT_FORMAT } from './ruleDraftImport';
+import { parseRuleDraftImport, RULE_DRAFT_IMPORT_FORMAT, RULE_DRAFT_IMPORT_SCHEMA_VERSION } from './ruleDraftImport';
 
 describe('rule draft import', () => {
   test('validates and normalizes a Codex-generated rule list', () => {
     const parsed = parseRuleDraftImport(JSON.stringify({
       format: RULE_DRAFT_IMPORT_FORMAT,
-      schemaVersion: 1,
+      schemaVersion: RULE_DRAFT_IMPORT_SCHEMA_VERSION,
       game: { displayName: '  範例遊戲  ', englishName: ' Example ' },
       sourceLabel: '規則書',
       sourceUrl: 'https://example.com/rules',
@@ -26,6 +26,31 @@ describe('rule draft import', () => {
       sourceLabel: '規則書',
       sourceUrl: 'https://example.com/rules',
     });
+  });
+
+  test('preserves the canonical rule fields used by submissions', () => {
+    const parsed = parseRuleDraftImport(JSON.stringify({
+      format: RULE_DRAFT_IMPORT_FORMAT,
+      schemaVersion: RULE_DRAFT_IMPORT_SCHEMA_VERSION,
+      game: { displayName: '柏林咖啡館', englishName: 'Seize the Bean' },
+      sourceUrl: '',
+      rules: [{
+        statement: '規則結論',
+        commonMistake: '常見誤解',
+        details: '補充說明',
+        flowStage: 'action',
+        categories: ['action_effect_detail'],
+        sourceUrl: '',
+        tagNames: ['急速運輸'],
+      }],
+    }));
+
+    expect(parsed.schemaVersion).toBe(RULE_DRAFT_IMPORT_SCHEMA_VERSION);
+    expect(parsed.sourceUrl).toBeUndefined();
+    expect(parsed.rules[0]).toMatchObject({
+      details: '補充說明', flowStage: 'action', categories: ['action_effect_detail'], tagNames: ['急速運輸'],
+    });
+    expect(parsed.rules[0].sourceUrl).toBeUndefined();
   });
 
   test.each([

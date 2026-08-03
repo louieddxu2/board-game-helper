@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
@@ -112,7 +112,7 @@ export interface DraftRecord {
   game?: { id: string; slug: string; displayName: string; englishName?: string };
   gameQuery: string;
   englishName?: string;
-  rules: Array<{ id: string; statement: string; commonMistake?: string; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] }>;
+  rules: Array<{ id: string; statement: string; commonMistake?: string; details?: string; flowStage?: FlowStage; categories?: RuleCategory[]; playerCounts?: number[]; editionNotes?: string[]; editionNote?: string; sourceLabel?: string; sourceUrl?: string; tagSelections?: TagSelection[]; tagNames?: string[] }>;
   sourceLabel?: string;
   sourceUrl?: string;
   updatedAt: number;

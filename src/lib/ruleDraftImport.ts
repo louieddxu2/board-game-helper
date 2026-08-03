@@ -1,25 +1,28 @@
 import { z } from 'zod';
-import { RULE_CATEGORIES, type RuleCategory } from '../shared/types';
+import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type RuleCategory } from '../shared/types';
 
 export const RULE_DRAFT_IMPORT_FORMAT = 'wrong-board-game-rules-draft';
-export const RULE_DRAFT_IMPORT_SCHEMA_VERSION = 1;
+export const RULE_DRAFT_IMPORT_SCHEMA_VERSION = 2;
 
 const optionalText = (maximum: number) => z.string().trim().max(maximum).optional();
+const optionalUrl = z.union([z.url().max(2000), z.literal('')]).optional();
 
 const ruleSchema = z.object({
   statement: z.string().trim().min(1).max(2000),
   commonMistake: optionalText(2000),
+  details: optionalText(5000),
+  flowStage: z.enum(FLOW_STAGES).optional(),
   categories: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
   playerCounts: z.array(z.number().int().min(1).max(8)).max(8).optional(),
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
   sourceLabel: optionalText(300),
-  sourceUrl: z.url().max(2000).optional(),
+  sourceUrl: optionalUrl,
   tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
 }).strict();
 
 const importSchema = z.object({
   format: z.literal(RULE_DRAFT_IMPORT_FORMAT),
-  schemaVersion: z.literal(RULE_DRAFT_IMPORT_SCHEMA_VERSION),
+  schemaVersion: z.union([z.literal(1), z.literal(RULE_DRAFT_IMPORT_SCHEMA_VERSION)]),
   game: z.object({
     id: optionalText(100),
     slug: optionalText(120),
@@ -31,13 +34,15 @@ const importSchema = z.object({
   playedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   privateNote: optionalText(2000),
   sourceLabel: optionalText(300),
-  sourceUrl: z.url().max(2000).optional(),
+  sourceUrl: optionalUrl,
   rules: z.array(ruleSchema).min(1).max(20),
 }).strict();
 
 export interface RuleDraftImportRule {
   statement: string;
   commonMistake?: string;
+  details?: string;
+  flowStage?: FlowStage;
   categories?: RuleCategory[];
   playerCounts?: number[];
   editionNotes?: string[];
@@ -68,14 +73,18 @@ export const parseRuleDraftImport = (text: string): RuleDraftImportFile => {
   const { playedOn: _playedOn, privateNote: _privateNote, ...data } = parsed.data;
   return {
     ...data,
+    schemaVersion: RULE_DRAFT_IMPORT_SCHEMA_VERSION,
+    sourceLabel: data.sourceLabel || undefined,
+    sourceUrl: data.sourceUrl?.trim() || undefined,
     rules: parsed.data.rules.map((rule) => ({
       ...rule,
+      details: rule.details || undefined,
       categories: rule.categories ? Array.from(new Set(rule.categories)) : undefined,
       playerCounts: rule.playerCounts ? Array.from(new Set(rule.playerCounts)).sort((a, b) => a - b) : undefined,
       editionNotes: rule.editionNotes ? Array.from(new Set(rule.editionNotes)) : undefined,
       tagNames: rule.tagNames ? Array.from(new Set(rule.tagNames)) : undefined,
-      sourceLabel: rule.sourceLabel || parsed.data.sourceLabel,
-      sourceUrl: rule.sourceUrl || parsed.data.sourceUrl,
+      sourceLabel: rule.sourceLabel || parsed.data.sourceLabel || undefined,
+      sourceUrl: rule.sourceUrl?.trim() || parsed.data.sourceUrl?.trim() || undefined,
     })),
   };
 };

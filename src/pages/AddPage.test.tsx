@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AddPage } from './AddPage';
-import { RULE_DRAFT_IMPORT_FORMAT } from '../lib/ruleDraftImport';
+import { RULE_DRAFT_IMPORT_FORMAT, RULE_DRAFT_IMPORT_SCHEMA_VERSION } from '../lib/ruleDraftImport';
 
 const mocks = vi.hoisted(() => {
   class ApiError extends Error {
@@ -100,7 +100,7 @@ describe('AddPage contribution constraints', () => {
 
     fireEvent.change(screen.getByLabelText('JSON'), { target: { value: JSON.stringify({
       format: RULE_DRAFT_IMPORT_FORMAT,
-      schemaVersion: 1,
+      schemaVersion: RULE_DRAFT_IMPORT_SCHEMA_VERSION,
       game: { displayName: '貼上遊戲' },
       rules: [{ statement: '貼上的規則' }],
     }) } });

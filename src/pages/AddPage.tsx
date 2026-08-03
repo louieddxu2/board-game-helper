@@ -13,12 +13,14 @@ import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOption
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import zhTWCopy from '../content/zh-TW.json';
-import type { ContributionQuota, GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
+import type { ContributionQuota, FlowStage, GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
 
 type RuleInput = {
   id: string;
   statement: string;
   commonMistake?: string;
+  details?: string;
+  flowStage?: FlowStage;
   categories?: RuleCategory[];
   playerCounts?: number[];
   editionNotes?: string[];
@@ -221,6 +223,7 @@ export const AddPage = () => {
       idempotencyKey: crypto.randomUUID(),
       rules: validRules.map((rule) => ({
         statement: rule.statement.trim(), commonMistake: rule.commonMistake?.trim() || undefined,
+        details: rule.details?.trim() || undefined, flowStage: rule.flowStage,
         categories: rule.categories, playerCounts: rule.playerCounts, editionNotes: rule.editionNotes,
         sourceLabel: rule.sourceLabel?.trim() || undefined, sourceUrl: rule.sourceUrl?.trim() || undefined,
         tagIds: rule.tagSelections?.flatMap((tag) => tag.id ? [tag.id] : []),
