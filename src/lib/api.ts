@@ -48,7 +48,6 @@ type GameMergeResponse = {
   ok: true;
   sourceGameId: string;
   targetGameId: string;
-  movedRuleIds: string[];
   sourceGame: GameSummary;
   targetGame: GameSummary;
 };
@@ -399,7 +398,7 @@ export const api = {
     const response = await mutation<GameMergeResponse>(`/api/games/${id}/merge`, {
       method: 'POST', body: JSON.stringify({ targetGameId }),
     });
-    await localDb.mergeCachedGame(response.sourceGame, response.targetGame, response.movedRuleIds).catch(() => undefined);
+    await localDb.mergeCachedGame(response.sourceGame, response.targetGame).catch(() => undefined);
     return response;
   },
   editors: () => uncachedRead<EditorAdminPayload>('/api/admin/editors', 'editor administration is private and intentionally always current'),

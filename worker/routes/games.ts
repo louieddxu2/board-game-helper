@@ -247,8 +247,6 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
   ]);
   if (!source || !target) return c.json({ error: 'game_not_found' }, 404);
-  const movedRulesResult = await getDatabase(c).statement('SELECT id FROM rules WHERE game_id = ?').bind(c.req.param('id')).all<{ id: string }>();
-  const movedRuleIds = (movedRulesResult.results ?? []).map((row) => row.id);
   const timestamp = now();
   await getDatabase(c).batch([
     getDatabase(c).statement(`
@@ -312,7 +310,6 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
     ok: true,
     sourceGameId: c.req.param('id'),
     targetGameId: parsed.data.targetGameId,
-    movedRuleIds,
     sourceGame: toGame(source as unknown as GameRow),
     targetGame: toGame(updatedTarget!),
   });

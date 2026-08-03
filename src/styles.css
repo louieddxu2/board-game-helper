@@ -633,9 +633,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .rule-input-fields > .player-count-input { margin-left: -38px; margin-right: -40px; }
   .rule-input-fields > .rule-category-input legend,
   .rule-input-fields > .player-count-input legend { padding-left: 38px; }
-  .rule-category-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rule-category-track { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .rule-category-track,
   .player-count-track { gap: 2px; padding: 3px; }
+  .category-btn { min-height: 44px; padding: 4px 3px; font-size: 12px; line-height: 1.15; }
   .narrow-page { width: calc(100% - 28px); padding-top: 42px; }
   .more-fields { grid-template-columns: 1fr; }
   .add-page { padding-bottom: calc(72px + env(safe-area-inset-bottom) + 24px); }
