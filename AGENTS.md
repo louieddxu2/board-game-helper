@@ -16,3 +16,9 @@
 3. Present the exact before/after wording in the handoff.
 4. Update `scripts/protected-copy.sha256` to the SHA-256 calculated from `JSON.stringify(JSON.parse(the final UTF-8 catalog))`.
 5. Run `npm run check:protected-copy`, relevant UI tests, type-check, and build.
+
+## JSON import contract
+
+- Before producing, editing, or diagnosing record-page JSON imports, read `docs/rule-list-import.md`.
+- `docs/rule-list-import.md` is the human- and AI-facing contract; `src/lib/ruleDraftImport.ts` is the runtime validator.
+- Keep the record-page draft JSON format separate from the `/api/submissions` request envelope and the admin review export format.
