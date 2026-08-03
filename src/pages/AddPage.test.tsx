@@ -18,6 +18,12 @@ const mocks = vi.hoisted(() => {
     recentGames: vi.fn(),
     saveDraft: vi.fn(),
     game: vi.fn(),
+    submit: vi.fn(),
+    addPending: vi.fn(),
+    removePending: vi.fn(),
+    clearDraft: vi.fn(),
+    invalidateHome: vi.fn(),
+    invalidateGame: vi.fn(),
     confirm: vi.fn(),
   };
 });
@@ -35,12 +41,12 @@ vi.mock('../components/TagInput', () => ({ TagInput: () => null }));
 vi.mock('../components/RuleCategoryInput', () => ({ RuleCategoryInput: () => null }));
 vi.mock('../lib/api', () => ({
   ApiError: mocks.ApiError,
-  api: { contributions: mocks.contributions, game: mocks.game },
+  api: { contributions: mocks.contributions, game: mocks.game, submit: mocks.submit },
 }));
 vi.mock('../lib/localDb', () => ({
   localDb: {
     getDraft: mocks.getDraft, recentGames: mocks.recentGames, saveDraft: mocks.saveDraft,
-    addPending: vi.fn(), removePending: vi.fn(), clearDraft: vi.fn(), invalidateHome: vi.fn(), invalidateGame: vi.fn(),
+    addPending: mocks.addPending, removePending: mocks.removePending, clearDraft: mocks.clearDraft, invalidateHome: mocks.invalidateHome, invalidateGame: mocks.invalidateGame,
   },
 }));
 
@@ -51,6 +57,12 @@ describe('AddPage contribution constraints', () => {
     mocks.getDraft.mockResolvedValue(undefined);
     mocks.recentGames.mockResolvedValue([]);
     mocks.saveDraft.mockResolvedValue(undefined);
+    mocks.addPending.mockResolvedValue(undefined);
+    mocks.removePending.mockResolvedValue(undefined);
+    mocks.clearDraft.mockResolvedValue(undefined);
+    mocks.invalidateHome.mockResolvedValue(undefined);
+    mocks.invalidateGame.mockResolvedValue(undefined);
+    mocks.submit.mockResolvedValue({ gameId: 'game-1', gameSlug: 'known-game', ruleIds: [] });
     mocks.confirm.mockResolvedValue(true);
     mocks.game.mockResolvedValue({ game: { id: 'game-1', slug: 'known-game', displayName: '既有遊戲', aliases: [], rules: [], ruleCount: 0, updatedAt: 1 } });
   });
@@ -108,6 +120,31 @@ describe('AddPage contribution constraints', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('貼上的規則')).toBeInTheDocument());
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  test('persists imported supplementary details when submitting', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'admin-1', roles: ['admin'] }, canEdit: true, isAdmin: true, loading: false });
+    const { container } = render(<MemoryRouter><AddPage /></MemoryRouter>);
+
+    fireEvent.click(container.querySelector('.rule-draft-import') as HTMLButtonElement);
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(screen.getByLabelText('JSON'), { target: { value: JSON.stringify({
+      format: RULE_DRAFT_IMPORT_FORMAT,
+      schemaVersion: RULE_DRAFT_IMPORT_SCHEMA_VERSION,
+      game: { displayName: 'Example Game' },
+      rules: [{ statement: 'Imported rule', details: 'Supplementary details', flowStage: 'action' }],
+    }) } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /JSON/ }));
+
+    await waitFor(() => expect(screen.getByDisplayValue('Supplementary details')).toBeInTheDocument());
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledWith(expect.objectContaining({
+      rules: [expect.objectContaining({ details: 'Supplementary details', flowStage: 'action' })],
+    })));
+    fireEvent.click(container.querySelector('.save-button') as HTMLButtonElement);
+
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({
+      rules: [expect.objectContaining({ details: 'Supplementary details', flowStage: 'action' })],
+    })));
   });
 
   test('keeps the add button clickable but refuses rows beyond the remaining rule quota', async () => {

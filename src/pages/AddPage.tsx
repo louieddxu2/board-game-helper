@@ -302,7 +302,8 @@ export const AddPage = () => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !mobile && rule.statement.trim()) { event.preventDefault(); addRuleAfter(rule.id); }
             }} />
             <label>{zhTWCopy.terms.mistakeSituation}<textarea rows={2} value={rule.commonMistake ?? ''} onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
-            <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: '' }} />
+            <label>補充說明<textarea rows={3} value={rule.details ?? ''} onChange={(event) => setRule(rule.id, { details: event.target.value })} /></label>
+            <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: rule.details }} />
             <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
             <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
             <EditionInput value={rule.editionNotes ?? []} options={editionOptions} onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
