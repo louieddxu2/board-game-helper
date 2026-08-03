@@ -58,9 +58,9 @@ describe('ContributionsPage', () => {
     expect(screen.getByText('待審核規則')).toBeInTheDocument();
     expect(screen.queryByText('已審核規則')).not.toBeInTheDocument();
     expect(screen.queryByText('已通過遊戲')).not.toBeInTheDocument();
-    expect(screen.getByText('本站規則記錄均視為公共財。為了維持內容精準與排版品質，目前採用授權邀請與申請機制。')).toBeInTheDocument();
-    expect(screen.getByText(/將你的登入信箱與規則範例傳遞訊息給我/)).toBeInTheDocument();
-    expect(screen.getByText(/若你平常經營桌遊部落格、專欄或已有撰文習慣/)).toBeInTheDocument();
+    expect(screen.getByText(/覺得記錄在此網頁方便自用，且分享給大家也不錯/)).toBeInTheDocument();
+    expect(screen.getByText(/提供你的Gmail帳號/)).toBeInTheDocument();
+    expect(screen.getByText('白話來說，讓我確定你是善意、穩定的使用者。')).toBeInTheDocument();
     expect(contributions).toHaveBeenCalledOnce();
   });
 });
