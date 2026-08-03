@@ -46,6 +46,8 @@ export const AddPage = () => {
   const [savedAt, setSavedAt] = useState<number>();
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string; englishName?: string }>>([]);
   const [quota, setQuota] = useState<ContributionQuota>();
+  const [pasteImportOpen, setPasteImportOpen] = useState(false);
+  const [pasteImportText, setPasteImportText] = useState('');
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const selectedGameId = game?.id;
   const isGeneralContributor = Boolean(user && !canEdit);
@@ -126,6 +128,20 @@ export const AddPage = () => {
     return () => window.clearTimeout(timer);
   }, [game, gameQuery, englishName, rules]);
 
+  useEffect(() => {
+    if (!pasteImportOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPasteImportOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pasteImportOpen]);
+
   const validRules = useMemo(() => rules.filter((rule) => rule.statement.trim()), [rules]);
   const editionOptions = useMemo(() => mergeEditionOptions(
     selectedGameId && gameEditionOptions?.gameId === selectedGameId ? gameEditionOptions.options : [],
@@ -154,12 +170,9 @@ export const AddPage = () => {
     if (activeRuleId === id && next[0]) setActiveRuleId(next[0].id);
   };
 
-  const importRuleDraft = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  const applyRuleDraftImport = async (text: string) => {
     try {
-      const imported = parseRuleDraftImport(await file.text());
+      const imported = parseRuleDraftImport(text);
       if (validRules.length && !await confirm({ title: '取代目前草稿？', message: `匯入的 ${imported.rules.length} 條規則會取代目前內容。`, confirmLabel: '匯入草稿' })) return;
       const importedGame = imported.game.id && imported.game.slug ? {
         id: imported.game.id,
@@ -172,7 +185,28 @@ export const AddPage = () => {
       const importedRules = imported.rules.map((rule) => ({ ...rule, id: crypto.randomUUID(), tagSelections: rule.tagNames?.map((name) => ({ name })) ?? [], tagNames: undefined }));
       setGame(importedGame); setGameQuery(imported.game.displayName); setEnglishName(imported.game.englishName ?? '');
       setRules(importedRules); setActiveRuleId(importedRules[0]?.id ?? blankRule().id);
+      setPasteImportText('');
+      setPasteImportOpen(false);
+      setError('');
     } catch (caught) { setError(caught instanceof Error ? caught.message : '無法匯入草稿。'); }
+  };
+
+  const closePasteImport = () => {
+    setPasteImportOpen(false);
+    setPasteImportText('');
+    setError('');
+  };
+
+  const importRuleDraft = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    await applyRuleDraftImport(await file.text());
+  };
+
+  const importPastedRuleDraft = async () => {
+    if (!pasteImportText.trim()) return;
+    await applyRuleDraftImport(pasteImportText);
   };
 
   const submit = async () => {
@@ -229,8 +263,18 @@ export const AddPage = () => {
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1><div className="add-page-actions">
       {isGeneralContributor && quota && <div className="add-page-quota" aria-label="投稿額度"><span>未審核規則 {quota.pendingRules} / {quota.ruleLimit}</span><span>未審核遊戲 {quota.pendingGames} / {quota.gameLimit}</span></div>}
       {isGeneralContributor && <Link className="text-action add-page-help-link" to="/contributions">投稿說明</Link>}
-      {isAdmin && <label className="button secondary rule-draft-import">匯入 JSON<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label>}
+      {isAdmin && <button type="button" className="button secondary rule-draft-import" onClick={() => { setError(''); setPasteImportOpen(true); }}>匯入 JSON</button>}
     </div></header>
+    {isAdmin && pasteImportOpen && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rule-draft-paste-title" onClick={(event) => { if (event.target === event.currentTarget) closePasteImport(); }}>
+      <div className="modal rule-draft-import-modal">
+        <div className="modal-heading"><h2 id="rule-draft-paste-title">貼上 JSON</h2><button type="button" onClick={closePasteImport} aria-label="關閉">×</button></div>
+        <p className="rule-draft-paste-help">直接將 JSON 貼到下方文字框，再匯入到目前的紀錄內容。</p>
+        <label>JSON<textarea autoFocus rows={12} value={pasteImportText} onChange={(event) => setPasteImportText(event.target.value)} spellCheck={false} /></label>
+        <div className="rule-draft-import-options"><span>也可以</span><label className="button secondary rule-draft-file-import">選擇 JSON 檔案<input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => void importRuleDraft(event)} /></label></div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <div className="modal-actions"><button type="button" className="button secondary" onClick={closePasteImport}>取消</button><div><button type="button" className="button primary" disabled={!pasteImportText.trim()} onClick={() => void importPastedRuleDraft()}>匯入 JSON</button></div></div>
+      </div>
+    </div>}
     <div className={game ? 'record-game-fields two-columns' : 'record-game-fields'}>
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); }}>重新選擇</button>}</div>

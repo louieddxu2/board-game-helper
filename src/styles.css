@@ -384,6 +384,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .checkbox input { width: auto; }
 .modal-actions { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
 .modal-actions > div { display: flex; gap: 8px; }
+.rule-draft-import-modal { width: min(720px, 100%); }
+.rule-draft-import-modal > p { margin: 0; color: var(--muted); line-height: 1.6; }
+.rule-draft-import-modal > label { display: grid; gap: 7px; }
+.rule-draft-import-modal textarea { min-height: 260px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; line-height: 1.5; }
+.rule-draft-import-options { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 13px; }
+.rule-draft-file-import { cursor: pointer; }
 .confirm-dialog { width: min(480px, 100%); gap: 24px; }
 .text-input-dialog { width: min(440px, 100%); gap: 14px; }
 .text-input-dialog > label { font-size: 13px; font-weight: 700; }

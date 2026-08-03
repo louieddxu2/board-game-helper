@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AddPage } from './AddPage';
+import { RULE_DRAFT_IMPORT_FORMAT } from '../lib/ruleDraftImport';
 
 const mocks = vi.hoisted(() => {
   class ApiError extends Error {
@@ -87,6 +88,26 @@ describe('AddPage contribution constraints', () => {
     expect(screen.getByRole('link', { name: '隱私與資料說明' })).toHaveAttribute('href', '/privacy');
     expect(screen.getByLabelText('玩錯情況')).toBeInTheDocument();
     expect(mocks.contributions).not.toHaveBeenCalled();
+  });
+
+  test('imports JSON pasted in the modal', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'admin-1', roles: ['admin'] }, canEdit: true, isAdmin: true, loading: false });
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: '匯入 JSON' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('JSON'), { target: { value: JSON.stringify({
+      format: RULE_DRAFT_IMPORT_FORMAT,
+      schemaVersion: 1,
+      game: { displayName: '貼上遊戲' },
+      rules: [{ statement: '貼上的規則' }],
+    }) } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '匯入 JSON' }));
+
+    await waitFor(() => expect(screen.getByDisplayValue('貼上的規則')).toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   test('keeps the add button clickable but refuses rows beyond the remaining rule quota', async () => {
