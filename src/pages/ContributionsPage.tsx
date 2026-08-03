@@ -74,13 +74,15 @@ export const ContributionsPage = () => {
 
     <section className="account-card contribution-help">
       <h2>如何申請完整的編輯/審核權限？</h2>
-      <p>若你願意協助校對投稿、整理遊戲或維護既有規則，請透過 <a href="https://www.facebook.com/huang.shao.dong.238497" target="_blank" rel="noopener noreferrer">黃紹東的 Facebook</a> 聯絡管理員。</p>
+      <p>本站規則記錄均視為公共財。為了維持內容精準與排版品質，目前採用授權邀請與申請機制。</p>
+      <h3>✉️ 申請編輯權限方式</h3>
+      <p>如果你平常也有紀錄玩錯規則的習慣，且願意協助補充規則，歡迎申請編輯權限：</p>
       <ol className="contribution-application-list">
-        <li>請向管理員說明你希望申請完整的編輯／審核權限；公開暱稱可在取得權限後、實際參與審核前再設定。</li>
-        <li>請附上既有投稿，或簡短說明你熟悉、願意協助維護的遊戲與規則資料。</li>
-        <li>審核工作需要比對規則書與來源；若資料有爭議，會優先保留可追溯的來源與討論空間。</li>
+        <li><strong>登入帳號：</strong>請先使用 Google 登入本站（以便授權信箱）。</li>
+        <li><strong>準備範例：</strong>準備 1～2 條你近期玩錯或想補充的規則細節（含遊戲名稱與玩錯情況）。</li>
+        <li><strong>聯繫作者：</strong>將你的登入信箱與規則範例傳遞訊息給我，我會綜合評估表達能力後開通權限。</li>
       </ol>
-      <p>取得完整權限後，仍使用相同的填寫介面，但不受一般投稿額度限制，也可以審核一般使用者的投稿。</p>
+      <p className="muted">（提示：若你平常經營桌遊部落格、專欄或已有撰文習慣，請附上連結，會優先獲得授權。）</p>
     </section>
   </section>;
 };
