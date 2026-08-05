@@ -179,6 +179,7 @@ describe('RuleCard', () => {
     expect(compact).toHaveTextContent('完整正確敘述');
     expect(compact).toHaveTextContent('完整玩錯情況');
     expect(compact).toHaveTextContent('💬 補充說明');
+    expect(compact.querySelector('.compact-rule-mistake')).toBeInTheDocument();
     fireEvent.click(compact);
     expect(onToggleExpanded).toHaveBeenCalledOnce();
     fireEvent.click(within(compact).getByRole('button', { name: /2~3/ }));

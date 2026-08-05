@@ -208,7 +208,8 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .compact-rule-row strong { min-width: 48px; font-size: 12px; line-height: 1.55; }
 .compact-rule-row p { min-width: 0; margin: 0; font-size: 14px; white-space: pre-line; word-break: break-word; }
 .compact-rule-correct strong { color: var(--green); }
-.compact-rule-mistake strong { color: #b7462f; }
+.compact-rule-mistake { margin-top: 5px; padding: 4px 7px; border: 1px solid rgba(183,70,47,.32); border-left: 3px solid #b7462f; border-radius: 6px; background: #fdf5f3; }
+.compact-rule-mistake strong, .compact-rule-mistake p { color: #7f3025; }
 .rule-card-footer, .rule-card-footer-actions, .importance-button { min-width: 0; max-width: 100%; }
 .rule-card.clickable { cursor: pointer; }
 .rule-card.clickable:hover, .rule-card:has(.rule-title-link:hover) { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(23,47,40,.1); border-color: var(--green); }
@@ -659,6 +660,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .compact-rule-row { grid-template-columns: 48px minmax(0, 1fr); gap: 6px; }
   .compact-rule-row p { font-size: 13px; line-height: 1.4; }
   .compact-rule-row strong { font-size: 11px; }
+  .compact-rule-mistake { padding: 3px 5px; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
