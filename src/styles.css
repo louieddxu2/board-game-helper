@@ -205,7 +205,9 @@ footer a { color: inherit; }
 .rule-card-title-group { min-width: 0; flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .rule-game-title { font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--ink); margin: 0; }
 .rule-attributes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.attr-chip { display: inline-flex; align-items: center; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
+.attr-chip { display: inline-flex; align-items: center; min-height: 0; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
+.attr-chip:where(button) { cursor: pointer; }
+.attr-chip:where(button):hover { background: #e3dccf; }
 
 /* 標籤與作者、編輯按鈕共用卡片標頭 */
 .rule-card .rule-tags { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }

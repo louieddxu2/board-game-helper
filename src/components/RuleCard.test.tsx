@@ -4,6 +4,24 @@ import { describe, expect, test, vi } from 'vitest';
 import { RuleCard } from './RuleCard';
 
 describe('RuleCard', () => {
+  test('makes player-count and edition attributes clickable when filter handlers are provided', () => {
+    const onPlayerCountsClick = vi.fn();
+    const onEditionClick = vi.fn();
+    render(<MemoryRouter><RuleCard
+      onPlayerCountsClick={onPlayerCountsClick}
+      onEditionClick={onEditionClick}
+      rule={{
+        id: 'rule_filters', gameId: 'game_1', statement: 'rule', status: 'published',
+        playerCounts: [2, 3, 4], editionNotes: ['Base Expansion'], tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: /2~4/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Base Expansion/ }));
+    expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3, 4]);
+    expect(onEditionClick).toHaveBeenCalledWith('Base Expansion');
+  });
+
   test('shows a pending contribution as unreviewed', () => {
     render(<MemoryRouter><RuleCard rule={{
       id: 'rule_pending', gameId: 'game_1', statement: '待審核規則', status: 'published',

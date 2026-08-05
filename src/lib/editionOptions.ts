@@ -2,12 +2,15 @@ const editionKey = (value: string) => value.normalize('NFKC').trim().toLocaleLow
 
 type EditionRule = { editionNotes?: string[]; editionNote?: string };
 
+export const getRuleEditions = (rule: EditionRule): string[] => {
+  const names = rule.editionNotes?.length ? rule.editionNotes : [rule.editionNote ?? ''];
+  return names.map((rawName) => rawName.normalize('NFKC').trim()).filter(Boolean);
+};
+
 export const collectEditionOptions = (rules: EditionRule[]): string[] => {
   const options = new Map<string, { name: string; count: number }>();
   for (const rule of rules) {
-    const names = rule.editionNotes?.length ? rule.editionNotes : [rule.editionNote ?? ''];
-    for (const rawName of names) {
-      const name = rawName.normalize('NFKC').trim();
+    for (const name of getRuleEditions(rule)) {
       if (!name) continue;
       const key = editionKey(name);
       const existing = options.get(key);

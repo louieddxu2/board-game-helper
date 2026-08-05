@@ -15,7 +15,7 @@ import { clearSearchCache } from '../components/GameSearch';
 import zhTWCopy from '../content/zh-TW.json';
 import { hydrateGameTags } from '../lib/tagHydration';
 import { canUserEditRule, canUserReviewRule } from '../lib/rulePermissions';
-import { collectEditionOptions } from '../lib/editionOptions';
+import { collectEditionOptions, getRuleEditions } from '../lib/editionOptions';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
 import { ApiError } from '../lib/api';
 import { writeHomeMode } from '../lib/homeMode';
@@ -62,6 +62,16 @@ export const GamePage = () => {
     setActivePlayerCounts((prev) =>
       prev.includes(count) ? prev.filter((c) => c !== count) : [...prev, count]
     );
+  };
+  const togglePlayerCounts = (counts: number[]) => {
+    const uniqueCounts = Array.from(new Set(counts));
+    if (uniqueCounts.length === 0) return;
+    setActivePlayerCounts((prev) => {
+      const allSelected = uniqueCounts.every((count) => prev.includes(count));
+      return allSelected
+        ? prev.filter((count) => !uniqueCounts.includes(count))
+        : Array.from(new Set([...prev, ...uniqueCounts]));
+    });
   };
   const toggleEdition = (edition: string) => {
     setActiveEditions((prev) =>
@@ -176,10 +186,10 @@ export const GamePage = () => {
       if (activePlayerCounts.length > 0) {
         const counts = rule.playerCounts ?? [];
         const hasMatch = activePlayerCounts.some((c) => counts.includes(c));
-        if (!hasMatch) return false;
+        if (counts.length > 0 && !hasMatch) return false;
       }
       if (activeEditions.length > 0) {
-        const editions = rule.editionNotes ?? [];
+        const editions = getRuleEditions(rule);
         const hasMatch = activeEditions.some((e) => editions.includes(e));
         if (!hasMatch) return false;
       }
@@ -203,7 +213,7 @@ export const GamePage = () => {
 
   const allGameEditions = useMemo(() => {
     const set = new Set<string>();
-    game?.rules.forEach((r) => r.editionNotes?.forEach((e) => e && set.add(e)));
+    game?.rules.forEach((rule) => getRuleEditions(rule).forEach((edition) => set.add(edition)));
     return Array.from(set).sort();
   }, [game?.rules]);
 
@@ -215,7 +225,7 @@ export const GamePage = () => {
 
   const availableEditions = useMemo(() => {
     const validSet = new Set<string>();
-    rulesByQuery.forEach((r) => r.editionNotes?.forEach((e) => e && validSet.add(e)));
+    rulesByQuery.forEach((rule) => getRuleEditions(rule).forEach((edition) => validSet.add(edition)));
     return allGameEditions.filter((e) => activeEditions.includes(e) || validSet.has(e));
   }, [rulesByQuery, allGameEditions, activeEditions]);
 
@@ -419,7 +429,7 @@ export const GamePage = () => {
       )}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
+      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onPlayerCountsClick={togglePlayerCounts} onEditionClick={toggleEdition} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
         importanceVoted={importantRuleIds.includes(rule.id)} importanceSaving={importanceSaving.has(rule.id)}
         onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined} />)}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}

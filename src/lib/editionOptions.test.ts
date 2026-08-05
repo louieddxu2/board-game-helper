@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { collectEditionOptions, findEditionOption, mergeEditionOptions } from './editionOptions';
+import { collectEditionOptions, findEditionOption, getRuleEditions, mergeEditionOptions } from './editionOptions';
 
 describe('edition options', () => {
+  test('normalizes legacy and current edition fields for display and filtering', () => {
+    expect(getRuleEditions({ editionNotes: [' Base Expansion ', 'Second Expansion'] }))
+      .toEqual(['Base Expansion', 'Second Expansion']);
+    expect(getRuleEditions({ editionNote: ' Revised Edition ' })).toEqual(['Revised Edition']);
+  });
+
   test('aggregates repeated values and places common choices first', () => {
     const options = collectEditionOptions([
       { editionNote: '挪威人擴充' },

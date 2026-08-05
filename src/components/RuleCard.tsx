@@ -3,6 +3,7 @@ import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
+import { getRuleEditions } from '../lib/editionOptions';
 import zhTWCopy from '../content/zh-TW.json';
 
 export interface RuleCardProps {
@@ -12,6 +13,8 @@ export interface RuleCardProps {
   gameHref?: string;
   onEdit?: () => void;
   onTagClick?: (tag: string) => void;
+  onPlayerCountsClick?: (counts: number[]) => void;
+  onEditionClick?: (edition: string) => void;
   importanceVoted?: boolean;
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
@@ -24,6 +27,8 @@ export const RuleCard = ({
   gameHref,
   onEdit,
   onTagClick,
+  onPlayerCountsClick,
+  onEditionClick,
   importanceVoted = false,
   importanceSaving = false,
   onToggleImportance,
@@ -35,6 +40,7 @@ export const RuleCard = ({
   const showToast = toastState?.showToast ?? (() => undefined);
   const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
   const hasReviewMeta = (rule.reviewStatus ?? 'not_required') !== 'not_required';
+  const ruleEditions = getRuleEditions(rule);
 
   const effectiveGameName = gameName || (rule as any).gameName;
   const effectiveGameSlug = (gameHref ? gameHref.replace('/games/', '') : undefined) || (rule as any).gameSlug;
@@ -96,11 +102,19 @@ export const RuleCard = ({
 
           {/* 屬性：擴充、人數 */}
           <div className="rule-attributes">
-            {(rule.editionNotes?.length ? rule.editionNotes : (rule.editionNote ? [rule.editionNote] : [])).map((edition) => (
-              <span className="attr-chip edition-chip" key={edition}>📦 {edition}</span>
+            {ruleEditions.map((edition) => (
+              onEditionClick ? (
+                <button type="button" className="attr-chip edition-chip" key={edition} onClick={(event) => { event.stopPropagation(); onEditionClick(edition); }}>
+                  📦 {edition}
+                </button>
+              ) : <span className="attr-chip edition-chip" key={edition}>📦 {edition}</span>
             ))}
             {Boolean(rule.playerCounts?.length) && (
-              <span className="attr-chip player-chip">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
+              onPlayerCountsClick ? (
+                <button type="button" className="attr-chip player-chip" onClick={(event) => { event.stopPropagation(); onPlayerCountsClick(rule.playerCounts!); }}>
+                  👥 {formatPlayerCounts(rule.playerCounts!)}
+                </button>
+              ) : <span className="attr-chip player-chip">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
             )}
           </div>
 
