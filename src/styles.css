@@ -363,9 +363,13 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 .game-page { max-width: 960px; margin: 0 auto; padding: 76px 24px 120px; }
 .game-hero { display: flex; justify-content: space-between; align-items: end; padding-bottom: 35px; border-bottom: 1px solid var(--line); }
+.game-hero-info { min-width: 0; flex: 1; }
 .game-hero h1 { font-size: clamp(42px, 7vw, 72px); margin-bottom: 5px; }
 .game-hero p { margin-bottom: 5px; color: var(--muted); }
+.game-hero-meta { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; }
+.game-hero-meta .favorite-button { flex-shrink: 0; }
 .english-name { font-size: 18px; }
+.game-hero-actions { align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 0; }
 .stage-tabs { display: flex; gap: 7px; overflow-x: auto; padding: 25px 0; position: sticky; top: 78px; background: rgba(246,243,235,.94); backdrop-filter: blur(10px); z-index: 5; }
 .stage-tabs button { flex: none; border: 1px solid var(--line); border-radius: 100px; padding: 9px 13px; background: var(--white); color: var(--ink); cursor: pointer; }
 .stage-tabs button.active { background: var(--green); color: white; border-color: var(--green); }
@@ -625,10 +629,14 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .draft-banner { margin: 14px; }
   .game-hero { align-items: start; gap: 20px; }
   .game-hero .button { padding: 0 14px; white-space: nowrap; }
+  .game-hero-meta { align-items: flex-start; }
+  .game-hero-actions { width: 100%; gap: 8px; }
   .stage-tabs { top: 66px; }
   .game-page { padding: 44px 16px 100px; }
   .game-hero { display: grid; }
-  .game-hero .button { width: 100%; }
+  .game-hero-actions .button { width: 100%; }
+  .game-hero-actions .game-add-rule-button { display: none; }
+  .mobile-nav .mobile-primary.game-page-primary { background: var(--orange); color: white; font-weight: 900; box-shadow: 0 3px 12px rgba(229, 115, 0, .28); }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }

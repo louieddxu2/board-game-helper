@@ -313,20 +313,24 @@ export const GamePage = () => {
   };
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
+  const addRuleHref = `/add?game=${encodeURIComponent(game.slug)}`;
   return <section className="game-page">
     <header className="game-hero">
-      <div><h1>{game.displayName}</h1>{game.englishName && <p className="english-name">{game.englishName}</p>}
-        <p>{game.ruleCount} 條易錯規則紀錄</p></div>
-      {(user || canEdit) && <div className="inline-actions">
-        {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
+      <div className="game-hero-info"><h1>{game.displayName}</h1>
+        <div className="game-hero-meta">
+          {game.englishName && <p className="english-name">{game.englishName}</p>}
+          {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
           {favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}
-        </button>}
+          </button>}
+        </div>
+      </div>
+      {(user || canEdit) && <div className="inline-actions game-hero-actions">
         {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
         {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
           ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
           : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
           {game.reviewStatus === 'pending' && <button type="button" className="button secondary" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
-        {user && <Link className="button primary" to={`/add?game=${game.slug}`}>＋新增規則</Link>}
+        {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>}
     </header>
     <section className="rule-filters" aria-label="篩選規則">
