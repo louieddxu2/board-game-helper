@@ -204,7 +204,7 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .compact-rule-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; line-height: 1.45; }
 .compact-rule-row + .compact-rule-row { margin-top: 4px; }
 .compact-rule-row strong { min-width: 20px; font-size: 15px; line-height: 1.5; }
-.compact-rule-row p { min-width: 0; margin: 0; font-size: 15px; white-space: pre-line; word-break: break-word; }
+.compact-rule-row p { min-width: 0; margin: 0; font-size: 16px; line-height: 1.6; white-space: pre-line; word-break: break-word; }
 .compact-rule-correct strong { color: var(--green); }
 .compact-rule-mistake { margin-top: 5px; padding: 4px 7px; border: 1px solid rgba(183,70,47,.32); border-left: 3px solid #b7462f; border-radius: 6px; background: #fdf5f3; }
 .compact-rule-mistake strong, .compact-rule-mistake p { color: #7f3025; }
@@ -228,18 +228,18 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 
 /* 第三行：正確規則 (支援換行 pre-line) */
 .rule-statement-section { margin-bottom: 12px; }
-.statement-text { font-size: 16px; line-height: 1.6; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
+.statement-text { font-size: 17px; line-height: 1.7; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
 .details-toggle { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 4px; }
 
 /* 第四行：玩錯情況 (支援換行 pre-line) */
 .mistake { background-color: #fdf5f3; border: 1px solid rgba(183, 70, 47, 0.3); border-left: 4px solid var(--orange); padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px 0; }
 .mistake .mistake-badge { background-color: var(--orange); color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; align-self: flex-start; font-weight: 700; }
-.mistake .mistake-text { color: #5a2a22; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-line; word-break: break-word; }
+.mistake .mistake-text { color: #5a2a22; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; word-break: break-word; }
 
 /* 補充說明：與正文分離，但採中性色避免搶過玩錯情況 */
 .rule-details-note { background: #f6f8f6; border: 1px solid var(--line); border-left: 4px solid #a8b5ad; padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; }
 .rule-details-note .details-badge { align-self: flex-start; background: #e7ece8; color: #52645a; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: 700; }
-.rule-details-note .details-text { color: #4f5d55; font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-line; word-break: break-word; }
+.rule-details-note .details-text { color: #4f5d55; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; word-break: break-word; }
 .rule-details-note .details-toggle { color: #54685c; align-self: flex-start; }
 
 /* 第五行：來源與右下角分享按鈕 */
@@ -657,8 +657,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .compact-rule-meta { margin-bottom: 5px; font-size: 11px; }
   .compact-attribute { min-height: 22px; padding: 2px 6px; }
   .compact-rule-row { grid-template-columns: 20px minmax(0, 1fr); gap: 6px; }
-  .compact-rule-row p { font-size: 14px; line-height: 1.45; }
-  .compact-rule-row strong { min-width: 20px; font-size: 14px; }
+  .compact-rule-row p { font-size: 16px; line-height: 1.6; }
+  .compact-rule-row strong { min-width: 20px; font-size: 16px; }
+  .statement-text { font-size: 18px; line-height: 1.75; }
+  .mistake .mistake-text, .rule-details-note .details-text { font-size: 16px; line-height: 1.7; }
   .compact-rule-mistake { padding: 3px 5px; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
