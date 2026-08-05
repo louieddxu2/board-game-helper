@@ -454,7 +454,7 @@ export const GamePage = () => {
         </div>
       )}
     </section>
-    <div className="game-rules">
+    <div className="game-rules compact-rules">
       {visibleRules.map((rule) => {
         const toggleExpanded = () => toggleExpandedRule(rule.id);
         if (expandedRuleId !== rule.id) {

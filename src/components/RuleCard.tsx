@@ -312,15 +312,14 @@ export const CompactRuleCard = ({
             </button>
           ) : <span className="compact-attribute compact-tag" key={tag.id}>#{tag.name}</span>
         ))}
-        <span className="compact-expand-hint" aria-hidden="true">展開 ›</span>
       </div>
       <div className="compact-rule-row compact-rule-correct">
-        <strong>✅ 正確</strong>
+        <strong aria-label="正確">✅</strong>
         <p>{rule.statement}</p>
       </div>
       {rule.commonMistake && (
         <div className="compact-rule-row compact-rule-mistake">
-          <strong>❌ 玩錯</strong>
+          <strong aria-label="玩錯">❌</strong>
           <p>{rule.commonMistake}</p>
         </div>
       )}

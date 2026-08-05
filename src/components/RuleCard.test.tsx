@@ -183,6 +183,7 @@ describe('RuleCard', () => {
     expect(compact).toHaveTextContent('完整玩錯情況');
     expect(compact).toHaveTextContent('#設置');
     expect(compact).not.toHaveTextContent('💬 補充說明');
+    expect(compact).not.toHaveTextContent('展開');
     expect(compact.querySelector('.compact-rule-mistake')).toBeInTheDocument();
     fireEvent.click(compact);
     expect(onToggleExpanded).toHaveBeenCalledOnce();
