@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
@@ -16,6 +16,7 @@ export interface RuleCardProps {
   onTagClick?: (tag: string) => void;
   onPlayerCountsClick?: (counts: number[]) => void;
   onEditionClick?: (edition: string) => void;
+  onToggleExpanded?: () => void;
   importanceVoted?: boolean;
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
@@ -31,12 +32,11 @@ export const RuleCard = ({
   onTagClick,
   onPlayerCountsClick,
   onEditionClick,
+  onToggleExpanded,
   importanceVoted = false,
   importanceSaving = false,
   onToggleImportance,
 }: RuleCardProps) => {
-  const [statementExpanded, setStatementExpanded] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
   const showToast = toastState?.showToast ?? (() => undefined);
@@ -54,15 +54,6 @@ export const RuleCard = ({
     : undefined;
   const effectiveEnglishName = shouldShowGameContext ? englishName || (rule as any).englishName : undefined;
 
-  const isLongStatement = rule.statement.length > 80;
-  const displayStatement = isLongStatement && !statementExpanded
-    ? `${rule.statement.slice(0, 80)}...`
-    : rule.statement;
-  const isLongDetails = Boolean(rule.details && rule.details.length > 80);
-  const displayDetails = isLongDetails && !detailsExpanded
-    ? `${rule.details!.slice(0, 80)}...`
-    : rule.details;
-
   const copyRuleLink = (e: React.MouseEvent) => {
     e.stopPropagation();
     const targetPath = effectiveGameHref ? `${effectiveGameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
@@ -77,8 +68,20 @@ export const RuleCard = ({
     if (target.closest('button, a, input, textarea, select, label')) {
       return;
     }
+    if (onToggleExpanded) {
+      onToggleExpanded();
+      return;
+    }
     if (effectiveGameHref) {
       navigate(`${effectiveGameHref}#rule-${rule.id}`);
+    }
+  };
+
+  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!onToggleExpanded || event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onToggleExpanded();
     }
   };
 
@@ -91,6 +94,10 @@ export const RuleCard = ({
       className={effectiveGameHref ? 'rule-card clickable' : 'rule-card'}
       id={`rule-${rule.id}`}
       onClick={handleCardClick}
+      onKeyDown={onToggleExpanded ? handleCardKeyDown : undefined}
+      role={onToggleExpanded ? 'button' : undefined}
+      tabIndex={onToggleExpanded ? 0 : undefined}
+      aria-expanded={onToggleExpanded ? true : undefined}
     >
       {/* 第一行：遊戲名稱(英文名稱)、屬性(擴充、人數)、右上編輯 */}
       <div className="rule-card-header">
@@ -173,20 +180,8 @@ export const RuleCard = ({
       {/* 第三行：標準規則欄位 */}
       <div className="rule-statement-section">
         <p className="statement-text">
-          {displayStatement}
+          {rule.statement}
         </p>
-        {isLongStatement && (
-          <button
-            type="button"
-            className="text-action details-toggle"
-            onClick={(e) => {
-              e.stopPropagation();
-              setStatementExpanded((prev) => !prev);
-            }}
-          >
-            {statementExpanded ? '收合' : '展開詳細'}
-          </button>
-        )}
       </div>
 
       {/* 第四行：常見錯誤欄位 */}
@@ -200,19 +195,7 @@ export const RuleCard = ({
       {rule.details && (
         <div className="rule-details-note">
           <strong className="details-badge">補充說明</strong>
-          <p className="details-text">{displayDetails}</p>
-          {isLongDetails && (
-            <button
-              type="button"
-              className="text-action details-toggle"
-              onClick={(event) => {
-                event.stopPropagation();
-                setDetailsExpanded((previous) => !previous);
-              }}
-            >
-              {detailsExpanded ? '收合補充' : '展開補充'}
-            </button>
-          )}
+          <p className="details-text">{rule.details}</p>
         </div>
       )}
 
@@ -264,6 +247,75 @@ export const RuleCard = ({
           </button>
         </div>
       </div>
+    </article>
+  );
+};
+
+export interface CompactRuleCardProps {
+  rule: RuleCardType;
+  onToggleExpanded: () => void;
+  onPlayerCountsClick?: (counts: number[]) => void;
+  onEditionClick?: (edition: string) => void;
+}
+
+export const CompactRuleCard = ({
+  rule,
+  onToggleExpanded,
+  onPlayerCountsClick,
+  onEditionClick,
+}: CompactRuleCardProps) => {
+  const ruleEditions = getRuleEditions(rule);
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, label')) return;
+    onToggleExpanded();
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onToggleExpanded();
+    }
+  };
+
+  return (
+    <article
+      className="rule-card-compact"
+      id={`rule-${rule.id}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={false}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="compact-rule-meta">
+        {Boolean(rule.playerCounts?.length) && (
+          onPlayerCountsClick ? (
+            <button type="button" className="compact-attribute" onClick={(event) => { event.stopPropagation(); onPlayerCountsClick(rule.playerCounts!); }}>
+              👥 {formatPlayerCounts(rule.playerCounts!)}
+            </button>
+          ) : <span className="compact-attribute">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
+        )}
+        {ruleEditions.map((edition) => (
+          onEditionClick ? (
+            <button type="button" className="compact-attribute" key={edition} onClick={(event) => { event.stopPropagation(); onEditionClick(edition); }}>
+              📦 {edition}
+            </button>
+          ) : <span className="compact-attribute" key={edition}>📦 {edition}</span>
+        ))}
+        {rule.details && <span className="compact-details-badge">💬 補充說明</span>}
+        <span className="compact-expand-hint" aria-hidden="true">展開 ›</span>
+      </div>
+      <div className="compact-rule-row compact-rule-correct">
+        <strong>✅ 正確</strong>
+        <p>{rule.statement}</p>
+      </div>
+      {rule.commonMistake && (
+        <div className="compact-rule-row compact-rule-mistake">
+          <strong>❌ 玩錯</strong>
+          <p>{rule.commonMistake}</p>
+        </div>
+      )}
     </article>
   );
 };

@@ -193,7 +193,22 @@ footer a { color: inherit; }
 .section-heading h2 { font-size: clamp(30px, 4vw, 48px); margin-bottom: 0; }
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
+.rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
+.rule-card-compact { min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; position: relative; box-shadow: 0 2px 8px rgba(23,47,40,.025); cursor: pointer; scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
+.rule-card-compact:hover { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
+.rule-card-compact:focus-visible, .rule-card[role="button"]:focus-visible { outline: 3px solid rgba(233,180,76,.45); outline-offset: 3px; }
+.compact-rule-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; min-width: 0; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.compact-attribute { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--cream); color: var(--green); font: inherit; font-weight: 700; line-height: 1.2; }
+button.compact-attribute { cursor: pointer; }
+button.compact-attribute:hover { border-color: var(--green); background: #e3dccf; }
+.compact-details-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid #c9d2cc; border-radius: 6px; background: #f0f4f1; color: #52645a; font-weight: 700; }
+.compact-expand-hint { margin-left: auto; color: var(--orange); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.compact-rule-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; line-height: 1.45; }
+.compact-rule-row + .compact-rule-row { margin-top: 4px; }
+.compact-rule-row strong { min-width: 48px; font-size: 12px; line-height: 1.55; }
+.compact-rule-row p { min-width: 0; margin: 0; font-size: 14px; white-space: pre-line; word-break: break-word; }
+.compact-rule-correct strong { color: var(--green); }
+.compact-rule-mistake strong { color: #b7462f; }
 .rule-card-footer, .rule-card-footer-actions, .importance-button { min-width: 0; max-width: 100%; }
 .rule-card.clickable { cursor: pointer; }
 .rule-card.clickable:hover, .rule-card:has(.rule-title-link:hover) { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(23,47,40,.1); border-color: var(--green); }
@@ -637,6 +652,13 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .game-hero-actions .button { width: 100%; }
   .game-hero-actions .game-add-rule-button { display: none; }
   .mobile-nav .mobile-primary.game-page-primary { background: var(--orange); color: white; font-weight: 900; box-shadow: 0 3px 12px rgba(229, 115, 0, .28); }
+  .rule-card, .rule-card-compact { scroll-margin-top: 16px; }
+  .rule-card-compact { padding: 9px 11px; }
+  .compact-rule-meta { margin-bottom: 5px; font-size: 11px; }
+  .compact-attribute, .compact-details-badge { min-height: 22px; padding: 2px 6px; }
+  .compact-rule-row { grid-template-columns: 48px minmax(0, 1fr); gap: 6px; }
+  .compact-rule-row p { font-size: 13px; line-height: 1.4; }
+  .compact-rule-row strong { font-size: 11px; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }

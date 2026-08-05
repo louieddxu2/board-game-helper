@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { RuleCard } from '../components/RuleCard';
+import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { RuleCategoryInput } from '../components/RuleCategoryInput';
@@ -45,6 +45,7 @@ export const GamePage = () => {
   const [importantRuleIds, setImportantRuleIds] = useState<string[]>([]);
   const [importanceReady, setImportanceReady] = useState(false);
   const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const [activePlayerCounts, setActivePlayerCounts] = useState<number[]>([]);
   const [activeEditions, setActiveEditions] = useState<string[]>([]);
   const [activeTags, setActiveTags] = useState<string[]>(() => {
@@ -110,6 +111,9 @@ export const GamePage = () => {
     return () => { active = false; };
   }, [identifier, location.state]);
   useEffect(() => {
+    setExpandedRuleId(null);
+  }, [identifier]);
+  useEffect(() => {
     let active = true;
     const applyTags = (data: { tags: TagSummary[] }) => { if (active) setClassificationTags(data.tags); };
     void api.tags(undefined, applyTags).then(applyTags).catch(() => undefined);
@@ -119,6 +123,16 @@ export const GamePage = () => {
     if (!game || !location.hash) return;
     window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
   }, [game, location.hash]);
+  useEffect(() => {
+    if (!expandedRuleId) return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(`rule-${expandedRuleId}`);
+      if (!element) return;
+      const isMobile = window.matchMedia('(max-width: 800px)').matches;
+      element.scrollIntoView({ behavior: 'smooth', block: isMobile ? 'center' : 'start' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [expandedRuleId]);
   useEffect(() => {
     if (!game || !user) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -247,6 +261,14 @@ export const GamePage = () => {
 
   const hasSpecialOptions = availablePlayerCounts.length > 0 || availableEditions.length > 0;
   const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0 || Boolean(ruleQuery);
+  useEffect(() => {
+    if (expandedRuleId && !visibleRules.some((rule) => rule.id === expandedRuleId)) {
+      setExpandedRuleId(null);
+    }
+  }, [expandedRuleId, visibleRules]);
+  const toggleExpandedRule = (ruleId: string) => {
+    setExpandedRuleId((current) => current === ruleId ? null : ruleId);
+  };
   const justAdded = (location.state as { justAdded?: number } | null)?.justAdded;
   useEffect(() => {
     if (justAdded) showToast(`已經記下 ${justAdded} 條規則。下次開桌前，它們會在這裡等你。`);
@@ -433,9 +455,31 @@ export const GamePage = () => {
       )}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} showGameContext={false} onTagClick={toggleTag} onPlayerCountsClick={togglePlayerCounts} onEditionClick={toggleEdition} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
-        importanceVoted={importantRuleIds.includes(rule.id)} importanceSaving={importanceSaving.has(rule.id)}
-        onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined} />)}
+      {visibleRules.map((rule) => {
+        const toggleExpanded = () => toggleExpandedRule(rule.id);
+        if (expandedRuleId !== rule.id) {
+          return <CompactRuleCard
+            key={rule.id}
+            rule={rule}
+            onToggleExpanded={toggleExpanded}
+            onPlayerCountsClick={togglePlayerCounts}
+            onEditionClick={toggleEdition}
+          />;
+        }
+        return <RuleCard
+          key={rule.id}
+          rule={rule}
+          showGameContext={false}
+          onToggleExpanded={toggleExpanded}
+          onTagClick={toggleTag}
+          onPlayerCountsClick={togglePlayerCounts}
+          onEditionClick={toggleEdition}
+          onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
+          importanceVoted={importantRuleIds.includes(rule.id)}
+          importanceSaving={importanceSaving.has(rule.id)}
+          onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined}
+        />;
+      })}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}

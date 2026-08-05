@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
-import { RuleCard } from './RuleCard';
+import { CompactRuleCard, RuleCard } from './RuleCard';
 import type { RuleCard as RuleCardType } from '../shared/types';
 
 describe('RuleCard', () => {
@@ -144,6 +144,47 @@ describe('RuleCard', () => {
     expect(mistake).toHaveTextContent('玩錯情況');
     expect(details).toHaveTextContent('補充說明');
     expect(details).toHaveTextContent('只有第一位玩家需要執行');
+  });
+
+  test('renders long statements and supplementary details without truncation controls', () => {
+    const statement = '這是一段超過八十字的完整正確規則，必須保留所有條件、例外與後續步驟，不能在中間被省略，讓玩家可以直接依照原文完整查閱。';
+    const details = '這是一段超過八十字的完整補充說明，包含背景、特殊情境與來源脈絡，標準卡片應該一次完整顯示。';
+    const { container } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_long_text', gameId: 'game_1', statement, details,
+      status: 'published', tags: [], sourceLinks: [],
+    }} /></MemoryRouter>);
+
+    expect(container.querySelector('.statement-text')).toHaveTextContent(statement);
+    expect(container.querySelector('.details-text')).toHaveTextContent(details);
+    expect(container.querySelectorAll('.details-toggle')).toHaveLength(0);
+    expect(container).not.toHaveTextContent('...');
+  });
+
+  test('supports compact rule expansion and keeps filter attributes interactive', () => {
+    const onToggleExpanded = vi.fn();
+    const onPlayerCountsClick = vi.fn();
+    const onEditionClick = vi.fn();
+    const { container } = render(<MemoryRouter><CompactRuleCard
+      onToggleExpanded={onToggleExpanded}
+      onPlayerCountsClick={onPlayerCountsClick}
+      onEditionClick={onEditionClick}
+      rule={{
+        id: 'rule_compact', gameId: 'game_1', statement: '完整正確敘述', commonMistake: '完整玩錯情況',
+        details: '有補充說明', playerCounts: [2, 3], editionNotes: ['擴充甲'], status: 'published', tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    const compact = container.querySelector('.rule-card-compact') as HTMLElement;
+    expect(compact).toHaveAttribute('aria-expanded', 'false');
+    expect(compact).toHaveTextContent('完整正確敘述');
+    expect(compact).toHaveTextContent('完整玩錯情況');
+    expect(compact).toHaveTextContent('💬 補充說明');
+    fireEvent.click(compact);
+    expect(onToggleExpanded).toHaveBeenCalledOnce();
+    fireEvent.click(within(compact).getByRole('button', { name: /2~3/ }));
+    fireEvent.click(within(compact).getByRole('button', { name: /擴充甲/ }));
+    expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3]);
+    expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
   });
 
   test('exposes a reversible importance vote with its aggregate count', () => {
