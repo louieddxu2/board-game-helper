@@ -162,15 +162,18 @@ describe('RuleCard', () => {
 
   test('supports compact rule expansion and keeps filter attributes interactive', () => {
     const onToggleExpanded = vi.fn();
+    const onTagClick = vi.fn();
     const onPlayerCountsClick = vi.fn();
     const onEditionClick = vi.fn();
     const { container } = render(<MemoryRouter><CompactRuleCard
       onToggleExpanded={onToggleExpanded}
+      onTagClick={onTagClick}
       onPlayerCountsClick={onPlayerCountsClick}
       onEditionClick={onEditionClick}
       rule={{
         id: 'rule_compact', gameId: 'game_1', statement: '完整正確敘述', commonMistake: '完整玩錯情況',
-        details: '有補充說明', playerCounts: [2, 3], editionNotes: ['擴充甲'], status: 'published', tags: [], sourceLinks: [],
+        details: '有補充說明', playerCounts: [2, 3], editionNotes: ['擴充甲'], status: 'published',
+        tags: [{ id: 'tag-1', slug: 'setup', name: '設置' }], sourceLinks: [],
       }}
     /></MemoryRouter>);
 
@@ -178,12 +181,15 @@ describe('RuleCard', () => {
     expect(compact).toHaveAttribute('aria-expanded', 'false');
     expect(compact).toHaveTextContent('完整正確敘述');
     expect(compact).toHaveTextContent('完整玩錯情況');
-    expect(compact).toHaveTextContent('💬 補充說明');
+    expect(compact).toHaveTextContent('#設置');
+    expect(compact).not.toHaveTextContent('💬 補充說明');
     expect(compact.querySelector('.compact-rule-mistake')).toBeInTheDocument();
     fireEvent.click(compact);
     expect(onToggleExpanded).toHaveBeenCalledOnce();
     fireEvent.click(within(compact).getByRole('button', { name: /2~3/ }));
     fireEvent.click(within(compact).getByRole('button', { name: /擴充甲/ }));
+    fireEvent.click(within(compact).getByRole('button', { name: '#設置' }));
+    expect(onTagClick).toHaveBeenCalledWith('設置');
     expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3]);
     expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
   });

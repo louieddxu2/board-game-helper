@@ -462,6 +462,7 @@ export const GamePage = () => {
             key={rule.id}
             rule={rule}
             onToggleExpanded={toggleExpanded}
+            onTagClick={toggleTag}
             onPlayerCountsClick={togglePlayerCounts}
             onEditionClick={toggleEdition}
           />;

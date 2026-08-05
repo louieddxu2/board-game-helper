@@ -254,6 +254,7 @@ export const RuleCard = ({
 export interface CompactRuleCardProps {
   rule: RuleCardType;
   onToggleExpanded: () => void;
+  onTagClick?: (tag: string) => void;
   onPlayerCountsClick?: (counts: number[]) => void;
   onEditionClick?: (edition: string) => void;
 }
@@ -261,6 +262,7 @@ export interface CompactRuleCardProps {
 export const CompactRuleCard = ({
   rule,
   onToggleExpanded,
+  onTagClick,
   onPlayerCountsClick,
   onEditionClick,
 }: CompactRuleCardProps) => {
@@ -303,7 +305,13 @@ export const CompactRuleCard = ({
             </button>
           ) : <span className="compact-attribute" key={edition}>📦 {edition}</span>
         ))}
-        {rule.details && <span className="compact-details-badge">💬 補充說明</span>}
+        {rule.tags.map((tag) => (
+          onTagClick && !tag.unresolved ? (
+            <button type="button" className="compact-attribute compact-tag" key={tag.id} onClick={(event) => { event.stopPropagation(); onTagClick(tag.name); }}>
+              #{tag.name}
+            </button>
+          ) : <span className="compact-attribute compact-tag" key={tag.id}>#{tag.name}</span>
+        ))}
         <span className="compact-expand-hint" aria-hidden="true">展開 ›</span>
       </div>
       <div className="compact-rule-row compact-rule-correct">

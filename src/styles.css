@@ -201,7 +201,6 @@ footer a { color: inherit; }
 .compact-attribute { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--cream); color: var(--green); font: inherit; font-weight: 700; line-height: 1.2; }
 button.compact-attribute { cursor: pointer; }
 button.compact-attribute:hover { border-color: var(--green); background: #e3dccf; }
-.compact-details-badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid #c9d2cc; border-radius: 6px; background: #f0f4f1; color: #52645a; font-weight: 700; }
 .compact-expand-hint { margin-left: auto; color: var(--orange); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .compact-rule-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; line-height: 1.45; }
 .compact-rule-row + .compact-rule-row { margin-top: 4px; }
@@ -656,7 +655,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .rule-card, .rule-card-compact { scroll-margin-top: 16px; }
   .rule-card-compact { padding: 9px 11px; }
   .compact-rule-meta { margin-bottom: 5px; font-size: 11px; }
-  .compact-attribute, .compact-details-badge { min-height: 22px; padding: 2px 6px; }
+  .compact-attribute { min-height: 22px; padding: 2px 6px; }
   .compact-rule-row { grid-template-columns: 48px minmax(0, 1fr); gap: 6px; }
   .compact-rule-row p { font-size: 13px; line-height: 1.4; }
   .compact-rule-row strong { font-size: 11px; }
