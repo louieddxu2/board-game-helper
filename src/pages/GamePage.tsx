@@ -429,7 +429,7 @@ export const GamePage = () => {
       )}
     </section>
     <div className="game-rules">
-      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} onTagClick={toggleTag} onPlayerCountsClick={togglePlayerCounts} onEditionClick={toggleEdition} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
+      {visibleRules.map((rule) => <RuleCard key={rule.id} rule={rule} showGameContext={false} onTagClick={toggleTag} onPlayerCountsClick={togglePlayerCounts} onEditionClick={toggleEdition} onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
         importanceVoted={importantRuleIds.includes(rule.id)} importanceSaving={importanceSaving.has(rule.id)}
         onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined} />)}
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { RuleCard } from './RuleCard';
+import type { RuleCard as RuleCardType } from '../shared/types';
 
 describe('RuleCard', () => {
   test('makes player-count and edition attributes clickable when filter handlers are provided', () => {
@@ -94,6 +95,21 @@ describe('RuleCard', () => {
     expect(screen.queryByText('不應重複顯示的遊戲')).not.toBeInTheDocument();
     expect(container.querySelector('.rule-credits')).toBeNull();
     expect(container).not.toHaveTextContent('0');
+  });
+
+  test('never shows cached game context when rendering a single-game card', () => {
+    const cachedRule = {
+      id: 'rule_cached_game_context', gameId: 'game_1', statement: '單款遊戲規則', status: 'published',
+      gameName: '快取中的遊戲名稱', gameSlug: 'cached-game', tags: [], sourceLinks: [],
+    } as RuleCardType & { gameName: string; gameSlug: string };
+    const { container } = render(<MemoryRouter><RuleCard
+      showGameContext={false}
+      rule={cachedRule}
+    /></MemoryRouter>);
+
+    expect(screen.queryByText('快取中的遊戲名稱')).not.toBeInTheDocument();
+    expect(container.querySelector('.rule-game-title')).toBeNull();
+    expect(container.querySelector('.rule-card.clickable')).toBeNull();
   });
 
   test('shows an unresolved tag ID as non-interactive 未知標籤', () => {

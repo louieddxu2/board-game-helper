@@ -11,6 +11,7 @@ export interface RuleCardProps {
   gameName?: string;
   englishName?: string;
   gameHref?: string;
+  showGameContext?: boolean;
   onEdit?: () => void;
   onTagClick?: (tag: string) => void;
   onPlayerCountsClick?: (counts: number[]) => void;
@@ -25,6 +26,7 @@ export const RuleCard = ({
   gameName,
   englishName,
   gameHref,
+  showGameContext,
   onEdit,
   onTagClick,
   onPlayerCountsClick,
@@ -42,10 +44,15 @@ export const RuleCard = ({
   const hasReviewMeta = (rule.reviewStatus ?? 'not_required') !== 'not_required';
   const ruleEditions = getRuleEditions(rule);
 
-  const effectiveGameName = gameName || (rule as any).gameName;
-  const effectiveGameSlug = (gameHref ? gameHref.replace('/games/', '') : undefined) || (rule as any).gameSlug;
-  const effectiveGameHref = gameHref || (effectiveGameSlug ? `/games/${effectiveGameSlug}` : undefined);
-  const effectiveEnglishName = englishName || (rule as any).englishName;
+  const shouldShowGameContext = showGameContext ?? Boolean(gameName || englishName || gameHref);
+  const effectiveGameName = shouldShowGameContext ? gameName || (rule as any).gameName : undefined;
+  const effectiveGameSlug = shouldShowGameContext
+    ? (gameHref ? gameHref.replace('/games/', '') : undefined) || (rule as any).gameSlug
+    : undefined;
+  const effectiveGameHref = shouldShowGameContext
+    ? gameHref || (effectiveGameSlug ? `/games/${effectiveGameSlug}` : undefined)
+    : undefined;
+  const effectiveEnglishName = shouldShowGameContext ? englishName || (rule as any).englishName : undefined;
 
   const isLongStatement = rule.statement.length > 80;
   const displayStatement = isLongStatement && !statementExpanded
