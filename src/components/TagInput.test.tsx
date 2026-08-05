@@ -34,6 +34,46 @@ describe('TagInput recommendations', () => {
     });
   });
 
+  test('reopens tag suggestions when the user taps the focused input after dismissing the keyboard', async () => {
+    const view = render(<TagInput value={[]} onChange={vi.fn()} availableTags={[tag('public-scoring', '閮?')]} />);
+    const input = view.getByRole('combobox');
+
+    fireEvent.focus(input);
+    await view.findByRole('option', { name: '#閮?' });
+
+    fireEvent.pointerDown(document.body);
+    expect(view.queryByRole('listbox')).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(input);
+    await vi.waitFor(() => expect(view.getByRole('listbox')).toBeVisible());
+  });
+
+  test('repositions tag suggestions when the mobile visual viewport changes', async () => {
+    const visualViewport = new EventTarget();
+    const previousVisualViewport = window.visualViewport;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+
+    try {
+      const view = render(<TagInput value={[]} onChange={vi.fn()} availableTags={[tag('public-scoring', '閮?')]} />);
+      const input = view.getByRole('combobox');
+      let bottom = 34;
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() => ({
+        top: 10, left: 10, right: 210, bottom, width: 200, height: 24, x: 10, y: 10,
+        toJSON: () => ({}),
+      }) as DOMRect);
+
+      fireEvent.focus(input);
+      const listbox = await view.findByRole('listbox');
+      expect(listbox).toHaveStyle({ top: '39px' });
+
+      bottom = 54;
+      visualViewport.dispatchEvent(new Event('resize'));
+      await vi.waitFor(() => expect(listbox).toHaveStyle({ top: '59px' }));
+    } finally {
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    }
+  });
+
   test('commits a composed mobile tag on Enter instead of advancing focus', () => {
     const onChange = vi.fn();
     const parentKeyDown = vi.fn();

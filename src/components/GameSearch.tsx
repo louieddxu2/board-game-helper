@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import type { GameSummary, RuleSearchResult } from '../shared/types';
@@ -145,23 +145,30 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     open && !selectedId && ((isEnglishOnly && query.length === 1) || loading || searchError
       || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0),
   );
+
+  const updateMenuPosition = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(rect.width, Math.max(0, window.innerWidth - 16));
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
+    setMenuPosition({ top: rect.bottom + 8, left, width });
+  }, []);
+
   useEffect(() => {
     if (!shouldShowResults) return;
-    const updatePosition = () => {
-      const rect = inputRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(rect.width, Math.max(0, window.innerWidth - 16));
-      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
-      setMenuPosition({ top: rect.bottom + 8, left, width });
-    };
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    updateMenuPosition();
+    const visualViewport = window.visualViewport;
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    visualViewport?.addEventListener('resize', updateMenuPosition);
+    visualViewport?.addEventListener('scroll', updateMenuPosition);
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      visualViewport?.removeEventListener('resize', updateMenuPosition);
+      visualViewport?.removeEventListener('scroll', updateMenuPosition);
     };
-  }, [shouldShowResults]);
+  }, [shouldShowResults, updateMenuPosition]);
 
   const handleCreateOrLogin = () => {
     if (canEdit || onCreate) {
@@ -179,7 +186,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
 
   return <div className="game-search" ref={containerRef}>
     <div className={selectedId ? 'search-input selected' : 'search-input'}>
-      <input ref={inputRef} id={inputId} value={value} onFocus={() => setOpen(true)} onChange={(event) => { onChange(event.target.value); setOpen(true); }}
+      <input ref={inputRef} id={inputId} value={value} onFocus={() => { setOpen(true); updateMenuPosition(); }} onPointerDown={() => { setOpen(true); updateMenuPosition(); }} onChange={(event) => { onChange(event.target.value); setOpen(true); }}
         placeholder={placeholder} autoComplete="off" aria-label="搜尋遊戲名稱"
         role="combobox" aria-autocomplete="list" aria-expanded={shouldShowResults} aria-controls={`${inputId}-results`}
         aria-activedescendant={activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined}

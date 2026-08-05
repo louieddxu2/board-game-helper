@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { detectDeterministicTags, type DetectionInput } from '../lib/tagDetector';
@@ -149,23 +149,30 @@ export const TagInput = ({
   const showRecommendations = value.length < 8 && (recommendations.detected.length > 0
     || recommendations.common.length > 0 || recommendations.publicFallback.length > 0);
   const showSuggestions = open && (suggestions.length > 0 || (canCreate && query.trim()));
+
+  const updateSuggestionPosition = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(Math.max(rect.width, 220), Math.max(0, window.innerWidth - 16));
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
+    setSuggestionPosition({ top: rect.bottom + 5, left, width });
+  }, []);
+
   useEffect(() => {
     if (!showSuggestions) return;
-    const updatePosition = () => {
-      const rect = inputRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(Math.max(rect.width, 220), Math.max(0, window.innerWidth - 16));
-      const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - width - 8));
-      setSuggestionPosition({ top: rect.bottom + 5, left, width });
-    };
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    updateSuggestionPosition();
+    const visualViewport = window.visualViewport;
+    window.addEventListener('resize', updateSuggestionPosition);
+    window.addEventListener('scroll', updateSuggestionPosition, true);
+    visualViewport?.addEventListener('resize', updateSuggestionPosition);
+    visualViewport?.addEventListener('scroll', updateSuggestionPosition);
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updateSuggestionPosition);
+      window.removeEventListener('scroll', updateSuggestionPosition, true);
+      visualViewport?.removeEventListener('resize', updateSuggestionPosition);
+      visualViewport?.removeEventListener('scroll', updateSuggestionPosition);
     };
-  }, [showSuggestions]);
+  }, [showSuggestions, updateSuggestionPosition]);
 
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>
@@ -173,7 +180,7 @@ export const TagInput = ({
       {value.map((tag) => <span className="tag-chip selected" key={tag.id ?? tag.name}>#{tag.name}<button type="button" aria-label={`移除標籤 ${tag.name}`} onClick={() => onChange(value.filter((item) => item !== tag))}>×</button></span>)}
       <input ref={inputRef} id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
         role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
-        onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+        onFocus={() => { setOpen(true); updateSuggestionPosition(); }} onPointerDown={() => { setOpen(true); updateSuggestionPosition(); }} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
