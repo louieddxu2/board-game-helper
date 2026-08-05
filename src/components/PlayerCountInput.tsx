@@ -11,14 +11,20 @@ interface PlayerCountInputProps {
 interface PaintState {
   pointerId: number;
   selected: boolean;
+  startCount: number;
+  startX: number;
+  startY: number;
+  phase: 'pending' | 'painting';
   visited: Set<number>;
   counts: Set<number>;
 }
 
 const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+const PAINT_INTENT_THRESHOLD = 8;
 
 export const PlayerCountInput = ({ value, onChange, label = '適用人數', disabled = false }: PlayerCountInputProps) => {
   const paintState = useRef<PaintState | undefined>(undefined);
+  const lastPointerAction = useRef<'tap' | 'paint' | 'cancelled' | undefined>(undefined);
   const normalized = normalizePlayerCounts(value);
 
   const toggle = (count: number) => {
@@ -49,30 +55,67 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數', disa
         if (disabled) return;
         const count = countFromElement(event.target as Element);
         if (!count) return;
-        event.preventDefault();
-        const selected = !normalized.includes(count);
-        const state = { pointerId: event.pointerId, selected, visited: new Set([count]), counts: new Set(normalized) };
-        paintState.current = state;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        paint(state, count);
+        lastPointerAction.current = undefined;
+        paintState.current = {
+          pointerId: event.pointerId,
+          selected: !normalized.includes(count),
+          startCount: count,
+          startX: event.clientX,
+          startY: event.clientY,
+          phase: 'pending',
+          visited: new Set([count]),
+          counts: new Set(normalized),
+        };
       }}
       onPointerMove={(event) => {
         const state = paintState.current;
         if (!state || state.pointerId !== event.pointerId) return;
+        if (state.phase === 'pending') {
+          const deltaX = event.clientX - state.startX;
+          const deltaY = event.clientY - state.startY;
+          if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < PAINT_INTENT_THRESHOLD) return;
+          if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+            paintState.current = undefined;
+            lastPointerAction.current = 'cancelled';
+            return;
+          }
+          state.phase = 'painting';
+          lastPointerAction.current = 'paint';
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          paint(state, state.startCount);
+        }
+        if (state.phase !== 'painting') return;
+        event.preventDefault();
         const count = countAtPoint(event.clientX, event.clientY);
         if (!count || state.visited.has(count)) return;
         state.visited.add(count);
         paint(state, count);
       }}
       onPointerUp={(event) => {
-        if (paintState.current?.pointerId === event.pointerId) paintState.current = undefined;
+        const state = paintState.current;
+        if (!state || state.pointerId !== event.pointerId) return;
+        if (state.phase === 'pending') {
+          toggle(state.startCount);
+          lastPointerAction.current = 'tap';
+        } else {
+          lastPointerAction.current = 'paint';
+        }
+        paintState.current = undefined;
       }}
-      onPointerCancel={() => { paintState.current = undefined; }}>
+      onPointerCancel={() => {
+        if (paintState.current) lastPointerAction.current = 'cancelled';
+        paintState.current = undefined;
+      }}>
       {PLAYER_COUNTS.map((count) => <button type="button" key={count} data-player-count={count}
         disabled={disabled}
         className={normalized.includes(count) ? 'selected' : ''} aria-pressed={normalized.includes(count)}
         aria-label={`${count} 人`} onClick={(event) => {
-          if (event.detail === 0) toggle(count);
+          if (lastPointerAction.current) {
+            lastPointerAction.current = undefined;
+            return;
+          }
+          toggle(count);
         }}>{count}</button>)}
     </div>
     <output aria-live="polite">{normalized.length ? formatPlayerCounts(normalized) : '未指定人數'}</output>
