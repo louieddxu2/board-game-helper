@@ -61,13 +61,17 @@ describe('GameSearch mobile keyboard behavior', () => {
         toJSON: () => ({}),
       }) as DOMRect);
 
+      input.focus();
+      fireEvent.focus(input);
       fireEvent.change(input, { target: { value: '範例' } });
       const listbox = await screen.findByRole('listbox');
       expect(listbox).toHaveStyle({ top: '42px' });
 
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       bottom = 54;
       visualViewport.dispatchEvent(new Event('resize'));
-      await waitFor(() => expect(listbox).toHaveStyle({ top: '62px' }));
+      await waitFor(() => expect(screen.getByRole('listbox')).toHaveStyle({ top: '62px' }));
     } finally {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
     }

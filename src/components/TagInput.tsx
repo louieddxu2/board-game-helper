@@ -148,7 +148,8 @@ export const TagInput = ({
   }, [availableTags, candidateTags, detectedSuggestions, detectionInput, value]);
   const showRecommendations = value.length < 8 && (recommendations.detected.length > 0
     || recommendations.common.length > 0 || recommendations.publicFallback.length > 0);
-  const showSuggestions = open && (suggestions.length > 0 || (canCreate && query.trim()));
+  const hasSuggestionContent = suggestions.length > 0 || Boolean(canCreate && query.trim());
+  const showSuggestions = open && hasSuggestionContent;
 
   const updateSuggestionPosition = useCallback(() => {
     const rect = inputRef.current?.getBoundingClientRect();
@@ -159,20 +160,25 @@ export const TagInput = ({
   }, []);
 
   useEffect(() => {
-    if (!showSuggestions) return;
-    updateSuggestionPosition();
     const visualViewport = window.visualViewport;
-    window.addEventListener('resize', updateSuggestionPosition);
-    window.addEventListener('scroll', updateSuggestionPosition, true);
-    visualViewport?.addEventListener('resize', updateSuggestionPosition);
-    visualViewport?.addEventListener('scroll', updateSuggestionPosition);
+    const handleVisualViewportChange = () => {
+      if (document.activeElement === inputRef.current && value.length < 8 && hasSuggestionContent) setOpen(true);
+      updateSuggestionPosition();
+    };
+    if (showSuggestions) {
+      updateSuggestionPosition();
+      window.addEventListener('resize', updateSuggestionPosition);
+      window.addEventListener('scroll', updateSuggestionPosition, true);
+    }
+    visualViewport?.addEventListener('resize', handleVisualViewportChange);
+    visualViewport?.addEventListener('scroll', handleVisualViewportChange);
     return () => {
       window.removeEventListener('resize', updateSuggestionPosition);
       window.removeEventListener('scroll', updateSuggestionPosition, true);
-      visualViewport?.removeEventListener('resize', updateSuggestionPosition);
-      visualViewport?.removeEventListener('scroll', updateSuggestionPosition);
+      visualViewport?.removeEventListener('resize', handleVisualViewportChange);
+      visualViewport?.removeEventListener('scroll', handleVisualViewportChange);
     };
-  }, [showSuggestions, updateSuggestionPosition]);
+  }, [hasSuggestionContent, showSuggestions, updateSuggestionPosition, value.length]);
 
   return <div className="tag-input" ref={containerRef}>
     <label htmlFor={id}>{label}</label>

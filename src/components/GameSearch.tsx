@@ -141,10 +141,11 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const showCreateOption = Boolean(allowCreate && (canEdit || onCreate))
     && Boolean(!loading && !searchError && query && isMinLengthSatisfied && (onCreate || !hasExactMatch));
   const optionCount = games.length + rules.length + (showCreateOption ? 1 : 0);
-  const shouldShowResults = Boolean(
-    open && !selectedId && ((isEnglishOnly && query.length === 1) || loading || searchError
+  const canShowResults = Boolean(
+    !selectedId && ((isEnglishOnly && query.length === 1) || loading || searchError
       || (!loading && !searchError && games.length === 0 && rules.length === 0 && query) || optionCount > 0),
   );
+  const shouldShowResults = open && canShowResults;
 
   const updateMenuPosition = useCallback(() => {
     const rect = inputRef.current?.getBoundingClientRect();
@@ -155,20 +156,25 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   }, []);
 
   useEffect(() => {
-    if (!shouldShowResults) return;
-    updateMenuPosition();
     const visualViewport = window.visualViewport;
-    window.addEventListener('resize', updateMenuPosition);
-    window.addEventListener('scroll', updateMenuPosition, true);
-    visualViewport?.addEventListener('resize', updateMenuPosition);
-    visualViewport?.addEventListener('scroll', updateMenuPosition);
+    const handleVisualViewportChange = () => {
+      if (document.activeElement === inputRef.current && canShowResults) setOpen(true);
+      updateMenuPosition();
+    };
+    if (shouldShowResults) {
+      updateMenuPosition();
+      window.addEventListener('resize', updateMenuPosition);
+      window.addEventListener('scroll', updateMenuPosition, true);
+    }
+    visualViewport?.addEventListener('resize', handleVisualViewportChange);
+    visualViewport?.addEventListener('scroll', handleVisualViewportChange);
     return () => {
       window.removeEventListener('resize', updateMenuPosition);
       window.removeEventListener('scroll', updateMenuPosition, true);
-      visualViewport?.removeEventListener('resize', updateMenuPosition);
-      visualViewport?.removeEventListener('scroll', updateMenuPosition);
+      visualViewport?.removeEventListener('resize', handleVisualViewportChange);
+      visualViewport?.removeEventListener('scroll', handleVisualViewportChange);
     };
-  }, [shouldShowResults, updateMenuPosition]);
+  }, [canShowResults, shouldShowResults, updateMenuPosition]);
 
   const handleCreateOrLogin = () => {
     if (canEdit || onCreate) {

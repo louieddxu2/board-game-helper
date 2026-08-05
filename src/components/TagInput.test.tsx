@@ -62,13 +62,16 @@ describe('TagInput recommendations', () => {
         toJSON: () => ({}),
       }) as DOMRect);
 
+      input.focus();
       fireEvent.focus(input);
       const listbox = await view.findByRole('listbox');
       expect(listbox).toHaveStyle({ top: '39px' });
 
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(view.queryByRole('listbox')).not.toBeInTheDocument();
       bottom = 54;
       visualViewport.dispatchEvent(new Event('resize'));
-      await vi.waitFor(() => expect(listbox).toHaveStyle({ top: '59px' }));
+      await vi.waitFor(() => expect(view.getByRole('listbox')).toHaveStyle({ top: '59px' }));
     } finally {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
     }
