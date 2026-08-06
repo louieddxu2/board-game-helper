@@ -89,4 +89,17 @@ describe('PlayerCountInput', () => {
     expect(button3).toHaveClass('selected');
     expect(HTMLElement.prototype.setPointerCapture).toHaveBeenCalledWith(2);
   });
+
+  test('does not swallow a keyboard click after a cancelled pointer gesture', () => {
+    const view = render(<Harness />);
+    const button = screen.getByRole('button', { name: /^2/ });
+    const track = view.container.querySelector('.player-count-track');
+    expect(track).not.toBeNull();
+
+    fireEvent(button, setPointerCoordinates(createEvent.pointerDown(button, { bubbles: true }), 4, 40, 100));
+    fireEvent(track!, setPointerCoordinates(createEvent.pointerMove(track!, { bubbles: true }), 4, 42, 150));
+    fireEvent.click(button, { detail: 0 });
+
+    expect(button).toHaveClass('selected');
+  });
 });

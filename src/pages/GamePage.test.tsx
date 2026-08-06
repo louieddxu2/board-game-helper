@@ -46,7 +46,7 @@ describe('GamePage compact rule view', () => {
 
   afterEach(() => cleanup());
 
-  const renderGamePage = () => render(<MemoryRouter initialEntries={['/games/test-game']}>
+  const renderGamePage = (entry = '/games/test-game') => render(<MemoryRouter initialEntries={[entry]}>
     <Routes>
       <Route path="/games/:identifier" element={<GamePage />} />
     </Routes>
@@ -80,6 +80,25 @@ describe('GamePage compact rule view', () => {
       fireEvent.click(container.querySelector('#rule-rule-2') as HTMLElement);
       await waitFor(() => expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2));
       expect(container.querySelectorAll('.rule-card')).toHaveLength(0);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
+    }
+  });
+
+  test('opens and scrolls to the rule targeted by a shared hash link', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: true })) });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+
+    try {
+      const { container } = renderGamePage('/games/test-game#rule-rule-2');
+      await waitFor(() => expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card'));
+      expect(container.querySelector('#rule-rule-1')).toHaveClass('rule-card-compact');
+      expect(screen.getByRole('button', { name: '收合規則' })).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center' }));
     } finally {
       Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
       Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });

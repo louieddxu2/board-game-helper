@@ -111,10 +111,11 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數', disa
         disabled={disabled}
         className={normalized.includes(count) ? 'selected' : ''} aria-pressed={normalized.includes(count)}
         aria-label={`${count} 人`} onClick={(event) => {
-          if (lastPointerAction.current) {
+          if (lastPointerAction.current && event.detail > 0) {
             lastPointerAction.current = undefined;
             return;
           }
+          lastPointerAction.current = undefined;
           toggle(count);
         }}>{count}</button>)}
     </div>

@@ -178,7 +178,8 @@ describe('RuleCard', () => {
     /></MemoryRouter>);
 
     const compact = container.querySelector('.rule-card-compact') as HTMLElement;
-    expect(compact).toHaveAttribute('aria-expanded', 'false');
+    expect(compact).not.toHaveAttribute('role');
+    expect(within(compact).getByRole('button', { name: '展開規則' })).toHaveAttribute('aria-expanded', 'false');
     expect(compact).toHaveTextContent('完整正確敘述');
     expect(compact).toHaveTextContent('完整玩錯情況');
     expect(compact).toHaveTextContent('#設置');
@@ -193,6 +194,25 @@ describe('RuleCard', () => {
     expect(onTagClick).toHaveBeenCalledWith('設置');
     expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3]);
     expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
+  });
+
+  test('exposes expansion as a real button without nesting other controls inside it', () => {
+    const onToggleExpanded = vi.fn();
+    const { container } = render(<MemoryRouter><CompactRuleCard
+      onToggleExpanded={onToggleExpanded}
+      onTagClick={vi.fn()}
+      rule={{
+        id: 'rule_accessible', gameId: 'game_1', statement: '點擊內文展開', status: 'published',
+        tags: [{ id: 'tag-1', slug: 'setup', name: '設置' }], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    const toggle = within(container).getByRole('button', { name: '展開規則' });
+    fireEvent.click(toggle);
+
+    expect(onToggleExpanded).toHaveBeenCalledOnce();
+    expect(toggle.querySelector('button, a')).toBeNull();
+    expect(container.querySelector('.rule-card-compact')?.querySelectorAll('button')).toHaveLength(2);
   });
 
   test('exposes a reversible importance vote with its aggregate count', () => {

@@ -77,27 +77,15 @@ export const RuleCard = ({
     }
   };
 
-  const handleCardKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (!onToggleExpanded || event.target !== event.currentTarget) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onToggleExpanded();
-    }
-  };
-
   const titleText = effectiveGameHref && effectiveGameName
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
 
   return (
     <article
-      className={effectiveGameHref ? 'rule-card clickable' : 'rule-card'}
+      className={`rule-card${effectiveGameHref ? ' clickable' : ''}${onToggleExpanded ? ' expandable' : ''}`}
       id={`rule-${rule.id}`}
       onClick={handleCardClick}
-      onKeyDown={onToggleExpanded ? handleCardKeyDown : undefined}
-      role={onToggleExpanded ? 'button' : undefined}
-      tabIndex={onToggleExpanded ? 0 : undefined}
-      aria-expanded={onToggleExpanded ? true : undefined}
     >
       {/* 第一行：遊戲名稱(英文名稱)、屬性(擴充、人數)、右上編輯 */}
       <div className="rule-card-header">
@@ -173,6 +161,18 @@ export const RuleCard = ({
             }}
           >
             編輯
+          </button>
+        )}
+        {onToggleExpanded && (
+          <button
+            type="button"
+            className="card-expand-control"
+            aria-expanded="true"
+            aria-label="收合規則"
+            title="收合規則"
+            onClick={(event) => { event.stopPropagation(); onToggleExpanded(); }}
+          >
+            <span aria-hidden="true">⌃</span>
           </button>
         )}
       </div>
@@ -272,24 +272,22 @@ export const CompactRuleCard = ({
     if (target.closest('button, a, input, textarea, select, label')) return;
     onToggleExpanded();
   };
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onToggleExpanded();
-    }
-  };
-
   return (
     <article
       className="rule-card-compact"
       id={`rule-${rule.id}`}
-      role="button"
-      tabIndex={0}
-      aria-expanded={false}
       onClick={handleClick}
-      onKeyDown={handleKeyDown}
     >
+      <button
+        type="button"
+        className="card-expand-control compact-expand-control"
+        aria-expanded="false"
+        aria-label="展開規則"
+        title="展開規則"
+        onClick={(event) => { event.stopPropagation(); onToggleExpanded(); }}
+      >
+        <span aria-hidden="true">⌄</span>
+      </button>
       <div className="compact-rule-meta">
         {Boolean(rule.playerCounts?.length) && (
           onPlayerCountsClick ? (

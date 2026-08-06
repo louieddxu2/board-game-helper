@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { EditionInput } from '../components/EditionInput';
@@ -46,6 +46,7 @@ export const GamePage = () => {
   const [importanceReady, setImportanceReady] = useState(false);
   const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
+  const handledRuleHash = useRef<string | undefined>(undefined);
   const [activePlayerCounts, setActivePlayerCounts] = useState<number[]>([]);
   const [activeEditions, setActiveEditions] = useState<string[]>([]);
   const [activeTags, setActiveTags] = useState<string[]>(() => {
@@ -120,8 +121,20 @@ export const GamePage = () => {
     return () => { active = false; };
   }, []);
   useEffect(() => {
-    if (!game || !location.hash) return;
-    window.setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+    if (!location.hash) {
+      handledRuleHash.current = undefined;
+      return;
+    }
+    if (!game || !location.hash.startsWith('#rule-')) return;
+    const hashKey = `${game.id}:${location.hash}`;
+    if (handledRuleHash.current === hashKey) return;
+    handledRuleHash.current = hashKey;
+    try {
+      const ruleId = decodeURIComponent(location.hash.slice('#rule-'.length));
+      if (game.rules.some((rule) => rule.id === ruleId)) setExpandedRuleId(ruleId);
+    } catch {
+      // Ignore malformed external hashes instead of crashing the page.
+    }
   }, [game, location.hash]);
   useEffect(() => {
     if (!expandedRuleId) return;
