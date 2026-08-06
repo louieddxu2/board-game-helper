@@ -68,10 +68,6 @@ export const RuleCard = ({
     if (target.closest('button, a, input, textarea, select, label')) {
       return;
     }
-    if (onToggleExpanded) {
-      onToggleExpanded();
-      return;
-    }
     if (effectiveGameHref) {
       navigate(`${effectiveGameHref}#rule-${rule.id}`);
     }
@@ -83,9 +79,9 @@ export const RuleCard = ({
 
   return (
     <article
-      className={`rule-card${effectiveGameHref ? ' clickable' : ''}${onToggleExpanded ? ' expandable' : ''}`}
+      className={effectiveGameHref ? 'rule-card clickable' : 'rule-card'}
       id={`rule-${rule.id}`}
-      onClick={handleCardClick}
+      onClick={onToggleExpanded ? undefined : handleCardClick}
     >
       {/* 第一行：遊戲名稱(英文名稱)、屬性(擴充、人數)、右上編輯 */}
       <div className="rule-card-header">
@@ -179,7 +175,7 @@ export const RuleCard = ({
 
       {/* 第三行：標準規則欄位 */}
       <div className="rule-statement-section">
-        <p className="statement-text">
+        <p className={onToggleExpanded ? 'statement-text rule-toggle-text' : 'statement-text'} onClick={onToggleExpanded}>
           {rule.statement}
         </p>
       </div>
@@ -267,16 +263,10 @@ export const CompactRuleCard = ({
   onEditionClick,
 }: CompactRuleCardProps) => {
   const ruleEditions = getRuleEditions(rule);
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, label')) return;
-    onToggleExpanded();
-  };
   return (
     <article
       className="rule-card-compact"
       id={`rule-${rule.id}`}
-      onClick={handleClick}
     >
       <button
         type="button"
@@ -313,7 +303,7 @@ export const CompactRuleCard = ({
       </div>
       <div className="compact-rule-row compact-rule-correct">
         <strong aria-label="正確">✅</strong>
-        <p>{rule.statement}</p>
+        <p className="rule-toggle-text" onClick={onToggleExpanded}>{rule.statement}</p>
       </div>
       {rule.commonMistake && (
         <div className="compact-rule-row compact-rule-mistake">

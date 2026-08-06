@@ -65,19 +65,21 @@ describe('GamePage compact rule view', () => {
       await screen.findByText('第一條正確規則');
       expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
 
-      fireEvent.click(screen.getByText('第一條正確規則').closest('.rule-card-compact') as HTMLElement);
+      fireEvent.click(screen.getByText('第一條正確規則'));
       await waitFor(() => expect(container.querySelectorAll('.rule-card')).toHaveLength(1));
       expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
       expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'start' });
 
       matchMedia.mockReturnValue({ matches: true });
-      fireEvent.click(screen.getByText('第二條正確規則').closest('.rule-card-compact') as HTMLElement);
+      fireEvent.click(screen.getByText('第二條正確規則'));
       await waitFor(() => expect(container.querySelectorAll('.rule-card')).toHaveLength(1));
       expect(container.querySelector('#rule-rule-1')).toHaveClass('rule-card-compact');
       expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card');
       expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center' });
 
       fireEvent.click(container.querySelector('#rule-rule-2') as HTMLElement);
+      expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card');
+      fireEvent.click(screen.getByText('第二條正確規則'));
       await waitFor(() => expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2));
       expect(container.querySelectorAll('.rule-card')).toHaveLength(0);
     } finally {

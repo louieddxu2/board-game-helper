@@ -186,6 +186,9 @@ describe('RuleCard', () => {
     expect(compact).not.toHaveTextContent('💬 補充說明');
     expect(compact).not.toHaveTextContent('展開');
     expect(compact.querySelector('.compact-rule-mistake')).toBeInTheDocument();
+    fireEvent.click(within(compact).getByText('完整正確敘述'));
+    expect(onToggleExpanded).toHaveBeenCalledOnce();
+    fireEvent.click(within(compact).getByText('完整玩錯情況'));
     fireEvent.click(compact);
     expect(onToggleExpanded).toHaveBeenCalledOnce();
     fireEvent.click(within(compact).getByRole('button', { name: /2~3/ }));
@@ -194,6 +197,28 @@ describe('RuleCard', () => {
     expect(onTagClick).toHaveBeenCalledWith('設置');
     expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3]);
     expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
+  });
+
+  test('only toggles an expanded card from its statement paragraph or explicit control', () => {
+    const onToggleExpanded = vi.fn();
+    const { container } = render(<MemoryRouter><RuleCard
+      onToggleExpanded={onToggleExpanded}
+      rule={{
+        id: 'rule_toggle_boundary', gameId: 'game_1', statement: '可收合的正文',
+        commonMistake: '不可收合的玩錯情況', details: '不可收合的補充說明',
+        status: 'published', tags: [], sourceLinks: [],
+      }}
+    /></MemoryRouter>);
+
+    const card = container.querySelector('.rule-card') as HTMLElement;
+    fireEvent.click(within(card).getByText('不可收合的玩錯情況'));
+    fireEvent.click(within(card).getByText('不可收合的補充說明'));
+    fireEvent.click(card);
+    expect(onToggleExpanded).not.toHaveBeenCalled();
+
+    fireEvent.click(within(card).getByText('可收合的正文'));
+    fireEvent.click(within(card).getByRole('button', { name: '收合規則' }));
+    expect(onToggleExpanded).toHaveBeenCalledTimes(2);
   });
 
   test('exposes expansion as a real button without nesting other controls inside it', () => {
