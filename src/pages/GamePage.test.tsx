@@ -99,7 +99,7 @@ describe('GamePage compact rule view', () => {
       const { container } = renderGamePage('/games/test-game#rule-rule-2');
       await waitFor(() => expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card'));
       expect(container.querySelector('#rule-rule-1')).toHaveClass('rule-card-compact');
-      expect(screen.getByRole('button', { name: '收合規則' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('button', { name: '第二條正確規則' })).toHaveAttribute('aria-expanded', 'true');
       await waitFor(() => expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: 'smooth', block: 'center' }));
     } finally {
       Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });

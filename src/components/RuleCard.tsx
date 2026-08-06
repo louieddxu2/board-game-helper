@@ -22,6 +22,12 @@ export interface RuleCardProps {
   onToggleImportance?: () => void;
 }
 
+const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, onToggle: () => void) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  onToggle();
+};
+
 export const RuleCard = ({
   rule,
   gameName,
@@ -76,6 +82,13 @@ export const RuleCard = ({
   const titleText = effectiveGameHref && effectiveGameName
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
+  const expandedTextToggleProps = onToggleExpanded ? {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-expanded': true,
+    onClick: onToggleExpanded,
+    onKeyDown: (event: React.KeyboardEvent<HTMLParagraphElement>) => toggleFromKeyboard(event, onToggleExpanded),
+  } : {};
 
   return (
     <article
@@ -159,23 +172,11 @@ export const RuleCard = ({
             編輯
           </button>
         )}
-        {onToggleExpanded && (
-          <button
-            type="button"
-            className="card-expand-control"
-            aria-expanded="true"
-            aria-label="收合規則"
-            title="收合規則"
-            onClick={(event) => { event.stopPropagation(); onToggleExpanded(); }}
-          >
-            <span aria-hidden="true">⌃</span>
-          </button>
-        )}
       </div>
 
       {/* 第三行：標準規則欄位 */}
       <div className="rule-statement-section">
-        <p className={onToggleExpanded ? 'statement-text rule-toggle-text' : 'statement-text'} onClick={onToggleExpanded}>
+        <p className={onToggleExpanded ? 'statement-text rule-toggle-text' : 'statement-text'} {...expandedTextToggleProps}>
           {rule.statement}
         </p>
       </div>
@@ -184,14 +185,14 @@ export const RuleCard = ({
       {rule.commonMistake && (
         <div className="mistake">
           <strong className="mistake-badge">⚠️ {zhTWCopy.terms.mistakeSituation}</strong>
-          <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} onClick={onToggleExpanded}>{rule.commonMistake}</p>
+          <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} {...expandedTextToggleProps}>{rule.commonMistake}</p>
         </div>
       )}
 
       {rule.details && (
         <div className="rule-details-note">
           <strong className="details-badge">補充說明</strong>
-          <p className={onToggleExpanded ? 'details-text rule-toggle-text' : 'details-text'} onClick={onToggleExpanded}>{rule.details}</p>
+          <p className={onToggleExpanded ? 'details-text rule-toggle-text' : 'details-text'} {...expandedTextToggleProps}>{rule.details}</p>
         </div>
       )}
 
@@ -263,21 +264,18 @@ export const CompactRuleCard = ({
   onEditionClick,
 }: CompactRuleCardProps) => {
   const ruleEditions = getRuleEditions(rule);
+  const compactTextToggleProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    'aria-expanded': false,
+    onClick: onToggleExpanded,
+    onKeyDown: (event: React.KeyboardEvent<HTMLParagraphElement>) => toggleFromKeyboard(event, onToggleExpanded),
+  };
   return (
     <article
       className="rule-card-compact"
       id={`rule-${rule.id}`}
     >
-      <button
-        type="button"
-        className="card-expand-control compact-expand-control"
-        aria-expanded="false"
-        aria-label="展開規則"
-        title="展開規則"
-        onClick={(event) => { event.stopPropagation(); onToggleExpanded(); }}
-      >
-        <span aria-hidden="true">⌄</span>
-      </button>
       <div className="compact-rule-meta">
         {Boolean(rule.playerCounts?.length) && (
           onPlayerCountsClick ? (
@@ -303,12 +301,12 @@ export const CompactRuleCard = ({
       </div>
       <div className="compact-rule-row compact-rule-correct">
         <strong aria-label="正確">✅</strong>
-        <p className="rule-toggle-text" onClick={onToggleExpanded}>{rule.statement}</p>
+        <p className="rule-toggle-text" {...compactTextToggleProps}>{rule.statement}</p>
       </div>
       {rule.commonMistake && (
         <div className="compact-rule-row compact-rule-mistake">
           <strong aria-label="玩錯">❌</strong>
-          <p className="rule-toggle-text" onClick={onToggleExpanded}>{rule.commonMistake}</p>
+          <p className="rule-toggle-text" {...compactTextToggleProps}>{rule.commonMistake}</p>
         </div>
       )}
     </article>

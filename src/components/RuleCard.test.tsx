@@ -179,7 +179,7 @@ describe('RuleCard', () => {
 
     const compact = container.querySelector('.rule-card-compact') as HTMLElement;
     expect(compact).not.toHaveAttribute('role');
-    expect(within(compact).getByRole('button', { name: '展開規則' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(compact).getByRole('button', { name: '完整正確敘述' })).toHaveAttribute('aria-expanded', 'false');
     expect(compact).toHaveTextContent('完整正確敘述');
     expect(compact).toHaveTextContent('完整玩錯情況');
     expect(compact).toHaveTextContent('#設置');
@@ -200,7 +200,7 @@ describe('RuleCard', () => {
     expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
   });
 
-  test('only toggles an expanded card from its text paragraphs or explicit control', () => {
+  test('only toggles an expanded card from its text paragraphs', () => {
     const onToggleExpanded = vi.fn();
     const { container } = render(<MemoryRouter><RuleCard
       onToggleExpanded={onToggleExpanded}
@@ -218,11 +218,10 @@ describe('RuleCard', () => {
     fireEvent.click(within(card).getByText('可收合的正文'));
     fireEvent.click(within(card).getByText('可收合的玩錯情況'));
     fireEvent.click(within(card).getByText('可收合的補充說明'));
-    fireEvent.click(within(card).getByRole('button', { name: '收合規則' }));
-    expect(onToggleExpanded).toHaveBeenCalledTimes(4);
+    expect(onToggleExpanded).toHaveBeenCalledTimes(3);
   });
 
-  test('exposes expansion as a real button without nesting other controls inside it', () => {
+  test('supports keyboard expansion directly from a text paragraph', () => {
     const onToggleExpanded = vi.fn();
     const { container } = render(<MemoryRouter><CompactRuleCard
       onToggleExpanded={onToggleExpanded}
@@ -233,12 +232,13 @@ describe('RuleCard', () => {
       }}
     /></MemoryRouter>);
 
-    const toggle = within(container).getByRole('button', { name: '展開規則' });
-    fireEvent.click(toggle);
+    const toggle = within(container).getByRole('button', { name: '點擊內文展開' });
+    fireEvent.keyDown(toggle, { key: 'Enter' });
+    fireEvent.keyDown(toggle, { key: ' ' });
 
-    expect(onToggleExpanded).toHaveBeenCalledOnce();
-    expect(toggle.querySelector('button, a')).toBeNull();
-    expect(container.querySelector('.rule-card-compact')?.querySelectorAll('button')).toHaveLength(2);
+    expect(onToggleExpanded).toHaveBeenCalledTimes(2);
+    expect(toggle.tagName).toBe('P');
+    expect(container.querySelector('.card-expand-control')).toBeNull();
   });
 
   test('exposes a reversible importance vote with its aggregate count', () => {
