@@ -184,14 +184,14 @@ export const RuleCard = ({
       {rule.commonMistake && (
         <div className="mistake">
           <strong className="mistake-badge">⚠️ {zhTWCopy.terms.mistakeSituation}</strong>
-          <p className="mistake-text">{rule.commonMistake}</p>
+          <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} onClick={onToggleExpanded}>{rule.commonMistake}</p>
         </div>
       )}
 
       {rule.details && (
         <div className="rule-details-note">
           <strong className="details-badge">補充說明</strong>
-          <p className="details-text">{rule.details}</p>
+          <p className={onToggleExpanded ? 'details-text rule-toggle-text' : 'details-text'} onClick={onToggleExpanded}>{rule.details}</p>
         </div>
       )}
 
@@ -308,7 +308,7 @@ export const CompactRuleCard = ({
       {rule.commonMistake && (
         <div className="compact-rule-row compact-rule-mistake">
           <strong aria-label="玩錯">❌</strong>
-          <p>{rule.commonMistake}</p>
+          <p className="rule-toggle-text" onClick={onToggleExpanded}>{rule.commonMistake}</p>
         </div>
       )}
     </article>
