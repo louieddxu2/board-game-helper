@@ -1,16 +1,6 @@
-import { createBrowserRouter, RouterProvider, useRouteError } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { SessionProvider } from './context/SessionContext';
-import { AddPage } from './pages/AddPage';
-import { AdminPage } from './pages/AdminPage';
-import { AccountPage } from './pages/AccountPage';
-import { CatalogPage } from './pages/CatalogPage';
-import { GamePage } from './pages/GamePage';
-import { HomePage } from './pages/HomePage';
-import { LoginPage } from './pages/LoginPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { ReviewPage } from './pages/ReviewPage';
-import { ContributionsPage } from './pages/ContributionsPage';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 
@@ -27,16 +17,16 @@ const ErrorFallback = () => (
 
 const router = createBrowserRouter([
   { path: '/', element: <Layout />, errorElement: <ErrorFallback />, children: [
-    { index: true, element: <HomePage /> },
-    { path: 'add', element: <AddPage /> },
-    { path: 'games/:identifier', element: <GamePage /> },
-    { path: 'login', element: <AccountPage /> },
-    { path: 'account', element: <AccountPage /> },
-    { path: 'catalog', element: <CatalogPage /> },
-    { path: 'contributions', element: <ContributionsPage /> },
-    { path: 'privacy', element: <PrivacyPage /> },
-    { path: 'review', element: <ReviewPage /> },
-    { path: 'admin', element: <AdminPage /> },
+    { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
+    { path: 'add', lazy: async () => ({ Component: (await import('./pages/AddPage')).AddPage }) },
+    { path: 'games/:identifier', lazy: async () => ({ Component: (await import('./pages/GamePage')).GamePage }) },
+    { path: 'login', lazy: async () => ({ Component: (await import('./pages/AccountPage')).AccountPage }) },
+    { path: 'account', lazy: async () => ({ Component: (await import('./pages/AccountPage')).AccountPage }) },
+    { path: 'catalog', lazy: async () => ({ Component: (await import('./pages/CatalogPage')).CatalogPage }) },
+    { path: 'contributions', lazy: async () => ({ Component: (await import('./pages/ContributionsPage')).ContributionsPage }) },
+    { path: 'privacy', lazy: async () => ({ Component: (await import('./pages/PrivacyPage')).PrivacyPage }) },
+    { path: 'review', lazy: async () => ({ Component: (await import('./pages/ReviewPage')).ReviewPage }) },
+    { path: 'admin', lazy: async () => ({ Component: (await import('./pages/AdminPage')).AdminPage }) },
   ] },
 ]);
 

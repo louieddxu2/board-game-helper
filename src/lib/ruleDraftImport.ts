@@ -1,42 +1,49 @@
-import { z } from 'zod';
+import { z } from 'zod/mini';
 import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type RuleCategory } from '../shared/types';
 
 export const RULE_DRAFT_IMPORT_FORMAT = 'wrong-board-game-rules-draft';
 export const RULE_DRAFT_IMPORT_SCHEMA_VERSION = 2;
 
-const optionalText = (maximum: number) => z.string().trim().max(maximum).optional();
-const optionalUrl = z.union([z.url().max(2000), z.literal('')]).optional();
+const trimmedText = (minimum: number, maximum: number) => z.string().check(
+  z.trim(),
+  z.minLength(minimum),
+  z.maxLength(maximum),
+);
+const optionalText = (maximum: number) => z.optional(trimmedText(0, maximum));
+const optionalUrl = z.optional(z.union([z.url().check(z.maxLength(2000)), z.literal('')]));
 
-const ruleSchema = z.object({
-  statement: z.string().trim().min(1).max(2000),
+const ruleSchema = z.strictObject({
+  statement: trimmedText(1, 2000),
   commonMistake: optionalText(2000),
   details: optionalText(5000),
-  flowStage: z.enum(FLOW_STAGES).optional(),
-  categories: z.array(z.enum(RULE_CATEGORIES)).max(RULE_CATEGORIES.length).optional(),
-  playerCounts: z.array(z.number().int().min(1).max(8)).max(8).optional(),
-  editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
+  flowStage: z.optional(z.enum(FLOW_STAGES)),
+  categories: z.optional(z.array(z.enum(RULE_CATEGORIES)).check(z.maxLength(RULE_CATEGORIES.length))),
+  playerCounts: z.optional(z.array(z.int().check(z.minimum(1), z.maximum(8))).check(z.maxLength(8))),
+  editionNotes: z.optional(z.array(trimmedText(1, 300)).check(z.maxLength(20))),
   sourceLabel: optionalText(300),
   sourceUrl: optionalUrl,
-  tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
-}).strict();
+  tagNames: z.optional(z.array(trimmedText(1, 40)).check(z.maxLength(8))),
+});
 
-const importSchema = z.object({
+const gameSchema = z.strictObject({
+  id: optionalText(100),
+  slug: optionalText(120),
+  displayName: trimmedText(1, 200),
+  englishName: optionalText(200),
+}).check(z.refine((game) => Boolean(game.id) === Boolean(game.slug), {
+  message: '既有遊戲必須同時提供 game.id 與 game.slug',
+}));
+
+const importSchema = z.strictObject({
   format: z.literal(RULE_DRAFT_IMPORT_FORMAT),
   schemaVersion: z.union([z.literal(1), z.literal(RULE_DRAFT_IMPORT_SCHEMA_VERSION)]),
-  game: z.object({
-    id: optionalText(100),
-    slug: optionalText(120),
-    displayName: z.string().trim().min(1).max(200),
-    englishName: optionalText(200),
-  }).strict().refine((game) => Boolean(game.id) === Boolean(game.slug), {
-    message: '既有遊戲必須同時提供 game.id 與 game.slug',
-  }),
-  playedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  game: gameSchema,
+  playedOn: z.optional(z.string().check(z.regex(/^\d{4}-\d{2}-\d{2}$/))),
   privateNote: optionalText(2000),
   sourceLabel: optionalText(300),
   sourceUrl: optionalUrl,
-  rules: z.array(ruleSchema).min(1).max(20),
-}).strict();
+  rules: z.array(ruleSchema).check(z.minLength(1), z.maxLength(20)),
+});
 
 export interface RuleDraftImportRule {
   statement: string;
