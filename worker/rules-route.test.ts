@@ -14,8 +14,9 @@ const row = {
   tag_ids_json: '[]', review_status: 'reviewed', reviewed_by: 'editor-1', reviewed_by_nickname: '編輯', reviewed_at: 90,
   game_name: '測試遊戲', game_slug: 'test-game',
 };
+const hiddenOwnRow = { ...row, status: 'hidden', review_status: 'pending', hidden_by: 'ordinary-1' };
 
-const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false) => {
+const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false, sourceRow: typeof row & { hidden_by?: string | null } = row) => {
   const statements: Array<DatabaseStatement & { sql: string; bindings: unknown[] }> = [];
   const statement = (sql: string) => {
     const item = {
@@ -23,7 +24,8 @@ const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false) => {
       bindings: [] as unknown[],
       bind: vi.fn((...values: unknown[]) => { item.bindings = values; return item; }),
       first: vi.fn(async <T>() => {
-        if (sql.includes('SELECT r.* FROM rules')) return row as T;
+        if (sql.includes('SELECT r.* FROM rules') || sql.includes('SELECT * FROM rules WHERE id = ?')) return sourceRow as T;
+        if (sql.includes('SELECT created_by FROM rules WHERE id = ?')) return { created_by: sourceRow.created_by } as T;
         if (sql.includes('SELECT id, batch_id, version, base_updated_at')) return null as T;
         if (sql.includes('COUNT(*) count FROM rules')) return { count: pendingRuleCount } as T;
         if (sql.includes('COUNT(*) count FROM games')) return { count: 0 } as T;
@@ -131,5 +133,36 @@ describe('rule mutation URL validation', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: 'PENDING_RULE_LIMIT_REACHED' });
     expect(batch).not.toHaveBeenCalled();
+  });
+
+  test('allows an ordinary user to restore a rule they hid themselves', async () => {
+    const { db, batch } = fakeDatabase(0, false, hiddenOwnRow);
+    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
+    const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1/restore', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(200);
+    expect(batch).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  test('does not let an ordinary user restore a rule hidden by someone else', async () => {
+    const { db, batch } = fakeDatabase(0, false, { ...hiddenOwnRow, hidden_by: 'editor-1' });
+    const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1/restore', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(403);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  test('lets a general user read revisions for their own rule only', async () => {
+    const { db } = fakeDatabase();
+    const ownResponse = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1/revisions');
+    const otherResponse = await appFor({ id: 'ordinary-2', roles: [] }, db).request('https://rules.example/api/rules/rule-1/revisions');
+
+    expect(ownResponse.status).toBe(200);
+    expect(otherResponse.status).toBe(403);
   });
 });

@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, resolveRuleTags, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
-import { canEditContributionRule, contributionErrorCode, queryContributionQuota } from '../contributions';
+import { canEditContributionRule, canRestoreHiddenContributionRule, contributionErrorCode, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
@@ -228,12 +228,17 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
   const row = await getDatabase(c).statement('SELECT * FROM rules WHERE id = ?').bind(id).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
-  if (!canEditContributionRule(row as {
+  const rulePermission = row as {
     created_by: string | null;
     pending_review_by?: string | null;
+    hidden_by?: string | null;
     review_status: 'not_required' | 'pending' | 'reviewed';
     status: string;
-  }, user)) {
+  };
+  const canChangeVisibility = status === 'hidden'
+    ? canEditContributionRule(rulePermission, user)
+    : canRestoreHiddenContributionRule(rulePermission, user);
+  if (!canChangeVisibility) {
     return c.json({ error: 'forbidden' }, 403);
   }
   const timestamp = now();
@@ -263,7 +268,7 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
 };
 
 rulesRoutes.post('/api/rules/:id/hide', requireUser, (c) => changeRuleVisibility(c, 'hidden'));
-rulesRoutes.post('/api/rules/:id/restore', requireRole('editor'), (c) => changeRuleVisibility(c, 'published'));
+rulesRoutes.post('/api/rules/:id/restore', requireUser, (c) => changeRuleVisibility(c, 'published'));
 
 rulesRoutes.post('/api/rules/:id/review', requireRole('editor'), async (c) => {
   const user = c.get('user')!;
@@ -293,7 +298,13 @@ rulesRoutes.post('/api/rules/:id/review', requireRole('editor'), async (c) => {
   return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
 });
 
-rulesRoutes.get('/api/rules/:id/revisions', requireRole('editor'), async (c) => {
+rulesRoutes.get('/api/rules/:id/revisions', requireUser, async (c) => {
+  const user = c.get('user')!;
+  const rule = await getDatabase(c).statement('SELECT created_by FROM rules WHERE id = ?')
+    .bind(c.req.param('id')).first<{ created_by: string | null }>();
+  if (!rule) return c.json({ error: 'rule_not_found' }, 404);
+  const canViewAnyRule = user.roles.some((role) => role === 'editor' || role === 'admin');
+  if (!canViewAnyRule && rule.created_by !== user.id) return c.json({ error: 'forbidden' }, 403);
   const revisions = await getDatabase(c).statement(`
     SELECT r.id, r.reason, r.created_at, r.previous_json, u.masked_email editor_email
     FROM rule_revisions r

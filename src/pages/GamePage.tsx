@@ -565,7 +565,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
     } finally { setSaving(false); }
   };
   const hide = async () => {
-    if (await confirm({ title: '隱藏規則？', message: '隱藏後仍可從管理頁恢復。', confirmLabel: '隱藏規則', tone: 'danger' })) {
+    if (await confirm({ title: '隱藏規則？', message: canWithdraw ? '隱藏後可從帳號頁恢復。' : '隱藏後仍可從管理頁恢復。', confirmLabel: '隱藏規則', tone: 'danger' })) {
       await api.hideRule(rule.id); await onSaved();
     }
   };
@@ -592,11 +592,11 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
       <EditionInput value={editionNotes} options={editionOptions} onChange={setEditionNotes} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
-      {canEdit && <section className="revision-panel">
+      {user && <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
           <span><strong>{revision.previousStatement}</strong><small>{new Date(revision.createdAt).toLocaleString('zh-TW')}・{revision.reason}</small></span>
-          <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>
+          {canEdit && <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>}
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
       </section>}
       <div className="modal-actions">{(canEdit || canWithdraw) ? <button type="button" className="danger-link" onClick={() => void hide()}>{canEdit ? '隱藏' : '撤回投稿'}</button> : <span />}<div><button type="button" className="button secondary" onClick={onClose}>取消</button>{canUserReviewRule(rule, user) && <button type="button" className="button secondary" disabled={saving} onClick={() => void review()}>審核</button>}<button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>

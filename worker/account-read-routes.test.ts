@@ -84,7 +84,7 @@ describe('account read routes', () => {
     expect(recorded).toHaveLength(0);
   });
 
-  test('limits a general account history to reviewed rules after expansion', async () => {
+  test('includes a general user\'s hidden rules in creation history after expansion', async () => {
     const { db, recorded } = fakeDatabase();
     const app = appFor({ id: 'user-1', roles: [] }, db);
 
@@ -92,8 +92,19 @@ describe('account read routes', () => {
 
     expect(response.status).toBe(200);
     expect(recorded).toHaveLength(1);
-    expect(recorded[0].sql).toContain("r.review_status = 'reviewed'");
+    expect(recorded[0].sql).toContain("r.review_status = 'reviewed' OR r.status = 'hidden'");
     expect(recorded[0].sql).toContain('LIMIT 20');
     expect(recorded[0].bindings).toEqual(['user-1']);
+  });
+
+  test('allows a general user to read their own modification history', async () => {
+    const { db, recorded } = fakeDatabase();
+    const response = await appFor({ id: 'user-1', roles: [] }, db).request('https://rules.example/api/account/modified-rules');
+
+    expect(response.status).toBe(200);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].sql).toContain('FROM rule_revisions rr');
+    expect(recorded[0].sql).toContain('WHERE r.created_by = ?');
+    expect(recorded[0].bindings).toEqual(['user-1', 'user-1']);
   });
 });

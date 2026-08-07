@@ -21,6 +21,17 @@ export const canEditContributionRule = (
   return rule.created_by === user.id && rule.review_status === 'pending' && rule.status !== 'hidden';
 };
 
+export const canRestoreHiddenContributionRule = (
+  rule: { created_by: string | null; hidden_by?: string | null; review_status: ContributionReviewStatus; status?: string },
+  user: Pick<SessionUser, 'id' | 'roles'>,
+) => {
+  if (user.roles.includes('admin')) return true;
+  if (user.roles.includes('editor')) {
+    return rule.created_by === user.id || rule.review_status !== 'not_required';
+  }
+  return rule.status === 'hidden' && rule.created_by === user.id && rule.hidden_by === user.id;
+};
+
 export const canEditContributionGame = (
   game: { created_by: string | null; review_status: ContributionReviewStatus; visibility?: string },
   user: Pick<SessionUser, 'id' | 'roles'>,

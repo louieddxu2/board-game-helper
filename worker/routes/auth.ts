@@ -36,15 +36,15 @@ authRoutes.get('/api/account/created-rules', requireUser, async (c) => {
   const canEdit = user.roles.some((role) => role === 'editor' || role === 'admin');
   const result = await getDatabase(c).statement(`
     SELECT r.id, g.display_name game_name, g.slug game_slug, r.statement,
-      r.status, r.created_at, r.updated_at
+      r.status, r.hidden_by, r.created_at, r.updated_at
     FROM rules r
     JOIN games g ON g.id = r.game_id
-    WHERE r.created_by = ?${canEdit ? '' : " AND r.review_status = 'reviewed'"}
+    WHERE r.created_by = ?${canEdit ? '' : " AND (r.review_status = 'reviewed' OR r.status = 'hidden')"}
     ORDER BY r.created_at DESC, r.id DESC
     LIMIT 20
   `).bind(user.id).all<{
     id: string; game_name: string; game_slug: string; statement: string;
-    status: 'draft' | 'published' | 'hidden'; created_at: number; updated_at: number;
+    status: 'draft' | 'published' | 'hidden'; hidden_by: string | null; created_at: number; updated_at: number;
   }>();
   setNoCache(c);
   return c.json({ rules: (result.results ?? []).map((row) => ({
@@ -53,12 +53,13 @@ authRoutes.get('/api/account/created-rules', requireUser, async (c) => {
     gameSlug: row.game_slug,
     statement: row.statement,
     status: row.status,
+    canRestore: !canEdit && row.status === 'hidden' && row.hidden_by === user.id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   })) });
 });
 
-authRoutes.get('/api/account/modified-rules', requireRole('editor'), async (c) => {
+authRoutes.get('/api/account/modified-rules', requireUser, async (c) => {
   const user = c.get('user')!;
   const result = await getDatabase(c).statement(`
     SELECT rr.id, rr.rule_id, g.display_name game_name, g.slug game_slug,

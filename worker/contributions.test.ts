@@ -6,6 +6,7 @@ import {
   RULE_CONTRIBUTION_LIMIT,
   canEditContributionGame,
   canEditContributionRule,
+  canRestoreHiddenContributionRule,
   contributionErrorCode,
   initialReviewStatus,
   isTrustedEditor,
@@ -52,6 +53,15 @@ describe('contribution policy helpers', () => {
     expect(canEditContributionGame({ created_by: ordinary.id, review_status: 'pending', visibility: 'hidden' }, ordinary)).toBe(false);
     expect(canEditContributionGame({ created_by: ordinary.id, review_status: 'reviewed' }, editor)).toBe(true);
     expect(canEditContributionGame({ created_by: 'other-editor', review_status: 'not_required' }, editor)).toBe(false);
+  });
+
+  test('lets only the user who hid their own rule restore it', () => {
+    const ordinary = user('ordinary', []);
+    const editor = user('editor', ['editor']);
+    const hiddenByOrdinary = { created_by: ordinary.id, hidden_by: ordinary.id, review_status: 'pending' as const, status: 'hidden' };
+    expect(canRestoreHiddenContributionRule(hiddenByOrdinary, ordinary)).toBe(true);
+    expect(canRestoreHiddenContributionRule({ ...hiddenByOrdinary, hidden_by: 'another-user' }, ordinary)).toBe(false);
+    expect(canRestoreHiddenContributionRule(hiddenByOrdinary, editor)).toBe(true);
   });
 
   test('calculates remaining quota from visible, unreviewed rows only', async () => {

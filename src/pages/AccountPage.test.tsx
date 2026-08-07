@@ -19,7 +19,7 @@ vi.mock('../lib/api', () => ({
   api: {
     accountCreatedRules: mocks.accountCreatedRules,
     accountModifiedRules: mocks.accountModifiedRules,
-    updateNickname: vi.fn(), clearFavorites: vi.fn(), accountDeletionSummary: vi.fn(), deleteAccount: vi.fn(),
+    updateNickname: vi.fn(), clearFavorites: vi.fn(), accountDeletionSummary: vi.fn(), deleteAccount: vi.fn(), restoreRule: vi.fn(),
   },
 }));
 vi.mock('../lib/localDb', () => ({
@@ -64,7 +64,7 @@ describe('AccountPage lazy activity', () => {
     expect(mocks.accountCreatedRules).toHaveBeenCalledOnce();
   });
 
-  test('offers reviewed creation history to a general user without editor revision history', async () => {
+  test('offers reviewed creation and modification history to a general user without restore controls', async () => {
     const user = userEvent.setup();
     mocks.useSession.mockReturnValue({
       user: { id: 'user-1', roles: [] }, realUser: { id: 'user-1', roles: [] },
@@ -73,8 +73,11 @@ describe('AccountPage lazy activity', () => {
     render(<MemoryRouter><AccountPage /></MemoryRouter>);
 
     expect(screen.getByText('展開後讀取已通過審核的投稿')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /我的規則修改紀錄/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /我的規則修改紀錄/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /我建立的規則/ }));
     await waitFor(() => expect(mocks.accountCreatedRules).toHaveBeenCalledOnce());
+    await user.click(screen.getByRole('button', { name: /我的規則修改紀錄/ }));
+    await waitFor(() => expect(mocks.accountModifiedRules).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: '恢復' })).not.toBeInTheDocument();
   });
 });

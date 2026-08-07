@@ -193,14 +193,15 @@ if (/FROM\s+(?:rules|rule_revisions)\b/i.test(accountHandler)) {
   violations.push('worker/routes/auth.ts: the base account response must not eagerly read rule history');
 }
 const createdRulesHandler = accountRouteSource.split("authRoutes.get('/api/account/created-rules'")[1]?.split("authRoutes.get('/api/account/modified-rules'")[0] ?? '';
-if (!/canEdit\s*\?\s*''\s*:\s*" AND r\.review_status = 'reviewed'"/.test(createdRulesHandler)) {
-  violations.push('worker/routes/auth.ts: ordinary account history must remain limited to reviewed rules');
+if (!/canEdit\s*\?\s*''\s*:\s*" AND \(r\.review_status = 'reviewed' OR r\.status = 'hidden'\)"/.test(createdRulesHandler)) {
+  violations.push('worker/routes/auth.ts: ordinary account history must include reviewed rules and the user\'s hidden rules');
 }
 if (!/LIMIT\s+20\b/.test(createdRulesHandler)) {
   violations.push('worker/routes/auth.ts: created-rule history must remain limited to the latest 20 rows');
 }
-if (!/get\('\/api\/account\/modified-rules',\s*requireRole\('editor'\)/.test(accountRouteSource)) {
-  violations.push('worker/routes/auth.ts: account revision history must remain editor-only');
+if (!/get\('\/api\/account\/modified-rules',\s*requireUser/.test(accountRouteSource)
+  || !/WHERE\s+r\.created_by\s*=\s*\?\s+AND\s+rr\.edited_by\s*<>\s*\?/i.test(accountRouteSource)) {
+  violations.push('worker/routes/auth.ts: account revision history must be authenticated and scoped to the rule owner');
 }
 
 if (violations.length > 0) {

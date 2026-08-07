@@ -6,6 +6,7 @@ import type { AccountDeletionSummary, AccountRevisionSummary, AccountRuleSummary
 import { useConfirm } from '../context/ConfirmContext';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
+import { clearSearchCache } from '../components/GameSearch';
 import { LoginPage } from './LoginPage';
 import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
 
@@ -26,17 +27,20 @@ const RuleLink = ({ gameSlug, ruleId, gameName, statement }: { gameSlug: string;
   </Link>
 );
 
-const CreatedRuleItem = ({ rule }: { rule: AccountRuleSummary }) => (
+const CreatedRuleItem = ({ rule, onRestore, restoring }: { rule: AccountRuleSummary; onRestore?(rule: AccountRuleSummary): void; restoring: boolean }) => (
   <li className="account-item">
-    <RuleLink gameSlug={rule.gameSlug} ruleId={rule.id} gameName={rule.gameName} statement={rule.statement} />
+    {rule.status === 'hidden'
+      ? <div className="account-item-link"><strong>{rule.gameName}</strong><span>{rule.statement}</span></div>
+      : <RuleLink gameSlug={rule.gameSlug} ruleId={rule.id} gameName={rule.gameName} statement={rule.statement} />}
     <small>{statusLabel[rule.status]}・建立於 {formatDate(rule.createdAt)}</small>
+    {rule.canRestore && onRestore && <button type="button" className="text-action" disabled={restoring} onClick={() => onRestore(rule)}>{restoring ? '恢復中…' : '恢復'}</button>}
   </li>
 );
 
 const ModifiedRuleItem = ({ revision }: { revision: AccountRevisionSummary }) => (
   <li className="account-item">
     <RuleLink gameSlug={revision.gameSlug} ruleId={revision.ruleId} gameName={revision.gameName} statement={revision.currentStatement} />
-    <small>{revision.editedByName ? `由 ${revision.editedByName} ` : '由其他編輯者 '}修改於 {formatDate(revision.editedAt)}・{revision.reason}</small>
+    <small>{revision.editedByName ? `由 ${revision.editedByName} ` : '由其他使用者 '}修改於 {formatDate(revision.editedAt)}・{revision.reason}</small>
     {revision.previousStatement && <div className="account-change"><span>修改前：{revision.previousStatement}</span><span>現在：{revision.currentStatement}</span></div>}
   </li>
 );
@@ -62,6 +66,7 @@ export const AccountPage = () => {
   const [createdRules, setCreatedRules] = useState<AccountRuleSummary[]>();
   const [createdRulesLoading, setCreatedRulesLoading] = useState(false);
   const [createdRulesError, setCreatedRulesError] = useState('');
+  const [restoringRuleId, setRestoringRuleId] = useState<string>();
   const [modifiedRulesOpen, setModifiedRulesOpen] = useState(false);
   const [modifiedRules, setModifiedRules] = useState<AccountRevisionSummary[]>();
   const [modifiedRulesLoading, setModifiedRulesLoading] = useState(false);
@@ -108,6 +113,27 @@ export const AccountPage = () => {
     try { setCreatedRules((await api.accountCreatedRules()).rules); }
     catch { setCreatedRulesError('建立紀錄暫時無法載入，請稍後再試。'); }
     finally { setCreatedRulesLoading(false); }
+  };
+
+  const restoreOwnRule = async (rule: AccountRuleSummary) => {
+    if (!rule.canRestore || restoringRuleId) return;
+    if (!await confirm({ title: '恢復隱藏規則？', message: '恢復後這條規則會重新顯示。', confirmLabel: '恢復規則' })) return;
+    setRestoringRuleId(rule.id);
+    setCreatedRulesError('');
+    try {
+      await api.restoreRule(rule.id);
+      setCreatedRules((current) => current?.map((item) => item.id === rule.id
+        ? { ...item, status: 'published', canRestore: false }
+        : item));
+      await localDb.invalidateAllGames();
+      clearSearchCache();
+    } catch (caught) {
+      setCreatedRulesError(caught instanceof ApiError && caught.code === 'forbidden'
+        ? '這條規則不是由你隱藏，無法恢復。'
+        : '恢復規則失敗，請稍後再試。');
+    } finally {
+      setRestoringRuleId(undefined);
+    }
   };
 
   const toggleModifiedRules = async () => {
@@ -227,24 +253,24 @@ export const AccountPage = () => {
         {createdRulesOpen && <div id="account-created-rules" className="account-lazy-content">
           {createdRulesLoading && <p className="muted" role="status">正在讀取建立紀錄…</p>}
           {createdRulesError && <p className="form-error" role="alert">{createdRulesError}</p>}
-          {createdRules && (createdRules.length > 0 ? <ul className="account-list">{createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} />)}</ul> : <p className="muted">目前還沒有可顯示的建立紀錄。</p>)}
+          {createdRules && (createdRules.length > 0 ? <ul className="account-list">{createdRules.map((rule) => <CreatedRuleItem key={rule.id} rule={rule} onRestore={(item) => void restoreOwnRule(item)} restoring={restoringRuleId === rule.id} />)}</ul> : <p className="muted">目前還沒有可顯示的建立紀錄。</p>)}
         </div>}
       </section>
 
-      {canEdit && <section className="account-card">
+      <section className="account-card">
         <button type="button" className="account-section-toggle" aria-expanded={modifiedRulesOpen} aria-controls="account-modified-rules" onClick={() => void toggleModifiedRules()}>
-          <span><strong>我的規則修改紀錄</strong><small>展開後讀取其他編輯者的修改</small></span>
+          <span><strong>我的規則修改紀錄</strong><small>{canEdit ? '展開後讀取其他編輯者的修改' : '展開後讀取其他使用者的修改'}</small></span>
           <span>{modifiedRulesOpen ? '收起' : '展開'}{modifiedRules ? `・${modifiedRules.length} 筆` : ''}</span>
         </button>
         {modifiedRulesOpen && <div id="account-modified-rules" className="account-lazy-content">
           {modifiedRulesLoading && <p className="muted" role="status">正在讀取修改紀錄…</p>}
           {modifiedRulesError && <p className="form-error" role="alert">{modifiedRulesError}</p>}
           {modifiedRules && <>
-            <p className="account-help">這裡只顯示其他編輯者修改你建立的規則；你自己修改的內容不會列在這裡。</p>
-            {modifiedRules.length > 0 ? <ul className="account-list">{modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他編輯者修改你規則的紀錄。</p>}
+            <p className="account-help">這裡只顯示其他使用者修改你建立的規則；你自己修改的內容不會列在這裡。</p>
+            {modifiedRules.length > 0 ? <ul className="account-list">{modifiedRules.map((revision) => <ModifiedRuleItem key={revision.id} revision={revision} />)}</ul> : <p className="muted">目前沒有其他使用者修改你規則的紀錄。</p>}
           </>}
         </div>}
-      </section>}
+      </section>
     </div>
     <DeleteAccountDialog
       open={deleteDialogOpen}

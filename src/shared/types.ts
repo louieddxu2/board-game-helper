@@ -64,6 +64,7 @@ export interface AccountRuleSummary {
   gameSlug: string;
   statement: string;
   status: RuleCard['status'];
+  canRestore?: boolean;
   createdAt: number;
   updatedAt: number;
 }
