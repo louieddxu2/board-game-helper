@@ -11,6 +11,7 @@ import { RuleEditor } from './GamePage';
 import { effectiveRuleCategories } from '../lib/ruleCategories';
 import zhTWCopy from '../content/zh-TW.json';
 import { ExternalLinkGuard } from '../components/ExternalLinkGuard';
+import { useToast } from '../context/ToastContext';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -127,7 +128,25 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
 
 export const CatalogPage = () => {
   const { canEdit, loading, user, isAdmin } = useSession();
+  const { showToast } = useToast();
   const canEditRule = (rule: RuleCard) => canUserEditRule(rule, user, isAdmin);
+  const beginRuleEdit = async (rule: RuleCard) => {
+    const ordinary = Boolean(user && !user.roles.some((role) => role === 'editor' || role === 'admin'));
+    if (!ordinary || rule.reviewStatus === 'pending') {
+      setEditingRule(rule);
+      return;
+    }
+    try {
+      const { quota } = await api.contributions();
+      if (quota.remainingRules < 1) {
+        showToast('待審核額度已用完，無法修改這條規則。', 'info');
+        return;
+      }
+      setEditingRule(rule);
+    } catch {
+      showToast('暫時無法確認待審核額度，請稍後再試。', 'error');
+    }
+  };
   const [games, setGames] = useState<GameSummary[]>([]);
   const [gameQuery, setGameQuery] = useState('');
   const [expandedGameId, setExpandedGameId] = useState<string>();
@@ -303,7 +322,7 @@ export const CatalogPage = () => {
               <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}{canEdit && Boolean(pendingRuleCounts[game.id]) && <small>・待審核 {pendingRuleCounts[game.id]}</small>}{canEdit && pendingGameIds.includes(game.id) && <small>・新遊戲待審核</small>}</td>
               <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
-            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={setEditingRule} canEditRule={canEditRule} /> : null}</td></tr>}
+            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={(rule) => void beginRuleEdit(rule)} canEditRule={canEditRule} /> : null}</td></tr>}
           </Fragment>)}
         </tbody>
       </table>

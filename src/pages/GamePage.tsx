@@ -87,6 +87,24 @@ export const GamePage = () => {
     setRuleQuery('');
   };
 
+  const beginRuleEdit = async (rule: RuleCardType) => {
+    const ordinary = Boolean(user && !user.roles.some((role) => role === 'editor' || role === 'admin'));
+    if (!ordinary || rule.reviewStatus === 'pending') {
+      setEditing(rule);
+      return;
+    }
+    try {
+      const { quota } = await api.contributions();
+      if (quota.remainingRules < 1) {
+        showToast('待審核額度已用完，無法修改這條規則。', 'info');
+        return;
+      }
+      setEditing(rule);
+    } catch {
+      showToast('暫時無法確認待審核額度，請稍後再試。', 'error');
+    }
+  };
+
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const load = async () => {
     try {
@@ -488,7 +506,7 @@ export const GamePage = () => {
           onTagClick={toggleTag}
           onPlayerCountsClick={togglePlayerCounts}
           onEditionClick={toggleEdition}
-          onEdit={canEditRule(rule) ? () => setEditing(rule) : undefined}
+          onEdit={canEditRule(rule) ? () => void beginRuleEdit(rule) : undefined}
           importanceVoted={importantRuleIds.includes(rule.id)}
           importanceSaving={importanceSaving.has(rule.id)}
           onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined}
