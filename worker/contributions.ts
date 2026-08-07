@@ -18,8 +18,7 @@ export const canEditContributionRule = (
   if (user.roles.includes('editor')) {
     return rule.created_by === user.id || rule.review_status !== 'not_required';
   }
-  return (rule.created_by === user.id || rule.pending_review_by === user.id)
-    && rule.review_status === 'pending' && rule.status !== 'hidden';
+  return rule.created_by === user.id && rule.review_status === 'pending' && rule.status !== 'hidden';
 };
 
 export const canEditContributionGame = (

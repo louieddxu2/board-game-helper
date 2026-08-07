@@ -36,7 +36,7 @@ describe('contribution policy helpers', () => {
     const editor = user('editor', ['editor']);
     const admin = user('admin', ['admin']);
     expect(canEditContributionRule({ created_by: ordinary.id, review_status: 'pending', status: 'published' }, ordinary)).toBe(true);
-    expect(canEditContributionRule({ created_by: 'another-ordinary', pending_review_by: ordinary.id, review_status: 'pending', status: 'published' }, ordinary)).toBe(true);
+    expect(canEditContributionRule({ created_by: 'another-ordinary', pending_review_by: ordinary.id, review_status: 'pending', status: 'published' }, ordinary)).toBe(false);
     expect(canEditContributionRule({ created_by: ordinary.id, review_status: 'reviewed', status: 'published' }, ordinary)).toBe(false);
     expect(canEditContributionRule({ created_by: ordinary.id, review_status: 'pending', status: 'hidden' }, ordinary)).toBe(false);
     expect(canEditContributionRule({ created_by: ordinary.id, review_status: 'reviewed' }, editor)).toBe(true);

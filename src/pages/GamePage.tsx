@@ -530,6 +530,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
     setSaving(true);
     try {
       const response = await api.patchRule(rule.id, {
+        ...(rule.updatedAt === undefined ? {} : { baseUpdatedAt: rule.updatedAt }),
         statement, commonMistake: commonMistake || null, details: details || null, categories, playerCounts, editionNotes,
         tagIds: tagSelections.flatMap((tag) => tag.id ? [tag.id] : []),
         newTagNames: tagSelections.flatMap((tag) => tag.id ? [] : [tag.name]),
@@ -537,6 +538,12 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       });
       if (response.reviewStatus === 'pending') showToast('修改已送交審核。', 'info');
       await onSaved();
+    } catch (caught) {
+      showToast(caught instanceof ApiError && caught.code === 'PENDING_RULE_LIMIT_REACHED'
+        ? '待審核額度已用完，無法修改這條規則。'
+        : caught instanceof ApiError && caught.code === 'rule_changed_while_editing'
+          ? '這條規則已在其他分頁更新，請關閉編輯器後重新載入。'
+          : '規則儲存失敗，請稍後再試。', 'error');
     } finally { setSaving(false); }
   };
   const hide = async () => {

@@ -26,6 +26,8 @@ describe('contribution rule permissions', () => {
     expect(canUserEditRule(rule(ordinary.id, 'pending'), ordinary, false)).toBe(true);
     expect(canUserEditRule(rule(ordinary.id, 'reviewed'), ordinary, false)).toBe(true);
     expect(canUserEditRule(rule(ordinary.id, 'not_required'), ordinary, false)).toBe(true);
+    expect(canUserEditRule(rule(anotherOrdinary.id, 'reviewed'), ordinary, false)).toBe(false);
+    expect(canUserEditRule(rule(anotherOrdinary.id, 'not_required'), ordinary, false)).toBe(false);
     expect(canUserEditRule(rule(anotherOrdinary.id, 'pending'), ordinary, false)).toBe(false);
     expect(canUserEditRule(rule(ordinary.id, 'pending', 'hidden'), ordinary, false)).toBe(false);
   });

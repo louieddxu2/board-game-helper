@@ -33,6 +33,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
 });
 
 export const rulePatchSchema = z.object({
+  baseUpdatedAt: z.number().int().nonnegative().optional(),
   statement: z.string().trim().min(1).max(2000).optional(),
   commonMistake: z.string().trim().max(2000).nullable().optional(),
   details: z.string().trim().max(5000).nullable().optional(),
@@ -82,6 +83,9 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
+  if (parsed.data.baseUpdatedAt !== undefined && Number(row.updated_at) !== parsed.data.baseUpdatedAt) {
+    return c.json({ error: 'rule_changed_while_editing', currentUpdatedAt: Number(row.updated_at) }, 409);
+  }
   const canEditDirectly = canEditContributionRule(row as {
     created_by: string | null;
     pending_review_by?: string | null;
@@ -90,6 +94,7 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
   }, user);
   const needsReviewAfterEdit = !canEditDirectly
     && !user.roles.some((role) => role === 'editor' || role === 'admin')
+    && row.created_by === user.id
     && row.status === 'published'
     && row.review_status !== 'pending';
   if (!canEditDirectly && !needsReviewAfterEdit) {
@@ -101,7 +106,7 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
   }
   const existingTags = await getDatabase(c).statement(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
     .bind(c.req.param('id')).all<{ name: string }>();
-  const timestamp = now();
+  const timestamp = Math.max(now(), Number(row.updated_at) + 1);
   const requestedTagNames = parsed.data.newTagNames ?? parsed.data.tagNames;
   const requestedTagIds = parsed.data.tagIds ?? [];
   if (!user.roles.some((role) => role === 'editor' || role === 'admin') && requestedTagNames?.length) {
@@ -143,37 +148,45 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, categories_json = ?,
         player_counts_json = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
         review_status = 'pending', pending_review_by = ?, reviewed_by = NULL, reviewed_by_nickname = NULL,
-        reviewed_at = NULL, updated_at = ? WHERE id = ?
+        reviewed_at = NULL, updated_at = ? WHERE id = ?${parsed.data.baseUpdatedAt === undefined ? '' : ' AND updated_at = ?'}
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
       JSON.stringify(updated.categories),
       JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
       JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
-      user.id, timestamp, c.req.param('id'),
+      user.id, timestamp, c.req.param('id'), ...(parsed.data.baseUpdatedAt === undefined ? [] : [parsed.data.baseUpdatedAt]),
     )
     : getDatabase(c).statement(`
       UPDATE rules SET statement = ?, common_mistake = ?, details = ?, flow_stage = ?, categories_json = ?,
         player_counts_json = ?, edition_notes_json = ?, edition_note = ?, source_label = ?, source_url = ?,
-        updated_at = ? WHERE id = ?
+        updated_at = ? WHERE id = ?${parsed.data.baseUpdatedAt === undefined ? '' : ' AND updated_at = ?'}
     `).bind(
       updated.statement, updated.commonMistake, updated.details, updated.flowStage,
       JSON.stringify(updated.categories),
       JSON.stringify(Array.from(new Set(updated.playerCounts)).sort((a, b) => a - b)),
       JSON.stringify(updated.editionNotes), updated.editionNotes[0] ?? null, updated.sourceLabel, updated.sourceUrl,
-      timestamp, c.req.param('id'),
+      timestamp, c.req.param('id'), ...(parsed.data.baseUpdatedAt === undefined ? [] : [parsed.data.baseUpdatedAt]),
     );
 
-  await getDatabase(c).batch([
+  const followUpStatements = [
     getDatabase(c).statement(`
       INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
-    updateRuleStatement,
     ...(!tagsRequested || tagIdsUnchanged ? [] : await tagWriteStatements(
       c, c.req.param('id'), requestedTagNames ?? [], user.id, timestamp, true, requestedTagIds,
     )),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
-  ]);
+  ];
+  if (parsed.data.baseUpdatedAt !== undefined) {
+    const updateResult = await updateRuleStatement.run();
+    if (Number(updateResult.meta?.changes ?? 0) !== 1) {
+      return c.json({ error: 'rule_changed_while_editing' }, 409);
+    }
+    await getDatabase(c).batch(followUpStatements);
+  } else {
+    await getDatabase(c).batch([updateRuleStatement, ...followUpStatements]);
+  }
   const cache = (caches as any).default;
   const gameSlug = await getDatabase(c).statement('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(c.req.param('id')).first<{ slug: string }>();
   if (gameSlug) {
