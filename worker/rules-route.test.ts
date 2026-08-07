@@ -15,7 +15,7 @@ const row = {
   game_name: '測試遊戲', game_slug: 'test-game',
 };
 
-const fakeDatabase = (pendingRuleCount = 0) => {
+const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false) => {
   const statements: Array<DatabaseStatement & { sql: string; bindings: unknown[] }> = [];
   const statement = (sql: string) => {
     const item = {
@@ -32,7 +32,10 @@ const fakeDatabase = (pendingRuleCount = 0) => {
         return null as T;
       }),
       all: vi.fn(async () => ({ results: [], meta: {} })),
-      run: vi.fn(async () => ({ results: [], meta: sql.includes('UPDATE rules SET') ? { changes: 1 } : {} })),
+      run: vi.fn(async () => {
+        if (rejectPendingRuleLimit && sql.includes('UPDATE rules SET')) throw new Error('D1_ERROR: pending_rule_limit');
+        return { results: [], meta: sql.includes('UPDATE rules SET') ? { changes: 1 } : {} };
+      }),
     } as DatabaseStatement & { sql: string; bindings: unknown[] };
     statements.push(item);
     return item;
@@ -110,6 +113,19 @@ describe('rule mutation URL validation', () => {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ baseUpdatedAt: 100, statement: 'quota exhausted' }),
+    }, { WRITE_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) } } as unknown as Env);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'PENDING_RULE_LIMIT_REACHED' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  test('maps a concurrent quota trigger rejection to the quota error', async () => {
+    const { db, batch } = fakeDatabase(5, true);
+    const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUpdatedAt: 100, statement: 'concurrent quota claim' }),
     }, { WRITE_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) } } as unknown as Env);
 
     expect(response.status).toBe(409);

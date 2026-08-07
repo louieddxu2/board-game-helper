@@ -8,7 +8,7 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, resolveRuleTags, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
-import { canEditContributionRule, queryContributionQuota } from '../contributions';
+import { canEditContributionRule, contributionErrorCode, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
@@ -178,14 +178,23 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     )),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ];
-  if (parsed.data.baseUpdatedAt !== undefined) {
-    const updateResult = await updateRuleStatement.run();
-    if (Number(updateResult.meta?.changes ?? 0) !== 1) {
-      return c.json({ error: 'rule_changed_while_editing' }, 409);
+  try {
+    if (parsed.data.baseUpdatedAt !== undefined) {
+      const updateResult = await updateRuleStatement.run();
+      if (Number(updateResult.meta?.changes ?? 0) !== 1) {
+        return c.json({ error: 'rule_changed_while_editing' }, 409);
+      }
+      await getDatabase(c).batch(followUpStatements);
+    } else {
+      await getDatabase(c).batch([updateRuleStatement, ...followUpStatements]);
     }
-    await getDatabase(c).batch(followUpStatements);
-  } else {
-    await getDatabase(c).batch([updateRuleStatement, ...followUpStatements]);
+  } catch (error) {
+    const code = contributionErrorCode(error);
+    if (code === 'PENDING_RULE_LIMIT_REACHED') {
+      const quota = await queryContributionQuota(getDatabase(c), user.id);
+      return c.json({ error: code, quota }, 409);
+    }
+    throw error;
   }
   const cache = (caches as any).default;
   const gameSlug = await getDatabase(c).statement('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(c.req.param('id')).first<{ slug: string }>();
