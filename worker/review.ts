@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage } from '../src/shared/types';
 import { normalizeText, sha256Hex } from './utils';
+import { isSafeExternalUrl } from '../src/shared/externalUrl';
 
 export const REVIEW_FORMAT = 'wrong-board-game-rules-review';
 export const REVIEW_SCHEMA_VERSION = 1;
@@ -15,7 +16,7 @@ export const reviewContentSchema = z.object({
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
-  sourceUrl: z.url().max(2000).nullable().optional().or(z.literal('')),
+  sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').nullable().optional().or(z.literal('')),
   tagNames: z.array(z.string().trim().min(1).max(40)).max(8),
 });
 

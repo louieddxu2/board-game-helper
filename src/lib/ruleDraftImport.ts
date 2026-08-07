@@ -1,5 +1,6 @@
 import { z } from 'zod/mini';
 import { FLOW_STAGES, RULE_CATEGORIES, type FlowStage, type RuleCategory } from '../shared/types';
+import { isSafeExternalUrl } from '../shared/externalUrl';
 
 export const RULE_DRAFT_IMPORT_FORMAT = 'wrong-board-game-rules-draft';
 export const RULE_DRAFT_IMPORT_SCHEMA_VERSION = 2;
@@ -10,7 +11,7 @@ const trimmedText = (minimum: number, maximum: number) => z.string().check(
   z.maxLength(maximum),
 );
 const optionalText = (maximum: number) => z.optional(trimmedText(0, maximum));
-const optionalUrl = z.optional(z.union([z.url().check(z.maxLength(2000)), z.literal('')]));
+const optionalUrl = z.optional(z.union([z.url().check(z.maxLength(2000), z.refine(isSafeExternalUrl, { message: 'source_url_must_be_https' })), z.literal('')]));
 
 const ruleSchema = z.strictObject({
   statement: trimmedText(1, 2000),

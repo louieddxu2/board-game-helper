@@ -9,6 +9,7 @@ import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewCo
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { contributionErrorCode, initialReviewStatus, isTrustedEditor, queryContributionQuota } from '../contributions';
+import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -19,7 +20,7 @@ export const submissionSchema = z.object({
     englishName: z.string().trim().max(120).optional(),
   }).optional(),
   sourceLabel: z.string().trim().max(300).optional(),
-  sourceUrl: z.url().max(2000).optional().or(z.literal('')),
+  sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').optional().or(z.literal('')),
   idempotencyKey: z.string().min(8).max(120),
   rules: z.array(z.object({
     statement: z.string().trim().min(1).max(2000),
@@ -31,7 +32,7 @@ export const submissionSchema = z.object({
     editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
     editionNote: z.string().trim().max(300).optional(),
     sourceLabel: z.string().trim().max(300).optional(),
-    sourceUrl: z.url().max(2000).optional().or(z.literal('')),
+    sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').optional().or(z.literal('')),
     tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
     tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
     newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),

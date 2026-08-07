@@ -44,7 +44,19 @@ export const queryContributionQuota = async (db: Database, userId: string): Prom
         AND merged_into_game_id IS NULL
     `).bind(userId).first<{ count: number }>(),
   ]);
-  const pendingRules = Number(ruleCount?.count ?? 0);
+  const editStatement = db.statement(`
+    SELECT COUNT(*) count FROM review_proposals
+    WHERE created_by = ? AND operation = 'edit' AND status IN ('pending', 'conflict')
+      AND NOT EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = review_proposals.created_by
+          AND role IN ('editor', 'admin') AND revoked_at IS NULL
+      )
+  `);
+  const editCount = editStatement
+    ? await editStatement.bind(userId).first<{ count: number }>()
+    : null;
+  const pendingRules = Number(ruleCount?.count ?? 0) + Number(editCount?.count ?? 0);
   const pendingGames = Number(gameCount?.count ?? 0);
   return {
     pendingRules,

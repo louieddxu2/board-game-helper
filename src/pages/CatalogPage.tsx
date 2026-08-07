@@ -10,6 +10,7 @@ import { RULE_CATEGORY_LABELS, type GameDetail, type GameSummary, type RuleCard,
 import { RuleEditor } from './GamePage';
 import { effectiveRuleCategories } from '../lib/ruleCategories';
 import zhTWCopy from '../content/zh-TW.json';
+import { ExternalLinkGuard } from '../components/ExternalLinkGuard';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -23,7 +24,7 @@ const statusLabel: Record<RuleCard['status'], string> = {
 
 const sourceCell = (rule: RuleCard) => {
   const label = rule.sourceLabel || '未填寫';
-  return rule.sourceUrl ? <a href={rule.sourceUrl} target="_blank" rel="noreferrer">{label} ↗</a> : label;
+  return rule.sourceUrl ? <ExternalLinkGuard url={rule.sourceUrl}>{label} ↗</ExternalLinkGuard> : label;
 };
 
 const ruleTagNames = (rule: RuleCard) => rule.tags.length

@@ -246,8 +246,8 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 /* 第五行：來源與右下角分享按鈕 */
 .rule-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .rule-source { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.rule-source a { color: var(--green); font-weight: 700; text-decoration: none; }
-.rule-source a:hover { text-decoration: underline; }
+.rule-source a, .rule-source .external-link-button { color: var(--green); font-weight: 700; text-decoration: none; }
+.rule-source a:hover, .rule-source .external-link-button:hover { text-decoration: underline; }
 .unverified { color: var(--color-text-warning); }
 
 .copy-link-btn { border: 0; background: none; color: var(--orange); font-weight: 700; cursor: pointer; font-size: 12px; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
@@ -419,6 +419,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .confirm-dialog-copy h2, .confirm-dialog-copy p { margin: 0; }
 .confirm-dialog-copy p { color: var(--muted); line-height: 1.7; }
 .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.external-link-button { border: 0; padding: 0; background: none; color: var(--orange); font: inherit; cursor: pointer; text-align: left; }
+.external-link-button:hover { text-decoration: underline; }
 .delete-account-dialog { max-height: calc(100dvh - 36px); overflow-y: auto; }
 .delete-account-dialog > label:not(.checkbox-row) { display: grid; gap: 8px; font-weight: 700; }
 .delete-account-rules { align-items: flex-start; line-height: 1.55; }
@@ -567,7 +569,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-rules-table td { line-height: 1.4; vertical-align: top; padding: 10px 8px; font-size: 13px; box-sizing: border-box; overflow: hidden; }
 .catalog-text-cell { white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
 .catalog-rules-table td:first-child { white-space: nowrap; }
-.catalog-rules-table a { color: var(--orange); font-weight: 700; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-rules-table a, .catalog-rules-table .external-link-button { color: var(--orange); font-weight: 700; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalog-update-cell > span { display: block; white-space: nowrap; }
 .catalog-update-cell .text-action { display: block; margin-top: 5px; padding: 0; }
 .catalog-rule-category-list, .catalog-rule-tag-list { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; }

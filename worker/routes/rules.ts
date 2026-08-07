@@ -9,7 +9,8 @@ import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewCo
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, cleanRuleCategories, parseEditionNotes, tagWriteStatements, toGame, resolvePublicNicknames, resolveRuleTags, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
-import { canEditContributionRule } from '../contributions';
+import { canEditContributionRule, queryContributionQuota } from '../contributions';
+import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -32,7 +33,7 @@ rulesRoutes.get('/api/rules/:id', async (c) => {
   return c.json({ rule: { ...toRule(row, undefined, nicknameMap), gameName: row.game_name, gameSlug: row.game_slug } });
 });
 
-const rulePatchSchema = z.object({
+export const rulePatchSchema = z.object({
   statement: z.string().trim().min(1).max(2000).optional(),
   commonMistake: z.string().trim().max(2000).nullable().optional(),
   details: z.string().trim().max(5000).nullable().optional(),
@@ -46,7 +47,7 @@ const rulePatchSchema = z.object({
   tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
   newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
-  sourceUrl: z.url().max(2000).nullable().optional().or(z.literal('')),
+  sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').nullable().optional().or(z.literal('')),
 }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
   message: '最多只能選擇 8 個標籤',
 });
@@ -82,11 +83,16 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     .bind(c.req.param('id')).first<Record<string, unknown>>();
   if (!row) return c.json({ error: 'rule_not_found' }, 404);
   const user = c.get('user')!;
-  if (!canEditContributionRule(row as {
+  const canEditDirectly = canEditContributionRule(row as {
     created_by: string | null;
     review_status: 'not_required' | 'pending' | 'reviewed';
     status: string;
-  }, user)) {
+  }, user);
+  const canSubmitReviewProposal = !canEditDirectly
+    && !user.roles.some((role) => role === 'editor' || role === 'admin')
+    && row.status === 'published'
+    && row.review_status !== 'pending';
+  if (!canEditDirectly && !canSubmitReviewProposal) {
     return c.json({ error: 'forbidden' }, 403);
   }
   const existingTags = await getDatabase(c).statement(`SELECT t.name FROM rule_tags rt JOIN tags t ON t.id = rt.tag_id WHERE rt.rule_id = ? ORDER BY t.name`)
@@ -127,6 +133,116 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     sourceLabel: parsed.data.sourceLabel === undefined ? row.source_label : parsed.data.sourceLabel,
     sourceUrl: parsed.data.sourceUrl === undefined ? row.source_url : (parsed.data.sourceUrl || null),
   };
+
+  if (canSubmitReviewProposal) {
+    const proposalLimit = await c.env.WRITE_RATE_LIMITER.limit({ key: `rule-edit-proposal:${user.id}` });
+    if (!proposalLimit.success) {
+      c.header('Retry-After', '60');
+      return c.json({ error: 'rate_limited' }, 429);
+    }
+    const currentTagNames = (existingTags.results ?? []).map((tag) => tag.name);
+    let proposedTagNames = currentTagNames;
+    if (parsed.data.tagIds !== undefined) {
+      const requestedIds = parsed.data.tagIds;
+      const selectedTags = requestedIds.length
+        ? await getDatabase(c).statement(`SELECT name FROM tags WHERE id IN (${requestedIds.map(() => '?').join(',')}) ORDER BY name`)
+          .bind(...requestedIds).all<{ name: string }>()
+        : { results: [] as Array<{ name: string }> };
+      proposedTagNames = (selectedTags.results ?? []).map((tag) => tag.name);
+    }
+    const currentCategories = (() => {
+      try { return cleanRuleCategories(JSON.parse(String(row.categories_json ?? '[]'))); }
+      catch { return []; }
+    })();
+    const currentContent = normalizedReviewContent({
+      statement: String(row.statement),
+      commonMistake: typeof row.common_mistake === 'string' ? row.common_mistake : null,
+      details: typeof row.details === 'string' ? row.details : null,
+      flowStage: row.flow_stage as FlowStage,
+      categories: currentCategories,
+      playerCounts: Array.isArray(updated.playerCounts) ? updated.playerCounts : [],
+      editionNotes: currentEditionNotes,
+      sourceLabel: typeof row.source_label === 'string' ? row.source_label : null,
+      sourceUrl: typeof row.source_url === 'string' ? row.source_url : null,
+      tagNames: currentTagNames,
+    });
+    const proposedContent = normalizedReviewContent({
+      statement: String(updated.statement),
+      commonMistake: updated.commonMistake == null ? null : String(updated.commonMistake),
+      details: updated.details == null ? null : String(updated.details),
+      flowStage: updated.flowStage as FlowStage,
+      categories: updated.categories,
+      playerCounts: Array.isArray(updated.playerCounts) ? updated.playerCounts : [],
+      editionNotes: updated.editionNotes,
+      sourceLabel: updated.sourceLabel == null ? null : String(updated.sourceLabel),
+      sourceUrl: updated.sourceUrl == null ? null : String(updated.sourceUrl),
+      tagNames: proposedTagNames,
+    });
+    const existingProposal = await getDatabase(c).statement(`
+      SELECT id, batch_id, version, base_updated_at
+      FROM review_proposals
+      WHERE target_id = ? AND created_by = ? AND operation = 'edit' AND status = 'pending'
+      LIMIT 1
+    `).bind(c.req.param('id'), user.id).first<{ id: string; batch_id: string; version: number; base_updated_at: number }>();
+    if (existingProposal && existingProposal.base_updated_at !== Number(row.updated_at)) {
+      return c.json({ error: 'rule_changed_while_pending' }, 409);
+    }
+    if (!existingProposal) {
+      const quota = await queryContributionQuota(getDatabase(c), user.id);
+      if (quota.remainingRules < 1) return c.json({ error: 'PENDING_RULE_LIMIT_REACHED', quota }, 409);
+    }
+    const proposalId = existingProposal?.id ?? createId('review');
+    const batchId = existingProposal?.batch_id ?? createId('review_batch');
+    const baseContentHash = await reviewContentHash(currentContent);
+    const proposalStatements: DatabaseStatement[] = [];
+    if (existingProposal) {
+      proposalStatements.push(getDatabase(c).statement(`
+        UPDATE review_proposals
+        SET proposed_json = ?, reason = ?, version = version + 1, updated_at = ?
+        WHERE id = ? AND version = ? AND status = 'pending'
+      `).bind(JSON.stringify(proposedContent), parsed.data.reason ?? 'user_edit', timestamp, proposalId, existingProposal.version));
+    } else {
+      proposalStatements.push(
+        getDatabase(c).statement(`
+          INSERT INTO review_batches (
+            id, name, source_type, scope_json, proposal_count, pending_count,
+            created_by, created_at, updated_at
+          ) VALUES (?, ?, 'manual', '{}', 1, 1, ?, ?, ?)
+        `).bind(batchId, '使用者規則修改', user.id, timestamp, timestamp),
+        getDatabase(c).statement(`
+          INSERT INTO review_proposals (
+            id, batch_id, target_id, operation, status, reason,
+            base_updated_at, base_content_hash, original_json, proposed_json,
+            created_by, created_at, updated_at
+          ) VALUES (?, ?, ?, 'edit', 'pending', ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          proposalId, batchId, c.req.param('id'), parsed.data.reason ?? 'user_edit',
+          Number(row.updated_at), baseContentHash, JSON.stringify(currentContent), JSON.stringify(proposedContent),
+          user.id, timestamp, timestamp,
+        ),
+      );
+    }
+    await getDatabase(c).batch(proposalStatements);
+    const currentRule = await getDatabase(c).statement(`
+      SELECT r.*, g.display_name AS game_name, g.slug AS game_slug
+      FROM rules r JOIN games g ON g.id = r.game_id
+      WHERE r.id = ?
+    `).bind(c.req.param('id')).first<RuleRow & { game_name: string; game_slug: string }>();
+    if (!currentRule) return c.json({ error: 'rule_not_found' }, 404);
+    const [tagMap, nicknameMap] = await Promise.all([
+      resolveRuleTags(getDatabase(c), [currentRule]),
+      resolvePublicNicknames(getDatabase(c), [currentRule]),
+    ]);
+    setNoCache(c);
+    return c.json({
+      ok: true,
+      updatedAt: timestamp,
+      proposalId,
+      reviewStatus: 'pending' as const,
+      rule: { ...toRule(currentRule, tagMap, nicknameMap), gameName: currentRule.game_name, gameSlug: currentRule.game_slug },
+    });
+  }
+
   await getDatabase(c).batch([
     getDatabase(c).statement(`
       INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at)

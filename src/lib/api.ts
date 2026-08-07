@@ -389,7 +389,7 @@ export const api = {
     }).catch(() => undefined);
     return { rule: stale.data };
   },
-  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule: ApiRule }>(`/api/rules/${id}`, {
+  patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule: ApiRule; proposalId?: string; reviewStatus?: 'pending' }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }).then(async (response) => {
     await localDb.updateCachedRuleEntity(response.rule).catch(() => undefined);

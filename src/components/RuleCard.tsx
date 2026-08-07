@@ -5,6 +5,7 @@ import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import zhTWCopy from '../content/zh-TW.json';
+import { ExternalLinkGuard } from './ExternalLinkGuard';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -201,15 +202,12 @@ export const RuleCard = ({
         <div className="rule-source">
           {rule.sourceLabel && <span>來源：{rule.sourceLabel}</span>}
           {rule.sourceLinks && rule.sourceLinks.map((source, index) => (
-            <a
+            <ExternalLinkGuard
               key={source.url}
-              href={source.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              url={source.url}
             >
               查看依據{rule.sourceLinks.length > 1 ? ` ${index + 1}` : ''} ↗
-            </a>
+            </ExternalLinkGuard>
           ))}
           {!rule.sourceLabel && (!rule.sourceLinks || rule.sourceLinks.length === 0) && (
             <span className="unverified">未附來源</span>

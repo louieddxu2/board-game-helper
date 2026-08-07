@@ -519,6 +519,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [revisions, setRevisions] = useState<RuleRevision[]>();
+  const canWithdraw = !canEdit && rule.reviewStatus === 'pending' && rule.createdBy === user?.id;
   const editionOptions = useMemo(() => collectEditionOptions(game.rules), [game.rules]);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -528,12 +529,13 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const save = async () => {
     setSaving(true);
     try {
-      await api.patchRule(rule.id, {
+      const response = await api.patchRule(rule.id, {
         statement, commonMistake: commonMistake || null, details: details || null, categories, playerCounts, editionNotes,
         tagIds: tagSelections.flatMap((tag) => tag.id ? [tag.id] : []),
         newTagNames: tagSelections.flatMap((tag) => tag.id ? [] : [tag.name]),
         sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null,
       });
+      if (response.proposalId) showToast('修改已送交審核，現有公開版本保持不變。', 'info');
       await onSaved();
     } finally { setSaving(false); }
   };
@@ -572,7 +574,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
           <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
       </section>}
-      <div className="modal-actions"><button type="button" className="danger-link" onClick={() => void hide()}>{canEdit ? '隱藏' : '撤回投稿'}</button><div><button type="button" className="button secondary" onClick={onClose}>取消</button>{canUserReviewRule(rule, user) && <button type="button" className="button secondary" disabled={saving} onClick={() => void review()}>審核</button>}<button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
+      <div className="modal-actions">{(canEdit || canWithdraw) ? <button type="button" className="danger-link" onClick={() => void hide()}>{canEdit ? '隱藏' : '撤回投稿'}</button> : <span />}<div><button type="button" className="button secondary" onClick={onClose}>取消</button>{canUserReviewRule(rule, user) && <button type="button" className="button secondary" disabled={saving} onClick={() => void review()}>審核</button>}<button type="button" className="button primary" disabled={!statement.trim() || saving} onClick={() => void save()}>{saving ? '儲存中…' : '儲存修改'}</button></div></div>
     </div>
   </div>;
 };

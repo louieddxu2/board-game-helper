@@ -22,10 +22,10 @@ describe('contribution rule permissions', () => {
   const anotherEditor = user('editor-2', ['editor']);
   const admin = user('admin-1', ['admin']);
 
-  it('lets an ordinary contributor edit only their own visible pending rule', () => {
+  it('lets an ordinary contributor edit pending rules and submit reviewed edits for review', () => {
     expect(canUserEditRule(rule(ordinary.id, 'pending'), ordinary, false)).toBe(true);
-    expect(canUserEditRule(rule(ordinary.id, 'reviewed'), ordinary, false)).toBe(false);
-    expect(canUserEditRule(rule(ordinary.id, 'not_required'), ordinary, false)).toBe(false);
+    expect(canUserEditRule(rule(ordinary.id, 'reviewed'), ordinary, false)).toBe(true);
+    expect(canUserEditRule(rule(ordinary.id, 'not_required'), ordinary, false)).toBe(true);
     expect(canUserEditRule(rule(anotherOrdinary.id, 'pending'), ordinary, false)).toBe(false);
     expect(canUserEditRule(rule(ordinary.id, 'pending', 'hidden'), ordinary, false)).toBe(false);
   });

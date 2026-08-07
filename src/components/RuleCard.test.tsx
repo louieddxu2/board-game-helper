@@ -49,7 +49,7 @@ describe('RuleCard', () => {
     expect(container).not.toHaveTextContent(/審核/);
   });
 
-  test('keeps the game link and source link as separate valid anchors', () => {
+  test('keeps the game link separate and guards source navigation with the full URL', () => {
     const { container } = render(<MemoryRouter><RuleCard
       gameName="船廠"
       gameHref="/games/shipyard"
@@ -60,8 +60,23 @@ describe('RuleCard', () => {
       }}
     /></MemoryRouter>);
     expect(screen.getByRole('link', { name: '船廠' })).toHaveAttribute('href', '/games/shipyard');
-    expect(screen.getByRole('link', { name: /查看依據/ })).toHaveAttribute('href', 'https://example.com/rules');
+    const openExternal = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(screen.getByRole('button', { name: /查看依據/ }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('example.com');
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('https://example.com/rules');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '繼續前往' }));
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/rules', '_blank', 'noopener,noreferrer');
+    openExternal.mockRestore();
     expect(container.querySelector('a a')).toBeNull();
+  });
+
+  test('does not make an unsafe legacy source URL interactive', () => {
+    const { container } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_unsafe_source', gameId: 'game_1', statement: '規則', status: 'published',
+      tags: [], sourceLinks: [{ url: 'javascript:alert(1)' }],
+    }} /></MemoryRouter>);
+    expect(container.querySelector('.external-link-button')).toBeNull();
+    expect(container.querySelector('[title]')).not.toBeNull();
   });
 
   test('places tags and public credits before the edit button in one header row', () => {
