@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { CompactRuleCard, RuleCard } from './RuleCard';
@@ -61,13 +61,28 @@ describe('RuleCard', () => {
     /></MemoryRouter>);
     expect(screen.getByRole('link', { name: '船廠' })).toHaveAttribute('href', '/games/shipyard');
     const openExternal = vi.spyOn(window, 'open').mockImplementation(() => null);
-    fireEvent.click(screen.getByRole('button', { name: /查看依據/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: /查看依據/ }).at(-1)!);
     expect(screen.getByRole('alertdialog')).toHaveTextContent('example.com');
     expect(screen.getByRole('alertdialog')).toHaveTextContent('https://example.com/rules');
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '繼續前往' }));
     expect(openExternal).toHaveBeenCalledWith('https://example.com/rules', '_blank', 'noopener,noreferrer');
     openExternal.mockRestore();
     expect(container.querySelector('a a')).toBeNull();
+  });
+
+  test('opens allowlisted BGG sources directly without a confirmation dialog', () => {
+    cleanup();
+    const openExternal = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_bgg_source', gameId: 'game_1', statement: 'rule', status: 'published',
+      tags: [], sourceLinks: [{ url: 'https://boardgamegeek.com/boardgame/1' }],
+    }} /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: /查看依據/ }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(openExternal).toHaveBeenCalledWith('https://boardgamegeek.com/boardgame/1', '_blank', 'noopener,noreferrer');
+    openExternal.mockRestore();
   });
 
   test('does not make an unsafe legacy source URL interactive', () => {

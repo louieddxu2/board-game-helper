@@ -28,7 +28,7 @@ const fakeDatabase = () => {
         if (sql.includes('COUNT(*) count FROM rules')) return { count: 0 } as T;
         if (sql.includes('COUNT(*) count FROM games')) return { count: 0 } as T;
         if (sql.includes('COUNT(*) count FROM review_proposals')) return { count: 0 } as T;
-        if (sql.includes('SELECT r.*, g.display_name')) return row as T;
+        if (sql.includes('SELECT r.*, g.display_name')) return { ...row, review_status: 'pending', pending_review_by: 'ordinary-1' } as T;
         return null as T;
       }),
       all: vi.fn(async () => ({ results: [], meta: {} })),
@@ -56,8 +56,9 @@ describe('rule mutation URL validation', () => {
     expect(rulePatchSchema.safeParse({ sourceUrl: '' }).success).toBe(true);
   });
 
-  test('stores an ordinary edit as a review proposal without changing the public row', async () => {
+  test('applies an ordinary reviewed-rule edit and marks the row pending', async () => {
     const { db, batch } = fakeDatabase();
+    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
     const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -69,6 +70,12 @@ describe('rule mutation URL validation', () => {
     expect(batch).toHaveBeenCalledOnce();
     const batchCalls = batch.mock.calls as unknown as Array<[Array<DatabaseStatement & { sql?: string }>] >;
     const batchedStatements = batchCalls[0]?.[0] ?? [];
-    expect(batchedStatements.some((item) => item.sql?.includes('UPDATE rules SET'))).toBe(false);
+    const update = batchedStatements.find((item) => item.sql?.includes('UPDATE rules SET'));
+    expect(update?.sql).toContain("review_status = 'pending'");
+    expect(update?.sql).toContain('pending_review_by = ?');
+    expect(batchedStatements.some((item) => item.sql?.includes('review_proposals'))).toBe(false);
+    expect(batchedStatements.some((item) => item.sql?.includes('review_batches'))).toBe(false);
+    expect((update as (DatabaseStatement & { bindings?: unknown[] }) | undefined)?.bindings).toContain('ordinary-1');
+    vi.unstubAllGlobals();
   });
 });

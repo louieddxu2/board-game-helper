@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { parseSafeExternalUrl } from '../shared/externalUrl';
+import { isDirectExternalUrl, parseSafeExternalUrl } from '../shared/externalUrl';
 
 interface ExternalLinkGuardProps {
   url: string;
@@ -10,6 +10,7 @@ interface ExternalLinkGuardProps {
 
 export const ExternalLinkGuard = ({ url, children, className }: ExternalLinkGuardProps) => {
   const safeUrl = parseSafeExternalUrl(url);
+  const direct = isDirectExternalUrl(url);
   const [open, setOpen] = useState(false);
 
   if (!safeUrl) return <span className={className} title="此來源網址無法安全驗證">{children}</span>;
@@ -23,7 +24,11 @@ export const ExternalLinkGuard = ({ url, children, className }: ExternalLinkGuar
     <button
       type="button"
       className={className ? `${className} external-link-button` : 'external-link-button'}
-      onClick={(event) => { event.stopPropagation(); setOpen(true); }}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (direct) openExternal();
+        else setOpen(true);
+      }}
     >
       {children}
     </button>

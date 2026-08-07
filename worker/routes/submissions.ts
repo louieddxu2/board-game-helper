@@ -152,8 +152,8 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
       INSERT INTO rules (
         id, submission_id, game_id, statement, common_mistake, details,
         flow_stage, categories_json, player_counts_json, edition_notes_json, edition_note, source_label, source_url,
-        status, created_by, created_at, updated_at, review_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)
+        pending_review_by, status, created_by, created_at, updated_at, review_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?, ?, ?)
     `).bind(
       ruleId, submissionId, gameId, input.statement,
       cleanOptional(input.commonMistake, 2000) ?? null,
@@ -164,6 +164,7 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
       JSON.stringify(editionNotes), editionNotes[0] ?? null,
       cleanOptional(input.sourceLabel ?? parsed.data.sourceLabel, 300) ?? null,
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
+      initialReviewStatus(user) === 'pending' ? user.id : null,
       user.id, timestamp, timestamp, initialReviewStatus(user),
     ));
     statements.push(...await tagWriteStatements(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isSafeExternalUrl, parseSafeExternalUrl } from './externalUrl';
+import { isDirectExternalUrl, isSafeExternalUrl, parseSafeExternalUrl } from './externalUrl';
 
 describe('external source URL policy', () => {
   test('allows HTTPS URLs and normalizes their display form', () => {
@@ -15,5 +15,12 @@ describe('external source URL policy', () => {
 
   test('rejects URLs carrying credentials', () => {
     expect(isSafeExternalUrl('https://user:password@example.com/rules')).toBe(false);
+  });
+
+  test('allows only the canonical BGG hosts to bypass confirmation', () => {
+    expect(isDirectExternalUrl('https://boardgamegeek.com/boardgame/1')).toBe(true);
+    expect(isDirectExternalUrl('https://www.boardgamegeek.com/boardgame/1')).toBe(true);
+    expect(isDirectExternalUrl('https://evil-boardgamegeek.com/boardgame/1')).toBe(false);
+    expect(isDirectExternalUrl('https://bgg.example.com/boardgame/1')).toBe(false);
   });
 });

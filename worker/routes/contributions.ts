@@ -9,36 +9,20 @@ const contributionRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariable
 
 contributionRoutes.get('/api/account/contributions', requireUser, async (c) => {
   const user = c.get('user')!;
-  const [rulesResult, editProposalsResult, gamesResult] = await Promise.all([
+  const [rulesResult, gamesResult] = await Promise.all([
     getDatabase(c).statement(`
       SELECT r.id, r.game_id, g.display_name game_name, g.slug game_slug,
         r.statement, r.status, r.review_status, r.created_at, r.updated_at
       FROM rules r
       JOIN games g ON g.id = r.game_id
-      WHERE r.created_by = ? AND r.review_status = 'pending' AND r.status = 'published'
+      WHERE (r.created_by = ? OR r.pending_review_by = ?)
+        AND r.review_status = 'pending' AND r.status = 'published'
       ORDER BY r.created_at DESC, r.id DESC
       LIMIT ${RULE_CONTRIBUTION_LIMIT}
-    `).bind(user.id).all<{
+    `).bind(user.id, user.id).all<{
       id: string; game_id: string; game_name: string; game_slug: string; statement: string;
       status: 'draft' | 'published' | 'hidden'; review_status: 'not_required' | 'pending' | 'reviewed';
       created_at: number; updated_at: number;
-    }>(),
-    getDatabase(c).statement(`
-      SELECT p.target_id id, r.game_id, g.display_name game_name, g.slug game_slug,
-        p.proposed_json, r.status, r.updated_at, p.created_at
-      FROM review_proposals p
-      JOIN rules r ON r.id = p.target_id
-      JOIN games g ON g.id = r.game_id
-      WHERE p.created_by = ? AND p.operation = 'edit' AND p.status IN ('pending', 'conflict')
-        AND NOT EXISTS (
-          SELECT 1 FROM user_roles
-          WHERE user_id = p.created_by AND role IN ('editor', 'admin') AND revoked_at IS NULL
-        )
-      ORDER BY p.created_at DESC, p.id DESC
-      LIMIT ${RULE_CONTRIBUTION_LIMIT}
-    `).bind(user.id).all<{
-      id: string; game_id: string; game_name: string; game_slug: string;
-      proposed_json: string; status: 'draft' | 'published' | 'hidden'; updated_at: number; created_at: number;
     }>(),
     getDatabase(c).statement(`
       SELECT g.id, g.slug, g.display_name, g.visibility, g.review_status,
@@ -55,34 +39,22 @@ contributionRoutes.get('/api/account/contributions', requireUser, async (c) => {
     }>(),
   ]);
   const pendingRules = rulesResult.results ?? [];
-  const pendingEdits = (editProposalsResult.results ?? []).map((row) => {
-    let statement = '';
-    try {
-      const proposed = JSON.parse(row.proposed_json) as { statement?: unknown };
-      if (typeof proposed.statement === 'string') statement = proposed.statement;
-    } catch { /* keep malformed historical proposals visible without failing the account page */ }
-    return {
-      id: row.id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug,
-      statement: statement || '待審核修改', status: row.status, reviewStatus: 'pending' as const,
-      createdAt: row.created_at, updatedAt: row.updated_at,
-    };
-  });
   const pendingGames = gamesResult.results ?? [];
   setNoCache(c);
   return c.json({
     quota: {
-      pendingRules: pendingRules.length + pendingEdits.length,
+      pendingRules: pendingRules.length,
       ruleLimit: RULE_CONTRIBUTION_LIMIT,
-      remainingRules: Math.max(0, RULE_CONTRIBUTION_LIMIT - pendingRules.length - pendingEdits.length),
+      remainingRules: Math.max(0, RULE_CONTRIBUTION_LIMIT - pendingRules.length),
       pendingGames: pendingGames.length,
       gameLimit: GAME_CONTRIBUTION_LIMIT,
       remainingGames: Math.max(0, GAME_CONTRIBUTION_LIMIT - pendingGames.length),
     },
-    rules: [...pendingRules.map((row) => ({
+    rules: pendingRules.map((row) => ({
       id: row.id, gameId: row.game_id, gameName: row.game_name, gameSlug: row.game_slug,
       statement: row.statement, status: row.status, reviewStatus: row.review_status,
       createdAt: row.created_at, updatedAt: row.updated_at,
-    })), ...pendingEdits],
+    })),
     games: pendingGames.map((row) => ({
       id: row.id, slug: row.slug, displayName: row.display_name, visibility: row.visibility,
       reviewStatus: row.review_status,

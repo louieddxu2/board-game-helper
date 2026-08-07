@@ -535,7 +535,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
         newTagNames: tagSelections.flatMap((tag) => tag.id ? [] : [tag.name]),
         sourceLabel: sourceLabel || null, sourceUrl: sourceUrl || null,
       });
-      if (response.proposalId) showToast('修改已送交審核，現有公開版本保持不變。', 'info');
+      if (response.reviewStatus === 'pending') showToast('修改已送交審核。', 'info');
       await onSaved();
     } finally { setSaving(false); }
   };

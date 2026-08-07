@@ -54,7 +54,7 @@ const appFor = (user: SessionUser, db: Database) => {
 };
 
 describe('account read routes', () => {
-  test('loads only bounded pending submissions with bounded edit proposals', async () => {
+  test('loads only bounded pending submissions with two D1 queries', async () => {
     const { db, recorded } = fakeDatabase();
     const app = appFor({ id: 'user-1', roles: [] }, db);
 
@@ -62,15 +62,13 @@ describe('account read routes', () => {
     const payload = await response.json() as { rules: unknown[]; games: unknown[]; quota: { pendingRules: number; pendingGames: number } };
 
     expect(response.status).toBe(200);
-    expect(recorded).toHaveLength(3);
+    expect(recorded).toHaveLength(2);
     expect(recorded.every((query) => !query.sql.includes('COUNT('))).toBe(true);
     expect(recorded[0].sql).toContain("r.review_status = 'pending' AND r.status = 'published'");
     expect(recorded[0].sql).toContain('LIMIT 6');
-    expect(recorded[1].sql).toContain('FROM review_proposals p');
-    expect(recorded[1].sql).toContain('LIMIT 6');
-    expect(recorded[2].sql).toContain("g.review_status = 'pending'");
-    expect(recorded[2].sql).toContain("g.visibility = 'public'");
-    expect(recorded[2].sql).toContain('LIMIT 1');
+    expect(recorded[1].sql).toContain("g.review_status = 'pending'");
+    expect(recorded[1].sql).toContain("g.visibility = 'public'");
+    expect(recorded[1].sql).toContain('LIMIT 1');
     expect(payload).toMatchObject({ quota: { pendingRules: 1, pendingGames: 1 } });
     expect(payload.rules).toHaveLength(1);
     expect(payload.games).toHaveLength(1);

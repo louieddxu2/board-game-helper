@@ -11,14 +11,15 @@ export const initialReviewStatus = (user: Pick<SessionUser, 'roles'>): Contribut
   isTrustedEditor(user) ? 'not_required' : 'pending';
 
 export const canEditContributionRule = (
-  rule: { created_by: string | null; review_status: ContributionReviewStatus; status?: string },
+  rule: { created_by: string | null; pending_review_by?: string | null; review_status: ContributionReviewStatus; status?: string },
   user: Pick<SessionUser, 'id' | 'roles'>,
 ) => {
   if (user.roles.includes('admin')) return true;
   if (user.roles.includes('editor')) {
     return rule.created_by === user.id || rule.review_status !== 'not_required';
   }
-  return rule.created_by === user.id && rule.review_status === 'pending' && rule.status !== 'hidden';
+  return (rule.created_by === user.id || rule.pending_review_by === user.id)
+    && rule.review_status === 'pending' && rule.status !== 'hidden';
 };
 
 export const canEditContributionGame = (
@@ -36,27 +37,16 @@ export const queryContributionQuota = async (db: Database, userId: string): Prom
   const [ruleCount, gameCount] = await Promise.all([
     db.statement(`
       SELECT COUNT(*) count FROM rules
-      WHERE created_by = ? AND review_status = 'pending' AND status = 'published'
-    `).bind(userId).first<{ count: number }>(),
+      WHERE review_status = 'pending' AND status = 'published'
+        AND (created_by = ? OR pending_review_by = ?)
+    `).bind(userId, userId).first<{ count: number }>(),
     db.statement(`
       SELECT COUNT(*) count FROM games
       WHERE created_by = ? AND review_status = 'pending' AND visibility = 'public'
         AND merged_into_game_id IS NULL
     `).bind(userId).first<{ count: number }>(),
   ]);
-  const editStatement = db.statement(`
-    SELECT COUNT(*) count FROM review_proposals
-    WHERE created_by = ? AND operation = 'edit' AND status IN ('pending', 'conflict')
-      AND NOT EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = review_proposals.created_by
-          AND role IN ('editor', 'admin') AND revoked_at IS NULL
-      )
-  `);
-  const editCount = editStatement
-    ? await editStatement.bind(userId).first<{ count: number }>()
-    : null;
-  const pendingRules = Number(ruleCount?.count ?? 0) + Number(editCount?.count ?? 0);
+  const pendingRules = Number(ruleCount?.count ?? 0);
   const pendingGames = Number(gameCount?.count ?? 0);
   return {
     pendingRules,
