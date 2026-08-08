@@ -9,14 +9,14 @@ vi.mock('../workspace/db', () => ({
     activeNodeId: 'node-table',
     nodes: [{ id: 'node-table', type: 'table', name: '測試表格', parentId: null, order: 0, tableId: 'table-1' }],
     tables: [{
-      id: 'table-1', name: '測試表格', updatedAt: 0,
+      id: 'table-1', name: '測試表格', rowHeaderName: '項目', updatedAt: 0,
       columns: [
         { id: 'column-text', name: '名稱', inputType: 'text', options: [] },
         { id: 'column-number', name: '數量', inputType: 'number', options: [] },
         { id: 'column-select', name: '類型', inputType: 'select', options: ['合作', '競爭'] },
         { id: 'column-dynamic', name: '標籤', inputType: 'dynamic-select', options: [] },
       ],
-      rows: [{ id: 'row-1', values: { 'column-text': null, 'column-number': 2, 'column-select': '合作', 'column-dynamic': null } }],
+      rows: [{ id: 'row-1', name: '花火', values: { 'column-text': null, 'column-number': 2, 'column-select': '合作', 'column-dynamic': null } }],
     }],
   }),
   saveWorkspace: vi.fn(async () => undefined),
@@ -66,5 +66,25 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('option', { name: '新增「新標籤」' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('新標籤')).toBeInTheDocument();
+  });
+
+  it('keeps item names and the item axis separate from attribute columns', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '編輯項目 花火' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '編輯項目 花火' }));
+    const itemName = screen.getByRole('textbox', { name: '項目名稱' });
+    await user.clear(itemName);
+    await user.type(itemName, '收藏清單第一項');
+    await user.click(screen.getByRole('button', { name: '確定' }));
+    expect(screen.getByRole('button', { name: '編輯項目 收藏清單第一項' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '項目' }));
+    const axisName = screen.getByRole('textbox', { name: '項目軸名稱' });
+    await user.clear(axisName);
+    await user.type(axisName, '桌遊收藏');
+    await user.click(screen.getByRole('button', { name: '確定' }));
+    expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
   });
 });

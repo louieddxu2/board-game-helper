@@ -47,10 +47,11 @@ const tableRows = (table: WorkspaceTable): unknown[][] => [
   [TABLE_MARKER, WORKSPACE_FORMAT_VERSION],
   ['table_id', table.id],
   ['table_name', table.name],
+  ['row_header_name', table.rowHeaderName],
   ['columns', 'id', 'name', 'inputType', 'options'],
   ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, column.options.join('\n')]),
-  ['data', 'row_id', ...table.columns.map((column) => column.id)],
-  ...table.rows.map((row) => [row.id, ...table.columns.map((column) => row.values[column.id] ?? null)]),
+  ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
+  ...table.rows.map((row) => [row.id, row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]),
 ];
 
 const workspaceRows = (data: WorkspaceData): unknown[][] => [
@@ -162,6 +163,7 @@ const parseType = (value: string): WorkspaceInputType => INPUT_TYPES.includes(va
 const parseTable = (rows: SheetRows): WorkspaceTable => {
   if (stringValue(rows[0]?.[0]) !== TABLE_MARKER) throw new Error('找不到動態表格格式標記');
   const tableName = stringValue(rows[2]?.[1]) || '匯入表格';
+  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]) || '項目';
   const columns: WorkspaceColumn[] = [];
   for (const row of rows) {
     if (stringValue(row[0]) !== 'column') continue;
@@ -173,14 +175,46 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   if (!columns.length) throw new Error('匯入表格沒有欄位');
   const dataIndex = rows.findIndex((row) => stringValue(row[0]) === 'data');
   if (dataIndex < 0) throw new Error('匯入表格沒有資料區');
-  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
+  const hasRowName = stringValue(rows[dataIndex]?.[2]) === 'row_name';
+  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row, index) => ({
     id: stringValue(row[0]) || makeId('row'),
-    values: Object.fromEntries(columns.map((column, index) => {
-      const raw = row[index + 1];
+    name: hasRowName ? stringValue(row[1]) || `項目 ${index + 1}` : `項目 ${index + 1}`,
+    values: Object.fromEntries(columns.map((column, columnIndex) => {
+      const raw = row[columnIndex + (hasRowName ? 2 : 1)];
       return [column.id, column.inputType === 'number' && typeof raw === 'number' ? raw : stringValue(raw) || null];
     })),
   }));
-  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName, columns, rows: rowsData, updatedAt: Date.now() };
+};
+
+const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {
+  const base = candidate.trim() || `欄位 ${index + 1}`;
+  let name = base;
+  let suffix = 2;
+  while (used.has(name)) name = `${base} ${suffix++}`;
+  used.add(name);
+  return name;
+};
+
+const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => {
+  const header = rows[0] ?? [];
+  if (header.length < 2) throw new Error('試算表至少需要項目欄與一個屬性欄');
+  const rowHeaderName = stringValue(header[0]) || '項目';
+  const usedNames = new Set<string>();
+  const columns = header.slice(1).map((value, index) => ({
+    ...createColumn(uniqueColumnName(stringValue(value), index, usedNames)),
+    inputType: 'text' as const,
+  }));
+  const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ''));
+  const rowsData: WorkspaceRow[] = dataRows.map((row, rowIndex) => ({
+    id: makeId('row'),
+    name: stringValue(row[0]) || `項目 ${rowIndex + 1}`,
+    values: Object.fromEntries(columns.map((column, columnIndex) => {
+      const raw = row[columnIndex + 1];
+      return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];
+    })),
+  }));
+  return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
@@ -243,7 +277,7 @@ const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {
   const columnMap = new Map(table.columns.map((column) => [column.id, makeId('column')]));
   const columns = table.columns.map((column) => ({ ...column, id: columnMap.get(column.id)!, options: [...column.options] }));
-  return { ...table, id: makeId('table'), name: `${table.name}（匯入）`, columns, rows: table.rows.map((row) => ({ id: makeId('row'), values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, row.values[column.id] ?? null])) })), updatedAt: Date.now() };
+  return { ...table, id: makeId('table'), name: `${table.name}（匯入）`, rowHeaderName: table.rowHeaderName, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: row.name, values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, row.values[column.id] ?? null])) })), updatedAt: Date.now() };
 };
 
 export interface ImportedWorkspace {
@@ -261,7 +295,12 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
   }
   if (!sheets.length) throw new Error('試算表沒有工作表');
   const workspaceSheet = sheets.find((sheet: Sheet<number>) => stringValue(sheet.data[0]?.[0]) === WORKSPACE_MARKER);
-  if (!workspaceSheet) return { isWorkspace: false, table: remapTable(parseTable(sheets[0].data)) };
+  if (!workspaceSheet) {
+    const table = stringValue(sheets[0].data[0]?.[0]) === TABLE_MARKER
+      ? parseTable(sheets[0].data)
+      : parsePlainTable(sheets[0].data, sheets[0].sheet);
+    return { isWorkspace: false, table: remapTable(table) };
+  }
   const parsed = parseWorkspace(workspaceSheet.data);
   const tableSheets = sheets.filter((sheet: Sheet<number>) => sheet !== workspaceSheet);
   const tables = tableSheets.map((sheet) => parseTable(sheet.data));

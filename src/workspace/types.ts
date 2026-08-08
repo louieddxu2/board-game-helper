@@ -10,12 +10,14 @@ export interface WorkspaceColumn {
 
 export interface WorkspaceRow {
   id: string;
+  name: string;
   values: Record<string, WorkspaceCellValue>;
 }
 
 export interface WorkspaceTable {
   id: string;
   name: string;
+  rowHeaderName: string;
   columns: WorkspaceColumn[];
   rows: WorkspaceRow[];
   updatedAt: number;

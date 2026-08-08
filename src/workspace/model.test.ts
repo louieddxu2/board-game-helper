@@ -8,10 +8,10 @@ describe('workspace model', () => {
     const column = createColumn('狀態', 'dynamic-select');
     table.columns.push(column);
     table.rows = [
-      { id: 'r1', values: { [column.id]: '已擁有' } },
-      { id: 'r2', values: { [column.id]: '想要' } },
-      { id: 'r3', values: { [column.id]: '已擁有' } },
-      { id: 'r4', values: { [column.id]: null } },
+      { id: 'r1', name: '項目 1', values: { [column.id]: '已擁有' } },
+      { id: 'r2', name: '項目 2', values: { [column.id]: '想要' } },
+      { id: 'r3', name: '項目 3', values: { [column.id]: '已擁有' } },
+      { id: 'r4', name: '項目 4', values: { [column.id]: null } },
     ];
     expect(getDynamicOptions(table, column.id)).toEqual(['已擁有', '想要']);
   });
@@ -31,8 +31,8 @@ describe('workspace model', () => {
         { id: 'table-root', type: 'table', name: '表 Root', parentId: null, order: 1, tableId: 'data-root' },
       ],
       tables: [
-        { id: 'data-a', name: '表 A', columns: [], rows: [], updatedAt: 0 },
-        { id: 'data-root', name: '表 Root', columns: [], rows: [], updatedAt: 0 },
+        { id: 'data-a', name: '表 A', rowHeaderName: '項目', columns: [], rows: [], updatedAt: 0 },
+        { id: 'data-root', name: '表 Root', rowHeaderName: '項目', columns: [], rows: [], updatedAt: 0 },
       ],
       activeNodeId: 'table-a',
     };

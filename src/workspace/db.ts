@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import { emptyWorkspace } from './model';
+import { emptyWorkspace, normalizeWorkspace } from './model';
 import type { WorkspaceData } from './types';
 
 interface WorkspaceDb extends DBSchema {
@@ -19,7 +19,8 @@ const database = typeof indexedDB === 'undefined'
 
 export const loadWorkspace = async (): Promise<WorkspaceData> => {
   if (!database) return emptyWorkspace();
-  return (await (await database).get('state', STATE_KEY)) ?? emptyWorkspace();
+  const loaded = (await (await database).get('state', STATE_KEY)) ?? emptyWorkspace();
+  return normalizeWorkspace(loaded);
 };
 
 export const saveWorkspace = async (data: WorkspaceData) => {
@@ -31,4 +32,3 @@ export const clearWorkspace = async () => {
   if (!database) return;
   await (await database).delete('state', STATE_KEY);
 };
-

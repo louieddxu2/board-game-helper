@@ -1,5 +1,7 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 
+const DEFAULT_ROW_HEADER_NAME = '項目';
+
 export const makeId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -13,14 +15,27 @@ export const createColumn = (name: string, inputType: WorkspaceInputType = 'text
   id: makeId('column'), name: name.trim() || '未命名欄位', inputType, options: [],
 });
 
-export const createRow = (columns: WorkspaceColumn[]): WorkspaceRow => ({
-  id: makeId('row'), values: Object.fromEntries(columns.map((column) => [column.id, null])),
+export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): WorkspaceRow => ({
+  id: makeId('row'), name, values: Object.fromEntries(columns.map((column) => [column.id, null])),
 });
 
 export const createTable = (name: string): WorkspaceTable => {
-  const columns = [createColumn('名稱', 'text')];
-  return { id: makeId('table'), name: name.trim() || '未命名表格', columns, rows: [createRow(columns)], updatedAt: Date.now() };
+  const columns = [createColumn('屬性 1', 'text')];
+  return { id: makeId('table'), name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, columns, rows: [createRow(columns)], updatedAt: Date.now() };
 };
+
+export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
+  ...data,
+  tables: data.tables.map((table) => ({
+    ...table,
+    rowHeaderName: table.rowHeaderName?.trim() || DEFAULT_ROW_HEADER_NAME,
+    rows: table.rows.map((row, index) => ({
+      ...row,
+      name: row.name?.trim() || `項目 ${index + 1}`,
+      values: { ...row.values },
+    })),
+  })),
+});
 
 export const createNode = (type: WorkspaceNode['type'], name: string, parentId: string | null, order: number, tableId?: string): WorkspaceNode => ({
   id: makeId(type), type, name: name.trim() || (type === 'folder' ? '未命名資料夾' : '未命名表格'), parentId, order, ...(tableId ? { tableId } : {}),
