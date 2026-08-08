@@ -101,6 +101,7 @@ const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }:
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectedOptionRef = useRef<HTMLButtonElement>(null);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return normalized ? options.filter((option) => option.toLocaleLowerCase().includes(normalized)) : options;
@@ -108,13 +109,17 @@ const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }:
   const normalizedQuery = query.trim();
   const hasExact = options.some((option) => option === normalizedQuery);
   useEffect(() => { if (isDynamic) inputRef.current?.focus(); }, [isDynamic]);
+  useEffect(() => {
+    const selected = selectedOptionRef.current;
+    if (selected && typeof selected.scrollIntoView === 'function') selected.scrollIntoView({ block: 'center' });
+  }, [currentValue, options]);
   const choose = (nextValue: string) => onSelect(nextValue);
   const submitQuery = () => { if (normalizedQuery) choose(normalizedQuery); };
 
   return <WorkspaceModal title={column.name} onClose={onClose} className="workspace-selection-dialog">
     {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} autoFocus inputMode="text" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或新增…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
     <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
-      {filtered.map((option) => <button type="button" key={option} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
+      {filtered.map((option) => <button ref={option === currentValue ? selectedOptionRef : undefined} type="button" key={option} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
       {isDynamic && normalizedQuery && !hasExact && <button type="button" className="workspace-selection-create" role="option" aria-selected={false} onClick={() => choose(normalizedQuery)}>新增「{normalizedQuery}」</button>}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
       {!filtered.length && isDynamic && normalizedQuery && <p className="workspace-selection-empty">按 Enter 或點擊上方按鈕新增此項目</p>}
