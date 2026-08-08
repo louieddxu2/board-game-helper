@@ -98,7 +98,8 @@ footer a { color: inherit; }
 .workspace-main { position: relative; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; padding: 0; }
 .workspace-notice { position: absolute; top: 84px; right: 18px; z-index: 20; display: flex; align-items: center; gap: 10px; max-width: min(360px, calc(100vw - 36px)); padding: 10px 13px; border: 1px solid #bbd6ed; border-radius: 8px; background: #edf6ff; color: #175a8e; box-shadow: 0 4px 14px rgba(0,0,0,.1); font-size: 13px; }
 .workspace-notice button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.workspace-table-viewport { flex: 1; min-height: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: var(--white); touch-action: pan-x pan-y pinch-zoom; }
+.workspace-table-viewport { flex: 1; min-height: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: var(--white); touch-action: pan-x pan-y pinch-zoom; scrollbar-width: none; }
+.workspace-table-viewport::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; color: #3c3c3c; table-layout: auto; transform-origin: top left; }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; width: max-content; padding: 12px 18px; border-right: 1px solid #e1e1e1; border-bottom: 1px solid #e1e1e1; vertical-align: middle; white-space: pre; line-height: 1.45; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 3; background: #fafafa; color: #343434; font-size: 20px; font-weight: 600; }
@@ -124,7 +125,7 @@ footer a { color: inherit; }
 .workspace-option-menu button:hover { background: #edf5fc; }
 .workspace-option-menu .workspace-create-option { border-top: 1px solid var(--line); color: #1976d2; font-weight: 700; }
 .workspace-option-menu span { display: block; padding: 8px; color: var(--muted); font-size: 12px; }
-.workspace-zoom-indicator { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-height: 36px; padding: 0 12px; color: #888; font-size: 11px; }
+.workspace-zoom-indicator { display: none; align-items: center; justify-content: flex-end; gap: 4px; min-height: 36px; padding: 0 12px; color: #888; font-size: 11px; }
 .workspace-zoom-indicator button { min-width: 28px; min-height: 27px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: #777; cursor: pointer; }
 .workspace-zoom-indicator button:hover { background: #f0f0f0; color: #1976d2; }
 .workspace-fab { position: absolute; right: 22px; bottom: 34px; z-index: 8; display: grid; place-items: center; width: 64px; height: 64px; border: 0; border-radius: 50%; background: #1976d2; color: white; box-shadow: 0 4px 12px rgba(0,0,0,.25); cursor: pointer; }
@@ -183,6 +184,8 @@ footer a { color: inherit; }
 .workspace-dialog-button.secondary { border-color: #d5d5d5; background: var(--white); color: #555; }
 .workspace-dialog-button.danger { background: #c62828; color: white; }
 .workspace-action-dialog { width: min(390px, 100%); }
+.workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
+.workspace-name-dialog-overlay { background: transparent; }
 .workspace-selection-dialog { width: min(430px, 50vw); max-height: min(50dvh, 720px); border: 3px solid #777; border-radius: 12px; }
 .workspace-selection-dialog-overlay { background: transparent; }
 .workspace-selection-dialog .workspace-dialog-heading { display: none; }
@@ -217,7 +220,9 @@ footer a { color: inherit; }
   .workspace-fab { right: 17px; bottom: 24px; width: 60px; height: 60px; }
   .workspace-zoom-indicator { padding-right: 10px; }
   .workspace-notice { top: 75px; right: 10px; }
-  .workspace-dialog { align-self: end; width: 100%; max-height: min(86dvh, 720px); border-radius: 12px 12px 0 0; }
+  .workspace-dialog { align-self: center; width: min(460px, 80vw); max-height: min(84dvh, 720px); border-radius: 12px; }
+  .workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
+  .workspace-column-dialog { width: min(460px, 80vw); }
   .workspace-selection-dialog { align-self: center; width: min(430px, 50vw); max-height: min(50dvh, 720px); border-radius: 12px; }
   .workspace-overlay { align-items: end; padding: 0; }
   .workspace-drawer { width: min(88vw, 360px); }
