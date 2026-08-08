@@ -51,6 +51,9 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
       setUser(response.user);
       setGoogleClientId(response.googleClientId);
       setLocalDevLogin(response.localDevLogin);
+    } catch {
+      // The local Workspace must still boot when the app shell is opened offline.
+      // Keep any already-known session state; an unavailable network is not a logout.
     } finally {
       setLoading(false);
     }

@@ -68,6 +68,7 @@ export const Layout = () => {
       {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <NavLink to="/">探索</NavLink>
+        <NavLink to="/workspace">Workspace</NavLink>
         <NavLink to={addRuleHref} className="nav-primary">＋記錄{!user && <FaintRedLock />}</NavLink>
         {isAdmin && <NavLink to="/review">校稿</NavLink>}
         {user && <NavLink to="/catalog">列表</NavLink>}

@@ -1,0 +1,62 @@
+import { describe, expect, it } from 'vitest';
+import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
+import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
+import type { WorkspaceData } from './types';
+
+const ensureBlobArrayBuffer = () => {
+  if (typeof Blob.prototype.arrayBuffer === 'function') return;
+  Object.defineProperty(Blob.prototype, 'arrayBuffer', {
+    configurable: true,
+    value(this: Blob) {
+      return new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(this);
+      });
+    },
+  });
+};
+
+const makeFixture = (): WorkspaceData => {
+  const table = createTable('收藏清單');
+  const status = createColumn('狀態', 'select'); status.options = ['已擁有', '想要'];
+  const quantity = createColumn('數量', 'number');
+  table.columns.push(status, quantity);
+  const row = createRow(table.columns);
+  row.values[table.columns[0].id] = '花磚物語';
+  row.values[status.id] = '已擁有';
+  row.values[quantity.id] = 2;
+  table.rows = [row];
+  const node = createNode('table', table.name, null, 0, table.id);
+  return { ...emptyWorkspace(), nodes: [node], tables: [table], activeNodeId: node.id };
+};
+
+describe('workspace spreadsheet format', () => {
+  it('round-trips one table through an xlsx workbook', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    const table = source.tables[0];
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+    expect(imported.isWorkspace).toBe(false);
+    expect(imported.table?.name).toBe('收藏清單（匯入）');
+    expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number']);
+    expect(imported.table?.rows[0].values[imported.table.columns[2].id]).toBe(2);
+  });
+
+  it('round-trips the workspace tree through multiple sheets', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    const folder = createNode('folder', '桌遊', null, 0);
+    source.nodes[0].parentId = folder.id;
+    source.nodes.push(folder);
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source));
+    expect(imported.isWorkspace).toBe(true);
+    expect(imported.data?.nodes).toHaveLength(2);
+    expect(imported.data?.tables[0].name).toBe('收藏清單');
+    const copy = cloneImportedWorkspace(imported.data!);
+    expect(copy.nodes.every((node) => node.id !== imported.data?.nodes.find((original) => original.name === node.name)?.id)).toBe(true);
+    expect(copy.nodes.find((node) => node.type === 'table')?.tableId).toBe(copy.tables[0].id);
+    expect(copy.nodes.find((node) => node.type === 'table')?.parentId).toBe(copy.nodes.find((node) => node.type === 'folder')?.id);
+  });
+});

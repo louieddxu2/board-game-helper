@@ -27,6 +27,7 @@ const router = createBrowserRouter([
     { path: 'privacy', lazy: async () => ({ Component: (await import('./pages/PrivacyPage')).PrivacyPage }) },
     { path: 'review', lazy: async () => ({ Component: (await import('./pages/ReviewPage')).ReviewPage }) },
     { path: 'admin', lazy: async () => ({ Component: (await import('./pages/AdminPage')).AdminPage }) },
+    { path: 'workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }) },
   ] },
 ]);
 
