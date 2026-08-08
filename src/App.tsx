@@ -16,7 +16,8 @@ const ErrorFallback = () => (
 );
 
 const router = createBrowserRouter([
-  { path: '/', element: <Layout />, errorElement: <ErrorFallback />, children: [
+  { path: '/workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }), errorElement: <ErrorFallback /> },
+  { path: '/', element: <SessionProvider><Layout /></SessionProvider>, errorElement: <ErrorFallback />, children: [
     { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
     { path: 'add', lazy: async () => ({ Component: (await import('./pages/AddPage')).AddPage }) },
     { path: 'games/:identifier', lazy: async () => ({ Component: (await import('./pages/GamePage')).GamePage }) },
@@ -27,8 +28,7 @@ const router = createBrowserRouter([
     { path: 'privacy', lazy: async () => ({ Component: (await import('./pages/PrivacyPage')).PrivacyPage }) },
     { path: 'review', lazy: async () => ({ Component: (await import('./pages/ReviewPage')).ReviewPage }) },
     { path: 'admin', lazy: async () => ({ Component: (await import('./pages/AdminPage')).AdminPage }) },
-    { path: 'workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }) },
   ] },
 ]);
 
-export const App = () => <SessionProvider><ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider></SessionProvider>;
+export const App = () => <ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider>;
