@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { WorkspacePage } from './pages/WorkspacePage';
 import { Layout } from './components/Layout';
 import { SessionProvider } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext';
@@ -16,7 +17,7 @@ const ErrorFallback = () => (
 );
 
 const router = createBrowserRouter([
-  { path: '/workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }), errorElement: <ErrorFallback /> },
+  { path: '/workspace', element: <WorkspacePage />, errorElement: <ErrorFallback /> },
   { path: '/', element: <SessionProvider><Layout /></SessionProvider>, errorElement: <ErrorFallback />, children: [
     { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
     { path: 'add', lazy: async () => ({ Component: (await import('./pages/AddPage')).AddPage }) },
