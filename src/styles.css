@@ -179,6 +179,19 @@ footer a { color: inherit; }
 .workspace-dialog-button.secondary { border-color: #d5d5d5; background: var(--white); color: #555; }
 .workspace-dialog-button.danger { background: #c62828; color: white; }
 .workspace-action-dialog { width: min(390px, 100%); }
+.workspace-selection-dialog { width: min(430px, 100%); }
+.workspace-selection-search { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 10px; border: 1px solid #cfcfcf; border-radius: 4px; color: #777; }
+.workspace-selection-search:focus-within { border-color: #5b9bd5; outline: 2px solid rgba(91,155,213,.2); }
+.workspace-selection-search input { flex: 1; min-width: 0; min-height: 34px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; }
+.workspace-selection-search button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #777; cursor: pointer; }
+.workspace-selection-search button:hover { background: #f0f0f0; color: #1976d2; }
+.workspace-selection-list { display: grid; max-height: min(48dvh, 400px); overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 5px; }
+.workspace-selection-list button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 8px 14px; border: 0; border-bottom: 1px solid #e7e7e7; background: var(--white); color: #333; cursor: pointer; font-size: 17px; text-align: left; }
+.workspace-selection-list button:last-child { border-bottom: 0; }
+.workspace-selection-list button:hover, .workspace-selection-list button.selected { background: #edf5fc; color: #155b91; }
+.workspace-selection-list .workspace-selection-clear { color: #777; font-size: 14px; }
+.workspace-selection-list .workspace-selection-create { color: #1976d2; font-weight: 700; }
+.workspace-selection-empty { margin: 0; padding: 26px 14px; color: #888; font-size: 14px; text-align: center; }
 .workspace-action-list { display: grid; gap: 2px; }
 .workspace-action-list button { display: flex; align-items: center; gap: 13px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: #333; cursor: pointer; text-align: left; font-size: 15px; }
 .workspace-action-list button:hover { background: #edf5fc; color: #155b91; }

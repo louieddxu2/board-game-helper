@@ -54,35 +54,16 @@ const findTableNode = (data: WorkspaceData, tableId: string) => data.nodes.find(
 interface CellEditorProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
-  options: string[];
   onSave(value: string): void;
   onCancel(): void;
 }
 
-const OptionEditor = ({ value, options, allowCreate, onSave, onCancel }: { value: string; options: string[]; allowCreate: boolean; onSave(value: string): void; onCancel(): void }) => {
-  const [draft, setDraft] = useState(value);
-  const filtered = options.filter((option) => option.toLocaleLowerCase().includes(draft.toLocaleLowerCase()));
-  const hasExact = options.some((option) => option === draft);
-  const saveOnBlur = () => window.setTimeout(() => onSave(draft.trim()), 120);
-  return <div className="workspace-option-editor">
-    <input autoFocus className="workspace-cell-editor" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={saveOnBlur} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); onSave(draft.trim()); } if (event.key === 'Escape') onCancel(); }} placeholder={allowCreate ? '搜尋或新增…' : '搜尋選項…'} />
-    <div className="workspace-option-menu" role="listbox">
-      <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => onSave('')}>清除內容</button>
-      {filtered.map((option) => <button type="button" role="option" key={option} onMouseDown={(event) => event.preventDefault()} onClick={() => onSave(option)}>{option}</button>)}
-      {allowCreate && !hasExact && draft.trim() && <button type="button" className="workspace-create-option" onMouseDown={(event) => event.preventDefault()} onClick={() => onSave(draft.trim())}>新增「{draft.trim()}」</button>}
-      {!filtered.length && !draft.trim() && <span>輸入文字以搜尋或新增</span>}
-    </div>
-  </div>;
-};
-
-const CellEditor = ({ column, value, options, onSave, onCancel }: CellEditorProps) => {
+const CellEditor = ({ column, value, onSave, onCancel }: CellEditorProps) => {
   const [draft, setDraft] = useState(value == null ? '' : String(value));
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   useEffect(() => { inputRef.current?.focus(); if (inputRef.current instanceof HTMLInputElement) inputRef.current.select(); }, []);
 
   const commit = () => onSave(draft);
-  if (column.inputType === 'select') return <OptionEditor value={draft} options={options} allowCreate={false} onSave={onSave} onCancel={onCancel} />;
-  if (column.inputType === 'dynamic-select') return <OptionEditor value={draft} options={options} allowCreate onSave={onSave} onCancel={onCancel} />;
   if (column.inputType === 'number') return <input ref={inputRef as React.RefObject<HTMLInputElement>} className="workspace-cell-editor" type="number" inputMode="decimal" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } if (event.key === 'Escape') onCancel(); }} />;
   return <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} className="workspace-cell-editor workspace-text-editor" inputMode="text" rows={Math.max(1, draft.split('\n').length)} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />;
 };
@@ -114,6 +95,33 @@ const NameDialog = ({ state, onClose, onSubmit }: { state: NameDialogState; onCl
 };
 
 const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} actions={<><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button danger" onClick={onConfirm}>刪除</button></>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
+
+const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect(value: string): void }) => {
+  const currentValue = value == null ? '' : String(value);
+  const isDynamic = column.inputType === 'dynamic-select';
+  const [query, setQuery] = useState(isDynamic ? currentValue : '');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized ? options.filter((option) => option.toLocaleLowerCase().includes(normalized)) : options;
+  }, [options, query]);
+  const normalizedQuery = query.trim();
+  const hasExact = options.some((option) => option === normalizedQuery);
+  useEffect(() => { if (isDynamic) inputRef.current?.focus(); }, [isDynamic]);
+  const choose = (nextValue: string) => onSelect(nextValue);
+  const submitQuery = () => { if (normalizedQuery) choose(normalizedQuery); };
+
+  return <WorkspaceModal title={column.name} onClose={onClose} className="workspace-selection-dialog">
+    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} autoFocus inputMode="text" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或新增…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
+    <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
+      {currentValue && <button type="button" className="workspace-selection-clear" role="option" aria-selected={false} onClick={() => choose('')}>清除目前內容</button>}
+      {filtered.map((option) => <button type="button" key={option} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}{option === currentValue && <WorkspaceIcon name="check" size={20} />}</button>)}
+      {isDynamic && normalizedQuery && !hasExact && <button type="button" className="workspace-selection-create" role="option" aria-selected={false} onClick={() => choose(normalizedQuery)}>新增「{normalizedQuery}」</button>}
+      {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
+      {!filtered.length && isDynamic && normalizedQuery && <p className="workspace-selection-empty">按 Enter 或點擊上方按鈕新增此項目</p>}
+    </div>
+  </WorkspaceModal>;
+};
 
 const ColumnConfig = ({ column, onSave, onClose }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onClose(): void }) => {
   const [draft, setDraft] = useState(column);
@@ -173,6 +181,7 @@ const WorkspacePage = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ rowId: string; columnId: string }>();
+  const [selectionEditor, setSelectionEditor] = useState<{ rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[] }>();
   const [configuring, setConfiguring] = useState<WorkspaceColumn>();
   const [workspaceImport, setWorkspaceImport] = useState<WorkspaceData>();
   const [nodeMenu, setNodeMenu] = useState<WorkspaceNode>();
@@ -259,6 +268,21 @@ const WorkspacePage = () => {
     commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.map((row) => row.id === rowId ? { ...row, values: { ...row.values, [column.id]: value } } : row) })));
     setEditing(undefined);
   };
+  const openCell = (row: WorkspaceRow, column: WorkspaceColumn) => {
+    if (!table) return;
+    const value = row.values[column.id];
+    if (column.inputType === 'select' || column.inputType === 'dynamic-select') {
+      setEditing(undefined);
+      setSelectionEditor({ rowId: row.id, column, value, options: column.inputType === 'dynamic-select' ? getDynamicOptions(table, column.id) : column.options });
+      return;
+    }
+    setEditing({ rowId: row.id, columnId: column.id });
+  };
+  const selectCellValue = (value: string) => {
+    if (!selectionEditor) return;
+    updateCell(selectionEditor.rowId, selectionEditor.column, value);
+    setSelectionEditor(undefined);
+  };
   const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns)] }))); setTableActionsOpen(false); };
   const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除列', message: `確定要刪除第 ${rowIndex + 1} 列嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
   const addColumn = () => { if (!data || !table) return; const column = createColumn(`欄位 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setConfiguring(column); setTableActionsOpen(false); };
@@ -306,7 +330,7 @@ const WorkspacePage = () => {
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
           <div ref={viewportRef} className="workspace-table-viewport" onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); setZoom((current) => Math.max(minZoom, Math.min(2.5, current - event.deltaY * 0.002))); } }} onPointerDown={(event) => { if (event.pointerType === 'touch') { pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2) { const points = [...pointers.current.values()]; pinchStart.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom }; } } }} onPointerMove={(event) => { if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2 && pinchStart.current) { const points = [...pointers.current.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); setZoom(Math.max(minZoom, Math.min(2.5, pinchStart.current.zoom * distance / pinchStart.current.distance))); event.preventDefault(); } }} onPointerUp={(event) => { pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinchStart.current = undefined; }} onPointerCancel={(event) => { pointers.current.delete(event.pointerId); pinchStart.current = undefined; }}>
-            <table ref={tableRef} className="workspace-table" style={{ zoom } as React.CSSProperties}><thead><tr><th className="workspace-row-corner"><span className="sr-only">表格左上角</span></th>{table.columns.map((column) => <th key={column.id} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name" onClick={() => setConfiguring(column)}>{column.name}</button></th>)}</tr></thead><tbody>{visibleRows.map((row) => { const originalIndex = table.rows.findIndex((item) => item.id === row.id); return <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><span>{originalIndex + 1}</span></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; const options = column.inputType === 'dynamic-select' ? getDynamicOptions(table, column.id) : column.options; return <td key={column.id} onClick={() => !isEditing && setEditing({ rowId: row.id, columnId: column.id })}>{isEditing ? <CellEditor column={column} value={value} options={options} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={value == null || value === '' ? 'workspace-empty-cell' : ''}>{value == null || value === '' ? '點按輸入' : String(value)}</span>}</td>; })}</tr>; })}</tbody></table>
+            <table ref={tableRef} className="workspace-table" style={{ zoom } as React.CSSProperties}><thead><tr><th className="workspace-row-corner"><span className="sr-only">表格左上角</span></th>{table.columns.map((column) => <th key={column.id} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name" onClick={() => setConfiguring(column)}>{column.name}</button></th>)}</tr></thead><tbody>{visibleRows.map((row) => { const originalIndex = table.rows.findIndex((item) => item.id === row.id); return <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><span>{originalIndex + 1}</span></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; return <td key={column.id} onClick={() => !isEditing && openCell(row, column)}>{isEditing ? <CellEditor column={column} value={value} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={value == null || value === '' ? 'workspace-empty-cell' : ''}>{value == null || value === '' ? '點按輸入' : String(value)}</span>}</td>; })}</tr>; })}</tbody></table>
           </div>
           <div className="workspace-zoom-indicator"><button type="button" onClick={() => setZoom((current) => Math.max(minZoom, current - 0.1))} aria-label="縮小表格">−</button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((current) => Math.min(2.5, current + 0.1))} aria-label="放大表格">＋</button><button type="button" onClick={() => setZoom(minZoom)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
         </>}
@@ -321,6 +345,7 @@ const WorkspacePage = () => {
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}
     {configuring && <ColumnConfig column={configuring} onSave={saveColumn} onClose={() => setConfiguring(undefined)} />}
+    {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)} actions={<button type="button" className="workspace-dialog-button secondary" onClick={() => setWorkspaceImport(undefined)}>取消</button>}><p className="workspace-dialog-message">要如何處理目前瀏覽器中的資料？</p><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
   </section>;
 };
