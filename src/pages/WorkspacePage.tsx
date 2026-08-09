@@ -720,12 +720,12 @@ const WorkspacePage = () => {
     const widthFor = (column: WorkspaceColumn, values: WorkspaceCellValue[]) => Math.max(
       measureWorkspaceText(column.name, 20, 600),
       ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400)) : []),
-    ) + (column.inputType === 'link' ? 46 : 0) + 24;
+    ) + (column.inputType === 'link' ? 46 : 0);
     if (!table.transposed) return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
     const properties = [rowHeader, ...visibleColumns];
-    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600))) + 24;
+    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
     const rowWidths = filteredRows.map((row) => Math.max(
-      measureWorkspaceText(displayWorkspaceCellValue(row.name, rowHeader.inputType), 20, 600) + 24,
+      measureWorkspaceText(displayWorkspaceCellValue(row.name, rowHeader.inputType), 20, 600),
       ...properties.map((column) => column.overflowMode === 'expand'
         ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400) + (column.inputType === 'link' ? 46 : 0)
         : 0),

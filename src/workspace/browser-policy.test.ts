@@ -45,6 +45,9 @@ describe('workspace browser policies', () => {
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
     expect(dialogRule).toMatch(/font-size:\s*16px/);
-    expect(filterRule).toMatch(/flex:\s*0 0 20px/);
+    expect(filterRule).toMatch(/position:\s*absolute/);
+    expect(filterRule).toMatch(/min-height:\s*20px/);
+    expect(filterRule).toMatch(/opacity:\s*\.42/);
+    expect(filterRule).not.toMatch(/flex:\s*0 0/);
   });
 });
