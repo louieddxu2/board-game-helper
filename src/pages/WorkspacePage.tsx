@@ -365,11 +365,11 @@ const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; o
       <div className="workspace-column-config-rail">
         <label className="workspace-form-field">欄位名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
-      </div>
-      <div className="workspace-column-config-panel">
         <fieldset className="workspace-form-field workspace-input-subtype-field"><legend>{inputCategoryLabels[category]}</legend><div className="workspace-input-subtype-options">{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-overflow-field"><legend>內容顯示</legend><div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={(draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap')) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div></fieldset>
+      </div>
+      <div className="workspace-column-config-panel">
         {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
       </div>
     </div>
@@ -567,6 +567,7 @@ const WorkspacePage = () => {
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const workspacePageRef = useRef<HTMLElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
   const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
@@ -577,6 +578,7 @@ const WorkspacePage = () => {
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
   const importTableParentId = useRef<string | null>(null);
   const textScaleRef = useRef(1);
+  const applyTextScaleRef = useRef<((scale: number, persist?: boolean) => void) | undefined>(undefined);
   const pendingScaleSave = useRef<{ tableId: string; scale: number } | undefined>(undefined);
   const scaleSaveTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => {
@@ -944,6 +946,34 @@ const WorkspacePage = () => {
     setTextScale(nextScale);
     if (persist) scheduleTextScaleSave(nextScale);
   };
+  applyTextScaleRef.current = applyTextScale;
+
+  useEffect(() => {
+    const isInsideWorkspace = (target: EventTarget | null) => target instanceof Node && Boolean(workspacePageRef.current?.contains(target));
+    const isInsideDialog = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('.workspace-dialog'));
+    const onWheelCapture = (event: WheelEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || !isInsideWorkspace(event.target)) return;
+      event.preventDefault();
+      if (isInsideDialog(event.target)) return;
+      applyTextScaleRef.current?.(textScaleRef.current - event.deltaY * 0.002);
+    };
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || !['+', '=', '-', '_', '0'].includes(event.key) || !isInsideWorkspace(event.target)) return;
+      event.preventDefault();
+      if (isInsideDialog(event.target)) return;
+      if (event.key === '0') {
+        applyTextScaleRef.current?.(1);
+        return;
+      }
+      applyTextScaleRef.current?.(textScaleRef.current + (event.key === '-' || event.key === '_' ? -0.1 : 0.1));
+    };
+    window.addEventListener('wheel', onWheelCapture, { capture: true, passive: false });
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    return () => {
+      window.removeEventListener('wheel', onWheelCapture, true);
+      window.removeEventListener('keydown', onKeyDownCapture, true);
+    };
+  }, []);
 
   const flushPendingTextScale = () => {
     if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
@@ -1095,32 +1125,13 @@ const WorkspacePage = () => {
     }
   };
 
-  const handleWorkspaceWheel = (event: React.WheelEvent<HTMLElement>) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    if (event.target instanceof Element && event.target.closest('.workspace-dialog')) return;
-    applyTextScale(textScaleRef.current - event.deltaY * 0.002);
-  };
-
-  const handleWorkspaceZoomKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    if (!['+', '=', '-', '_', '0'].includes(event.key)) return;
-    event.preventDefault();
-    if (event.target instanceof Element && event.target.closest('.workspace-dialog')) return;
-    if (event.key === '0') {
-      applyTextScale(1);
-      return;
-    }
-    applyTextScale(textScaleRef.current + (event.key === '-' || event.key === '_' ? -0.1 : 0.1));
-  };
-
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
   const activeEditingRowIndex = activeEditingRow && table ? table.rows.findIndex((item) => item.id === activeEditingRow.id) : -1;
   const activeEditingColumn = editing && table ? editing.columnId === rowHeader?.id ? rowHeader : table.columns.find((item) => item.id === editing.columnId) : undefined;
   const activeEditingValue = activeEditingRow && activeEditingColumn ? activeEditingColumn.id === rowHeader?.id ? activeEditingRow.name : activeEditingRow.values[activeEditingColumn.id] : null;
   const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined);
-  return <section className="workspace-page" style={{ '--workspace-text-scale': textScale } as React.CSSProperties} onWheel={handleWorkspaceWheel} onKeyDownCapture={handleWorkspaceZoomKeyDown}>
+  return <section ref={workspacePageRef} className="workspace-page" style={{ '--workspace-text-scale': textScale } as React.CSSProperties}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>

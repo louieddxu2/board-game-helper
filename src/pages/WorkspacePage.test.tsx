@@ -513,6 +513,23 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '刪除欄位' })).not.toBeInTheDocument();
   });
 
+  it('keeps display settings on the left and fixed options on the right', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+
+    const rail = document.querySelector('.workspace-column-config-rail');
+    const panel = document.querySelector('.workspace-column-config-panel');
+    expect(rail?.querySelector('.workspace-alignment-field')).toBeInTheDocument();
+    expect(rail?.querySelector('.workspace-overflow-field')).toBeInTheDocument();
+    expect(panel?.querySelector('.workspace-alignment-field')).not.toBeInTheDocument();
+    expect(panel?.querySelector('.workspace-overflow-field')).not.toBeInTheDocument();
+    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(await screen.findByRole('columnheader', { name: '類型' }));
+    expect(document.querySelector('.workspace-column-config-panel .workspace-option-list')).toBeInTheDocument();
+  });
+
   it('edits and renders a link with a preferred display name and external action', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
