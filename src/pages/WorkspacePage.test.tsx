@@ -52,7 +52,24 @@ describe('WorkspacePage', () => {
     expect(screen.getByText('競爭')).toBeInTheDocument();
   });
 
-  it('opens the dynamic selection search and creates a new option without blur submission', async () => {
+  it('preserves line breaks in fixed list options', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '名稱' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '固定列表' }));
+    const option = screen.getByRole('textbox', { name: '固定選項 1' });
+    await user.type(option, '第一行');
+    await user.keyboard('{Enter}');
+    await user.type(option, '第二行');
+    await user.click(screen.getByRole('button', { name: '儲存', exact: true }));
+
+    await user.click(screen.getAllByText('點按輸入')[0]);
+    expect(screen.getByRole('option', { name: /第一行/ })).toBeInTheDocument();
+  });
+
+  it('opens the dynamic selection search and commits a new value from text submission', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getAllByText('點按輸入')).toHaveLength(2));
@@ -61,9 +78,7 @@ describe('WorkspacePage', () => {
     const search = screen.getByRole('textbox', { name: '搜尋或新增選項' });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.type(search, '新標籤');
-    expect(screen.getByRole('option', { name: '新增「新標籤」' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('option', { name: '新增「新標籤」' }));
+    await user.keyboard('{Enter}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('新標籤')).toBeInTheDocument();
   });

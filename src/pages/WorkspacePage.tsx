@@ -51,6 +51,20 @@ const updateTable = (data: WorkspaceData, tableId: string, updater: (table: Work
 
 const findTableNode = (data: WorkspaceData, tableId: string) => data.nodes.find((node) => node.type === 'table' && node.tableId === tableId);
 
+const workspaceCellPadding = 34;
+const workspaceMaxColumnWidth = 280;
+const workspaceMinColumnWidth = 40;
+
+const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
+  if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
+  if (typeof window !== 'undefined' && /jsdom/i.test(window.navigator.userAgent)) return Math.max(fontSize, text.length * fontSize);
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return Math.max(fontSize, text.length * fontSize);
+  context.font = `${fontWeight} ${fontSize}px "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif`;
+  return Math.max(...text.split('\n').map((line) => context.measureText(line || 'M').width));
+};
+
 interface CellEditorProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
@@ -107,8 +121,6 @@ const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }:
     return normalized ? options.filter((option) => option.toLocaleLowerCase().includes(normalized)) : options;
   }, [options, query]);
   const normalizedQuery = query.trim();
-  const hasExact = options.some((option) => option === normalizedQuery);
-  useEffect(() => { if (isDynamic) inputRef.current?.focus(); }, [isDynamic]);
   useEffect(() => {
     const selected = selectedOptionRef.current;
     if (selected && typeof selected.scrollIntoView === 'function') selected.scrollIntoView({ block: 'center' });
@@ -117,23 +129,41 @@ const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }:
   const submitQuery = () => { if (normalizedQuery) choose(normalizedQuery); };
 
   return <WorkspaceModal title={column.name} onClose={onClose} className="workspace-selection-dialog">
-    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} autoFocus inputMode="text" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或新增…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
+    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
     <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
       {filtered.map((option) => <button ref={option === currentValue ? selectedOptionRef : undefined} type="button" key={option} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
-      {isDynamic && normalizedQuery && !hasExact && <button type="button" className="workspace-selection-create" role="option" aria-selected={false} onClick={() => choose(normalizedQuery)}>新增「{normalizedQuery}」</button>}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
-      {!filtered.length && isDynamic && normalizedQuery && <p className="workspace-selection-empty">按 Enter 或點擊上方按鈕新增此項目</p>}
     </div>
   </WorkspaceModal>;
 };
 
+const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onChange(options: string[]): void }) => {
+  const visibleOptions = options.length ? options : [''];
+  const updateOption = (index: number, value: string) => {
+    const next = options.length ? [...options] : [''];
+    next[index] = value;
+    onChange(next);
+  };
+  const addOption = () => onChange([...options, '']);
+  const removeOption = (index: number) => onChange(options.filter((_, optionIndex) => optionIndex !== index));
+
+  return <div className="workspace-option-list">
+    {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
+      <textarea rows={2} value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
+      <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`刪除固定選項 ${index + 1}`}><WorkspaceIcon name="trash" size={18} /></button>
+    </div>)}
+    <button type="button" className="workspace-option-add" onClick={addOption}><WorkspaceIcon name="plus" size={18} />新增選項</button>
+  </div>;
+};
+
 const ColumnConfig = ({ column, onSave, onDelete, onClose }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete(): void; onClose(): void }) => {
   const [draft, setDraft] = useState(column);
-  return <WorkspaceModal title="欄位設定" onClose={onClose} className="workspace-column-dialog" actions={<><button type="button" className="workspace-dialog-button danger" onClick={onDelete}>刪除欄位</button><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button primary" onClick={() => onSave({ ...draft, name: draft.name.trim() || '未命名欄位' })}>儲存</button></>}>
-    <label className="workspace-form-field">欄位名稱<input autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-    <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{Object.entries(inputTypeLabels).map(([value, label]) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => setDraft({ ...draft, inputType: value as WorkspaceInputType })}>{label}</button>)}</div></fieldset>
-    {draft.inputType === 'select' && <label className="workspace-form-field">固定選項（每行一項）<textarea rows={5} value={draft.options.join('\n')} onChange={(event) => setDraft({ ...draft, options: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })} /></label>}
-    {draft.inputType === 'dynamic-select' && <p className="workspace-dialog-hint">動態列表會自動彙整此欄其他儲存格曾輸入過的內容，也可以在輸入時新增。</p>}
+  const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名欄位', options: draft.inputType === 'select' ? draft.options.map((option) => option.trim()).filter(Boolean) : [] });
+  const chooseInputType = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, options: inputType === 'select' ? current.options : [] }));
+  return <WorkspaceModal title="欄位設定" onClose={onClose} className="workspace-column-dialog" actions={<><button type="button" className="workspace-dialog-button danger" onClick={onDelete}>刪除欄位</button><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button primary" onClick={save}>儲存</button></>}>
+    <label className="workspace-form-field">欄位名稱<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+    <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{Object.entries(inputTypeLabels).map(([value, label]) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputType(value as WorkspaceInputType)}>{label}</button>)}</div></fieldset>
+    {draft.inputType === 'select' && <div className="workspace-form-field"><span>固定選項</span><SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} /></div>}
   </WorkspaceModal>;
 };
 
@@ -195,12 +225,12 @@ const WorkspacePage = () => {
   const [notice, setNotice] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [zoom, setZoom] = useState(1);
-  const [minZoom, setMinZoom] = useState(0.35);
+  const [textScale, setTextScale] = useState(1);
+  const [minTextScale, setMinTextScale] = useState(0.35);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLTableElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const pinchStart = useRef<{ distance: number; zoom: number } | undefined>(undefined);
+  const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
 
   const reload = useCallback(async () => {
     const loaded = await loadWorkspace();
@@ -212,6 +242,16 @@ const WorkspacePage = () => {
   const commit = useCallback((next: WorkspaceData) => { setData(next); void saveWorkspace(next); }, []);
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
+  const columnTextWidths = useMemo(() => {
+    if (!table) return [];
+    const itemHeaderWidth = Math.max(
+      measureWorkspaceText(table.rowHeaderName, 20, 600),
+      ...table.rows.map((row) => measureWorkspaceText(row.name, 20, 400)),
+    );
+    return [itemHeaderWidth, ...table.columns.map((column) => measureWorkspaceText(column.name, 20, 600))];
+  }, [table]);
+  const columnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.min(workspaceMaxColumnWidth, Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding))), [columnTextWidths, textScale]);
+  const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
   const visibleRows = useMemo(() => {
     if (!table || !searchQuery.trim()) return table?.rows ?? [];
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -220,19 +260,24 @@ const WorkspacePage = () => {
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    const element = tableRef.current;
-    if (!viewport || !element || typeof ResizeObserver === 'undefined') return;
-    const update = () => {
-      const naturalWidth = Math.max(1, element.getBoundingClientRect().width / Math.max(zoom, 0.01));
-      const fit = Math.min(1, viewport.clientWidth / naturalWidth);
-      setMinZoom(Math.max(0.2, fit));
-      setZoom((current) => Math.max(Math.max(0.2, fit), Math.min(2.5, current)));
-    };
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+    const update = () => setViewportWidth(viewport.clientWidth);
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(viewport); observer.observe(element);
+    observer.observe(viewport);
     return () => observer.disconnect();
-  }, [table, zoom]);
+  }, [table]);
+
+  useEffect(() => {
+    if (!columnTextWidths.length || !viewportWidth) return;
+    const textWidth = columnTextWidths.reduce((total, width) => total + width, 0);
+    const availableTextWidth = Math.max(1, viewportWidth - columnTextWidths.length * workspaceCellPadding);
+    setMinTextScale(Math.min(1, Math.max(0.1, availableTextWidth / textWidth)));
+  }, [columnTextWidths, viewportWidth]);
+
+  useEffect(() => {
+    setTextScale((current) => Math.max(minTextScale, Math.min(4, current)));
+  }, [minTextScale]);
 
   const openNameDialog = (mode: NameDialogState['mode'], initialValue: string, parentId?: string | null, node?: WorkspaceNode) => setNameDialog({ mode, initialValue, parentId, node });
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
@@ -340,13 +385,14 @@ const WorkspacePage = () => {
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
-          <div ref={viewportRef} className="workspace-table-viewport" onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); setZoom((current) => Math.max(minZoom, Math.min(4, current - event.deltaY * 0.002))); } }} onPointerDown={(event) => { if (event.pointerType === 'touch') { pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2) { const points = [...pointers.current.values()]; pinchStart.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), zoom }; } } }} onPointerMove={(event) => { if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2 && pinchStart.current) { const points = [...pointers.current.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); setZoom(Math.max(minZoom, Math.min(4, pinchStart.current.zoom * distance / pinchStart.current.distance))); event.preventDefault(); } }} onPointerUp={(event) => { pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinchStart.current = undefined; }} onPointerCancel={(event) => { pointers.current.delete(event.pointerId); pinchStart.current = undefined; }}>
-            <table ref={tableRef} className="workspace-table" style={{ zoom } as React.CSSProperties}>
+          <div ref={viewportRef} className="workspace-table-viewport" onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); setTextScale((current) => Math.max(minTextScale, Math.min(4, current - event.deltaY * 0.002))); } }} onPointerDown={(event) => { if (event.pointerType === 'touch') { pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2) { const points = [...pointers.current.values()]; pinchStart.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: textScale }; } } }} onPointerMove={(event) => { if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2 && pinchStart.current) { const points = [...pointers.current.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); setTextScale(Math.max(minTextScale, Math.min(4, pinchStart.current.scale * distance / pinchStart.current.distance))); event.preventDefault(); } }} onPointerUp={(event) => { pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinchStart.current = undefined; }} onPointerCancel={(event) => { pointers.current.delete(event.pointerId); pinchStart.current = undefined; }}>
+            <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
+              <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
               <thead><tr><th className="workspace-row-corner"><button type="button" className="workspace-row-axis-name" onClick={() => renameRowHeader(table)}>{table.rowHeaderName}</button></th>{table.columns.map((column) => <th key={column.id} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name" onClick={() => setConfiguring(column)}>{column.name}</button></th>)}</tr></thead>
               <tbody>{visibleRows.map((row) => { const originalIndex = table.rows.findIndex((item) => item.id === row.id); return <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" onClick={() => renameRow(row)} aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; return <td key={column.id} onClick={() => !isEditing && openCell(row, column)}>{isEditing ? <CellEditor column={column} value={value} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={value == null || value === '' ? 'workspace-empty-cell' : ''}>{value == null || value === '' ? '點按輸入' : String(value)}</span>}</td>; })}</tr>; })}</tbody>
             </table>
           </div>
-          <div className="workspace-zoom-indicator"><button type="button" onClick={() => setZoom((current) => Math.max(minZoom, current - 0.1))} aria-label="縮小表格">−</button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((current) => Math.min(2.5, current + 0.1))} aria-label="放大表格">＋</button><button type="button" onClick={() => setZoom(minZoom)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
+          <div className="workspace-zoom-indicator"><button type="button" onClick={() => setTextScale((current) => Math.max(minTextScale, current - 0.1))} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => setTextScale((current) => Math.min(4, current + 0.1))} aria-label="放大文字">＋</button><button type="button" onClick={() => setTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
         </>}
       </main>
       <button type="button" className="workspace-fab" onClick={addRow} disabled={!table} aria-label="新增項目"><WorkspaceIcon name="plus" size={38} /></button>
