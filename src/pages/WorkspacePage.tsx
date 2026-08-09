@@ -63,6 +63,22 @@ const workspaceCellPadding = 40;
 const workspaceMinColumnWidth = 40;
 const workspaceMaxTextScale = 2.5;
 const expandedFoldersStorageKey = 'board-game-helper-workspace-expanded-folders';
+const tableReorderHoldMs = 420;
+
+type TableReorderKind = 'row' | 'column';
+type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
+type TableReorderSession = TableReorderVisual & { pointerId: number; startX: number; startY: number; active: boolean; timer?: number };
+
+const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[], sourceId: string, targetId: string, after: boolean) => {
+  if (sourceId === targetId) return items;
+  const source = items.find((item) => item.id === sourceId);
+  if (!source) return items;
+  const next = items.filter((item) => item.id !== sourceId);
+  const targetIndex = next.findIndex((item) => item.id === targetId);
+  if (targetIndex < 0) return items;
+  next.splice(targetIndex + (after ? 1 : 0), 0, source);
+  return next;
+};
 
 const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
   if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
@@ -377,6 +393,7 @@ const WorkspacePage = () => {
   const [minTextScale, setMinTextScale] = useState(0.35);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [panning, setPanning] = useState(false);
+  const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -384,10 +401,16 @@ const WorkspacePage = () => {
   const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
+  const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
+  const importTableInputRef = useRef<HTMLInputElement>(null);
+  const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
   const textScaleRef = useRef(1);
   const pendingScaleSave = useRef<{ tableId: string; scale: number } | undefined>(undefined);
   const scaleSaveTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => { if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current); }, []);
+  useEffect(() => () => {
+    if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
+    if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(''), 2200);
@@ -557,8 +580,20 @@ const WorkspacePage = () => {
 
   const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
   const exportAll = () => { if (!data) return; download(exportWorkspaceXlsx(data), 'workspace.xlsx'); setTableActionsOpen(false); setNotice('已匯出整個資料庫'); };
-  const chooseImport = (kind: 'table' | 'workspace') => { setTableActionsOpen(false); const input = document.getElementById(`workspace-import-${kind}`) as HTMLInputElement | null; input?.click(); };
+  const chooseImport = (kind: 'table' | 'workspace') => {
+    const input = kind === 'table' ? importTableInputRef.current : importWorkspaceInputRef.current;
+    if (!input) { setNotice('無法開啟檔案選擇器'); return; }
+    try {
+      if (typeof input.showPicker === 'function') input.showPicker();
+      else input.click();
+      setTableActionsOpen(false);
+    } catch {
+      input.click();
+      setTableActionsOpen(false);
+    }
+  };
   const readImport = async (file: File, kind: 'table' | 'workspace') => {
+    setNotice(`正在匯入「${file.name}」…`);
     try {
       const imported = await importWorkspaceXlsx(file);
       if (kind === 'table') {
@@ -617,6 +652,71 @@ const WorkspacePage = () => {
     scaleSaveTimer.current = undefined;
     const pending = pendingScaleSave.current;
     if (pending) persistTextScale(pending.scale);
+  };
+
+  const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const session: TableReorderSession = { kind, sourceId, targetId: sourceId, after: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    session.timer = window.setTimeout(() => {
+      if (tableReorderSession.current !== session) return;
+      session.active = true;
+      pointers.current.clear();
+      panStart.current = undefined;
+      pinchStart.current = undefined;
+      setPanning(false);
+      setTableReorderVisual({ kind, sourceId, targetId: sourceId, after: false });
+      const viewport = viewportRef.current;
+      if (viewport && 'setPointerCapture' in viewport) {
+        try { viewport.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+      }
+    }, tableReorderHoldMs);
+    tableReorderSession.current = session;
+  };
+
+  const moveTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = tableReorderSession.current;
+    if (!session || session.pointerId !== event.pointerId) return false;
+    if (!session.active) {
+      if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 8) {
+        if (session.timer) window.clearTimeout(session.timer);
+        tableReorderSession.current = undefined;
+      }
+      return false;
+    }
+    const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(selector);
+    const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
+    if (target && targetId) {
+      const rect = target.getBoundingClientRect();
+      session.targetId = targetId;
+      session.after = session.kind === 'row' ? event.clientY > rect.top + rect.height / 2 : event.clientX > rect.left + rect.width / 2;
+      setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
+    }
+    event.preventDefault();
+    return true;
+  };
+
+  const endTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = tableReorderSession.current;
+    if (!session || session.pointerId !== event.pointerId) return false;
+    if (session.timer) window.clearTimeout(session.timer);
+    tableReorderSession.current = undefined;
+    setTableReorderVisual(undefined);
+    if (!session.active) return false;
+    if (data && table && session.sourceId !== session.targetId) {
+      commit(updateTable(data, table.id, (current) => ({
+        ...current,
+        updatedAt: Date.now(),
+        ...(session.kind === 'row'
+          ? { rows: reorderBeforeOrAfter(current.rows, session.sourceId, session.targetId, session.after) }
+          : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }),
+      })));
+      setNotice(session.kind === 'row' ? '已調整項目順序' : '已調整屬性順序');
+    }
+    ignoreNextTableClick.current = true;
+    window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+    event.preventDefault();
+    return true;
   };
 
   const beginTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -713,11 +813,11 @@ const WorkspacePage = () => {
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
-          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { event.preventDefault(); if (event.ctrlKey || event.metaKey) applyTextScale(textScaleRef.current - event.deltaY * 0.002); else { event.currentTarget.scrollTop += event.deltaY; event.currentTarget.scrollLeft += event.deltaX; } }} onPointerDown={beginTablePan} onPointerMove={moveTablePan} onPointerUp={endTablePan} onPointerCancel={endTablePan} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
+          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { event.preventDefault(); if (event.ctrlKey || event.metaKey) applyTextScale(textScaleRef.current - event.deltaY * 0.002); else { event.currentTarget.scrollTop += event.deltaY; event.currentTarget.scrollLeft += event.deltaX; } }} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
             <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
-              <thead><tr><th className={`workspace-row-corner ${nameDialog?.mode === 'axis' ? 'is-editing' : ''}`} onClick={() => renameRowHeader(table)}><button type="button" className="workspace-row-axis-name">{table.rowHeaderName}</button></th>{table.columns.map((column) => <th key={column.id} className={configuring?.id === column.id ? 'is-editing' : ''} onClick={() => setConfiguring(column)} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name">{column.name}</button></th>)}</tr></thead>
-              <tbody>{table.rows.map((row, originalIndex) => <tr key={row.id}><th className={`workspace-row-heading ${nameDialog?.row?.id === row.id ? 'is-editing' : ''}`} onClick={() => renameRow(row)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const value = row.values[column.id]; const displayValue = value == null ? '' : String(value); const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id; return <td key={column.id} className={isActive ? 'is-editing' : ''} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${row.name}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><span className={displayValue ? '' : 'workspace-empty-cell'}>{displayValue}</span></td>; })}</tr>)}</tbody>
+              <thead><tr><th className={`workspace-row-corner ${nameDialog?.mode === 'axis' ? 'is-editing' : ''}`} onClick={() => renameRowHeader(table)}><button type="button" className="workspace-row-axis-name">{table.rowHeaderName}</button></th>{table.columns.map((column) => { const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id; const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id; return <th key={column.id} data-column-id={column.id} className={`${configuring?.id === column.id ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring(column)} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name">{column.name}</button></th>; })}</tr></thead>
+              <tbody>{table.rows.map((row, originalIndex) => { const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id; const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id; return <tr key={row.id}><th data-row-id={row.id} className={`workspace-row-heading ${nameDialog?.row?.id === row.id ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => renameRow(row)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const value = row.values[column.id]; const displayValue = value == null ? '' : String(value); const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id; return <td key={column.id} className={isActive ? 'is-editing' : ''} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${row.name}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><span className={displayValue ? '' : 'workspace-empty-cell'}>{displayValue}</span></td>; })}</tr>; })}</tbody>
             </table>
           </div>
           <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
@@ -726,8 +826,8 @@ const WorkspacePage = () => {
       <button type="button" className="workspace-fab" onClick={addRow} disabled={!table} aria-label="新增項目"><WorkspaceIcon name="plus" size={38} /></button>
     </div>
     {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => addTable(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><Tree data={data} expanded={expanded} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
-    <input id="workspace-import-table" hidden type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
-    <input id="workspace-import-workspace" hidden type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
+    <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
+    <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); addTable(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onImportTable={() => chooseImport('table')} onExportAll={exportAll} onImportAll={() => chooseImport('workspace')} />}

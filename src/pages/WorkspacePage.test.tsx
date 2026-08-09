@@ -462,4 +462,60 @@ describe('WorkspacePage', () => {
       document.elementFromPoint = previousElementFromPoint;
     }
   });
+
+  it('opens the native Excel picker directly from the settings action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    const input = document.querySelector('#workspace-import-table') as HTMLInputElement & { showPicker?: () => void };
+    const showPicker = vi.fn();
+    input.showPicker = showPicker;
+
+    await user.click(screen.getByRole('button', { name: '匯入單表' }));
+
+    expect(showPicker).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('reorders attributes and items with a long-press drag', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport')!;
+    const previousElementFromPoint = document.elementFromPoint;
+    const dispatchPointer = (element: Element, type: string, x: number, y: number, pointerId: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: pointerId }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    try {
+      const sourceColumn = document.querySelector('[data-column-id="column-text"]')!;
+      const targetColumn = document.querySelector('[data-column-id="column-number"]')!;
+      document.elementFromPoint = vi.fn(() => targetColumn);
+      dispatchPointer(sourceColumn, 'pointerdown', 100, 40, 10);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(viewport, 'pointermove', 220, 40, 10);
+      dispatchPointer(viewport, 'pointerup', 220, 40, 10);
+      await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
+        tables: expect.arrayContaining([expect.objectContaining({
+          columns: expect.arrayContaining([expect.objectContaining({ id: 'column-number' })]),
+        })]),
+      })));
+      const latestColumnSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+      expect(latestColumnSave?.tables[0].columns.slice(0, 2).map((column) => column.id)).toEqual(['column-number', 'column-text']);
+
+      await user.click(screen.getByRole('button', { name: '新增項目' }));
+      const sourceRow = document.querySelector('[data-row-id="row-1"]')!;
+      const targetRow = document.querySelectorAll('[data-row-id]')[1];
+      document.elementFromPoint = vi.fn(() => targetRow);
+      dispatchPointer(sourceRow, 'pointerdown', 40, 100, 11);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(viewport, 'pointermove', 40, 220, 11);
+      dispatchPointer(viewport, 'pointerup', 40, 220, 11);
+      await waitFor(() => expect(vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0].tables[0].rows[1].id).toBe('row-1'));
+    } finally {
+      document.elementFromPoint = previousElementFromPoint;
+    }
+  });
 });

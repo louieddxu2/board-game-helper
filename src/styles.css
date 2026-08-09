@@ -125,7 +125,7 @@ footer a { color: inherit; }
 .workspace-zoom-indicator { display: none; align-items: center; justify-content: flex-end; gap: 4px; min-height: 36px; padding: 0 12px; color: #888; font-size: 11px; }
 .workspace-zoom-indicator button { min-width: 28px; min-height: 27px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: #777; cursor: pointer; }
 .workspace-zoom-indicator button:hover { background: #f0f0f0; color: #1976d2; }
-.workspace-fab { position: absolute; right: 22px; bottom: 34px; z-index: 8; display: grid; place-items: center; width: 64px; height: 64px; border: 0; border-radius: 50%; background: var(--orange); color: var(--white); box-shadow: 0 4px 12px rgba(23,47,40,.22); cursor: pointer; }
+.workspace-fab { position: fixed; right: max(22px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); z-index: 60; display: grid; place-items: center; width: 64px; height: 64px; border: 0; border-radius: 50%; background: var(--orange); color: var(--white); box-shadow: 0 4px 12px rgba(23,47,40,.22); cursor: pointer; }
 .workspace-fab:hover { background: #96331f; transform: translateY(-1px); }
 .workspace-fab:disabled { display: none; }
 .workspace-drawer-backdrop { position: fixed; inset: 0; z-index: 70; border: 0; background: rgba(24,51,45,.3); cursor: pointer; }
@@ -232,7 +232,7 @@ footer a { color: inherit; }
 .workspace-option-controls .workspace-option-remove { color: var(--orange); }
 .workspace-option-add { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 12px; border: 1px dashed var(--orange); border-radius: 6px; background: transparent; color: var(--orange); cursor: pointer; font-weight: 700; }
 .workspace-option-add:hover { background: var(--cream); }
-.workspace-column-dialog-overlay { align-items: end; background: transparent; }
+.workspace-column-dialog-overlay { background: transparent; }
 .workspace-column-dialog { width: min(520px, calc(100vw - 28px)); max-height: min(62dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 28px)); overflow: visible; border: 2px solid var(--green); }
 .workspace-column-dialog:has(.workspace-column-config.is-compact) { width: min(300px, calc(100vw - 28px)); }
 .workspace-column-dialog .workspace-dialog-heading { display: none; }
@@ -245,6 +245,14 @@ footer a { color: inherit; }
 .workspace-alignment-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .workspace-alignment-options button { display: grid; place-items: center; min-height: 38px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; }
 .workspace-alignment-options button:hover, .workspace-alignment-options button.selected { border-color: var(--orange); background: var(--white); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
+.workspace-table th[data-column-id], .workspace-row-heading[data-row-id] { position: relative; touch-action: none; }
+.workspace-table .is-reorder-source { z-index: 2; background: var(--cream); color: var(--orange); box-shadow: inset 0 0 0 2px var(--orange); }
+.workspace-table th[data-column-id].is-drop-before::after, .workspace-table th[data-column-id].is-drop-after::after { content: ''; position: absolute; top: 3px; bottom: 3px; z-index: 4; width: 4px; border-radius: 4px; background: var(--orange); }
+.workspace-table th[data-column-id].is-drop-before::after { left: -2px; }
+.workspace-table th[data-column-id].is-drop-after::after { right: -2px; }
+.workspace-row-heading.is-drop-before::after, .workspace-row-heading.is-drop-after::after { content: ''; position: absolute; right: 3px; left: 3px; z-index: 4; height: 4px; border-radius: 4px; background: var(--orange); }
+.workspace-row-heading.is-drop-before::after { top: -2px; }
+.workspace-row-heading.is-drop-after::after { bottom: -2px; }
 .workspace-action-list { display: grid; gap: 2px; }
 .workspace-action-list button { display: flex; align-items: center; gap: 13px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: var(--green); cursor: pointer; text-align: left; font-size: 15px; }
 .workspace-action-list button:hover { background: var(--cream); color: var(--orange); }
