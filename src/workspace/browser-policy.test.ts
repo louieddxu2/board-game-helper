@@ -37,14 +37,20 @@ describe('workspace browser policies', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+    const appbarTitleRule = styles.match(/\.workspace-appbar-title span\s*\{([^}]*)\}/)?.[1];
+    const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
+    const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
 
     expect(valueOverlayRule).toMatch(/place-items:\s*center/);
     expect(valueInputRule).toMatch(/font-size:\s*28px/);
     expect(valueInputRule).not.toContain('--workspace-text-scale');
+    expect(appbarTitleRule).toMatch(/font-size:\s*calc\(17px \* var\(--workspace-text-scale, 1\)\)/);
+    expect(overlayRule).toMatch(/font-size:\s*16px/);
+    expect(overlayRule).toMatch(/--workspace-text-scale:\s*1/);
 
-    const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
     expect(dialogRule).toMatch(/font-size:\s*16px/);
+    expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(filterRule).toMatch(/position:\s*absolute/);
     expect(filterRule).toMatch(/min-height:\s*20px/);
     expect(filterRule).toMatch(/opacity:\s*\.42/);

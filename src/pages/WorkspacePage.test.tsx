@@ -344,6 +344,24 @@ describe('WorkspacePage', () => {
     })));
   });
 
+  it('scales the workspace title while keeping modal zoom isolated', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    const page = document.querySelector('.workspace-page');
+    expect(page).not.toBeNull();
+
+    fireEvent.keyDown(page!, { ctrlKey: true, key: '=' });
+    await waitFor(() => expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' }));
+    expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.1' });
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    const input = screen.getByRole('textbox');
+    fireEvent.keyDown(input, { ctrlKey: true, key: '=' });
+    expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' });
+    expect(document.querySelector('.workspace-value-dialog-overlay')).toBeInTheDocument();
+  });
+
   it('keeps setting dialogs inside the mobile visual viewport when the keyboard changes it', async () => {
     const previousVisualViewport = window.visualViewport;
     const visualViewport = Object.assign(new EventTarget(), { offsetTop: 12, offsetLeft: 0, width: 390, height: 420 });
