@@ -68,21 +68,28 @@ const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number
   return Math.max(...text.split('\n').map((line) => context.measureText(line || 'M').width));
 };
 
-interface CellEditorProps {
+interface CellInputDialogProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
   onSave(value: string): void;
-  onCancel(): void;
 }
 
-const CellEditor = ({ column, value, onSave, onCancel }: CellEditorProps) => {
+const CellInputDialog = ({ column, value, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(value == null ? '' : String(value));
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-  useEffect(() => { inputRef.current?.focus(); if (inputRef.current instanceof HTMLInputElement) inputRef.current.select(); }, []);
+  useEffect(() => {
+    const input = inputRef.current;
+    input?.focus();
+    if (input instanceof HTMLInputElement) input.select();
+    else input?.setSelectionRange(0, input.value.length);
+  }, []);
 
   const commit = () => onSave(draft);
-  if (column.inputType === 'number') return <input ref={inputRef as React.RefObject<HTMLInputElement>} className="workspace-cell-editor" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } if (event.key === 'Escape') onCancel(); }} />;
-  return <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} className="workspace-cell-editor workspace-text-editor" inputMode="text" rows={Math.max(1, draft.split('\n').length)} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />;
+  return <WorkspaceModal title={column.name} onClose={commit} className="workspace-value-dialog">
+    {column.inputType === 'number'
+      ? <input ref={inputRef as React.RefObject<HTMLInputElement>} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+      : <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" rows={Math.max(2, draft.split('\n').length)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
+  </WorkspaceModal>;
 };
 
 const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string }) => {
@@ -506,9 +513,6 @@ const WorkspacePage = () => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
-    if ('setPointerCapture' in viewport) {
-      try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
-    }
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     pointerMoved.current = false;
     if (pointers.current.size === 1) {
@@ -516,6 +520,11 @@ const WorkspacePage = () => {
       pinchStart.current = undefined;
     } else if (pointers.current.size === 2) {
       const points = [...pointers.current.values()];
+      if ('setPointerCapture' in viewport) {
+        for (const pointerId of pointers.current.keys()) {
+          try { viewport.setPointerCapture(pointerId); } catch { /* A pointer may already have been cancelled. */ }
+        }
+      }
       pinchStart.current = { distance: Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)), scale: textScaleRef.current };
       panStart.current = undefined;
     }
@@ -534,9 +543,14 @@ const WorkspacePage = () => {
     } else if (pointers.current.size === 1 && panStart.current?.pointerId === event.pointerId) {
       const deltaX = event.clientX - panStart.current.x;
       const deltaY = event.clientY - panStart.current.y;
-      if (Math.hypot(deltaX, deltaY) > 4) {
+      const dragThreshold = event.pointerType === 'touch' ? 10 : 4;
+      if (!pointerMoved.current && Math.hypot(deltaX, deltaY) <= dragThreshold) return;
+      if (!pointerMoved.current) {
         pointerMoved.current = true;
         setPanning(true);
+        if ('setPointerCapture' in viewport) {
+          try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+        }
       }
       viewport.scrollLeft = panStart.current.scrollLeft - deltaX;
       viewport.scrollTop = panStart.current.scrollTop - deltaY;
@@ -573,6 +587,8 @@ const WorkspacePage = () => {
   };
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
+  const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
+  const activeEditingColumn = editing && table ? table.columns.find((item) => item.id === editing.columnId) : undefined;
   return <section className="workspace-page">
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
@@ -589,8 +605,8 @@ const WorkspacePage = () => {
           <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); applyTextScale(textScaleRef.current - event.deltaY * 0.002); } }} onPointerDown={beginTablePan} onPointerMove={moveTablePan} onPointerUp={endTablePan} onPointerCancel={endTablePan} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
             <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
-              <thead><tr><th className="workspace-row-corner"><button type="button" className="workspace-row-axis-name" onClick={() => renameRowHeader(table)}>{table.rowHeaderName}</button></th>{table.columns.map((column) => <th key={column.id} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name" onClick={() => setConfiguring(column)}>{column.name}</button></th>)}</tr></thead>
-              <tbody>{table.rows.map((row, originalIndex) => <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" onClick={() => renameRow(row)} aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; const displayValue = value == null ? '' : String(value); return <td key={column.id} aria-label={`${row.name}，${column.name}：${displayValue || '空白'}`} onClick={() => !isEditing && openCell(row, column)}>{isEditing ? <CellEditor column={column} value={value} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={displayValue ? '' : 'workspace-empty-cell'}>{displayValue}</span>}</td>; })}</tr>)}</tbody>
+              <thead><tr><th className="workspace-row-corner" onClick={() => renameRowHeader(table)}><button type="button" className="workspace-row-axis-name">{table.rowHeaderName}</button></th>{table.columns.map((column) => <th key={column.id} onClick={() => setConfiguring(column)} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name">{column.name}</button></th>)}</tr></thead>
+              <tbody>{table.rows.map((row, originalIndex) => <tr key={row.id}><th className="workspace-row-heading" onClick={() => renameRow(row)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const value = row.values[column.id]; const displayValue = value == null ? '' : String(value); return <td key={column.id} aria-label={`${row.name}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><span className={displayValue ? '' : 'workspace-empty-cell'}>{displayValue}</span></td>; })}</tr>)}</tbody>
             </table>
           </div>
           <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
@@ -605,6 +621,7 @@ const WorkspacePage = () => {
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} onClose={() => setTableActionsOpen(false)} onRename={() => { setTableActionsOpen(false); if (tableNode) renameNode(tableNode); }} onExport={exportCurrent} onImportTable={() => chooseImport('table')} onExportAll={exportAll} onImportAll={() => chooseImport('workspace')} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}
+    {activeEditingRow && activeEditingColumn && <CellInputDialog column={activeEditingColumn} value={activeEditingRow.values[activeEditingColumn.id]} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />}
     {configuring && <ColumnConfig column={configuring} onSave={saveColumn} onDelete={() => { askDeleteColumn(configuring); setConfiguring(undefined); }} />}
     {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}

@@ -38,10 +38,12 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: '動態表格' })).toBeInTheDocument());
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(screen.getByRole('textbox').closest('[role="dialog"]')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveAttribute('inputmode', 'text');
 
     await user.keyboard('{Escape}');
     await user.click(screen.getByText('2'));
+    expect(screen.getByRole('spinbutton').closest('[role="dialog"]')).toBeInTheDocument();
     expect(screen.getByRole('spinbutton')).toHaveAttribute('inputmode', 'decimal');
     expect(screen.getByRole('spinbutton')).toHaveAttribute('enterkeyhint', 'done');
   });
@@ -58,6 +60,23 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('option', { name: '競爭' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('競爭')).toBeInTheDocument();
+  });
+
+  it('commits a text dialog by clicking beside it without changing table widths', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getAllByRole('cell')).toHaveLength(4));
+    const widthsBefore = [...document.querySelectorAll('.workspace-table col')].map((column) => column.getAttribute('style'));
+
+    await user.click(screen.getAllByRole('cell')[0]);
+    const input = screen.getByRole('textbox');
+    await user.type(input, 'new value');
+    expect(input.closest('[role="dialog"]')).toBeInTheDocument();
+    expect([...document.querySelectorAll('.workspace-table col')].map((column) => column.getAttribute('style'))).toEqual(widthsBefore);
+
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('new value')).toBeInTheDocument();
   });
 
   it('preserves line breaks in fixed list options', async () => {
@@ -134,6 +153,18 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
   });
 
+  it('opens header editors when the header cell itself is clicked', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(document.querySelector('.workspace-row-heading')).not.toBeNull());
+
+    fireEvent.click(document.querySelector('.workspace-row-heading')!);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.pointerDown(document.querySelector('.workspace-cell-name-dialog-overlay')!);
+
+    fireEvent.click(document.querySelectorAll('.workspace-table thead th')[1]);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
   it('allows intentional line breaks in item and column headers', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -198,6 +229,52 @@ describe('WorkspacePage', () => {
     expect(viewport.scrollLeft).toBe(90);
     expect(viewport.scrollTop).toBe(40);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps a slightly moving touch tap available for opening the cell editor', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getAllByRole('cell')).toHaveLength(4));
+    const cell = screen.getAllByRole('cell')[2];
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const dispatchTouchPointer = (target: Element, type: string, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY });
+      Object.defineProperties(event, {
+        pointerId: { value: 7 },
+        pointerType: { value: 'touch' },
+      });
+      fireEvent(target, event);
+      return event;
+    };
+
+    dispatchTouchPointer(cell, 'pointerdown', 120, 180);
+    const slightMove = dispatchTouchPointer(viewport, 'pointermove', 123, 182);
+    dispatchTouchPointer(viewport, 'pointerup', 123, 182);
+
+    expect(slightMove.defaultPrevented).toBe(false);
+    fireEvent.click(cell);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('does not capture a mouse pointer until the gesture becomes a drag', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getAllByRole('cell')).toHaveLength(4));
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const capture = vi.fn();
+    viewport.setPointerCapture = capture;
+    const dispatchMousePointer = (target: Element, type: string, clientX: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY: 100 });
+      Object.defineProperties(event, {
+        pointerId: { value: 3 },
+        pointerType: { value: 'mouse' },
+      });
+      fireEvent(target, event);
+    };
+
+    dispatchMousePointer(screen.getAllByRole('cell')[0], 'pointerdown', 100);
+    expect(capture).not.toHaveBeenCalled();
+
+    dispatchMousePointer(viewport, 'pointermove', 106);
+    expect(capture).toHaveBeenCalledWith(3);
   });
 
   it('places destructive actions at the dialog top-left and omits input confirmation buttons', async () => {
