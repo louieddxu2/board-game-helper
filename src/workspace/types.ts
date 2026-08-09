@@ -30,6 +30,7 @@ export interface WorkspaceTable {
   rowHeaderName: string;
   rowHeader?: WorkspaceColumn;
   textScale?: number;
+  transposed?: boolean;
   columns: WorkspaceColumn[];
   rows: WorkspaceRow[];
   updatedAt: number;

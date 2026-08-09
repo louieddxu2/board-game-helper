@@ -70,6 +70,7 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
       rowHeaderName: rowHeader.name,
       rowHeader,
       textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
+      transposed: Boolean(table.transposed),
       columns,
       rows: table.rows.map((row, index) => ({
         ...row,

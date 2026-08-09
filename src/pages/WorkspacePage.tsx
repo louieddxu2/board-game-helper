@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspace, saveWorkspace } from '../workspace/db';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, getChildren, getDynamicOptions, getRowHeaderColumn, getTableForNode, isWorkspaceLinkValue, moveNode, removeNodeAndDescendants, resolveActiveTableNodeId } from '../workspace/model';
 import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from '../workspace/spreadsheet';
@@ -68,6 +68,10 @@ const externalHref = (raw: string) => {
     return '';
   }
 };
+
+const searchableWorkspaceCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value)
+  ? `${value.label}\n${value.url}`
+  : value == null ? '' : String(value);
 
 const updateTable = (data: WorkspaceData, tableId: string, updater: (table: WorkspaceTable) => WorkspaceTable): WorkspaceData => ({
   ...data,
@@ -317,12 +321,40 @@ const TreeNode = ({ node, data, expanded, depth, draggingId, dragTargetId, onTog
 
 const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { data: WorkspaceData; expanded: Set<string>; onToggle(id: string): void; onOpen(node: WorkspaceNode): void; onContext(node: WorkspaceNode): void; onMove(node: WorkspaceNode, parentId: string | null): void }) => {
   const treeRef = useRef<HTMLDivElement>(null);
+  const autoScrollFrame = useRef<number | undefined>(undefined);
+  const autoScrollVelocity = useRef(0);
   const dragSession = useRef<{ node: WorkspaceNode; pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
   const dragTargetRef = useRef<string | null>(null);
   const suppressNextClick = useRef(false);
   const [draggingNode, setDraggingNode] = useState<WorkspaceNode>();
   const [dragTargetId, setDragTargetId] = useState<string | null>();
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
+  const stopAutoScroll = () => {
+    autoScrollVelocity.current = 0;
+    if (autoScrollFrame.current !== undefined) window.cancelAnimationFrame(autoScrollFrame.current);
+    autoScrollFrame.current = undefined;
+  };
+  const runAutoScroll = () => {
+    const tree = treeRef.current;
+    if (!tree || autoScrollVelocity.current === 0) { autoScrollFrame.current = undefined; return; }
+    const next = Math.max(0, Math.min(tree.scrollHeight - tree.clientHeight, tree.scrollTop + autoScrollVelocity.current));
+    tree.scrollTop = next;
+    autoScrollFrame.current = window.requestAnimationFrame(runAutoScroll);
+  };
+  const updateAutoScroll = (clientY: number) => {
+    const tree = treeRef.current;
+    if (!tree) return;
+    const rect = tree.getBoundingClientRect();
+    const edge = Math.min(64, rect.height / 3);
+    const velocity = clientY < rect.top + edge
+      ? -Math.max(3, (rect.top + edge - clientY) / 3)
+      : clientY > rect.bottom - edge
+        ? Math.max(3, (clientY - (rect.bottom - edge)) / 3)
+        : 0;
+    autoScrollVelocity.current = velocity;
+    if (velocity === 0) stopAutoScroll();
+    else if (autoScrollFrame.current === undefined) autoScrollFrame.current = window.requestAnimationFrame(runAutoScroll);
+  };
   const isInsideNode = (candidateId: string, ancestorId: string) => {
     let current = data.nodes.find((item) => item.id === candidateId);
     while (current?.parentId) {
@@ -334,6 +366,7 @@ const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { data: W
   const clearDrag = () => {
     const session = dragSession.current;
     if (session?.timer) window.clearTimeout(session.timer);
+    stopAutoScroll();
     dragSession.current = undefined;
     dragTargetRef.current = null;
     setDraggingNode(undefined);
@@ -341,6 +374,7 @@ const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { data: W
   };
   useEffect(() => () => {
     if (dragSession.current?.timer) window.clearTimeout(dragSession.current.timer);
+    stopAutoScroll();
   }, []);
   const beginDrag = (node: WorkspaceNode, event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -363,7 +397,8 @@ const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { data: W
     }
     event.preventDefault();
     setDragPoint({ x: event.clientX, y: event.clientY });
-    const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.workspace-tree-row[data-node-id]');
+    updateAutoScroll(event.clientY);
+    const targetRow = document.elementFromPoint?.(event.clientX, event.clientY)?.closest<HTMLElement>('.workspace-tree-row[data-node-id]');
     const targetId = targetRow?.dataset.nodeType === 'folder' ? targetRow.dataset.nodeId : undefined;
     const nextTarget = targetId && targetId !== session.node.id && !isInsideNode(targetId, session.node.id) ? targetId : null;
     dragTargetRef.current = nextTarget;
@@ -407,8 +442,10 @@ const MoveNodeDialog = ({ node, data, onClose, onMove }: { node: WorkspaceNode; 
   return <WorkspaceModal title={`移動「${node.name}」`} onClose={onClose} className="workspace-action-dialog"><div className="workspace-action-list workspace-move-list"><button type="button" onClick={() => onMove(null)}><WorkspaceIcon name="home" size={21} />最外層</button>{folders.map((folder) => <button type="button" key={folder.id} onClick={() => onMove(folder.id)}><WorkspaceIcon name="folder" size={21} />{folder.name}</button>)}</div></WorkspaceModal>;
 };
 
-const TableActionsDialog = ({ tableName, onClose, onExport }: { tableName: string; onClose(): void; onExport(): void }) => <WorkspaceModal title={tableName} onClose={onClose} className="workspace-action-dialog">
+const TableActionsDialog = ({ tableName, transposed, onClose, onExport, onSearch, onTranspose }: { tableName: string; transposed: boolean; onClose(): void; onExport(): void; onSearch(): void; onTranspose(): void }) => <WorkspaceModal title={tableName} onClose={onClose} className="workspace-action-dialog">
   <div className="workspace-action-list">
+    <button type="button" onClick={onSearch}><WorkspaceIcon name="search" size={21} />搜尋此表</button>
+    <button type="button" onClick={onTranspose}><WorkspaceIcon name="refresh" size={21} />{transposed ? '恢復正常顯示' : '轉置顯示'}</button>
     <button type="button" onClick={onExport}><WorkspaceIcon name="download" size={21} />匯出此表</button>
   </div>
 </WorkspaceModal>;
@@ -431,6 +468,8 @@ const WorkspacePage = () => {
   const [nodeMenu, setNodeMenu] = useState<WorkspaceNode>();
   const [movingNode, setMovingNode] = useState<WorkspaceNode>();
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [tableCreateParentId, setTableCreateParentId] = useState<string | null | undefined>(undefined);
   const [nameDialog, setNameDialog] = useState<NameDialogState>();
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; onConfirm(): void }>();
@@ -491,10 +530,22 @@ const WorkspacePage = () => {
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table]);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const filteredRows = useMemo(() => {
+    if (!table) return [];
+    const query = deferredSearchQuery.trim().toLocaleLowerCase();
+    if (!query) return table.rows;
+    return table.rows.filter((row) => [row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]
+      .some((value) => searchableWorkspaceCellValue(value).toLocaleLowerCase().includes(query)));
+  }, [deferredSearchQuery, table]);
   useEffect(() => {
     const nextScale = table?.textScale ?? 1;
     textScaleRef.current = nextScale;
     setTextScale(nextScale);
+  }, [table?.id]);
+  useEffect(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
   }, [table?.id]);
   useEffect(() => {
     if (!data) return;
@@ -506,8 +557,17 @@ const WorkspacePage = () => {
       measureWorkspaceText(column.name, 20, 600),
       ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value), 20, 400)) : []),
     ) + (column.inputType === 'link' ? 46 : 0);
-    return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
-  }, [rowHeader, table]);
+    if (!table.transposed) return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
+    const properties = [rowHeader, ...table.columns];
+    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
+    const rowWidths = filteredRows.map((row) => Math.max(
+      measureWorkspaceText(displayWorkspaceCellValue(row.name), 20, 600),
+      ...properties.map((column) => column.overflowMode === 'expand'
+        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null), 20, 400) + (column.inputType === 'link' ? 46 : 0)
+        : 0),
+    ));
+    return [propertyWidth, ...rowWidths];
+  }, [filteredRows, rowHeader, table]);
   const naturalColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
   const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
   const fillRatio = viewportWidth && naturalTableWidth < viewportWidth ? viewportWidth / naturalTableWidth : 1;
@@ -760,7 +820,8 @@ const WorkspacePage = () => {
     if (target && targetId) {
       const rect = target.getBoundingClientRect();
       session.targetId = targetId;
-      session.after = session.kind === 'row' ? event.clientY > rect.top + rect.height / 2 : event.clientX > rect.left + rect.width / 2;
+      const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+      session.after = horizontal ? event.clientX > rect.left + rect.width / 2 : event.clientY > rect.top + rect.height / 2;
       setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
     }
     event.preventDefault();
@@ -882,14 +943,15 @@ const WorkspacePage = () => {
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => setTableActionsOpen(true)} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
+    {searchOpen && table && <div className="workspace-searchbar" role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label="搜尋此表" placeholder="搜尋此表" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
     {notice && <div className="workspace-notice" role="status">{notice}</div>}
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
           <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); applyTextScale(textScaleRef.current - event.deltaY * 0.002); } }} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
-            <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
+            <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
-              <thead><tr>
+              {!table.transposed ? <><thead><tr>
                 {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><button type="button" className="workspace-row-axis-name">{rowHeader.name}</button></th>}
                 {table.columns.map((column) => {
                   const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
@@ -897,13 +959,14 @@ const WorkspacePage = () => {
                   return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-column-name">{column.name}</button></th>;
                 })}
               </tr></thead>
-              <tbody>{table.rows.map((row, originalIndex) => {
+              <tbody>{filteredRows.map((row) => {
+                const originalIndex = table.rows.findIndex((item) => item.id === row.id);
                 const rowLabel = displayWorkspaceCellValue(row.name) || `項目 ${originalIndex + 1}`;
                 const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                 return <tr key={row.id}>
-                  {rowHeader && <th data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value);
@@ -911,7 +974,32 @@ const WorkspacePage = () => {
                     return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
                   })}
                 </tr>;
-              })}</tbody>
+              })}</tbody></> : <><thead><tr>
+                {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><button type="button" className="workspace-row-axis-name">{rowHeader.name}</button></th>}
+                {filteredRows.map((row) => {
+                  const originalIndex = table.rows.findIndex((item) => item.id === row.id);
+                  const rowLabel = displayWorkspaceCellValue(row.name) || `項目 ${originalIndex + 1}`;
+                  const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
+                  const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
+                  const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
+                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-column-name" aria-label={`編輯項目 ${rowLabel}`}>{rowLabel}</button></th>;
+                })}
+              </tr></thead><tbody>
+                {table.columns.map((column) => {
+                  const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
+                  const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
+                  return <tr key={column.id}>
+                    <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
+                    {filteredRows.map((row) => {
+                      const rowLabel = displayWorkspaceCellValue(row.name) || '未命名項目';
+                      const value = row.values[column.id] ?? null;
+                      const displayValue = displayWorkspaceCellValue(value);
+                      const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
+                      return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
+                    })}
+                  </tr>;
+                })}
+              </tbody></>}
             </table>
           </div>
           <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
@@ -924,7 +1012,7 @@ const WorkspacePage = () => {
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
-    {tableActionsOpen && table && <TableActionsDialog tableName={table.name} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} />}
+    {tableActionsOpen && table && <TableActionsDialog tableName={table.name} transposed={Boolean(table.transposed)} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onSearch={() => { setTableActionsOpen(false); setSearchOpen(true); }} onTranspose={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}

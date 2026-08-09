@@ -55,6 +55,7 @@ const tableRows = (table: WorkspaceTable): unknown[][] => {
   ['table_name', table.name],
   ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
+  ['transposed_view', table.transposed ? 'true' : 'false'],
   ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand'],
   ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode'],
   ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')]),
@@ -206,6 +207,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]) || '項目';
   const textScaleValue = Number(rows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
   const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
+  const transposed = stringValue(rows.find((row) => stringValue(row[0]) === 'transposed_view')?.[1]) === 'true';
   const columns: WorkspaceColumn[] = [];
   for (const row of rows) {
     if (stringValue(row[0]) !== 'column') continue;
@@ -234,7 +236,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
       return [column.id, parseCellValue(raw, column)];
     })),
   }));
-  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {

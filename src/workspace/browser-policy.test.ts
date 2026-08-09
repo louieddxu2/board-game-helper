@@ -18,13 +18,19 @@ describe('workspace browser policies', () => {
 
   it('keeps both table axes sticky while their headings support reordering', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
-    const columnReorderRule = styles.match(/\.workspace-table th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
-    const rowReorderRule = styles.match(/\.workspace-row-heading\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
+    const columnReorderRule = styles.match(/\.workspace-table:not\(\.is-transposed\) thead th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
+    const rowReorderRule = styles.match(/\.workspace-table:not\(\.is-transposed\) \.workspace-row-heading\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
+    const transposedRowRule = styles.match(/\.workspace-table\.is-transposed thead th\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
+    const transposedColumnRule = styles.match(/\.workspace-table\.is-transposed tbody th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
 
     expect(columnReorderRule).toMatch(/position:\s*sticky/);
     expect(columnReorderRule).toMatch(/top:\s*0/);
     expect(rowReorderRule).toMatch(/position:\s*sticky/);
     expect(rowReorderRule).toMatch(/left:\s*0/);
+    expect(transposedRowRule).toMatch(/position:\s*sticky/);
+    expect(transposedRowRule).toMatch(/top:\s*0/);
+    expect(transposedColumnRule).toMatch(/position:\s*sticky/);
+    expect(transposedColumnRule).toMatch(/left:\s*0/);
   });
 
   it('centers value editors independently from table text scaling', () => {

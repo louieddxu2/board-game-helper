@@ -528,6 +528,75 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByRole('button', { name: '匯入整個資料庫' })).toBeInTheDocument();
   });
 
+  it('searches every value in the active table without changing the app-bar actions', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '搜尋此表' }));
+
+    const search = screen.getByRole('searchbox', { name: '搜尋此表' });
+    await user.type(search, '合作');
+    expect(screen.getByRole('row', { name: /花火/ })).toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, '不存在');
+    expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
+    expect(screen.getByText('顯示 0 / 1 項')).toBeInTheDocument();
+    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((button) => button.getAttribute('aria-label'))).toEqual(['新增屬性', '設定']);
+  });
+
+  it('transposes only the table view while preserving row and column data', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '轉置顯示' }));
+
+    expect(screen.getByRole('columnheader', { name: /花火/ })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
+    const latestSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    expect(latestSave?.tables[0]).toMatchObject({ transposed: true });
+    expect(latestSave?.tables[0].rows[0].id).toBe('row-1');
+    expect(latestSave?.tables[0].columns.map((column) => column.id)).toEqual(['column-text', 'column-number', 'column-select', 'column-dynamic']);
+  });
+
+  it('auto-scrolls the drawer tree while a dragged item is held near an edge', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const source = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
+    const tree = document.querySelector('.workspace-tree') as HTMLDivElement;
+    Object.defineProperties(tree, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollTop: { configurable: true, writable: true, value: 40 },
+    });
+    tree.getBoundingClientRect = () => ({ top: 0, bottom: 200, left: 0, right: 300, width: 300, height: 200, x: 0, y: 0, toJSON: () => ({}) });
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let animationFrame: FrameRequestCallback | undefined;
+    window.requestAnimationFrame = vi.fn((callback) => { animationFrame = callback; return 1; });
+    window.cancelAnimationFrame = vi.fn();
+    const dispatchPointer = (element: Element, type: string, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 30, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 18 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    try {
+      dispatchPointer(source, 'pointerdown', 80);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(tree, 'pointermove', 195);
+      expect(animationFrame).toBeTypeOf('function');
+      animationFrame?.(0);
+      expect(tree.scrollTop).toBeGreaterThan(40);
+      dispatchPointer(tree, 'pointerup', 195);
+    } finally {
+      window.requestAnimationFrame = previousRequestAnimationFrame;
+      window.cancelAnimationFrame = previousCancelAnimationFrame;
+    }
+  });
+
   it('reorders attributes and items with a long-press drag', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

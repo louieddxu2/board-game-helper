@@ -80,6 +80,18 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'https://example.com/rules', label: '規則頁' });
   });
 
+  it('round-trips the non-destructive transposed view preference', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    source.tables[0].transposed = true;
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+
+    expect(imported.table?.transposed).toBe(true);
+    expect(imported.table?.columns.map((column) => column.name)).toEqual(source.tables[0].columns.map((column) => column.name));
+    expect(imported.table?.rows.map((row) => row.name)).toEqual(source.tables[0].rows.map((row) => row.name));
+  });
+
   it('round-trips the workspace tree through multiple sheets', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();
