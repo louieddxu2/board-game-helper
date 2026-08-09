@@ -8,7 +8,10 @@ vi.mock('../workspace/db', () => ({
   loadWorkspace: async () => ({
     version: 1,
     activeNodeId: 'node-table',
-    nodes: [{ id: 'node-table', type: 'table', name: '測試表格', parentId: null, order: 0, tableId: 'table-1' }],
+    nodes: [
+      { id: 'node-table', type: 'table', name: '測試表格', parentId: null, order: 0, tableId: 'table-1' },
+      { id: 'folder-1', type: 'folder', name: '收藏資料夾', parentId: null, order: 1 },
+    ],
     tables: [{
       id: 'table-1', name: '測試表格', rowHeaderName: '項目', updatedAt: 0,
       columns: [
@@ -287,7 +290,7 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
 
     await user.click(deleteButton);
-    const confirmedDelete = screen.getByRole('button', { name: '刪除' });
+    const confirmedDelete = screen.getByRole('button', { name: '確認刪除' });
     expect(confirmedDelete.parentElement).toHaveClass('workspace-dialog-leading-action');
   });
 
@@ -364,7 +367,99 @@ describe('WorkspacePage', () => {
   it('shows the table name and only add-property and settings actions in the app bar', async () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByText('測試表格')).toBeInTheDocument());
-    const appBar = document.querySelector('.workspace-appbar')!;
-    expect([...appBar.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['開啟目錄', '新增屬性', '設定']);
+    const actions = document.querySelector('.workspace-appbar-actions')!;
+    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['新增屬性', '設定']);
+  });
+
+  it('adds rows and columns without opening an editor and reports both with toast messages', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '新增屬性' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('已新增屬性');
+
+    await user.click(screen.getByRole('button', { name: '新增項目' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('已新增項目');
+  });
+
+  it('edits the table name by clicking the displayed table title', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '重新命名表格' }));
+    const input = screen.getByRole('textbox', { name: '名稱' });
+    await user.clear(input);
+    await user.type(input, '新表格名稱');
+    fireEvent.pointerDown(document.querySelector('.workspace-name-dialog-overlay')!);
+    expect(screen.getByText('新表格名稱')).toBeInTheDocument();
+  });
+
+  it('visibly marks the cell or column currently being edited', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(cell);
+    expect(cell).toHaveClass('is-editing');
+    await user.keyboard('{Escape}');
+
+    const column = screen.getByRole('columnheader', { name: '名稱' });
+    await user.click(column);
+    expect(column).toHaveClass('is-editing');
+  });
+
+  it('saves a column text alignment and applies it to its cells', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '置右' }));
+    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveStyle({ textAlign: 'right' });
+  });
+
+  it('keeps ordinary mouse-wheel scrolling available without changing text scale', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    fireEvent.wheel(viewport, { deltaY: 80 });
+    expect(viewport.scrollTop).toBe(80);
+    expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1' });
+  });
+
+  it('offers move-to instead of an already implicit open-table action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    await user.click(screen.getByRole('button', { name: '開啟測試表格操作' }));
+    expect(screen.queryByRole('button', { name: '開啟表格' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '移動至' }));
+    expect(screen.getByRole('button', { name: '收藏資料夾' })).toBeInTheDocument();
+  });
+
+  it('moves a drawer item into a folder after a long-press drag', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const source = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
+    const target = screen.getByText('收藏資料夾').closest('.workspace-tree-row')!;
+    const tree = document.querySelector('.workspace-tree')!;
+    const previousElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => target);
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 8 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    try {
+      dispatchPointer(source, 'pointerdown', 30, 80);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(tree, 'pointermove', 30, 140);
+      dispatchPointer(tree, 'pointerup', 30, 140);
+      await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
+        nodes: expect.arrayContaining([expect.objectContaining({ id: 'node-table', parentId: 'folder-1' })]),
+      })));
+    } finally {
+      document.elementFromPoint = previousElementFromPoint;
+    }
   });
 });

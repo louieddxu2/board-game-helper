@@ -39,6 +39,7 @@ describe('workspace spreadsheet format', () => {
     const table = source.tables[0];
     table.rowHeaderName = '桌遊收藏';
     table.textScale = 1.4;
+    table.columns[0].alignment = 'right';
     table.rows[0].name = '花磚物語';
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
     expect(imported.isWorkspace).toBe(false);
@@ -46,6 +47,7 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number']);
     expect(imported.table?.rowHeaderName).toBe('桌遊收藏');
     expect(imported.table?.textScale).toBe(1.4);
+    expect(imported.table?.columns[0].alignment).toBe('right');
     expect(imported.table?.rows[0].name).toBe('花磚物語');
     expect(imported.table?.rows[0].values[imported.table.columns[2].id]).toBe(2);
   });

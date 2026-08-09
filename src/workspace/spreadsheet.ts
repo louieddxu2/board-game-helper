@@ -1,6 +1,6 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
 import { createColumn, createNode, createRow, createTable, makeId } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
 const TABLE_MARKER = '__workspace_table';
@@ -50,8 +50,8 @@ const tableRows = (table: WorkspaceTable): unknown[][] => [
   ['table_name', table.name],
   ['row_header_name', table.rowHeaderName],
   ['text_scale', table.textScale ?? 1],
-  ['columns', 'id', 'name', 'inputType', 'options'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`]),
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment'],
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left']),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
   ...table.rows.map((row) => [row.id, row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]),
 ];
@@ -161,6 +161,7 @@ type SheetCell = CellValue<number> | null;
 type SheetRows = SheetCell[][];
 const stringValue = (value: SheetCell | undefined) => value === null || value === undefined ? '' : String(value);
 const parseType = (value: string): WorkspaceInputType => INPUT_TYPES.includes(value as WorkspaceInputType) ? value as WorkspaceInputType : 'text';
+const parseAlignment = (value: string): WorkspaceTextAlign => value === 'center' || value === 'right' ? value : 'left';
 const parseOptions = (value: string) => {
   if (value.startsWith(OPTIONS_JSON_MARKER)) {
     try {
@@ -187,6 +188,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
     const column = createColumn(stringValue(row[2]) || '未命名欄位', parseType(stringValue(row[3])));
     column.id = stringValue(row[1]) || column.id;
     column.options = parseOptions(stringValue(row[4]));
+    column.alignment = parseAlignment(stringValue(row[5]));
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');

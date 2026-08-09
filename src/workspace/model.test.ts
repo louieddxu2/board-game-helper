@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, getDynamicOptions, removeNodeAndDescendants } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, getDynamicOptions, moveNode, removeNodeAndDescendants } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -51,5 +51,18 @@ describe('workspace model', () => {
       activeNodeId: 'only-table',
     };
     expect(removeNodeAndDescendants(data, 'only-table').activeNodeId).toBeNull();
+  });
+
+  it('moves nodes into folders while preventing descendant cycles', () => {
+    const data = {
+      ...emptyWorkspace(),
+      nodes: [
+        { id: 'folder-a', type: 'folder' as const, name: 'A', parentId: null, order: 0 },
+        { id: 'folder-b', type: 'folder' as const, name: 'B', parentId: 'folder-a', order: 0 },
+        { id: 'table-a', type: 'table' as const, name: '表格', parentId: null, order: 1, tableId: 'table-a' },
+      ],
+    };
+    expect(moveNode(data, 'table-a', 'folder-b').nodes.find((node) => node.id === 'table-a')?.parentId).toBe('folder-b');
+    expect(moveNode(data, 'folder-a', 'folder-b')).toBe(data);
   });
 });

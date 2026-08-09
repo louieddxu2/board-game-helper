@@ -12,7 +12,7 @@ export const makeId = (prefix: string) => {
 export const emptyWorkspace = (): WorkspaceData => ({ version: 1, nodes: [], tables: [], activeNodeId: null });
 
 export const createColumn = (name: string, inputType: WorkspaceInputType = 'text'): WorkspaceColumn => ({
-  id: makeId('column'), name: name.trim() || '未命名欄位', inputType, options: [],
+  id: makeId('column'), name: name.trim() || '未命名欄位', inputType, options: [], alignment: 'left',
 });
 
 export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): WorkspaceRow => ({
@@ -30,6 +30,7 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
     ...table,
     rowHeaderName: table.rowHeaderName?.trim() || DEFAULT_ROW_HEADER_NAME,
     textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
+    columns: table.columns.map((column) => ({ ...column, alignment: column.alignment ?? 'left' })),
     rows: table.rows.map((row, index) => ({
       ...row,
       name: row.name?.trim() || `項目 ${index + 1}`,
@@ -96,4 +97,20 @@ export const removeNodeAndDescendants = (data: WorkspaceData, nodeId: string): W
   const tableIds = new Set(data.nodes.filter((node) => removedIds.has(node.id) && node.tableId).map((node) => node.tableId));
   const remaining = { ...data, nodes: data.nodes.filter((node) => !removedIds.has(node.id)), tables: data.tables.filter((table) => !tableIds.has(table.id)) };
   return { ...remaining, activeNodeId: resolveActiveTableNodeId(remaining) };
+};
+
+export const moveNode = (data: WorkspaceData, nodeId: string, parentId: string | null): WorkspaceData => {
+  const node = data.nodes.find((item) => item.id === nodeId);
+  if (!node || node.parentId === parentId || parentId === nodeId) return data;
+  if (parentId) {
+    const parent = data.nodes.find((item) => item.id === parentId);
+    if (!parent || parent.type !== 'folder') return data;
+    let ancestor: WorkspaceNode | undefined = parent;
+    while (ancestor) {
+      if (ancestor.id === nodeId) return data;
+      ancestor = ancestor.parentId ? data.nodes.find((item) => item.id === ancestor?.parentId) : undefined;
+    }
+  }
+  const destinationOrder = getChildren(data, parentId).filter((item) => item.id !== nodeId).length;
+  return { ...data, nodes: data.nodes.map((item) => item.id === nodeId ? { ...item, parentId, order: destinationOrder } : item) };
 };

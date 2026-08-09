@@ -1,4 +1,5 @@
 export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select';
+export type WorkspaceTextAlign = 'left' | 'center' | 'right';
 export type WorkspaceCellValue = string | number | null;
 
 export interface WorkspaceColumn {
@@ -6,6 +7,7 @@ export interface WorkspaceColumn {
   name: string;
   inputType: WorkspaceInputType;
   options: string[];
+  alignment?: WorkspaceTextAlign;
 }
 
 export interface WorkspaceRow {
