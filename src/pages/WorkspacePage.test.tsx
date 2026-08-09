@@ -145,14 +145,14 @@ describe('WorkspacePage', () => {
     const itemName = screen.getByRole('textbox', { name: '項目名稱' });
     await user.clear(itemName);
     await user.type(itemName, '收藏清單第一項');
-    fireEvent.pointerDown(document.querySelector('.workspace-cell-name-dialog-overlay')!);
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.getByRole('button', { name: '編輯項目 收藏清單第一項' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '項目' }));
-    const axisName = screen.getByRole('textbox', { name: '項目軸名稱' });
+    await user.click(screen.getByRole('columnheader', { name: '項目' }));
+    const axisName = screen.getByRole('textbox', { name: '欄位名稱' });
     await user.clear(axisName);
     await user.type(axisName, '桌遊收藏');
-    fireEvent.pointerDown(document.querySelector('.workspace-cell-name-dialog-overlay')!);
+    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
     expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
   });
 
@@ -162,7 +162,7 @@ describe('WorkspacePage', () => {
 
     fireEvent.click(document.querySelector('.workspace-row-heading')!);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    fireEvent.pointerDown(document.querySelector('.workspace-cell-name-dialog-overlay')!);
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
 
     fireEvent.click(document.querySelectorAll('.workspace-table thead th')[1]);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -176,7 +176,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '編輯項目 花火' }));
     await user.clear(screen.getByRole('textbox', { name: '項目名稱' }));
     await user.type(screen.getByRole('textbox', { name: '項目名稱' }), '收藏{Enter}第一項');
-    fireEvent.pointerDown(document.querySelector('.workspace-cell-name-dialog-overlay')!);
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.getByRole('button', { name: /編輯項目 收藏\s+第一項/ }).textContent).toBe('收藏\n第一項');
 
     await user.click(screen.getByRole('button', { name: '名稱' }));
@@ -465,10 +465,11 @@ describe('WorkspacePage', () => {
     }
   });
 
-  it('opens the native Excel picker directly from the settings action', async () => {
+  it('offers blank-table creation and single-table import from the drawer create action', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '設定' }));
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    await user.click(screen.getByRole('button', { name: '新增表格' }));
     const input = document.querySelector('#workspace-import-table') as HTMLInputElement & { showPicker?: () => void };
     const showPicker = vi.fn();
     input.showPicker = showPicker;
@@ -477,6 +478,42 @@ describe('WorkspacePage', () => {
 
     expect(showPicker).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('edits the first column through the same property settings as other columns', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '項目' }));
+
+    expect(screen.getByRole('button', { name: '文字' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '連結' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '刪除欄位' })).not.toBeInTheDocument();
+  });
+
+  it('edits and renders a link with a preferred display name and external action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '連結' }));
+    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '連結' }), 'example.com/game');
+    await user.type(screen.getByRole('textbox', { name: '顯示名稱' }), '遊戲頁面');
+    fireEvent.pointerDown(document.querySelector('.workspace-link-dialog-overlay')!);
+
+    expect(screen.getByText('遊戲頁面')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
+  });
+
+  it('offers expand, ellipsis, and wrapping display modes for every property', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+
+    expect(screen.getByRole('button', { name: '推擠寬度' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '超過省略' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '自動換行' })).toBeInTheDocument();
   });
 
   it('keeps database import in the drawer instead of the current-table settings', async () => {

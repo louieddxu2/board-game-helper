@@ -26,4 +26,14 @@ describe('workspace browser policies', () => {
     expect(rowReorderRule).toMatch(/position:\s*sticky/);
     expect(rowReorderRule).toMatch(/left:\s*0/);
   });
+
+  it('centers value editors independently from table text scaling', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
+    const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+
+    expect(valueOverlayRule).toMatch(/place-items:\s*center/);
+    expect(valueInputRule).toMatch(/font-size:\s*28px/);
+    expect(valueInputRule).not.toContain('--workspace-text-scale');
+  });
 });

@@ -60,6 +60,26 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[1].options).toEqual(['第一行\n第二行', '單行']);
   });
 
+  it('round-trips link values, overflow modes, and the editable first-column property', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    const table = source.tables[0];
+    table.rowHeaderName = '來源';
+    table.rowHeader = { ...table.rowHeader!, name: '來源', inputType: 'link', overflowMode: 'ellipsis' };
+    table.rows[0].name = { url: 'https://example.com/game', label: '遊戲頁面' };
+    const link = createColumn('規則', 'link');
+    link.overflowMode = 'expand';
+    table.columns.push(link);
+    table.rows[0].values[link.id] = { url: 'https://example.com/rules', label: '規則頁' };
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+
+    expect(imported.table?.rowHeader).toMatchObject({ name: '來源', inputType: 'link', overflowMode: 'ellipsis' });
+    expect(imported.table?.rows[0].name).toEqual({ url: 'https://example.com/game', label: '遊戲頁面' });
+    expect(imported.table?.columns.at(-1)).toMatchObject({ name: '規則', inputType: 'link', overflowMode: 'expand' });
+    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'https://example.com/rules', label: '規則頁' });
+  });
+
   it('round-trips the workspace tree through multiple sheets', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();

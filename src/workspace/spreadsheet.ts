@@ -1,12 +1,15 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, makeId } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
+import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceLinkValue, makeId } from './model';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
 const TABLE_MARKER = '__workspace_table';
 const WORKSPACE_MARKER = '__workspace';
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
-const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select'];
+const LINK_JSON_MARKER = '__workspace_link_json:';
+const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link'];
+
+const serializeCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value) ? `${LINK_JSON_MARKER}${JSON.stringify(value)}` : value;
 
 const escapeXml = (value: string) => value
   .replaceAll('&', '&amp;')
@@ -44,17 +47,21 @@ const sheetXml = (rows: unknown[][]) => {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${columnName(maxColumns - 1)}${maxRows}"/><sheetData>${cells}</sheetData></worksheet>`;
 };
 
-const tableRows = (table: WorkspaceTable): unknown[][] => [
+const tableRows = (table: WorkspaceTable): unknown[][] => {
+  const rowHeader = getRowHeaderColumn(table);
+  return [
   [TABLE_MARKER, WORKSPACE_FORMAT_VERSION],
   ['table_id', table.id],
   ['table_name', table.name],
-  ['row_header_name', table.rowHeaderName],
+  ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left']),
+  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode'],
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')]),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
-  ...table.rows.map((row) => [row.id, row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]),
-];
+  ...table.rows.map((row) => [row.id, serializeCellValue(row.name), ...table.columns.map((column) => serializeCellValue(row.values[column.id] ?? null))]),
+  ];
+};
 
 const workspaceRows = (data: WorkspaceData): unknown[][] => [
   [WORKSPACE_MARKER, WORKSPACE_FORMAT_VERSION],
@@ -162,6 +169,7 @@ type SheetRows = SheetCell[][];
 const stringValue = (value: SheetCell | undefined) => value === null || value === undefined ? '' : String(value);
 const parseType = (value: string): WorkspaceInputType => INPUT_TYPES.includes(value as WorkspaceInputType) ? value as WorkspaceInputType : 'text';
 const parseAlignment = (value: string): WorkspaceTextAlign => value === 'center' || value === 'right' ? value : 'left';
+const parseOverflowMode = (value: string, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
 const parseOptions = (value: string) => {
   if (value.startsWith(OPTIONS_JSON_MARKER)) {
     try {
@@ -174,6 +182,22 @@ const parseOptions = (value: string) => {
     }
   }
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
+};
+
+const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): WorkspaceCellValue => {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const text = stringValue(raw);
+  if (text.startsWith(LINK_JSON_MARKER)) {
+    try {
+      const parsed: unknown = JSON.parse(text.slice(LINK_JSON_MARKER.length));
+      if (parsed && typeof parsed === 'object' && 'url' in parsed && typeof parsed.url === 'string' && 'label' in parsed && typeof parsed.label === 'string') return { url: parsed.url, label: parsed.label };
+    } catch {
+      // Fall through and retain the original text if the JSON was hand-edited.
+    }
+  }
+  if (column.inputType === 'link') return { url: text, label: '' };
+  if (column.inputType === 'number' && typeof raw === 'number') return raw;
+  return text || null;
 };
 
 const parseTable = (rows: SheetRows): WorkspaceTable => {
@@ -189,21 +213,28 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
     column.id = stringValue(row[1]) || column.id;
     column.options = parseOptions(stringValue(row[4]));
     column.alignment = parseAlignment(stringValue(row[5]));
+    column.overflowMode = parseOverflowMode(stringValue(row[6]), column.inputType);
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');
   const dataIndex = rows.findIndex((row) => stringValue(row[0]) === 'data');
   if (dataIndex < 0) throw new Error('匯入表格沒有資料區');
   const hasRowName = stringValue(rows[dataIndex]?.[2]) === 'row_name';
+  const rowHeaderMetadata = rows.find((row) => stringValue(row[0]) === 'row_header');
+  const rowHeader = createColumn(stringValue(rowHeaderMetadata?.[2]) || rowHeaderName, parseType(stringValue(rowHeaderMetadata?.[3])));
+  rowHeader.id = stringValue(rowHeaderMetadata?.[1]) || `row-header-${stringValue(rows[1]?.[1]) || makeId('table')}`;
+  rowHeader.options = parseOptions(stringValue(rowHeaderMetadata?.[4]));
+  rowHeader.alignment = parseAlignment(stringValue(rowHeaderMetadata?.[5]));
+  rowHeader.overflowMode = parseOverflowMode(stringValue(rowHeaderMetadata?.[6]), rowHeader.inputType, 'expand');
   const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row, index) => ({
     id: stringValue(row[0]) || makeId('row'),
-    name: hasRowName ? stringValue(row[1]) || `項目 ${index + 1}` : `項目 ${index + 1}`,
+    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? `項目 ${index + 1}` : `項目 ${index + 1}`,
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + (hasRowName ? 2 : 1)];
-      return [column.id, column.inputType === 'number' && typeof raw === 'number' ? raw : stringValue(raw) || null];
+      return [column.id, parseCellValue(raw, column)];
     })),
   }));
-  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName, textScale, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {
@@ -219,6 +250,8 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
   const header = rows[0] ?? [];
   if (header.length < 2) throw new Error('試算表至少需要項目欄與一個屬性欄');
   const rowHeaderName = stringValue(header[0]) || '項目';
+  const rowHeader = createColumn(rowHeaderName, 'text');
+  rowHeader.overflowMode = 'expand';
   const usedNames = new Set<string>();
   const columns = header.slice(1).map((value, index) => ({
     ...createColumn(uniqueColumnName(stringValue(value), index, usedNames)),
@@ -233,7 +266,7 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
       return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];
     })),
   }));
-  return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, rowHeader, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
@@ -296,7 +329,10 @@ const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {
   const columnMap = new Map(table.columns.map((column) => [column.id, makeId('column')]));
   const columns = table.columns.map((column) => ({ ...column, id: columnMap.get(column.id)!, options: [...column.options] }));
-  return { ...table, id: makeId('table'), name: `${table.name}（匯入）`, rowHeaderName: table.rowHeaderName, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: row.name, values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, row.values[column.id] ?? null])) })), updatedAt: Date.now() };
+  const tableId = makeId('table');
+  const rowHeader = { ...getRowHeaderColumn(table), id: `row-header-${tableId}`, options: [...getRowHeaderColumn(table).options] };
+  const cloneValue = (value: WorkspaceCellValue): WorkspaceCellValue => isWorkspaceLinkValue(value) ? { ...value } : value;
+  return { ...table, id: tableId, name: `${table.name}（匯入）`, rowHeaderName: rowHeader.name, rowHeader, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: cloneValue(row.name), values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, cloneValue(row.values[column.id] ?? null)])) })), updatedAt: Date.now() };
 };
 
 export interface ImportedWorkspace {

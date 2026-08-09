@@ -1,4 +1,4 @@
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
 
@@ -12,7 +12,7 @@ export const makeId = (prefix: string) => {
 export const emptyWorkspace = (): WorkspaceData => ({ version: 1, nodes: [], tables: [], activeNodeId: null });
 
 export const createColumn = (name: string, inputType: WorkspaceInputType = 'text'): WorkspaceColumn => ({
-  id: makeId('column'), name: name.trim() || '未命名欄位', inputType, options: [], alignment: 'left',
+  id: makeId('column'), name: name.trim() || '未命名欄位', inputType, options: [], alignment: 'left', overflowMode: inputType === 'link' ? 'ellipsis' : 'wrap',
 });
 
 export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): WorkspaceRow => ({
@@ -21,22 +21,63 @@ export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): Worksp
 
 export const createTable = (name: string): WorkspaceTable => {
   const columns = [createColumn('屬性 1', 'text')];
-  return { id: makeId('table'), name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, textScale: 1, columns, rows: [createRow(columns)], updatedAt: Date.now() };
+  const tableId = makeId('table');
+  const rowHeader = { ...createColumn(DEFAULT_ROW_HEADER_NAME, 'text'), id: `row-header-${tableId}`, overflowMode: 'expand' as const };
+  return { id: tableId, name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, rowHeader, textScale: 1, columns, rows: [createRow(columns)], updatedAt: Date.now() };
+};
+
+const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
+
+const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOverflowMode = 'wrap'): WorkspaceColumn => ({
+  ...column,
+  inputType: column.inputType === 'link' || column.inputType === 'number' || column.inputType === 'select' || column.inputType === 'dynamic-select' ? column.inputType : 'text',
+  options: Array.isArray(column.options) ? column.options : [],
+  alignment: column.alignment ?? 'left',
+  overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
+});
+
+export const isWorkspaceLinkValue = (value: WorkspaceCellValue | unknown): value is WorkspaceLinkValue => Boolean(value && typeof value === 'object' && 'url' in value && typeof value.url === 'string' && 'label' in value && typeof value.label === 'string');
+
+export const displayWorkspaceCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value) ? value.label.trim() || value.url : value == null ? '' : String(value);
+
+export const getRowHeaderColumn = (table: WorkspaceTable): WorkspaceColumn => normalizeColumn(table.rowHeader
+  ? { ...table.rowHeader, name: table.rowHeaderName?.trim() || table.rowHeader.name }
+  : {
+    id: `row-header-${table.id}`,
+    name: table.rowHeaderName?.trim() || DEFAULT_ROW_HEADER_NAME,
+    inputType: 'text',
+    options: [],
+    alignment: 'left',
+    overflowMode: 'expand',
+  }, 'expand');
+
+const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInputType): WorkspaceCellValue => {
+  if (inputType === 'link') {
+    if (isWorkspaceLinkValue(value)) return { url: value.url, label: value.label };
+    return typeof value === 'string' && value.trim() ? { url: value.trim(), label: '' } : null;
+  }
+  if (isWorkspaceLinkValue(value)) return displayWorkspaceCellValue(value) || null;
+  return value ?? null;
 };
 
 export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
   ...data,
-  tables: data.tables.map((table) => ({
-    ...table,
-    rowHeaderName: table.rowHeaderName?.trim() || DEFAULT_ROW_HEADER_NAME,
-    textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
-    columns: table.columns.map((column) => ({ ...column, alignment: column.alignment ?? 'left' })),
-    rows: table.rows.map((row, index) => ({
-      ...row,
-      name: row.name?.trim() || `項目 ${index + 1}`,
-      values: { ...row.values },
-    })),
-  })),
+  tables: data.tables.map((table) => {
+    const rowHeader = getRowHeaderColumn(table);
+    const columns = table.columns.map((column) => normalizeColumn(column));
+    return {
+      ...table,
+      rowHeaderName: rowHeader.name,
+      rowHeader,
+      textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
+      columns,
+      rows: table.rows.map((row, index) => ({
+        ...row,
+        name: normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`,
+        values: Object.fromEntries(columns.map((column) => [column.id, normalizeCellValue(row.values[column.id] ?? null, column.inputType)])),
+      })),
+    };
+  }),
 });
 
 export const createNode = (type: WorkspaceNode['type'], name: string, parentId: string | null, order: number, tableId?: string): WorkspaceNode => ({
@@ -56,7 +97,7 @@ export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
   const seen = new Set<string>();
   const options: string[] = [];
   for (const row of table.rows) {
-    const value = row.values[columnId];
+    const value = columnId === getRowHeaderColumn(table).id ? row.name : row.values[columnId];
     const normalized = typeof value === 'string' ? value.trim() : '';
     const key = normalized.toLocaleLowerCase();
     if (!normalized || seen.has(key)) continue;
@@ -77,6 +118,7 @@ export const resolveActiveTableNodeId = (data: WorkspaceData, preferredNodeId = 
 
 export const coerceCellValue = (column: WorkspaceColumn, raw: string): WorkspaceCellValue => {
   if (!raw.trim()) return null;
+  if (column.inputType === 'link') return { url: raw.trim(), label: '' };
   if (column.inputType !== 'number') return raw;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;

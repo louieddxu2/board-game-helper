@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, getDynamicOptions, moveNode, removeNodeAndDescendants } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, getDynamicOptions, moveNode, normalizeWorkspace, removeNodeAndDescendants } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -19,6 +19,18 @@ describe('workspace model', () => {
   it('creates rows with an empty cell for every current column', () => {
     const columns = [createColumn('名稱'), createColumn('數量', 'number')];
     expect(createRow(columns).values).toEqual({ [columns[0].id]: null, [columns[1].id]: null });
+  });
+
+  it('upgrades a legacy first column into an editable text property without losing row names', () => {
+    const legacy: WorkspaceData = {
+      ...emptyWorkspace(),
+      tables: [{ id: 'legacy', name: '舊表格', rowHeaderName: '遊戲', columns: [], rows: [{ id: 'row', name: '花火', values: {} }], updatedAt: 0 }],
+    };
+
+    const normalized = normalizeWorkspace(legacy);
+
+    expect(normalized.tables[0].rowHeader).toMatchObject({ name: '遊戲', inputType: 'text', overflowMode: 'expand' });
+    expect(normalized.tables[0].rows[0].name).toBe('花火');
   });
 
   it('removes a folder, its descendants, and linked tables only', () => {

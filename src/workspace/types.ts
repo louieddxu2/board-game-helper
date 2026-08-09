@@ -1,6 +1,13 @@
-export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select';
+export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select' | 'link';
 export type WorkspaceTextAlign = 'left' | 'center' | 'right';
-export type WorkspaceCellValue = string | number | null;
+export type WorkspaceOverflowMode = 'expand' | 'ellipsis' | 'wrap';
+
+export interface WorkspaceLinkValue {
+  url: string;
+  label: string;
+}
+
+export type WorkspaceCellValue = string | number | WorkspaceLinkValue | null;
 
 export interface WorkspaceColumn {
   id: string;
@@ -8,11 +15,12 @@ export interface WorkspaceColumn {
   inputType: WorkspaceInputType;
   options: string[];
   alignment?: WorkspaceTextAlign;
+  overflowMode?: WorkspaceOverflowMode;
 }
 
 export interface WorkspaceRow {
   id: string;
-  name: string;
+  name: WorkspaceCellValue;
   values: Record<string, WorkspaceCellValue>;
 }
 
@@ -20,6 +28,7 @@ export interface WorkspaceTable {
   id: string;
   name: string;
   rowHeaderName: string;
+  rowHeader?: WorkspaceColumn;
   textScale?: number;
   columns: WorkspaceColumn[];
   rows: WorkspaceRow[];
