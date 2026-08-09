@@ -12,13 +12,14 @@ const overflowModeLabels: Record<WorkspaceOverflowMode, string> = {
   expand: '推擠寬度', ellipsis: '超過省略', wrap: '自動換行',
 };
 
-type IconName = 'menu' | 'search' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
+type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
 
 const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: number }) => {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
   switch (name) {
     case 'menu': return <svg {...common}><path d="M4 6h16M4 12h11M4 18h7" /></svg>;
     case 'search': return <svg {...common}><circle cx="10.8" cy="10.8" r="6.5" /><path d="m16 16 4 4" /></svg>;
+    case 'filter': return <svg {...common}><path d="M4 5h16l-6.5 7.2V19l-3 1v-7.8Z" /></svg>;
     case 'edit': return <svg {...common}><path d="M12 20h8" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>;
     case 'check': return <svg {...common}><rect x="3.5" y="3.5" width="17" height="17" rx="2" /><path d="m7.5 12 3 3 6-6" /></svg>;
     case 'refresh': return <svg {...common}><path d="M20 11a8 8 0 1 0 1 4" /><path d="M20 4v7h-7" /></svg>;
@@ -73,6 +74,17 @@ const searchableWorkspaceCellValue = (value: WorkspaceCellValue) => isWorkspaceL
   ? `${value.label}\n${value.url}`
   : value == null ? '' : String(value);
 
+const workspaceFilterValueKey = (value: WorkspaceCellValue) => value == null
+  ? 'empty:'
+  : typeof value === 'number'
+    ? `number:${value}`
+    : isWorkspaceLinkValue(value)
+      ? `link:${value.label}\u0000${value.url}`
+      : `text:${value}`;
+
+const workspaceValueCollator = new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' });
+const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left), searchableWorkspaceCellValue(right));
+
 const updateTable = (data: WorkspaceData, tableId: string, updater: (table: WorkspaceTable) => WorkspaceTable): WorkspaceData => ({
   ...data,
   tables: data.tables.map((table) => table.id === tableId ? updater(table) : table),
@@ -89,6 +101,9 @@ const tableReorderHoldMs = 420;
 type TableReorderKind = 'row' | 'column';
 type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
 type TableReorderSession = TableReorderVisual & { pointerId: number; startX: number; startY: number; active: boolean; timer?: number };
+type HeaderFilterTarget = { axis: 'column' | 'row'; id: string; label: string };
+type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null };
+type HeaderFilterOption = { key: string; label: string };
 
 const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[], sourceId: string, targetId: string, after: boolean) => {
   if (sourceId === targetId) return items;
@@ -158,6 +173,11 @@ const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
   return href ? <a className="workspace-cell-external" href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /><span>外連</span></a> : null;
 };
 
+const WorkspaceHeaderContent = ({ label, nameClass, editLabel, filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
+  <button type="button" className={nameClass} aria-label={editLabel}>{label}</button>
+  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${label}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={17} /></button>
+</div>;
+
 const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string }) => {
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
   useEffect(() => {
@@ -194,6 +214,27 @@ const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, clas
       {actions && <footer className="workspace-dialog-actions">{actions}</footer>}
     </section>
   </div>;
+};
+
+const HeaderFilterDialog = ({ label, options, state, onClose, onSort, onToggle, onSelectAll, onClearAll }: { label: string; options: HeaderFilterOption[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void }) => {
+  const [query, setQuery] = useState('');
+  const visibleOptions = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
+  }, [options, query]);
+  const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
+  return <WorkspaceModal title={`篩選 ${label}`} onClose={onClose} className="workspace-filter-dialog">
+    <div className="workspace-filter-sort" role="group" aria-label={`排序 ${label}`}>
+      <button type="button" className={state.sort === 'asc' ? 'selected' : ''} onClick={() => onSort('asc')}><WorkspaceIcon name="up" size={18} />升冪</button>
+      <button type="button" className={state.sort === 'desc' ? 'selected' : ''} onClick={() => onSort('desc')}><WorkspaceIcon name="down" size={18} />降冪</button>
+    </div>
+    <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+    <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
+    <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>
+      {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span></label>)}
+      {!visibleOptions.length && <p>沒有符合的值</p>}
+    </div>
+  </WorkspaceModal>;
 };
 
 type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode; row?: WorkspaceRow; table?: WorkspaceTable };
@@ -470,6 +511,8 @@ const WorkspacePage = () => {
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [headerFilters, setHeaderFilters] = useState<Record<string, HeaderFilterState>>({});
+  const [filterTarget, setFilterTarget] = useState<HeaderFilterTarget>();
   const [tableCreateParentId, setTableCreateParentId] = useState<string | null | undefined>(undefined);
   const [nameDialog, setNameDialog] = useState<NameDialogState>();
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; onConfirm(): void }>();
@@ -531,13 +574,50 @@ const WorkspacePage = () => {
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table]);
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const filteredRows = useMemo(() => {
+  const searchedRows = useMemo(() => {
     if (!table) return [];
     const query = deferredSearchQuery.trim().toLocaleLowerCase();
     if (!query) return table.rows;
     return table.rows.filter((row) => [row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]
       .some((value) => searchableWorkspaceCellValue(value).toLocaleLowerCase().includes(query)));
   }, [deferredSearchQuery, table]);
+  const filteredRows = useMemo(() => {
+    if (!table || !rowHeader) return [];
+    const columnIds = new Set([rowHeader.id, ...table.columns.map((column) => column.id)]);
+    const columnFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.includedKeys !== null);
+    const rows = searchedRows.filter((row) => columnFilters.every(([key, state]) => {
+      const columnId = key.slice(7);
+      const value = columnId === rowHeader.id ? row.name : row.values[columnId] ?? null;
+      return state.includedKeys!.includes(workspaceFilterValueKey(value));
+    }));
+    const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.sort);
+    if (!sortedEntry) return rows;
+    const [key, state] = sortedEntry;
+    const columnId = key.slice(7);
+    const direction = state.sort === 'desc' ? -1 : 1;
+    return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+      const leftValue = columnId === rowHeader.id ? left.row.name : left.row.values[columnId] ?? null;
+      const rightValue = columnId === rowHeader.id ? right.row.name : right.row.values[columnId] ?? null;
+      return compareWorkspaceCellValues(leftValue, rightValue) * direction || left.index - right.index;
+    }).map(({ row }) => row);
+  }, [headerFilters, rowHeader, searchedRows, table]);
+  const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table]);
+  const visibleColumns = useMemo(() => {
+    if (!table) return [];
+    const visibleRowIds = new Set(filteredRows.map((row) => row.id));
+    const rowFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.includedKeys !== null);
+    const columns = table.columns.filter((column) => rowFilters.every(([key, state]) => {
+      const row = tableRowsById.get(key.slice(4));
+      return Boolean(row && state.includedKeys!.includes(workspaceFilterValueKey(row.values[column.id] ?? null)));
+    }));
+    const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.sort);
+    if (!sortedEntry) return columns;
+    const [key, state] = sortedEntry;
+    const row = tableRowsById.get(key.slice(4));
+    if (!row) return columns;
+    const direction = state.sort === 'desc' ? -1 : 1;
+    return columns.map((column, index) => ({ column, index })).sort((left, right) => compareWorkspaceCellValues(row.values[left.column.id] ?? null, row.values[right.column.id] ?? null) * direction || left.index - right.index).map(({ column }) => column);
+  }, [filteredRows, headerFilters, table, tableRowsById]);
   useEffect(() => {
     const nextScale = table?.textScale ?? 1;
     textScaleRef.current = nextScale;
@@ -546,28 +626,66 @@ const WorkspacePage = () => {
   useEffect(() => {
     setSearchOpen(false);
     setSearchQuery('');
+    setHeaderFilters({});
+    setFilterTarget(undefined);
   }, [table?.id]);
   useEffect(() => {
     if (!data) return;
     window.localStorage.setItem(expandedFoldersStorageKey, JSON.stringify([...expanded]));
   }, [data, expanded]);
+  const activeFilterKey = filterTarget ? `${filterTarget.axis}:${filterTarget.id}` : '';
+  const activeFilterState = headerFilters[activeFilterKey] ?? { includedKeys: null, sort: null };
+  const activeFilterOptions = useMemo(() => {
+    if (!table || !rowHeader || !filterTarget) return [];
+    const values = filterTarget.axis === 'column'
+      ? table.rows.map((row) => filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null)
+      : table.columns.map((column) => tableRowsById.get(filterTarget.id)?.values[column.id] ?? null);
+    const unique = new Map<string, HeaderFilterOption>();
+    for (const value of values) {
+      const key = workspaceFilterValueKey(value);
+      if (!unique.has(key)) unique.set(key, { key, label: displayWorkspaceCellValue(value) || '（空白）' });
+    }
+    return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));
+  }, [filterTarget, rowHeader, table, tableRowsById]);
+  const updateActiveFilter = (updater: (state: HeaderFilterState) => HeaderFilterState) => {
+    if (!activeFilterKey) return;
+    setHeaderFilters((current) => ({ ...current, [activeFilterKey]: updater(current[activeFilterKey] ?? { includedKeys: null, sort: null }) }));
+  };
+  const setActiveFilterSort = (direction: 'asc' | 'desc') => {
+    if (!activeFilterKey) return;
+    setHeaderFilters((current) => {
+      const next = Object.fromEntries(Object.entries(current).map(([key, state]) => [key, { ...state, sort: null }])) as Record<string, HeaderFilterState>;
+      const state = current[activeFilterKey] ?? { includedKeys: null, sort: null };
+      next[activeFilterKey] = { ...state, sort: state.sort === direction ? null : direction };
+      return next;
+    });
+  };
+  const toggleActiveFilterOption = (key: string) => updateActiveFilter((state) => {
+    const selected = state.includedKeys === null ? new Set(activeFilterOptions.map((option) => option.key)) : new Set(state.includedKeys);
+    if (selected.has(key)) selected.delete(key); else selected.add(key);
+    return { ...state, includedKeys: selected.size === activeFilterOptions.length ? null : [...selected] };
+  });
+  const isHeaderFilterActive = (axis: HeaderFilterTarget['axis'], id: string) => {
+    const state = headerFilters[`${axis}:${id}`];
+    return Boolean(state && (state.includedKeys !== null || state.sort));
+  };
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
     const widthFor = (column: WorkspaceColumn, values: WorkspaceCellValue[]) => Math.max(
       measureWorkspaceText(column.name, 20, 600),
       ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value), 20, 400)) : []),
-    ) + (column.inputType === 'link' ? 46 : 0);
+    ) + (column.inputType === 'link' ? 46 : 0) + 36;
     if (!table.transposed) return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
-    const properties = [rowHeader, ...table.columns];
-    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
+    const properties = [rowHeader, ...visibleColumns];
+    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600))) + 36;
     const rowWidths = filteredRows.map((row) => Math.max(
-      measureWorkspaceText(displayWorkspaceCellValue(row.name), 20, 600),
+      measureWorkspaceText(displayWorkspaceCellValue(row.name), 20, 600) + 36,
       ...properties.map((column) => column.overflowMode === 'expand'
         ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null), 20, 400) + (column.inputType === 'link' ? 46 : 0)
         : 0),
     ));
     return [propertyWidth, ...rowWidths];
-  }, [filteredRows, rowHeader, table]);
+  }, [filteredRows, rowHeader, table, visibleColumns]);
   const naturalColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
   const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
   const fillRatio = viewportWidth && naturalTableWidth < viewportWidth ? viewportWidth / naturalTableWidth : 1;
@@ -952,11 +1070,11 @@ const WorkspacePage = () => {
             <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
               {!table.transposed ? <><thead><tr>
-                {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><button type="button" className="workspace-row-axis-name">{rowHeader.name}</button></th>}
+                {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {table.columns.map((column) => {
                   const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
                   const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
-                  return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-column-name">{column.name}</button></th>;
+                  return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={isHeaderFilterActive('column', column.id)} onFilter={() => setFilterTarget({ axis: 'column', id: column.id, label: column.name })} /></th>;
                 })}
               </tr></thead>
               <tbody>{filteredRows.map((row) => {
@@ -975,17 +1093,17 @@ const WorkspacePage = () => {
                   })}
                 </tr>;
               })}</tbody></> : <><thead><tr>
-                {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><button type="button" className="workspace-row-axis-name">{rowHeader.name}</button></th>}
+                {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {filteredRows.map((row) => {
                   const originalIndex = table.rows.findIndex((item) => item.id === row.id);
                   const rowLabel = displayWorkspaceCellValue(row.name) || `項目 ${originalIndex + 1}`;
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-column-name" aria-label={`編輯項目 ${rowLabel}`}>{rowLabel}</button></th>;
+                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯項目 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
                 })}
               </tr></thead><tbody>
-                {table.columns.map((column) => {
+                {visibleColumns.map((column) => {
                   const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
                   const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
                   return <tr key={column.id}>
@@ -1013,6 +1131,7 @@ const WorkspacePage = () => {
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} transposed={Boolean(table.transposed)} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onSearch={() => { setTableActionsOpen(false); setSearchOpen(true); }} onTranspose={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }} />}
+    {filterTarget && <HeaderFilterDialog label={filterTarget.label} options={activeFilterOptions} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}

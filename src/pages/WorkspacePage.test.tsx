@@ -184,7 +184,7 @@ describe('WorkspacePage', () => {
     await user.clear(columnName);
     await user.type(columnName, '桌遊{Enter}名稱');
     fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
-    expect(screen.getByRole('button', { name: /桌遊\s+名稱/ }).textContent).toBe('桌遊\n名稱');
+    expect(screen.getAllByRole('button', { name: /桌遊\s+名稱/ }).find((button) => button.classList.contains('workspace-column-name'))?.textContent).toBe('桌遊\n名稱');
   });
 
   it('preserves fixed options while trying other input types', async () => {
@@ -545,6 +545,40 @@ describe('WorkspacePage', () => {
     expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((button) => button.getAttribute('aria-label'))).toEqual(['新增屬性', '設定']);
   });
 
+  it('filters, sorts, and searches values from every first-row header', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '新增項目' }));
+    await user.click(screen.getByRole('cell', { name: '項目 2，數量：空白' }));
+    await user.type(screen.getByRole('spinbutton'), '10');
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getAllByRole('button', { name: /^篩選 / })).toHaveLength(5);
+    await user.click(screen.getByRole('button', { name: '篩選 數量' }));
+    expect(screen.getByRole('dialog', { name: '篩選 數量' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '欄位設定' })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '2' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: '降冪' }));
+    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    expect([...document.querySelectorAll('.workspace-table tbody tr')].map((row) => row.textContent)).toEqual([
+      expect.stringContaining('項目 2'),
+      expect.stringContaining('花火'),
+    ]);
+
+    await user.click(screen.getByRole('button', { name: '篩選 數量' }));
+    await user.click(screen.getByRole('checkbox', { name: '2' }));
+    const optionSearch = screen.getByRole('searchbox', { name: '搜尋數量的值' });
+    await user.type(optionSearch, '10');
+    expect(screen.queryByRole('checkbox', { name: '2' })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
+    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /項目 2/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('transposes only the table view while preserving row and column data', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -558,6 +592,12 @@ describe('WorkspacePage', () => {
     expect(latestSave?.tables[0]).toMatchObject({ transposed: true });
     expect(latestSave?.tables[0].rows[0].id).toBe('row-1');
     expect(latestSave?.tables[0].columns.map((column) => column.id)).toEqual(['column-text', 'column-number', 'column-select', 'column-dynamic']);
+
+    await user.click(screen.getByRole('button', { name: '篩選 花火' }));
+    await user.click(screen.getByRole('checkbox', { name: '合作' }));
+    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    expect(screen.queryByRole('rowheader', { name: '類型' })).not.toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
   });
 
   it('auto-scrolls the drawer tree while a dragged item is held near an edge', async () => {

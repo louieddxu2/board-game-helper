@@ -116,6 +116,10 @@ footer a { color: inherit; }
 .workspace-row-axis-name:hover, .workspace-row-name:hover { color: var(--orange); }
 .workspace-column-name { min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-column-name:hover { color: var(--orange); }
+.workspace-header-layout { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.workspace-header-layout > .workspace-row-axis-name, .workspace-header-layout > .workspace-column-name { flex: 1 1 auto; width: auto; min-width: 0; }
+.workspace-header-filter { display: grid; flex: 0 0 30px; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.workspace-header-filter:hover, .workspace-header-filter.active { background: var(--white); color: var(--orange); box-shadow: inset 0 0 0 1px var(--line); }
 .workspace-row-heading { position: sticky; left: 0; z-index: 2; min-width: 0 !important; padding: 12px 18px !important; cursor: pointer; background: var(--white); color: var(--ink); text-align: left; }
 .workspace-table td { background: var(--white); cursor: text; font-size: inherit; }
 .workspace-table td:hover, .workspace-table td:focus-within { background: rgba(236,230,216,.72); }
@@ -200,6 +204,24 @@ footer a { color: inherit; }
 .workspace-dialog-button.secondary { border-color: var(--line); background: var(--white); color: var(--green); }
 .workspace-dialog-button.danger { background: #a52f23; color: var(--white); }
 .workspace-action-dialog { width: min(390px, 100%); }
+.workspace-filter-dialog { width: min(340px, calc(100vw - 28px)); max-height: min(70dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 28px)); border: 2px solid var(--green); }
+.workspace-filter-dialog .workspace-dialog-heading { display: none; }
+.workspace-filter-dialog .workspace-dialog-content { gap: 10px; padding: 14px; }
+.workspace-filter-sort { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.workspace-filter-sort button, .workspace-filter-selection-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; }
+.workspace-filter-sort button:hover, .workspace-filter-sort button.selected { border-color: var(--orange); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
+.workspace-filter-search { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--green); }
+.workspace-filter-search:focus-within { border-color: var(--yellow); outline: 2px solid rgba(233,180,76,.28); }
+.workspace-filter-dialog .workspace-filter-search input { min-width: 0; min-height: 36px; padding: 0; border: 0; outline: 0; }
+.workspace-filter-selection-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.workspace-filter-selection-actions button { min-height: 34px; color: var(--orange); font-size: 13px; }
+.workspace-filter-options { display: grid; min-height: 0; max-height: min(38dvh, 360px); overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.workspace-filter-options label { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 7px 10px; border-bottom: 1px solid var(--line); color: var(--ink); cursor: pointer; }
+.workspace-filter-options label:last-of-type { border-bottom: 0; }
+.workspace-filter-options label:hover { background: var(--cream); }
+.workspace-filter-options input { flex: 0 0 auto; width: 18px; min-height: 18px; margin: 0; accent-color: var(--orange); }
+.workspace-filter-options span { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-filter-options p { margin: 0; padding: 18px 12px; color: var(--muted); text-align: center; }
 .workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
 .workspace-name-dialog-overlay { background: transparent; }
 .workspace-cell-name-dialog { width: min(360px, 50vw); border: 3px solid var(--green); border-radius: 12px; }
