@@ -155,7 +155,10 @@ footer a { color: inherit; }
 .workspace-tree-more { flex: 0 0 40px; margin-right: 2px; }
 .workspace-tree-children { padding-left: 18px; }
 .workspace-tree-empty { padding: 18px 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
-.workspace-drawer-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.workspace-drawer-footer { display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.workspace-drawer-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.workspace-drawer-data-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.workspace-drawer-data-actions button:hover { border-color: var(--orange); background: var(--cream); color: var(--orange); }
 .workspace-drawer-footer a { display: flex; align-items: center; gap: 9px; min-height: 42px; color: var(--green); font-size: 14px; text-decoration: none; }
 .workspace-drawer-footer a:hover { color: var(--orange); }
 .workspace-empty { flex: 1; min-height: 420px; display: grid; place-items: center; align-content: center; gap: 10px; padding: 38px; text-align: center; }
@@ -245,7 +248,8 @@ footer a { color: inherit; }
 .workspace-alignment-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .workspace-alignment-options button { display: grid; place-items: center; min-height: 38px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; }
 .workspace-alignment-options button:hover, .workspace-alignment-options button.selected { border-color: var(--orange); background: var(--white); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
-.workspace-table th[data-column-id], .workspace-row-heading[data-row-id] { position: relative; touch-action: none; }
+.workspace-table th[data-column-id] { position: sticky; top: 0; touch-action: none; }
+.workspace-row-heading[data-row-id] { position: sticky; left: 0; touch-action: none; }
 .workspace-table .is-reorder-source { z-index: 2; background: var(--cream); color: var(--orange); box-shadow: inset 0 0 0 2px var(--orange); }
 .workspace-table th[data-column-id].is-drop-before::after, .workspace-table th[data-column-id].is-drop-after::after { content: ''; position: absolute; top: 3px; bottom: 3px; z-index: 4; width: 4px; border-radius: 4px; background: var(--orange); }
 .workspace-table th[data-column-id].is-drop-before::after { left: -2px; }

@@ -15,4 +15,15 @@ describe('workspace browser policies', () => {
 
     expect(workspacePageRule).toMatch(/(?:^|;)\s*height:\s*100dvh/);
   });
+
+  it('keeps both table axes sticky while their headings support reordering', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const columnReorderRule = styles.match(/\.workspace-table th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
+    const rowReorderRule = styles.match(/\.workspace-row-heading\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
+
+    expect(columnReorderRule).toMatch(/position:\s*sticky/);
+    expect(columnReorderRule).toMatch(/top:\s*0/);
+    expect(rowReorderRule).toMatch(/position:\s*sticky/);
+    expect(rowReorderRule).toMatch(/left:\s*0/);
+  });
 });

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
@@ -477,6 +477,18 @@ describe('WorkspacePage', () => {
 
     expect(showPicker).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps database import in the drawer instead of the current-table settings', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    expect(screen.queryByRole('button', { name: '匯入整個資料庫' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await user.click(screen.getByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    expect(within(drawer).getByRole('button', { name: '匯入整個資料庫' })).toBeInTheDocument();
   });
 
   it('reorders attributes and items with a long-press drag', async () => {
