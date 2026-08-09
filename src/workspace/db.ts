@@ -17,18 +17,28 @@ const database = typeof indexedDB === 'undefined'
     },
   });
 
+let saveQueue: Promise<void> = Promise.resolve();
+
 export const loadWorkspace = async (): Promise<WorkspaceData> => {
   if (!database) return emptyWorkspace();
+  await saveQueue.catch(() => undefined);
   const loaded = (await (await database).get('state', STATE_KEY)) ?? emptyWorkspace();
   return normalizeWorkspace(loaded);
 };
 
-export const saveWorkspace = async (data: WorkspaceData) => {
-  if (!database) return;
-  await (await database).put('state', data, STATE_KEY);
+export const saveWorkspace = (data: WorkspaceData) => {
+  if (!database) return Promise.resolve();
+  const pending = saveQueue.catch(() => undefined).then(async () => {
+    await (await database).put('state', data, STATE_KEY);
+  });
+  saveQueue = pending;
+  return pending;
 };
+
+export const flushWorkspaceSaves = () => saveQueue;
 
 export const clearWorkspace = async () => {
   if (!database) return;
+  await saveQueue.catch(() => undefined);
   await (await database).delete('state', STATE_KEY);
 };

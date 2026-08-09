@@ -38,14 +38,24 @@ describe('workspace spreadsheet format', () => {
     const source = makeFixture();
     const table = source.tables[0];
     table.rowHeaderName = '桌遊收藏';
+    table.textScale = 1.4;
     table.rows[0].name = '花磚物語';
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
     expect(imported.isWorkspace).toBe(false);
     expect(imported.table?.name).toBe('收藏清單（匯入）');
     expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number']);
     expect(imported.table?.rowHeaderName).toBe('桌遊收藏');
+    expect(imported.table?.textScale).toBe(1.4);
     expect(imported.table?.rows[0].name).toBe('花磚物語');
     expect(imported.table?.rows[0].values[imported.table.columns[2].id]).toBe(2);
+  });
+
+  it('preserves line breaks inside fixed options through an xlsx round trip', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    source.tables[0].columns[1].options = ['第一行\n第二行', '單行'];
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+    expect(imported.table?.columns[1].options).toEqual(['第一行\n第二行', '單行']);
   });
 
   it('round-trips the workspace tree through multiple sheets', async () => {

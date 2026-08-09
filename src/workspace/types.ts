@@ -18,6 +18,7 @@ export interface WorkspaceTable {
   id: string;
   name: string;
   rowHeaderName: string;
+  textScale?: number;
   columns: WorkspaceColumn[];
   rows: WorkspaceRow[];
   updatedAt: number;

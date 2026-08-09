@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { loadWorkspace, saveWorkspace } from '../workspace/db';
-import { createColumn, createNode, createRow, createTable, getChildren, getDynamicOptions, getTableForNode, removeNodeAndDescendants } from '../workspace/model';
+import { flushWorkspaceSaves, loadWorkspace, saveWorkspace } from '../workspace/db';
+import { createColumn, createNode, createRow, createTable, getChildren, getDynamicOptions, getTableForNode, removeNodeAndDescendants, resolveActiveTableNodeId } from '../workspace/model';
 import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from '../workspace/spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 
@@ -8,7 +8,7 @@ const inputTypeLabels: Record<WorkspaceInputType, string> = {
   text: '文字', number: '數字', select: '固定列表', 'dynamic-select': '動態列表',
 };
 
-type IconName = 'menu' | 'search' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'table' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home';
+type IconName = 'menu' | 'search' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'table' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down';
 
 const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: number }) => {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -32,6 +32,8 @@ const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: number }) =
     case 'rows': return <svg {...common}><path d="M4 5h16M4 12h16M4 19h16" /><path d="M8 3v18" /></svg>;
     case 'columns': return <svg {...common}><path d="M5 4v16M12 4v16M19 4v16" /><path d="M3 8h18" /></svg>;
     case 'home': return <svg {...common}><path d="m4 11 8-7 8 7" /><path d="M6 10v9h12v-9M10 19v-5h4v5" /></svg>;
+    case 'up': return <svg {...common}><path d="m6 15 6-6 6 6" /></svg>;
+    case 'down': return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
   }
 };
 
@@ -51,9 +53,10 @@ const updateTable = (data: WorkspaceData, tableId: string, updater: (table: Work
 
 const findTableNode = (data: WorkspaceData, tableId: string) => data.nodes.find((node) => node.type === 'table' && node.tableId === tableId);
 
-const workspaceCellPadding = 34;
-const workspaceMaxColumnWidth = 280;
+const workspaceCellPadding = 40;
 const workspaceMinColumnWidth = 40;
+const workspaceMaxTextScale = 2.5;
+const expandedFoldersStorageKey = 'board-game-helper-workspace-expanded-folders';
 
 const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
   if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
@@ -78,17 +81,39 @@ const CellEditor = ({ column, value, onSave, onCancel }: CellEditorProps) => {
   useEffect(() => { inputRef.current?.focus(); if (inputRef.current instanceof HTMLInputElement) inputRef.current.select(); }, []);
 
   const commit = () => onSave(draft);
-  if (column.inputType === 'number') return <input ref={inputRef as React.RefObject<HTMLInputElement>} className="workspace-cell-editor" type="number" inputMode="decimal" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } if (event.key === 'Escape') onCancel(); }} />;
+  if (column.inputType === 'number') return <input ref={inputRef as React.RefObject<HTMLInputElement>} className="workspace-cell-editor" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } if (event.key === 'Escape') onCancel(); }} />;
   return <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} className="workspace-cell-editor workspace-text-editor" inputMode="text" rows={Math.max(1, draft.split('\n').length)} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />;
 };
 
 const WorkspaceModal = ({ title, children, actions, onClose, className = '' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; onClose(): void; className?: string }) => {
+  const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
-  return <div className={`workspace-overlay ${className ? `${className}-overlay` : ''}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const updateBounds = () => setVisualViewport({ top: viewport.offsetTop, left: viewport.offsetLeft, width: viewport.width, height: viewport.height });
+    updateBounds();
+    viewport.addEventListener('resize', updateBounds);
+    viewport.addEventListener('scroll', updateBounds);
+    return () => {
+      viewport.removeEventListener('resize', updateBounds);
+      viewport.removeEventListener('scroll', updateBounds);
+    };
+  }, []);
+  const overlayStyle = visualViewport ? {
+    top: `${visualViewport.top}px`,
+    left: `${visualViewport.left}px`,
+    right: 'auto',
+    bottom: 'auto',
+    width: `${visualViewport.width}px`,
+    height: `${visualViewport.height}px`,
+    '--workspace-visual-viewport-height': `${visualViewport.height}px`,
+  } as React.CSSProperties : undefined;
+  return <div className={`workspace-overlay ${className ? `${className}-overlay` : ''}`} style={overlayStyle} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className={`workspace-dialog ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-dialog-title">
       <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={onClose} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
       <div className="workspace-dialog-content">{children}</div>
@@ -101,10 +126,13 @@ type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; i
 
 const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: NameDialogState; onClose(): void; onSubmit(name: string): void; onDelete?(): void }) => {
   const [name, setName] = useState(state.initialValue);
+  const isMultiline = state.mode === 'row' || state.mode === 'axis';
   const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : state.mode === 'row' ? '項目名稱' : state.mode === 'axis' ? '項目軸名稱' : '名稱';
   const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : state.mode === 'row' ? '編輯項目名稱' : state.mode === 'axis' ? '編輯項目軸' : '重新命名';
-  return <WorkspaceModal title={title} onClose={onClose} className="workspace-name-dialog" actions={<>{onDelete && <button type="button" className="workspace-dialog-button danger" onClick={onDelete}>刪除項目</button>}<button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button primary" onClick={() => { const value = name.trim(); if (value) onSubmit(value); }}>確定</button></>}>
-    <label className="workspace-form-field">{label}<input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); const value = name.trim(); if (value) onSubmit(value); } }} /></label>
+  return <WorkspaceModal title={title} onClose={onClose} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} actions={<>{onDelete && <button type="button" className="workspace-dialog-button danger" onClick={onDelete}>刪除項目</button>}<button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button primary" onClick={() => { const value = name.trim(); if (value) onSubmit(value); }}>確定</button></>}>
+    <label className="workspace-form-field">{label}{isMultiline
+      ? <textarea autoFocus rows={Math.max(2, name.split('\n').length)} value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); const value = name.trim(); if (value) onSubmit(value); } }} />
+      : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); const value = name.trim(); if (value) onSubmit(value); } }} />}</label>
   </WorkspaceModal>;
 };
 
@@ -133,9 +161,9 @@ const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }:
   };
 
   return <WorkspaceModal title={column.name} onClose={onClose} className="workspace-selection-dialog">
-    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
+    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
     <div className={`workspace-selection-list ${isDynamic ? 'with-search' : ''}`} role="listbox" aria-label={`${column.name}選項`}>
-      {filtered.map((option) => <button ref={option === currentValue ? selectedOptionRef : undefined} type="button" key={option} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
+      {filtered.map((option, index) => <button ref={option === currentValue ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
     </div>
   </WorkspaceModal>;
@@ -150,11 +178,22 @@ const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onCh
   };
   const addOption = () => onChange([...options, '']);
   const removeOption = (index: number) => onChange(options.filter((_, optionIndex) => optionIndex !== index));
+  const moveOption = (index: number, direction: -1 | 1) => {
+    const next = options.length ? [...options] : [''];
+    const destination = index + direction;
+    if (destination < 0 || destination >= next.length) return;
+    [next[index], next[destination]] = [next[destination], next[index]];
+    onChange(next);
+  };
 
   return <div className="workspace-option-list">
     {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
       <textarea rows={2} value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
-      <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`刪除固定選項 ${index + 1}`}><WorkspaceIcon name="trash" size={18} /></button>
+      <div className="workspace-option-controls">
+        <button type="button" onClick={() => moveOption(index, -1)} disabled={index === 0} aria-label={`向上移動固定選項 ${index + 1}`}><WorkspaceIcon name="up" size={17} /></button>
+        <button type="button" onClick={() => moveOption(index, 1)} disabled={index === visibleOptions.length - 1} aria-label={`向下移動固定選項 ${index + 1}`}><WorkspaceIcon name="down" size={17} /></button>
+        <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`刪除固定選項 ${index + 1}`}><WorkspaceIcon name="trash" size={18} /></button>
+      </div>
     </div>)}
     <button type="button" className="workspace-option-add" onClick={addOption}><WorkspaceIcon name="plus" size={18} />新增選項</button>
   </div>;
@@ -165,9 +204,15 @@ const ColumnConfig = ({ column, onSave, onDelete, onClose }: { column: Workspace
   const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名欄位', options: draft.inputType === 'select' ? draft.options.map((option) => option.trim()).filter(Boolean) : [] });
   const chooseInputType = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, options: inputType === 'select' ? current.options : [] }));
   return <WorkspaceModal title="欄位設定" onClose={onClose} className="workspace-column-dialog" actions={<><button type="button" className="workspace-dialog-button danger" onClick={onDelete}>刪除欄位</button><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button primary" onClick={save}>儲存</button></>}>
-    <label className="workspace-form-field">欄位名稱<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-    <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{Object.entries(inputTypeLabels).map(([value, label]) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputType(value as WorkspaceInputType)}>{label}</button>)}</div></fieldset>
-    {draft.inputType === 'select' && <div className="workspace-form-field"><span>固定選項</span><SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} /></div>}
+    <div className="workspace-column-config">
+      <div className="workspace-column-config-rail">
+        <label className="workspace-form-field">欄位名稱<textarea rows={Math.max(2, draft.name.split('\n').length)} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{Object.entries(inputTypeLabels).map(([value, label]) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputType(value as WorkspaceInputType)}>{label}</button>)}</div></fieldset>
+      </div>
+      <div className="workspace-column-config-panel">
+        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
+      </div>
+    </div>
   </WorkspaceModal>;
 };
 
@@ -232,20 +277,51 @@ const WorkspacePage = () => {
   const [textScale, setTextScale] = useState(1);
   const [minTextScale, setMinTextScale] = useState(0.35);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
+  const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
+  const textScaleRef = useRef(1);
+  const pendingScaleSave = useRef<{ tableId: string; scale: number } | undefined>(undefined);
+  const scaleSaveTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => { if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current); }, []);
 
   const reload = useCallback(async () => {
     const loaded = await loadWorkspace();
+    dataRef.current = loaded;
     setData(loaded);
-    setExpanded(new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id)));
+    const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
+    let restored = new Set(folderIds);
+    try {
+      const stored = window.localStorage.getItem(expandedFoldersStorageKey);
+      if (stored !== null) restored = new Set((JSON.parse(stored) as unknown[]).filter((id): id is string => typeof id === 'string' && folderIds.has(id)));
+    } catch { /* Ignore damaged UI preferences. */ }
+    let current = loaded.nodes.find((node) => node.id === loaded.activeNodeId);
+    while (current?.parentId) {
+      restored.add(current.parentId);
+      current = loaded.nodes.find((node) => node.id === current?.parentId);
+    }
+    setExpanded(restored);
   }, []);
   useEffect(() => { void reload(); }, [reload]);
 
-  const commit = useCallback((next: WorkspaceData) => { setData(next); void saveWorkspace(next); }, []);
+  const commit = useCallback((next: WorkspaceData) => {
+    dataRef.current = next;
+    setData(next);
+    void saveWorkspace(next).catch(() => setNotice('本機儲存失敗，請先匯出資料備份'));
+  }, []);
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
+  useEffect(() => {
+    const nextScale = table?.textScale ?? 1;
+    textScaleRef.current = nextScale;
+    setTextScale(nextScale);
+  }, [table?.id]);
+  useEffect(() => {
+    if (!data) return;
+    window.localStorage.setItem(expandedFoldersStorageKey, JSON.stringify([...expanded]));
+  }, [data, expanded]);
   const columnTextWidths = useMemo(() => {
     if (!table) return [];
     const itemHeaderWidth = Math.max(
@@ -254,12 +330,12 @@ const WorkspacePage = () => {
     );
     return [itemHeaderWidth, ...table.columns.map((column) => measureWorkspaceText(column.name, 20, 600))];
   }, [table]);
-  const columnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.min(workspaceMaxColumnWidth, Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding))), [columnTextWidths, textScale]);
+  const columnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
   const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
   const visibleRows = useMemo(() => {
     if (!table || !searchQuery.trim()) return table?.rows ?? [];
     const query = searchQuery.trim().toLocaleLowerCase();
-    return table.rows.filter((row) => table.columns.some((column) => String(row.values[column.id] ?? '').toLocaleLowerCase().includes(query)));
+    return table.rows.filter((row) => row.name.toLocaleLowerCase().includes(query) || table.columns.some((column) => String(row.values[column.id] ?? '').toLocaleLowerCase().includes(query)));
   }, [searchQuery, table]);
 
   useEffect(() => {
@@ -280,7 +356,11 @@ const WorkspacePage = () => {
   }, [columnTextWidths, viewportWidth]);
 
   useEffect(() => {
-    setTextScale((current) => Math.max(minTextScale, Math.min(4, current)));
+    setTextScale((current) => {
+      const next = Math.max(minTextScale, Math.min(workspaceMaxTextScale, current));
+      textScaleRef.current = next;
+      return next;
+    });
   }, [minTextScale]);
 
   const openNameDialog = (mode: NameDialogState['mode'], initialValue: string, parentId?: string | null, node?: WorkspaceNode) => setNameDialog({ mode, initialValue, parentId, node });
@@ -297,12 +377,12 @@ const WorkspacePage = () => {
       if (nameDialog.mode === 'folder') {
         const node = createNode('folder', name, parentId, getChildren(data, parentId).length);
         commit({ ...data, nodes: [...data.nodes, node] });
-        setExpanded((current) => new Set(current).add(parentId ?? node.id));
+        setExpanded((current) => { const next = new Set(current); if (parentId) next.add(parentId); else next.add(node.id); return next; });
       } else {
         const currentTable = createTable(name);
         const node = createNode('table', currentTable.name, parentId, getChildren(data, parentId).length, currentTable.id);
         commit({ ...data, tables: [...data.tables, currentTable], nodes: [...data.nodes, node], activeNodeId: node.id });
-        setExpanded((current) => new Set(current).add(parentId ?? node.id));
+        if (parentId) setExpanded((current) => new Set(current).add(parentId));
         setDrawerOpen(false);
       }
     } else if (nameDialog.row && table) {
@@ -318,8 +398,11 @@ const WorkspacePage = () => {
     setNameDialog(undefined);
   };
 
-  const askDeleteNode = (node: WorkspaceNode) => setConfirmDialog({ title: '確認刪除', message: `確定要刪除「${node.name}」嗎？${node.type === 'folder' ? '資料夾內的內容也會一併刪除。' : ''}`, onConfirm: () => { if (data) commit(removeNodeAndDescendants(data, node.id)); setConfirmDialog(undefined); setNodeMenu(undefined); } });
-  const openNode = (node: WorkspaceNode) => { if (!data) return; if (node.type === 'folder') { setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); return; } commit({ ...data, activeNodeId: node.id }); setDrawerOpen(false); setNodeMenu(undefined); };
+  const askDeleteNode = (node: WorkspaceNode) => {
+    setNodeMenu(undefined);
+    setConfirmDialog({ title: '確認刪除', message: `確定要刪除「${node.name}」嗎？${node.type === 'folder' ? '資料夾內的內容也會一併刪除。' : ''}`, onConfirm: () => { if (data) commit(removeNodeAndDescendants(data, node.id)); setConfirmDialog(undefined); } });
+  };
+  const openNode = (node: WorkspaceNode) => { if (!data) return; if (node.type === 'folder') { setExpanded((current) => { const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); return; } commit({ ...data, activeNodeId: node.id }); setSearchQuery(''); setEditing(undefined); setSelectionEditor(undefined); setDrawerOpen(false); setNodeMenu(undefined); };
 
   const updateCell = (rowId: string, column: WorkspaceColumn, raw: string) => {
     if (!data || !table) return;
@@ -368,8 +451,103 @@ const WorkspacePage = () => {
   };
   const finishWorkspaceImport = (mode: 'replace' | 'merge') => {
     if (!data || !workspaceImport) return;
-    const next = mode === 'replace' ? { ...workspaceImport, activeNodeId: workspaceImport.nodes.find((node) => node.type === 'table')?.id ?? null } : (() => { const copy = cloneImportedWorkspace(workspaceImport); return { ...data, nodes: [...data.nodes, ...copy.nodes], tables: [...data.tables, ...copy.tables], activeNodeId: copy.nodes.find((node) => node.type === 'table')?.id ?? data.activeNodeId }; })();
+    const next = mode === 'replace'
+      ? { ...workspaceImport, activeNodeId: resolveActiveTableNodeId(workspaceImport) }
+      : (() => {
+        const copy = cloneImportedWorkspace(workspaceImport);
+        const merged = { ...data, nodes: [...data.nodes, ...copy.nodes], tables: [...data.tables, ...copy.tables] };
+        return { ...merged, activeNodeId: resolveActiveTableNodeId(merged, copy.nodes.find((node) => node.type === 'table')?.id) };
+      })();
     commit(next); setWorkspaceImport(undefined); setNotice(mode === 'replace' ? '資料庫已取代' : '資料庫已合併');
+  };
+
+  const persistTextScale = (scale: number) => {
+    const pending = pendingScaleSave.current;
+    const currentData = dataRef.current;
+    const tableId = pending?.tableId ?? table?.id;
+    pendingScaleSave.current = undefined;
+    if (!currentData || !tableId) return;
+    const currentTable = currentData.tables.find((item) => item.id === tableId);
+    if (!currentTable || Math.abs((currentTable.textScale ?? 1) - scale) < 0.001) return;
+    commit(updateTable(currentData, tableId, (current) => ({ ...current, textScale: scale, updatedAt: Date.now() })));
+  };
+
+  const scheduleTextScaleSave = (scale: number) => {
+    if (!table) return;
+    pendingScaleSave.current = { tableId: table.id, scale };
+    if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
+    scaleSaveTimer.current = window.setTimeout(() => {
+      scaleSaveTimer.current = undefined;
+      persistTextScale(pendingScaleSave.current?.scale ?? scale);
+    }, 180);
+  };
+
+  const applyTextScale = (scale: number, persist = true) => {
+    const nextScale = Math.max(minTextScale, Math.min(workspaceMaxTextScale, scale));
+    textScaleRef.current = nextScale;
+    setTextScale(nextScale);
+    if (persist) scheduleTextScaleSave(nextScale);
+  };
+
+  const flushPendingTextScale = () => {
+    if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
+    scaleSaveTimer.current = undefined;
+    const pending = pendingScaleSave.current;
+    if (pending) persistTextScale(pending.scale);
+  };
+
+  const beginTableTouch = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return;
+    if ((event.target as Element).closest('input, textarea')) return;
+    const viewport = event.currentTarget;
+    if ('setPointerCapture' in viewport) {
+      try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+    }
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 1) {
+      panStart.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+      pinchStart.current = undefined;
+    } else if (pointers.current.size === 2) {
+      const points = [...pointers.current.values()];
+      pinchStart.current = { distance: Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)), scale: textScaleRef.current };
+      panStart.current = undefined;
+    }
+  };
+
+  const moveTableTouch = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return;
+    const viewport = event.currentTarget;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const points = [...pointers.current.values()];
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      applyTextScale(pinchStart.current.scale * distance / pinchStart.current.distance, false);
+      event.preventDefault();
+    } else if (pointers.current.size === 1 && panStart.current?.pointerId === event.pointerId) {
+      viewport.scrollLeft = panStart.current.scrollLeft - (event.clientX - panStart.current.x);
+      viewport.scrollTop = panStart.current.scrollTop - (event.clientY - panStart.current.y);
+      event.preventDefault();
+    }
+  };
+
+  const endTableTouch = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return;
+    const viewport = event.currentTarget;
+    pointers.current.delete(event.pointerId);
+    if ('hasPointerCapture' in viewport && viewport.hasPointerCapture(event.pointerId)) {
+      try { viewport.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+    }
+    pinchStart.current = undefined;
+    if (pointers.current.size === 1) {
+      const [pointerId, point] = pointers.current.entries().next().value as [number, { x: number; y: number }];
+      panStart.current = { pointerId, x: point.x, y: point.y, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+    } else {
+      panStart.current = undefined;
+    }
+    if (pointers.current.size === 0) {
+      pendingScaleSave.current = table ? { tableId: table.id, scale: textScaleRef.current } : undefined;
+      flushPendingTextScale();
+    }
   };
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
@@ -380,8 +558,8 @@ const WorkspacePage = () => {
       <div className="workspace-appbar-actions">
         <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''}`} aria-label="搜尋表格" onClick={() => { setSearchOpen((current) => !current); setSearchQuery(''); }}><WorkspaceIcon name="search" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="編輯表格" onClick={() => setTableActionsOpen(true)} disabled={!table}><WorkspaceIcon name="edit" size={29} /></button>
-        <button type="button" className="workspace-appbar-button" aria-label="完成並儲存" onClick={() => setNotice('資料已儲存於本機')}><WorkspaceIcon name="check" size={29} /></button>
-        <button type="button" className="workspace-appbar-button" aria-label="重新整理資料" onClick={() => { void reload(); setNotice('已重新整理'); }}><WorkspaceIcon name="refresh" size={30} /></button>
+        <button type="button" className="workspace-appbar-button" aria-label="完成並儲存" onClick={() => { flushPendingTextScale(); void flushWorkspaceSaves().then(() => setNotice('資料已儲存於本機')).catch(() => setNotice('本機儲存失敗，請先匯出資料備份')); }}><WorkspaceIcon name="check" size={29} /></button>
+        <button type="button" className="workspace-appbar-button" aria-label="重新整理資料" onClick={() => { flushPendingTextScale(); void flushWorkspaceSaves().then(reload).then(() => setNotice('已重新整理')).catch(() => setNotice('重新整理失敗')); }}><WorkspaceIcon name="refresh" size={30} /></button>
       </div>
     </header>
     {searchOpen && <div className="workspace-searchbar"><WorkspaceIcon name="search" size={21} /><input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜尋目前表格…" /><button type="button" onClick={() => { setSearchQuery(''); setSearchOpen(false); }} aria-label="關閉搜尋"><WorkspaceIcon name="close" size={19} /></button></div>}
@@ -389,14 +567,14 @@ const WorkspacePage = () => {
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
-          <div ref={viewportRef} className="workspace-table-viewport" onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); setTextScale((current) => Math.max(minTextScale, Math.min(4, current - event.deltaY * 0.002))); } }} onPointerDown={(event) => { if (event.pointerType === 'touch') { pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2) { const points = [...pointers.current.values()]; pinchStart.current = { distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: textScale }; } } }} onPointerMove={(event) => { if (event.pointerType !== 'touch' || !pointers.current.has(event.pointerId)) return; pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2 && pinchStart.current) { const points = [...pointers.current.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); setTextScale(Math.max(minTextScale, Math.min(4, pinchStart.current.scale * distance / pinchStart.current.distance))); event.preventDefault(); } }} onPointerUp={(event) => { pointers.current.delete(event.pointerId); if (pointers.current.size < 2) pinchStart.current = undefined; }} onPointerCancel={(event) => { pointers.current.delete(event.pointerId); pinchStart.current = undefined; }}>
+          <div ref={viewportRef} className="workspace-table-viewport" onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); applyTextScale(textScaleRef.current - event.deltaY * 0.002); } }} onPointerDown={beginTableTouch} onPointerMove={moveTableTouch} onPointerUp={endTableTouch} onPointerCancel={endTableTouch}>
             <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
               <thead><tr><th className="workspace-row-corner"><button type="button" className="workspace-row-axis-name" onClick={() => renameRowHeader(table)}>{table.rowHeaderName}</button></th>{table.columns.map((column) => <th key={column.id} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name" onClick={() => setConfiguring(column)}>{column.name}</button></th>)}</tr></thead>
-              <tbody>{visibleRows.map((row) => { const originalIndex = table.rows.findIndex((item) => item.id === row.id); return <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" onClick={() => renameRow(row)} aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; return <td key={column.id} onClick={() => !isEditing && openCell(row, column)}>{isEditing ? <CellEditor column={column} value={value} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={value == null || value === '' ? 'workspace-empty-cell' : ''}>{value == null || value === '' ? '點按輸入' : String(value)}</span>}</td>; })}</tr>; })}</tbody>
+              <tbody>{visibleRows.map((row) => { const originalIndex = table.rows.findIndex((item) => item.id === row.id); return <tr key={row.id}><th className="workspace-row-heading" onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><button type="button" className="workspace-row-name" onClick={() => renameRow(row)} aria-label={`編輯項目 ${row.name}`}>{row.name}</button></th>{table.columns.map((column) => { const isEditing = editing?.rowId === row.id && editing.columnId === column.id; const value = row.values[column.id]; const displayValue = value == null ? '' : String(value); return <td key={column.id} aria-label={`${row.name}，${column.name}：${displayValue || '空白'}`} onClick={() => !isEditing && openCell(row, column)}>{isEditing ? <CellEditor column={column} value={value} onSave={(next) => updateCell(row.id, column, next)} onCancel={() => setEditing(undefined)} /> : <span className={displayValue ? '' : 'workspace-empty-cell'}>{displayValue}</span>}</td>; })}</tr>; })}</tbody>
             </table>
           </div>
-          <div className="workspace-zoom-indicator"><button type="button" onClick={() => setTextScale((current) => Math.max(minTextScale, current - 0.1))} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => setTextScale((current) => Math.min(4, current + 0.1))} aria-label="放大文字">＋</button><button type="button" onClick={() => setTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
+          <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
         </>}
       </main>
       <button type="button" className="workspace-fab" onClick={addRow} disabled={!table} aria-label="新增項目"><WorkspaceIcon name="plus" size={38} /></button>

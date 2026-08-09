@@ -1,6 +1,7 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { saveWorkspace } from '../workspace/db';
 import { WorkspacePage } from './WorkspacePage';
 
 vi.mock('../workspace/db', () => ({
@@ -20,7 +21,13 @@ vi.mock('../workspace/db', () => ({
     }],
   }),
   saveWorkspace: vi.fn(async () => undefined),
+  flushWorkspaceSaves: vi.fn(async () => undefined),
 }));
+
+beforeEach(() => {
+  window.localStorage.clear();
+  vi.mocked(saveWorkspace).mockClear();
+});
 
 afterEach(() => cleanup());
 
@@ -30,12 +37,13 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('heading', { name: '動態表格' })).toBeInTheDocument());
 
-    await user.click(screen.getAllByText('點按輸入')[0]);
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     expect(screen.getByRole('textbox')).toHaveAttribute('inputmode', 'text');
 
     await user.keyboard('{Escape}');
     await user.click(screen.getByText('2'));
     expect(screen.getByRole('spinbutton')).toHaveAttribute('inputmode', 'decimal');
+    expect(screen.getByRole('spinbutton')).toHaveAttribute('enterkeyhint', 'done');
   });
 
   it('opens the fixed selection list immediately and saves a choice', async () => {
@@ -63,19 +71,23 @@ describe('WorkspacePage', () => {
     await user.type(option, '第一行');
     await user.keyboard('{Enter}');
     await user.type(option, '第二行');
+    await user.click(screen.getByRole('button', { name: '新增選項' }));
+    await user.type(screen.getByRole('textbox', { name: '固定選項 2' }), '單行');
+    await user.click(screen.getByRole('button', { name: '向上移動固定選項 2' }));
     await user.click(screen.getByText('儲存', { exact: true }));
 
-    await user.click(screen.getAllByText('點按輸入')[0]);
-    expect(screen.getByRole('option', { name: /第一行/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(screen.getAllByRole('option').map((item) => item.textContent)).toEqual(['單行', '第一行\n第二行']);
   });
 
   it('opens the dynamic selection search and commits a new value from text submission', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await waitFor(() => expect(screen.getAllByText('點按輸入')).toHaveLength(2));
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，標籤：空白' })).toBeInTheDocument());
 
-    await user.click(screen.getAllByText('點按輸入')[1]);
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：空白' }));
     const search = screen.getByRole('textbox', { name: '搜尋或新增選項' });
+    expect(search).toHaveAttribute('enterkeyhint', 'done');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.type(search, '新標籤');
     await user.keyboard('{Enter}');
@@ -120,5 +132,80 @@ describe('WorkspacePage', () => {
     await user.type(axisName, '桌遊收藏');
     await user.click(screen.getByRole('button', { name: '確定' }));
     expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
+  });
+
+  it('allows intentional line breaks in item and column headers', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '編輯項目 花火' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '編輯項目 花火' }));
+    await user.clear(screen.getByRole('textbox', { name: '項目名稱' }));
+    await user.type(screen.getByRole('textbox', { name: '項目名稱' }), '收藏{Enter}第一項');
+    await user.click(screen.getByRole('button', { name: '確定' }));
+    expect(screen.getByRole('button', { name: /編輯項目 收藏\s+第一項/ }).textContent).toBe('收藏\n第一項');
+
+    await user.click(screen.getByRole('button', { name: '名稱' }));
+    const columnName = screen.getByRole('textbox', { name: '欄位名稱' });
+    await user.clear(columnName);
+    await user.type(columnName, '桌遊{Enter}名稱');
+    await user.click(screen.getByRole('button', { name: '儲存' }));
+    expect(screen.getByRole('button', { name: /桌遊\s+名稱/ }).textContent).toBe('桌遊\n名稱');
+  });
+
+  it('changes only table text scale and persists it for the active table', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    const viewport = document.querySelector('.workspace-table-viewport');
+    expect(viewport).not.toBeNull();
+
+    fireEvent.wheel(viewport!, { ctrlKey: true, deltaY: -100 });
+    await waitFor(() => expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.2' }));
+    await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
+      tables: expect.arrayContaining([expect.objectContaining({ id: 'table-1', textScale: 1.2 })]),
+    })));
+
+    fireEvent.click(screen.getByRole('button', { name: '放大文字' }));
+    await waitFor(() => expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.3' }));
+    await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
+      tables: expect.arrayContaining([expect.objectContaining({ id: 'table-1', textScale: 1.3 })]),
+    })));
+  });
+
+  it('keeps setting dialogs inside the mobile visual viewport when the keyboard changes it', async () => {
+    const previousVisualViewport = window.visualViewport;
+    const visualViewport = Object.assign(new EventTarget(), { offsetTop: 12, offsetLeft: 0, width: 390, height: 420 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    const user = userEvent.setup();
+    const rendered = render(<WorkspacePage />);
+
+    try {
+      await user.click(await screen.findByRole('button', { name: '名稱' }));
+      const overlay = document.querySelector('.workspace-column-dialog-overlay');
+      expect(overlay).toHaveStyle({ top: '12px', left: '0px', width: '390px', height: '420px' });
+
+      visualViewport.offsetTop = 18;
+      visualViewport.height = 300;
+      visualViewport.dispatchEvent(new Event('resize'));
+      await waitFor(() => expect(overlay).toHaveStyle({ top: '18px', height: '300px' }));
+    } finally {
+      rendered.unmount();
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    }
+  });
+
+  it('searches item names as well as attribute values', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '編輯項目 花火' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '搜尋表格' }));
+    const search = screen.getByPlaceholderText('搜尋目前表格…');
+    await user.type(search, '花火');
+    expect(screen.getByRole('button', { name: '編輯項目 花火' })).toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, '不存在');
+    expect(screen.queryByRole('button', { name: '編輯項目 花火' })).not.toBeInTheDocument();
   });
 });

@@ -39,6 +39,17 @@ describe('workspace model', () => {
     const result = removeNodeAndDescendants(data, 'folder-a');
     expect(result.nodes.map((node) => node.id)).toEqual(['table-root']);
     expect(result.tables.map((table) => table.id)).toEqual(['data-root']);
-    expect(result.activeNodeId).toBeNull();
+    expect(result.activeNodeId).toBe('table-root');
+  });
+
+  it('clears the active node when the last table is removed', () => {
+    const table = createTable('唯一表格');
+    const data: WorkspaceData = {
+      ...emptyWorkspace(),
+      nodes: [{ id: 'only-table', type: 'table', name: table.name, parentId: null, order: 0, tableId: table.id }],
+      tables: [table],
+      activeNodeId: 'only-table',
+    };
+    expect(removeNodeAndDescendants(data, 'only-table').activeNodeId).toBeNull();
   });
 });

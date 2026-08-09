@@ -21,7 +21,7 @@ export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): Worksp
 
 export const createTable = (name: string): WorkspaceTable => {
   const columns = [createColumn('屬性 1', 'text')];
-  return { id: makeId('table'), name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, columns, rows: [createRow(columns)], updatedAt: Date.now() };
+  return { id: makeId('table'), name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, textScale: 1, columns, rows: [createRow(columns)], updatedAt: Date.now() };
 };
 
 export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
@@ -29,6 +29,7 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
   tables: data.tables.map((table) => ({
     ...table,
     rowHeaderName: table.rowHeaderName?.trim() || DEFAULT_ROW_HEADER_NAME,
+    textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
     rows: table.rows.map((row, index) => ({
       ...row,
       name: row.name?.trim() || `項目 ${index + 1}`,
@@ -55,11 +56,22 @@ export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
   const options: string[] = [];
   for (const row of table.rows) {
     const value = row.values[columnId];
-    if (typeof value !== 'string' || !value.trim() || seen.has(value)) continue;
-    seen.add(value);
-    options.push(value);
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    const key = normalized.toLocaleLowerCase();
+    if (!normalized || seen.has(key)) continue;
+    seen.add(key);
+    options.push(normalized);
   }
   return options;
+};
+
+export const resolveActiveTableNodeId = (data: WorkspaceData, preferredNodeId = data.activeNodeId) => {
+  const tableIds = new Set(data.tables.map((table) => table.id));
+  const isAvailableTable = (node: WorkspaceNode) => node.type === 'table' && Boolean(node.tableId && tableIds.has(node.tableId));
+  const preferredNode = preferredNodeId ? data.nodes.find((node) => node.id === preferredNodeId) : undefined;
+  return preferredNode && isAvailableTable(preferredNode)
+    ? preferredNode.id
+    : data.nodes.find(isAvailableTable)?.id ?? null;
 };
 
 export const coerceCellValue = (column: WorkspaceColumn, raw: string): WorkspaceCellValue => {
@@ -82,6 +94,6 @@ export const removeNodeAndDescendants = (data: WorkspaceData, nodeId: string): W
     }
   }
   const tableIds = new Set(data.nodes.filter((node) => removedIds.has(node.id) && node.tableId).map((node) => node.tableId));
-  const activeNodeId = data.activeNodeId && removedIds.has(data.activeNodeId) ? null : data.activeNodeId;
-  return { ...data, nodes: data.nodes.filter((node) => !removedIds.has(node.id)), tables: data.tables.filter((table) => !tableIds.has(table.id)), activeNodeId };
+  const remaining = { ...data, nodes: data.nodes.filter((node) => !removedIds.has(node.id)), tables: data.tables.filter((table) => !tableIds.has(table.id)) };
+  return { ...remaining, activeNodeId: resolveActiveTableNodeId(remaining) };
 };

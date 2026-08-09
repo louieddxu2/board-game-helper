@@ -5,6 +5,7 @@ import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
 const TABLE_MARKER = '__workspace_table';
 const WORKSPACE_MARKER = '__workspace';
+const OPTIONS_JSON_MARKER = '__workspace_options_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select'];
 
 const escapeXml = (value: string) => value
@@ -48,8 +49,9 @@ const tableRows = (table: WorkspaceTable): unknown[][] => [
   ['table_id', table.id],
   ['table_name', table.name],
   ['row_header_name', table.rowHeaderName],
+  ['text_scale', table.textScale ?? 1],
   ['columns', 'id', 'name', 'inputType', 'options'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, column.options.join('\n')]),
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`]),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
   ...table.rows.map((row) => [row.id, row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]),
 ];
@@ -159,17 +161,32 @@ type SheetCell = CellValue<number> | null;
 type SheetRows = SheetCell[][];
 const stringValue = (value: SheetCell | undefined) => value === null || value === undefined ? '' : String(value);
 const parseType = (value: string): WorkspaceInputType => INPUT_TYPES.includes(value as WorkspaceInputType) ? value as WorkspaceInputType : 'text';
+const parseOptions = (value: string) => {
+  if (value.startsWith(OPTIONS_JSON_MARKER)) {
+    try {
+      const parsed: unknown = JSON.parse(value.slice(OPTIONS_JSON_MARKER.length));
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
+        return parsed.map((item) => item.trim()).filter(Boolean);
+      }
+    } catch {
+      // Fall through to the legacy line-based format for damaged or hand-edited files.
+    }
+  }
+  return value.split('\n').map((item) => item.trim()).filter(Boolean);
+};
 
 const parseTable = (rows: SheetRows): WorkspaceTable => {
   if (stringValue(rows[0]?.[0]) !== TABLE_MARKER) throw new Error('找不到動態表格格式標記');
   const tableName = stringValue(rows[2]?.[1]) || '匯入表格';
   const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]) || '項目';
+  const textScaleValue = Number(rows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
+  const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
   const columns: WorkspaceColumn[] = [];
   for (const row of rows) {
     if (stringValue(row[0]) !== 'column') continue;
     const column = createColumn(stringValue(row[2]) || '未命名欄位', parseType(stringValue(row[3])));
     column.id = stringValue(row[1]) || column.id;
-    column.options = stringValue(row[4]).split('\n').map((item) => item.trim()).filter(Boolean);
+    column.options = parseOptions(stringValue(row[4]));
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');
@@ -184,7 +201,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
       return [column.id, column.inputType === 'number' && typeof raw === 'number' ? raw : stringValue(raw) || null];
     })),
   }));
-  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName, textScale, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {
@@ -214,7 +231,7 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
       return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];
     })),
   }));
-  return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, columns, rows: rowsData, updatedAt: Date.now() };
+  return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
