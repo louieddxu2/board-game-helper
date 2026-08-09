@@ -13,6 +13,18 @@ vi.mock('./ScrollToTop', () => ({ ScrollToTop: () => null }));
 describe('Layout navigation', () => {
   afterEach(cleanup);
 
+  test('does not expose the local Workspace from the site navigation', () => {
+    render(<MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Outlet />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+
+    expect(screen.queryByRole('link', { name: 'Workspace' })).not.toBeInTheDocument();
+  });
+
   test('prefills both desktop and mobile record links with the current game', () => {
     render(<MemoryRouter initialEntries={['/games/seize-the-bean']}>
       <Routes>
