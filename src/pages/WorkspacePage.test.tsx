@@ -420,8 +420,10 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await screen.findByRole('table');
     const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
-    fireEvent.wheel(viewport, { deltaY: 80 });
-    expect(viewport.scrollTop).toBe(80);
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 80 });
+    fireEvent(viewport, wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+    expect(viewport.scrollTop).toBe(0);
     expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1' });
   });
 

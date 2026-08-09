@@ -605,7 +605,10 @@ const WorkspacePage = () => {
         if (!imported.isWorkspace || !imported.data || !data) throw new Error('請選擇整個資料庫檔案');
         setWorkspaceImport(imported.data);
       }
-    } catch (error) { setNotice(error instanceof Error ? error.message : '匯入失敗'); }
+    } catch (error) {
+      console.error('[workspace-import] failed', { kind, fileName: file.name, fileSize: file.size, error });
+      setNotice(error instanceof Error ? `匯入失敗：${error.message}` : '匯入失敗');
+    }
   };
   const finishWorkspaceImport = (mode: 'replace' | 'merge') => {
     if (!data || !workspaceImport) return;
@@ -813,7 +816,7 @@ const WorkspacePage = () => {
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
-          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { event.preventDefault(); if (event.ctrlKey || event.metaKey) applyTextScale(textScaleRef.current - event.deltaY * 0.002); else { event.currentTarget.scrollTop += event.deltaY; event.currentTarget.scrollLeft += event.deltaX; } }} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
+          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); applyTextScale(textScaleRef.current - event.deltaY * 0.002); } }} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
             <table className="workspace-table" style={{ '--workspace-text-scale': textScale, width: `${tableWidth}px` } as React.CSSProperties}>
               <colgroup>{columnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
               <thead><tr><th className={`workspace-row-corner ${nameDialog?.mode === 'axis' ? 'is-editing' : ''}`} onClick={() => renameRowHeader(table)}><button type="button" className="workspace-row-axis-name">{table.rowHeaderName}</button></th>{table.columns.map((column) => { const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id; const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id; return <th key={column.id} data-column-id={column.id} className={`${configuring?.id === column.id ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring(column)} onContextMenu={(event) => { event.preventDefault(); setConfiguring(column); }}><button type="button" className="workspace-column-name">{column.name}</button></th>; })}</tr></thead>
