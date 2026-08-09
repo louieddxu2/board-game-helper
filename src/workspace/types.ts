@@ -1,4 +1,4 @@
-export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select' | 'link';
+export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select' | 'link' | 'datetime';
 export type WorkspaceTextAlign = 'left' | 'center' | 'right';
 export type WorkspaceOverflowMode = 'expand' | 'ellipsis' | 'wrap';
 

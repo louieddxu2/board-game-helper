@@ -1,12 +1,24 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useDeferredValue, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspace, saveWorkspace } from '../workspace/db';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, getChildren, getDynamicOptions, getRowHeaderColumn, getTableForNode, isWorkspaceLinkValue, moveNode, removeNodeAndDescendants, resolveActiveTableNodeId } from '../workspace/model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, formatWorkspaceDateTime, getChildren, getDynamicOptions, getRowHeaderColumn, getTableForNode, isWorkspaceLinkValue, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from '../workspace/model';
 import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from '../workspace/spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from '../workspace/types';
 
-const inputTypeLabels: Record<WorkspaceInputType, string> = {
-  text: '文字', number: '數字', select: '固定列表', 'dynamic-select': '動態列表', link: '連結',
+type WorkspaceInputCategory = 'text' | 'select' | 'other';
+
+const inputCategoryLabels: Record<WorkspaceInputCategory, string> = {
+  text: '文字', select: '選單', other: '其他',
 };
+
+const inputSubtypeLabels: Record<WorkspaceInputCategory, Array<{ value: WorkspaceInputType; label: string }>> = {
+  text: [{ value: 'text', label: '文字' }, { value: 'number', label: '數字' }],
+  select: [{ value: 'dynamic-select', label: '動態列表' }, { value: 'select', label: '固定列表' }],
+  other: [{ value: 'datetime', label: '時間(含日期)' }, { value: 'link', label: '連結' }],
+};
+
+const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputCategory => inputType === 'select' || inputType === 'dynamic-select' ? 'select' : inputType === 'link' || inputType === 'datetime' ? 'other' : 'text';
+
+const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 
 const overflowModeLabels: Record<WorkspaceOverflowMode, string> = {
   expand: '推擠寬度', ellipsis: '超過省略', wrap: '自動換行',
@@ -70,9 +82,9 @@ const externalHref = (raw: string) => {
   }
 };
 
-const searchableWorkspaceCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value)
+const searchableWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType) => isWorkspaceLinkValue(value)
   ? `${value.label}\n${value.url}`
-  : value == null ? '' : String(value);
+  : inputType === 'datetime' ? formatWorkspaceDateTime(value) : value == null ? '' : String(value);
 
 const workspaceFilterValueKey = (value: WorkspaceCellValue) => value == null
   ? 'empty:'
@@ -83,7 +95,7 @@ const workspaceFilterValueKey = (value: WorkspaceCellValue) => value == null
       : `text:${value}`;
 
 const workspaceValueCollator = new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' });
-const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left), searchableWorkspaceCellValue(right));
+const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue, inputType?: WorkspaceInputType) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left, inputType), searchableWorkspaceCellValue(right, inputType));
 
 const updateTable = (data: WorkspaceData, tableId: string, updater: (table: WorkspaceTable) => WorkspaceTable): WorkspaceData => ({
   ...data,
@@ -126,6 +138,26 @@ const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number
   return Math.max(...text.split('\n').map((line) => context.measureText(line || 'M').width));
 };
 
+const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>((props, forwardedRef) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resize = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = '0px';
+    textarea.style.height = `${Math.max(42, textarea.scrollHeight)}px`;
+  }, []);
+  useImperativeHandle(forwardedRef, () => textareaRef.current as HTMLTextAreaElement, []);
+  useLayoutEffect(() => { resize(); }, [props.value, resize]);
+  return <textarea {...props} ref={textareaRef} rows={1} onInput={(event) => { resize(); props.onInput?.(event); }} />;
+});
+AutoGrowTextarea.displayName = 'AutoGrowTextarea';
+
+const dateTimeLocalValue = (value: WorkspaceCellValue) => {
+  const source = normalizeWorkspaceDateTime(value) ? new Date(normalizeWorkspaceDateTime(value)!) : new Date();
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${source.getFullYear()}-${pad(source.getMonth() + 1)}-${pad(source.getDate())}T${pad(source.getHours())}:${pad(source.getMinutes())}`;
+};
+
 interface CellInputDialogProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
@@ -135,7 +167,7 @@ interface CellInputDialogProps {
 }
 
 const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellInputDialogProps) => {
-  const [draft, setDraft] = useState(displayWorkspaceCellValue(value));
+  const [draft, setDraft] = useState(column.inputType === 'datetime' ? dateTimeLocalValue(value) : displayWorkspaceCellValue(value, column.inputType));
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   useEffect(() => {
     const input = inputRef.current;
@@ -146,9 +178,11 @@ const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellIn
 
   const commit = () => onSave(draft);
   return <WorkspaceModal title={column.name} onClose={commit} className="workspace-value-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
-    {column.inputType === 'number'
+    {column.inputType === 'datetime'
+      ? <input ref={inputRef as React.RefObject<HTMLInputElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input" type="datetime-local" value={draft} onChange={(event) => setDraft(event.target.value)} />
+      : column.inputType === 'number'
       ? <input ref={inputRef as React.RefObject<HTMLInputElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
-      : <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" rows={Math.max(2, draft.split('\n').length)} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
+      : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
   </WorkspaceModal>;
 };
 
@@ -175,7 +209,7 @@ const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
 
 const WorkspaceHeaderContent = ({ label, nameClass, editLabel, filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
   <button type="button" className={nameClass} aria-label={editLabel}>{label}</button>
-  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${label}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={17} /></button>
+  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${label}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
 </div>;
 
 const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string }) => {
@@ -247,7 +281,7 @@ const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: NameDialogS
   const finish = () => { const value = name.trim(); if (value) onSubmit(value); else onClose(); };
   return <WorkspaceModal title={title} onClose={finish} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     <label className="workspace-form-field">{label}{isMultiline
-      ? <textarea autoFocus rows={Math.max(2, name.split('\n').length)} value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(); } }} />
+      ? <AutoGrowTextarea autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(); } }} />
       : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finish(); } }} />}</label>
   </WorkspaceModal>;
 };
@@ -305,7 +339,7 @@ const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onCh
 
   return <div className="workspace-option-list">
     {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
-      <textarea rows={2} value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
+      <AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
       <div className="workspace-option-controls">
         <button type="button" onClick={() => moveOption(index, -1)} disabled={index === 0} aria-label={`向上移動固定選項 ${index + 1}`}><WorkspaceIcon name="up" size={17} /></button>
         <button type="button" onClick={() => moveOption(index, 1)} disabled={index === visibleOptions.length - 1} aria-label={`向下移動固定選項 ${index + 1}`}><WorkspaceIcon name="down" size={17} /></button>
@@ -319,16 +353,25 @@ const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onCh
 const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
   const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名欄位', options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
-  const chooseInputType = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode }));
+  const category = inputCategoryFor(draft.inputType);
+  const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
+    const currentCategory = inputCategoryFor(current.inputType);
+    const nextType = currentCategory === nextCategory ? current.inputType : defaultInputTypeFor(nextCategory);
+    return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
+  });
+  const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode }));
   return <WorkspaceModal title="欄位設定" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除欄位"><WorkspaceIcon name="trash" size={20} /></button>}>
-    <div className={`workspace-column-config ${draft.inputType === 'select' ? 'has-options' : 'is-compact'}`}>
+    <div className="workspace-column-config">
       <div className="workspace-column-config-rail">
-        <label className="workspace-form-field">欄位名稱<textarea rows={Math.max(2, draft.name.split('\n').length)} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-        <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{Object.entries(inputTypeLabels).map(([value, label]) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputType(value as WorkspaceInputType)}>{label}</button>)}</div></fieldset>
+        <label className="workspace-form-field">欄位名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
+      </div>
+      <div className="workspace-column-config-panel">
+        <fieldset className="workspace-form-field workspace-input-subtype-field"><legend>{inputCategoryLabels[category]}</legend><div className="workspace-input-subtype-options">{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-overflow-field"><legend>內容顯示</legend><div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={(draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap')) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div></fieldset>
+        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
       </div>
-      {draft.inputType === 'select' && <div className="workspace-column-config-panel"><SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} /></div>}
     </div>
   </WorkspaceModal>;
 };
@@ -578,9 +621,11 @@ const WorkspacePage = () => {
     if (!table) return [];
     const query = deferredSearchQuery.trim().toLocaleLowerCase();
     if (!query) return table.rows;
-    return table.rows.filter((row) => [row.name, ...table.columns.map((column) => row.values[column.id] ?? null)]
-      .some((value) => searchableWorkspaceCellValue(value).toLocaleLowerCase().includes(query)));
-  }, [deferredSearchQuery, table]);
+    return table.rows.filter((row) => [
+      { value: row.name, inputType: rowHeader?.inputType },
+      ...table.columns.map((column) => ({ value: row.values[column.id] ?? null, inputType: column.inputType })),
+    ].some(({ value, inputType }) => searchableWorkspaceCellValue(value, inputType).toLocaleLowerCase().includes(query)));
+  }, [deferredSearchQuery, rowHeader, table]);
   const filteredRows = useMemo(() => {
     if (!table || !rowHeader) return [];
     const columnIds = new Set([rowHeader.id, ...table.columns.map((column) => column.id)]);
@@ -598,7 +643,8 @@ const WorkspacePage = () => {
     return rows.map((row, index) => ({ row, index })).sort((left, right) => {
       const leftValue = columnId === rowHeader.id ? left.row.name : left.row.values[columnId] ?? null;
       const rightValue = columnId === rowHeader.id ? right.row.name : right.row.values[columnId] ?? null;
-      return compareWorkspaceCellValues(leftValue, rightValue) * direction || left.index - right.index;
+      const inputType = columnId === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === columnId)?.inputType;
+      return compareWorkspaceCellValues(leftValue, rightValue, inputType) * direction || left.index - right.index;
     }).map(({ row }) => row);
   }, [headerFilters, rowHeader, searchedRows, table]);
   const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table]);
@@ -616,7 +662,7 @@ const WorkspacePage = () => {
     const row = tableRowsById.get(key.slice(4));
     if (!row) return columns;
     const direction = state.sort === 'desc' ? -1 : 1;
-    return columns.map((column, index) => ({ column, index })).sort((left, right) => compareWorkspaceCellValues(row.values[left.column.id] ?? null, row.values[right.column.id] ?? null) * direction || left.index - right.index).map(({ column }) => column);
+    return columns.map((column, index) => ({ column, index })).sort((left, right) => compareWorkspaceCellValues(row.values[left.column.id] ?? null, row.values[right.column.id] ?? null, left.column.inputType) * direction || left.index - right.index).map(({ column }) => column);
   }, [filteredRows, headerFilters, table, tableRowsById]);
   useEffect(() => {
     const nextScale = table?.textScale ?? 1;
@@ -638,12 +684,12 @@ const WorkspacePage = () => {
   const activeFilterOptions = useMemo(() => {
     if (!table || !rowHeader || !filterTarget) return [];
     const values = filterTarget.axis === 'column'
-      ? table.rows.map((row) => filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null)
-      : table.columns.map((column) => tableRowsById.get(filterTarget.id)?.values[column.id] ?? null);
+      ? table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, inputType: filterTarget.id === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === filterTarget.id)?.inputType }))
+      : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, inputType: column.inputType }));
     const unique = new Map<string, HeaderFilterOption>();
-    for (const value of values) {
+    for (const { value, inputType } of values) {
       const key = workspaceFilterValueKey(value);
-      if (!unique.has(key)) unique.set(key, { key, label: displayWorkspaceCellValue(value) || '（空白）' });
+      if (!unique.has(key)) unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）' });
     }
     return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));
   }, [filterTarget, rowHeader, table, tableRowsById]);
@@ -673,15 +719,15 @@ const WorkspacePage = () => {
     if (!table || !rowHeader) return [];
     const widthFor = (column: WorkspaceColumn, values: WorkspaceCellValue[]) => Math.max(
       measureWorkspaceText(column.name, 20, 600),
-      ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value), 20, 400)) : []),
-    ) + (column.inputType === 'link' ? 46 : 0) + 36;
+      ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400)) : []),
+    ) + (column.inputType === 'link' ? 46 : 0) + 24;
     if (!table.transposed) return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
     const properties = [rowHeader, ...visibleColumns];
-    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600))) + 36;
+    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600))) + 24;
     const rowWidths = filteredRows.map((row) => Math.max(
-      measureWorkspaceText(displayWorkspaceCellValue(row.name), 20, 600) + 36,
+      measureWorkspaceText(displayWorkspaceCellValue(row.name, rowHeader.inputType), 20, 600) + 24,
       ...properties.map((column) => column.overflowMode === 'expand'
-        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null), 20, 400) + (column.inputType === 'link' ? 46 : 0)
+        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400) + (column.inputType === 'link' ? 46 : 0)
         : 0),
     ));
     return [propertyWidth, ...rowWidths];
@@ -728,7 +774,7 @@ const WorkspacePage = () => {
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
   const addTable = (parentId: string | null) => openNameDialog('table', '', parentId);
   const renameNode = (node: WorkspaceNode) => openNameDialog('rename', node.name, undefined, node);
-  const renameRow = (row: WorkspaceRow) => setNameDialog({ mode: 'row', initialValue: displayWorkspaceCellValue(row.name), row });
+  const renameRow = (row: WorkspaceRow) => setNameDialog({ mode: 'row', initialValue: displayWorkspaceCellValue(row.name, rowHeader?.inputType), row });
   const renameRowHeader = (currentTable: WorkspaceTable) => setNameDialog({ mode: 'axis', initialValue: getRowHeaderColumn(currentTable).name, table: currentTable });
 
   const submitName = (name: string) => {
@@ -788,7 +834,10 @@ const WorkspacePage = () => {
   };
   const updateCell = (rowId: string, column: WorkspaceColumn, raw: string) => {
     if (column.inputType === 'number' && raw.trim() && !Number.isFinite(Number(raw))) { setNotice('請輸入有效數字'); return; }
-    const value: WorkspaceCellValue = !raw.trim() ? null : column.inputType === 'number' ? Number(raw) : raw;
+    const value: WorkspaceCellValue = column.inputType === 'datetime'
+      ? normalizeWorkspaceDateTime(raw)
+      : !raw.trim() ? null : column.inputType === 'number' ? Number(raw) : raw;
+    if (column.inputType === 'datetime' && raw.trim() && !value) { setNotice('請輸入有效時間'); return; }
     saveCellValue(rowId, column, value);
   };
   const openCell = (row: WorkspaceRow, column: WorkspaceColumn) => {
@@ -808,7 +857,7 @@ const WorkspacePage = () => {
     setSelectionEditor(undefined);
   };
   const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns, `項目 ${current.rows.length + 1}`)] }))); setTableActionsOpen(false); setNotice('已新增項目'); };
-  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除項目', message: `確定要刪除「${displayWorkspaceCellValue(row.name) || `項目 ${rowIndex + 1}`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
+  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除項目', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `項目 ${rowIndex + 1}`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
   const addColumn = () => { if (!data || !table) return; const column = createColumn(`欄位 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setTableActionsOpen(false); setNotice('已新增屬性'); };
   const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除欄位', message: `確定要刪除欄位「${column.name}」嗎？此欄的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
   const saveColumn = (column: WorkspaceColumn) => {
@@ -1079,7 +1128,7 @@ const WorkspacePage = () => {
               </tr></thead>
               <tbody>{filteredRows.map((row) => {
                 const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                const rowLabel = displayWorkspaceCellValue(row.name) || `項目 ${originalIndex + 1}`;
+                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `項目 ${originalIndex + 1}`;
                 const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
@@ -1087,7 +1136,7 @@ const WorkspacePage = () => {
                   {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
-                    const displayValue = displayWorkspaceCellValue(value);
+                    const displayValue = displayWorkspaceCellValue(value, column.inputType);
                     const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                     return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
                   })}
@@ -1096,7 +1145,7 @@ const WorkspacePage = () => {
                 {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {filteredRows.map((row) => {
                   const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                  const rowLabel = displayWorkspaceCellValue(row.name) || `項目 ${originalIndex + 1}`;
+                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `項目 ${originalIndex + 1}`;
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
@@ -1109,9 +1158,9 @@ const WorkspacePage = () => {
                   return <tr key={column.id}>
                     <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                     {filteredRows.map((row) => {
-                      const rowLabel = displayWorkspaceCellValue(row.name) || '未命名項目';
+                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名項目';
                       const value = row.values[column.id] ?? null;
-                      const displayValue = displayWorkspaceCellValue(value);
+                      const displayValue = displayWorkspaceCellValue(value, column.inputType);
                       const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                       return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
                     })}

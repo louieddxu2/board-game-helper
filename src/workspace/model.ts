@@ -30,7 +30,7 @@ const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputTy
 
 const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOverflowMode = 'wrap'): WorkspaceColumn => ({
   ...column,
-  inputType: column.inputType === 'link' || column.inputType === 'number' || column.inputType === 'select' || column.inputType === 'dynamic-select' ? column.inputType : 'text',
+  inputType: column.inputType === 'link' || column.inputType === 'datetime' || column.inputType === 'number' || column.inputType === 'select' || column.inputType === 'dynamic-select' ? column.inputType : 'text',
   options: Array.isArray(column.options) ? column.options : [],
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
@@ -38,7 +38,23 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
 
 export const isWorkspaceLinkValue = (value: WorkspaceCellValue | unknown): value is WorkspaceLinkValue => Boolean(value && typeof value === 'object' && 'url' in value && typeof value.url === 'string' && 'label' in value && typeof value.label === 'string');
 
-export const displayWorkspaceCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value) ? value.label.trim() || value.url : value == null ? '' : String(value);
+export const normalizeWorkspaceDateTime = (value: WorkspaceCellValue): string | null => {
+  if (value == null || value === '' || isWorkspaceLinkValue(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+export const formatWorkspaceDateTime = (value: WorkspaceCellValue) => {
+  const normalized = normalizeWorkspaceDateTime(value);
+  if (!normalized) return '';
+  const parts = new Intl.DateTimeFormat('zh-TW-u-ca-gregory', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(normalized));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}年${part('month')}月${part('day')}日${part('hour')}點${part('minute')}分`;
+};
+
+export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType) => inputType === 'datetime'
+  ? formatWorkspaceDateTime(value)
+  : isWorkspaceLinkValue(value) ? value.label.trim() || value.url : value == null ? '' : String(value);
 
 export const getRowHeaderColumn = (table: WorkspaceTable): WorkspaceColumn => normalizeColumn(table.rowHeader
   ? { ...table.rowHeader, name: table.rowHeaderName?.trim() || table.rowHeader.name }
@@ -56,6 +72,7 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
     if (isWorkspaceLinkValue(value)) return { url: value.url, label: value.label };
     return typeof value === 'string' && value.trim() ? { url: value.trim(), label: '' } : null;
   }
+  if (inputType === 'datetime') return normalizeWorkspaceDateTime(value);
   if (isWorkspaceLinkValue(value)) return displayWorkspaceCellValue(value) || null;
   return value ?? null;
 };
@@ -120,6 +137,7 @@ export const resolveActiveTableNodeId = (data: WorkspaceData, preferredNodeId = 
 export const coerceCellValue = (column: WorkspaceColumn, raw: string): WorkspaceCellValue => {
   if (!raw.trim()) return null;
   if (column.inputType === 'link') return { url: raw.trim(), label: '' };
+  if (column.inputType === 'datetime') return normalizeWorkspaceDateTime(raw);
   if (column.inputType !== 'number') return raw;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;

@@ -41,5 +41,10 @@ describe('workspace browser policies', () => {
     expect(valueOverlayRule).toMatch(/place-items:\s*center/);
     expect(valueInputRule).toMatch(/font-size:\s*28px/);
     expect(valueInputRule).not.toContain('--workspace-text-scale');
+
+    const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
+    const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
+    expect(dialogRule).toMatch(/font-size:\s*16px/);
+    expect(filterRule).toMatch(/flex:\s*0 0 20px/);
   });
 });

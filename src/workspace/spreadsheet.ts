@@ -1,5 +1,5 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceLinkValue, makeId } from './model';
+import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
@@ -7,7 +7,7 @@ const TABLE_MARKER = '__workspace_table';
 const WORKSPACE_MARKER = '__workspace';
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
 const LINK_JSON_MARKER = '__workspace_link_json:';
-const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link'];
+const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
 const serializeCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkValue(value) ? `${LINK_JSON_MARKER}${JSON.stringify(value)}` : value;
 
@@ -197,6 +197,7 @@ const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): Wo
     }
   }
   if (column.inputType === 'link') return { url: text, label: '' };
+  if (column.inputType === 'datetime') return normalizeWorkspaceDateTime(raw instanceof Date ? raw.toISOString() : text);
   if (column.inputType === 'number' && typeof raw === 'number') return raw;
   return text || null;
 };

@@ -88,6 +88,7 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '名稱' })).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '選單' }));
     await user.click(screen.getByRole('button', { name: '固定列表' }));
     const option = screen.getByRole('textbox', { name: '固定選項 1' });
     await user.type(option, '第一行');
@@ -203,6 +204,7 @@ describe('WorkspacePage', () => {
     })));
 
     await user.click(screen.getByRole('button', { name: '類型' }));
+    await user.click(screen.getByRole('button', { name: '選單' }));
     await user.click(screen.getByRole('button', { name: '固定列表' }));
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
@@ -485,8 +487,11 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '項目' }));
 
-    expect(screen.getByRole('button', { name: '文字' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '選單' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '其他' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '其他' }));
     expect(screen.getByRole('button', { name: '連結' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '時間(含日期)' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除欄位' })).not.toBeInTheDocument();
   });
 
@@ -494,6 +499,7 @@ describe('WorkspacePage', () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
     await user.click(screen.getByRole('button', { name: '連結' }));
     fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
 
@@ -504,6 +510,24 @@ describe('WorkspacePage', () => {
 
     expect(screen.getByText('遊戲頁面')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
+  });
+
+  it('opens the native date-time editor and displays saved values in Traditional Chinese', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).not.toBe('');
+    fireEvent.change(input, { target: { value: '2024-02-03T14:05' } });
+    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getByText(/2024年\d+月\d+日\d+點05分/)).toBeInTheDocument();
   });
 
   it('offers expand, ellipsis, and wrapping display modes for every property', async () => {

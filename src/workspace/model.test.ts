@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, getDynamicOptions, moveNode, normalizeWorkspace, removeNodeAndDescendants } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, removeNodeAndDescendants } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -19,6 +19,13 @@ describe('workspace model', () => {
   it('creates rows with an empty cell for every current column', () => {
     const columns = [createColumn('名稱'), createColumn('數量', 'number')];
     expect(createRow(columns).values).toEqual({ [columns[0].id]: null, [columns[1].id]: null });
+  });
+
+  it('normalizes date-time values for storage and formats them in Traditional Chinese', () => {
+    const normalized = normalizeWorkspaceDateTime('2024-02-03T14:05');
+    expect(normalized).toMatch(/^2024-02-03T/);
+    expect(formatWorkspaceDateTime(normalized)).toMatch(/^\d+年\d+月\d+日\d+點\d{2}分$/);
+    expect(normalizeWorkspaceDateTime('不是時間')).toBeNull();
   });
 
   it('upgrades a legacy first column into an editable text property without losing row names', () => {

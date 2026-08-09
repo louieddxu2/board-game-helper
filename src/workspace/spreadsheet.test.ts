@@ -80,6 +80,20 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'https://example.com/rules', label: '規則頁' });
   });
 
+  it('round-trips date-time values as normalized ISO strings', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    const table = source.tables[0];
+    const dateTime = createColumn('建立時間', 'datetime');
+    table.columns.push(dateTime);
+    table.rows[0].values[dateTime.id] = '2024-02-03T06:05:00.000Z';
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+
+    expect(imported.table?.columns.at(-1)).toMatchObject({ name: '建立時間', inputType: 'datetime' });
+    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toBe('2024-02-03T06:05:00.000Z');
+  });
+
   it('round-trips the non-destructive transposed view preference', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();
