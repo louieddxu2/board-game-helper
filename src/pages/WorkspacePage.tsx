@@ -204,7 +204,7 @@ const overflowClassName = (column: WorkspaceColumn) => `workspace-overflow-${col
 const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
   if (!isWorkspaceLinkValue(value)) return null;
   const href = externalHref(value.url);
-  return href ? <a className="workspace-cell-external" href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /><span>外連</span></a> : null;
+  return href ? <a className="workspace-cell-external" href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /></a> : null;
 };
 
 const WorkspaceHeaderContent = ({ label, nameClass, editLabel, filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">

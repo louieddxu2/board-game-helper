@@ -528,6 +528,7 @@ describe('WorkspacePage', () => {
 
     expect(screen.getByText('遊戲頁面')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
+    expect(screen.getByRole('link', { name: '外連' })).not.toHaveTextContent('外連');
   });
 
   it('opens the native date-time editor and displays saved values in Traditional Chinese', async () => {
