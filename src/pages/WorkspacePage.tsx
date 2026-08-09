@@ -104,7 +104,7 @@ const updateTable = (data: WorkspaceData, tableId: string, updater: (table: Work
 
 const findTableNode = (data: WorkspaceData, tableId: string) => data.nodes.find((node) => node.type === 'table' && node.tableId === tableId);
 
-const workspaceCellPadding = 40;
+const workspaceCellPadding = 22;
 const workspaceMinColumnWidth = 40;
 const workspaceMaxTextScale = 2.5;
 const expandedFoldersStorageKey = 'board-game-helper-workspace-expanded-folders';
@@ -217,7 +217,9 @@ const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, clas
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [onClose]);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -240,7 +242,7 @@ const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, clas
     height: `${visualViewport.height}px`,
     '--workspace-visual-viewport-height': `${visualViewport.height}px`,
   } as React.CSSProperties : undefined;
-  return <div className={`workspace-overlay ${className ? `${className}-overlay` : ''}`} style={overlayStyle} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className={`workspace-overlay ${className ? `${className}-overlay` : ''}`} style={overlayStyle} role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); onClose(); } }} onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); } }}>
     <section className={`workspace-dialog ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-dialog-title">
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
       <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={onClose} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
@@ -276,8 +278,8 @@ type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; i
 const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: NameDialogState; onClose(): void; onSubmit(name: string): void; onDelete?(): void }) => {
   const [name, setName] = useState(state.initialValue);
   const isMultiline = state.mode === 'row' || state.mode === 'axis';
-  const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : state.mode === 'row' ? '項目名稱' : state.mode === 'axis' ? '項目軸名稱' : '名稱';
-  const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : state.mode === 'row' ? '編輯項目名稱' : state.mode === 'axis' ? '編輯項目軸' : '重新命名';
+  const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : state.mode === 'row' ? '物件名稱' : state.mode === 'axis' ? '物件軸名稱' : '名稱';
+  const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : state.mode === 'row' ? '編輯物件名稱' : state.mode === 'axis' ? '編輯物件軸' : '重新命名';
   const finish = () => { const value = name.trim(); if (value) onSubmit(value); else onClose(); };
   return <WorkspaceModal title={title} onClose={finish} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     <label className="workspace-form-field">{label}{isMultiline
@@ -352,7 +354,7 @@ const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onCh
 
 const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
-  const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名欄位', options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名屬性', options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
     const currentCategory = inputCategoryFor(current.inputType);
@@ -360,10 +362,10 @@ const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; o
     return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
   });
   const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode }));
-  return <WorkspaceModal title="欄位設定" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除欄位"><WorkspaceIcon name="trash" size={20} /></button>}>
+  return <WorkspaceModal title="屬性設定" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
     <div className="workspace-column-config">
       <div className="workspace-column-config-rail">
-        <label className="workspace-form-field">欄位名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-overflow-field"><legend>內容顯示</legend><div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={(draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap')) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div></fieldset>
@@ -534,6 +536,13 @@ const TableActionsDialog = ({ tableName, transposed, onClose, onExport, onSearch
   </div>
 </WorkspaceModal>;
 
+const TableAddDialog = ({ onClose, onAddRow, onAddColumn }: { onClose(): void; onAddRow(): void; onAddColumn(): void }) => <WorkspaceModal title="新增" onClose={onClose} className="workspace-action-dialog">
+  <div className="workspace-action-list">
+    <button type="button" onClick={onAddRow}><WorkspaceIcon name="rows" size={21} />物件</button>
+    <button type="button" onClick={onAddColumn}><WorkspaceIcon name="columns" size={21} />屬性</button>
+  </div>
+</WorkspaceModal>;
+
 const TableCreateDialog = ({ onClose, onCreate, onImport }: { onClose(): void; onCreate(): void; onImport(): void }) => <WorkspaceModal title="新增表格" onClose={onClose} className="workspace-action-dialog">
   <div className="workspace-action-list">
     <button type="button" onClick={onCreate}><WorkspaceIcon name="table-plus" size={21} />建立空白表格</button>
@@ -551,6 +560,7 @@ const WorkspacePage = () => {
   const [workspaceImport, setWorkspaceImport] = useState<WorkspaceData>();
   const [nodeMenu, setNodeMenu] = useState<WorkspaceNode>();
   const [movingNode, setMovingNode] = useState<WorkspaceNode>();
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -858,10 +868,10 @@ const WorkspacePage = () => {
     updateCell(selectionEditor.rowId, selectionEditor.column, value);
     setSelectionEditor(undefined);
   };
-  const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns, `項目 ${current.rows.length + 1}`)] }))); setTableActionsOpen(false); setNotice('已新增項目'); };
-  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除項目', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `項目 ${rowIndex + 1}`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
-  const addColumn = () => { if (!data || !table) return; const column = createColumn(`欄位 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setTableActionsOpen(false); setNotice('已新增屬性'); };
-  const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除欄位', message: `確定要刪除欄位「${column.name}」嗎？此欄的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
+  const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns, `物件 ${current.rows.length + 1}`)] }))); setAddMenuOpen(false); setNotice('已新增物件'); };
+  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `物件 ${rowIndex + 1}`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
+  const addColumn = () => { if (!data || !table) return; const column = createColumn(`屬性 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setAddMenuOpen(false); setNotice('已新增屬性'); };
+  const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
   const saveColumn = (column: WorkspaceColumn) => {
     if (!data || !table || !configuring) return;
     commit(updateTable(data, table.id, (current) => configuring.isRowHeader
@@ -1040,7 +1050,7 @@ const WorkspacePage = () => {
           ? { rows: reorderBeforeOrAfter(current.rows, session.sourceId, session.targetId, session.after) }
           : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }),
       })));
-      setNotice(session.kind === 'row' ? '已調整項目順序' : '已調整屬性順序');
+      setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
     }
     ignoreNextTableClick.current = true;
     window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
@@ -1136,7 +1146,7 @@ const WorkspacePage = () => {
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>
       <div className="workspace-appbar-actions">
-        <button type="button" className="workspace-appbar-button" aria-label="新增屬性" onClick={addColumn} disabled={!table}><WorkspaceIcon name="columns" size={29} /></button>
+        <button type="button" className={`workspace-appbar-button ${addMenuOpen ? 'active' : ''}`} aria-label="新增物件或屬性" onClick={() => setAddMenuOpen(true)} disabled={!table}><WorkspaceIcon name="plus" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => setTableActionsOpen(true)} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
@@ -1158,12 +1168,12 @@ const WorkspacePage = () => {
               </tr></thead>
               <tbody>{filteredRows.map((row) => {
                 const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `項目 ${originalIndex + 1}`;
+                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `物件 ${originalIndex + 1}`;
                 const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯項目 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value, column.inputType);
@@ -1175,11 +1185,11 @@ const WorkspacePage = () => {
                 {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {filteredRows.map((row) => {
                   const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `項目 ${originalIndex + 1}`;
+                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `物件 ${originalIndex + 1}`;
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯項目 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
+                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
                 })}
               </tr></thead><tbody>
                 {visibleColumns.map((column) => {
@@ -1188,7 +1198,7 @@ const WorkspacePage = () => {
                   return <tr key={column.id}>
                     <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                     {filteredRows.map((row) => {
-                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名項目';
+                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名物件';
                       const value = row.values[column.id] ?? null;
                       const displayValue = displayWorkspaceCellValue(value, column.inputType);
                       const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
@@ -1199,16 +1209,16 @@ const WorkspacePage = () => {
               </tbody></>}
             </table>
           </div>
-          <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示欄位">適合寬度</button></div>
+          <div className="workspace-zoom-indicator"><button type="button" onClick={() => applyTextScale(textScaleRef.current - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => applyTextScale(textScaleRef.current + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => applyTextScale(minTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
         </>}
       </main>
-      <button type="button" className="workspace-fab" onClick={addRow} disabled={!table} aria-label="新增項目"><WorkspaceIcon name="plus" size={38} /></button>
     </div>
     {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><Tree data={data} expanded={expanded} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className="workspace-drawer-data-actions"><button type="button" onClick={exportAll}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
+    {addMenuOpen && table && <TableAddDialog onClose={() => setAddMenuOpen(false)} onAddRow={addRow} onAddColumn={addColumn} />}
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} transposed={Boolean(table.transposed)} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onSearch={() => { setTableActionsOpen(false); setSearchOpen(true); }} onTranspose={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }} />}
     {filterTarget && <HeaderFilterDialog label={filterTarget.label} options={activeFilterOptions} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
@@ -1216,7 +1226,7 @@ const WorkspacePage = () => {
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}
     {activeEditingRow && activeEditingColumn && (activeEditingColumn.inputType === 'link'
       ? <LinkInputDialog column={activeEditingColumn} value={activeEditingValue} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => saveCellValue(activeEditingRow.id, activeEditingColumn, next)} />
-      : <CellInputDialog column={activeEditingColumn} value={activeEditingValue} inputLabel={activeEditingColumn.id === rowHeader?.id ? '項目名稱' : undefined} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />)}
+      : <CellInputDialog column={activeEditingColumn} value={activeEditingValue} inputLabel={activeEditingColumn.id === rowHeader?.id ? '物件名稱' : undefined} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />)}
     {configuring && <ColumnConfig column={configuring.column} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
     {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
