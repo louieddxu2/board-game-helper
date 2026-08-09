@@ -182,13 +182,14 @@ footer a { color: inherit; }
 .workspace-selection-dialog { width: min(430px, 50vw); max-height: min(50dvh, 720px); border: 3px solid var(--green); border-radius: 12px; }
 .workspace-selection-dialog-overlay { background: transparent; }
 .workspace-selection-dialog .workspace-dialog-heading { display: none; }
-.workspace-selection-dialog .workspace-dialog-content { gap: 0; overflow: hidden; padding: 0; }
+.workspace-selection-dialog .workspace-dialog-content { display: flex; flex-direction: column; gap: 0; min-height: 0; overflow: hidden; padding: 0; }
 .workspace-selection-search { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--green); }
 .workspace-selection-search:focus-within { border-color: var(--yellow); outline: 2px solid rgba(233,180,76,.28); }
 .workspace-selection-search input { flex: 1; min-width: 0; min-height: 34px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; }
 .workspace-selection-search button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
 .workspace-selection-search button:hover { background: var(--cream); color: var(--orange); }
-.workspace-selection-list { display: grid; max-height: min(50dvh, 600px); overflow-y: auto; border: 0; border-radius: 0; }
+.workspace-selection-list { display: grid; flex: 1 1 auto; min-height: 0; max-height: min(50dvh, 600px); overflow-y: auto; border: 0; border-radius: 0; }
+.workspace-selection-list.with-search { max-height: calc(50dvh - 54px); }
 .workspace-selection-list button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 62px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: var(--white); color: var(--green); cursor: pointer; font-size: 22px; font-weight: 700; line-height: 1.35; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-selection-list button:last-child { border-bottom: 0; }
 .workspace-selection-list button:hover, .workspace-selection-list button.selected { background: var(--cream); color: var(--orange); }

@@ -63,7 +63,7 @@ describe('WorkspacePage', () => {
     await user.type(option, '第一行');
     await user.keyboard('{Enter}');
     await user.type(option, '第二行');
-    await user.click(screen.getByRole('button', { name: '儲存', exact: true }));
+    await user.click(screen.getByText('儲存', { exact: true }));
 
     await user.click(screen.getAllByText('點按輸入')[0]);
     expect(screen.getByRole('option', { name: /第一行/ })).toBeInTheDocument();
@@ -81,6 +81,25 @@ describe('WorkspacePage', () => {
     await user.keyboard('{Enter}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('新標籤')).toBeInTheDocument();
+  });
+
+  it('reuses an existing dynamic option instead of creating a case variant', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getAllByRole('cell')).toHaveLength(4));
+
+    await user.click(screen.getAllByRole('cell')[3]);
+    const search = screen.getAllByRole('textbox')[0];
+    await user.type(search, 'Tag');
+    await user.keyboard('{Enter}');
+
+    await user.click(screen.getByText('Tag'));
+    const secondSearch = screen.getAllByRole('textbox')[0];
+    await user.type(secondSearch, 'tag');
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByText('Tag')).toBeInTheDocument();
+    expect(screen.queryByText('tag')).not.toBeInTheDocument();
   });
 
   it('keeps item names and the item axis separate from attribute columns', async () => {
