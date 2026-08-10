@@ -1,0 +1,252 @@
+import { useEffect, useRef, useState } from 'react';
+import type { WorkspaceData, WorkspaceTable } from './types';
+import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
+import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
+import { useMomentumScroll } from './useMomentumScroll';
+import { useTableZoom } from './useTableZoom';
+
+interface UseTableGesturesProps {
+  table: WorkspaceTable | undefined;
+  data: WorkspaceData | undefined;
+  commit: (next: WorkspaceData) => void;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  workspacePageRef: React.RefObject<HTMLElement | null>;
+  setNotice: (msg: string) => void;
+  minTextScale: number;
+}
+
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale }: UseTableGesturesProps) {
+  const [panning, setPanning] = useState(false);
+  const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
+
+  const dataRef = useRef<WorkspaceData | undefined>(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+
+  const {
+    textScale,
+    setTextScale,
+    textScaleRef,
+    applyTextScale,
+    pendingScaleSave,
+    flushPendingTextScale,
+  } = useTableZoom({ table, data, commit, workspacePageRef, minTextScale });
+
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
+  const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
+  const pointerMoved = useRef(false);
+  const ignoreNextTableClick = useRef(false);
+  
+  const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
+  const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
+  const tableReorderAutoScrollFrame = useRef<number | undefined>(undefined);
+
+  const momentumScroll = useMomentumScroll();
+
+  const updateTableReorderTarget = (session: TableReorderSession, clientX: number, clientY: number) => {
+    const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
+    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>(selector);
+    const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
+    if (!target || !targetId) return;
+    const rect = target.getBoundingClientRect();
+    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    session.targetId = targetId;
+    session.after = horizontal ? clientX > rect.left + rect.width / 2 : clientY > rect.top + rect.height / 2;
+    setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
+  };
+
+  const stopTableReorderAutoScroll = () => {
+    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
+    tableReorderAutoScrollFrame.current = undefined;
+  };
+
+  const runTableReorderAutoScroll = () => {
+    tableReorderAutoScrollFrame.current = undefined;
+    const pointer = tableReorderPointer.current;
+    const session = tableReorderSession.current;
+    const viewport = viewportRef.current;
+    if (!pointer || !session || pointer.session !== session || !session.active || !viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const edge = Math.min(64, Math.max(32, Math.min(rect.width, rect.height) / 3));
+    const speed = (distance: number) => Math.min(18, Math.max(3, (edge - distance) / 2));
+    const canScrollLeft = viewport.scrollLeft > 0;
+    const canScrollRight = viewport.scrollLeft < viewport.scrollWidth - viewport.clientWidth;
+    const canScrollUp = viewport.scrollTop > 0;
+    const canScrollDown = viewport.scrollTop < viewport.scrollHeight - viewport.clientHeight;
+    const deltaX = pointer.x < rect.left + edge && canScrollLeft
+      ? -speed(pointer.x - rect.left)
+      : pointer.x > rect.right - edge && canScrollRight
+        ? speed(rect.right - pointer.x)
+        : 0;
+    const deltaY = pointer.y < rect.top + edge && canScrollUp
+      ? -speed(pointer.y - rect.top)
+      : pointer.y > rect.bottom - edge && canScrollDown
+        ? speed(rect.bottom - pointer.y)
+        : 0;
+    if (!deltaX && !deltaY) return;
+    viewport.scrollLeft += deltaX;
+    viewport.scrollTop += deltaY;
+    updateTableReorderTarget(session, pointer.x, pointer.y);
+    tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
+  };
+
+  const updateTableReorderAutoScroll = () => {
+    if (tableReorderAutoScrollFrame.current === undefined) tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
+  };
+
+  const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const session: TableReorderSession = { kind, sourceId, targetId: sourceId, after: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    session.timer = window.setTimeout(() => {
+      if (tableReorderSession.current !== session) return;
+      session.active = true;
+      pointers.current.clear();
+      panStart.current = undefined;
+      pinchStart.current = undefined;
+      setPanning(false);
+      setTableReorderVisual({ kind, sourceId, targetId: sourceId, after: false });
+      const viewport = viewportRef.current;
+      if (viewport && 'setPointerCapture' in viewport) {
+        try { viewport.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+      }
+    }, tableReorderHoldMs);
+    tableReorderSession.current = session;
+  };
+
+  const moveTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = tableReorderSession.current;
+    if (!session || session.pointerId !== event.pointerId) return false;
+    if (!session.active) {
+      if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 8) {
+        if (session.timer) window.clearTimeout(session.timer);
+        tableReorderSession.current = undefined;
+        tableReorderPointer.current = undefined;
+      }
+      return false;
+    }
+    tableReorderPointer.current = { session, x: event.clientX, y: event.clientY };
+    updateTableReorderTarget(session, event.clientX, event.clientY);
+    updateTableReorderAutoScroll();
+    event.preventDefault();
+    return true;
+  };
+
+  const endTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = tableReorderSession.current;
+    if (!session || session.pointerId !== event.pointerId) return false;
+    if (session.timer) window.clearTimeout(session.timer);
+    stopTableReorderAutoScroll();
+    tableReorderPointer.current = undefined;
+    tableReorderSession.current = undefined;
+    setTableReorderVisual(undefined);
+    if (!session.active) return false;
+    const currentData = dataRef.current;
+    if (currentData && table && session.sourceId !== session.targetId) {
+      commit(updateTable(currentData, table.id, (current) => ({
+        ...current,
+        updatedAt: Date.now(),
+        ...(session.kind === 'row'
+          ? { rows: reorderBeforeOrAfter(current.rows, session.sourceId, session.targetId, session.after) }
+          : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }),
+      })));
+      setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
+    }
+    ignoreNextTableClick.current = true;
+    window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+    event.preventDefault();
+    return true;
+  };
+
+  const beginTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    momentumScroll.stop();
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if ((event.target as Element).closest('input, textarea')) return;
+    const viewport = event.currentTarget;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    pointerMoved.current = false;
+    if (pointers.current.size === 1) {
+      panStart.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+      pinchStart.current = undefined;
+    } else if (pointers.current.size === 2) {
+      const points = [...pointers.current.values()];
+      if ('setPointerCapture' in viewport) {
+        for (const pointerId of pointers.current.keys()) {
+          try { viewport.setPointerCapture(pointerId); } catch { /* A pointer may already have been cancelled. */ }
+        }
+      }
+      pinchStart.current = { distance: Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)), scale: textScaleRef.current };
+      panStart.current = undefined;
+    }
+  };
+
+  const moveTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    const viewport = event.currentTarget;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const points = [...pointers.current.values()];
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      pointerMoved.current = true;
+      applyTextScale(pinchStart.current.scale * distance / pinchStart.current.distance, false);
+      event.preventDefault();
+    } else if (pointers.current.size === 1 && panStart.current?.pointerId === event.pointerId) {
+      const deltaX = event.clientX - panStart.current.x;
+      const deltaY = event.clientY - panStart.current.y;
+      const dragThreshold = event.pointerType === 'touch' ? 10 : 4;
+      if (!pointerMoved.current && Math.hypot(deltaX, deltaY) <= dragThreshold) return;
+      if (!pointerMoved.current) {
+        pointerMoved.current = true;
+        setPanning(true);
+        if ('setPointerCapture' in viewport) {
+          try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+        }
+      }
+      momentumScroll.trackMove(event.clientX, event.clientY);
+      viewport.scrollLeft = panStart.current.scrollLeft - deltaX;
+      viewport.scrollTop = panStart.current.scrollTop - deltaY;
+      event.preventDefault();
+    }
+  };
+
+  const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    const viewport = event.currentTarget;
+    const moved = pointerMoved.current;
+    pointers.current.delete(event.pointerId);
+    if ('hasPointerCapture' in viewport && viewport.hasPointerCapture(event.pointerId)) {
+      try { viewport.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+    }
+    pinchStart.current = undefined;
+    if (pointers.current.size === 1) {
+      const [pointerId, point] = pointers.current.entries().next().value as [number, { x: number; y: number }];
+      panStart.current = { pointerId, x: point.x, y: point.y, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+    } else {
+      panStart.current = undefined;
+    }
+    if (pointers.current.size === 0) {
+      setPanning(false);
+      momentumScroll.release(viewport);
+      if (moved) {
+        ignoreNextTableClick.current = true;
+        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 0);
+      }
+      if (event.pointerType === 'touch') {
+        pendingScaleSave.current = table ? { tableId: table.id, scale: textScaleRef.current } : undefined;
+        flushPendingTextScale();
+      }
+    }
+  };
+
+  useEffect(() => () => {
+    if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
+    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
+    momentumScroll.stop();
+  }, [momentumScroll.stop]);
+
+  return {
+    textScale, panning, tableReorderVisual, ignoreNextTableClick,
+    setTextScale, applyTextScale,
+    beginTableReorder, moveTableReorder, endTableReorder,
+    beginTablePan, moveTablePan, endTablePan,
+  };
+}

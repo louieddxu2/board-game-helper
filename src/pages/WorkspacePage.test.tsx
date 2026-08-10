@@ -401,7 +401,7 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByText('測試表格')).toBeInTheDocument());
     const actions = document.querySelector('.workspace-appbar-actions')!;
-    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['新增物件或屬性', '設定']);
+    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
   });
 
   it('adds objects and attributes without opening an editor and reports both with toast messages', async () => {
@@ -624,8 +624,7 @@ describe('WorkspacePage', () => {
   it('searches every value in the active table without changing the app-bar actions', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '設定' }));
-    await user.click(screen.getByRole('button', { name: '搜尋此表' }));
+    await user.click(await screen.findByRole('button', { name: '搜尋' }));
 
     const search = screen.getByRole('searchbox', { name: '搜尋此表' });
     await user.type(search, '合作');
@@ -635,7 +634,7 @@ describe('WorkspacePage', () => {
     await user.type(search, '不存在');
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByText('顯示 0 / 1 項')).toBeInTheDocument();
-    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((button) => button.getAttribute('aria-label'))).toEqual(['新增物件或屬性', '設定']);
+    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
   });
 
   it('filters, sorts, and searches values from every first-row header', async () => {

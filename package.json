@@ -42,6 +42,7 @@
     "cross-env": "^10.1.0",
     "jsdom": "^26.1.0",
     "read-excel-file": "^9.3.4",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
