@@ -101,8 +101,8 @@ export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.in
 export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
   if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null) {
     const includedSet = new Set(state.includedKeys);
-    if (isMultiple && typeof value === 'string') {
-      const list = parseMultiSelectValues(value);
+    const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
+    if (list) {
       if (list.length === 0) {
         if (!includedSet.has(workspaceFilterValueKey(null))) return false;
       } else {

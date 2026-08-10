@@ -79,8 +79,8 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
       : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, inputType: column.inputType, isMultiple: column.isMultiple }));
     const unique = new Map<string, { key: string; label: string; count: number }>();
     for (const { value, inputType, isMultiple } of values) {
-      if (isMultiple && typeof value === 'string') {
-        const list = parseMultiSelectValues(value);
+      const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
+      if (list && list.length > 0) {
         for (const item of list) {
           const key = workspaceFilterValueKey(item);
           const existing = unique.get(key);
