@@ -18,7 +18,8 @@
     "db:migrate:remote": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-prod --remote --config wrangler.production.jsonc",
     "db:seed:local": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 execute board-game-rules-local --local --file=seed.sql",
     "import:legacy": "tsx scripts/import-legacy.ts",
-    "deploy": "npm run build && cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler deploy --config wrangler.production.jsonc"
+    "deploy:code": "npm run build && cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler deploy --config wrangler.production.jsonc",
+    "deploy": "node scripts/deploy-with-migration-check.mjs"
   },
   "dependencies": {
     "hono": "^4.9.2",
