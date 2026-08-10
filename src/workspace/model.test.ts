@@ -35,6 +35,18 @@ describe('workspace model', () => {
     expect(normalizeWorkspaceDateTime('不是時間')).toBeNull();
   });
 
+  it('collects clean individual options in getDynamicOptions even when values contain delimiters', () => {
+    const table = createTable('測試表');
+    table.columns.push(createColumn('標籤', 'dynamic-select'));
+    table.rows.push(createRow(table.columns));
+    table.rows.push(createRow(table.columns));
+    table.rows[0].values[table.columns[0].id] = '蘋果, 香蕉';
+    table.rows[1].values[table.columns[0].id] = '香蕉、橘子';
+
+    const options = getDynamicOptions(table, table.columns[0].id);
+    expect(options).toEqual(['蘋果', '香蕉', '橘子']);
+  });
+
   it('upgrades a legacy first column into an editable text property without losing row names', () => {
     const legacy: WorkspaceData = {
       ...emptyWorkspace(),

@@ -134,15 +134,20 @@ export const getChildren = (data: WorkspaceData, parentId: string | null) => dat
   .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh-Hant'));
 
 export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
+  const column = columnId === getRowHeaderColumn(table).id ? getRowHeaderColumn(table) : table.columns.find((col) => col.id === columnId);
   const seen = new Set<string>();
   const options: string[] = [];
   for (const row of table.rows) {
     const value = columnId === getRowHeaderColumn(table).id ? row.name : row.values[columnId];
-    const normalized = typeof value === 'string' ? value.trim() : '';
-    const key = normalized.toLocaleLowerCase();
-    if (!normalized || seen.has(key)) continue;
-    seen.add(key);
-    options.push(normalized);
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const rawList = (column?.isMultiple || /[,，、;；]/.test(value)) ? parseMultiSelectValues(value) : [value.trim()];
+    for (const item of rawList) {
+      const normalized = item.trim();
+      const key = normalized.toLocaleLowerCase();
+      if (!normalized || seen.has(key)) continue;
+      seen.add(key);
+      options.push(normalized);
+    }
   }
   return options;
 };
