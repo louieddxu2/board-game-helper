@@ -155,7 +155,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
         if (isMultiple) {
           return <label key={`${index}-${option}`} className={`workspace-selection-checkbox-item ${isSelected ? 'selected' : ''}`}>
             <input type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
-            <span style={{ flex: 1, minWidth: 0, overflowWrap: 'break-word' }}>{option}</span>
+            <span className="workspace-selection-checkbox-label">{option}</span>
           </label>;
         }
         return <button ref={isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>

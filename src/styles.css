@@ -270,7 +270,7 @@ footer a { color: inherit; }
 .workspace-link-dialog .workspace-dialog-content { padding: 16px; }
 .workspace-link-fields { display: grid; gap: 12px; }
 .workspace-link-fields input { background: rgba(255,253,248,.68); font-size: 16px; }
-.workspace-selection-dialog { width: min(480px, 88vw); max-height: min(55dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.62); backdrop-filter: blur(8px); }
+.workspace-selection-dialog { width: min(480px, 88vw); max-height: min(55dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.62); }
 .workspace-selection-dialog-overlay { background: transparent; }
 .workspace-selection-dialog .workspace-dialog-heading { display: none; }
 .workspace-selection-dialog .workspace-dialog-content { display: flex; flex-direction: column; gap: 0; min-height: 0; overflow: hidden; padding: 0; }
@@ -284,10 +284,11 @@ footer a { color: inherit; }
 .workspace-selection-list button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--line); background: rgba(255,253,248,.38); color: var(--green); cursor: pointer; font-size: 18px; font-weight: 700; line-height: 1.35; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-selection-list button:last-child { border-bottom: 0; }
 .workspace-selection-list button:hover, .workspace-selection-list button.selected { background: rgba(236,230,216,.58); color: var(--orange); }
-.workspace-selection-checkbox-item { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font-size: 16px; font-weight: 600; line-height: 1.4; text-align: left; user-select: none; transition: background 0.15s ease; }
+.workspace-selection-checkbox-item { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font-size: 15px; font-weight: 600; line-height: 1.35; text-align: left; user-select: none; transition: background 0.15s ease; }
 .workspace-selection-checkbox-item:last-child { border-bottom: 0; }
 .workspace-selection-checkbox-item:hover, .workspace-selection-checkbox-item.selected { background: rgba(44, 85, 69, 0.08); color: var(--green); }
-.workspace-selection-checkbox-item input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; accent-color: var(--green); }
+.workspace-selection-checkbox-item input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; margin: 0; cursor: pointer; accent-color: var(--green); }
+.workspace-selection-checkbox-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .workspace-selection-empty { margin: 0; padding: 26px 14px; background: rgba(255,253,248,.28); color: var(--muted); font-size: 14px; text-align: center; }
 .workspace-option-list { display: grid; gap: 8px; }
 .workspace-option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px; }
