@@ -33,11 +33,11 @@ export const submissionSchema = z.object({
     editionNote: z.string().trim().max(300).optional(),
     sourceLabel: z.string().trim().max(300).optional(),
     sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').optional().or(z.literal('')),
-    tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
-    tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
-    newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
-  }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
-    message: '最多只能選擇 8 個標籤',
+    tagNames: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+    tagIds: z.array(z.string().trim().min(1).max(100)).max(6).optional(),
+    newTagNames: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+  }).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 6, {
+    message: '最多只能選擇 6 個標籤',
   })).min(1).max(20),
 }).refine((value) => Boolean(value.gameId) !== Boolean(value.newGame), {
   message: 'exactly_one_game_target_required',
@@ -65,9 +65,6 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
     return c.json({ error: 'rate_limited' }, 429);
   }
   const trusted = isTrustedEditor(user);
-  if (!trusted && parsed.data.rules.some((rule) => (rule.newTagNames?.length ?? rule.tagNames?.length ?? 0) > 0)) {
-    return c.json({ error: 'new_tags_require_editor' }, 403);
-  }
   const quota = trusted ? undefined : await queryContributionQuota(getDatabase(c), user.id);
   if (quota && parsed.data.rules.length > quota.remainingRules) {
     return c.json({ error: 'PENDING_RULE_LIMIT_REACHED', quota }, 409);

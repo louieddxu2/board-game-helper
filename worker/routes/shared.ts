@@ -207,11 +207,11 @@ export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nic
 export const cleanTagNames = (names: string[] | undefined): string[] => Array.from(new Map((names ?? [])
   .map((name) => name.trim().replace(/^#/, '').slice(0, 40))
   .filter(Boolean)
-  .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 8);
+  .map((name) => [normalizeText(name), name] as const)).values()).slice(0, 6);
 
 export const cleanTagIds = (ids: string[] | undefined): string[] => Array.from(new Set(
   (ids ?? []).map((id) => id.trim()).filter(Boolean),
-)).slice(0, 8);
+)).slice(0, 6);
 
 export const tagWriteStatements = async (
   c: AppContext,
@@ -226,8 +226,6 @@ export const tagWriteStatements = async (
     ? [getDatabase(c).statement('DELETE FROM rule_tags WHERE rule_id = ?').bind(ruleId)]
     : [];
   const tagIds = cleanTagIds(referencedTagIds);
-  const userRoles = c.get('user')?.roles ?? [];
-  const canCreate = userRoles.includes('admin') || userRoles.includes('editor');
   const cleanedNames = cleanTagNames(names);
   const normalizedNames = cleanedNames.map((name) => normalizeText(name)).filter(Boolean);
   const existingByName = new Map<string, string>();
@@ -246,7 +244,6 @@ export const tagWriteStatements = async (
     const existingId = existingByName.get(normalized);
     const suffix = (await sha256Hex(normalized)).slice(0, 20);
     const tagId = existingId ?? `tag_${suffix}`;
-    if (!existingId && !canCreate) throw new Error('unknown_tag');
     if (!tagIds.includes(tagId)) tagIds.push(tagId);
     if (!existingId) {
       statements.push(getDatabase(c).statement(`

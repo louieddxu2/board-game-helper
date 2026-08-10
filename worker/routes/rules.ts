@@ -43,13 +43,13 @@ export const rulePatchSchema = z.object({
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20).nullable().optional(),
   editionNote: z.string().trim().max(300).nullable().optional(),
   reason: z.string().trim().max(300).optional(),
-  tagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
-  tagIds: z.array(z.string().trim().min(1).max(100)).max(8).optional(),
-  newTagNames: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  tagNames: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+  tagIds: z.array(z.string().trim().min(1).max(100)).max(6).optional(),
+  newTagNames: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
   sourceLabel: z.string().trim().max(300).nullable().optional(),
   sourceUrl: z.url().max(2000).refine(isSafeExternalUrl, 'source_url_must_be_https').nullable().optional().or(z.literal('')),
-}).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 8, {
-  message: '最多只能選擇 8 個標籤',
+}).refine((value) => (value.tagIds?.length ?? 0) + (value.newTagNames?.length ?? value.tagNames?.length ?? 0) <= 6, {
+  message: '最多只能選擇 6 個標籤',
 });
 
 rulesRoutes.get('/api/games/:gameId/rule-importance', requireUser, async (c) => {
@@ -109,9 +109,6 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
   const timestamp = Math.max(now(), Number(row.updated_at) + 1);
   const requestedTagNames = parsed.data.newTagNames ?? parsed.data.tagNames;
   const requestedTagIds = parsed.data.tagIds ?? [];
-  if (!user.roles.some((role) => role === 'editor' || role === 'admin') && requestedTagNames?.length) {
-    return c.json({ error: 'new_tags_require_editor' }, 403);
-  }
   const currentTagIds = (() => {
     try { return JSON.parse(String(row.tag_ids_json ?? '[]')) as string[]; }
     catch { return []; }

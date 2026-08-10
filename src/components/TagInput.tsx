@@ -108,12 +108,12 @@ export const TagInput = ({
   const add = (selection: TagSelection) => {
     const cleaned = selection.name.trim().replace(/^#/, '');
     if (!cleaned || value.some((selected) => (selection.id && selected.id === selection.id)
-      || selectionName(selected) === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
+      || selectionName(selected) === cleaned.toLocaleLowerCase()) || value.length >= 6) return;
     onChange([...value, { ...selection, name: cleaned }]); setQuery(''); setOpen(false);
   };
   const commitQuery = (rawValue = query) => {
     const cleaned = rawValue.trim().replace(/^#/, '');
-    if (!cleaned || value.some((tag) => selectionName(tag) === cleaned.toLocaleLowerCase()) || value.length >= 8) return;
+    if (!cleaned || value.some((tag) => selectionName(tag) === cleaned.toLocaleLowerCase()) || value.length >= 6) return;
     const exact = candidateTags.find((tag) => tag.name.toLocaleLowerCase() === cleaned.toLocaleLowerCase());
     if (exact) {
       add({ id: exact.id, name: exact.name });
@@ -146,7 +146,7 @@ export const TagInput = ({
       .slice(0, 6);
     return { detected, common, publicFallback };
   }, [availableTags, candidateTags, detectedSuggestions, detectionInput, value]);
-  const showRecommendations = value.length < 8 && (recommendations.detected.length > 0
+  const showRecommendations = value.length < 6 && (recommendations.detected.length > 0
     || recommendations.common.length > 0 || recommendations.publicFallback.length > 0);
   const hasSuggestionContent = suggestions.length > 0 || Boolean(canCreate && query.trim());
   const showSuggestions = open && hasSuggestionContent;
@@ -162,7 +162,7 @@ export const TagInput = ({
   useEffect(() => {
     const visualViewport = window.visualViewport;
     const handleVisualViewportChange = () => {
-      if (document.activeElement === inputRef.current && value.length < 8 && hasSuggestionContent) setOpen(true);
+      if (document.activeElement === inputRef.current && value.length < 6 && hasSuggestionContent) setOpen(true);
       updateSuggestionPosition();
     };
     if (showSuggestions) {
@@ -184,7 +184,7 @@ export const TagInput = ({
     <label htmlFor={id}>{label}</label>
     <div className="tag-composer">
       {value.map((tag) => <span className="tag-chip selected" key={tag.id ?? tag.name}>#{tag.name}<button type="button" aria-label={`移除標籤 ${tag.name}`} onClick={() => onChange(value.filter((item) => item !== tag))}>×</button></span>)}
-      <input ref={inputRef} id={id} value={query} disabled={value.length >= 8} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
+      <input ref={inputRef} id={id} value={query} disabled={value.length >= 6} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
         role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
         onFocus={() => { setOpen(true); updateSuggestionPosition(); }} onPointerDown={() => { setOpen(true); updateSuggestionPosition(); }} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={(event) => {
