@@ -52,9 +52,31 @@ export const formatWorkspaceDateTime = (value: WorkspaceCellValue) => {
   return `${part('year')}年${part('month')}月${part('day')}日${part('hour')}點${part('minute')}分`;
 };
 
-export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType) => inputType === 'datetime'
-  ? formatWorkspaceDateTime(value)
-  : isWorkspaceLinkValue(value) ? value.label.trim() || value.url : value == null ? '' : String(value);
+export const parseMultiSelectValues = (value: WorkspaceCellValue): string[] => {
+  if (value == null || value === '' || isWorkspaceLinkValue(value)) return [];
+  const str = String(value).trim();
+  if (!str) return [];
+  if (str.startsWith('[') && str.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch { /* Fallback to comma split */ }
+  }
+  return str.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
+};
+
+export const formatMultiSelectValues = (values: string[]): string => values.filter(Boolean).join(', ');
+
+export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType, isMultiple?: boolean) => {
+  if (inputType === 'datetime') return formatWorkspaceDateTime(value);
+  if (isWorkspaceLinkValue(value)) return value.label.trim() || value.url;
+  if (value == null) return '';
+  if (isMultiple && typeof value === 'string') {
+    const list = parseMultiSelectValues(value);
+    if (list.length > 0) return list.join('、');
+  }
+  return String(value);
+};
 
 export const getRowHeaderColumn = (table: WorkspaceTable): WorkspaceColumn => normalizeColumn(table.rowHeader
   ? { ...table.rowHeader, name: table.rowHeaderName?.trim() || table.rowHeader.name }

@@ -14,6 +14,7 @@ export interface WorkspaceColumn {
   name: string;
   inputType: WorkspaceInputType;
   options: string[];
+  isMultiple?: boolean;
   alignment?: WorkspaceTextAlign;
   overflowMode?: WorkspaceOverflowMode;
 }

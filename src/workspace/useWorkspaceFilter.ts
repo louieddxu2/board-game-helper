@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
-import { displayWorkspaceCellValue } from './model';
+import { displayWorkspaceCellValue, parseMultiSelectValues } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
 
 interface UseWorkspaceFilterProps {
@@ -73,15 +73,26 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
 
   const activeFilterOptions = useMemo(() => {
     if (!table || !rowHeader || !filterTarget) return [];
+    const targetColumn = filterTarget.axis === 'column' ? (filterTarget.id === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === filterTarget.id)) : undefined;
     const values = filterTarget.axis === 'column'
-      ? table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, inputType: filterTarget.id === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === filterTarget.id)?.inputType }))
-      : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, inputType: column.inputType }));
+      ? table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, inputType: targetColumn?.inputType, isMultiple: targetColumn?.isMultiple }))
+      : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, inputType: column.inputType, isMultiple: column.isMultiple }));
     const unique = new Map<string, { key: string; label: string; count: number }>();
-    for (const { value, inputType } of values) {
-      const key = workspaceFilterValueKey(value);
-      const existing = unique.get(key);
-      if (existing) existing.count += 1;
-      else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1 });
+    for (const { value, inputType, isMultiple } of values) {
+      if (isMultiple && typeof value === 'string') {
+        const list = parseMultiSelectValues(value);
+        for (const item of list) {
+          const key = workspaceFilterValueKey(item);
+          const existing = unique.get(key);
+          if (existing) existing.count += 1;
+          else unique.set(key, { key, label: item, count: 1 });
+        }
+      } else {
+        const key = workspaceFilterValueKey(value);
+        const existing = unique.get(key);
+        if (existing) existing.count += 1;
+        else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1 });
+      }
     }
     return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));
   }, [filterTarget, rowHeader, table, tableRowsById]);

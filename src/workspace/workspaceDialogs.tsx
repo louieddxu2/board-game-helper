@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { displayWorkspaceCellValue, isWorkspaceLinkValue } from "./model";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceLinkValue, parseMultiSelectValues } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceOverflowMode, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
@@ -90,34 +90,79 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
 };
 export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" leadingAction={<button type="button" className="workspace-dialog-delete" onClick={onConfirm} aria-label="確認刪除"><WorkspaceIcon name="trash" size={20} /></button>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
 export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect(value: string): void }) => {
-  const currentValue = value == null ? '' : String(value);
+  const isMultiple = Boolean(column.isMultiple);
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
+  const [selectedSet, setSelectedSet] = useState<Set<string>>(() => new Set(isMultiple ? parseMultiSelectValues(value) : [value == null ? '' : String(value)]));
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedOptionRef = useRef<HTMLButtonElement>(null);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return normalized ? options.filter((option) => option.toLocaleLowerCase().includes(normalized)) : options;
   }, [options, query]);
+
   const normalizedQuery = query.trim();
-  useEffect(() => {
-    const selected = selectedOptionRef.current;
-    if (selected && typeof selected.scrollIntoView === 'function') selected.scrollIntoView({ block: 'center' });
-  }, [currentValue, options]);
-  const choose = (nextValue: string) => onSelect(nextValue);
+
+  const toggleOption = (option: string) => {
+    if (!isMultiple) {
+      onSelect(option);
+      return;
+    }
+    setSelectedSet((prev) => {
+      const next = new Set(prev);
+      if (next.has(option)) next.delete(option);
+      else next.add(option);
+      return next;
+    });
+  };
+
   const submitQuery = () => {
     if (!normalizedQuery) return;
     const existingOption = options.find((option) => option.toLocaleLowerCase() === normalizedQuery.toLocaleLowerCase());
-    choose(existingOption ?? normalizedQuery);
+    const optionToAdd = existingOption ?? normalizedQuery;
+    if (isMultiple) {
+      setSelectedSet((prev) => new Set([...prev, optionToAdd]));
+      setQuery('');
+    } else {
+      onSelect(optionToAdd);
+    }
   };
 
-  const finish = () => { if (isDynamic && normalizedQuery) submitQuery(); else onClose(); };
+  const saveMultiple = () => {
+    onSelect(formatMultiSelectValues(Array.from(selectedSet)));
+  };
+
+  const selectAll = () => setSelectedSet(new Set(options));
+  const clearAll = () => setSelectedSet(new Set());
+
+  const finish = () => {
+    if (isMultiple) {
+      saveMultiple();
+    } else if (isDynamic && normalizedQuery) {
+      submitQuery();
+    } else {
+      onClose();
+    }
+  };
+
   return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
-    {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
-    <div className={`workspace-selection-list ${isDynamic ? 'with-search' : ''}`} role="listbox" aria-label={`${column.name}選項`}>
-      {filtered.map((option, index) => <button ref={option === currentValue ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={option === currentValue} className={option === currentValue ? 'selected' : ''} onClick={() => choose(option)}>{option}</button>)}
+    {(isDynamic || isMultiple) && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={20} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋"><WorkspaceIcon name="close" size={18} /></button></label>}
+    {isMultiple && <div className="workspace-selection-actions"><button type="button" onClick={selectAll}>全選</button><button type="button" onClick={clearAll}>清空</button></div>}
+    <div className={`workspace-selection-list ${isDynamic || isMultiple ? 'with-search' : ''}`} role="listbox" aria-label={`${column.name}選項`}>
+      {filtered.map((option, index) => {
+        const isSelected = selectedSet.has(option);
+        return <button ref={!isMultiple && isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>
+          {isMultiple && <input type="checkbox" checked={isSelected} readOnly aria-label={option} style={{ marginRight: 8, pointerEvents: 'none' }} />}
+          <span>{option}</span>
+        </button>;
+      })}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
     </div>
+    {isMultiple && <div className="workspace-dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+      <button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button>
+      <button type="button" className="workspace-dialog-button primary" onClick={saveMultiple}>確定 ({selectedSet.size})</button>
+    </div>}
   </WorkspaceModal>;
 };
 export const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onChange(options: string[]): void }) => {
@@ -168,7 +213,10 @@ export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceCo
         <fieldset className="workspace-form-field workspace-overflow-field"><legend>內容顯示</legend><div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={(draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap')) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div></fieldset>
       </div>
       <div className="workspace-column-config-panel">
-        <div className="workspace-input-subtype-options">{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
+        <div className="workspace-input-subtype-options" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
+          {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />允許多選</label>}
+        </div>
         {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
       </div>
     </div>

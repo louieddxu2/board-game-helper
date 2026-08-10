@@ -194,7 +194,7 @@ const WorkspacePage = () => {
                   {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
-                    const displayValue = displayWorkspaceCellValue(value, column.inputType);
+                    const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                     const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                     return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
                   })}
@@ -218,7 +218,7 @@ const WorkspacePage = () => {
                     {filteredRows.map((row) => {
                       const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名物件';
                       const value = row.values[column.id] ?? null;
-                      const displayValue = displayWorkspaceCellValue(value, column.inputType);
+                      const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                       const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                       return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
                     })}

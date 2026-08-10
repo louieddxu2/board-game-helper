@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, removeNodeAndDescendants } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -19,6 +19,12 @@ describe('workspace model', () => {
   it('creates rows with an empty cell for every current column', () => {
     const columns = [createColumn('名稱'), createColumn('數量', 'number')];
     expect(createRow(columns).values).toEqual({ [columns[0].id]: null, [columns[1].id]: null });
+  });
+
+  it('parses and formats multi-select values seamlessly', () => {
+    expect(parseMultiSelectValues('蘋果, 香蕉, 橘子')).toEqual(['蘋果', '香蕉', '橘子']);
+    expect(parseMultiSelectValues('["A", "B"]')).toEqual(['A', 'B']);
+    expect(formatMultiSelectValues(['紅', '黃'])).toBe('紅, 黃');
   });
 
   it('normalizes date-time values for storage and formats them in Traditional Chinese', () => {
