@@ -152,14 +152,19 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     <div className={`workspace-selection-list ${isDynamic || isMultiple ? 'with-search' : ''}`} role="listbox" aria-label={`${column.name}選項`}>
       {filtered.map((option, index) => {
         const isSelected = selectedSet.has(option);
-        return <button ref={!isMultiple && isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>
-          {isMultiple && <input type="checkbox" checked={isSelected} readOnly aria-label={option} style={{ marginRight: 8, pointerEvents: 'none' }} />}
+        if (isMultiple) {
+          return <label key={`${index}-${option}`} className={`workspace-selection-checkbox-item ${isSelected ? 'selected' : ''}`}>
+            <input type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
+            <span style={{ flex: 1, minWidth: 0, overflowWrap: 'break-word' }}>{option}</span>
+          </label>;
+        }
+        return <button ref={isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>
           <span>{option}</span>
         </button>;
       })}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
     </div>
-    {isMultiple && <div className="workspace-dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+    {isMultiple && <div className="workspace-dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px' }}>
       <button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button>
       <button type="button" className="workspace-dialog-button primary" onClick={saveMultiple}>確定 ({selectedSet.size})</button>
     </div>}
