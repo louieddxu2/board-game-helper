@@ -1365,6 +1365,28 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   flex-wrap: wrap;
   gap: 6px;
 }
+
+.workspace-multi-chip-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.workspace-multi-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--cream);
+  color: var(--palette-green-900);
+  border: 1px solid var(--palette-line);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
 .special-chip {
   background: var(--cream);
   border-color: #d7cebc;

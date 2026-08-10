@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspace, saveWorkspace } from '../workspace/db';
-import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode } from '../workspace/model';
+import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode, parseMultiSelectValues } from '../workspace/model';
 import { ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMaxTextScale, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableActionsDialog, TableAddDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
@@ -196,7 +196,19 @@ const WorkspacePage = () => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                     const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
-                    return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
+                    const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
+                    return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
+                      <div className="workspace-cell-layout">
+                        {multiChips.length > 0 ? (
+                          <div className="workspace-multi-chip-list">
+                            {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip">{chip}</span>)}
+                          </div>
+                        ) : (
+                          <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span>
+                        )}
+                        <ExternalLinkAction value={value} />
+                      </div>
+                    </td>;
                   })}
                 </tr>;
               })}</tbody></> : <><thead><tr>
@@ -220,7 +232,19 @@ const WorkspacePage = () => {
                       const value = row.values[column.id] ?? null;
                       const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                       const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
-                      return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}><div className="workspace-cell-layout"><span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span><ExternalLinkAction value={value} /></div></td>;
+                      const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
+                      return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
+                        <div className="workspace-cell-layout">
+                          {multiChips.length > 0 ? (
+                            <div className="workspace-multi-chip-list">
+                              {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip">{chip}</span>)}
+                            </div>
+                          ) : (
+                            <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span>
+                          )}
+                          <ExternalLinkAction value={value} />
+                        </div>
+                      </td>;
                     })}
                   </tr>;
                 })}
