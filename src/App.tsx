@@ -5,6 +5,12 @@ import { SessionProvider } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 
+const LoadingFallback = () => (
+  <section className="narrow-page workspace-loading">
+    <p>載入中…</p>
+  </section>
+);
+
 const ErrorFallback = () => (
   <section className="narrow-page">
     <h1>頁面發生小意外</h1>
@@ -17,8 +23,8 @@ const ErrorFallback = () => (
 );
 
 const router = createBrowserRouter([
-  { path: '/workspace', element: <WorkspacePage />, errorElement: <ErrorFallback /> },
-  { path: '/', element: <SessionProvider><Layout /></SessionProvider>, errorElement: <ErrorFallback />, children: [
+  { path: '/workspace', element: <WorkspacePage />, errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback },
+  { path: '/', element: <SessionProvider><Layout /></SessionProvider>, errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback, children: [
     { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
     { path: 'add', lazy: async () => ({ Component: (await import('./pages/AddPage')).AddPage }) },
     { path: 'games/:identifier', lazy: async () => ({ Component: (await import('./pages/GamePage')).GamePage }) },
