@@ -94,6 +94,14 @@ const workspaceFilterValueKey = (value: WorkspaceCellValue) => value == null
       ? `link:${value.label}\u0000${value.url}`
       : `text:${value}`;
 
+const isWorkspaceListInput = (inputType?: WorkspaceInputType) => inputType === 'select' || inputType === 'dynamic-select';
+const numericWorkspaceValue = (value: WorkspaceCellValue) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const workspaceValueCollator = new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' });
 const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue, inputType?: WorkspaceInputType) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left, inputType), searchableWorkspaceCellValue(right, inputType));
 
@@ -114,8 +122,25 @@ type TableReorderKind = 'row' | 'column';
 type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
 type TableReorderSession = TableReorderVisual & { pointerId: number; startX: number; startY: number; active: boolean; timer?: number };
 type HeaderFilterTarget = { axis: 'column' | 'row'; id: string; label: string };
-type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null };
-type HeaderFilterOption = { key: string; label: string };
+type HeaderFilterAggregate = 'sum' | 'average';
+type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; aggregate?: HeaderFilterAggregate };
+type HeaderFilterOption = { key: string; label: string; count: number };
+
+const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
+const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState) => {
+  if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null && !state.includedKeys.includes(workspaceFilterValueKey(value))) return false;
+  const query = state.query?.trim().toLocaleLowerCase();
+  if (query && !searchableWorkspaceCellValue(value, inputType).toLocaleLowerCase().includes(query)) return false;
+  if (inputType === 'number' && (state.min?.trim() || state.max?.trim())) {
+    const numeric = numericWorkspaceValue(value);
+    if (numeric === undefined) return false;
+    const minimum = state.min?.trim() ? Number(state.min) : undefined;
+    const maximum = state.max?.trim() ? Number(state.max) : undefined;
+    if (minimum !== undefined && Number.isFinite(minimum) && numeric < minimum) return false;
+    if (maximum !== undefined && Number.isFinite(maximum) && numeric > maximum) return false;
+  }
+  return true;
+};
 
 const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[], sourceId: string, targetId: string, after: boolean) => {
   if (sourceId === targetId) return items;
@@ -252,24 +277,46 @@ const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, clas
   </div>;
 };
 
-const HeaderFilterDialog = ({ label, options, state, onClose, onSort, onToggle, onSelectAll, onClearAll }: { label: string; options: HeaderFilterOption[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void }) => {
-  const [query, setQuery] = useState('');
+const HeaderFilterDialog = ({ label, inputType, options, numericValues, state, onClose, onSort, onToggle, onSelectAll, onClearAll, onQuery, onRange, onAggregate }: { label: string; inputType?: WorkspaceInputType; options: HeaderFilterOption[]; numericValues: number[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void; onQuery(query: string): void; onRange(min: string, max: string): void; onAggregate(aggregate: HeaderFilterAggregate): void }) => {
+  const [optionQuery, setOptionQuery] = useState('');
   const visibleOptions = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = optionQuery.trim().toLocaleLowerCase();
     return normalized ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
-  }, [options, query]);
+  }, [options, optionQuery]);
   const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
+  const isText = inputType === 'text';
+  const isNumber = inputType === 'number';
+  const aggregate = state.aggregate ?? 'sum';
+  const aggregateValue = numericValues.length
+    ? aggregate === 'sum' ? numericValues.reduce((total, value) => total + value, 0) : numericValues.reduce((total, value) => total + value, 0) / numericValues.length
+    : undefined;
   return <WorkspaceModal title={`篩選 ${label}`} onClose={onClose} className="workspace-filter-dialog">
     <div className="workspace-filter-sort" role="group" aria-label={`排序 ${label}`}>
       <button type="button" className={state.sort === 'asc' ? 'selected' : ''} onClick={() => onSort('asc')}><WorkspaceIcon name="up" size={18} />升冪</button>
       <button type="button" className={state.sort === 'desc' ? 'selected' : ''} onClick={() => onSort('desc')}><WorkspaceIcon name="down" size={18} />降冪</button>
     </div>
-    <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-    <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
-    <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>
-      {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span></label>)}
-      {!visibleOptions.length && <p>沒有符合的值</p>}
-    </div>
+    {isText && <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={state.query ?? ''} onChange={(event) => onQuery(event.target.value)} /></label>}
+    {isNumber && <>
+      <div className="workspace-filter-range" role="group" aria-label={`${label}範圍`}>
+        <label>最小值<input type="number" inputMode="decimal" aria-label={`${label}最小值`} value={state.min ?? ''} onChange={(event) => onRange(event.target.value, state.max ?? '')} /></label>
+        <span aria-hidden="true">至</span>
+        <label>最大值<input type="number" inputMode="decimal" aria-label={`${label}最大值`} value={state.max ?? ''} onChange={(event) => onRange(state.min ?? '', event.target.value)} /></label>
+      </div>
+      <div className="workspace-filter-aggregate" role="group" aria-label={`${label}統計`}>
+        <button type="button" className={aggregate === 'sum' ? 'selected' : ''} onClick={() => onAggregate('sum')}>總和</button>
+        <button type="button" className={aggregate === 'average' ? 'selected' : ''} onClick={() => onAggregate('average')}>平均</button>
+        <output aria-label={`${label}${aggregate === 'sum' ? '總和' : '平均'}`}>{aggregateValue === undefined ? '—' : aggregateValue.toLocaleString('zh-Hant-TW', { maximumFractionDigits: 4 })}</output>
+      </div>
+      <p className="workspace-filter-result-count">目前符合 {numericValues.length} 筆</p>
+    </>}
+    {!isText && !isNumber && <>
+      <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} /></label>
+      <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
+      <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>
+        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
+        {!visibleOptions.length && <p>沒有符合的值</p>}
+      </div>
+    </>}
   </WorkspaceModal>;
 };
 
@@ -644,11 +691,12 @@ const WorkspacePage = () => {
   const filteredRows = useMemo(() => {
     if (!table || !rowHeader) return [];
     const columnIds = new Set([rowHeader.id, ...table.columns.map((column) => column.id)]);
-    const columnFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.includedKeys !== null);
+    const columnFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && hasWorkspaceFilterCriteria(state));
     const rows = searchedRows.filter((row) => columnFilters.every(([key, state]) => {
       const columnId = key.slice(7);
       const value = columnId === rowHeader.id ? row.name : row.values[columnId] ?? null;
-      return state.includedKeys!.includes(workspaceFilterValueKey(value));
+      const inputType = columnId === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === columnId)?.inputType;
+      return matchesWorkspaceFilter(value, inputType, state);
     }));
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.sort);
     if (!sortedEntry) return rows;
@@ -666,10 +714,10 @@ const WorkspacePage = () => {
   const visibleColumns = useMemo(() => {
     if (!table) return [];
     const visibleRowIds = new Set(filteredRows.map((row) => row.id));
-    const rowFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.includedKeys !== null);
+    const rowFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && hasWorkspaceFilterCriteria(state));
     const columns = table.columns.filter((column) => rowFilters.every(([key, state]) => {
       const row = tableRowsById.get(key.slice(4));
-      return Boolean(row && state.includedKeys!.includes(workspaceFilterValueKey(row.values[column.id] ?? null)));
+      return Boolean(row && matchesWorkspaceFilter(row.values[column.id] ?? null, column.inputType, state));
     }));
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.sort);
     if (!sortedEntry) return columns;
@@ -704,10 +752,29 @@ const WorkspacePage = () => {
     const unique = new Map<string, HeaderFilterOption>();
     for (const { value, inputType } of values) {
       const key = workspaceFilterValueKey(value);
-      if (!unique.has(key)) unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）' });
+      const existing = unique.get(key);
+      if (existing) existing.count += 1;
+      else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1 });
     }
     return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));
   }, [filterTarget, rowHeader, table, tableRowsById]);
+  const activeFilterInputType = useMemo(() => {
+    if (!table || !rowHeader || !filterTarget) return undefined;
+    if (filterTarget.axis === 'column') return filterTarget.id === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === filterTarget.id)?.inputType;
+    if (!table.columns.length || !tableRowsById.has(filterTarget.id)) return undefined;
+    const firstType = table.columns[0].inputType;
+    return table.columns.every((column) => column.inputType === firstType) ? firstType : undefined;
+  }, [filterTarget, rowHeader, table, tableRowsById]);
+  const activeNumericValues = useMemo(() => {
+    if (activeFilterInputType !== 'number' || !filterTarget) return [];
+    const values = filterTarget.axis === 'column'
+      ? filteredRows.map((row) => filterTarget.id === rowHeader?.id ? row.name : row.values[filterTarget.id] ?? null)
+      : (() => {
+        const row = tableRowsById.get(filterTarget.id);
+        return row ? visibleColumns.map((column) => row.values[column.id] ?? null) : [];
+      })();
+    return values.map(numericWorkspaceValue).filter((value): value is number => value !== undefined);
+  }, [activeFilterInputType, filterTarget, filteredRows, rowHeader, tableRowsById, visibleColumns]);
   const updateActiveFilter = (updater: (state: HeaderFilterState) => HeaderFilterState) => {
     if (!activeFilterKey) return;
     setHeaderFilters((current) => ({ ...current, [activeFilterKey]: updater(current[activeFilterKey] ?? { includedKeys: null, sort: null }) }));
@@ -721,6 +788,9 @@ const WorkspacePage = () => {
       return next;
     });
   };
+  const setActiveFilterQuery = (query: string) => updateActiveFilter((state) => ({ ...state, query }));
+  const setActiveFilterRange = (min: string, max: string) => updateActiveFilter((state) => ({ ...state, min, max }));
+  const setActiveFilterAggregate = (aggregate: HeaderFilterAggregate) => updateActiveFilter((state) => ({ ...state, aggregate }));
   const toggleActiveFilterOption = (key: string) => updateActiveFilter((state) => {
     const selected = state.includedKeys === null ? new Set(activeFilterOptions.map((option) => option.key)) : new Set(state.includedKeys);
     if (selected.has(key)) selected.delete(key); else selected.add(key);
@@ -728,7 +798,7 @@ const WorkspacePage = () => {
   });
   const isHeaderFilterActive = (axis: HeaderFilterTarget['axis'], id: string) => {
     const state = headerFilters[`${axis}:${id}`];
-    return Boolean(state && (state.includedKeys !== null || state.sort));
+    return Boolean(state && (hasWorkspaceFilterCriteria(state) || state.sort));
   };
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
@@ -1270,7 +1340,7 @@ const WorkspacePage = () => {
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
     {addMenuOpen && table && <TableAddDialog onClose={() => setAddMenuOpen(false)} onAddRow={addRow} onAddColumn={addColumn} />}
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} transposed={Boolean(table.transposed)} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onSearch={() => { setTableActionsOpen(false); setSearchOpen(true); }} onTranspose={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }} />}
-    {filterTarget && <HeaderFilterDialog label={filterTarget.label} options={activeFilterOptions} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} />}
+    {filterTarget && <HeaderFilterDialog label={filterTarget.label} inputType={activeFilterInputType} options={activeFilterOptions} numericValues={activeNumericValues} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} onQuery={setActiveFilterQuery} onRange={setActiveFilterRange} onAggregate={setActiveFilterAggregate} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}

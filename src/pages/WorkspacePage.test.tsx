@@ -651,8 +651,12 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '篩選 數量' }));
     expect(screen.getByRole('dialog', { name: '篩選 數量' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '屬性設定' })).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '2' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('spinbutton')).toHaveLength(2);
+    expect(screen.getAllByRole('spinbutton')[0]).toHaveAttribute('value', '');
+    expect(screen.getAllByRole('spinbutton')[1]).toHaveAttribute('value', '');
+    expect(screen.getByText('目前符合 2 筆')).toBeInTheDocument();
+    expect(screen.getByLabelText('數量總和')).toHaveTextContent('12');
 
     await user.click(screen.getByRole('button', { name: '降冪' }));
     fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
@@ -662,15 +666,28 @@ describe('WorkspacePage', () => {
     ]);
 
     await user.click(screen.getByRole('button', { name: '篩選 數量' }));
-    await user.click(screen.getByRole('checkbox', { name: '2' }));
-    const optionSearch = screen.getByRole('searchbox', { name: '搜尋數量的值' });
-    await user.type(optionSearch, '10');
-    expect(screen.queryByRole('checkbox', { name: '2' })).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
+    const rangeInputs = screen.getAllByRole('spinbutton');
+    await user.type(rangeInputs[0], '5');
+    await user.type(rangeInputs[1], '10');
+    expect(screen.getByText('目前符合 1 筆')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '平均' }));
+    expect(screen.getByLabelText('數量平均')).toHaveTextContent('10');
     fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('searches text filter values without option checkboxes', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '篩選 物件' }));
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: '搜尋物件的值' });
+    await user.type(search, '花');
+    expect(screen.getByRole('row', { name: /花火/ })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /物件 2/ })).not.toBeInTheDocument();
   });
 
   it('transposes only the table view while preserving row and column data', async () => {
@@ -688,6 +705,9 @@ describe('WorkspacePage', () => {
     expect(latestSave?.tables[0].columns.map((column) => column.id)).toEqual(['column-text', 'column-number', 'column-select', 'column-dynamic']);
 
     await user.click(screen.getByRole('button', { name: '篩選 花火' }));
+    const filterDialog = screen.getByRole('dialog', { name: '篩選 花火' });
+    expect(filterDialog.querySelectorAll('.workspace-filter-option-count')).toHaveLength(3);
+    expect([...filterDialog.querySelectorAll('.workspace-filter-option-count')].map((node) => node.textContent)).toEqual(expect.arrayContaining(['2', '1']));
     await user.click(screen.getByRole('checkbox', { name: '合作' }));
     fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect(screen.queryByRole('rowheader', { name: '類型' })).not.toBeInTheDocument();

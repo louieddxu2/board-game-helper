@@ -220,7 +220,17 @@ footer a { color: inherit; }
 .workspace-filter-options label:hover { background: var(--cream); }
 .workspace-filter-options input { flex: 0 0 auto; width: 18px; min-height: 18px; margin: 0; accent-color: var(--orange); }
 .workspace-filter-options span { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-filter-option-count { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .workspace-filter-options p { margin: 0; padding: 18px 12px; color: var(--muted); text-align: center; }
+.workspace-filter-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; }
+.workspace-filter-range label { display: grid; gap: 5px; color: var(--green); font-size: 13px; font-weight: 700; }
+.workspace-filter-range input { min-width: 0; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font: inherit; }
+.workspace-filter-range > span { padding-bottom: 10px; color: var(--muted); }
+.workspace-filter-aggregate { display: grid; grid-template-columns: 1fr 1fr minmax(0, 1.2fr); gap: 6px; align-items: stretch; }
+.workspace-filter-aggregate button { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; }
+.workspace-filter-aggregate button:hover, .workspace-filter-aggregate button.selected { border-color: var(--orange); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
+.workspace-filter-aggregate output { display: grid; place-items: center; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,253,248,.7); color: var(--green); font-variant-numeric: tabular-nums; font-weight: 700; }
+.workspace-filter-result-count { margin: 0; color: var(--muted); font-size: 12px; text-align: right; }
 .workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
 .workspace-name-dialog { background: rgba(255,253,248,.84); backdrop-filter: blur(4px); }
 .workspace-name-dialog-overlay { background: transparent; }
