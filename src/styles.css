@@ -243,21 +243,21 @@ footer a { color: inherit; }
 .workspace-link-dialog .workspace-dialog-content { padding: 16px; }
 .workspace-link-fields { display: grid; gap: 12px; }
 .workspace-link-fields input { background: rgba(255,253,248,.68); font-size: 16px; }
-.workspace-selection-dialog { width: min(430px, 50vw); max-height: min(50dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.84); backdrop-filter: blur(4px); }
+.workspace-selection-dialog { width: min(430px, 50vw); max-height: min(50dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.62); backdrop-filter: blur(3px); }
 .workspace-selection-dialog-overlay { background: transparent; }
 .workspace-selection-dialog .workspace-dialog-heading { display: none; }
 .workspace-selection-dialog .workspace-dialog-content { display: flex; flex-direction: column; gap: 0; min-height: 0; overflow: hidden; padding: 0; }
-.workspace-selection-search { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: rgba(255,253,248,.48); color: var(--green); }
+.workspace-selection-search { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: rgba(255,253,248,.34); color: var(--green); }
 .workspace-selection-search:focus-within { border-color: var(--yellow); outline: 2px solid rgba(233,180,76,.28); }
 .workspace-selection-search input { flex: 1; min-width: 0; min-height: 34px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; }
 .workspace-selection-search button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
 .workspace-selection-search button:hover { background: var(--cream); color: var(--orange); }
-.workspace-selection-list { display: grid; flex: 1 1 auto; min-height: 0; max-height: min(50dvh, 600px); overflow-y: auto; border: 0; border-radius: 0; }
+.workspace-selection-list { display: grid; flex: 1 1 auto; min-height: 0; max-height: min(50dvh, 600px); overflow-y: auto; border: 0; border-radius: 0; background: rgba(255,253,248,.28); }
 .workspace-selection-list.with-search { max-height: calc(50dvh - 54px); }
-.workspace-selection-list button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 62px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: rgba(255,253,248,.54); color: var(--green); cursor: pointer; font-size: 22px; font-weight: 700; line-height: 1.35; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-selection-list button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 62px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: rgba(255,253,248,.38); color: var(--green); cursor: pointer; font-size: 22px; font-weight: 700; line-height: 1.35; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-selection-list button:last-child { border-bottom: 0; }
-.workspace-selection-list button:hover, .workspace-selection-list button.selected { background: rgba(236,230,216,.76); color: var(--orange); }
-.workspace-selection-empty { margin: 0; padding: 26px 14px; color: var(--muted); font-size: 14px; text-align: center; }
+.workspace-selection-list button:hover, .workspace-selection-list button.selected { background: rgba(236,230,216,.58); color: var(--orange); }
+.workspace-selection-empty { margin: 0; padding: 26px 14px; background: rgba(255,253,248,.28); color: var(--muted); font-size: 14px; text-align: center; }
 .workspace-option-list { display: grid; gap: 8px; }
 .workspace-option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px; }
 .workspace-option-row textarea { min-height: 42px !important; overflow: auto; resize: none; white-space: pre-wrap; }
