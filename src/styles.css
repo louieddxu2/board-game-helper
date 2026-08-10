@@ -274,10 +274,11 @@ footer a { color: inherit; }
 .workspace-column-dialog .workspace-dialog-content { flex: 1; overflow: hidden; padding: 0; border-radius: 8px; }
 .workspace-column-config { min-height: 0; display: grid; grid-template-columns: minmax(130px, .9fr) minmax(0, 1.5fr); overflow: hidden; }
 .workspace-column-config-rail { display: flex; flex-direction: column; gap: 18px; min-width: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--line); background: var(--cream); }
+.workspace-column-config-rail .workspace-form-field { text-align: center; }
+.workspace-column-config-rail legend { width: 100%; padding: 0; text-align: center; }
 .workspace-column-config-rail textarea { min-height: 42px; overflow: auto; resize: none; text-align: center; font-weight: 700; }
 .workspace-column-config-panel { min-width: 0; overflow: auto; padding: 12px; background: var(--white); }
-.workspace-input-subtype-field { margin: 0 0 18px; padding: 0; border: 0; }
-.workspace-input-subtype-field legend { padding: 0; }
+.workspace-input-subtype-options { margin-bottom: 18px; }
 .workspace-input-subtype-options { display: grid; gap: 6px; }
 .workspace-input-subtype-options button { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-weight: 500; }
 .workspace-input-subtype-options button:hover, .workspace-input-subtype-options button.selected { border-color: var(--orange); background: var(--cream); color: var(--green); }

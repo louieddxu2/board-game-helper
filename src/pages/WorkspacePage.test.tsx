@@ -538,7 +538,8 @@ describe('WorkspacePage', () => {
     const panel = document.querySelector('.workspace-column-config-panel');
     expect(rail?.querySelector('.workspace-alignment-field')).toBeInTheDocument();
     expect(rail?.querySelector('.workspace-overflow-field')).toBeInTheDocument();
-    expect(panel?.querySelector('.workspace-input-subtype-field')).toBeInTheDocument();
+    expect(panel?.querySelector('.workspace-input-subtype-options')).toBeInTheDocument();
+    expect(panel?.querySelector('legend')).not.toBeInTheDocument();
     expect(panel?.querySelector('.workspace-alignment-field')).not.toBeInTheDocument();
     expect(panel?.querySelector('.workspace-overflow-field')).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
