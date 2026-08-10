@@ -446,10 +446,25 @@ describe('WorkspacePage', () => {
   it('saves a column text alignment and applies it to its cells', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    const header = await screen.findByRole('columnheader', { name: '名稱' });
+    expect(header).toHaveStyle({ textAlign: 'center' });
+    await user.click(header);
     await user.click(screen.getByRole('button', { name: '置右' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    expect(screen.getByRole('columnheader', { name: '名稱' })).toHaveStyle({ textAlign: 'center' });
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveStyle({ textAlign: 'right' });
+  });
+
+  it('does not delete rows or attributes from a context menu gesture', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    const row = document.querySelector('[data-row-id="row-1"]')!;
+    const column = document.querySelector('[data-column-id="column-text"]')!;
+    fireEvent.contextMenu(row);
+    fireEvent.contextMenu(column);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(row).toBeInTheDocument();
+    expect(column).toBeInTheDocument();
   });
 
   it('keeps ordinary mouse-wheel scrolling available without changing text scale', async () => {
@@ -756,6 +771,49 @@ describe('WorkspacePage', () => {
       await waitFor(() => expect(vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0].tables[0].rows[1].id).toBe('row-1'));
     } finally {
       document.elementFromPoint = previousElementFromPoint;
+    }
+  });
+
+  it('auto-scrolls the table viewport when a reorder reaches an edge', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = document.querySelector('[data-column-id="column-text"]')!;
+    const target = document.querySelector('[data-column-id="column-number"]')!;
+    const previousElementFromPoint = document.elementFromPoint;
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let animationFrame: FrameRequestCallback | undefined;
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 19 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 800 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    viewport.getBoundingClientRect = () => ({ top: 0, bottom: 300, left: 0, right: 400, width: 400, height: 300, x: 0, y: 0, toJSON: () => ({}) });
+    document.elementFromPoint = vi.fn(() => target);
+    window.requestAnimationFrame = vi.fn((callback) => { animationFrame = callback; return 1; });
+    window.cancelAnimationFrame = vi.fn();
+
+    try {
+      dispatchPointer(source, 'pointerdown', 100, 40);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(viewport, 'pointermove', 395, 150);
+      animationFrame?.(0);
+      expect(viewport.scrollLeft).toBeGreaterThan(0);
+    } finally {
+      dispatchPointer(viewport, 'pointerup', 395, 150);
+      document.elementFromPoint = previousElementFromPoint;
+      window.requestAnimationFrame = previousRequestAnimationFrame;
+      window.cancelAnimationFrame = previousCancelAnimationFrame;
     }
   });
 });

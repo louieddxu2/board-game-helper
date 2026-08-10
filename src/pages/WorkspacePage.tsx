@@ -584,6 +584,8 @@ const WorkspacePage = () => {
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
+  const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
+  const tableReorderAutoScrollFrame = useRef<number | undefined>(undefined);
   const importTableInputRef = useRef<HTMLInputElement>(null);
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
   const importTableParentId = useRef<string | null>(null);
@@ -594,6 +596,7 @@ const WorkspacePage = () => {
   useEffect(() => () => {
     if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
     if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
+    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
   }, []);
   useEffect(() => {
     if (!notice) return;
@@ -992,6 +995,57 @@ const WorkspacePage = () => {
     if (pending) persistTextScale(pending.scale);
   };
 
+  const updateTableReorderTarget = (session: TableReorderSession, clientX: number, clientY: number) => {
+    const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
+    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>(selector);
+    const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
+    if (!target || !targetId) return;
+    const rect = target.getBoundingClientRect();
+    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    session.targetId = targetId;
+    session.after = horizontal ? clientX > rect.left + rect.width / 2 : clientY > rect.top + rect.height / 2;
+    setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
+  };
+
+  const stopTableReorderAutoScroll = () => {
+    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
+    tableReorderAutoScrollFrame.current = undefined;
+  };
+
+  const runTableReorderAutoScroll = () => {
+    tableReorderAutoScrollFrame.current = undefined;
+    const pointer = tableReorderPointer.current;
+    const session = tableReorderSession.current;
+    const viewport = viewportRef.current;
+    if (!pointer || !session || pointer.session !== session || !session.active || !viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const edge = Math.min(64, Math.max(32, Math.min(rect.width, rect.height) / 3));
+    const speed = (distance: number) => Math.min(18, Math.max(3, (edge - distance) / 2));
+    const canScrollLeft = viewport.scrollLeft > 0;
+    const canScrollRight = viewport.scrollLeft < viewport.scrollWidth - viewport.clientWidth;
+    const canScrollUp = viewport.scrollTop > 0;
+    const canScrollDown = viewport.scrollTop < viewport.scrollHeight - viewport.clientHeight;
+    const deltaX = pointer.x < rect.left + edge && canScrollLeft
+      ? -speed(pointer.x - rect.left)
+      : pointer.x > rect.right - edge && canScrollRight
+        ? speed(rect.right - pointer.x)
+        : 0;
+    const deltaY = pointer.y < rect.top + edge && canScrollUp
+      ? -speed(pointer.y - rect.top)
+      : pointer.y > rect.bottom - edge && canScrollDown
+        ? speed(rect.bottom - pointer.y)
+        : 0;
+    if (!deltaX && !deltaY) return;
+    viewport.scrollLeft += deltaX;
+    viewport.scrollTop += deltaY;
+    updateTableReorderTarget(session, pointer.x, pointer.y);
+    tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
+  };
+
+  const updateTableReorderAutoScroll = () => {
+    if (tableReorderAutoScrollFrame.current === undefined) tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
+  };
+
   const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const session: TableReorderSession = { kind, sourceId, targetId: sourceId, after: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
@@ -1018,19 +1072,13 @@ const WorkspacePage = () => {
       if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 8) {
         if (session.timer) window.clearTimeout(session.timer);
         tableReorderSession.current = undefined;
+        tableReorderPointer.current = undefined;
       }
       return false;
     }
-    const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>(selector);
-    const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
-    if (target && targetId) {
-      const rect = target.getBoundingClientRect();
-      session.targetId = targetId;
-      const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
-      session.after = horizontal ? event.clientX > rect.left + rect.width / 2 : event.clientY > rect.top + rect.height / 2;
-      setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
-    }
+    tableReorderPointer.current = { session, x: event.clientX, y: event.clientY };
+    updateTableReorderTarget(session, event.clientX, event.clientY);
+    updateTableReorderAutoScroll();
     event.preventDefault();
     return true;
   };
@@ -1039,6 +1087,8 @@ const WorkspacePage = () => {
     const session = tableReorderSession.current;
     if (!session || session.pointerId !== event.pointerId) return false;
     if (session.timer) window.clearTimeout(session.timer);
+    stopTableReorderAutoScroll();
+    tableReorderPointer.current = undefined;
     tableReorderSession.current = undefined;
     setTableReorderVisual(undefined);
     if (!session.active) return false;
@@ -1163,7 +1213,7 @@ const WorkspacePage = () => {
                 {table.columns.map((column) => {
                   const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
                   const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
-                  return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={isHeaderFilterActive('column', column.id)} onFilter={() => setFilterTarget({ axis: 'column', id: column.id, label: column.name })} /></th>;
+                  return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={isHeaderFilterActive('column', column.id)} onFilter={() => setFilterTarget({ axis: 'column', id: column.id, label: column.name })} /></th>;
                 })}
               </tr></thead>
               <tbody>{filteredRows.map((row) => {
@@ -1173,7 +1223,7 @@ const WorkspacePage = () => {
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value, column.inputType);
@@ -1189,14 +1239,14 @@ const WorkspacePage = () => {
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); askDeleteRow(row, originalIndex); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
+                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
                 })}
               </tr></thead><tbody>
                 {visibleColumns.map((column) => {
                   const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
                   const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
                   return <tr key={column.id}>
-                    <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); setConfiguring({ column, isRowHeader: false }); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
+                    <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                     {filteredRows.map((row) => {
                       const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名物件';
                       const value = row.values[column.id] ?? null;

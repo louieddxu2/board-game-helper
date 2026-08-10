@@ -46,7 +46,8 @@ describe('workspace browser policies', () => {
     expect(valueOverlayRule).toMatch(/place-items:\s*center/);
     expect(valueInputRule).toMatch(/font-size:\s*28px/);
     expect(valueInputRule).not.toContain('--workspace-text-scale');
-    expect(appbarTitleRule).toMatch(/font-size:\s*17px/);
+    expect(appbarTitleRule).toMatch(/font-size:\s*24px/);
+    expect(appbarTitleRule).toMatch(/line-height:\s*1\.2/);
     expect(overlayRule).toMatch(/font-size:\s*16px/);
     expect(overlayRule).toMatch(/--workspace-text-scale:\s*1/);
 
