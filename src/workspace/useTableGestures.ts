@@ -202,8 +202,31 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         }
       }
       momentumScroll.trackMove(event.clientX, event.clientY);
-      viewport.scrollLeft = panStart.current.scrollLeft - deltaX;
-      viewport.scrollTop = panStart.current.scrollTop - deltaY;
+      const targetScrollLeft = panStart.current.scrollLeft - deltaX;
+      const targetScrollTop = panStart.current.scrollTop - deltaY;
+      viewport.scrollLeft = targetScrollLeft;
+      viewport.scrollTop = targetScrollTop;
+
+      // Calculate visual elastic tension on inner <table> when dragging beyond viewport boundaries
+      const table = viewport.querySelector('table');
+      if (table) {
+        const maxLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+        const maxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        let overX = 0;
+        let overY = 0;
+        if (targetScrollLeft < 0) overX = Math.min(30, -targetScrollLeft * 0.35);
+        else if (targetScrollLeft > maxLeft) overX = Math.max(-30, (maxLeft - targetScrollLeft) * 0.35);
+
+        if (targetScrollTop < 0) overY = Math.min(30, -targetScrollTop * 0.35);
+        else if (targetScrollTop > maxTop) overY = Math.max(-30, (maxTop - targetScrollTop) * 0.35);
+
+        if (overX !== 0 || overY !== 0) {
+          table.style.transform = `translate3d(${overX.toFixed(1)}px, ${overY.toFixed(1)}px, 0px)`;
+        } else if (table.style.transform !== '') {
+          table.style.transform = '';
+        }
+      }
+
       event.preventDefault();
     }
   };
@@ -224,6 +247,12 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panStart.current = undefined;
     }
     if (pointers.current.size === 0) {
+      const table = viewport.querySelector('table');
+      if (table && table.style.transform) {
+        table.style.transition = 'transform 0.2s ease-out';
+        table.style.transform = '';
+        setTimeout(() => { if (table) table.style.transition = ''; }, 200);
+      }
       setPanning(false);
       momentumScroll.release(viewport);
       if (moved) {
