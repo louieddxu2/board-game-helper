@@ -8,7 +8,7 @@ describe('useMomentumScroll', () => {
     expect(result.current.isCoasting()).toBe(false);
   });
 
-  test('stacks velocity when tracking consecutive quick swipes', () => {
+  test('stacks velocity for consecutive swipes', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const mockViewport = {
       scrollWidth: 2000,
@@ -17,7 +17,6 @@ describe('useMomentumScroll', () => {
       clientHeight: 500,
       scrollLeft: 200,
       scrollTop: 200,
-      style: { transform: '', transition: '' },
     } as unknown as HTMLDivElement;
 
     vi.useFakeTimers();
