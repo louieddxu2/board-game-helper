@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime } from "./model";
+import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
@@ -98,8 +98,20 @@ export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
 export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputCategory => inputType === 'select' || inputType === 'dynamic-select' ? 'select' : inputType === 'link' || inputType === 'datetime' ? 'other' : 'text';
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
-export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState) => {
-  if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null && !state.includedKeys.includes(workspaceFilterValueKey(value))) return false;
+export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
+  if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null) {
+    const includedSet = new Set(state.includedKeys);
+    if (isMultiple && typeof value === 'string') {
+      const list = parseMultiSelectValues(value);
+      if (list.length === 0) {
+        if (!includedSet.has(workspaceFilterValueKey(null))) return false;
+      } else {
+        if (!list.some((item) => includedSet.has(workspaceFilterValueKey(item)))) return false;
+      }
+    } else {
+      if (!includedSet.has(workspaceFilterValueKey(value))) return false;
+    }
+  }
   const query = state.query?.trim().toLocaleLowerCase();
   if (query && !searchableWorkspaceCellValue(value, inputType).toLocaleLowerCase().includes(query)) return false;
   if (inputType === 'number' && (state.min?.trim() || state.max?.trim())) {

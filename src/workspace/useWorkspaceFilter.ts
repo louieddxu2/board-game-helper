@@ -35,8 +35,8 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     const rows = searchedRows.filter((row) => columnFilters.every(([key, state]) => {
       const columnId = key.slice(7);
       const value = columnId === rowHeader.id ? row.name : row.values[columnId] ?? null;
-      const inputType = columnId === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === columnId)?.inputType;
-      return matchesWorkspaceFilter(value, inputType, state);
+      const col = columnId === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === columnId);
+      return matchesWorkspaceFilter(value, col?.inputType, state, col?.isMultiple);
     }));
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.sort);
     if (!sortedEntry) return rows;
@@ -57,7 +57,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     const rowFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && hasWorkspaceFilterCriteria(state));
     const columns = table.columns.filter((column) => rowFilters.every(([key, state]) => {
       const row = tableRowsById.get(key.slice(4));
-      return Boolean(row && matchesWorkspaceFilter(row.values[column.id] ?? null, column.inputType, state));
+      return Boolean(row && matchesWorkspaceFilter(row.values[column.id] ?? null, column.inputType, state, column.isMultiple));
     }));
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.sort);
     if (!sortedEntry) return columns;
