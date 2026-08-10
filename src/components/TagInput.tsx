@@ -181,10 +181,10 @@ export const TagInput = ({
   }, [hasSuggestionContent, showSuggestions, updateSuggestionPosition, value.length]);
 
   return <div className="tag-input" ref={containerRef}>
-    <label htmlFor={id}>{label}</label>
+    <label htmlFor={id}>{label} <small className="muted">({value.length}/6{value.length >= 6 ? '，已達上限' : ''})</small></label>
     <div className="tag-composer">
       {value.map((tag) => <span className="tag-chip selected" key={tag.id ?? tag.name}>#{tag.name}<button type="button" aria-label={`移除標籤 ${tag.name}`} onClick={() => onChange(value.filter((item) => item !== tag))}>×</button></span>)}
-      <input ref={inputRef} id={id} value={query} disabled={value.length >= 6} placeholder={value.length ? '再加一個…' : '搜尋時機、補牌、平手…'}
+      <input ref={inputRef} id={id} value={query} disabled={value.length >= 6} placeholder={value.length >= 6 ? '已達 6 個標籤上限' : (value.length ? '再加一個…' : '搜尋時機、補牌、平手…')}
         role="combobox" aria-expanded={open} aria-controls={`${id}-list`} autoComplete="off" enterKeyHint="enter"
         onFocus={() => { setOpen(true); updateSuggestionPosition(); }} onPointerDown={() => { setOpen(true); updateSuggestionPosition(); }} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
         onKeyDown={(event) => {

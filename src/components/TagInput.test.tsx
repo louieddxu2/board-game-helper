@@ -156,4 +156,18 @@ describe('TagInput recommendations', () => {
     expect(view.getByRole('button', { name: '加入標籤 計分' })).toBeInTheDocument();
     expect(view.getByRole('button', { name: '加入標籤 設置' })).toBeInTheDocument();
   });
+
+  test('shows tag count limit in label and updates placeholder when limit is reached', () => {
+    const view = render(<TagInput value={[{ name: '標籤1' }, { name: '標籤2' }]} onChange={vi.fn()} />);
+    expect(view.getByText('(2/6)')).toBeInTheDocument();
+    expect(view.getByPlaceholderText('再加一個…')).toBeInTheDocument();
+
+    view.rerender(<TagInput value={[
+      { name: 't1' }, { name: 't2' }, { name: 't3' }, { name: 't4' }, { name: 't5' }, { name: 't6' }
+    ]} onChange={vi.fn()} />);
+
+    expect(view.getByText('(6/6，已達上限)')).toBeInTheDocument();
+    expect(view.getByPlaceholderText('已達 6 個標籤上限')).toBeDisabled();
+  });
 });
+

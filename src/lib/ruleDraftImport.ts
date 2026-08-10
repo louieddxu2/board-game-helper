@@ -23,7 +23,7 @@ const ruleSchema = z.strictObject({
   editionNotes: z.optional(z.array(trimmedText(1, 300)).check(z.maxLength(20))),
   sourceLabel: optionalText(300),
   sourceUrl: optionalUrl,
-  tagNames: z.optional(z.array(trimmedText(1, 40)).check(z.maxLength(8))),
+  tagNames: z.optional(z.array(trimmedText(1, 40)).check(z.maxLength(6))),
 });
 
 const gameSchema = z.strictObject({
