@@ -42,6 +42,8 @@ describe('workspace browser policies', () => {
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-list button\s*\{([^}]*)\}/)?.[1];
+    const dragSurfaceRule = styles.match(/\.workspace-table-viewport, \.workspace-table-viewport \*, \.workspace-tree, \.workspace-tree \*\s*\{([^}]*)\}/)?.[1];
+    const editableSurfaceRule = styles.match(/\.workspace-dialog input, \.workspace-dialog textarea, \.workspace-dialog select, \.workspace-dialog \[contenteditable="true"\]\s*\{([^}]*)\}/)?.[1];
 
     expect(valueOverlayRule).toMatch(/place-items:\s*center/);
     expect(valueInputRule).toMatch(/font-size:\s*28px/);
@@ -56,6 +58,9 @@ describe('workspace browser policies', () => {
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.62\)/);
     expect(selectionListRule).toMatch(/background:\s*rgba\(255,253,248,\.38\)/);
+    expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
+    expect(dragSurfaceRule).toMatch(/-webkit-touch-callout:\s*none/);
+    expect(editableSurfaceRule).toMatch(/user-select:\s*text/);
     expect(filterRule).toMatch(/position:\s*absolute/);
     expect(filterRule).toMatch(/min-height:\s*20px/);
     expect(filterRule).toMatch(/opacity:\s*\.42/);

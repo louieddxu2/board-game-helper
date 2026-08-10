@@ -104,6 +104,8 @@ footer a { color: inherit; }
 .workspace-page, .workspace-page * { scrollbar-width: none; }
 .workspace-page::-webkit-scrollbar, .workspace-page *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table-viewport { flex: 1; min-height: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: var(--paper); touch-action: none; cursor: grab; scrollbar-width: none; }
+.workspace-table-viewport, .workspace-table-viewport *, .workspace-tree, .workspace-tree * { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.workspace-dialog input, .workspace-dialog textarea, .workspace-dialog select, .workspace-dialog [contenteditable="true"] { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
 .workspace-table-viewport.is-panning { cursor: grabbing; user-select: none; }
 .workspace-table-viewport::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table { width: max-content; border-collapse: separate; border-spacing: 0; color: var(--ink); table-layout: fixed; font-size: calc(20px * var(--workspace-text-scale, 1)); }
