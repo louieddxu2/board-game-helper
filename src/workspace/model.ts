@@ -60,9 +60,9 @@ export const parseMultiSelectValues = (value: WorkspaceCellValue): string[] => {
     try {
       const parsed = JSON.parse(str);
       if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
-    } catch { /* Fallback to comma split */ }
+    } catch { /* Fallback to delimiter split */ }
   }
-  return str.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
+  return str.split(/[,，、;；]\s*/).map((s) => s.trim()).filter(Boolean);
 };
 
 export const formatMultiSelectValues = (values: string[]): string => values.filter(Boolean).join(', ');

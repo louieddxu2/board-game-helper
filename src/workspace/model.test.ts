@@ -23,6 +23,7 @@ describe('workspace model', () => {
 
   it('parses and formats multi-select values seamlessly', () => {
     expect(parseMultiSelectValues('蘋果, 香蕉, 橘子')).toEqual(['蘋果', '香蕉', '橘子']);
+    expect(parseMultiSelectValues('蘋果、香蕉、橘子')).toEqual(['蘋果', '香蕉', '橘子']);
     expect(parseMultiSelectValues('["A", "B"]')).toEqual(['A', 'B']);
     expect(formatMultiSelectValues(['紅', '黃'])).toBe('紅, 黃');
   });
