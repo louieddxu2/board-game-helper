@@ -77,7 +77,7 @@ describe('WorkspacePage', () => {
     expect(input.closest('[role="dialog"]')).toBeInTheDocument();
     expect([...document.querySelectorAll('.workspace-table col')].map((column) => column.getAttribute('style'))).toEqual(widthsBefore);
 
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('new value')).toBeInTheDocument();
   });
@@ -110,7 +110,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '新增選項' }));
     await user.type(screen.getByRole('textbox', { name: '固定選項 2' }), '單行');
     await user.click(screen.getByRole('button', { name: '向上移動固定選項 2' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     expect(screen.getAllByRole('option').map((item) => item.textContent)).toEqual(['單行', '第一行\n第二行']);
@@ -126,7 +126,7 @@ describe('WorkspacePage', () => {
     expect(search).toHaveAttribute('enterkeyhint', 'done');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.type(search, '新標籤');
-    fireEvent.pointerDown(document.querySelector('.workspace-selection-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('新標籤')).toBeInTheDocument();
   });
@@ -159,14 +159,14 @@ describe('WorkspacePage', () => {
     const itemName = screen.getByRole('textbox', { name: '物件名稱' });
     await user.clear(itemName);
     await user.type(itemName, '收藏清單第一項');
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.getByRole('button', { name: '編輯物件 收藏清單第一項' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('columnheader', { name: '物件' }));
     const axisName = screen.getByRole('textbox', { name: '屬性名稱' });
     await user.clear(axisName);
     await user.type(axisName, '桌遊收藏');
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
   });
 
@@ -176,7 +176,7 @@ describe('WorkspacePage', () => {
 
     fireEvent.click(document.querySelector('.workspace-row-heading')!);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     fireEvent.click(document.querySelectorAll('.workspace-table thead th')[1]);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -190,14 +190,14 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '編輯物件 花火' }));
     await user.clear(screen.getByRole('textbox', { name: '物件名稱' }));
     await user.type(screen.getByRole('textbox', { name: '物件名稱' }), '收藏{Enter}第一項');
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.getByRole('button', { name: /編輯物件 收藏\s+第一項/ }).textContent).toBe('收藏\n第一項');
 
     await user.click(screen.getByRole('button', { name: '名稱' }));
     const columnName = screen.getByRole('textbox', { name: '屬性名稱' });
     await user.clear(columnName);
     await user.type(columnName, '桌遊{Enter}名稱');
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     expect(screen.getAllByRole('button', { name: /桌遊\s+名稱/ }).find((button) => button.classList.contains('workspace-column-name'))?.textContent).toBe('桌遊\n名稱');
   });
 
@@ -209,7 +209,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
 
     await user.click(screen.getByRole('button', { name: '文字' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
       tables: expect.arrayContaining([expect.objectContaining({
         columns: expect.arrayContaining([expect.objectContaining({ id: 'column-select', inputType: 'text', options: ['合作', '競爭'] })]),
@@ -426,7 +426,7 @@ describe('WorkspacePage', () => {
     const input = screen.getByRole('textbox', { name: '名稱' });
     await user.clear(input);
     await user.type(input, '新表格名稱');
-    fireEvent.pointerDown(document.querySelector('.workspace-name-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-name-dialog-overlay')!);
     expect(screen.getByText('新表格名稱')).toBeInTheDocument();
   });
 
@@ -448,7 +448,7 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
     await user.click(screen.getByRole('button', { name: '置右' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveStyle({ textAlign: 'right' });
   });
 
@@ -541,7 +541,7 @@ describe('WorkspacePage', () => {
     expect(panel?.querySelector('.workspace-input-subtype-field')).toBeInTheDocument();
     expect(panel?.querySelector('.workspace-alignment-field')).not.toBeInTheDocument();
     expect(panel?.querySelector('.workspace-overflow-field')).not.toBeInTheDocument();
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(await screen.findByRole('columnheader', { name: '類型' }));
     expect(document.querySelector('.workspace-column-config-panel .workspace-option-list')).toBeInTheDocument();
@@ -553,12 +553,12 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
     await user.click(screen.getByRole('button', { name: '其他' }));
     await user.click(screen.getByRole('button', { name: '連結' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     await user.type(screen.getByRole('textbox', { name: '連結' }), 'example.com/game');
     await user.type(screen.getByRole('textbox', { name: '顯示名稱' }), '遊戲頁面');
-    fireEvent.pointerDown(document.querySelector('.workspace-link-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-link-dialog-overlay')!);
 
     expect(screen.getByText('遊戲頁面')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
@@ -571,14 +571,14 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
     await user.click(screen.getByRole('button', { name: '其他' }));
     await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-column-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
     expect(input).toBeInTheDocument();
     expect(input.value).not.toBe('');
     fireEvent.change(input, { target: { value: '2024-02-03T14:05' } });
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getByText(/2024年\d+月\d+日\d+點05分/)).toBeInTheDocument();
   });
@@ -629,7 +629,7 @@ describe('WorkspacePage', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
     await user.type(screen.getByRole('spinbutton'), '10');
-    fireEvent.pointerDown(document.querySelector('.workspace-value-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getAllByRole('button', { name: /^篩選 / })).toHaveLength(5);
     await user.click(screen.getByRole('button', { name: '篩選 數量' }));
@@ -639,7 +639,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
 
     await user.click(screen.getByRole('button', { name: '降冪' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect([...document.querySelectorAll('.workspace-table tbody tr')].map((row) => row.textContent)).toEqual([
       expect.stringContaining('物件 2'),
       expect.stringContaining('花火'),
@@ -651,7 +651,7 @@ describe('WorkspacePage', () => {
     await user.type(optionSearch, '10');
     expect(screen.queryByRole('checkbox', { name: '2' })).not.toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: '10' })).toBeChecked();
-    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveAttribute('aria-pressed', 'true');
@@ -673,7 +673,7 @@ describe('WorkspacePage', () => {
 
     await user.click(screen.getByRole('button', { name: '篩選 花火' }));
     await user.click(screen.getByRole('checkbox', { name: '合作' }));
-    fireEvent.pointerDown(document.querySelector('.workspace-filter-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect(screen.queryByRole('rowheader', { name: '類型' })).not.toBeInTheDocument();
     expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
   });
