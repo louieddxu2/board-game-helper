@@ -24,6 +24,10 @@ vi.mock('../workspace/db', () => ({
     }],
   }),
   saveWorkspace: vi.fn(async () => undefined),
+  loadWorkspaceHistories: vi.fn(async () => new Map()),
+  saveWorkspaceHistory: vi.fn(async () => undefined),
+  clearAllWorkspaceHistories: vi.fn(async () => undefined),
+  deleteWorkspaceHistories: vi.fn(async () => undefined),
   flushWorkspaceSaves: vi.fn(async () => undefined),
 }));
 
@@ -431,24 +435,61 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByText('測試表格')).toBeInTheDocument());
     const actions = document.querySelector('.workspace-appbar-actions')!;
-    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
+    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
   it('adds objects and attributes without opening an editor and reports both with toast messages', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '新增物件或屬性' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '屬性' }));
+    await user.click(await screen.findByRole('button', { name: '編輯' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '新增屬性' }));
     expect(screen.getByRole('status')).toHaveTextContent('已新增屬性');
     expect(screen.getByRole('columnheader', { name: /屬性 5/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '新增物件或屬性' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('已新增物件');
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
+  });
+
+  it('undoes and redoes a cell edit from the table edit bar', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(cell);
+    await user.type(screen.getByRole('textbox'), '改名');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByText('改名')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    const undo = screen.getByRole('button', { name: '復原' });
+    const redo = screen.getByRole('button', { name: '重做' });
+    expect(undo).not.toBeDisabled();
+    expect(redo).toBeDisabled();
+    await user.click(undo);
+    expect(screen.queryByText('改名')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
+    expect(redo).not.toBeDisabled();
+    await user.click(redo);
+    expect(screen.getByText('改名')).toBeInTheDocument();
+  });
+
+  it('clears redo after a new table edit', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(cell);
+    await user.type(screen.getByRole('textbox'), '第一次');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('button', { name: '重做' })).not.toBeDisabled();
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox'), '第二次');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByRole('button', { name: '重做' })).toBeDisabled();
   });
 
   it('edits the table name by clicking the displayed table title', async () => {
@@ -678,14 +719,14 @@ describe('WorkspacePage', () => {
     await user.type(search, '不存在');
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByText('顯示 0 / 1 項')).toBeInTheDocument();
-    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
+    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
   it('filters, sorts, and searches values from every first-row header', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '新增物件或屬性' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+    await user.click(await screen.findByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
     await user.type(screen.getByRole('spinbutton'), '10');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
@@ -822,8 +863,8 @@ describe('WorkspacePage', () => {
       const latestColumnSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
       expect(latestColumnSave?.tables[0].columns.slice(0, 2).map((column) => column.id)).toEqual(['column-number', 'column-text']);
 
-      await user.click(screen.getByRole('button', { name: '新增物件或屬性' }));
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+      await user.click(screen.getByRole('button', { name: '編輯' }));
+      await user.click(screen.getByRole('button', { name: '新增物件' }));
       const sourceRow = document.querySelector('[data-row-id="row-1"]')!;
       const targetRow = document.querySelectorAll('[data-row-id]')[1];
       document.elementFromPoint = vi.fn(() => targetRow);

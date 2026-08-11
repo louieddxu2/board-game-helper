@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
-export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
+export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
 export type WorkspaceInputCategory = 'text' | 'select' | 'other';
 export type TableReorderKind = 'row' | 'column';
 export type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
@@ -184,6 +184,10 @@ export const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: numb
     case 'upload': return <svg {...common}><path d="M12 15V3M7 8l5-5 5 5M4 20h16" /></svg>;
     case 'rows': return <svg {...common}><path d="M4 5h16M4 12h16M4 19h16" /><path d="M8 3v18" /></svg>;
     case 'columns': return <svg {...common}><rect x="3" y="4" width="13" height="16" rx="1.5" /><path d="M8 4v16M3 9h13M20 10v8M16 14h8" /></svg>;
+    case 'rows-plus': return <svg {...common}><path d="M3 5h13M3 12h13M3 19h13" /><path d="M7 3v18" /><path d="M20 10v8M16 14h8" /></svg>;
+    case 'columns-plus': return <svg {...common}><rect x="3" y="4" width="13" height="16" rx="1.5" /><path d="M8 4v16M3 9h13M20 10v8M16 14h8" /></svg>;
+    case 'undo': return <svg {...common}><path d="M9 7 4 12l5 5" /><path d="M4 12h9a7 7 0 0 1 7 7" /></svg>;
+    case 'redo': return <svg {...common}><path d="m15 7 5 5-5 5" /><path d="M20 12h-9a7 7 0 0 0-7 7" /></svg>;
     case 'home': return <svg {...common}><path d="m4 11 8-7 8 7" /><path d="M6 10v9h12v-9M10 19v-5h4v5" /></svg>;
     case 'up': return <svg {...common}><path d="m6 15 6-6 6 6" /></svg>;
     case 'down': return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;

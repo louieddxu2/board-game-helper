@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { loadWorkspace, saveWorkspace } from '../workspace/db';
+import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
+import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode, parseMultiSelectValues } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
-import { MoveNodeDialog, NodeActionsDialog, TableActionsDialog, TableAddDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
+import { MoveNodeDialog, NodeActionsDialog, TableActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ConfirmDialog, HeaderFilterDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
 import { Tree } from "../workspace/workspaceSidebar";
 import { useTableGestures } from "../workspace/useTableGestures";
@@ -22,7 +23,8 @@ const WorkspacePage = () => {
   const [workspaceImport, setWorkspaceImport] = useState<WorkspaceData>();
   const [nodeMenu, setNodeMenu] = useState<WorkspaceNode>();
   const [movingNode, setMovingNode] = useState<WorkspaceNode>();
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [editBarOpen, setEditBarOpen] = useState(false);
+  const [historyByTable, setHistoryByTable] = useState<Map<string, WorkspaceTableHistory>>(new Map());
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [tableCreateParentId, setTableCreateParentId] = useState<string | null | undefined>(undefined);
   const [nameDialog, setNameDialog] = useState<NameDialogState>();
@@ -34,6 +36,8 @@ const WorkspacePage = () => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
+  const dataRef = useRef<WorkspaceData | undefined>(undefined);
+  const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
 
   useEffect(() => {
     if (!notice) return;
@@ -42,8 +46,11 @@ const WorkspacePage = () => {
   }, [notice]);
 
   const reload = useCallback(async () => {
-    const loaded = await loadWorkspace();
+    const [loaded, histories] = await Promise.all([loadWorkspace(), loadWorkspaceHistories()]);
     setData(loaded);
+    dataRef.current = loaded;
+    historyRef.current = histories;
+    setHistoryByTable(histories);
     const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
     let restored = new Set(folderIds);
     try {
@@ -59,8 +66,37 @@ const WorkspacePage = () => {
   }, []);
   useEffect(() => { void reload(); }, [reload]);
 
-  const commit = useCallback((next: WorkspaceData) => {
+  const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
+    const previous = dataRef.current;
+    const mutation = explicitMutation ?? (previous ? inferWorkspaceTableMutation(previous, next) : undefined);
+    const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
     setData(next);
+    dataRef.current = next;
+    if (options?.clearAllHistory) {
+      historyRef.current = new Map();
+      setHistoryByTable(new Map());
+      void clearAllWorkspaceHistories();
+    } else if (options?.clearTableHistoryIds?.length) {
+      const nextHistories = new Map(historyRef.current);
+      options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
+      historyRef.current = nextHistories;
+      setHistoryByTable(nextHistories);
+      void deleteWorkspaceHistories(options.clearTableHistoryIds);
+    } else if (removedTableIds.length) {
+      const nextHistories = new Map(historyRef.current);
+      removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
+      historyRef.current = nextHistories;
+      setHistoryByTable(nextHistories);
+      void deleteWorkspaceHistories(removedTableIds);
+    }
+    if (mutation) {
+      const currentHistory = historyRef.current.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
+      const nextHistory = pushWorkspaceTableHistory(currentHistory, mutation);
+      const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
+      historyRef.current = nextHistories;
+      setHistoryByTable(nextHistories);
+      void saveWorkspaceHistory(nextHistory);
+    }
     void saveWorkspace(next).catch(() => setNotice('本機儲存失敗，請先匯出資料備份'));
   }, []);
 
@@ -78,6 +114,9 @@ const WorkspacePage = () => {
     updateActiveFilter, isHeaderFilterActive
   } = useWorkspaceFilter({ table, rowHeader, tableRowsById });
 
+  useEffect(() => {
+    if (searchOpen) setEditBarOpen(false);
+  }, [searchOpen]);
   useEffect(() => { clearFilters(); }, [table?.id]);
 
   useEffect(() => {
@@ -149,9 +188,35 @@ const WorkspacePage = () => {
   } = useWorkspaceActions({
     data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
     setEditing, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
-    setAddMenuOpen, setTableActionsOpen, setTableCreateParentId, setNameDialog,
+    setTableActionsOpen, setTableCreateParentId, setNameDialog,
     setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
   });
+
+  const moveTableHistory = useCallback((direction: 'undo' | 'redo') => {
+    if (!data || !table) return;
+    const currentHistory = historyRef.current.get(table.id) ?? createEmptyWorkspaceTableHistory(table.id);
+    const source = direction === 'undo' ? currentHistory.past : currentHistory.future;
+    const entry = source[source.length - 1];
+    if (!entry) return;
+    const nextData = applyWorkspaceTableHistoryActionWithNode(data, table.id, entry.action, direction);
+    const nextHistory: WorkspaceTableHistory = direction === 'undo'
+      ? { tableId: table.id, past: currentHistory.past.slice(0, -1), future: [...currentHistory.future, entry] }
+      : { tableId: table.id, past: [...currentHistory.past, entry], future: currentHistory.future.slice(0, -1) };
+    const nextHistories = new Map(historyRef.current).set(table.id, nextHistory);
+    historyRef.current = nextHistories;
+    setHistoryByTable(nextHistories);
+    setData(nextData);
+    dataRef.current = nextData;
+    setEditing(undefined);
+    setSelectionEditor(undefined);
+    void saveWorkspace(nextData).catch(() => setNotice('本機儲存失敗'));
+    void saveWorkspaceHistory(nextHistory);
+    setNotice(direction === 'undo' ? `已復原：${entry.label}` : `已重做：${entry.label}`);
+  }, [data, table]);
+
+  const undoTable = useCallback(() => moveTableHistory('undo'), [moveTableHistory]);
+  const redoTable = useCallback(() => moveTableHistory('redo'), [moveTableHistory]);
+  const currentTableHistory = table ? historyByTable.get(table.id) : undefined;
 
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, viewportWidth), [columnTextWidths, textScale, viewportWidth]);
 
@@ -215,11 +280,21 @@ const WorkspacePage = () => {
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>
       <div className="workspace-appbar-actions">
         <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''}`} aria-label="搜尋" onClick={() => setSearchOpen((open) => !open)} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
-        <button type="button" className={`workspace-appbar-button ${addMenuOpen ? 'active' : ''}`} aria-label="新增物件或屬性" onClick={() => setAddMenuOpen(true)} disabled={!table}><WorkspaceIcon name="plus" size={29} /></button>
+        <button type="button" className={`workspace-appbar-button ${editBarOpen ? 'active' : ''}`} aria-label="編輯" onClick={() => { setEditBarOpen((open) => !open); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="edit" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => setTableActionsOpen(true)} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
     {searchOpen && table && <div className="workspace-searchbar" role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label="搜尋此表" placeholder="搜尋此表" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
+    {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
+      <div className="workspace-editbar-group workspace-editbar-history">
+        <button type="button" className="workspace-editbar-button" aria-label="復原" onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
+        <button type="button" className="workspace-editbar-button" aria-label="重做" onClick={redoTable} disabled={!currentTableHistory?.future.length}><WorkspaceIcon name="redo" size={22} /></button>
+      </div>
+      <div className="workspace-editbar-group workspace-editbar-add">
+        <button type="button" className="workspace-editbar-button" aria-label="新增物件" onClick={addRow}><WorkspaceIcon name="rows-plus" size={24} /></button>
+        <button type="button" className="workspace-editbar-button" aria-label="新增屬性" onClick={addColumn}><WorkspaceIcon name="columns-plus" size={24} /></button>
+      </div>
+    </div>}
     {notice && <div className="workspace-notice" role="status">{notice}</div>}
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
@@ -315,7 +390,6 @@ const WorkspacePage = () => {
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
-    {addMenuOpen && table && <TableAddDialog onClose={() => setAddMenuOpen(false)} onAddRow={addRow} onAddColumn={addColumn} />}
     {tableActionsOpen && table && <TableActionsDialog tableName={table.name} transposed={Boolean(table.transposed)} onClose={() => setTableActionsOpen(false)} onExport={exportCurrent} onTranspose={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }} />}
     {filterTarget && <HeaderFilterDialog label={filterTarget.label} inputType={activeFilterInputType} options={activeFilterOptions} numericValues={activeNumericValues} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} onQuery={setActiveFilterQuery} onRange={setActiveFilterRange} onAggregate={setActiveFilterAggregate} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
