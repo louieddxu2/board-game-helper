@@ -144,9 +144,9 @@ export function useWorkspaceActions({
     setSelectionEditor(undefined);
   };
 
-  const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns)] }))); setAddMenuOpen(false); setNotice('已新增物件'); };
+  const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns, `物件 ${current.rows.length + 1}`)] }))); setAddMenuOpen(false); setNotice('已新增物件'); };
   const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
-  const addColumn = () => { if (!data || !table) return; const column = createColumn(''); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setAddMenuOpen(false); setNotice('已新增屬性'); };
+  const addColumn = () => { if (!data || !table) return; const column = createColumn(`屬性 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setAddMenuOpen(false); setNotice('已新增屬性'); };
   const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
   
   const saveColumn = (column: WorkspaceColumn) => {

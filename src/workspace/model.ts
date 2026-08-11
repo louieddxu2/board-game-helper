@@ -1,6 +1,6 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 
-const DEFAULT_ROW_HEADER_NAME = '';
+const DEFAULT_ROW_HEADER_NAME = '項目';
 
 export const makeId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -15,12 +15,12 @@ export const createColumn = (name: string, inputType: WorkspaceInputType = 'text
   id: makeId('column'), name: name.trim(), inputType, options: [], alignment: 'left', overflowMode: inputType === 'link' ? 'ellipsis' : 'wrap',
 });
 
-export const createRow = (columns: WorkspaceColumn[], name = ''): WorkspaceRow => ({
+export const createRow = (columns: WorkspaceColumn[], name = '項目 1'): WorkspaceRow => ({
   id: makeId('row'), name, values: Object.fromEntries(columns.map((column) => [column.id, null])),
 });
 
 export const createTable = (name: string): WorkspaceTable => {
-  const columns = [createColumn('', 'text')];
+  const columns = [createColumn('屬性 1', 'text')];
   const tableId = makeId('table');
   const rowHeader = { ...createColumn(DEFAULT_ROW_HEADER_NAME, 'text'), id: `row-header-${tableId}`, overflowMode: 'expand' as const };
   return { id: tableId, name: name.trim() || '未命名表格', rowHeaderName: DEFAULT_ROW_HEADER_NAME, rowHeader, textScale: 1, columns, rows: [createRow(columns)], updatedAt: Date.now() };
@@ -99,28 +99,11 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
   return value ?? null;
 };
 
-const clearGeneratedRowName = (value: WorkspaceCellValue): WorkspaceCellValue => {
-  if (typeof value === 'string' && /^(?:項目|物件) \d+$/.test(value.trim())) return '';
-  return value;
-};
-
-const clearGeneratedColumnName = (value: string) => {
-  const name = value.trim();
-  return /^(?:屬性|欄位) \d+$/.test(name) || name === '未命名欄位' || name === '未命名屬性' ? '' : value;
-};
-
-const clearGeneratedAxisName = (value: string) => {
-  const name = value.trim();
-  return name === '項目' || name === '物件' || name === '未命名欄位' || name === '未命名屬性' ? '' : value;
-};
-
 export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
   ...data,
   tables: data.tables.map((table) => {
-    const rawRowHeaderName = table.rowHeaderName?.trim() || table.rowHeader?.name?.trim() || '';
-    const rowHeaderName = clearGeneratedAxisName(rawRowHeaderName);
-    const rowHeader = getRowHeaderColumn({ ...table, rowHeaderName, rowHeader: table.rowHeader ? { ...table.rowHeader, name: rowHeaderName } : undefined });
-    const columns = table.columns.map((column) => normalizeColumn({ ...column, name: clearGeneratedColumnName(column.name) }));
+    const rowHeader = getRowHeaderColumn(table);
+    const columns = table.columns.map((column) => normalizeColumn(column));
     return {
       ...table,
       rowHeaderName: rowHeader.name,
@@ -128,9 +111,9 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
       textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
       transposed: Boolean(table.transposed),
       columns,
-      rows: table.rows.map((row) => ({
+      rows: table.rows.map((row, index) => ({
         ...row,
-        name: clearGeneratedRowName(normalizeCellValue(row.name, rowHeader.inputType) ?? ''),
+        name: normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`,
         values: Object.fromEntries(columns.map((column) => [column.id, normalizeCellValue(row.values[column.id] ?? null, column.inputType)])),
       })),
     };
