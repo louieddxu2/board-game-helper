@@ -81,13 +81,14 @@ export const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[],
   return next;
 };
 export const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
+  if (!text.trim()) return 0;
   if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
   if (typeof window !== 'undefined' && /jsdom/i.test(window.navigator.userAgent)) return Math.max(fontSize, text.length * fontSize);
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   if (!context) return Math.max(fontSize, text.length * fontSize);
   context.font = `${fontWeight} ${fontSize}px "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif`;
-  return Math.max(...text.split('\n').map((line) => context.measureText(line || 'M').width));
+  return Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
 };
 export const overflowClassName = (column: WorkspaceColumn) => `workspace-overflow-${column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')}`;
 export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
