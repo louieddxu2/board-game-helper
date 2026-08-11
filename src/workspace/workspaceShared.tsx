@@ -220,9 +220,9 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
     </section>
   </div>;
 };
-export const WorkspaceHeaderContent = ({ label, nameClass, editLabel, filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
-  <button type="button" className={nameClass} aria-label={editLabel}>{label}</button>
-  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${label}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
+export const WorkspaceHeaderContent = ({ label, nameClass, editLabel, accessibleLabel = label || '未命名屬性', filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; accessibleLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
+  <button type="button" className={nameClass} aria-label={editLabel ?? accessibleLabel}>{label}</button>
+  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
 </div>;
 export const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
   if (!isWorkspaceLinkValue(value)) return null;

@@ -186,18 +186,19 @@ const WorkspacePage = () => {
               </tr></thead>
               <tbody>{filteredRows.map((row) => {
                 const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `物件 ${originalIndex + 1}`;
+                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
                 const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                     const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                     const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
-                    return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
+                    return <td key={column.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
                       <div className="workspace-cell-layout">
                         {multiChips.length > 0 ? (
                           <div className="workspace-multi-chip-list">
@@ -215,11 +216,12 @@ const WorkspacePage = () => {
                 {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}`} style={{ textAlign: 'center' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {filteredRows.map((row) => {
                   const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || `物件 ${originalIndex + 1}`;
+                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                  const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={rowLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
+                  return <th key={row.id} data-row-id={row.id} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={rowLabel} accessibleLabel={rowAccessibleLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowAccessibleLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
                 })}
               </tr></thead><tbody>
                 {visibleColumns.map((column) => {
@@ -228,12 +230,13 @@ const WorkspacePage = () => {
                   return <tr key={column.id}>
                     <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                     {filteredRows.map((row) => {
-                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType) || '未命名物件';
+                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                      const rowAccessibleLabel = rowLabel || `第 ${filteredRows.findIndex((item) => item.id === row.id) + 1} 個物件`;
                       const value = row.values[column.id] ?? null;
                       const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
                       const isActive = activeCell?.rowId === row.id && activeCell.columnId === column.id;
                       const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
-                      return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowLabel}，${column.name}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
+                      return <td key={row.id} className={`${overflowClassName(column)} ${isActive ? 'is-editing' : ''}`} style={{ textAlign: column.alignment ?? 'left' }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} onClick={() => openCell(row, column)}>
                         <div className="workspace-cell-layout">
                           {multiChips.length > 0 ? (
                             <div className="workspace-multi-chip-list">

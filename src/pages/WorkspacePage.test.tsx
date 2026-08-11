@@ -643,7 +643,7 @@ describe('WorkspacePage', () => {
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '新增物件或屬性' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
-    await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
+    await user.click(screen.getByRole('cell', { name: '第 2 個物件，數量：空白' }));
     await user.type(screen.getByRole('spinbutton'), '10');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
@@ -661,7 +661,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '降冪' }));
     fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect([...document.querySelectorAll('.workspace-table tbody tr')].map((row) => row.textContent)).toEqual([
-      expect.stringContaining('物件 2'),
+      '10',
       expect.stringContaining('花火'),
     ]);
 
@@ -674,7 +674,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByLabelText('數量平均')).toHaveTextContent('10');
     fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /第 2 個物件/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -687,7 +687,7 @@ describe('WorkspacePage', () => {
     const search = screen.getByRole('searchbox', { name: '搜尋物件的值' });
     await user.type(search, '花');
     expect(screen.getByRole('row', { name: /花火/ })).toBeInTheDocument();
-    expect(screen.queryByRole('row', { name: /物件 2/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /第 2 個物件/ })).not.toBeInTheDocument();
   });
 
   it('transposes only the table view while preserving row and column data', async () => {

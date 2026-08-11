@@ -201,7 +201,7 @@ export const SelectionOptionsEditor = ({ options, onChange }: { options: string[
 };
 export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
-  const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名屬性', options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  const save = () => onSave({ ...draft, name: draft.name.trim(), options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
     const currentCategory = inputCategoryFor(current.inputType);

@@ -18,7 +18,34 @@ describe('workspace model', () => {
 
   it('creates rows with an empty cell for every current column', () => {
     const columns = [createColumn('名稱'), createColumn('數量', 'number')];
-    expect(createRow(columns).values).toEqual({ [columns[0].id]: null, [columns[1].id]: null });
+    expect(createRow(columns)).toMatchObject({ name: '', values: { [columns[0].id]: null, [columns[1].id]: null } });
+  });
+
+  it('does not invent visible names for empty rows, columns, or the row header', () => {
+    const table = createTable('空白表格');
+
+    expect(table.columns[0].name).toBe('');
+    expect(table.rowHeaderName).toBe('');
+    expect(table.rows[0].name).toBe('');
+    expect(createColumn('').name).toBe('');
+    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].rows[0].name).toBe('');
+  });
+
+  it('clears placeholders left by older workspace versions without clearing real names', () => {
+    const table = createTable('相容性表格');
+    table.rowHeaderName = '物件';
+    table.rowHeader = { ...table.rowHeader!, name: '物件' };
+    table.columns[0].name = '屬性 1';
+    table.rows = [
+      { id: 'generated', name: '物件 1', values: {} },
+      { id: 'real', name: '花火', values: {} },
+    ];
+
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0];
+
+    expect(normalized.rowHeaderName).toBe('');
+    expect(normalized.columns[0].name).toBe('');
+    expect(normalized.rows.map((row) => row.name)).toEqual(['', '花火']);
   });
 
   it('parses and formats multi-select values seamlessly', () => {

@@ -205,14 +205,14 @@ const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): Wo
 const parseTable = (rows: SheetRows): WorkspaceTable => {
   if (stringValue(rows[0]?.[0]) !== TABLE_MARKER) throw new Error('找不到動態表格格式標記');
   const tableName = stringValue(rows[2]?.[1]) || '匯入表格';
-  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]) || '項目';
+  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]);
   const textScaleValue = Number(rows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
   const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
   const transposed = stringValue(rows.find((row) => stringValue(row[0]) === 'transposed_view')?.[1]) === 'true';
   const columns: WorkspaceColumn[] = [];
   for (const row of rows) {
     if (stringValue(row[0]) !== 'column') continue;
-    const column = createColumn(stringValue(row[2]) || '未命名欄位', parseType(stringValue(row[3])));
+    const column = createColumn(stringValue(row[2]), parseType(stringValue(row[3])));
     column.id = stringValue(row[1]) || column.id;
     column.options = parseOptions(stringValue(row[4]));
     column.alignment = parseAlignment(stringValue(row[5]));
@@ -229,9 +229,9 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   rowHeader.options = parseOptions(stringValue(rowHeaderMetadata?.[4]));
   rowHeader.alignment = parseAlignment(stringValue(rowHeaderMetadata?.[5]));
   rowHeader.overflowMode = parseOverflowMode(stringValue(rowHeaderMetadata?.[6]), rowHeader.inputType, 'expand');
-  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row, index) => ({
+  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
     id: stringValue(row[0]) || makeId('row'),
-    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? `項目 ${index + 1}` : `項目 ${index + 1}`,
+    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? '' : '',
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + (hasRowName ? 2 : 1)];
       return [column.id, parseCellValue(raw, column)];
@@ -240,8 +240,9 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
-const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {
-  const base = candidate.trim() || `欄位 ${index + 1}`;
+const uniqueColumnName = (candidate: string, used: Set<string>) => {
+  const base = candidate.trim();
+  if (!base) return '';
   let name = base;
   let suffix = 2;
   while (used.has(name)) name = `${base} ${suffix++}`;
@@ -252,18 +253,18 @@ const uniqueColumnName = (candidate: string, index: number, used: Set<string>) =
 const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => {
   const header = rows[0] ?? [];
   if (header.length < 2) throw new Error('試算表至少需要項目欄與一個屬性欄');
-  const rowHeaderName = stringValue(header[0]) || '項目';
+  const rowHeaderName = stringValue(header[0]);
   const rowHeader = createColumn(rowHeaderName, 'text');
   rowHeader.overflowMode = 'expand';
   const usedNames = new Set<string>();
-  const columns = header.slice(1).map((value, index) => ({
-    ...createColumn(uniqueColumnName(stringValue(value), index, usedNames)),
+  const columns = header.slice(1).map((value) => ({
+    ...createColumn(uniqueColumnName(stringValue(value), usedNames)),
     inputType: 'text' as const,
   }));
   const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ''));
-  const rowsData: WorkspaceRow[] = dataRows.map((row, rowIndex) => ({
+  const rowsData: WorkspaceRow[] = dataRows.map((row) => ({
     id: makeId('row'),
-    name: stringValue(row[0]) || `項目 ${rowIndex + 1}`,
+    name: stringValue(row[0]),
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + 1];
       return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];
