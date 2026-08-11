@@ -38,4 +38,46 @@ describe('useMomentumScroll', () => {
     expect(result.current.isCoasting()).toBe(true);
     vi.useRealTimers();
   });
+
+  test('applies boundary bounce to one selected axis of body cells', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const row = document.createElement('tr');
+    row.append(document.createElement('td'));
+    body.append(row);
+    table.append(body);
+    viewport.append(table);
+    Object.defineProperties(viewport, {
+      scrollWidth: { configurable: true, value: 2000 },
+      clientWidth: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 2000 },
+      clientHeight: { configurable: true, value: 500 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 200 },
+    });
+    const frames: FrameRequestCallback[] = [];
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    result.current.trackMove(0, 0);
+    vi.setSystemTime(now + 40);
+    result.current.trackMove(50, 20);
+    result.current.release(viewport, 'x');
+    frames.shift()?.(0);
+
+    expect(table.classList.contains('is-bouncing')).toBe(true);
+    expect(table.style.getPropertyValue('--workspace-bounce-x')).not.toBe('0px');
+    expect(table.style.getPropertyValue('--workspace-bounce-y')).toBe('0.0px');
+
+    result.current.stop();
+    requestAnimationFrame.mockRestore();
+    vi.useRealTimers();
+  });
 });

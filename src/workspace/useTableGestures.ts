@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceData, WorkspaceTable } from './types';
 import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
-import { useMomentumScroll } from './useMomentumScroll';
+import { applyTableBounce, resetTableBounce, settleTableBounce, useMomentumScroll, TableBounceAxis } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 
 interface UseTableGesturesProps {
@@ -34,6 +34,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
   const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
+  const panAxis = useRef<TableBounceAxis | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   
@@ -166,6 +167,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     pointerMoved.current = false;
     if (pointers.current.size === 1) {
       panStart.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
+      panAxis.current = undefined;
       pinchStart.current = undefined;
     } else if (pointers.current.size === 2) {
       const points = [...pointers.current.values()];
@@ -176,6 +178,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       }
       pinchStart.current = { distance: Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)), scale: textScaleRef.current };
       panStart.current = undefined;
+      panAxis.current = undefined;
     }
   };
 
@@ -196,6 +199,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (!pointerMoved.current && Math.hypot(deltaX, deltaY) <= dragThreshold) return;
       if (!pointerMoved.current) {
         pointerMoved.current = true;
+        panAxis.current = Math.abs(deltaX) >= Math.abs(deltaY) ? 'x' : 'y';
         setPanning(true);
         if ('setPointerCapture' in viewport) {
           try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
@@ -212,18 +216,23 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (table) {
         const maxLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
         const maxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        const beyondX = targetScrollLeft < 0 || targetScrollLeft > maxLeft;
+        const beyondY = targetScrollTop < 0 || targetScrollTop > maxTop;
+        const bounceAxis = beyondX && !beyondY ? 'x' : beyondY && !beyondX ? 'y' : panAxis.current;
         let overX = 0;
         let overY = 0;
-        if (targetScrollLeft < 0) overX = Math.min(30, -targetScrollLeft * 0.35);
-        else if (targetScrollLeft > maxLeft) overX = Math.max(-30, (maxLeft - targetScrollLeft) * 0.35);
-
-        if (targetScrollTop < 0) overY = Math.min(30, -targetScrollTop * 0.35);
-        else if (targetScrollTop > maxTop) overY = Math.max(-30, (maxTop - targetScrollTop) * 0.35);
+        if (bounceAxis === 'x') {
+          if (targetScrollLeft < 0) overX = Math.min(30, -targetScrollLeft * 0.35);
+          else if (targetScrollLeft > maxLeft) overX = Math.max(-30, (maxLeft - targetScrollLeft) * 0.35);
+        } else if (bounceAxis === 'y') {
+          if (targetScrollTop < 0) overY = Math.min(30, -targetScrollTop * 0.35);
+          else if (targetScrollTop > maxTop) overY = Math.max(-30, (maxTop - targetScrollTop) * 0.35);
+        }
 
         if (overX !== 0 || overY !== 0) {
-          table.style.transform = `translate3d(${overX.toFixed(1)}px, ${overY.toFixed(1)}px, 0px)`;
-        } else if (table.style.transform !== '') {
-          table.style.transform = '';
+          applyTableBounce(table, overX, overY);
+        } else if (table.classList.contains('is-bouncing') || table.style.transform !== '') {
+          resetTableBounce(table);
         }
       }
 
@@ -248,13 +257,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     }
     if (pointers.current.size === 0) {
       const table = viewport.querySelector('table');
-      if (table && table.style.transform) {
-        table.style.transition = 'transform 0.2s ease-out';
-        table.style.transform = '';
-        setTimeout(() => { if (table) table.style.transition = ''; }, 200);
-      }
+      if (table && (table.classList.contains('is-bouncing') || table.style.transform)) settleTableBounce(table);
       setPanning(false);
-      momentumScroll.release(viewport);
+      momentumScroll.release(viewport, panAxis.current);
+      panAxis.current = undefined;
       if (moved) {
         ignoreNextTableClick.current = true;
         window.setTimeout(() => { ignoreNextTableClick.current = false; }, 0);
