@@ -29,6 +29,7 @@ const WorkspacePage = () => {
   const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; onConfirm(): void }>();
   const [notice, setNotice] = useState('');
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [visualViewportHeight, setVisualViewportHeight] = useState<number>();
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
@@ -174,7 +175,12 @@ const WorkspacePage = () => {
     if (!activeCellKey) return;
     let animationFrame: number | undefined;
     let delayedFrame: number | undefined;
+    const visualViewport = window.visualViewport;
+    const updateVisualViewportHeight = () => {
+      if (visualViewport && Number.isFinite(visualViewport.height) && visualViewport.height > 0) setVisualViewportHeight(visualViewport.height);
+    };
     const schedule = () => {
+      updateVisualViewportHeight();
       if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
       if (delayedFrame !== undefined) window.clearTimeout(delayedFrame);
       animationFrame = window.requestAnimationFrame(() => {
@@ -182,7 +188,6 @@ const WorkspacePage = () => {
         delayedFrame = window.setTimeout(keepActiveCellVisible, 160);
       });
     };
-    const visualViewport = window.visualViewport;
     schedule();
     visualViewport?.addEventListener('resize', schedule);
     visualViewport?.addEventListener('scroll', schedule);
@@ -196,9 +201,15 @@ const WorkspacePage = () => {
     };
   }, [activeCellKey, keepActiveCellVisible]);
 
+  const workspacePageStyle = activeCellKey && visualViewportHeight ? {
+    height: `${visualViewportHeight}px`,
+    minHeight: `${visualViewportHeight}px`,
+    maxHeight: `${visualViewportHeight}px`,
+  } as React.CSSProperties : undefined;
+
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
 
-  return <section ref={workspacePageRef} className="workspace-page">
+  return <section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>

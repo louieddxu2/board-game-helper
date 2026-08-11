@@ -398,6 +398,35 @@ describe('WorkspacePage', () => {
     }
   });
 
+  it('shrinks the workspace to the visual viewport while a cell is being edited', async () => {
+    const previousVisualViewport = window.visualViewport;
+    const visualViewport = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, width: 390, height: 420 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    const user = userEvent.setup();
+    const rendered = render(<WorkspacePage />);
+    const page = document.querySelector('.workspace-page');
+
+    try {
+      const cell = await waitFor(() => {
+        const nextCell = document.querySelector<HTMLElement>('td[data-cell-id]');
+        if (!nextCell) throw new Error('The workspace cell did not render');
+        return nextCell;
+      });
+      await user.click(cell);
+      await waitFor(() => expect(page).toHaveStyle({ height: '420px', minHeight: '420px', maxHeight: '420px' }));
+
+      visualViewport.height = 300;
+      visualViewport.dispatchEvent(new Event('resize'));
+      await waitFor(() => expect(page).toHaveStyle({ height: '300px', minHeight: '300px', maxHeight: '300px' }));
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(page).not.toHaveStyle({ height: '300px' }));
+    } finally {
+      rendered.unmount();
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    }
+  });
+
   it('shows the table name and only add and settings actions in the app bar', async () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByText('測試表格')).toBeInTheDocument());

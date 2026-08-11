@@ -118,11 +118,13 @@ export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLE
   const visibleBottom = Math.min(viewportRect.bottom - 8, visualBottom - 8);
   const visibleLeft = Math.max(viewportRect.left + 8, visualLeft + 8, stickyColumnRect ? stickyColumnRect.right + 4 : Number.NEGATIVE_INFINITY);
   const visibleRight = Math.min(viewportRect.right - 8, visualRight - 8);
+  const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
 
-  if (elementRect.top < visibleTop) viewport.scrollTop += elementRect.top - visibleTop;
-  else if (elementRect.bottom > visibleBottom) viewport.scrollTop += elementRect.bottom - visibleBottom;
-  if (elementRect.left < visibleLeft) viewport.scrollLeft += elementRect.left - visibleLeft;
-  else if (elementRect.right > visibleRight) viewport.scrollLeft += elementRect.right - visibleRight;
+  if (elementRect.top < visibleTop) viewport.scrollTop = Math.min(maxScrollTop, Math.max(0, viewport.scrollTop + elementRect.top - visibleTop));
+  else if (elementRect.bottom > visibleBottom) viewport.scrollTop = Math.min(maxScrollTop, Math.max(0, viewport.scrollTop + elementRect.bottom - visibleBottom));
+  if (elementRect.left < visibleLeft) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.left - visibleLeft));
+  else if (elementRect.right > visibleRight) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.right - visibleRight));
 };
 export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
   const source = normalizeWorkspaceDateTime(value) ? new Date(normalizeWorkspaceDateTime(value)!) : new Date();
