@@ -83,12 +83,23 @@ const WorkspacePage = () => {
 
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
-    const widthFor = (column: WorkspaceColumn, headerValue = column.name) => measureWorkspaceText(headerValue, 20, 600) + (column.inputType === 'link' ? 46 : 0);
-    const rowHeaderWidth = Math.max(widthFor(rowHeader), ...table.rows.map((row) => widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType))));
-    if (!table.transposed) return [rowHeaderWidth, ...table.columns.map((column) => widthFor(column))];
+    const widthFor = (column: WorkspaceColumn, headerValue = column.name, values: WorkspaceCellValue[] = []) => {
+      const measuredValues = column.overflowMode === 'expand'
+        ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400))
+        : [];
+      return Math.max(measureWorkspaceText(headerValue, 20, 600), ...measuredValues) + (column.inputType === 'link' ? 46 : 0);
+    };
+    const rowHeaderValues = table.rows.map((row) => row.name);
+    const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, rowHeaderValues);
+    if (!table.transposed) return [rowHeaderWidth, ...table.columns.map((column) => widthFor(column, column.name, table.rows.map((row) => row.values[column.id] ?? null)))];
     const properties = [rowHeader, ...visibleColumns];
     const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
-    const rowWidths = filteredRows.map((row) => widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType)));
+    const rowWidths = filteredRows.map((row) => Math.max(
+      widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType)),
+      ...properties.map((column) => column.overflowMode === 'expand'
+        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400) + (column.inputType === 'link' ? 46 : 0)
+        : 0),
+    ));
     return [propertyWidth, ...rowWidths];
   }, [filteredRows, rowHeader, table, visibleColumns]);
 
@@ -139,11 +150,14 @@ const WorkspacePage = () => {
   });
 
   const naturalColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
+  const baseColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth + workspaceCellPadding)), [columnTextWidths]);
   const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
-  const extraTableWidth = Math.max(0, viewportWidth - naturalTableWidth);
-  const widthAddition = naturalColumnWidths.length ? extraTableWidth / naturalColumnWidths.length : 0;
-  const columnWidths = naturalColumnWidths.map((width) => width + widthAddition);
-  const tableWidth = naturalTableWidth + extraTableWidth;
+  const baseTableWidth = baseColumnWidths.reduce((total, width) => total + width, 0);
+  const baselineExtraWidth = Math.max(0, viewportWidth - baseTableWidth);
+  const requiredExtraWidth = Math.max(0, viewportWidth - naturalTableWidth);
+  const extraTableWidth = Math.max(baselineExtraWidth, requiredExtraWidth);
+  const columnWidths = naturalColumnWidths.map((width, index) => width + (baseTableWidth ? extraTableWidth * (baseColumnWidths[index] / baseTableWidth) : 0));
+  const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
@@ -152,7 +166,7 @@ const WorkspacePage = () => {
   const activeEditingValue = activeEditingRow && activeEditingColumn ? activeEditingColumn.id === rowHeader?.id ? activeEditingRow.name : activeEditingRow.values[activeEditingColumn.id] : null;
   const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined);
 
-  return <section ref={workspacePageRef} className="workspace-page" style={{ '--workspace-text-scale': textScale } as React.CSSProperties}>
+  return <section ref={workspacePageRef} className="workspace-page">
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>

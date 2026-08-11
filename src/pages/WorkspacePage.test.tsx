@@ -309,7 +309,7 @@ describe('WorkspacePage', () => {
     expect(confirmedDelete.parentElement).toHaveClass('workspace-dialog-leading-action');
   });
 
-  it('fills the viewport proportionally while zooming through text size', async () => {
+  it('keeps baseline fill while zooming text-driven column widths', async () => {
     const previousResizeObserver = globalThis.ResizeObserver;
     const previousClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
     class ResizeObserverMock {
@@ -327,9 +327,10 @@ describe('WorkspacePage', () => {
       await waitFor(() => expect(table).toHaveStyle({ width: '1000px' }));
       const widthsBefore = [...table.querySelectorAll('col')].map((column) => Number.parseFloat((column as HTMLElement).style.width));
       fireEvent.wheel(document.querySelector('.workspace-table-viewport')!, { ctrlKey: true, deltaY: -100 });
-      await waitFor(() => expect(table).toHaveStyle({ '--workspace-text-scale': '1.2', width: '1000px' }));
+      await waitFor(() => expect(table).toHaveStyle({ '--workspace-text-scale': '1.2' }));
+      expect(Number.parseFloat((table as HTMLElement).style.width)).toBeGreaterThan(1000);
       const widthsAfter = [...table.querySelectorAll('col')].map((column) => Number.parseFloat((column as HTMLElement).style.width));
-      widthsAfter.forEach((width, index) => expect(width).toBeCloseTo(widthsBefore[index], 8));
+      expect(widthsAfter.some((width, index) => width > widthsBefore[index] + 0.01)).toBe(true);
     } finally {
       rendered.unmount();
       Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: previousResizeObserver });
@@ -357,7 +358,7 @@ describe('WorkspacePage', () => {
     })));
   });
 
-  it('scales the workspace title while keeping modal zoom isolated', async () => {
+  it('scales only the table while keeping modal zoom isolated', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
@@ -365,13 +366,13 @@ describe('WorkspacePage', () => {
     expect(page).not.toBeNull();
 
     fireEvent.keyDown(page!, { ctrlKey: true, key: '=' });
-    await waitFor(() => expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' }));
     expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.1' });
+    expect(page).not.toHaveStyle({ '--workspace-text-scale': '1.1' });
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     const input = screen.getByRole('textbox');
     fireEvent.keyDown(input, { ctrlKey: true, key: '=' });
-    expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' });
+    expect(page).not.toHaveStyle({ '--workspace-text-scale': '1.1' });
     expect(document.querySelector('.workspace-value-dialog-overlay')).toBeInTheDocument();
   });
 
