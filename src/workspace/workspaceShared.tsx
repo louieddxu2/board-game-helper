@@ -35,9 +35,7 @@ export const calculateWorkspaceTableLayout = (columnTextWidths: readonly number[
   const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
   const baseTableWidth = baseColumnWidths.reduce((total, width) => total + width, 0);
   const baselineExtraWidth = Math.max(0, viewportWidth - baseTableWidth);
-  const requiredExtraWidth = Math.max(0, viewportWidth - naturalTableWidth);
-  const extraTableWidth = Math.max(baselineExtraWidth, requiredExtraWidth);
-  const columnWidths = naturalColumnWidths.map((width, index) => width + (baseTableWidth ? extraTableWidth * (baseColumnWidths[index] / baseTableWidth) : 0));
+  const columnWidths = naturalColumnWidths.map((width, index) => width + (baseTableWidth ? baselineExtraWidth * (baseColumnWidths[index] / baseTableWidth) : 0));
   return { naturalColumnWidths, columnWidths, tableWidth: columnWidths.reduce((total, width) => total + width, 0) };
 };
 export const download = (blob: Blob, name: string) => {

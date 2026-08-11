@@ -26,4 +26,15 @@ describe('workspace text measurements', () => {
     expect(zoomed.columnWidths[2]).toBeCloseTo(normal.columnWidths[2], 8);
     expect(zoomed.columnWidths[3]).toBeCloseTo(normal.columnWidths[3], 8);
   });
+
+  it('does not redistribute overflow space into empty columns after zooming', () => {
+    const normal = calculateWorkspaceTableLayout([0, 250, 0, 0], 1, 400);
+    const zoomed = calculateWorkspaceTableLayout([0, 250, 0, 0], 2.5, 400);
+
+    expect(zoomed.tableWidth).toBeGreaterThan(400);
+    expect(zoomed.columnWidths[1]).toBeGreaterThan(normal.columnWidths[1]);
+    expect(zoomed.columnWidths[0]).toBeCloseTo(normal.columnWidths[0], 8);
+    expect(zoomed.columnWidths[2]).toBeCloseTo(normal.columnWidths[2], 8);
+    expect(zoomed.columnWidths[3]).toBeCloseTo(normal.columnWidths[3], 8);
+  });
 });
