@@ -33,6 +33,19 @@ describe('workspace browser policies', () => {
     expect(transposedColumnRule).toMatch(/left:\s*0/);
   });
 
+  it('keeps the frozen header layer above body content during automatic scrolling', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];
+    const theadRule = styles.match(/\.workspace-table thead\s*\{([^}]*)\}/)?.[1];
+    const tbodyRule = styles.match(/\.workspace-table tbody\s*\{([^}]*)\}/)?.[1];
+    const headerCellRule = styles.match(/\.workspace-table thead th\s*\{([^}]*)\}/)?.[1];
+
+    expect(tableRule).toMatch(/isolation:\s*isolate/);
+    expect(theadRule).toMatch(/z-index:\s*4/);
+    expect(tbodyRule).toMatch(/z-index:\s*1/);
+    expect(headerCellRule).toMatch(/z-index:\s*6/);
+  });
+
   it('centers value editors independently from table text scaling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];

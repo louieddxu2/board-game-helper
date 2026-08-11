@@ -42,10 +42,14 @@ describe('workspace text measurements', () => {
     const viewport = document.createElement('div');
     const table = document.createElement('table');
     const head = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    const headCell = document.createElement('th');
     const body = document.createElement('tbody');
     const heading = document.createElement('th');
     const cell = document.createElement('td');
     heading.className = 'workspace-row-heading';
+    headRow.append(headCell);
+    head.append(headRow);
     body.append(heading, cell);
     table.append(head, body);
     viewport.append(table);
@@ -56,6 +60,7 @@ describe('workspace text measurements', () => {
     Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 390 });
     Object.defineProperty(viewport, 'scrollWidth', { configurable: true, value: 390 });
     Object.defineProperty(head, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 100, left: 0, right: 390, width: 390, height: 52 }) });
+    Object.defineProperty(headCell, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 100, left: 0, right: 390, width: 390, height: 52 }) });
     Object.defineProperty(heading, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 100, bottom: 150, left: 0, right: 84, width: 84, height: 50 }) });
     Object.defineProperty(cell, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 520 - viewport.scrollTop, bottom: 560 - viewport.scrollTop, left: 120, right: 240, width: 120, height: 40 }) });
     const previousVisualViewport = window.visualViewport;
@@ -66,6 +71,44 @@ describe('workspace text measurements', () => {
       expect(viewport.scrollTop).toBe(268);
       ensureWorkspaceCellVisible(cell, viewport);
       expect(viewport.scrollTop).toBe(268);
+    } finally {
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+      viewport.remove();
+    }
+  });
+
+  it('keeps a body cell below the frozen header when the thead itself has scrolled away', () => {
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const head = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    const headCell = document.createElement('th');
+    const body = document.createElement('tbody');
+    const heading = document.createElement('th');
+    const cell = document.createElement('td');
+    headRow.append(headCell);
+    head.append(headRow);
+    heading.className = 'workspace-row-heading';
+    body.append(heading, cell);
+    table.append(head, body);
+    viewport.append(table);
+    document.body.append(viewport);
+    Object.defineProperty(viewport, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 780, left: 0, right: 390, width: 390, height: 732 }) });
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 732 });
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1600 });
+    Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 390 });
+    Object.defineProperty(viewport, 'scrollWidth', { configurable: true, value: 390 });
+    Object.defineProperty(head, 'getBoundingClientRect', { configurable: true, value: () => ({ top: -500, bottom: -448, left: 0, right: 390, width: 390, height: 52 }) });
+    Object.defineProperty(headCell, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 100, left: 0, right: 390, width: 390, height: 52 }) });
+    Object.defineProperty(heading, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 100, bottom: 150, left: 0, right: 84, width: 84, height: 50 }) });
+    Object.defineProperty(cell, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 80, bottom: 120, left: 120, right: 240, width: 120, height: 40 }) });
+    const previousVisualViewport = window.visualViewport;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: { offsetTop: 0, offsetLeft: 0, width: 390, height: 780 } });
+    viewport.scrollTop = 500;
+
+    try {
+      ensureWorkspaceCellVisible(cell, viewport);
+      expect(viewport.scrollTop).toBe(476);
     } finally {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
       viewport.remove();
