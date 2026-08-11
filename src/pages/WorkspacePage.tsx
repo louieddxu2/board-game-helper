@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspace, saveWorkspace } from '../workspace/db';
 import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode, parseMultiSelectValues } from '../workspace/model';
-import { ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMaxTextScale, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
+import { calculateWorkspaceTableLayout, ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableActionsDialog, TableAddDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ConfirmDialog, HeaderFilterDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
@@ -149,15 +149,7 @@ const WorkspacePage = () => {
     setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
   });
 
-  const naturalColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
-  const baseColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth + workspaceCellPadding)), [columnTextWidths]);
-  const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
-  const baseTableWidth = baseColumnWidths.reduce((total, width) => total + width, 0);
-  const baselineExtraWidth = Math.max(0, viewportWidth - baseTableWidth);
-  const requiredExtraWidth = Math.max(0, viewportWidth - naturalTableWidth);
-  const extraTableWidth = Math.max(baselineExtraWidth, requiredExtraWidth);
-  const columnWidths = naturalColumnWidths.map((width, index) => width + (baseTableWidth ? extraTableWidth * (baseColumnWidths[index] / baseTableWidth) : 0));
-  const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
+  const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, viewportWidth), [columnTextWidths, textScale, viewportWidth]);
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;

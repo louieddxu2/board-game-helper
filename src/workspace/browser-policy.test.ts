@@ -68,5 +68,6 @@ describe('workspace browser policies', () => {
     expect(filterRule).toMatch(/min-height:\s*20px/);
     expect(filterRule).toMatch(/opacity:\s*\.42/);
     expect(filterRule).not.toMatch(/flex:\s*0 0/);
+    expect(styles).not.toContain('.workspace-empty-cell::after');
   });
 });

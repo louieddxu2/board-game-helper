@@ -152,7 +152,6 @@ footer a { color: inherit; }
 .workspace-cell-external { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 28px; min-height: 28px; padding: 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); line-height: 1; text-decoration: none; }
 .workspace-cell-external:hover { border-color: var(--orange); background: var(--cream); }
 .workspace-empty-cell { color: var(--muted); }
-.workspace-empty-cell::after { content: '\00a0'; }
 .workspace-zoom-indicator { display: none; align-items: center; justify-content: flex-end; gap: 4px; min-height: 36px; padding: 0 12px; color: #888; font-size: 11px; }
 .workspace-zoom-indicator button { min-width: 28px; min-height: 27px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: #777; cursor: pointer; }
 .workspace-zoom-indicator button:hover { background: #f0f0f0; color: #1976d2; }
