@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceData, WorkspaceTable } from './types';
 import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
-import { applyTableBounce, resetTableBounce, settleTableBounce, useMomentumScroll, TableBounceAxis } from './useMomentumScroll';
+import { applyTableBounce, getTableContentScrollBounds, resetTableBounce, settleTableBounce, useMomentumScroll, TableBounceAxis } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 
 interface UseTableGesturesProps {
@@ -214,8 +214,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       // Calculate visual elastic tension on inner <table> when dragging beyond viewport boundaries
       const table = viewport.querySelector('table');
       if (table) {
-        const maxLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-        const maxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
         const beyondX = targetScrollLeft < 0 || targetScrollLeft > maxLeft;
         const beyondY = targetScrollTop < 0 || targetScrollTop > maxTop;
         const bounceAxis = beyondX && !beyondY ? 'x' : beyondY && !beyondX ? 'y' : panAxis.current;

@@ -6,11 +6,29 @@ const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 
 export type TableBounceAxis = 'x' | 'y';
 
+export const getTableContentScrollBounds = (viewport: HTMLDivElement, table: HTMLTableElement | null) => {
+  const corner = table?.querySelector<HTMLElement>('.workspace-row-corner');
+  const fixedColumnWidth = corner?.getBoundingClientRect().width ?? 0;
+  const fixedHeaderHeight = corner?.getBoundingClientRect().height ?? 0;
+  const tableWidth = Math.max(table?.getBoundingClientRect().width ?? 0, viewport.scrollWidth);
+  const tableHeight = Math.max(table?.getBoundingClientRect().height ?? 0, viewport.scrollHeight);
+  const contentWidth = Math.max(0, tableWidth - fixedColumnWidth);
+  const contentHeight = Math.max(0, tableHeight - fixedHeaderHeight);
+  const visibleContentWidth = Math.max(0, viewport.clientWidth - fixedColumnWidth);
+  const visibleContentHeight = Math.max(0, viewport.clientHeight - fixedHeaderHeight);
+  return {
+    maxLeft: Math.max(0, contentWidth - visibleContentWidth),
+    maxTop: Math.max(0, contentHeight - visibleContentHeight),
+  };
+};
+
 export const applyTableBounce = (table: HTMLTableElement | null, x: number, y: number) => {
   if (!table) return;
   table.style.setProperty('--workspace-bounce-x', `${x.toFixed(1)}px`);
   table.style.setProperty('--workspace-bounce-y', `${y.toFixed(1)}px`);
   table.classList.toggle('is-bouncing', Math.abs(x) > 0.5 || Math.abs(y) > 0.5);
+  table.classList.toggle('is-bounce-x', Math.abs(x) > 0.5);
+  table.classList.toggle('is-bounce-y', Math.abs(y) > 0.5);
   table.classList.remove('is-bounce-settling');
   table.style.transform = '';
 };
@@ -20,6 +38,7 @@ export const resetTableBounce = (table: HTMLTableElement | null) => {
   table.style.removeProperty('--workspace-bounce-x');
   table.style.removeProperty('--workspace-bounce-y');
   table.classList.remove('is-bouncing');
+  table.classList.remove('is-bounce-x', 'is-bounce-y');
   table.classList.remove('is-bounce-settling');
   table.style.transform = '';
 };
@@ -87,8 +106,7 @@ export function useMomentumScroll() {
     const coast = () => {
       activeVelocity.current = { vx, vy };
 
-      const maxLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      const maxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
       const atBoundaryX = (viewport.scrollLeft <= 0 && vx > 0) || (viewport.scrollLeft >= maxLeft && vx < 0);
       const atBoundaryY = (viewport.scrollTop <= 0 && vy > 0) || (viewport.scrollTop >= maxTop && vy < 0);
       const activeBounceAxis = atBoundaryX && !atBoundaryY ? 'x' : atBoundaryY && !atBoundaryX ? 'y' : preferredBounceAxis;
@@ -113,7 +131,7 @@ export function useMomentumScroll() {
         overscroll.current.x = 0;
       }
 
-      // Apply the elastic offset to body cells only, leaving sticky headers and the first column fixed.
+      // CSS moves the content region with its matching header/row labels while keeping the corner fixed.
       if (table) {
         if (Math.abs(overscroll.current.x) > 0.5 || Math.abs(overscroll.current.y) > 0.5) {
           applyTableBounce(table, overscroll.current.x, overscroll.current.y);

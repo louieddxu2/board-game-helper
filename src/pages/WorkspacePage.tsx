@@ -83,19 +83,12 @@ const WorkspacePage = () => {
 
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
-    const widthFor = (column: WorkspaceColumn, values: WorkspaceCellValue[]) => Math.max(
-      measureWorkspaceText(column.name, 20, 600),
-      ...(column.overflowMode === 'expand' ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400)) : []),
-    ) + (column.inputType === 'link' ? 46 : 0);
-    if (!table.transposed) return [widthFor(rowHeader, table.rows.map((row) => row.name)), ...table.columns.map((column) => widthFor(column, table.rows.map((row) => row.values[column.id] ?? null)))];
+    const widthFor = (column: WorkspaceColumn, headerValue = column.name) => measureWorkspaceText(headerValue, 20, 600) + (column.inputType === 'link' ? 46 : 0);
+    const rowHeaderWidth = Math.max(widthFor(rowHeader), ...table.rows.map((row) => widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType))));
+    if (!table.transposed) return [rowHeaderWidth, ...table.columns.map((column) => widthFor(column))];
     const properties = [rowHeader, ...visibleColumns];
     const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
-    const rowWidths = filteredRows.map((row) => Math.max(
-      measureWorkspaceText(displayWorkspaceCellValue(row.name, rowHeader.inputType), 20, 600),
-      ...properties.map((column) => column.overflowMode === 'expand'
-        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400) + (column.inputType === 'link' ? 46 : 0)
-        : 0),
-    ));
+    const rowWidths = filteredRows.map((row) => widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType)));
     return [propertyWidth, ...rowWidths];
   }, [filteredRows, rowHeader, table, visibleColumns]);
 
@@ -147,9 +140,10 @@ const WorkspacePage = () => {
 
   const naturalColumnWidths = useMemo(() => columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding)), [columnTextWidths, textScale]);
   const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
-  const fillRatio = viewportWidth && naturalTableWidth < viewportWidth ? viewportWidth / naturalTableWidth : 1;
-  const columnWidths = naturalColumnWidths.map((width) => width * fillRatio);
-  const tableWidth = Math.max(viewportWidth, naturalTableWidth);
+  const extraTableWidth = Math.max(0, viewportWidth - naturalTableWidth);
+  const widthAddition = naturalColumnWidths.length ? extraTableWidth / naturalColumnWidths.length : 0;
+  const columnWidths = naturalColumnWidths.map((width) => width + widthAddition);
+  const tableWidth = naturalTableWidth + extraTableWidth;
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;

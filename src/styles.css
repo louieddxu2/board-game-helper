@@ -124,8 +124,9 @@ footer a { color: inherit; }
 .workspace-table-viewport.is-panning { cursor: grabbing; user-select: none; }
 .workspace-table-viewport::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table { width: max-content; border-collapse: separate; border-spacing: 0; color: var(--ink); table-layout: fixed; font-size: calc(20px * var(--workspace-text-scale, 1)); }
-.workspace-table.is-bouncing tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), var(--workspace-bounce-y, 0px), 0); }
-.workspace-table.is-bounce-settling tbody td { transition: transform 0.2s ease-out; }
+.workspace-table.is-bouncing.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bouncing.is-bounce-x tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), 0, 0); }
+.workspace-table.is-bouncing.is-bounce-y tbody th[scope="row"], .workspace-table.is-bouncing.is-bounce-y tbody td { transform: translate3d(0, var(--workspace-bounce-y, 0px), 0); }
+.workspace-table.is-bounce-settling.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bounce-settling.is-bounce-x tbody td, .workspace-table.is-bounce-settling.is-bounce-y tbody th[scope="row"], .workspace-table.is-bounce-settling.is-bounce-y tbody td { transition: transform 0.2s ease-out; }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; padding: 8px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 3; cursor: pointer; background: var(--cream); color: var(--green); font-size: inherit; font-weight: 700; }
 .workspace-table .workspace-row-corner { position: sticky; left: 0; z-index: 5; min-width: 0; padding: 8px 10px; background: var(--cream); color: var(--green); }
