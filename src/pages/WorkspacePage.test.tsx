@@ -446,6 +446,18 @@ describe('WorkspacePage', () => {
     expect(column).toHaveClass('is-editing');
   });
 
+  it('highlights the active object and property context while editing a cell', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(document.querySelector('[data-cell-id="row-1:column-text"]')).not.toBeNull());
+
+    const cell = document.querySelector('[data-cell-id="row-1:column-text"]') as HTMLElement;
+    fireEvent.click(cell);
+
+    expect(cell).toHaveClass('is-editing');
+    expect(document.querySelector('[data-row-id="row-1"]')).toHaveClass('workspace-context-active');
+    expect(document.querySelector('[data-column-id="column-text"]')).toHaveClass('workspace-context-active');
+  });
+
   it('saves a column text alignment and applies it to its cells', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

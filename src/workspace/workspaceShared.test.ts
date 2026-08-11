@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateWorkspaceTableLayout, measureWorkspaceText, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
+import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, measureWorkspaceText, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
 
 describe('workspace text measurements', () => {
   it('does not turn empty content into a scalable character width', () => {
@@ -36,5 +36,35 @@ describe('workspace text measurements', () => {
     expect(zoomed.columnWidths[0]).toBeCloseTo(normal.columnWidths[0], 8);
     expect(zoomed.columnWidths[2]).toBeCloseTo(normal.columnWidths[2], 8);
     expect(zoomed.columnWidths[3]).toBeCloseTo(normal.columnWidths[3], 8);
+  });
+
+  it('keeps an active cell above the visual keyboard and below the sticky header', () => {
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const head = document.createElement('thead');
+    const body = document.createElement('tbody');
+    const heading = document.createElement('th');
+    const cell = document.createElement('td');
+    heading.className = 'workspace-row-heading';
+    body.append(heading, cell);
+    table.append(head, body);
+    viewport.append(table);
+    document.body.append(viewport);
+    Object.defineProperty(viewport, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 780, left: 0, right: 390, width: 390, height: 732 }) });
+    Object.defineProperty(head, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 48, bottom: 100, left: 0, right: 390, width: 390, height: 52 }) });
+    Object.defineProperty(heading, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 100, bottom: 150, left: 0, right: 84, width: 84, height: 50 }) });
+    Object.defineProperty(cell, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 520 - viewport.scrollTop, bottom: 560 - viewport.scrollTop, left: 120, right: 240, width: 120, height: 40 }) });
+    const previousVisualViewport = window.visualViewport;
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: { offsetTop: 0, offsetLeft: 0, width: 390, height: 300 } });
+
+    try {
+      ensureWorkspaceCellVisible(cell, viewport);
+      expect(viewport.scrollTop).toBe(268);
+      ensureWorkspaceCellVisible(cell, viewport);
+      expect(viewport.scrollTop).toBe(268);
+    } finally {
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+      viewport.remove();
+    }
   });
 });

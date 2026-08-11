@@ -101,6 +101,29 @@ export const measureWorkspaceText = (text: string, fontSize: number, fontWeight:
   return Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
 };
 export const overflowClassName = (column: WorkspaceColumn) => `workspace-overflow-${column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')}`;
+export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLElement) => {
+  const elementRect = element.getBoundingClientRect();
+  const viewportRect = viewport.getBoundingClientRect();
+  const visualViewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
+  const layoutHeight = typeof window !== 'undefined' ? window.innerHeight : viewport.clientHeight;
+  const layoutWidth = typeof window !== 'undefined' ? window.innerWidth : viewport.clientWidth;
+  const visualTop = visualViewport?.offsetTop ?? 0;
+  const visualLeft = visualViewport?.offsetLeft ?? 0;
+  const visualBottom = visualTop + (visualViewport?.height ?? layoutHeight);
+  const visualRight = visualLeft + (visualViewport?.width ?? layoutWidth);
+  const isBodyCell = Boolean(element.closest('tbody'));
+  const headerRect = isBodyCell ? viewport.querySelector<HTMLElement>('thead')?.getBoundingClientRect() : undefined;
+  const stickyColumnRect = element.matches('td') ? viewport.querySelector<HTMLElement>('.workspace-row-heading')?.getBoundingClientRect() : undefined;
+  const visibleTop = Math.max(viewportRect.top + 8, visualTop + 8, headerRect ? headerRect.bottom + 4 : Number.NEGATIVE_INFINITY);
+  const visibleBottom = Math.min(viewportRect.bottom - 8, visualBottom - 8);
+  const visibleLeft = Math.max(viewportRect.left + 8, visualLeft + 8, stickyColumnRect ? stickyColumnRect.right + 4 : Number.NEGATIVE_INFINITY);
+  const visibleRight = Math.min(viewportRect.right - 8, visualRight - 8);
+
+  if (elementRect.top < visibleTop) viewport.scrollTop += elementRect.top - visibleTop;
+  else if (elementRect.bottom > visibleBottom) viewport.scrollTop += elementRect.bottom - visibleBottom;
+  if (elementRect.left < visibleLeft) viewport.scrollLeft += elementRect.left - visibleLeft;
+  else if (elementRect.right > visibleRight) viewport.scrollLeft += elementRect.right - visibleRight;
+};
 export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
   const source = normalizeWorkspaceDateTime(value) ? new Date(normalizeWorkspaceDateTime(value)!) : new Date();
   const pad = (part: number) => String(part).padStart(2, '0');

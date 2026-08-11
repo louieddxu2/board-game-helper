@@ -143,6 +143,8 @@ footer a { color: inherit; }
 .workspace-row-heading { position: sticky; left: 0; z-index: 2; min-width: 0 !important; padding: 8px 10px !important; cursor: pointer; background: var(--white); color: var(--ink); text-align: left; }
 .workspace-table td { background: var(--white); cursor: text; font-size: inherit; }
 .workspace-table td:hover, .workspace-table td:focus-within { background: rgba(236,230,216,.72); }
+.workspace-table .workspace-context-active { background: rgba(233,180,76,.18); color: var(--orange); box-shadow: inset 0 0 0 2px rgba(233,180,76,.55); }
+.workspace-table th.workspace-context-active .workspace-header-filter { color: var(--orange); opacity: .9; }
 .workspace-table th.is-editing, .workspace-table td.is-editing { background: #fff7dc; box-shadow: inset 0 0 0 3px var(--yellow); }
 .workspace-cell-layout { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
 .workspace-cell-value { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; }
