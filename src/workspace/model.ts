@@ -65,12 +65,27 @@ export const normalizeWorkspaceDateTime = (value: WorkspaceCellValue): string | 
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
+export type WorkspaceDateTimeParts = { year: number; month: number; day: number; hour: number; minute: number };
+
+const padDateTimePart = (value: number) => String(value).padStart(2, '0');
+
+export const workspaceDateTimeParts = (value: WorkspaceCellValue): WorkspaceDateTimeParts => {
+  const normalized = normalizeWorkspaceDateTime(value);
+  const date = normalized ? new Date(normalized) : new Date();
+  return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hour: date.getHours(), minute: date.getMinutes() };
+};
+
+export const workspaceDateTimeFromParts = (parts: WorkspaceDateTimeParts): string | null => {
+  const date = new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0, 0);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() !== parts.year || date.getMonth() !== parts.month - 1 || date.getDate() !== parts.day || date.getHours() !== parts.hour || date.getMinutes() !== parts.minute) return null;
+  return date.toISOString();
+};
+
 export const formatWorkspaceDateTime = (value: WorkspaceCellValue) => {
   const normalized = normalizeWorkspaceDateTime(value);
   if (!normalized) return '';
-  const parts = new Intl.DateTimeFormat('zh-TW-u-ca-gregory', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(normalized));
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
-  return `${part('year')}年${part('month')}月${part('day')}日${part('hour')}點${part('minute')}分`;
+  const date = new Date(normalized);
+  return `${date.getFullYear()}/${padDateTimePart(date.getMonth() + 1)}/${padDateTimePart(date.getDate())} ${padDateTimePart(date.getHours())}:${padDateTimePart(date.getMinutes())}`;
 };
 export const workspaceDateMonthKey = (value: WorkspaceCellValue): string | null => {
   const normalized = normalizeWorkspaceDateTime(value);

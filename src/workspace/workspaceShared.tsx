@@ -136,11 +136,6 @@ export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLE
   if (elementRect.left < visibleLeft) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.left - visibleLeft));
   else if (elementRect.right > visibleRight) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.right - visibleRight));
 };
-export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
-  const source = normalizeWorkspaceDateTime(value) ? new Date(normalizeWorkspaceDateTime(value)!) : new Date();
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${source.getFullYear()}-${pad(source.getMonth() + 1)}-${pad(source.getDate())}T${pad(source.getHours())}:${pad(source.getMinutes())}`;
-};
 export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputCategory => inputType === 'select' || inputType === 'dynamic-select' ? 'select' : inputType === 'link' || inputType === 'datetime' ? 'other' : 'text';
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
@@ -269,7 +264,8 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
     height: `${visualViewport.height}px`,
     '--workspace-visual-viewport-height': `${visualViewport.height}px`,
   } as React.CSSProperties : undefined;
-  return <div className={`workspace-overlay ${className ? `${className}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
+  const overlayClass = className.trim().split(/\s+/)[0];
+  return <div className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
     <section className={`workspace-dialog ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-dialog-title">
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
       <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={onClose} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>

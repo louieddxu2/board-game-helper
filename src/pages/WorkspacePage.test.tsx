@@ -705,7 +705,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('link', { name: '外連' })).not.toHaveTextContent('外連');
   });
 
-  it('opens the native date-time editor and displays saved values in Traditional Chinese', async () => {
+  it('opens the compact date-time wheel editor and displays zero-padded values', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
@@ -714,13 +714,14 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
-    const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
-    expect(input).toBeInTheDocument();
-    expect(input.value).not.toBe('');
-    fireEvent.change(input, { target: { value: '2024-02-03T14:05' } });
+    expect(screen.getByRole('group', { name: '名稱日期時間' })).toBeInTheDocument();
+    const minuteWheel = screen.getByRole('listbox', { name: '分' });
+    const currentMinute = within(minuteWheel).getByRole('option', { selected: true }).textContent;
+    fireEvent.wheel(minuteWheel, { deltaY: -30 });
+    expect(within(minuteWheel).getByRole('option', { selected: true })).not.toHaveTextContent(currentMinute ?? '');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
-    expect(screen.getByText(/2024年\d+月\d+日\d+點05分/)).toBeInTheDocument();
+    expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
   it('offers expand, ellipsis, and wrapping display modes for every property', async () => {

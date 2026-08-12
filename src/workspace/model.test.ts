@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -76,11 +76,18 @@ describe('workspace model', () => {
     expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [], hidden: false });
   });
 
-  it('normalizes date-time values for storage and formats them in Traditional Chinese', () => {
+  it('normalizes date-time values for storage and formats them with zero-padded local parts', () => {
     const normalized = normalizeWorkspaceDateTime('2024-02-03T14:05');
     expect(normalized).toMatch(/^2024-02-03T/);
-    expect(formatWorkspaceDateTime(normalized)).toMatch(/^\d+年\d+月\d+日\d+點\d{2}分$/);
+    expect(formatWorkspaceDateTime(normalized)).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/);
     expect(normalizeWorkspaceDateTime('不是時間')).toBeNull();
+  });
+
+  it('round-trips editable date-time wheel parts in local time', () => {
+    const parts = workspaceDateTimeParts('2024-02-03T14:05+08:00');
+    expect(parts).toMatchObject({ year: 2024, month: 2, day: 3, hour: 14, minute: 5 });
+    expect(workspaceDateTimeParts(null).year).toBe(new Date().getFullYear());
+    expect(workspaceDateTimeFromParts(parts)).toBeTruthy();
   });
 
   it('groups valid date-time values by their local year and month', () => {
