@@ -235,11 +235,49 @@ export const HiddenFieldsDialog = ({ title, row, columns, optionsByColumn, onSav
   </WorkspaceModal>;
 };
 
-export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => <div className="workspace-color-palette" role="group" aria-label={ariaLabel}>
-  {workspaceColorPalette.map((color) => <button type="button" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-pressed={value === color.value} onClick={() => onChange(color.value)}>
-    <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />
-  </button>)}
-</div>;
+export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => {
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>();
+  const selected = workspaceColorPalette.find((color) => color.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeWhenOutside = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', closeWhenOutside);
+    return () => window.removeEventListener('pointerdown', closeWhenOutside);
+  }, [open]);
+
+  const toggleMenu = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuWidth = 168;
+      setMenuPosition({
+        top: Math.min(window.innerHeight - 56, rect.bottom + 4),
+        left: Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth)),
+      });
+    }
+    setOpen(true);
+  };
+
+  return <div ref={pickerRef} className="workspace-color-palette" role="group" aria-label={ariaLabel}>
+    <button ref={triggerRef} type="button" className="workspace-color-picker-trigger" aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} onClick={toggleMenu}>
+      <span className={`workspace-color-swatch ${value ? '' : 'default'}`} style={value ? { backgroundColor: value } : undefined} />
+    </button>
+    {open && <div className="workspace-color-menu" role="menu" aria-label={`${ariaLabel}選單`} style={menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined}>
+      {workspaceColorPalette.map((color) => <button type="button" role="menuitem" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-checked={value === color.value} onClick={() => { onChange(color.value); setOpen(false); }}>
+        <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />
+      </button>)}
+    </div>}
+  </div>;
+};
 
 export const NumberRangeEditor = ({ ranges, onChange }: { ranges: WorkspaceNumberRange[]; onChange(ranges: WorkspaceNumberRange[]): void }) => {
   const updateRange = (index: number, field: 'min' | 'max', raw: string) => {
@@ -266,6 +304,13 @@ export const NumberRangeEditor = ({ ranges, onChange }: { ranges: WorkspaceNumbe
 export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { options: string[]; optionColors?: Record<string, string>; onChange(options: string[], optionColors: Record<string, string>): void }) => {
   const visibleOptions = options.length ? options : [''];
   const visibleColors = visibleOptions.map((option) => optionColors?.[option] ?? '');
+  const optionListRef = useRef<HTMLDivElement>(null);
+  const dragSessionRef = useRef<{ pointerId: number; currentIndex: number; active: boolean; startY: number } | undefined>(undefined);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const optionStateRef = useRef({ options: visibleOptions, colors: visibleColors });
+  const onChangeRef = useRef(onChange);
+  optionStateRef.current = { options: visibleOptions, colors: visibleColors };
+  onChangeRef.current = onChange;
   const emit = (nextOptions: string[], nextColors: string[]) => {
     const nextOptionColors: Record<string, string> = {};
     nextOptions.forEach((option, index) => {
@@ -289,22 +334,57 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     const next = visibleOptions.filter((_, optionIndex) => optionIndex !== index);
     emit(next.length ? next : [''], visibleColors.filter((_, optionIndex) => optionIndex !== index));
   };
-  const moveOption = (index: number, direction: -1 | 1) => {
-    const next = [...visibleOptions];
-    const nextColors = [...visibleColors];
-    const destination = index + direction;
-    if (destination < 0 || destination >= next.length) return;
-    [next[index], next[destination]] = [next[destination], next[index]];
-    [nextColors[index], nextColors[destination]] = [nextColors[destination], nextColors[index]];
-    emit(next, nextColors);
+  const reorderOption = (sourceIndex: number, destination: number) => {
+    const { options: currentOptions, colors: currentColors } = optionStateRef.current;
+    if (sourceIndex === destination || sourceIndex < 0 || destination < 0 || sourceIndex >= currentOptions.length || destination >= currentOptions.length) return;
+    const nextOptions = [...currentOptions];
+    const nextColors = [...currentColors];
+    [nextOptions[sourceIndex], nextOptions[destination]] = [nextOptions[destination], nextOptions[sourceIndex]];
+    [nextColors[sourceIndex], nextColors[destination]] = [nextColors[destination], nextColors[sourceIndex]];
+    onChangeRef.current(nextOptions, Object.fromEntries(nextOptions.map((option, index) => [option.trim(), nextColors[index]]).filter(([option, color]) => Boolean(option) && Boolean(color))));
+    optionStateRef.current = { options: nextOptions, colors: nextColors };
+    dragSessionRef.current!.currentIndex = destination;
+    setDraggingIndex(destination);
+  };
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const session = dragSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      const distance = Math.abs(event.clientY - session.startY);
+      if (!session.active && distance < 6) return;
+      session.active = true;
+      const items = Array.from(optionListRef.current?.querySelectorAll<HTMLElement>('[data-option-index]') ?? []);
+      const destination = items.findIndex((item) => event.clientY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
+      reorderOption(session.currentIndex, destination === -1 ? items.length - 1 : destination);
+    };
+    const end = (event: PointerEvent) => {
+      if (dragSessionRef.current?.pointerId !== event.pointerId) return;
+      dragSessionRef.current = undefined;
+      setDraggingIndex(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  });
+  const beginOptionDrag = (index: number, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragSessionRef.current = { pointerId: event.pointerId, currentIndex: index, active: false, startY: event.clientY };
+    setDraggingIndex(index);
   };
 
-  return <div className="workspace-option-list">
-    {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
-      <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /><WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} /></div>
+  return <div ref={optionListRef} className="workspace-option-list">
+    {visibleOptions.map((option, index) => <div className={`workspace-option-row ${draggingIndex === index ? 'is-dragging' : ''}`} data-option-index={index} key={index}>
+      <button type="button" className="workspace-option-drag-handle" aria-label={`拖曳固定選項 ${index + 1}`} onPointerDown={(event) => beginOptionDrag(index, event)}><WorkspaceIcon name="more" size={20} /></button>
+      <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /></div>
       <div className="workspace-option-controls">
-        <button type="button" onClick={() => moveOption(index, -1)} disabled={index === 0} aria-label={`向上移動固定選項 ${index + 1}`}><WorkspaceIcon name="up" size={17} /></button>
-        <button type="button" onClick={() => moveOption(index, 1)} disabled={index === visibleOptions.length - 1} aria-label={`向下移動固定選項 ${index + 1}`}><WorkspaceIcon name="down" size={17} /></button>
+        <WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} />
         <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`移除固定選項 ${index + 1}`}><WorkspaceIcon name="close" size={18} /></button>
       </div>
     </div>)}

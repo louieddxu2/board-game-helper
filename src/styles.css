@@ -335,12 +335,18 @@ footer a { color: inherit; }
 .workspace-selection-checkbox-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .workspace-selection-empty { margin: 0; padding: 26px 14px; background: rgba(255,253,248,.28); color: var(--muted); font-size: 14px; text-align: center; }
 .workspace-option-list { display: grid; gap: 8px; }
-.workspace-option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px; }
+.workspace-option-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: start; gap: 6px; }
+.workspace-option-row.is-dragging { opacity: .58; }
 .workspace-option-editor { display: grid; gap: 6px; min-width: 0; }
 .workspace-option-row textarea { min-height: 42px !important; overflow: auto; resize: none; white-space: pre-wrap; }
-.workspace-color-palette { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-.workspace-color-palette button { display: grid; place-items: center; width: 24px; height: 24px; padding: 2px; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
-.workspace-color-palette button:hover, .workspace-color-palette button.selected { border-color: var(--orange); background: var(--cream); }
+.workspace-option-drag-handle { display: grid; place-items: center; width: 30px; min-height: 42px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: grab; touch-action: none; user-select: none; }
+.workspace-option-drag-handle:hover, .workspace-option-drag-handle:active { background: var(--cream); color: var(--orange); }
+.workspace-color-palette { position: relative; display: flex; align-items: center; justify-content: center; min-width: 34px; min-height: 42px; }
+.workspace-color-picker-trigger { display: grid; place-items: center; width: 34px; height: 34px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; }
+.workspace-color-picker-trigger:hover, .workspace-color-picker-trigger[aria-expanded="true"] { border-color: var(--orange); background: var(--cream); }
+.workspace-color-menu { position: fixed; z-index: 250; display: grid; grid-template-columns: repeat(4, 34px); gap: 4px; width: 168px; padding: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); box-shadow: 0 8px 24px rgba(23,47,40,.24); }
+.workspace-color-menu button { display: grid; place-items: center; width: 34px; height: 34px; padding: 2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--green); cursor: pointer; }
+.workspace-color-menu button:hover, .workspace-color-menu button.selected { border-color: var(--orange); background: var(--cream); }
 .workspace-color-swatch { display: block; width: 15px; height: 15px; border: 1px solid rgba(35, 52, 45, .25); border-radius: 50%; }
 .workspace-color-swatch.default { background: linear-gradient(135deg, transparent 43%, var(--orange) 44% 56%, transparent 57%); }
 .workspace-number-range-editor { display: grid; gap: 8px; margin-top: 12px; }
@@ -350,7 +356,7 @@ footer a { color: inherit; }
 .workspace-number-range-inputs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 5px; min-width: 0; }
 .workspace-number-range-inputs input { min-width: 0; width: 100%; }
 .workspace-number-range-empty { margin: 0; color: var(--muted); font-size: 13px; }
-.workspace-option-controls { display: grid; grid-template-columns: repeat(3, 32px); gap: 3px; }
+.workspace-option-controls { display: flex; align-items: start; gap: 3px; }
 .workspace-option-controls button { display: grid; place-items: center; width: 32px; min-height: 42px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; }
 .workspace-option-controls button:hover { background: var(--cream); border-color: var(--orange); color: var(--orange); }
 .workspace-option-controls button:disabled { cursor: default; opacity: .3; }

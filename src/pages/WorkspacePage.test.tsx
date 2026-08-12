@@ -113,7 +113,15 @@ describe('WorkspacePage', () => {
     await user.type(option, '第二行');
     await user.click(screen.getByRole('button', { name: '新增選項' }));
     await user.type(screen.getByRole('textbox', { name: '固定選項 2' }), '單行');
-    await user.click(screen.getByRole('button', { name: '向上移動固定選項 2' }));
+    const dragHandle = screen.getByRole('button', { name: '拖曳固定選項 2' });
+    const dispatchPointer = (target: Element | Window, type: string, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY });
+      Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'mouse' } });
+      fireEvent(target, event);
+    };
+    dispatchPointer(dragHandle, 'pointerdown', 100);
+    dispatchPointer(window, 'pointermove', -20);
+    dispatchPointer(window, 'pointerup', -20);
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -231,7 +239,9 @@ describe('WorkspacePage', () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '類型' }));
-    await user.click(within(screen.getByRole('group', { name: '固定選項 1 顏色' })).getByRole('button', { name: '綠色' }));
+    const colorGroup = screen.getByRole('group', { name: '固定選項 1 顏色' });
+    await user.click(within(colorGroup).getByRole('button', { name: '固定選項 1 顏色' }));
+    await user.click(screen.getByRole('menuitem', { name: '綠色' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     const cell = screen.getByRole('cell', { name: '花火，類型：合作' });
@@ -247,7 +257,9 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('columnheader', { name: '數量' }));
     await user.click(screen.getByRole('button', { name: '新增範圍' }));
     await user.type(screen.getByRole('spinbutton', { name: '第 1 段上限' }), '10');
-    await user.click(within(screen.getByRole('group', { name: '第 1 段顏色' })).getByRole('button', { name: '藍色' }));
+    const colorGroup = screen.getByRole('group', { name: '第 1 段顏色' });
+    await user.click(within(colorGroup).getByRole('button', { name: '第 1 段顏色' }));
+    await user.click(screen.getByRole('menuitem', { name: '藍色' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     const cell = screen.getByRole('cell', { name: '花火，數量：2' });
