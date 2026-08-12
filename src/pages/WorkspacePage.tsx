@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
-import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode, parseMultiSelectValues } from '../workspace/model';
+import { displayWorkspaceCellValue, getRowHeaderColumn, getTableForNode, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
@@ -319,7 +319,7 @@ const WorkspacePage = () => {
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                 const isActiveRow = activeCell?.rowId === row.id;
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value">{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                   {table.columns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
@@ -329,10 +329,10 @@ const WorkspacePage = () => {
                       <div className="workspace-cell-layout">
                         {multiChips.length > 0 ? (
                           <div className="workspace-multi-chip-list">
-                            {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip">{chip}</span>)}
+                             {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip" style={{ color: workspaceOptionColor(column, chip) }}>{chip}</span>)}
                           </div>
                         ) : (
-                          <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span>
+                           <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: workspaceCellColor(column, value) }}>{displayValue}</span>
                         )}
                         <ExternalLinkAction value={value} />
                       </div>
@@ -348,7 +348,7 @@ const WorkspacePage = () => {
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                  return <th key={row.id} data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader!.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${activeCell?.rowId === row.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={rowLabel} accessibleLabel={rowAccessibleLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowAccessibleLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
+                   return <th key={row.id} data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader!.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${activeCell?.rowId === row.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={rowLabel} labelColor={workspaceCellColor(rowHeader, row.name)} accessibleLabel={rowAccessibleLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowAccessibleLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} /></th>;
                 })}
               </tr></thead><tbody>
                 {visibleColumns.map((column) => {
@@ -367,10 +367,10 @@ const WorkspacePage = () => {
                         <div className="workspace-cell-layout">
                           {multiChips.length > 0 ? (
                             <div className="workspace-multi-chip-list">
-                              {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip">{chip}</span>)}
+                               {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip" style={{ color: workspaceOptionColor(column, chip) }}>{chip}</span>)}
                             </div>
                           ) : (
-                            <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`}>{displayValue}</span>
+                             <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: workspaceCellColor(column, value) }}>{displayValue}</span>
                           )}
                           <ExternalLinkAction value={value} />
                         </div>

@@ -1,4 +1,4 @@
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
 
@@ -28,10 +28,30 @@ export const createTable = (name: string): WorkspaceTable => {
 
 const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
 
+export const isWorkspaceColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+const normalizeOptionColors = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const colors = Object.fromEntries(Object.entries(value).filter(([, color]) => isWorkspaceColor(color)));
+  return Object.keys(colors).length ? colors : undefined;
+};
+const normalizeNumberRanges = (value: unknown): WorkspaceNumberRange[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((range) => {
+    if (!range || typeof range !== 'object') return [];
+    const candidate = range as Partial<WorkspaceNumberRange>;
+    const min = candidate.min === null || candidate.min === undefined ? null : Number(candidate.min);
+    const max = candidate.max === null || candidate.max === undefined ? null : Number(candidate.max);
+    if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max)) || (min !== null && max !== null && min > max) || !isWorkspaceColor(candidate.color)) return [];
+    return [{ min, max, color: candidate.color }];
+  });
+};
+
 const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOverflowMode = 'wrap'): WorkspaceColumn => ({
   ...column,
   inputType: column.inputType === 'link' || column.inputType === 'datetime' || column.inputType === 'number' || column.inputType === 'select' || column.inputType === 'dynamic-select' ? column.inputType : 'text',
   options: Array.isArray(column.options) ? column.options : [],
+  optionColors: normalizeOptionColors(column.optionColors),
+  numberRanges: normalizeNumberRanges(column.numberRanges),
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
 });
@@ -76,6 +96,19 @@ export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?:
     if (list.length > 0) return list.join('、');
   }
   return String(value);
+};
+
+export const workspaceOptionColor = (column: WorkspaceColumn | undefined, option: string) => column?.inputType === 'select' ? column.optionColors?.[option] : undefined;
+export const workspaceNumberRangeColor = (column: WorkspaceColumn | undefined, value: WorkspaceCellValue) => {
+  if (column?.inputType !== 'number') return undefined;
+  const numeric = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : undefined;
+  if (numeric === undefined || !Number.isFinite(numeric)) return undefined;
+  return column.numberRanges?.find((range) => (range.min === null || numeric >= range.min) && (range.max === null || numeric <= range.max))?.color;
+};
+export const workspaceCellColor = (column: WorkspaceColumn | undefined, value: WorkspaceCellValue) => {
+  if (!column) return undefined;
+  if (column.inputType === 'select' && typeof value === 'string') return workspaceOptionColor(column, value);
+  return workspaceNumberRangeColor(column, value);
 };
 
 export const getRowHeaderColumn = (table: WorkspaceTable): WorkspaceColumn => normalizeColumn(table.rowHeader

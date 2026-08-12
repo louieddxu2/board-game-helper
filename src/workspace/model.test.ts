@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -40,6 +40,40 @@ describe('workspace model', () => {
     expect(parseMultiSelectValues('蘋果、香蕉、橘子')).toEqual(['蘋果', '香蕉', '橘子']);
     expect(parseMultiSelectValues('["A", "B"]')).toEqual(['A', 'B']);
     expect(formatMultiSelectValues(['紅', '黃'])).toBe('紅, 黃');
+  });
+
+  it('resolves fixed option colors only for the matching fixed-list value', () => {
+    const column = createColumn('狀態', 'select');
+    column.options = ['已擁有', '想要'];
+    column.optionColors = { 已擁有: '#2F6F5E', 想要: '#C2410C' };
+
+    expect(workspaceOptionColor(column, '已擁有')).toBe('#2F6F5E');
+    expect(workspaceCellColor(column, '想要')).toBe('#C2410C');
+    expect(workspaceOptionColor(column, '不存在')).toBeUndefined();
+    expect(workspaceOptionColor({ ...column, inputType: 'dynamic-select' }, '已擁有')).toBeUndefined();
+  });
+
+  it('resolves inclusive numeric color ranges with open-ended bounds', () => {
+    const column = createColumn('分數', 'number');
+    column.numberRanges = [
+      { min: null, max: 0, color: '#1D4ED8' },
+      { min: 1, max: 10, color: '#2F6F5E' },
+      { min: 11, max: null, color: '#C2410C' },
+    ];
+
+    expect(workspaceNumberRangeColor(column, -100)).toBe('#1D4ED8');
+    expect(workspaceNumberRangeColor(column, 0)).toBe('#1D4ED8');
+    expect(workspaceCellColor(column, '10')).toBe('#2F6F5E');
+    expect(workspaceCellColor(column, 11)).toBe('#C2410C');
+    expect(workspaceCellColor(column, '不是數字')).toBeUndefined();
+  });
+
+  it('keeps legacy columns valid when color rules are absent', () => {
+    const table = createTable('舊資料');
+    delete table.columns[0].optionColors;
+    delete table.columns[0].numberRanges;
+
+    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [] });
   });
 
   it('normalizes date-time values for storage and formats them in Traditional Chinese', () => {

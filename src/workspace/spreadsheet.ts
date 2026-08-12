@@ -1,11 +1,13 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
+import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
 const TABLE_MARKER = '__workspace_table';
 const WORKSPACE_MARKER = '__workspace';
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
+const OPTION_COLORS_JSON_MARKER = '__workspace_option_colors_json:';
+const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
 const LINK_JSON_MARKER = '__workspace_link_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
@@ -49,6 +51,8 @@ const sheetXml = (rows: unknown[][]) => {
 
 const tableRows = (table: WorkspaceTable): unknown[][] => {
   const rowHeader = getRowHeaderColumn(table);
+  const serializeOptionColors = (column: WorkspaceColumn) => `${OPTION_COLORS_JSON_MARKER}${JSON.stringify(column.optionColors ?? {})}`;
+  const serializeNumberRanges = (column: WorkspaceColumn) => `${NUMBER_RANGES_JSON_MARKER}${JSON.stringify(column.numberRanges ?? [])}`;
   return [
   [TABLE_MARKER, WORKSPACE_FORMAT_VERSION],
   ['table_id', table.id],
@@ -56,9 +60,9 @@ const tableRows = (table: WorkspaceTable): unknown[][] => {
   ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
-  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand'],
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')]),
+  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand', serializeOptionColors(rowHeader), serializeNumberRanges(rowHeader)],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges'],
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap'), serializeOptionColors(column), serializeNumberRanges(column)]),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
   ...table.rows.map((row) => [row.id, serializeCellValue(row.name), ...table.columns.map((column) => serializeCellValue(row.values[column.id] ?? null))]),
   ];
@@ -184,6 +188,33 @@ const parseOptions = (value: string) => {
   }
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
 };
+const parseOptionColors = (value: string): Record<string, string> => {
+  if (!value.startsWith(OPTION_COLORS_JSON_MARKER)) return {};
+  try {
+    const parsed: unknown = JSON.parse(value.slice(OPTION_COLORS_JSON_MARKER.length));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([option, color]) => Boolean(option.trim()) && isWorkspaceColor(color)));
+  } catch {
+    return {};
+  }
+};
+const parseNumberRanges = (value: string): WorkspaceNumberRange[] => {
+  if (!value.startsWith(NUMBER_RANGES_JSON_MARKER)) return [];
+  try {
+    const parsed: unknown = JSON.parse(value.slice(NUMBER_RANGES_JSON_MARKER.length));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const candidate = item as Partial<WorkspaceNumberRange>;
+      const min = candidate.min === null || candidate.min === undefined ? null : Number(candidate.min);
+      const max = candidate.max === null || candidate.max === undefined ? null : Number(candidate.max);
+      if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max)) || (min !== null && max !== null && min > max) || !isWorkspaceColor(candidate.color)) return [];
+      return [{ min, max, color: candidate.color }];
+    });
+  } catch {
+    return [];
+  }
+};
 
 const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): WorkspaceCellValue => {
   if (raw === null || raw === undefined || raw === '') return null;
@@ -217,6 +248,8 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
     column.options = parseOptions(stringValue(row[4]));
     column.alignment = parseAlignment(stringValue(row[5]));
     column.overflowMode = parseOverflowMode(stringValue(row[6]), column.inputType);
+    column.optionColors = parseOptionColors(stringValue(row[7]));
+    column.numberRanges = parseNumberRanges(stringValue(row[8]));
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');
@@ -229,6 +262,8 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   rowHeader.options = parseOptions(stringValue(rowHeaderMetadata?.[4]));
   rowHeader.alignment = parseAlignment(stringValue(rowHeaderMetadata?.[5]));
   rowHeader.overflowMode = parseOverflowMode(stringValue(rowHeaderMetadata?.[6]), rowHeader.inputType, 'expand');
+  rowHeader.optionColors = parseOptionColors(stringValue(rowHeaderMetadata?.[7]));
+  rowHeader.numberRanges = parseNumberRanges(stringValue(rowHeaderMetadata?.[8]));
   const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
     id: stringValue(row[0]) || makeId('row'),
     name: hasRowName ? parseCellValue(row[1], rowHeader) ?? '' : '',

@@ -10,8 +10,18 @@ export type TableReorderSession = TableReorderVisual & { pointerId: number; star
 export type HeaderFilterTarget = { axis: 'column' | 'row'; id: string; label: string };
 export type HeaderFilterAggregate = 'sum' | 'average';
 export type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; aggregate?: HeaderFilterAggregate };
-export type HeaderFilterOption = { key: string; label: string; count: number };
+export type HeaderFilterOption = { key: string; label: string; count: number; color?: string };
 export type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode; row?: WorkspaceRow; table?: WorkspaceTable };
+export const workspaceColorPalette = [
+  { value: '', label: '預設' },
+  { value: '#2F6F5E', label: '綠色' },
+  { value: '#1D4ED8', label: '藍色' },
+  { value: '#7C3AED', label: '紫色' },
+  { value: '#C2410C', label: '橘色' },
+  { value: '#B91C1C', label: '紅色' },
+  { value: '#0F766E', label: '青色' },
+  { value: '#6B7280', label: '灰色' },
+] as const;
 export const inputCategoryLabels: Record<WorkspaceInputCategory, string> = {
   text: '文字', select: '選單', other: '其他',
 };
@@ -249,8 +259,8 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
     </section>
   </div>;
 };
-export const WorkspaceHeaderContent = ({ label, nameClass, editLabel, accessibleLabel = label || '未命名屬性', filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; accessibleLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
-  <button type="button" className={nameClass} aria-label={editLabel ?? accessibleLabel}>{label}</button>
+export const WorkspaceHeaderContent = ({ label, labelColor, nameClass, editLabel, accessibleLabel = label || '未命名屬性', filterActive, onFilter }: { label: string; labelColor?: string; nameClass: string; editLabel?: string; accessibleLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
+  <button type="button" className={nameClass} style={{ color: labelColor }} aria-label={editLabel ?? accessibleLabel}>{label}</button>
   <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
 </div>;
 export const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {

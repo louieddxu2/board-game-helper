@@ -7,6 +7,12 @@ export interface WorkspaceLinkValue {
   label: string;
 }
 
+export interface WorkspaceNumberRange {
+  min: number | null;
+  max: number | null;
+  color: string;
+}
+
 export type WorkspaceCellValue = string | number | WorkspaceLinkValue | null;
 
 export interface WorkspaceColumn {
@@ -14,6 +20,8 @@ export interface WorkspaceColumn {
   name: string;
   inputType: WorkspaceInputType;
   options: string[];
+  optionColors?: Record<string, string>;
+  numberRanges?: WorkspaceNumberRange[];
   isMultiple?: boolean;
   alignment?: WorkspaceTextAlign;
   overflowMode?: WorkspaceOverflowMode;

@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
-import { displayWorkspaceCellValue, parseMultiSelectValues } from './model';
+import { displayWorkspaceCellValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
 
 interface UseWorkspaceFilterProps {
@@ -75,23 +75,25 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     if (!table || !rowHeader || !filterTarget) return [];
     const targetColumn = filterTarget.axis === 'column' ? (filterTarget.id === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === filterTarget.id)) : undefined;
     const values = filterTarget.axis === 'column'
-      ? table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, inputType: targetColumn?.inputType, isMultiple: targetColumn?.isMultiple }))
-      : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, inputType: column.inputType, isMultiple: column.isMultiple }));
-    const unique = new Map<string, { key: string; label: string; count: number }>();
-    for (const { value, inputType, isMultiple } of values) {
+      ? table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, column: targetColumn }))
+      : table.columns.map((column) => ({ value: tableRowsById.get(filterTarget.id)?.values[column.id] ?? null, column }));
+    const unique = new Map<string, { key: string; label: string; count: number; color?: string }>();
+    for (const { value, column } of values) {
+      const inputType = column?.inputType;
+      const isMultiple = column?.isMultiple;
       const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
       if (list && list.length > 0) {
         for (const item of list) {
           const key = workspaceFilterValueKey(item);
           const existing = unique.get(key);
           if (existing) existing.count += 1;
-          else unique.set(key, { key, label: item, count: 1 });
+          else unique.set(key, { key, label: item, count: 1, color: workspaceOptionColor(column, item) });
         }
       } else {
         const key = workspaceFilterValueKey(value);
         const existing = unique.get(key);
         if (existing) existing.count += 1;
-        else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1 });
+        else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1, color: workspaceCellColor(column, value) });
       }
     }
     return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));

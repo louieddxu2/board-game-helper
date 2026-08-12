@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceLinkValue, parseMultiSelectValues } from "./model";
-import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceOverflowMode, WorkspaceTextAlign } from "./types";
-import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
+import { displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from "./model";
+import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceTextAlign } from "./types";
+import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
 export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(column.inputType === 'datetime' ? dateTimeLocalValue(value) : displayWorkspaceCellValue(value, column.inputType));
@@ -70,7 +70,7 @@ export const HeaderFilterDialog = ({ label, inputType, options, numericValues, s
       <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} /></label>
       <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
       <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>
-        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
+        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span style={{ color: option.color }}>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
         {!visibleOptions.length && <p>沒有符合的值</p>}
       </div>
     </>}
@@ -155,11 +155,11 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
         if (isMultiple) {
           return <label key={`${index}-${option}`} className={`workspace-selection-checkbox-item ${isSelected ? 'selected' : ''}`}>
             <input type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
-            <span className="workspace-selection-checkbox-label">{option}</span>
+            <span className="workspace-selection-checkbox-label" style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
           </label>;
         }
         return <button ref={isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>
-          <span>{option}</span>
+          <span style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
         </button>;
       })}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
@@ -170,26 +170,73 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     </div>}
   </WorkspaceModal>;
 };
-export const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onChange(options: string[]): void }) => {
-  const visibleOptions = options.length ? options : [''];
-  const updateOption = (index: number, value: string) => {
-    const next = options.length ? [...options] : [''];
-    next[index] = value;
-    onChange(next);
+export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => <div className="workspace-color-palette" role="group" aria-label={ariaLabel}>
+  {workspaceColorPalette.map((color) => <button type="button" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-pressed={value === color.value} onClick={() => onChange(color.value)}>
+    <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />
+  </button>)}
+</div>;
+
+export const NumberRangeEditor = ({ ranges, onChange }: { ranges: WorkspaceNumberRange[]; onChange(ranges: WorkspaceNumberRange[]): void }) => {
+  const updateRange = (index: number, field: 'min' | 'max', raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = trimmed ? Number(trimmed) : null;
+    const value = parsed === null || Number.isFinite(parsed) ? parsed : null;
+    onChange(ranges.map((range, rangeIndex) => rangeIndex === index ? { ...range, [field]: value } : range));
   };
-  const addOption = () => onChange([...options, '']);
-  const removeOption = (index: number) => onChange(options.filter((_, optionIndex) => optionIndex !== index));
+  return <div className="workspace-number-range-editor">
+    <div className="workspace-number-range-heading"><span>數字範圍顏色</span><button type="button" className="workspace-option-add" onClick={() => onChange([...ranges, { min: null, max: null, color: '' }])}><WorkspaceIcon name="plus" size={17} />新增範圍</button></div>
+    {!ranges.length && <p className="workspace-number-range-empty">尚未設定範圍</p>}
+    {ranges.map((range, index) => <div className="workspace-number-range-row" key={index}>
+      <div className="workspace-number-range-inputs">
+        <input type="number" inputMode="decimal" step="any" value={range.min ?? ''} placeholder="−∞" aria-label={`第 ${index + 1} 段下限`} onChange={(event) => updateRange(index, 'min', event.target.value)} />
+        <span>～</span>
+        <input type="number" inputMode="decimal" step="any" value={range.max ?? ''} placeholder="＋∞" aria-label={`第 ${index + 1} 段上限`} onChange={(event) => updateRange(index, 'max', event.target.value)} />
+      </div>
+      <WorkspaceColorPalette value={range.color} onChange={(color) => onChange(ranges.map((item, rangeIndex) => rangeIndex === index ? { ...item, color } : item))} ariaLabel={`第 ${index + 1} 段顏色`} />
+      <button type="button" className="workspace-option-remove" aria-label={`刪除第 ${index + 1} 段範圍`} onClick={() => onChange(ranges.filter((_, rangeIndex) => rangeIndex !== index))}><WorkspaceIcon name="trash" size={17} /></button>
+    </div>)}
+  </div>;
+};
+
+export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { options: string[]; optionColors?: Record<string, string>; onChange(options: string[], optionColors: Record<string, string>): void }) => {
+  const visibleOptions = options.length ? options : [''];
+  const visibleColors = visibleOptions.map((option) => optionColors?.[option] ?? '');
+  const emit = (nextOptions: string[], nextColors: string[]) => {
+    const nextOptionColors: Record<string, string> = {};
+    nextOptions.forEach((option, index) => {
+      const key = option.trim();
+      if (key && nextColors[index]) nextOptionColors[key] = nextColors[index];
+    });
+    onChange(nextOptions, nextOptionColors);
+  };
+  const updateOption = (index: number, value: string) => {
+    const next = [...visibleOptions];
+    next[index] = value;
+    emit(next, visibleColors);
+  };
+  const updateOptionColor = (index: number, color: string) => {
+    const nextColors = [...visibleColors];
+    nextColors[index] = color;
+    emit(visibleOptions, nextColors);
+  };
+  const addOption = () => emit([...visibleOptions, ''], [...visibleColors, '']);
+  const removeOption = (index: number) => {
+    const next = visibleOptions.filter((_, optionIndex) => optionIndex !== index);
+    emit(next.length ? next : [''], visibleColors.filter((_, optionIndex) => optionIndex !== index));
+  };
   const moveOption = (index: number, direction: -1 | 1) => {
-    const next = options.length ? [...options] : [''];
+    const next = [...visibleOptions];
+    const nextColors = [...visibleColors];
     const destination = index + direction;
     if (destination < 0 || destination >= next.length) return;
     [next[index], next[destination]] = [next[destination], next[index]];
-    onChange(next);
+    [nextColors[index], nextColors[destination]] = [nextColors[destination], nextColors[index]];
+    emit(next, nextColors);
   };
 
   return <div className="workspace-option-list">
     {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
-      <AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
+      <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /><WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} /></div>
       <div className="workspace-option-controls">
         <button type="button" onClick={() => moveOption(index, -1)} disabled={index === 0} aria-label={`向上移動固定選項 ${index + 1}`}><WorkspaceIcon name="up" size={17} /></button>
         <button type="button" onClick={() => moveOption(index, 1)} disabled={index === visibleOptions.length - 1} aria-label={`向下移動固定選項 ${index + 1}`}><WorkspaceIcon name="down" size={17} /></button>
@@ -201,7 +248,11 @@ export const SelectionOptionsEditor = ({ options, onChange }: { options: string[
 };
 export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
-  const save = () => onSave({ ...draft, name: draft.name.trim(), options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  const save = () => {
+    const options = draft.options.map((option) => option.trim()).filter(Boolean);
+    const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
+    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
     const currentCategory = inputCategoryFor(current.inputType);
@@ -222,7 +273,8 @@ export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceCo
           <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
           {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
         </div>
-        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
+        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
+        {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
       </div>
     </div>
   </WorkspaceModal>;

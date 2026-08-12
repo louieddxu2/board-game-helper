@@ -227,6 +227,33 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
   });
 
+  it('configures and renders fixed option colors', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '類型' }));
+    await user.click(within(screen.getByRole('group', { name: '固定選項 1 顏色' })).getByRole('button', { name: '綠色' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，類型：合作' });
+    expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#2F6F5E' });
+
+    await user.click(cell);
+    expect(screen.getByRole('option', { name: '合作' }).querySelector('span')).toHaveStyle({ color: '#2F6F5E' });
+  });
+
+  it('configures inclusive open-ended numeric color ranges', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '數量' }));
+    await user.click(screen.getByRole('button', { name: '新增範圍' }));
+    await user.type(screen.getByRole('spinbutton', { name: '第 1 段上限' }), '10');
+    await user.click(within(screen.getByRole('group', { name: '第 1 段顏色' })).getByRole('button', { name: '藍色' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，數量：2' });
+    expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#1D4ED8' });
+  });
+
   it('pans the table with a mouse drag without opening the dragged cell', async () => {
     render(<WorkspacePage />);
     const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
