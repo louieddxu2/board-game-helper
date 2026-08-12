@@ -17,7 +17,7 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }:
   const commit = () => onSave(draft);
   return <WorkspaceModal title={column.name} onClose={commit} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
-      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}日期時間`} onChange={setDraft} />
+      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}日期時間`} onChange={setDraft} onClear={() => setDraft('')} />
       : column.inputType === 'number'
       ? <input ref={inputRef as React.RefObject<HTMLInputElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
@@ -63,7 +63,7 @@ const WheelPicker = ({ label, value, options, onChange, loop = false }: { label:
   </div>;
 };
 
-export const DateTimeWheelEditor = ({ value, ariaLabel, onChange }: { value: WorkspaceCellValue; ariaLabel: string; onChange(value: string): void }) => {
+export const DateTimeWheelEditor = ({ value, ariaLabel, onChange, onClear }: { value: WorkspaceCellValue; ariaLabel: string; onChange(value: string): void; onClear?(): void }) => {
   const [parts, setParts] = useState(() => workspaceDateTimeParts(value));
   const currentYear = new Date().getFullYear();
   const daysInMonth = new Date(parts.year, parts.month, 0).getDate();
@@ -85,6 +85,10 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, onChange }: { value: Wor
     <div className="workspace-datetime-wheel-row" aria-label="時間">
       <WheelPicker label="時" value={parts.hour} options={range(0, 23)} loop onChange={(next) => updatePart('hour', next)} />
       <WheelPicker label="分" value={parts.minute} options={range(0, 59)} loop onChange={(next) => updatePart('minute', next)} />
+    </div>
+    <div className="workspace-datetime-footer">
+      <button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button>
+      <span className="workspace-datetime-timezone">依裝置時區</span>
     </div>
   </div>;
 };
@@ -243,6 +247,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
       })}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
     </div>
+    <div className="workspace-selection-clear-row"><button type="button" onClick={() => onSelect('')}>清除</button></div>
     {isMultiple && <div className="workspace-dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px' }}>
       <button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button>
       <button type="button" className="workspace-dialog-button primary" onClick={saveMultiple}>確定 ({selectedSet.size})</button>
@@ -288,7 +293,7 @@ const HiddenFieldEditor = ({ column, value, options, onChange }: { column: Works
       <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={link.label} onChange={(event) => onChange({ ...link, label: event.target.value })} /></label>
     </div>;
   }
-  if (column.inputType === 'datetime') return <DateTimeWheelEditor value={value} ariaLabel={`${column.name}日期時間`} onChange={(next) => onChange(coerceCellValue(column, next))} />;
+  if (column.inputType === 'datetime') return <DateTimeWheelEditor value={value} ariaLabel={`${column.name}日期時間`} onChange={(next) => onChange(coerceCellValue(column, next))} onClear={() => onChange(null)} />;
   if (column.inputType === 'number') return <input className="workspace-hidden-field-input" type="number" inputMode="decimal" step="any" value={value == null ? '' : String(value)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
   if (column.inputType === 'select' || column.inputType === 'dynamic-select') return <div className="workspace-hidden-select-editor">
     <div className="workspace-hidden-select-options" role="group" aria-label={`${column.name}選項`}>

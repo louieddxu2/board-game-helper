@@ -327,6 +327,10 @@ footer a { color: inherit; }
 .workspace-datetime-wheel-empty { min-height: 32px; }
 .workspace-datetime-wheel-unit { position: absolute; right: 0; bottom: 0; left: 0; color: var(--muted); font-size: 11px; line-height: 12px; text-align: center; }
 .workspace-datetime-divider { height: 1px; margin: 0 8px; background: rgba(22,53,47,.18); }
+.workspace-datetime-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; padding: 0 2px; }
+.workspace-datetime-clear { min-height: 30px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--orange); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.workspace-datetime-clear:hover { background: rgba(213,102,47,.1); }
+.workspace-datetime-timezone { color: var(--muted); font-size: 11px; }
 .workspace-link-dialog { align-self: center; justify-self: center; width: min(380px, 80vw); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.84); backdrop-filter: blur(4px); }
 .workspace-link-dialog-overlay { place-items: center; align-content: center; background: transparent; }
 .workspace-link-dialog .workspace-dialog-heading { display: none; }
@@ -347,6 +351,9 @@ footer a { color: inherit; }
 .workspace-selection-list button { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--line); background: rgba(255,253,248,.38); color: var(--green); cursor: pointer; font-size: 18px; font-weight: 700; line-height: 1.35; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-selection-list button:last-child { border-bottom: 0; }
 .workspace-selection-list button:hover, .workspace-selection-list button.selected { background: rgba(236,230,216,.58); color: var(--orange); }
+.workspace-selection-clear-row { display: flex; justify-content: flex-start; padding: 8px 14px 4px; background: rgba(255,253,248,.28); }
+.workspace-selection-clear-row button { min-height: 32px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--orange); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.workspace-selection-clear-row button:hover { background: rgba(213,102,47,.1); }
 .workspace-selection-checkbox-item { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font-size: 15px; font-weight: 600; line-height: 1.35; text-align: left; user-select: none; transition: background 0.15s ease; }
 .workspace-selection-checkbox-item:last-child { border-bottom: 0; }
 .workspace-selection-checkbox-item:hover, .workspace-selection-checkbox-item.selected { background: rgba(44, 85, 69, 0.08); color: var(--green); }

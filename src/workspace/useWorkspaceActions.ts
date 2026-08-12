@@ -15,6 +15,7 @@ interface UseWorkspaceActionsProps {
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
   setDrawerOpen: (open: boolean) => void;
   setEditing: (editing: { rowId: string; columnId: string } | undefined) => void;
+  setFocusTarget: (target: { rowId: string; columnId: string } | undefined) => void;
   setSelectionEditor: (editor: { rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean } | undefined) => void;
   setConfiguring: (config: { column: WorkspaceColumn; isRowHeader: boolean } | undefined) => void;
   setNodeMenu: (node: WorkspaceNode | undefined) => void;
@@ -32,7 +33,7 @@ interface UseWorkspaceActionsProps {
 
 export function useWorkspaceActions({
   data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
-  setEditing, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
+  setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
   setTableActionsOpen, setTableCreateParentId, setNameDialog,
   setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
 }: UseWorkspaceActionsProps) {
@@ -101,6 +102,7 @@ export function useWorkspaceActions({
     }
     commit({ ...data, activeNodeId: node.id });
     setEditing(undefined);
+    setFocusTarget(undefined);
     setSelectionEditor(undefined);
     setDrawerOpen(false);
     setNodeMenu(undefined);
@@ -128,6 +130,7 @@ export function useWorkspaceActions({
 
   const openCell = (row: WorkspaceRow, column: WorkspaceColumn) => {
     if (!table) return;
+    setFocusTarget(undefined);
     const isRowHeader = rowHeader?.id === column.id;
     const value = isRowHeader ? row.name : row.values[column.id];
     if (column.inputType === 'select' || column.inputType === 'dynamic-select') {
@@ -144,9 +147,21 @@ export function useWorkspaceActions({
     setSelectionEditor(undefined);
   };
 
-  const addRow = () => { if (!data || !table) return; commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, createRow(current.columns, `物件 ${current.rows.length + 1}`)] }))); setNotice('已新增物件'); };
+  const addRow = () => {
+    if (!data || !table || !rowHeader) return;
+    const row = createRow(table.columns, `物件 ${table.rows.length + 1}`);
+    commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, row] })));
+    setFocusTarget({ rowId: row.id, columnId: table.transposed ? table.columns[0]?.id ?? rowHeader.id : rowHeader.id });
+    setNotice('已新增物件');
+  };
   const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
-  const addColumn = () => { if (!data || !table) return; const column = createColumn(`屬性 ${table.columns.length + 1}`); commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) }))); setNotice('已新增屬性'); };
+  const addColumn = () => {
+    if (!data || !table || !table.rows.length) return;
+    const column = createColumn(`屬性 ${table.columns.length + 1}`);
+    commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) })));
+    setFocusTarget({ rowId: table.rows[0].id, columnId: column.id });
+    setNotice('已新增屬性');
+  };
   const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
   
   const saveColumn = (column: WorkspaceColumn) => {

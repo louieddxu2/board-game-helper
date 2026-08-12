@@ -18,6 +18,7 @@ const WorkspacePage = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ rowId: string; columnId: string }>();
+  const [focusTarget, setFocusTarget] = useState<{ rowId: string; columnId: string }>();
   const [selectionEditor, setSelectionEditor] = useState<{ rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean }>();
   const [configuring, setConfiguring] = useState<{ column: WorkspaceColumn; isRowHeader: boolean }>();
   const [workspaceImport, setWorkspaceImport] = useState<WorkspaceData>();
@@ -194,7 +195,7 @@ const WorkspacePage = () => {
     exportCurrent, exportAll, chooseImport, readImport, finishWorkspaceImport
   } = useWorkspaceActions({
     data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
-    setEditing, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
+    setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
     setTableActionsOpen, setTableCreateParentId, setNameDialog,
     setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
   });
@@ -268,8 +269,14 @@ const WorkspacePage = () => {
   const activeEditingColumn = editing && table ? editing.columnId === rowHeader?.id ? rowHeader : table.columns.find((item) => item.id === editing.columnId) : undefined;
   const activeEditingValue = activeEditingRow && activeEditingColumn ? activeEditingColumn.id === rowHeader?.id ? activeEditingRow.name : activeEditingRow.values[activeEditingColumn.id] : null;
   const hiddenEditorRow = hiddenFieldsEditor && table ? table.rows.find((row) => row.id === hiddenFieldsEditor.rowId) : undefined;
-  const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined);
+  const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : focusTarget);
   const activeCellKey = activeCell ? workspaceCellKey(activeCell.rowId, activeCell.columnId) : undefined;
+
+  useEffect(() => {
+    if (!focusTarget) return;
+    const timer = window.setTimeout(() => setFocusTarget(undefined), 3000);
+    return () => window.clearTimeout(timer);
+  }, [focusTarget]);
 
   const keepActiveCellVisible = useCallback(() => {
     const element = activeCellElementRef.current;

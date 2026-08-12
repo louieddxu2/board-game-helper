@@ -69,6 +69,18 @@ describe('WorkspacePage', () => {
     expect(screen.getByText('競爭')).toBeInTheDocument();
   });
 
+  it('clears a fixed-list value without opening another editor', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getAllByRole('cell')).toHaveLength(4));
+    const fixedListCell = screen.getAllByRole('cell')[2];
+    await user.click(fixedListCell);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.click(document.querySelector('.workspace-selection-clear-row button')!);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fixedListCell).toHaveTextContent('');
+  });
+
   it('commits a text dialog by clicking beside it without changing table widths', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -492,6 +504,17 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
   });
 
+  it('reveals newly added objects and attributes in the table', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增屬性' }));
+    expect(document.querySelector('.workspace-table thead th.workspace-context-active')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    expect(document.querySelector('.workspace-row-heading.workspace-context-active')).toBeInTheDocument();
+  });
+
   it('undoes and redoes a cell edit from the table edit bar', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -722,6 +745,22 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)).toBeInTheDocument();
+  });
+
+  it('clears an existing date-time value from the compact editor', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(document.querySelector('.workspace-datetime-timezone')).toBeInTheDocument();
+    await user.click(document.querySelector('.workspace-datetime-clear')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
   });
 
   it('offers expand, ellipsis, and wrapping display modes for every property', async () => {
