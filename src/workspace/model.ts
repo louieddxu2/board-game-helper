@@ -72,6 +72,18 @@ export const formatWorkspaceDateTime = (value: WorkspaceCellValue) => {
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
   return `${part('year')}年${part('month')}月${part('day')}日${part('hour')}點${part('minute')}分`;
 };
+export const workspaceDateMonthKey = (value: WorkspaceCellValue): string | null => {
+  const normalized = normalizeWorkspaceDateTime(value);
+  if (!normalized) return null;
+  const date = new Date(normalized);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+export const formatWorkspaceDateMonth = (value: WorkspaceCellValue) => {
+  const key = workspaceDateMonthKey(value);
+  if (!key) return '';
+  const [year, month] = key.split('-');
+  return `${year}年${Number(month)}月`;
+};
 
 export const parseMultiSelectValues = (value: WorkspaceCellValue): string[] => {
   if (value == null || value === '' || isWorkspaceLinkValue(value)) return [];

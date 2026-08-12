@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues } from "./model";
+import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
@@ -145,17 +145,18 @@ export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputC
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
 export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
-  if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null) {
+  if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null) {
     const includedSet = new Set(state.includedKeys);
-    const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
-    if (list) {
-      if (list.length === 0) {
-        if (!includedSet.has(workspaceFilterValueKey(null))) return false;
-      } else {
-        if (!list.some((item) => includedSet.has(workspaceFilterValueKey(item)))) return false;
-      }
+    if (inputType === 'datetime') {
+      const monthKey = workspaceDateMonthKey(value);
+      if (!includedSet.has(monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null))) return false;
     } else {
-      if (!includedSet.has(workspaceFilterValueKey(value))) return false;
+      const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
+      if (list) {
+        if (list.length === 0) {
+          if (!includedSet.has(workspaceFilterValueKey(null))) return false;
+        } else if (!list.some((item) => includedSet.has(workspaceFilterValueKey(item)))) return false;
+      } else if (!includedSet.has(workspaceFilterValueKey(value))) return false;
     }
   }
   const query = state.query?.trim().toLocaleLowerCase();
@@ -167,6 +168,21 @@ export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: Wor
     const maximum = state.max?.trim() ? Number(state.max) : undefined;
     if (minimum !== undefined && Number.isFinite(minimum) && numeric < minimum) return false;
     if (maximum !== undefined && Number.isFinite(maximum) && numeric > maximum) return false;
+  }
+  if (inputType === 'datetime' && (state.min?.trim() || state.max?.trim())) {
+    const normalized = normalizeWorkspaceDateTime(value);
+    if (!normalized) return false;
+    const timestamp = new Date(normalized).getTime();
+    const boundary = (raw: string | undefined, endOfDay: boolean) => {
+      if (!raw?.trim()) return undefined;
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+      if (!match) return undefined;
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
+    };
+    const minimum = boundary(state.min, false);
+    const maximum = boundary(state.max, true);
+    if (minimum !== undefined && timestamp < minimum) return false;
+    if (maximum !== undefined && timestamp > maximum) return false;
   }
   return true;
 };

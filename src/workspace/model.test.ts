@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -81,6 +81,14 @@ describe('workspace model', () => {
     expect(normalized).toMatch(/^2024-02-03T/);
     expect(formatWorkspaceDateTime(normalized)).toMatch(/^\d+年\d+月\d+日\d+點\d{2}分$/);
     expect(normalizeWorkspaceDateTime('不是時間')).toBeNull();
+  });
+
+  it('groups valid date-time values by their local year and month', () => {
+    const value = '2024-02-03T14:05+08:00';
+    expect(workspaceDateMonthKey(value)).toBe('2024-02');
+    expect(formatWorkspaceDateMonth(value)).toBe('2024年2月');
+    expect(workspaceDateMonthKey(null)).toBeNull();
+    expect(formatWorkspaceDateMonth(null)).toBe('');
   });
 
   it('collects clean individual options in getDynamicOptions even when values contain delimiters', () => {

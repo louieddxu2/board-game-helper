@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, measureWorkspaceText, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
+import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, matchesWorkspaceFilter, measureWorkspaceText, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
 
 describe('workspace text measurements', () => {
   it('does not turn empty content into a scalable character width', () => {
@@ -146,5 +146,24 @@ describe('workspace text measurements', () => {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
       viewport.remove();
     }
+  });
+});
+
+describe('workspace date filters', () => {
+  it('filters date-time values by selected year-month keys', () => {
+    const state = { includedKeys: ['date-month:2024-02'], sort: null };
+
+    expect(matchesWorkspaceFilter('2024-02-03T14:05+08:00', 'datetime', state)).toBe(true);
+    expect(matchesWorkspaceFilter('2024-03-03T14:05+08:00', 'datetime', state)).toBe(false);
+    expect(matchesWorkspaceFilter(null, 'datetime', state)).toBe(false);
+  });
+
+  it('filters date-time values with an inclusive date range', () => {
+    const state = { includedKeys: null, sort: null, min: '2024-02-01', max: '2024-02-29' } as const;
+
+    expect(matchesWorkspaceFilter('2024-02-01T00:00:00+08:00', 'datetime', state)).toBe(true);
+    expect(matchesWorkspaceFilter('2024-02-29T23:59:59+08:00', 'datetime', state)).toBe(true);
+    expect(matchesWorkspaceFilter('2024-03-01T00:00:00+08:00', 'datetime', state)).toBe(false);
+    expect(matchesWorkspaceFilter(null, 'datetime', state)).toBe(false);
   });
 });

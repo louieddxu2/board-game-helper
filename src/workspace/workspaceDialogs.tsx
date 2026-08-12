@@ -36,13 +36,14 @@ export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: W
 };
 export const HeaderFilterDialog = ({ label, inputType, options, numericValues, state, onClose, onSort, onToggle, onSelectAll, onClearAll, onQuery, onRange, onAggregate }: { label: string; inputType?: WorkspaceInputType; options: HeaderFilterOption[]; numericValues: number[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void; onQuery(query: string): void; onRange(min: string, max: string): void; onAggregate(aggregate: HeaderFilterAggregate): void }) => {
   const [optionQuery, setOptionQuery] = useState('');
-  const visibleOptions = useMemo(() => {
-    const normalized = optionQuery.trim().toLocaleLowerCase();
-    return normalized ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
-  }, [options, optionQuery]);
-  const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
   const isText = inputType === 'text';
   const isNumber = inputType === 'number';
+  const isDate = inputType === 'datetime';
+  const visibleOptions = useMemo(() => {
+    const normalized = optionQuery.trim().toLocaleLowerCase();
+    return normalized && !isDate ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
+  }, [isDate, options, optionQuery]);
+  const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
   const aggregate = state.aggregate ?? 'sum';
   const aggregateValue = numericValues.length
     ? aggregate === 'sum' ? numericValues.reduce((total, value) => total + value, 0) : numericValues.reduce((total, value) => total + value, 0) / numericValues.length
@@ -66,7 +67,19 @@ export const HeaderFilterDialog = ({ label, inputType, options, numericValues, s
       </div>
       <p className="workspace-filter-result-count">目前符合 {numericValues.length} 筆</p>
     </>}
-    {!isText && !isNumber && <>
+    {isDate && <>
+      <div className="workspace-filter-date-range" role="group" aria-label={`${label}日期範圍`}>
+        <label>開始日期<input type="date" aria-label={`${label}開始日期`} value={state.min ?? ''} onChange={(event) => onRange(event.target.value, state.max ?? '')} /></label>
+        <span aria-hidden="true">至</span>
+        <label>結束日期<input type="date" aria-label={`${label}結束日期`} value={state.max ?? ''} onChange={(event) => onRange(state.min ?? '', event.target.value)} /></label>
+      </div>
+      <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部年月</button><button type="button" onClick={onClearAll}>清除年月</button></div>
+      <div className="workspace-filter-options" role="group" aria-label={`${label}年月篩選`}>
+        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
+        {!visibleOptions.length && <p>沒有日期資料</p>}
+      </div>
+    </>}
+    {!isText && !isNumber && !isDate && <>
       <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} /></label>
       <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
       <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>

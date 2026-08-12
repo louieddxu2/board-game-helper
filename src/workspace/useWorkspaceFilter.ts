@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
-import { displayWorkspaceCellValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from './model';
+import { displayWorkspaceCellValue, formatWorkspaceDateMonth, parseMultiSelectValues, workspaceCellColor, workspaceDateMonthKey, workspaceOptionColor } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
 
 interface UseWorkspaceFilterProps {
@@ -81,6 +81,14 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     for (const { value, column } of values) {
       const inputType = column?.inputType;
       const isMultiple = column?.isMultiple;
+      if (inputType === 'datetime') {
+        const monthKey = workspaceDateMonthKey(value);
+        const key = monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null);
+        const existing = unique.get(key);
+        if (existing) existing.count += 1;
+        else unique.set(key, { key, label: monthKey ? formatWorkspaceDateMonth(value) : '（空白）', count: 1 });
+        continue;
+      }
       const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
       if (list && list.length > 0) {
         for (const item of list) {
@@ -96,7 +104,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
         else unique.set(key, { key, label: displayWorkspaceCellValue(value, inputType) || '（空白）', count: 1, color: workspaceCellColor(column, value) });
       }
     }
-    return [...unique.values()].sort((left, right) => workspaceValueCollator.compare(left.label, right.label));
+    return [...unique.values()].sort((left, right) => left.key.startsWith('date-month:') && right.key.startsWith('date-month:') ? left.key.localeCompare(right.key) : workspaceValueCollator.compare(left.label, right.label));
   }, [filterTarget, rowHeader, table, tableRowsById]);
 
   const activeFilterInputType = useMemo(() => {
