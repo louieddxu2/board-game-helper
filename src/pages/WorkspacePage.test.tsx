@@ -843,28 +843,14 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('row', { name: /物件 2/ })).not.toBeInTheDocument();
   });
 
-  it('transposes only the table view while preserving row and column data', async () => {
+  it('does not expose the unfinished transpose control', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '設定' }));
-    await user.click(screen.getByRole('button', { name: '轉置顯示' }));
-
-    expect(screen.getByRole('columnheader', { name: /花火/ })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
-    const latestSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
-    expect(latestSave?.tables[0]).toMatchObject({ transposed: true });
-    expect(latestSave?.tables[0].rows[0].id).toBe('row-1');
-    expect(latestSave?.tables[0].columns.map((column) => column.id)).toEqual(['column-text', 'column-number', 'column-select', 'column-dynamic']);
-
-    await user.click(screen.getByRole('button', { name: '篩選 花火' }));
-    const filterDialog = screen.getByRole('dialog', { name: '篩選 花火' });
-    expect(filterDialog.querySelectorAll('.workspace-filter-option-count')).toHaveLength(3);
-    expect([...filterDialog.querySelectorAll('.workspace-filter-option-count')].map((node) => node.textContent)).toEqual(expect.arrayContaining(['2', '1']));
-    await user.click(screen.getByRole('checkbox', { name: '合作' }));
-    fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
-    expect(screen.queryByRole('rowheader', { name: '類型' })).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '匯出此表' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '欄位顯示設定' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '轉置顯示' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '恢復正常顯示' })).not.toBeInTheDocument();
   });
 
   it('auto-scrolls the drawer tree while a dragged item is held near an edge', async () => {

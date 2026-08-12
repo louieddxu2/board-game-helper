@@ -341,7 +341,7 @@ const WorkspacePage = () => {
     </div>}
     {tableActionsOpen && table && <div className="workspace-editbar workspace-table-toolsbar" aria-label="表格工具列">
       <div className="workspace-editbar-group"><button type="button" className="workspace-editbar-button" aria-label="匯出此表" onClick={exportCurrent}><WorkspaceIcon name="download" size={22} /></button></div>
-      <div className="workspace-editbar-group"><button type="button" className="workspace-editbar-button" aria-label={table.transposed ? '恢復正常顯示' : '轉置顯示'} onClick={() => { commit(updateTable(data, table.id, (current) => ({ ...current, transposed: !current.transposed, updatedAt: Date.now() }))); setTableActionsOpen(false); }}><WorkspaceIcon name="refresh" size={22} /></button><button type="button" className="workspace-editbar-button" aria-label="欄位顯示設定" onClick={() => setColumnVisibilityOpen(true)}><WorkspaceIcon name="visibility" size={23} /></button></div>
+      <div className="workspace-editbar-group"><button type="button" className="workspace-editbar-button" aria-label="欄位顯示設定" onClick={() => setColumnVisibilityOpen(true)}><WorkspaceIcon name="visibility" size={23} /></button></div>
     </div>}
     {notice && <div className="workspace-notice" role="status">{notice}</div>}
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
