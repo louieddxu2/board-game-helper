@@ -52,6 +52,7 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
   options: Array.isArray(column.options) ? column.options : [],
   optionColors: normalizeOptionColors(column.optionColors),
   numberRanges: normalizeNumberRanges(column.numberRanges),
+  hidden: Boolean(column.hidden),
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
 });

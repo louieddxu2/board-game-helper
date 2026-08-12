@@ -22,6 +22,7 @@ export interface WorkspaceColumn {
   options: string[];
   optionColors?: Record<string, string>;
   numberRanges?: WorkspaceNumberRange[];
+  hidden?: boolean;
   isMultiple?: boolean;
   alignment?: WorkspaceTextAlign;
   overflowMode?: WorkspaceOverflowMode;

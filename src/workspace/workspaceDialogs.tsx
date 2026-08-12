@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from "./model";
-import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceTextAlign } from "./types";
+import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from "./model";
+import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
 export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellInputDialogProps) => {
@@ -170,6 +170,71 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     </div>}
   </WorkspaceModal>;
 };
+export const ColumnVisibilityDialog = ({ columns, onClose, onToggle }: { columns: WorkspaceColumn[]; onClose(): void; onToggle(columnId: string): void }) => <WorkspaceModal title="欄位顯示設定" onClose={onClose} className="workspace-column-visibility-dialog">
+  <div className="workspace-column-visibility-list" role="group" aria-label="欄位顯示設定">
+    {columns.map((column) => <div className={`workspace-column-visibility-row ${column.hidden ? 'is-hidden' : ''}`} key={column.id}>
+      <span className="workspace-column-visibility-name">{column.name || '未命名屬性'}</span>
+      <button type="button" className="workspace-icon-button workspace-visibility-toggle" aria-label={column.hidden ? `顯示 ${column.name || '未命名屬性'}` : `隱藏 ${column.name || '未命名屬性'}`} aria-pressed={!column.hidden} onClick={() => onToggle(column.id)}><WorkspaceIcon name={column.hidden ? 'eye-off' : 'eye'} size={22} /></button>
+    </div>)}
+    {!columns.length && <p className="workspace-column-visibility-empty">目前沒有可設定的欄位</p>}
+  </div>
+</WorkspaceModal>;
+
+const HiddenFieldEditor = ({ column, value, options, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onChange(value: WorkspaceCellValue): void }) => {
+  const [dynamicDraft, setDynamicDraft] = useState('');
+  const listOptions = options.length ? options : column.options;
+  const selectedValues = parseMultiSelectValues(value);
+  const toggleOption = (option: string) => {
+    if (!column.isMultiple) {
+      onChange(option);
+      return;
+    }
+    const next = new Set(selectedValues);
+    if (next.has(option)) next.delete(option);
+    else next.add(option);
+    onChange(formatMultiSelectValues([...next]));
+  };
+  const addDynamicValue = () => {
+    const normalized = dynamicDraft.trim();
+    if (!normalized) return;
+    const existing = listOptions.find((option) => option.toLocaleLowerCase() === normalized.toLocaleLowerCase()) ?? normalized;
+    if (column.isMultiple) onChange(formatMultiSelectValues([...new Set([...selectedValues, existing])]));
+    else onChange(existing);
+    setDynamicDraft('');
+  };
+  if (column.inputType === 'link') {
+    const link = isWorkspaceLinkValue(value) ? value : { url: typeof value === 'string' ? value : '', label: '' };
+    return <div className="workspace-hidden-link-fields">
+      <label className="workspace-form-field">連結<input type="url" inputMode="url" value={link.url} onChange={(event) => onChange({ ...link, url: event.target.value })} /></label>
+      <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={link.label} onChange={(event) => onChange({ ...link, label: event.target.value })} /></label>
+    </div>;
+  }
+  if (column.inputType === 'datetime') return <input className="workspace-hidden-field-input" type="datetime-local" value={dateTimeLocalValue(value)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+  if (column.inputType === 'number') return <input className="workspace-hidden-field-input" type="number" inputMode="decimal" step="any" value={value == null ? '' : String(value)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+  if (column.inputType === 'select' || column.inputType === 'dynamic-select') return <div className="workspace-hidden-select-editor">
+    <div className="workspace-hidden-select-options" role="group" aria-label={`${column.name}選項`}>
+      {listOptions.map((option) => <button type="button" key={option} className={selectedValues.includes(option) ? 'selected' : ''} onClick={() => toggleOption(option)}>{option}</button>)}
+      {!listOptions.length && <span className="workspace-hidden-select-empty">尚無既有選項</span>}
+    </div>
+    {column.inputType === 'dynamic-select' && <div className="workspace-hidden-select-add"><input type="text" inputMode="text" value={dynamicDraft} placeholder="輸入新選項" onChange={(event) => setDynamicDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addDynamicValue(); } }} /><button type="button" onClick={addDynamicValue} aria-label={`新增${column.name}選項`}><WorkspaceIcon name="plus" size={17} /></button></div>}
+  </div>;
+  return <AutoGrowTextarea className="workspace-hidden-field-input workspace-hidden-field-textarea" value={displayWorkspaceCellValue(value, column.inputType)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+};
+
+export const HiddenFieldsDialog = ({ title, row, columns, optionsByColumn, onSave }: { title: string; row: WorkspaceRow; columns: WorkspaceColumn[]; optionsByColumn: Record<string, string[]>; onSave(values: Record<string, WorkspaceCellValue>): void }) => {
+  const [draft, setDraft] = useState<Record<string, WorkspaceCellValue>>(() => Object.fromEntries(columns.map((column) => [column.id, row.values[column.id] ?? null])));
+  const updateValue = (columnId: string, value: WorkspaceCellValue) => setDraft((current) => ({ ...current, [columnId]: value }));
+  return <WorkspaceModal title={title || '物件'} onClose={() => onSave(draft)} className="workspace-hidden-fields-dialog">
+    <div className="workspace-hidden-fields-list">
+      {columns.map((column) => <div className="workspace-hidden-field" key={column.id}>
+        <span className="workspace-hidden-field-label">{column.name || '未命名屬性'}</span>
+        <HiddenFieldEditor column={column} value={draft[column.id] ?? null} options={optionsByColumn[column.id] ?? []} onChange={(value) => updateValue(column.id, value)} />
+      </div>)}
+      {!columns.length && <p className="workspace-hidden-fields-empty">目前沒有隱藏欄位</p>}
+    </div>
+  </WorkspaceModal>;
+};
+
 export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => <div className="workspace-color-palette" role="group" aria-label={ariaLabel}>
   {workspaceColorPalette.map((color) => <button type="button" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-pressed={value === color.value} onClick={() => onChange(color.value)}>
     <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />

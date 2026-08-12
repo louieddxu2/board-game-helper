@@ -66,6 +66,7 @@ describe('workspace spreadsheet format', () => {
     const table = source.tables[0];
     const status = table.columns[1];
     status.optionColors = { 已擁有: '#2F6F5E', 想要: '#C2410C' };
+    status.hidden = true;
     table.columns[2].numberRanges = [
       { min: null, max: 0, color: '#1D4ED8' },
       { min: 1, max: 10, color: '#2F6F5E' },
@@ -75,6 +76,7 @@ describe('workspace spreadsheet format', () => {
 
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
     expect(imported.table?.columns[1].optionColors).toEqual(status.optionColors);
+    expect(imported.table?.columns[1].hidden).toBe(true);
     expect(imported.table?.columns[2].numberRanges).toEqual(table.columns[2].numberRanges);
     expect(imported.table?.rowHeader?.optionColors).toEqual({ 已擁有: '#7C3AED' });
   });

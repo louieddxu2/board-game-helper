@@ -73,7 +73,7 @@ describe('workspace model', () => {
     delete table.columns[0].optionColors;
     delete table.columns[0].numberRanges;
 
-    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [] });
+    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [], hidden: false });
   });
 
   it('normalizes date-time values for storage and formats them in Traditional Chinese', () => {

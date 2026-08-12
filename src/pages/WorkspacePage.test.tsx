@@ -727,10 +727,40 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('button', { name: '設定' }));
     expect(screen.queryByRole('button', { name: '匯入整個資料庫' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await user.click(screen.getByRole('button', { name: '設定' }));
     await user.click(screen.getByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     expect(within(drawer).getByRole('button', { name: '匯入整個資料庫' })).toBeInTheDocument();
+  });
+
+  it('hides selected columns and edits them from the object arrow panel', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '欄位顯示設定' }));
+
+    expect(screen.getByRole('dialog', { name: '欄位顯示設定' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '隱藏 類型' }));
+    expect(screen.getByRole('button', { name: '顯示 類型' })).toBeInTheDocument();
+    fireEvent.click(document.querySelector('.workspace-column-visibility-dialog-overlay')!);
+
+    expect(screen.queryByRole('columnheader', { name: '類型' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: '花火，類型：合作' })).not.toBeInTheDocument();
+    const arrow = screen.getByRole('button', { name: '編輯 花火 的隱藏欄位' });
+    await user.click(arrow);
+    const hiddenDialog = screen.getByRole('dialog', { name: '花火' });
+    expect(within(hiddenDialog).getByText('類型')).toBeInTheDocument();
+    await user.click(within(hiddenDialog).getByRole('button', { name: '競爭' }));
+    fireEvent.click(document.querySelector('.workspace-hidden-fields-dialog-overlay')!);
+
+    const latestSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    expect(latestSave?.tables[0].rows[0].values['column-select']).toBe('競爭');
+    expect(screen.queryByRole('cell', { name: '花火，類型：競爭' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '欄位顯示設定' }));
+    await user.click(screen.getByRole('button', { name: '顯示 類型' }));
+    fireEvent.click(document.querySelector('.workspace-column-visibility-dialog-overlay')!);
+    expect(screen.getByRole('cell', { name: '花火，類型：競爭' })).toBeInTheDocument();
   });
 
   it('searches every value in the active table without changing the app-bar actions', async () => {

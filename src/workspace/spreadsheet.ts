@@ -60,9 +60,9 @@ const tableRows = (table: WorkspaceTable): unknown[][] => {
   ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
-  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand', serializeOptionColors(rowHeader), serializeNumberRanges(rowHeader)],
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap'), serializeOptionColors(column), serializeNumberRanges(column)]),
+  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand', serializeOptionColors(rowHeader), serializeNumberRanges(rowHeader), 'false'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden'],
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap'), serializeOptionColors(column), serializeNumberRanges(column), column.hidden ? 'true' : 'false']),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
   ...table.rows.map((row) => [row.id, serializeCellValue(row.name), ...table.columns.map((column) => serializeCellValue(row.values[column.id] ?? null))]),
   ];
@@ -250,6 +250,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
     column.overflowMode = parseOverflowMode(stringValue(row[6]), column.inputType);
     column.optionColors = parseOptionColors(stringValue(row[7]));
     column.numberRanges = parseNumberRanges(stringValue(row[8]));
+    column.hidden = stringValue(row[9]) === 'true';
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');
@@ -264,6 +265,7 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   rowHeader.overflowMode = parseOverflowMode(stringValue(rowHeaderMetadata?.[6]), rowHeader.inputType, 'expand');
   rowHeader.optionColors = parseOptionColors(stringValue(rowHeaderMetadata?.[7]));
   rowHeader.numberRanges = parseNumberRanges(stringValue(rowHeaderMetadata?.[8]));
+  rowHeader.hidden = false;
   const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
     id: stringValue(row[0]) || makeId('row'),
     name: hasRowName ? parseCellValue(row[1], rowHeader) ?? '' : '',
