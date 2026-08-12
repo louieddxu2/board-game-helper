@@ -1,5 +1,6 @@
 import { openDB, type DBSchema } from 'idb';
 import { emptyWorkspace, normalizeWorkspace } from './model';
+import { pruneWorkspaceTableHistory, type WorkspaceTableHistory } from './history';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
 
 type WorkspaceMetadata = {
@@ -12,6 +13,7 @@ interface WorkspaceDb extends DBSchema {
   state: { key: string; value: WorkspaceData };
   meta: { key: string; value: WorkspaceMetadata };
   tables: { key: string; value: WorkspaceTable };
+  history: { key: string; value: WorkspaceTableHistory };
 }
 
 const DATABASE_NAME = 'board-game-helper-workspace';
@@ -20,15 +22,17 @@ const META_KEY = 'workspace';
 
 const database = typeof indexedDB === 'undefined'
   ? null
-  : openDB<WorkspaceDb>(DATABASE_NAME, 2, {
+  : openDB<WorkspaceDb>(DATABASE_NAME, 3, {
     upgrade(db) {
       if (!db.objectStoreNames.contains('state')) db.createObjectStore('state');
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta');
       if (!db.objectStoreNames.contains('tables')) db.createObjectStore('tables');
+      if (!db.objectStoreNames.contains('history')) db.createObjectStore('history');
     },
   });
 
 let saveQueue: Promise<void> = Promise.resolve();
+let historySaveQueue: Promise<void> = Promise.resolve();
 let savedTableSignatures = new Map<string, string>();
 
 export const tableStorageSignature = (table: WorkspaceTable) => JSON.stringify(table);
@@ -84,15 +88,73 @@ export const saveWorkspace = (data: WorkspaceData) => {
 
 export const flushWorkspaceSaves = () => saveQueue;
 
+export const loadWorkspaceHistories = async (): Promise<Map<string, WorkspaceTableHistory>> => {
+  if (!database) return new Map();
+  const db = await database;
+  const histories = await db.getAll('history');
+  const now = Date.now();
+  const result = new Map<string, WorkspaceTableHistory>();
+  const transaction = db.transaction('history', 'readwrite');
+  const writes: Promise<unknown>[] = [];
+  for (const history of histories) {
+    const pruned = pruneWorkspaceTableHistory(history, now);
+    result.set(pruned.tableId, pruned);
+    if (JSON.stringify(pruned) === JSON.stringify(history)) continue;
+    if (pruned.past.length === 0 && pruned.future.length === 0) writes.push(transaction.store.delete(history.tableId));
+    else writes.push(transaction.store.put(pruned, history.tableId));
+  }
+  await Promise.all(writes);
+  await transaction.done;
+  return result;
+};
+
+export const saveWorkspaceHistory = (history: WorkspaceTableHistory) => {
+  historySaveQueue = historySaveQueue.then(async () => {
+    if (!database) return;
+    const db = await database;
+    const pruned = pruneWorkspaceTableHistory(history);
+    if (pruned.past.length === 0 && pruned.future.length === 0) {
+      await db.delete('history', history.tableId);
+      return;
+    }
+    await db.put('history', pruned, history.tableId);
+  });
+  return historySaveQueue;
+};
+
+export const deleteWorkspaceHistories = (tableIds: readonly string[]) => {
+  historySaveQueue = historySaveQueue.then(async () => {
+    if (!database || tableIds.length === 0) return;
+    const db = await database;
+    const transaction = db.transaction('history', 'readwrite');
+    await Promise.all(tableIds.map((tableId) => transaction.store.delete(tableId)));
+    await transaction.done;
+  });
+  return historySaveQueue;
+};
+
+export const clearAllWorkspaceHistories = () => {
+  historySaveQueue = historySaveQueue.then(async () => {
+    if (!database) return;
+    const db = await database;
+    await db.clear('history');
+  });
+  return historySaveQueue;
+};
+
+export const flushWorkspaceHistorySaves = () => historySaveQueue;
+
 export const clearWorkspace = async () => {
   if (!database) return;
   await saveQueue.catch(() => undefined);
+  await historySaveQueue.catch(() => undefined);
   const db = await database;
-  const transaction = db.transaction(['state', 'meta', 'tables'], 'readwrite');
+  const transaction = db.transaction(['state', 'meta', 'tables', 'history'], 'readwrite');
   await Promise.all([
     transaction.objectStore('state').clear(),
     transaction.objectStore('meta').clear(),
     transaction.objectStore('tables').clear(),
+    transaction.objectStore('history').clear(),
   ]);
   await transaction.done;
   savedTableSignatures = new Map();

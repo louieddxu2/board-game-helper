@@ -60,6 +60,27 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[1].options).toEqual(['第一行\n第二行', '單行']);
   });
 
+  it('round-trips fixed option colors and numeric range colors', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    const table = source.tables[0];
+    const status = table.columns[1];
+    status.optionColors = { 已擁有: '#2F6F5E', 想要: '#C2410C' };
+    status.hidden = true;
+    table.columns[2].numberRanges = [
+      { min: null, max: 0, color: '#1D4ED8' },
+      { min: 1, max: 10, color: '#2F6F5E' },
+      { min: 11, max: null, color: '#C2410C' },
+    ];
+    table.rowHeader = { ...table.rowHeader!, inputType: 'select', options: ['已擁有'], optionColors: { 已擁有: '#7C3AED' } };
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+    expect(imported.table?.columns[1].optionColors).toEqual(status.optionColors);
+    expect(imported.table?.columns[1].hidden).toBe(true);
+    expect(imported.table?.columns[2].numberRanges).toEqual(table.columns[2].numberRanges);
+    expect(imported.table?.rowHeader?.optionColors).toEqual({ 已擁有: '#7C3AED' });
+  });
+
   it('round-trips link values, overflow modes, and the editable first-column property', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();

@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues } from "./model";
+import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
-export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
+export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
 export type WorkspaceInputCategory = 'text' | 'select' | 'other';
 export type TableReorderKind = 'row' | 'column';
 export type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
@@ -10,8 +10,18 @@ export type TableReorderSession = TableReorderVisual & { pointerId: number; star
 export type HeaderFilterTarget = { axis: 'column' | 'row'; id: string; label: string };
 export type HeaderFilterAggregate = 'sum' | 'average';
 export type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; aggregate?: HeaderFilterAggregate };
-export type HeaderFilterOption = { key: string; label: string; count: number };
+export type HeaderFilterOption = { key: string; label: string; count: number; color?: string };
 export type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode; row?: WorkspaceRow; table?: WorkspaceTable };
+export const workspaceColorPalette = [
+  { value: '', label: '預設' },
+  { value: '#2F6F5E', label: '綠色' },
+  { value: '#1D4ED8', label: '藍色' },
+  { value: '#7C3AED', label: '紫色' },
+  { value: '#C2410C', label: '橘色' },
+  { value: '#B91C1C', label: '紅色' },
+  { value: '#0F766E', label: '青色' },
+  { value: '#6B7280', label: '灰色' },
+] as const;
 export const inputCategoryLabels: Record<WorkspaceInputCategory, string> = {
   text: '文字', select: '選單', other: '其他',
 };
@@ -28,6 +38,16 @@ export const workspaceMinColumnWidth = 40;
 export const workspaceMaxTextScale = 2.5;
 export const expandedFoldersStorageKey = 'board-game-helper-workspace-expanded-folders';
 export const tableReorderHoldMs = 420;
+export type WorkspaceTableLayout = { naturalColumnWidths: number[]; columnWidths: number[]; tableWidth: number };
+export const calculateWorkspaceTableLayout = (columnTextWidths: readonly number[], textScale: number, viewportWidth: number): WorkspaceTableLayout => {
+  const naturalColumnWidths = columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth * textScale + workspaceCellPadding));
+  const baseColumnWidths = columnTextWidths.map((textWidth) => Math.max(workspaceMinColumnWidth, textWidth + workspaceCellPadding));
+  const naturalTableWidth = naturalColumnWidths.reduce((total, width) => total + width, 0);
+  const baseTableWidth = baseColumnWidths.reduce((total, width) => total + width, 0);
+  const baselineExtraWidth = Math.max(0, viewportWidth - baseTableWidth);
+  const columnWidths = naturalColumnWidths.map((width, index) => width + (baseTableWidth ? baselineExtraWidth * (baseColumnWidths[index] / baseTableWidth) : 0));
+  return { naturalColumnWidths, columnWidths, tableWidth: columnWidths.reduce((total, width) => total + width, 0) };
+};
 export const download = (blob: Blob, name: string) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -81,15 +101,41 @@ export const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[],
   return next;
 };
 export const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
+  if (!text.trim()) return 0;
   if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
   if (typeof window !== 'undefined' && /jsdom/i.test(window.navigator.userAgent)) return Math.max(fontSize, text.length * fontSize);
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   if (!context) return Math.max(fontSize, text.length * fontSize);
   context.font = `${fontWeight} ${fontSize}px "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif`;
-  return Math.max(...text.split('\n').map((line) => context.measureText(line || 'M').width));
+  return Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
 };
 export const overflowClassName = (column: WorkspaceColumn) => `workspace-overflow-${column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')}`;
+export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLElement) => {
+  const elementRect = element.getBoundingClientRect();
+  const viewportRect = viewport.getBoundingClientRect();
+  const visualViewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
+  const layoutHeight = typeof window !== 'undefined' ? window.innerHeight : viewport.clientHeight;
+  const layoutWidth = typeof window !== 'undefined' ? window.innerWidth : viewport.clientWidth;
+  const visualTop = visualViewport?.offsetTop ?? 0;
+  const visualLeft = visualViewport?.offsetLeft ?? 0;
+  const visualBottom = visualTop + (visualViewport?.height ?? layoutHeight);
+  const visualRight = visualLeft + (visualViewport?.width ?? layoutWidth);
+  const isBodyCell = Boolean(element.closest('tbody'));
+  const headerRect = isBodyCell ? viewport.querySelector<HTMLElement>('thead th')?.getBoundingClientRect() : undefined;
+  const stickyColumnRect = element.matches('td') ? viewport.querySelector<HTMLElement>('.workspace-row-heading')?.getBoundingClientRect() : undefined;
+  const visibleTop = Math.max(viewportRect.top + 8, visualTop + 8, headerRect ? headerRect.bottom + 4 : Number.NEGATIVE_INFINITY);
+  const visibleBottom = Math.min(viewportRect.bottom - 8, visualBottom - 8);
+  const visibleLeft = Math.max(viewportRect.left + 8, visualLeft + 8, stickyColumnRect ? stickyColumnRect.right + 4 : Number.NEGATIVE_INFINITY);
+  const visibleRight = Math.min(viewportRect.right - 8, visualRight - 8);
+  const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+
+  if (elementRect.top < visibleTop) viewport.scrollTop = Math.min(maxScrollTop, Math.max(0, viewport.scrollTop + elementRect.top - visibleTop));
+  else if (elementRect.bottom > visibleBottom) viewport.scrollTop = Math.min(maxScrollTop, Math.max(0, viewport.scrollTop + elementRect.bottom - visibleBottom));
+  if (elementRect.left < visibleLeft) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.left - visibleLeft));
+  else if (elementRect.right > visibleRight) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.right - visibleRight));
+};
 export const dateTimeLocalValue = (value: WorkspaceCellValue) => {
   const source = normalizeWorkspaceDateTime(value) ? new Date(normalizeWorkspaceDateTime(value)!) : new Date();
   const pad = (part: number) => String(part).padStart(2, '0');
@@ -99,17 +145,18 @@ export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputC
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
 export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
-  if ((!inputType || isWorkspaceListInput(inputType)) && state.includedKeys !== null) {
+  if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null) {
     const includedSet = new Set(state.includedKeys);
-    const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
-    if (list) {
-      if (list.length === 0) {
-        if (!includedSet.has(workspaceFilterValueKey(null))) return false;
-      } else {
-        if (!list.some((item) => includedSet.has(workspaceFilterValueKey(item)))) return false;
-      }
+    if (inputType === 'datetime') {
+      const monthKey = workspaceDateMonthKey(value);
+      if (!includedSet.has(monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null))) return false;
     } else {
-      if (!includedSet.has(workspaceFilterValueKey(value))) return false;
+      const list = (isMultiple || (typeof value === 'string' && /[,，、;；]/.test(value))) ? parseMultiSelectValues(value) : null;
+      if (list) {
+        if (list.length === 0) {
+          if (!includedSet.has(workspaceFilterValueKey(null))) return false;
+        } else if (!list.some((item) => includedSet.has(workspaceFilterValueKey(item)))) return false;
+      } else if (!includedSet.has(workspaceFilterValueKey(value))) return false;
     }
   }
   const query = state.query?.trim().toLocaleLowerCase();
@@ -121,6 +168,21 @@ export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: Wor
     const maximum = state.max?.trim() ? Number(state.max) : undefined;
     if (minimum !== undefined && Number.isFinite(minimum) && numeric < minimum) return false;
     if (maximum !== undefined && Number.isFinite(maximum) && numeric > maximum) return false;
+  }
+  if (inputType === 'datetime' && (state.min?.trim() || state.max?.trim())) {
+    const normalized = normalizeWorkspaceDateTime(value);
+    if (!normalized) return false;
+    const timestamp = new Date(normalized).getTime();
+    const boundary = (raw: string | undefined, endOfDay: boolean) => {
+      if (!raw?.trim()) return undefined;
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+      if (!match) return undefined;
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
+    };
+    const minimum = boundary(state.min, false);
+    const maximum = boundary(state.max, true);
+    if (minimum !== undefined && timestamp < minimum) return false;
+    if (maximum !== undefined && timestamp > maximum) return false;
   }
   return true;
 };
@@ -142,12 +204,19 @@ export const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: numb
     case 'more': return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>;
     case 'plus': return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
     case 'settings': return <svg {...common}><path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" /><circle cx="13" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></svg>;
+    case 'visibility': return <svg {...common}><rect x="3" y="4" width="8" height="16" rx="1.5" /><path d="M3 9h8M3 14h8M7 4v16" /><path d="M15 12s2.5-3 5-3 5 3 5 3-2.5 3-5 3-5-3-5-3Z" transform="translate(-1 0)" /><circle cx="19" cy="12" r="1.3" fill="currentColor" stroke="none" /></svg>;
+    case 'eye': return <svg {...common}><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z" /><circle cx="12" cy="12" r="2.2" /></svg>;
+    case 'eye-off': return <svg {...common}><path d="M3 3l18 18" /><path d="M10.6 6.9A10.5 10.5 0 0 1 12 7c6 0 9.5 5 9.5 5a16.5 16.5 0 0 1-3.3 3.4M6.5 6.5C4 8 2.5 12 2.5 12a16 16 0 0 0 5.1 4.2A10.5 10.5 0 0 0 12 17c.5 0 1-.1 1.5-.2" /></svg>;
     case 'trash': return <svg {...common}><path d="M4 7h16M10 11v5M14 11v5M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>;
     case 'back': return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></svg>;
     case 'download': return <svg {...common}><path d="M12 3v12M7 10l5 5 5-5M4 20h16" /></svg>;
     case 'upload': return <svg {...common}><path d="M12 15V3M7 8l5-5 5 5M4 20h16" /></svg>;
     case 'rows': return <svg {...common}><path d="M4 5h16M4 12h16M4 19h16" /><path d="M8 3v18" /></svg>;
     case 'columns': return <svg {...common}><rect x="3" y="4" width="13" height="16" rx="1.5" /><path d="M8 4v16M3 9h13M20 10v8M16 14h8" /></svg>;
+    case 'rows-plus': return <svg {...common}><path d="M3 5h13M3 12h13M3 19h13" /><path d="M7 3v18" /><path d="M20 10v8M16 14h8" /></svg>;
+    case 'columns-plus': return <svg {...common}><rect x="3" y="4" width="13" height="16" rx="1.5" /><path d="M8 4v16M3 9h13M20 10v8M16 14h8" /></svg>;
+    case 'undo': return <svg {...common}><path d="M9 7 4 12l5 5" /><path d="M4 12h9a7 7 0 0 1 7 7" /></svg>;
+    case 'redo': return <svg {...common}><path d="m15 7 5 5-5 5" /><path d="M20 12h-9a7 7 0 0 0-7 7" /></svg>;
     case 'home': return <svg {...common}><path d="m4 11 8-7 8 7" /><path d="M6 10v9h12v-9M10 19v-5h4v5" /></svg>;
     case 'up': return <svg {...common}><path d="m6 15 6-6 6 6" /></svg>;
     case 'down': return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
@@ -209,9 +278,9 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
     </section>
   </div>;
 };
-export const WorkspaceHeaderContent = ({ label, nameClass, editLabel, filterActive, onFilter }: { label: string; nameClass: string; editLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
-  <button type="button" className={nameClass} aria-label={editLabel}>{label}</button>
-  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${label}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
+export const WorkspaceHeaderContent = ({ label, labelColor, nameClass, editLabel, accessibleLabel = label || '未命名屬性', filterActive, onFilter }: { label: string; labelColor?: string; nameClass: string; editLabel?: string; accessibleLabel?: string; filterActive: boolean; onFilter(): void }) => <div className="workspace-header-layout">
+  <button type="button" className={nameClass} style={{ color: labelColor }} aria-label={editLabel ?? accessibleLabel}>{label}</button>
+  <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
 </div>;
 export const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
   if (!isWorkspaceLinkValue(value)) return null;

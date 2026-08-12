@@ -1,11 +1,13 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
+import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT, WORKSPACE_FORMAT_VERSION } from './types';
 
 const TABLE_MARKER = '__workspace_table';
 const WORKSPACE_MARKER = '__workspace';
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
+const OPTION_COLORS_JSON_MARKER = '__workspace_option_colors_json:';
+const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
 const LINK_JSON_MARKER = '__workspace_link_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
@@ -49,6 +51,8 @@ const sheetXml = (rows: unknown[][]) => {
 
 const tableRows = (table: WorkspaceTable): unknown[][] => {
   const rowHeader = getRowHeaderColumn(table);
+  const serializeOptionColors = (column: WorkspaceColumn) => `${OPTION_COLORS_JSON_MARKER}${JSON.stringify(column.optionColors ?? {})}`;
+  const serializeNumberRanges = (column: WorkspaceColumn) => `${NUMBER_RANGES_JSON_MARKER}${JSON.stringify(column.numberRanges ?? [])}`;
   return [
   [TABLE_MARKER, WORKSPACE_FORMAT_VERSION],
   ['table_id', table.id],
@@ -56,9 +60,9 @@ const tableRows = (table: WorkspaceTable): unknown[][] => {
   ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
-  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand'],
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode'],
-  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')]),
+  ['row_header', rowHeader.id, rowHeader.name, rowHeader.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(rowHeader.options)}`, rowHeader.alignment ?? 'left', rowHeader.overflowMode ?? 'expand', serializeOptionColors(rowHeader), serializeNumberRanges(rowHeader), 'false'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden'],
+  ...table.columns.map((column) => ['column', column.id, column.name, column.inputType, `${OPTIONS_JSON_MARKER}${JSON.stringify(column.options)}`, column.alignment ?? 'left', column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap'), serializeOptionColors(column), serializeNumberRanges(column), column.hidden ? 'true' : 'false']),
   ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
   ...table.rows.map((row) => [row.id, serializeCellValue(row.name), ...table.columns.map((column) => serializeCellValue(row.values[column.id] ?? null))]),
   ];
@@ -184,6 +188,33 @@ const parseOptions = (value: string) => {
   }
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
 };
+const parseOptionColors = (value: string): Record<string, string> => {
+  if (!value.startsWith(OPTION_COLORS_JSON_MARKER)) return {};
+  try {
+    const parsed: unknown = JSON.parse(value.slice(OPTION_COLORS_JSON_MARKER.length));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([option, color]) => Boolean(option.trim()) && isWorkspaceColor(color)));
+  } catch {
+    return {};
+  }
+};
+const parseNumberRanges = (value: string): WorkspaceNumberRange[] => {
+  if (!value.startsWith(NUMBER_RANGES_JSON_MARKER)) return [];
+  try {
+    const parsed: unknown = JSON.parse(value.slice(NUMBER_RANGES_JSON_MARKER.length));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const candidate = item as Partial<WorkspaceNumberRange>;
+      const min = candidate.min === null || candidate.min === undefined ? null : Number(candidate.min);
+      const max = candidate.max === null || candidate.max === undefined ? null : Number(candidate.max);
+      if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max)) || (min !== null && max !== null && min > max) || !isWorkspaceColor(candidate.color)) return [];
+      return [{ min, max, color: candidate.color }];
+    });
+  } catch {
+    return [];
+  }
+};
 
 const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): WorkspaceCellValue => {
   if (raw === null || raw === undefined || raw === '') return null;
@@ -205,18 +236,21 @@ const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): Wo
 const parseTable = (rows: SheetRows): WorkspaceTable => {
   if (stringValue(rows[0]?.[0]) !== TABLE_MARKER) throw new Error('找不到動態表格格式標記');
   const tableName = stringValue(rows[2]?.[1]) || '匯入表格';
-  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]) || '項目';
+  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]);
   const textScaleValue = Number(rows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
   const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
   const transposed = stringValue(rows.find((row) => stringValue(row[0]) === 'transposed_view')?.[1]) === 'true';
   const columns: WorkspaceColumn[] = [];
   for (const row of rows) {
     if (stringValue(row[0]) !== 'column') continue;
-    const column = createColumn(stringValue(row[2]) || '未命名欄位', parseType(stringValue(row[3])));
+    const column = createColumn(stringValue(row[2]), parseType(stringValue(row[3])));
     column.id = stringValue(row[1]) || column.id;
     column.options = parseOptions(stringValue(row[4]));
     column.alignment = parseAlignment(stringValue(row[5]));
     column.overflowMode = parseOverflowMode(stringValue(row[6]), column.inputType);
+    column.optionColors = parseOptionColors(stringValue(row[7]));
+    column.numberRanges = parseNumberRanges(stringValue(row[8]));
+    column.hidden = stringValue(row[9]) === 'true';
     columns.push(column);
   }
   if (!columns.length) throw new Error('匯入表格沒有欄位');
@@ -229,9 +263,12 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   rowHeader.options = parseOptions(stringValue(rowHeaderMetadata?.[4]));
   rowHeader.alignment = parseAlignment(stringValue(rowHeaderMetadata?.[5]));
   rowHeader.overflowMode = parseOverflowMode(stringValue(rowHeaderMetadata?.[6]), rowHeader.inputType, 'expand');
-  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row, index) => ({
+  rowHeader.optionColors = parseOptionColors(stringValue(rowHeaderMetadata?.[7]));
+  rowHeader.numberRanges = parseNumberRanges(stringValue(rowHeaderMetadata?.[8]));
+  rowHeader.hidden = false;
+  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
     id: stringValue(row[0]) || makeId('row'),
-    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? `項目 ${index + 1}` : `項目 ${index + 1}`,
+    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? '' : '',
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + (hasRowName ? 2 : 1)];
       return [column.id, parseCellValue(raw, column)];
@@ -240,8 +277,9 @@ const parseTable = (rows: SheetRows): WorkspaceTable => {
   return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
-const uniqueColumnName = (candidate: string, index: number, used: Set<string>) => {
-  const base = candidate.trim() || `欄位 ${index + 1}`;
+const uniqueColumnName = (candidate: string, used: Set<string>) => {
+  const base = candidate.trim();
+  if (!base) return '';
   let name = base;
   let suffix = 2;
   while (used.has(name)) name = `${base} ${suffix++}`;
@@ -252,18 +290,18 @@ const uniqueColumnName = (candidate: string, index: number, used: Set<string>) =
 const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => {
   const header = rows[0] ?? [];
   if (header.length < 2) throw new Error('試算表至少需要項目欄與一個屬性欄');
-  const rowHeaderName = stringValue(header[0]) || '項目';
+  const rowHeaderName = stringValue(header[0]);
   const rowHeader = createColumn(rowHeaderName, 'text');
   rowHeader.overflowMode = 'expand';
   const usedNames = new Set<string>();
-  const columns = header.slice(1).map((value, index) => ({
-    ...createColumn(uniqueColumnName(stringValue(value), index, usedNames)),
+  const columns = header.slice(1).map((value) => ({
+    ...createColumn(uniqueColumnName(stringValue(value), usedNames)),
     inputType: 'text' as const,
   }));
   const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ''));
-  const rowsData: WorkspaceRow[] = dataRows.map((row, rowIndex) => ({
+  const rowsData: WorkspaceRow[] = dataRows.map((row) => ({
     id: makeId('row'),
-    name: stringValue(row[0]) || `項目 ${rowIndex + 1}`,
+    name: stringValue(row[0]),
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + 1];
       return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];

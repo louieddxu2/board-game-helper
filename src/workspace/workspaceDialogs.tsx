@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceLinkValue, parseMultiSelectValues } from "./model";
-import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceOverflowMode, WorkspaceTextAlign } from "./types";
-import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
+import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from "./model";
+import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
+import { AutoGrowTextarea, dateTimeLocalValue, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
 export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(column.inputType === 'datetime' ? dateTimeLocalValue(value) : displayWorkspaceCellValue(value, column.inputType));
@@ -36,13 +36,14 @@ export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: W
 };
 export const HeaderFilterDialog = ({ label, inputType, options, numericValues, state, onClose, onSort, onToggle, onSelectAll, onClearAll, onQuery, onRange, onAggregate }: { label: string; inputType?: WorkspaceInputType; options: HeaderFilterOption[]; numericValues: number[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void; onQuery(query: string): void; onRange(min: string, max: string): void; onAggregate(aggregate: HeaderFilterAggregate): void }) => {
   const [optionQuery, setOptionQuery] = useState('');
-  const visibleOptions = useMemo(() => {
-    const normalized = optionQuery.trim().toLocaleLowerCase();
-    return normalized ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
-  }, [options, optionQuery]);
-  const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
   const isText = inputType === 'text';
   const isNumber = inputType === 'number';
+  const isDate = inputType === 'datetime';
+  const visibleOptions = useMemo(() => {
+    const normalized = optionQuery.trim().toLocaleLowerCase();
+    return normalized && !isDate ? options.filter((option) => option.label.toLocaleLowerCase().includes(normalized)) : options;
+  }, [isDate, options, optionQuery]);
+  const selected = state.includedKeys === null ? null : new Set(state.includedKeys);
   const aggregate = state.aggregate ?? 'sum';
   const aggregateValue = numericValues.length
     ? aggregate === 'sum' ? numericValues.reduce((total, value) => total + value, 0) : numericValues.reduce((total, value) => total + value, 0) / numericValues.length
@@ -66,11 +67,23 @@ export const HeaderFilterDialog = ({ label, inputType, options, numericValues, s
       </div>
       <p className="workspace-filter-result-count">目前符合 {numericValues.length} 筆</p>
     </>}
-    {!isText && !isNumber && <>
+    {isDate && <>
+      <div className="workspace-filter-date-range" role="group" aria-label={`${label}日期範圍`}>
+        <label>開始日期<input type="date" aria-label={`${label}開始日期`} value={state.min ?? ''} onChange={(event) => onRange(event.target.value, state.max ?? '')} /></label>
+        <span aria-hidden="true">至</span>
+        <label>結束日期<input type="date" aria-label={`${label}結束日期`} value={state.max ?? ''} onChange={(event) => onRange(state.min ?? '', event.target.value)} /></label>
+      </div>
+      <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部年月</button><button type="button" onClick={onClearAll}>清除年月</button></div>
+      <div className="workspace-filter-options" role="group" aria-label={`${label}年月篩選`}>
+        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
+        {!visibleOptions.length && <p>沒有日期資料</p>}
+      </div>
+    </>}
+    {!isText && !isNumber && !isDate && <>
       <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} /></label>
       <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>
       <div className="workspace-filter-options" role="group" aria-label={`${label}篩選值`}>
-        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
+        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span style={{ color: option.color }}>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
         {!visibleOptions.length && <p>沒有符合的值</p>}
       </div>
     </>}
@@ -155,11 +168,11 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
         if (isMultiple) {
           return <label key={`${index}-${option}`} className={`workspace-selection-checkbox-item ${isSelected ? 'selected' : ''}`}>
             <input type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
-            <span style={{ flex: 1, minWidth: 0, overflowWrap: 'break-word' }}>{option}</span>
+            <span className="workspace-selection-checkbox-label" style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
           </label>;
         }
         return <button ref={isSelected ? selectedOptionRef : undefined} type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={isSelected ? 'selected' : ''} onClick={() => toggleOption(option)}>
-          <span>{option}</span>
+          <span style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
         </button>;
       })}
       {!filtered.length && !(isDynamic && normalizedQuery) && <p className="workspace-selection-empty">目前沒有可選項目</p>}
@@ -170,29 +183,221 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     </div>}
   </WorkspaceModal>;
 };
-export const SelectionOptionsEditor = ({ options, onChange }: { options: string[]; onChange(options: string[]): void }) => {
-  const visibleOptions = options.length ? options : [''];
-  const updateOption = (index: number, value: string) => {
-    const next = options.length ? [...options] : [''];
-    next[index] = value;
-    onChange(next);
+export const ColumnVisibilityDialog = ({ columns, onClose, onToggle }: { columns: WorkspaceColumn[]; onClose(): void; onToggle(columnId: string): void }) => <WorkspaceModal title="欄位顯示設定" onClose={onClose} className="workspace-column-visibility-dialog">
+  <div className="workspace-column-visibility-list" role="group" aria-label="欄位顯示設定">
+    {columns.map((column) => <div className={`workspace-column-visibility-row ${column.hidden ? 'is-hidden' : ''}`} key={column.id}>
+      <span className="workspace-column-visibility-name">{column.name || '未命名屬性'}</span>
+      <button type="button" className="workspace-icon-button workspace-visibility-toggle" aria-label={column.hidden ? `顯示 ${column.name || '未命名屬性'}` : `隱藏 ${column.name || '未命名屬性'}`} aria-pressed={!column.hidden} onClick={() => onToggle(column.id)}><WorkspaceIcon name={column.hidden ? 'eye-off' : 'eye'} size={22} /></button>
+    </div>)}
+    {!columns.length && <p className="workspace-column-visibility-empty">目前沒有可設定的欄位</p>}
+  </div>
+</WorkspaceModal>;
+
+const HiddenFieldEditor = ({ column, value, options, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onChange(value: WorkspaceCellValue): void }) => {
+  const [dynamicDraft, setDynamicDraft] = useState('');
+  const listOptions = options.length ? options : column.options;
+  const selectedValues = parseMultiSelectValues(value);
+  const toggleOption = (option: string) => {
+    if (!column.isMultiple) {
+      onChange(option);
+      return;
+    }
+    const next = new Set(selectedValues);
+    if (next.has(option)) next.delete(option);
+    else next.add(option);
+    onChange(formatMultiSelectValues([...next]));
   };
-  const addOption = () => onChange([...options, '']);
-  const removeOption = (index: number) => onChange(options.filter((_, optionIndex) => optionIndex !== index));
-  const moveOption = (index: number, direction: -1 | 1) => {
-    const next = options.length ? [...options] : [''];
-    const destination = index + direction;
-    if (destination < 0 || destination >= next.length) return;
-    [next[index], next[destination]] = [next[destination], next[index]];
-    onChange(next);
+  const addDynamicValue = () => {
+    const normalized = dynamicDraft.trim();
+    if (!normalized) return;
+    const existing = listOptions.find((option) => option.toLocaleLowerCase() === normalized.toLocaleLowerCase()) ?? normalized;
+    if (column.isMultiple) onChange(formatMultiSelectValues([...new Set([...selectedValues, existing])]));
+    else onChange(existing);
+    setDynamicDraft('');
+  };
+  if (column.inputType === 'link') {
+    const link = isWorkspaceLinkValue(value) ? value : { url: typeof value === 'string' ? value : '', label: '' };
+    return <div className="workspace-hidden-link-fields">
+      <label className="workspace-form-field">連結<input type="url" inputMode="url" value={link.url} onChange={(event) => onChange({ ...link, url: event.target.value })} /></label>
+      <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={link.label} onChange={(event) => onChange({ ...link, label: event.target.value })} /></label>
+    </div>;
+  }
+  if (column.inputType === 'datetime') return <input className="workspace-hidden-field-input" type="datetime-local" value={dateTimeLocalValue(value)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+  if (column.inputType === 'number') return <input className="workspace-hidden-field-input" type="number" inputMode="decimal" step="any" value={value == null ? '' : String(value)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+  if (column.inputType === 'select' || column.inputType === 'dynamic-select') return <div className="workspace-hidden-select-editor">
+    <div className="workspace-hidden-select-options" role="group" aria-label={`${column.name}選項`}>
+      {listOptions.map((option) => <button type="button" key={option} className={selectedValues.includes(option) ? 'selected' : ''} onClick={() => toggleOption(option)}>{option}</button>)}
+      {!listOptions.length && <span className="workspace-hidden-select-empty">尚無既有選項</span>}
+    </div>
+    {column.inputType === 'dynamic-select' && <div className="workspace-hidden-select-add"><input type="text" inputMode="text" value={dynamicDraft} placeholder="輸入新選項" onChange={(event) => setDynamicDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addDynamicValue(); } }} /><button type="button" onClick={addDynamicValue} aria-label={`新增${column.name}選項`}><WorkspaceIcon name="plus" size={17} /></button></div>}
+  </div>;
+  return <AutoGrowTextarea className="workspace-hidden-field-input workspace-hidden-field-textarea" value={displayWorkspaceCellValue(value, column.inputType)} onChange={(event) => onChange(coerceCellValue(column, event.target.value))} />;
+};
+
+export const HiddenFieldsDialog = ({ title, row, columns, optionsByColumn, onSave }: { title: string; row: WorkspaceRow; columns: WorkspaceColumn[]; optionsByColumn: Record<string, string[]>; onSave(values: Record<string, WorkspaceCellValue>): void }) => {
+  const [draft, setDraft] = useState<Record<string, WorkspaceCellValue>>(() => Object.fromEntries(columns.map((column) => [column.id, row.values[column.id] ?? null])));
+  const updateValue = (columnId: string, value: WorkspaceCellValue) => setDraft((current) => ({ ...current, [columnId]: value }));
+  return <WorkspaceModal title={title || '物件'} onClose={() => onSave(draft)} className="workspace-hidden-fields-dialog">
+    <div className="workspace-hidden-fields-list">
+      {columns.map((column) => <div className="workspace-hidden-field" key={column.id}>
+        <span className="workspace-hidden-field-label">{column.name || '未命名屬性'}</span>
+        <HiddenFieldEditor column={column} value={draft[column.id] ?? null} options={optionsByColumn[column.id] ?? []} onChange={(value) => updateValue(column.id, value)} />
+      </div>)}
+      {!columns.length && <p className="workspace-hidden-fields-empty">目前沒有隱藏欄位</p>}
+    </div>
+  </WorkspaceModal>;
+};
+
+export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => {
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>();
+  const selected = workspaceColorPalette.find((color) => color.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeWhenOutside = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', closeWhenOutside);
+    return () => window.removeEventListener('pointerdown', closeWhenOutside);
+  }, [open]);
+
+  const toggleMenu = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuWidth = 168;
+      setMenuPosition({
+        top: Math.min(window.innerHeight - 56, rect.bottom + 4),
+        left: Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth)),
+      });
+    }
+    setOpen(true);
   };
 
-  return <div className="workspace-option-list">
-    {visibleOptions.map((option, index) => <div className="workspace-option-row" key={index}>
-      <AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} />
+  return <div ref={pickerRef} className="workspace-color-palette" role="group" aria-label={ariaLabel}>
+    <button ref={triggerRef} type="button" className="workspace-color-picker-trigger" aria-label={ariaLabel} aria-haspopup="menu" aria-expanded={open} onClick={toggleMenu}>
+      <span className={`workspace-color-swatch ${value ? '' : 'default'}`} style={value ? { backgroundColor: value } : undefined} />
+    </button>
+    {open && <div className="workspace-color-menu" role="menu" aria-label={`${ariaLabel}選單`} style={menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined}>
+      {workspaceColorPalette.map((color) => <button type="button" role="menuitem" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-checked={value === color.value} onClick={() => { onChange(color.value); setOpen(false); }}>
+        <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />
+      </button>)}
+    </div>}
+  </div>;
+};
+
+export const NumberRangeEditor = ({ ranges, onChange }: { ranges: WorkspaceNumberRange[]; onChange(ranges: WorkspaceNumberRange[]): void }) => {
+  const updateRange = (index: number, field: 'min' | 'max', raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = trimmed ? Number(trimmed) : null;
+    const value = parsed === null || Number.isFinite(parsed) ? parsed : null;
+    onChange(ranges.map((range, rangeIndex) => rangeIndex === index ? { ...range, [field]: value } : range));
+  };
+  return <div className="workspace-number-range-editor">
+    <div className="workspace-number-range-heading"><span>數字範圍顏色</span><button type="button" className="workspace-option-add" onClick={() => onChange([...ranges, { min: null, max: null, color: '' }])}><WorkspaceIcon name="plus" size={17} />新增範圍</button></div>
+    {!ranges.length && <p className="workspace-number-range-empty">尚未設定範圍</p>}
+    {ranges.map((range, index) => <div className="workspace-number-range-row" key={index}>
+      <div className="workspace-number-range-inputs">
+        <input type="number" inputMode="decimal" step="any" value={range.min ?? ''} placeholder="−∞" aria-label={`第 ${index + 1} 段下限`} onChange={(event) => updateRange(index, 'min', event.target.value)} />
+        <span>～</span>
+        <input type="number" inputMode="decimal" step="any" value={range.max ?? ''} placeholder="＋∞" aria-label={`第 ${index + 1} 段上限`} onChange={(event) => updateRange(index, 'max', event.target.value)} />
+      </div>
+      <WorkspaceColorPalette value={range.color} onChange={(color) => onChange(ranges.map((item, rangeIndex) => rangeIndex === index ? { ...item, color } : item))} ariaLabel={`第 ${index + 1} 段顏色`} />
+      <button type="button" className="workspace-option-remove" aria-label={`刪除第 ${index + 1} 段範圍`} onClick={() => onChange(ranges.filter((_, rangeIndex) => rangeIndex !== index))}><WorkspaceIcon name="trash" size={17} /></button>
+    </div>)}
+  </div>;
+};
+
+export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { options: string[]; optionColors?: Record<string, string>; onChange(options: string[], optionColors: Record<string, string>): void }) => {
+  const visibleOptions = options.length ? options : [''];
+  const visibleColors = visibleOptions.map((option) => optionColors?.[option] ?? '');
+  const optionListRef = useRef<HTMLDivElement>(null);
+  const dragSessionRef = useRef<{ pointerId: number; currentIndex: number; active: boolean; startY: number } | undefined>(undefined);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const optionStateRef = useRef({ options: visibleOptions, colors: visibleColors });
+  const onChangeRef = useRef(onChange);
+  optionStateRef.current = { options: visibleOptions, colors: visibleColors };
+  onChangeRef.current = onChange;
+  const emit = (nextOptions: string[], nextColors: string[]) => {
+    const nextOptionColors: Record<string, string> = {};
+    nextOptions.forEach((option, index) => {
+      const key = option.trim();
+      if (key && nextColors[index]) nextOptionColors[key] = nextColors[index];
+    });
+    onChange(nextOptions, nextOptionColors);
+  };
+  const updateOption = (index: number, value: string) => {
+    const next = [...visibleOptions];
+    next[index] = value;
+    emit(next, visibleColors);
+  };
+  const updateOptionColor = (index: number, color: string) => {
+    const nextColors = [...visibleColors];
+    nextColors[index] = color;
+    emit(visibleOptions, nextColors);
+  };
+  const addOption = () => emit([...visibleOptions, ''], [...visibleColors, '']);
+  const removeOption = (index: number) => {
+    const next = visibleOptions.filter((_, optionIndex) => optionIndex !== index);
+    emit(next.length ? next : [''], visibleColors.filter((_, optionIndex) => optionIndex !== index));
+  };
+  const reorderOption = (sourceIndex: number, destination: number) => {
+    const { options: currentOptions, colors: currentColors } = optionStateRef.current;
+    if (sourceIndex === destination || sourceIndex < 0 || destination < 0 || sourceIndex >= currentOptions.length || destination >= currentOptions.length) return;
+    const nextOptions = [...currentOptions];
+    const nextColors = [...currentColors];
+    [nextOptions[sourceIndex], nextOptions[destination]] = [nextOptions[destination], nextOptions[sourceIndex]];
+    [nextColors[sourceIndex], nextColors[destination]] = [nextColors[destination], nextColors[sourceIndex]];
+    onChangeRef.current(nextOptions, Object.fromEntries(nextOptions.map((option, index) => [option.trim(), nextColors[index]]).filter(([option, color]) => Boolean(option) && Boolean(color))));
+    optionStateRef.current = { options: nextOptions, colors: nextColors };
+    dragSessionRef.current!.currentIndex = destination;
+    setDraggingIndex(destination);
+  };
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const session = dragSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      const distance = Math.abs(event.clientY - session.startY);
+      if (!session.active && distance < 6) return;
+      session.active = true;
+      const items = Array.from(optionListRef.current?.querySelectorAll<HTMLElement>('[data-option-index]') ?? []);
+      const destination = items.findIndex((item) => event.clientY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
+      reorderOption(session.currentIndex, destination === -1 ? items.length - 1 : destination);
+    };
+    const end = (event: PointerEvent) => {
+      if (dragSessionRef.current?.pointerId !== event.pointerId) return;
+      dragSessionRef.current = undefined;
+      setDraggingIndex(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  });
+  const beginOptionDrag = (index: number, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragSessionRef.current = { pointerId: event.pointerId, currentIndex: index, active: false, startY: event.clientY };
+    setDraggingIndex(index);
+  };
+
+  return <div ref={optionListRef} className="workspace-option-list">
+    {visibleOptions.map((option, index) => <div className={`workspace-option-row ${draggingIndex === index ? 'is-dragging' : ''}`} data-option-index={index} key={index}>
+      <button type="button" className="workspace-option-drag-handle" aria-label={`拖曳固定選項 ${index + 1}`} onPointerDown={(event) => beginOptionDrag(index, event)}><WorkspaceIcon name="more" size={20} /></button>
+      <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /></div>
       <div className="workspace-option-controls">
-        <button type="button" onClick={() => moveOption(index, -1)} disabled={index === 0} aria-label={`向上移動固定選項 ${index + 1}`}><WorkspaceIcon name="up" size={17} /></button>
-        <button type="button" onClick={() => moveOption(index, 1)} disabled={index === visibleOptions.length - 1} aria-label={`向下移動固定選項 ${index + 1}`}><WorkspaceIcon name="down" size={17} /></button>
+        <WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} />
         <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`移除固定選項 ${index + 1}`}><WorkspaceIcon name="close" size={18} /></button>
       </div>
     </div>)}
@@ -201,7 +406,11 @@ export const SelectionOptionsEditor = ({ options, onChange }: { options: string[
 };
 export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
-  const save = () => onSave({ ...draft, name: draft.name.trim() || '未命名屬性', options: draft.options.map((option) => option.trim()).filter(Boolean), overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  const save = () => {
+    const options = draft.options.map((option) => option.trim()).filter(Boolean);
+    const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
+    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+  };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
     const currentCategory = inputCategoryFor(current.inputType);
@@ -222,7 +431,8 @@ export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceCo
           <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
           {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
         </div>
-        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} onChange={(options) => setDraft((current) => ({ ...current, options }))} />}
+        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
+        {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
       </div>
     </div>
   </WorkspaceModal>;

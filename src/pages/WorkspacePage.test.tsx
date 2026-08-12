@@ -24,6 +24,10 @@ vi.mock('../workspace/db', () => ({
     }],
   }),
   saveWorkspace: vi.fn(async () => undefined),
+  loadWorkspaceHistories: vi.fn(async () => new Map()),
+  saveWorkspaceHistory: vi.fn(async () => undefined),
+  clearAllWorkspaceHistories: vi.fn(async () => undefined),
+  deleteWorkspaceHistories: vi.fn(async () => undefined),
   flushWorkspaceSaves: vi.fn(async () => undefined),
 }));
 
@@ -109,7 +113,15 @@ describe('WorkspacePage', () => {
     await user.type(option, '第二行');
     await user.click(screen.getByRole('button', { name: '新增選項' }));
     await user.type(screen.getByRole('textbox', { name: '固定選項 2' }), '單行');
-    await user.click(screen.getByRole('button', { name: '向上移動固定選項 2' }));
+    const dragHandle = screen.getByRole('button', { name: '拖曳固定選項 2' });
+    const dispatchPointer = (target: Element | Window, type: string, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 10, clientY });
+      Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: 'mouse' } });
+      fireEvent(target, event);
+    };
+    dispatchPointer(dragHandle, 'pointerdown', 100);
+    dispatchPointer(window, 'pointermove', -20);
+    dispatchPointer(window, 'pointerup', -20);
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -223,6 +235,37 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
   });
 
+  it('configures and renders fixed option colors', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '類型' }));
+    const colorGroup = screen.getByRole('group', { name: '固定選項 1 顏色' });
+    await user.click(within(colorGroup).getByRole('button', { name: '固定選項 1 顏色' }));
+    await user.click(screen.getByRole('menuitem', { name: '綠色' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，類型：合作' });
+    expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#2F6F5E' });
+
+    await user.click(cell);
+    expect(screen.getByRole('option', { name: '合作' }).querySelector('span')).toHaveStyle({ color: '#2F6F5E' });
+  });
+
+  it('configures inclusive open-ended numeric color ranges', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '數量' }));
+    await user.click(screen.getByRole('button', { name: '新增範圍' }));
+    await user.type(screen.getByRole('spinbutton', { name: '第 1 段上限' }), '10');
+    const colorGroup = screen.getByRole('group', { name: '第 1 段顏色' });
+    await user.click(within(colorGroup).getByRole('button', { name: '第 1 段顏色' }));
+    await user.click(screen.getByRole('menuitem', { name: '藍色' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，數量：2' });
+    expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#1D4ED8' });
+  });
+
   it('pans the table with a mouse drag without opening the dragged cell', async () => {
     render(<WorkspacePage />);
     const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
@@ -309,7 +352,7 @@ describe('WorkspacePage', () => {
     expect(confirmedDelete.parentElement).toHaveClass('workspace-dialog-leading-action');
   });
 
-  it('fills the viewport proportionally while zooming through text size', async () => {
+  it('keeps baseline fill while zooming text-driven column widths', async () => {
     const previousResizeObserver = globalThis.ResizeObserver;
     const previousClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
     class ResizeObserverMock {
@@ -327,9 +370,10 @@ describe('WorkspacePage', () => {
       await waitFor(() => expect(table).toHaveStyle({ width: '1000px' }));
       const widthsBefore = [...table.querySelectorAll('col')].map((column) => Number.parseFloat((column as HTMLElement).style.width));
       fireEvent.wheel(document.querySelector('.workspace-table-viewport')!, { ctrlKey: true, deltaY: -100 });
-      await waitFor(() => expect(table).toHaveStyle({ '--workspace-text-scale': '1.2', width: '1000px' }));
+      await waitFor(() => expect(table).toHaveStyle({ '--workspace-text-scale': '1.2' }));
+      expect(Number.parseFloat((table as HTMLElement).style.width)).toBeGreaterThan(1000);
       const widthsAfter = [...table.querySelectorAll('col')].map((column) => Number.parseFloat((column as HTMLElement).style.width));
-      widthsAfter.forEach((width, index) => expect(width).toBeCloseTo(widthsBefore[index], 8));
+      expect(widthsAfter.some((width, index) => width > widthsBefore[index] + 0.01)).toBe(true);
     } finally {
       rendered.unmount();
       Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: previousResizeObserver });
@@ -357,7 +401,7 @@ describe('WorkspacePage', () => {
     })));
   });
 
-  it('scales the workspace title while keeping modal zoom isolated', async () => {
+  it('scales only the table while keeping modal zoom isolated', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
@@ -365,13 +409,13 @@ describe('WorkspacePage', () => {
     expect(page).not.toBeNull();
 
     fireEvent.keyDown(page!, { ctrlKey: true, key: '=' });
-    await waitFor(() => expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' }));
     expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.1' });
+    expect(page).not.toHaveStyle({ '--workspace-text-scale': '1.1' });
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     const input = screen.getByRole('textbox');
     fireEvent.keyDown(input, { ctrlKey: true, key: '=' });
-    expect(page).toHaveStyle({ '--workspace-text-scale': '1.1' });
+    expect(page).not.toHaveStyle({ '--workspace-text-scale': '1.1' });
     expect(document.querySelector('.workspace-value-dialog-overlay')).toBeInTheDocument();
   });
 
@@ -397,26 +441,94 @@ describe('WorkspacePage', () => {
     }
   });
 
+  it('shrinks the workspace to the visual viewport while a cell is being edited', async () => {
+    const previousVisualViewport = window.visualViewport;
+    const visualViewport = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, width: 390, height: 420 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    const user = userEvent.setup();
+    const rendered = render(<WorkspacePage />);
+    const page = document.querySelector('.workspace-page');
+
+    try {
+      const cell = await waitFor(() => {
+        const nextCell = document.querySelector<HTMLElement>('td[data-cell-id]');
+        if (!nextCell) throw new Error('The workspace cell did not render');
+        return nextCell;
+      });
+      await user.click(cell);
+      await waitFor(() => expect(page).toHaveStyle({ height: '420px', minHeight: '420px', maxHeight: '420px' }));
+
+      visualViewport.height = 300;
+      visualViewport.dispatchEvent(new Event('resize'));
+      await waitFor(() => expect(page).toHaveStyle({ height: '300px', minHeight: '300px', maxHeight: '300px' }));
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(page).not.toHaveStyle({ height: '300px' }));
+    } finally {
+      rendered.unmount();
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    }
+  });
+
   it('shows the table name and only add and settings actions in the app bar', async () => {
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByText('測試表格')).toBeInTheDocument());
     const actions = document.querySelector('.workspace-appbar-actions')!;
-    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
+    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
   it('adds objects and attributes without opening an editor and reports both with toast messages', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '新增物件或屬性' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '屬性' }));
+    await user.click(await screen.findByRole('button', { name: '編輯' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '新增屬性' }));
     expect(screen.getByRole('status')).toHaveTextContent('已新增屬性');
+    expect(screen.getByRole('columnheader', { name: /屬性 5/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '新增物件或屬性' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('已新增物件');
+    expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
+  });
+
+  it('undoes and redoes a cell edit from the table edit bar', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(cell);
+    await user.type(screen.getByRole('textbox'), '改名');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByText('改名')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    const undo = screen.getByRole('button', { name: '復原' });
+    const redo = screen.getByRole('button', { name: '重做' });
+    expect(undo).not.toBeDisabled();
+    expect(redo).toBeDisabled();
+    await user.click(undo);
+    expect(screen.queryByText('改名')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
+    expect(redo).not.toBeDisabled();
+    await user.click(redo);
+    expect(screen.getByText('改名')).toBeInTheDocument();
+  });
+
+  it('clears redo after a new table edit', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(cell);
+    await user.type(screen.getByRole('textbox'), '第一次');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('button', { name: '重做' })).not.toBeDisabled();
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox'), '第二次');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByRole('button', { name: '重做' })).toBeDisabled();
   });
 
   it('edits the table name by clicking the displayed table title', async () => {
@@ -441,6 +553,18 @@ describe('WorkspacePage', () => {
     const column = screen.getByRole('columnheader', { name: '名稱' });
     await user.click(column);
     expect(column).toHaveClass('is-editing');
+  });
+
+  it('highlights the active object and property context while editing a cell', async () => {
+    render(<WorkspacePage />);
+    await waitFor(() => expect(document.querySelector('[data-cell-id="row-1:column-text"]')).not.toBeNull());
+
+    const cell = document.querySelector('[data-cell-id="row-1:column-text"]') as HTMLElement;
+    fireEvent.click(cell);
+
+    expect(cell).toHaveClass('is-editing');
+    expect(document.querySelector('[data-row-id="row-1"]')).toHaveClass('workspace-context-active');
+    expect(document.querySelector('[data-column-id="column-text"]')).toHaveClass('workspace-context-active');
   });
 
   it('saves a column text alignment and applies it to its cells', async () => {
@@ -615,10 +739,40 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('button', { name: '設定' }));
     expect(screen.queryByRole('button', { name: '匯入整個資料庫' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await user.click(screen.getByRole('button', { name: '設定' }));
     await user.click(screen.getByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     expect(within(drawer).getByRole('button', { name: '匯入整個資料庫' })).toBeInTheDocument();
+  });
+
+  it('hides selected columns and edits them from the object arrow panel', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '欄位顯示設定' }));
+
+    expect(screen.getByRole('dialog', { name: '欄位顯示設定' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '隱藏 類型' }));
+    expect(screen.getByRole('button', { name: '顯示 類型' })).toBeInTheDocument();
+    fireEvent.click(document.querySelector('.workspace-column-visibility-dialog-overlay')!);
+
+    expect(screen.queryByRole('columnheader', { name: '類型' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: '花火，類型：合作' })).not.toBeInTheDocument();
+    const arrow = screen.getByRole('button', { name: '編輯 花火 的隱藏欄位' });
+    await user.click(arrow);
+    const hiddenDialog = screen.getByRole('dialog', { name: '花火' });
+    expect(within(hiddenDialog).getByText('類型')).toBeInTheDocument();
+    await user.click(within(hiddenDialog).getByRole('button', { name: '競爭' }));
+    fireEvent.click(document.querySelector('.workspace-hidden-fields-dialog-overlay')!);
+
+    const latestSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    expect(latestSave?.tables[0].rows[0].values['column-select']).toBe('競爭');
+    expect(screen.queryByRole('cell', { name: '花火，類型：競爭' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '欄位顯示設定' }));
+    await user.click(screen.getByRole('button', { name: '顯示 類型' }));
+    fireEvent.click(document.querySelector('.workspace-column-visibility-dialog-overlay')!);
+    expect(screen.getByRole('cell', { name: '花火，類型：競爭' })).toBeInTheDocument();
   });
 
   it('searches every value in the active table without changing the app-bar actions', async () => {
@@ -634,14 +788,14 @@ describe('WorkspacePage', () => {
     await user.type(search, '不存在');
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByText('顯示 0 / 1 項')).toBeInTheDocument();
-    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '新增物件或屬性', '設定']);
+    expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
   it('filters, sorts, and searches values from every first-row header', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await user.click(await screen.findByRole('button', { name: '新增物件或屬性' }));
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+    await user.click(await screen.findByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
     await user.type(screen.getByRole('spinbutton'), '10');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
@@ -689,28 +843,14 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('row', { name: /物件 2/ })).not.toBeInTheDocument();
   });
 
-  it('transposes only the table view while preserving row and column data', async () => {
+  it('does not expose the unfinished transpose control', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '設定' }));
-    await user.click(screen.getByRole('button', { name: '轉置顯示' }));
-
-    expect(screen.getByRole('columnheader', { name: /花火/ })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
-    const latestSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
-    expect(latestSave?.tables[0]).toMatchObject({ transposed: true });
-    expect(latestSave?.tables[0].rows[0].id).toBe('row-1');
-    expect(latestSave?.tables[0].columns.map((column) => column.id)).toEqual(['column-text', 'column-number', 'column-select', 'column-dynamic']);
-
-    await user.click(screen.getByRole('button', { name: '篩選 花火' }));
-    const filterDialog = screen.getByRole('dialog', { name: '篩選 花火' });
-    expect(filterDialog.querySelectorAll('.workspace-filter-option-count')).toHaveLength(3);
-    expect([...filterDialog.querySelectorAll('.workspace-filter-option-count')].map((node) => node.textContent)).toEqual(expect.arrayContaining(['2', '1']));
-    await user.click(screen.getByRole('checkbox', { name: '合作' }));
-    fireEvent.click(document.querySelector('.workspace-filter-dialog-overlay')!);
-    expect(screen.queryByRole('rowheader', { name: '類型' })).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: '名稱' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '匯出此表' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '欄位顯示設定' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '轉置顯示' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '恢復正常顯示' })).not.toBeInTheDocument();
   });
 
   it('auto-scrolls the drawer tree while a dragged item is held near an edge', async () => {
@@ -778,8 +918,8 @@ describe('WorkspacePage', () => {
       const latestColumnSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
       expect(latestColumnSave?.tables[0].columns.slice(0, 2).map((column) => column.id)).toEqual(['column-number', 'column-text']);
 
-      await user.click(screen.getByRole('button', { name: '新增物件或屬性' }));
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '物件' }));
+      await user.click(screen.getByRole('button', { name: '編輯' }));
+      await user.click(screen.getByRole('button', { name: '新增物件' }));
       const sourceRow = document.querySelector('[data-row-id="row-1"]')!;
       const targetRow = document.querySelectorAll('[data-row-id]')[1];
       document.elementFromPoint = vi.fn(() => targetRow);

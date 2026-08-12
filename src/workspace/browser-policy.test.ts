@@ -33,6 +33,19 @@ describe('workspace browser policies', () => {
     expect(transposedColumnRule).toMatch(/left:\s*0/);
   });
 
+  it('keeps the frozen header layer above body content during automatic scrolling', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];
+    const theadRule = styles.match(/\.workspace-table thead\s*\{([^}]*)\}/)?.[1];
+    const tbodyRule = styles.match(/\.workspace-table tbody\s*\{([^}]*)\}/)?.[1];
+    const headerCellRule = styles.match(/\.workspace-table thead th\s*\{([^}]*)\}/)?.[1];
+
+    expect(tableRule).toMatch(/isolation:\s*isolate/);
+    expect(theadRule).toMatch(/z-index:\s*4/);
+    expect(tbodyRule).toMatch(/z-index:\s*1/);
+    expect(headerCellRule).toMatch(/z-index:\s*6/);
+  });
+
   it('centers value editors independently from table text scaling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
@@ -42,6 +55,7 @@ describe('workspace browser policies', () => {
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-list button\s*\{([^}]*)\}/)?.[1];
+    const selectionCheckboxRule = styles.match(/\.workspace-selection-checkbox-item\s*\{([^}]*)\}/)?.[1];
     const dragSurfaceRule = styles.match(/\.workspace-table-viewport, \.workspace-table-viewport \*, \.workspace-tree, \.workspace-tree \*\s*\{([^}]*)\}/)?.[1];
     const editableSurfaceRule = styles.match(/\.workspace-dialog input, \.workspace-dialog textarea, \.workspace-dialog select, \.workspace-dialog \[contenteditable="true"\]\s*\{([^}]*)\}/)?.[1];
 
@@ -57,7 +71,9 @@ describe('workspace browser policies', () => {
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.62\)/);
+    expect(selectionDialogRule).not.toMatch(/backdrop-filter/);
     expect(selectionListRule).toMatch(/background:\s*rgba\(255,253,248,\.38\)/);
+    expect(selectionCheckboxRule).toMatch(/grid-template-columns:\s*16px\s+minmax\(0,\s*1fr\)/);
     expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
     expect(dragSurfaceRule).toMatch(/-webkit-touch-callout:\s*none/);
     expect(editableSurfaceRule).toMatch(/user-select:\s*text/);
@@ -65,5 +81,6 @@ describe('workspace browser policies', () => {
     expect(filterRule).toMatch(/min-height:\s*20px/);
     expect(filterRule).toMatch(/opacity:\s*\.42/);
     expect(filterRule).not.toMatch(/flex:\s*0 0/);
+    expect(styles).not.toContain('.workspace-empty-cell::after');
   });
 });
