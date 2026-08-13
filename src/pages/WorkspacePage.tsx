@@ -14,6 +14,14 @@ import type { WorkspaceBulkSelection } from '../workspace/bulkEdit';
 import { WorkspaceBulkEditToolbar, WorkspaceRatioDistributionDialog } from '../workspace/workspaceBulkEdit';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
+const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
+  const selected = selection.rowIds.includes(rowId);
+  const rowIds = selected ? selection.rowIds.filter((id) => id !== rowId) : [...selection.rowIds, rowId];
+  if (rowIds.length === 0) return undefined;
+  return selection.distributedValues
+    ? { ...selection, rowIds, hasDraft: false, sharedValue: null, distributedValues: undefined }
+    : { ...selection, rowIds };
+};
 
 const WorkspacePage = () => {
   const [data, setData] = useState<WorkspaceData>();
@@ -174,6 +182,15 @@ const WorkspacePage = () => {
 
   const startBulkSelection = useCallback((rowId: string, columnId: string) => {
     if (!table || !table.columns.some((column) => column.id === columnId)) return;
+    if (bulkSelection) {
+      if (bulkSelection.columnId !== columnId) {
+        setNotice('批次編輯只能選取同一屬性的格子');
+        return;
+      }
+      if (bulkSelection.distributedValues) setNotice('選取已變更，請重新設定比例');
+      setBulkSelection(toggleBulkSelectionRow(bulkSelection, rowId));
+      return;
+    }
     setEditing(undefined);
     setSelectionEditor(undefined);
     setConfiguring(undefined);
@@ -182,7 +199,7 @@ const WorkspacePage = () => {
     setTableActionsOpen(false);
     setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId], hasDraft: false, sharedValue: null });
     setNotice('已進入批次選取');
-  }, [table, setSearchOpen]);
+  }, [bulkSelection, table, setSearchOpen]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -237,13 +254,8 @@ const WorkspacePage = () => {
       setNotice('批次編輯只能選取同一屬性的格子');
       return;
     }
-    setBulkSelection((current) => {
-      if (!current) return current;
-      const selected = current.rowIds.includes(row.id);
-      const rowIds = selected ? current.rowIds.filter((id) => id !== row.id) : [...current.rowIds, row.id];
-      if (rowIds.length === 0) return undefined;
-      return { ...current, rowIds, distributedValues: undefined };
-    });
+    if (bulkSelection.distributedValues) setNotice('選取已變更，請重新設定比例');
+    setBulkSelection(toggleBulkSelectionRow(bulkSelection, row.id));
   }, [bulkSelection, openCell]);
 
   const closeBulkSelection = useCallback(() => {
@@ -556,7 +568,7 @@ const WorkspacePage = () => {
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
          ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />
          : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
-     {bulkDistributionOpen && bulkColumn?.inputType === 'number' && <WorkspaceRatioDistributionDialog rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} onClose={() => setBulkDistributionOpen(false)} onApply={(distributedValues) => { setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: null, distributedValues } : current); setBulkDistributionOpen(false); }} />}
+     {bulkDistributionOpen && bulkColumn?.inputType === 'number' && <WorkspaceRatioDistributionDialog rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} onClose={(distributedValues) => { if (distributedValues) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: null, distributedValues } : current); setBulkDistributionOpen(false); }} />}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
   </section>;
