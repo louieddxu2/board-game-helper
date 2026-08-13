@@ -83,4 +83,17 @@ describe('workspace browser policies', () => {
     expect(filterRule).not.toMatch(/flex:\s*0 0/);
     expect(styles).not.toContain('.workspace-empty-cell::after');
   });
+
+  it('keeps every workspace dialog and input surface translucent without background blur', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
+    const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
+    const inputRule = styles.match(/\.workspace-dialog textarea, \.workspace-dialog input, \.workspace-dialog select\s*\{([^}]*)\}/)?.[1];
+
+    expect(overlayRule).toMatch(/background:\s*transparent/);
+    expect(dialogRule).toMatch(/background:\s*rgba\(/);
+    expect(dialogRule).toMatch(/backdrop-filter:\s*none/);
+    expect(inputRule).toMatch(/background:\s*rgba\(/);
+    expect(styles).not.toMatch(/\.workspace-(?:name|cell-name|value|link)-dialog[^{}]*\{[^}]*backdrop-filter:\s*blur/);
+  });
 });

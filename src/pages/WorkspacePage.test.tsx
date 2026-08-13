@@ -117,18 +117,42 @@ describe('WorkspacePage', () => {
     const second = screen.getByRole('cell', { name: '物件 2，數量：空白' });
     await longPress(first);
     await user.click(second);
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
+    await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
-    await user.type(screen.getByRole('spinbutton', { name: '總和' }), '10');
     await user.clear(screen.getByRole('spinbutton', { name: '物件 2比例' }));
     await user.type(screen.getByRole('spinbutton', { name: '物件 2比例' }), '3');
     expect(screen.getByRole('status', { name: '花火分配結果' })).toHaveTextContent('3');
     expect(screen.getByRole('status', { name: '物件 2分配結果' })).toHaveTextContent('7');
     expect(screen.queryByRole('button', { name: '套用預覽' })).not.toBeInTheDocument();
-    fireEvent.click(document.querySelector('.workspace-ratio-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(first).toHaveTextContent('2');
     await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
     expect(screen.getByRole('cell', { name: '花火，數量：3' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
+  });
+
+  it('embeds collapsed proportional allocation below the batch number input', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await longPress(screen.getByRole('cell', { name: '花火，數量：2' }));
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
+
+    expect(screen.queryByRole('button', { name: '比例分配' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    const dialog = screen.getByRole('dialog');
+    const disclosure = within(dialog).getByRole('button', { name: '比例分配' });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    expect(within(dialog).queryByRole('spinbutton', { name: '花火比例' })).not.toBeInTheDocument();
+
+    await user.click(disclosure);
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(within(dialog).getByRole('spinbutton', { name: '花火比例' })).toBeInTheDocument();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
   it('keeps the shared number input and proportional total synchronized', async () => {
@@ -144,13 +168,11 @@ describe('WorkspacePage', () => {
     const sharedInput = screen.getByRole('spinbutton', { name: '數量批次輸入' });
     await user.clear(sharedInput);
     await user.type(sharedInput, '12');
-    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-
     await user.click(screen.getByRole('button', { name: '比例分配' }));
-    expect(screen.getByRole('spinbutton', { name: '總和' })).toHaveValue(12);
-    await user.clear(screen.getByRole('spinbutton', { name: '總和' }));
-    await user.type(screen.getByRole('spinbutton', { name: '總和' }), '20');
-    fireEvent.click(document.querySelector('.workspace-ratio-dialog-overlay')!);
+    expect(sharedInput).toHaveValue(12);
+    await user.clear(sharedInput);
+    await user.type(sharedInput, '20');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
     expect(screen.getByRole('spinbutton', { name: '數量批次輸入' })).toHaveValue(20);
@@ -166,9 +188,11 @@ describe('WorkspacePage', () => {
     const second = screen.getByRole('cell', { name: '物件 2，數量：空白' });
     await longPress(first);
     await user.click(second);
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
+    await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
-    await user.type(screen.getByRole('spinbutton', { name: '總和' }), '10');
-    fireEvent.click(document.querySelector('.workspace-ratio-dialog-overlay')!);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.getByRole('button', { name: '套用批次編輯' })).toBeEnabled();
 
     await user.click(second);

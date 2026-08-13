@@ -11,7 +11,7 @@ import { useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
 import { useWorkspaceActions } from "../workspace/useWorkspaceActions";
 import type { WorkspaceBulkSelection } from '../workspace/bulkEdit';
-import { WorkspaceBulkEditToolbar, WorkspaceRatioDistributionDialog } from '../workspace/workspaceBulkEdit';
+import { WorkspaceBulkEditToolbar, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
@@ -47,7 +47,6 @@ const WorkspacePage = () => {
   const [visualViewportHeight, setVisualViewportHeight] = useState<number>();
   const [bulkSelection, setBulkSelection] = useState<WorkspaceBulkSelection>();
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
-  const [bulkDistributionOpen, setBulkDistributionOpen] = useState(false);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
@@ -148,7 +147,6 @@ const WorkspacePage = () => {
   useEffect(() => {
     setBulkSelection(undefined);
     setBulkEditorOpen(false);
-    setBulkDistributionOpen(false);
   }, [table?.id]);
 
   useEffect(() => {
@@ -261,7 +259,6 @@ const WorkspacePage = () => {
   const closeBulkSelection = useCallback(() => {
     setBulkSelection(undefined);
     setBulkEditorOpen(false);
-    setBulkDistributionOpen(false);
   }, []);
 
   const setBulkSharedValue = useCallback((value: WorkspaceCellValue) => {
@@ -438,7 +435,7 @@ const WorkspacePage = () => {
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => { closeBulkSelection(); setTableActionsOpen((open) => !open); setEditBarOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
-    {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onOpenDistribution={() => setBulkDistributionOpen(true)} onConfirm={commitBulkSelection} />}
+    {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onConfirm={commitBulkSelection} />}
     {searchOpen && table && <div className="workspace-searchbar" role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label="搜尋此表" placeholder="搜尋此表" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
@@ -563,12 +560,13 @@ const WorkspacePage = () => {
       : <CellInputDialog column={activeEditingColumn} value={activeEditingValue} inputLabel={activeEditingColumn.id === rowHeader?.id ? '物件名稱' : undefined} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />)}
      {configuring && <ColumnConfig column={configuring.column} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
      {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
-     {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'link'
+     {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
+       ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />
+       : bulkColumn.inputType === 'link'
        ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} onSave={setBulkSharedValue} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
          ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />
          : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
-     {bulkDistributionOpen && bulkColumn?.inputType === 'number' && <WorkspaceRatioDistributionDialog rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkSelection?.sharedValue === 'number' ? bulkSelection.sharedValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkDistributionOpen(false); }} />}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
   </section>;
