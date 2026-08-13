@@ -5,6 +5,20 @@ const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous sw
 const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 
 export type TableBounceAxis = 'x' | 'y';
+export type TablePanAxis = TableBounceAxis | 'both';
+
+const DIAGONAL_SLOPE_MIN = 0.72;
+const DIAGONAL_SLOPE_MAX = 1 / DIAGONAL_SLOPE_MIN;
+
+export const getTablePanAxis = (deltaX: number, deltaY: number): TablePanAxis => {
+  const absX = Math.abs(deltaX);
+  const absY = Math.abs(deltaY);
+  if (absX === 0) return 'y';
+  if (absY === 0) return 'x';
+  const slope = absY / absX;
+  if (slope >= DIAGONAL_SLOPE_MIN && slope <= DIAGONAL_SLOPE_MAX) return 'both';
+  return absX > absY ? 'x' : 'y';
+};
 
 export const getTableContentScrollBounds = (viewport: HTMLDivElement, table: HTMLTableElement | null) => {
   const corner = table?.querySelector<HTMLElement>('.workspace-row-corner');
@@ -79,7 +93,7 @@ export function useMomentumScroll() {
     points.current = points.current.filter((p) => now - p.time <= 100).slice(-5);
   }, []);
 
-  const release = useCallback((viewport: HTMLDivElement, bounceAxis?: TableBounceAxis) => {
+  const release = useCallback((viewport: HTMLDivElement, panAxis?: TablePanAxis) => {
     const table = viewport.querySelector?.('table') ?? null;
     activeTableRef.current = table;
 
@@ -95,7 +109,11 @@ export function useMomentumScroll() {
     // Stack residual velocity from previous coasting for consecutive swipe acceleration
     let vx = activeVelocity.current.vx * ACCELERATION_STACK_FACTOR + rawVx;
     let vy = activeVelocity.current.vy * ACCELERATION_STACK_FACTOR + rawVy;
-    const preferredBounceAxis = bounceAxis ?? (Math.abs(vx) >= Math.abs(vy) ? 'x' : 'y');
+    if (panAxis === 'x') vy = 0;
+    if (panAxis === 'y') vx = 0;
+    const preferredBounceAxis = panAxis === 'x' || panAxis === 'y'
+      ? panAxis
+      : Math.abs(vx) >= Math.abs(vy) ? 'x' : 'y';
 
     // Clamp speed limits
     vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, vx));
@@ -109,7 +127,7 @@ export function useMomentumScroll() {
       const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
       const atBoundaryX = (viewport.scrollLeft <= 0 && vx > 0) || (viewport.scrollLeft >= maxLeft && vx < 0);
       const atBoundaryY = (viewport.scrollTop <= 0 && vy > 0) || (viewport.scrollTop >= maxTop && vy < 0);
-      const activeBounceAxis = atBoundaryX && !atBoundaryY ? 'x' : atBoundaryY && !atBoundaryX ? 'y' : preferredBounceAxis;
+      const activeBounceAxis = preferredBounceAxis;
 
       if (activeBounceAxis === 'x') {
         if (atBoundaryX) {

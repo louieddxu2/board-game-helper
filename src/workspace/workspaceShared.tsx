@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { formatWorkspaceDateTime, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
+import { formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
@@ -281,7 +281,7 @@ export const WorkspaceHeaderContent = ({ label, labelColor, nameClass, editLabel
   <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>
 </div>;
 export const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
-  if (!isWorkspaceLinkValue(value)) return null;
-  const href = externalHref(value.url);
+  const rawUrl = isWorkspaceLinkValue(value) ? value.url : isWorkspaceUrlText(value) ? value : '';
+  const href = externalHref(rawUrl);
   return href ? <a className="workspace-cell-external" href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /></a> : null;
 };

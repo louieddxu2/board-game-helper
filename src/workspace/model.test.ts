@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
+  it('recognizes explicit web addresses without turning ordinary text into links', () => {
+    expect(isWorkspaceUrlText('https://example.com/game')).toBe(true);
+    expect(isWorkspaceUrlText('www.example.com/game')).toBe(true);
+    expect(isWorkspaceUrlText('example.com/game')).toBe(true);
+    expect(isWorkspaceUrlText('花火')).toBe(false);
+    expect(isWorkspaceUrlText('example')).toBe(false);
+  });
+
   it('derives dynamic options in first-seen order without empty or duplicate values', () => {
     const table = createTable('收藏');
     const column = createColumn('狀態', 'dynamic-select');

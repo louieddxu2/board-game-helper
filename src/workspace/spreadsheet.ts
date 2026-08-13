@@ -1,5 +1,5 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, makeId, normalizeWorkspaceDateTime } from './model';
+import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
 
@@ -12,7 +12,7 @@ const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
 type AssertNever<T extends never> = T;
-type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode';
+type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars';
 type SerializedTableFields = 'id' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
@@ -85,6 +85,7 @@ const serializeColumnSettings = (kind: 'row_header' | 'column', column: Workspac
   `${NUMBER_RANGES_JSON_MARKER}${JSON.stringify(column.numberRanges ?? [])}`,
   kind === 'column' && column.hidden ? 'true' : 'false',
   column.isMultiple ? 'true' : 'false',
+  column.widthLimitChars ?? '',
 ];
 
 const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknown[][] => {
@@ -98,7 +99,7 @@ const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknow
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
   serializeColumnSettings('row_header', rowHeader),
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars'],
   ...table.columns.map((column) => serializeColumnSettings('column', column)),
   ];
 };
@@ -293,6 +294,8 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   column.numberRanges = parseNumberRanges(stringValue(row?.[8]));
   column.hidden = stringValue(row?.[9]) === 'true';
   column.isMultiple = stringValue(row?.[10]) === 'true';
+  const widthLimitChars = Number(row?.[11]);
+  column.widthLimitChars = Number.isFinite(widthLimitChars) && widthLimitChars > 0 ? Math.max(1, Math.round(widthLimitChars)) : undefined;
   return column;
 };
 
@@ -329,24 +332,48 @@ const uniqueColumnName = (candidate: string, used: Set<string>) => {
   return name;
 };
 
+export const inferPlainColumnSettings = (values: unknown[]): Pick<WorkspaceColumn, 'inputType' | 'options' | 'overflowMode'> => {
+  const populated = values.filter((value) => value !== null && value !== undefined && value !== '');
+  if (!populated.length) return { inputType: 'text', options: [], overflowMode: 'wrap' };
+  if (populated.every((value) => typeof value === 'number' && Number.isFinite(value))) return { inputType: 'number', options: [], overflowMode: 'wrap' };
+  if (populated.every((value) => typeof value === 'string' && isWorkspaceUrlText(value))) return { inputType: 'link', options: [], overflowMode: 'ellipsis' };
+  const dateLike = (value: unknown) => value instanceof Date || (typeof value === 'string' && /^\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(value.trim()) && Boolean(normalizeWorkspaceDateTime(value)));
+  if (populated.every(dateLike)) return { inputType: 'datetime', options: [], overflowMode: 'wrap' };
+  if (populated.every((value) => typeof value === 'string')) {
+    const seen = new Set<string>();
+    const options: string[] = [];
+    for (const value of populated) {
+      const option = String(value).trim();
+      const key = option.toLocaleLowerCase();
+      if (!option || seen.has(key)) continue;
+      seen.add(key);
+      options.push(option);
+      if (options.length > 10) return { inputType: 'text', options: [], overflowMode: 'wrap' };
+    }
+    if (options.length < populated.length) return { inputType: 'select', options, overflowMode: 'wrap' };
+  }
+  return { inputType: 'text', options: [], overflowMode: 'wrap' };
+};
+
 const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => {
   const header = rows[0] ?? [];
   if (header.length < 2) throw new Error('試算表至少需要項目欄與一個屬性欄');
   const rowHeaderName = stringValue(header[0]);
-  const rowHeader = createColumn(rowHeaderName, 'text');
-  rowHeader.overflowMode = 'expand';
-  const usedNames = new Set<string>();
-  const columns = header.slice(1).map((value) => ({
-    ...createColumn(uniqueColumnName(stringValue(value), usedNames)),
-    inputType: 'text' as const,
-  }));
   const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ''));
+  const rowHeaderInference = inferPlainColumnSettings(dataRows.map((row) => row[0]));
+  const rowHeader = { ...createColumn(rowHeaderName, rowHeaderInference.inputType), ...rowHeaderInference };
+  if (rowHeader.inputType === 'text') rowHeader.overflowMode = 'expand';
+  const usedNames = new Set<string>();
+  const columns = header.slice(1).map((value, columnIndex) => {
+    const inference = inferPlainColumnSettings(dataRows.map((row) => row[columnIndex + 1]));
+    return { ...createColumn(uniqueColumnName(stringValue(value), usedNames), inference.inputType), ...inference };
+  });
   const rowsData: WorkspaceRow[] = dataRows.map((row) => ({
     id: makeId('row'),
-    name: stringValue(row[0]),
+    name: parseCellValue(row[0], rowHeader),
     values: Object.fromEntries(columns.map((column, columnIndex) => {
       const raw = row[columnIndex + 1];
-      return [column.id, raw === null || raw === undefined || raw === '' ? null : typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw)];
+      return [column.id, parseCellValue(raw, column)];
     })),
   }));
   return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, rowHeader, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };

@@ -1,8 +1,15 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
-import { useMomentumScroll } from './useMomentumScroll';
+import { getTablePanAxis, useMomentumScroll } from './useMomentumScroll';
 
 describe('useMomentumScroll', () => {
+  test('locks clear horizontal and vertical gestures while preserving near-diagonal movement', () => {
+    expect(getTablePanAxis(100, 20)).toBe('x');
+    expect(getTablePanAxis(20, -100)).toBe('y');
+    expect(getTablePanAxis(100, 90)).toBe('both');
+    expect(getTablePanAxis(-90, 100)).toBe('both');
+  });
+
   test('initializes with inactive coasting state', () => {
     const { result } = renderHook(() => useMomentumScroll());
     expect(result.current.isCoasting()).toBe(false);
@@ -75,6 +82,37 @@ describe('useMomentumScroll', () => {
     expect(table.classList.contains('is-bouncing')).toBe(true);
     expect(table.style.getPropertyValue('--workspace-bounce-x')).not.toBe('0px');
     expect(table.style.getPropertyValue('--workspace-bounce-y')).toBe('0.0px');
+
+    result.current.stop();
+    requestAnimationFrame.mockRestore();
+    vi.useRealTimers();
+  });
+
+  test('does not bounce the secondary axis when only that axis reaches a boundary', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    viewport.append(table);
+    Object.defineProperties(viewport, {
+      scrollWidth: { configurable: true, value: 2000 }, clientWidth: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 2000 }, clientHeight: { configurable: true, value: 500 },
+      scrollLeft: { configurable: true, writable: true, value: 0 }, scrollTop: { configurable: true, writable: true, value: 200 },
+    });
+    const frames: FrameRequestCallback[] = [];
+    if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
+    if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => { frames.push(callback); return frames.length; });
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    result.current.trackMove(0, 0);
+    vi.setSystemTime(now + 40);
+    result.current.trackMove(15, 50);
+    result.current.release(viewport, 'y');
+    frames.shift()?.(0);
+
+    expect(table.classList.contains('is-bounce-x')).toBe(false);
+    expect(table.style.getPropertyValue('--workspace-bounce-x')).toBe('');
 
     result.current.stop();
     requestAnimationFrame.mockRestore();

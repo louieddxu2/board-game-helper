@@ -475,35 +475,51 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     <button type="button" className="workspace-option-add" onClick={addOption}><WorkspaceIcon name="plus" size={18} />新增選項</button>
   </div>;
 };
-export const ColumnConfig = ({ column, onSave, onDelete }: { column: WorkspaceColumn; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
+export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
+  const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
   const save = () => {
     const options = draft.options.map((option) => option.trim()).filter(Boolean);
     const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
-    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap') });
+    const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
+    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars });
   };
   const category = inputCategoryFor(draft.inputType);
-  const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => setDraft((current) => {
-    const currentCategory = inputCategoryFor(current.inputType);
-    const nextType = currentCategory === nextCategory ? current.inputType : defaultInputTypeFor(nextCategory);
-    return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
-  });
-  const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({ ...current, inputType, overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode }));
+  const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
+    setActivePanel('input');
+    setDraft((current) => {
+      const currentCategory = inputCategoryFor(current.inputType);
+      const nextType = currentCategory === nextCategory ? current.inputType : defaultInputTypeFor(nextCategory);
+      return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
+    });
+  };
+  const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({
+    ...current,
+    inputType,
+    options: inputType === 'select' && current.options.length === 0 && suggestedOptions.length <= 10 ? suggestedOptions : current.options,
+    overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode,
+  }));
+  const currentOverflowMode = draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap');
   return <WorkspaceModal title="屬性設定" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
     <div className="workspace-column-config">
       <div className="workspace-column-config-rail">
         <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
-        <fieldset className="workspace-form-field workspace-overflow-field"><legend>內容顯示</legend><div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={(draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap')) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div></fieldset>
+        <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} onClick={() => setActivePanel('overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>
       </div>
       <div className="workspace-column-config-panel">
-        <div className="workspace-input-subtype-options" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
-          {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
-        </div>
-        {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
-        {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
+        {activePanel === 'input' ? <>
+          <div className="workspace-input-subtype-options">
+            <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
+            {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
+          </div>
+          {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
+          {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
+        </> : <div className="workspace-overflow-panel">
+          <div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={currentOverflowMode === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div>
+          {currentOverflowMode !== 'expand' && <label className="workspace-form-field">欄寬上限（全形字數）<input type="number" inputMode="numeric" min="1" step="1" value={draft.widthLimitChars ?? ''} placeholder="未設定" onChange={(event) => setDraft((current) => ({ ...current, widthLimitChars: event.target.value ? Number(event.target.value) : undefined }))} /></label>}
+        </div>}
       </div>
     </div>
   </WorkspaceModal>;

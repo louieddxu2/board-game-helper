@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
-import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
 import type { WorkspaceData } from './types';
 
 const ensureBlobArrayBuffer = () => {
@@ -75,6 +75,40 @@ const makeFixture = (): WorkspaceData => {
 };
 
 describe('workspace spreadsheet format', () => {
+  it('infers conservative property types for ordinary spreadsheet imports', () => {
+    expect(inferPlainColumnSettings([1, 2, 3])).toMatchObject({ inputType: 'number' });
+    expect(inferPlainColumnSettings(['example.com/a', 'https://example.org/b'])).toMatchObject({ inputType: 'link' });
+    expect(inferPlainColumnSettings(['2026/08/12 20:14', '2026/08/13 09:00'])).toMatchObject({ inputType: 'datetime' });
+    expect(inferPlainColumnSettings(['合作', '競爭', '合作'])).toEqual({ inputType: 'select', options: ['合作', '競爭'], overflowMode: 'wrap' });
+    expect(inferPlainColumnSettings(['唯一一', '唯一二', '唯一三'])).toMatchObject({ inputType: 'text', options: [] });
+  });
+
+  it('applies inferred property types while importing an ordinary data-only workbook', async () => {
+    const source = makeFixture();
+    const table = source.tables[0];
+    const website = createColumn('網站');
+    const playedAt = createColumn('遊玩時間');
+    table.columns.push(website, playedAt);
+    table.rows[0].values[website.id] = 'example.com/a';
+    table.rows[0].values[playedAt.id] = '2026/08/12 20:14';
+    const second = createRow(table.columns, '第二款');
+    second.values[table.columns[0].id] = '另一款遊戲';
+    second.values[table.columns[1].id] = '已擁有';
+    second.values[table.columns[2].id] = 4;
+    second.values[website.id] = 'https://example.org/b';
+    second.values[playedAt.id] = '2026/08/13 09:00';
+    table.rows.push(second);
+    const exported = exportWorkspaceXlsx(source, table);
+    const settingsSheetTag = '<sheet name="收藏清單__設定" sheetId="2" r:id="rId2"/>';
+    const dataOnlyWorkbook = await replaceStoredWorkbookText(exported, settingsSheetTag, ' '.repeat(new TextEncoder().encode(settingsSheetTag).length));
+
+    const imported = await importWorkspaceXlsx(dataOnlyWorkbook);
+
+    expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number', 'link', 'datetime']);
+    expect(imported.table?.columns[1].options).toEqual(['已擁有']);
+    expect(imported.table?.rows[0].values[imported.table.columns[3].id]).toEqual({ url: 'example.com/a', label: '' });
+  });
+
   it('exports a clean data sheet followed by a separate settings sheet', async () => {
     const source = makeFixture();
     source.tables[0].rowHeaderName = '桌遊收藏';
@@ -198,6 +232,16 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[1].hidden).toBe(true);
     expect(imported.table?.columns[2].numberRanges).toEqual(table.columns[2].numberRanges);
     expect(imported.table?.rowHeader?.optionColors).toEqual({ 已擁有: '#7C3AED' });
+  });
+
+  it('round-trips the full-width-character column width limit', async () => {
+    const source = makeFixture();
+    source.tables[0].columns[0].overflowMode = 'ellipsis';
+    source.tables[0].columns[0].widthLimitChars = 8;
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+
+    expect(imported.table?.columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 8 });
   });
 
   it('round-trips link values, overflow modes, and the editable first-column property', async () => {

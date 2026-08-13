@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceData, WorkspaceTable } from './types';
 import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
-import { applyTableBounce, getTableContentScrollBounds, resetTableBounce, settleTableBounce, useMomentumScroll, TableBounceAxis } from './useMomentumScroll';
+import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, useMomentumScroll, TablePanAxis } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 
 interface UseTableGesturesProps {
@@ -35,7 +35,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
   const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
-  const panAxis = useRef<TableBounceAxis | undefined>(undefined);
+  const panAxis = useRef<TablePanAxis | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
@@ -233,15 +233,15 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (!pointerMoved.current && Math.hypot(deltaX, deltaY) <= dragThreshold) return;
       if (!pointerMoved.current) {
         pointerMoved.current = true;
-        panAxis.current = Math.abs(deltaX) >= Math.abs(deltaY) ? 'x' : 'y';
+        panAxis.current = getTablePanAxis(deltaX, deltaY);
         setPanning(true);
         if ('setPointerCapture' in viewport) {
           try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
         }
       }
       momentumScroll.trackMove(event.clientX, event.clientY);
-      const targetScrollLeft = panStart.current.scrollLeft - deltaX;
-      const targetScrollTop = panStart.current.scrollTop - deltaY;
+      const targetScrollLeft = panAxis.current === 'y' ? panStart.current.scrollLeft : panStart.current.scrollLeft - deltaX;
+      const targetScrollTop = panAxis.current === 'x' ? panStart.current.scrollTop : panStart.current.scrollTop - deltaY;
       viewport.scrollLeft = targetScrollLeft;
       viewport.scrollTop = targetScrollTop;
 
@@ -251,7 +251,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
         const beyondX = targetScrollLeft < 0 || targetScrollLeft > maxLeft;
         const beyondY = targetScrollTop < 0 || targetScrollTop > maxTop;
-        const bounceAxis = beyondX && !beyondY ? 'x' : beyondY && !beyondX ? 'y' : panAxis.current;
+        const bounceAxis = panAxis.current === 'both'
+          ? Math.abs(deltaX) >= Math.abs(deltaY) ? 'x' : 'y'
+          : panAxis.current;
         let overX = 0;
         let overY = 0;
         if (bounceAxis === 'x') {

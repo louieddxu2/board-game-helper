@@ -443,7 +443,7 @@ describe('WorkspacePage', () => {
     expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#1D4ED8' });
   });
 
-  it('pans the table with a mouse drag without opening the dragged cell', async () => {
+  it('locks a clearly horizontal mouse drag without opening the dragged cell', async () => {
     render(<WorkspacePage />);
     const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
     const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
@@ -465,7 +465,7 @@ describe('WorkspacePage', () => {
     fireEvent.click(cell);
 
     expect(viewport.scrollLeft).toBe(90);
-    expect(viewport.scrollTop).toBe(40);
+    expect(viewport.scrollTop).toBe(0);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
@@ -856,7 +856,7 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '刪除屬性' })).not.toBeInTheDocument();
   });
 
-  it('keeps display settings on the left and fixed options on the right', async () => {
+  it('opens display settings from one left-side button into the right panel', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
@@ -866,9 +866,10 @@ describe('WorkspacePage', () => {
     expect(rail?.querySelector('.workspace-alignment-field')).toBeInTheDocument();
     expect(rail?.querySelector('.workspace-overflow-field')).toBeInTheDocument();
     expect(panel?.querySelector('.workspace-input-subtype-options')).toBeInTheDocument();
-    expect(panel?.querySelector('legend')).not.toBeInTheDocument();
-    expect(panel?.querySelector('.workspace-alignment-field')).not.toBeInTheDocument();
-    expect(panel?.querySelector('.workspace-overflow-field')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '自動換行' }));
+    expect(panel?.querySelector('.workspace-overflow-panel')).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByRole('button', { name: '推擠寬度' })).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByRole('button', { name: '超過省略' })).toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(await screen.findByRole('columnheader', { name: '類型' }));
@@ -891,6 +892,29 @@ describe('WorkspacePage', () => {
     expect(screen.getByText('遊戲頁面')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
     expect(screen.getByRole('link', { name: '外連' })).not.toHaveTextContent('外連');
+  });
+
+  it('immediately renders an external action when ordinary cell text is a URL', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), 'example.com/game');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getByRole('link', { name: '外連' })).toHaveAttribute('href', 'https://example.com/game');
+  });
+
+  it('suggests current distinct values when changing a property to a fixed list', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), '合作');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    await user.click(screen.getByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '選單' }));
+    await user.click(screen.getByRole('button', { name: '固定列表' }));
+
+    expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
   });
 
   it('opens the compact date-time wheel editor and displays zero-padded values', async () => {
@@ -928,14 +952,19 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
   });
 
-  it('offers expand, ellipsis, and wrapping display modes for every property', async () => {
+  it('sets an ellipsis width limit in full-width characters', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
 
-    expect(screen.getByRole('button', { name: '推擠寬度' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '超過省略' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '自動換行' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '自動換行' }));
+    await user.click(screen.getByRole('button', { name: '超過省略' }));
+    await user.type(screen.getByRole('spinbutton', { name: '欄寬上限（全形字數）' }), '6');
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalled());
+    const latest = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    expect(latest?.tables[0].columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 6 });
   });
 
   it('keeps database import in the drawer instead of the current-table settings', async () => {

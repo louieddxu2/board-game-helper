@@ -139,6 +139,24 @@ const WorkspacePage = () => {
     const row = tableRowsById.get(rowId);
     return row ? [row] : [];
   }) : [], [bulkSelection, tableRowsById]);
+  const fixedListSuggestions = useMemo(() => {
+    if (!configuring || !table || !rowHeader) return [];
+    const values = table.rows.map((row) => configuring.isRowHeader ? row.name : row.values[configuring.column.id] ?? null);
+    const seen = new Set<string>();
+    const options: string[] = [];
+    for (const value of values) {
+      const items = configuring.column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [displayWorkspaceCellValue(value, configuring.column.inputType)];
+      for (const item of items) {
+        const option = item.trim();
+        const key = option.toLocaleLowerCase();
+        if (!option || seen.has(key)) continue;
+        seen.add(key);
+        options.push(option);
+        if (options.length > 10) return [];
+      }
+    }
+    return options;
+  }, [configuring, rowHeader, table]);
 
   useEffect(() => {
     if (searchOpen) setEditBarOpen(false);
@@ -157,10 +175,13 @@ const WorkspacePage = () => {
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
     const widthFor = (column: WorkspaceColumn, headerValue = column.name, values: WorkspaceCellValue[] = []) => {
-      const measuredValues = column.overflowMode === 'expand'
-        ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400))
-        : [];
-      return Math.max(measureWorkspaceText(headerValue, 20, 600), ...measuredValues) + (column.inputType === 'link' ? 46 : 0);
+      const shouldMeasureValues = column.overflowMode === 'expand' || Boolean(column.widthLimitChars);
+      const measuredValues = shouldMeasureValues ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400)) : [];
+      const valueWidth = measuredValues.length ? Math.max(...measuredValues) : 0;
+      const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
+        ? Math.min(valueWidth, column.widthLimitChars * 20)
+        : column.overflowMode === 'expand' ? valueWidth : 0;
+      return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' ? 46 : 0);
     };
     const rowHeaderValues = table.rows.map((row) => row.name);
     const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, rowHeaderValues);
@@ -169,9 +190,12 @@ const WorkspacePage = () => {
     const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
     const rowWidths = filteredRows.map((row) => Math.max(
       widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType)),
-      ...properties.map((column) => column.overflowMode === 'expand'
-        ? measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400) + (column.inputType === 'link' ? 46 : 0)
-        : 0),
+      ...properties.map((column) => {
+        if (column.overflowMode !== 'expand' && !column.widthLimitChars) return column.inputType === 'link' ? 46 : 0;
+        const measured = measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400);
+        const visibleWidth = column.overflowMode === 'expand' ? measured : column.widthLimitChars ? Math.min(measured, column.widthLimitChars * 20) : 0;
+        return visibleWidth + (column.inputType === 'link' ? 46 : 0);
+      }),
     ));
     return [propertyWidth, ...rowWidths];
   }, [displayedColumns, filteredRows, rowHeader, table]);
@@ -558,7 +582,7 @@ const WorkspacePage = () => {
     {activeEditingRow && activeEditingColumn && (activeEditingColumn.inputType === 'link'
       ? <LinkInputDialog column={activeEditingColumn} value={activeEditingValue} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => saveCellValue(activeEditingRow.id, activeEditingColumn, next)} />
       : <CellInputDialog column={activeEditingColumn} value={activeEditingValue} inputLabel={activeEditingColumn.id === rowHeader?.id ? '物件名稱' : undefined} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />)}
-     {configuring && <ColumnConfig column={configuring.column} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
+     {configuring && <ColumnConfig column={configuring.column} suggestedOptions={fixedListSuggestions} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
      {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
      {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
        ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />

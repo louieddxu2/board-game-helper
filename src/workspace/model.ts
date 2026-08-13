@@ -27,6 +27,7 @@ export const createTable = (name: string): WorkspaceTable => {
 };
 
 const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
+const normalizeWidthLimitChars = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : undefined;
 
 export const isWorkspaceColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 const normalizeOptionColors = (value: unknown) => {
@@ -55,9 +56,24 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
   hidden: Boolean(column.hidden),
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
+  widthLimitChars: normalizeWidthLimitChars(column.widthLimitChars),
 });
 
 export const isWorkspaceLinkValue = (value: WorkspaceCellValue | unknown): value is WorkspaceLinkValue => Boolean(value && typeof value === 'object' && 'url' in value && typeof value.url === 'string' && 'label' in value && typeof value.label === 'string');
+
+export const isWorkspaceUrlText = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  const text = value.trim();
+  if (!text || /\s/.test(text)) return false;
+  const candidate = /^https?:\/\//i.test(text) ? text : /^(?:www\.)?[\p{L}\d](?:[\p{L}\d.-]*[\p{L}\d])?\.[\p{L}]{2,}(?::\d+)?(?:[/?#].*)?$/iu.test(text) ? `https://${text}` : '';
+  if (!candidate) return false;
+  try {
+    const url = new URL(candidate);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname.includes('.'));
+  } catch {
+    return false;
+  }
+};
 
 export const normalizeWorkspaceDateTime = (value: WorkspaceCellValue): string | null => {
   if (value == null || value === '' || isWorkspaceLinkValue(value)) return null;

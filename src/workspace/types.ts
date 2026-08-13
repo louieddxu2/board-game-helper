@@ -26,6 +26,7 @@ export interface WorkspaceColumn {
   isMultiple?: boolean;
   alignment?: WorkspaceTextAlign;
   overflowMode?: WorkspaceOverflowMode;
+  widthLimitChars?: number;
 }
 
 export interface WorkspaceRow {

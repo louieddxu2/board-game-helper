@@ -33,6 +33,15 @@ describe('workspace browser policies', () => {
     expect(transposedColumnRule).toMatch(/left:\s*0/);
   });
 
+  it('gives the frozen first column a distinct surface color', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const rowHeadingRule = styles.match(/\.workspace-row-heading\s*\{([^}]*)\}/)?.[1];
+    const dataCellRule = styles.match(/(?:^|\n)\.workspace-table td\s*\{([^}]*)\}/)?.[1];
+
+    expect(rowHeadingRule).toMatch(/background:\s*var\(--cream\)/);
+    expect(dataCellRule).toMatch(/background:\s*var\(--white\)/);
+  });
+
   it('keeps the frozen header layer above body content during automatic scrolling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];
