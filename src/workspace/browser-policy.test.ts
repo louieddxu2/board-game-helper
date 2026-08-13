@@ -104,7 +104,8 @@ describe('workspace browser policies', () => {
 
     expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
     expect(styles).not.toMatch(/\.workspace-bulk-number-dialog\.is-expanded\s*\{[^}]*width:/);
-    expect(ratioPanelRule).toMatch(/width:\s*min\(430px,\s*calc\(100vw - 28px\)\)/);
-    expect(ratioPanelRule).toMatch(/justify-self:\s*center/);
+    expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
+    expect(ratioPanelRule).toMatch(/width:\s*100%/);
+    expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 });
