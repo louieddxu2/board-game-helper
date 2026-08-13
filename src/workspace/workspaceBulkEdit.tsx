@@ -18,7 +18,7 @@ export const WorkspaceBulkEditToolbar = ({ column, count, summary, hasDraft, onC
   </div>
   <div className="workspace-bulk-actions">
     <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`設定 ${column.name} 的批次內容`}><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">{hasDraft ? summary || '清除內容' : '設定內容'}</span></button>
-    <button type="button" className="workspace-editbar-button workspace-bulk-confirm" aria-label="套用批次編輯" disabled={!hasDraft || count === 0} onClick={onConfirm}><WorkspaceIcon name="check" size={23} /></button>
+    <button type="button" className="workspace-editbar-button workspace-bulk-confirm" aria-label="輸入至已選方格" disabled={!hasDraft || count === 0} onClick={onConfirm}><WorkspaceIcon name="apply-cells" size={23} /></button>
   </div>
 </div>;
 
@@ -64,13 +64,13 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
       <input autoFocus aria-label={`${column.name}批次輸入`} className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={total} onChange={(event) => setTotal(event.target.value)} />
       <button type="button" className="workspace-ratio-disclosure" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><WorkspaceIcon name="chevron" size={16} />比例分配</button>
       {expanded && <div className="workspace-ratio-panel">
-        <label className="workspace-ratio-round"><input className="workspace-compact-checkbox" type="checkbox" checked={roundToIntegers} onChange={(event) => setRoundToIntegers(event.target.checked)} />四捨五入為整數</label>
+        <label className="workspace-ratio-round"><input className="workspace-compact-checkbox" type="checkbox" checked={roundToIntegers} onChange={(event) => setRoundToIntegers(event.target.checked)} />近似取整</label>
         <div className="workspace-ratio-list">
-          <div className="workspace-ratio-row workspace-ratio-heading" aria-hidden="true"><span>物件</span><span>比例</span><span>結果</span></div>
+          <div className="workspace-ratio-row workspace-ratio-heading" aria-hidden="true"><span>物件</span><span>比例</span><span>→</span></div>
           {rows.map((row) => <div className="workspace-ratio-row" key={row.rowId}>
             <span className="workspace-ratio-name" title={row.label}>{row.label}</span>
             <label className="workspace-ratio-input"><span className="workspace-ratio-field-label">比例</span><input aria-label={`${row.label}比例`} type="number" inputMode="decimal" min="0" step="any" value={ratios[row.rowId]} onChange={(event) => setRatios((current) => ({ ...current, [row.rowId]: event.target.value }))} /></label>
-            <span className="workspace-ratio-result"><span className="workspace-ratio-field-label">結果</span><output aria-label={`${row.label}分配結果`}>{validDistribution ? values[row.rowId] : '—'}</output></span>
+            <span className="workspace-ratio-result"><span className="workspace-ratio-field-label" aria-hidden="true">→</span><output aria-label={`${row.label}分配結果`}>{validDistribution ? values[row.rowId] : '—'}</output></span>
           </div>)}
         </div>
       </div>}

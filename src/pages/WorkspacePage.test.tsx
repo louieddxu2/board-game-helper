@@ -82,7 +82,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
     await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-    await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
+    await user.click(screen.getByRole('button', { name: '輸入至已選方格' }));
 
     expect(screen.getAllByText('共同內容')).toHaveLength(2);
     expect(screen.queryByRole('toolbar', { name: '批次編輯 名稱' })).not.toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '套用預覽' })).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(first).toHaveTextContent('2');
-    await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
+    await user.click(screen.getByRole('button', { name: '輸入至已選方格' }));
     expect(screen.getByRole('cell', { name: '花火，數量：3' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
   });
@@ -152,6 +152,9 @@ describe('WorkspacePage', () => {
     await user.click(disclosure);
     expect(disclosure).toHaveAttribute('aria-expanded', 'true');
     expect(within(dialog).getByRole('spinbutton', { name: '花火比例' })).toBeInTheDocument();
+    expect(within(dialog).getByText('近似取整')).toBeInTheDocument();
+    expect(within(dialog).queryByText('結果')).not.toBeInTheDocument();
+    expect(within(dialog).getAllByText('→').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
@@ -193,10 +196,10 @@ describe('WorkspacePage', () => {
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-    expect(screen.getByRole('button', { name: '套用批次編輯' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '輸入至已選方格' })).toBeEnabled();
 
     await user.click(second);
-    expect(screen.getByRole('button', { name: '套用批次編輯' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '輸入至已選方格' })).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent('請重新設定比例');
     expect(first).toHaveTextContent('2');
   });

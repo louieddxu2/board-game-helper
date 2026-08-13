@@ -96,4 +96,15 @@ describe('workspace browser policies', () => {
     expect(inputRule).toMatch(/background:\s*rgba\(/);
     expect(styles).not.toMatch(/\.workspace-(?:name|cell-name|value|link)-dialog[^{}]*\{[^}]*backdrop-filter:\s*blur/);
   });
+
+  it('expands proportional allocation without resizing the number editor', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
+    const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
+
+    expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
+    expect(styles).not.toMatch(/\.workspace-bulk-number-dialog\.is-expanded\s*\{[^}]*width:/);
+    expect(ratioPanelRule).toMatch(/width:\s*min\(430px,\s*calc\(100vw - 28px\)\)/);
+    expect(ratioPanelRule).toMatch(/justify-self:\s*center/);
+  });
 });
