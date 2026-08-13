@@ -6,6 +6,7 @@ export const workspaceHistoryLimit = 50;
 
 export type WorkspaceTableHistoryAction =
   | { type: 'set-cell'; rowId: string; columnId: string; before: WorkspaceCellValue; after: WorkspaceCellValue }
+  | { type: 'set-cells'; columnId: string; changes: Array<{ rowId: string; before: WorkspaceCellValue; after: WorkspaceCellValue }> }
   | { type: 'add-row'; row: WorkspaceRow; index: number }
   | { type: 'remove-row'; row: WorkspaceRow; index: number }
   | { type: 'reorder-rows'; beforeIds: string[]; afterIds: string[] }
@@ -103,6 +104,17 @@ export const applyWorkspaceTableHistoryAction = (
             ? { ...row, name: forward ? action.after : action.before }
             : { ...row, values: { ...row.values, [action.columnId]: forward ? action.after : action.before } }),
         });
+      case 'set-cells': {
+        const changes = new Map(action.changes.map((change) => [change.rowId, change]));
+        return tableWithUpdatedAt({
+          ...current,
+          rows: current.rows.map((row) => {
+            const change = changes.get(row.id);
+            if (!change) return row;
+            return { ...row, values: { ...row.values, [action.columnId]: forward ? change.after : change.before } };
+          }),
+        });
+      }
       case 'add-row':
         return tableWithUpdatedAt({ ...current, rows: forward ? insertAt(current.rows.filter((row) => row.id !== action.row.id), action.row, action.index) : current.rows.filter((row) => row.id !== action.row.id) });
       case 'remove-row':

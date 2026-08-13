@@ -39,6 +39,70 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('WorkspacePage', () => {
+  const longPress = async (target: Element) => {
+    const dispatchPointer = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 20 });
+      Object.defineProperties(event, { pointerId: { value: 17 }, pointerType: { value: 'mouse' } });
+      fireEvent(target, event);
+    };
+    dispatchPointer('pointerdown');
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    dispatchPointer('pointerup');
+    fireEvent.click(target);
+  };
+
+  it('selects same-property cells by long press and commits one shared value', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+
+    const first = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    await longPress(first);
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+    expect(screen.getByRole('status')).toHaveTextContent('只能選取同一屬性');
+    await user.click(second);
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+
+    await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
+
+    expect(screen.getAllByText('共同內容')).toHaveLength(2);
+    expect(screen.queryByRole('toolbar', { name: '批次編輯 名稱' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
+  });
+
+  it('previews proportional number allocation before the toolbar confirmation', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    const first = screen.getByRole('cell', { name: '花火，數量：2' });
+    const second = screen.getByRole('cell', { name: '物件 2，數量：空白' });
+    await longPress(first);
+    await user.click(second);
+    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    await user.type(screen.getByRole('spinbutton', { name: '總和' }), '10');
+    await user.clear(screen.getByRole('spinbutton', { name: '物件 2比例' }));
+    await user.type(screen.getByRole('spinbutton', { name: '物件 2比例' }), '3');
+    expect(screen.getByRole('status', { name: '花火分配結果' })).toHaveTextContent('3');
+    expect(screen.getByRole('status', { name: '物件 2分配結果' })).toHaveTextContent('7');
+    await user.click(screen.getByRole('button', { name: '套用預覽' }));
+    expect(first).toHaveTextContent('2');
+    await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
+    expect(screen.getByRole('cell', { name: '花火，數量：3' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
+  });
+
   it('uses native text and number controls when cells enter edit mode', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

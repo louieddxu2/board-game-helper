@@ -49,4 +49,21 @@ describe('workspace table history', () => {
     const scaled = data({ ...table(), textScale: 1.5 });
     expect(inferWorkspaceTableMutation(before, scaled)).toBeUndefined();
   });
+
+  it('undoes and redoes a multi-cell edit as one history action', () => {
+    const current = table();
+    current.rows.push({ id: 'row-2', name: '第二筆', values: { 'column-1': '舊值' } });
+    const action = {
+      type: 'set-cells' as const,
+      columnId: 'column-1',
+      changes: [
+        { rowId: 'row-1', before: null, after: '同一值' },
+        { rowId: 'row-2', before: '舊值', after: '同一值' },
+      ],
+    };
+    const redone = applyWorkspaceTableHistoryAction(data(current), 'table-1', action, 'redo');
+    expect(redone.tables[0].rows.map((row) => row.values['column-1'])).toEqual(['同一值', '同一值']);
+    const undone = applyWorkspaceTableHistoryAction(redone, 'table-1', action, 'undo');
+    expect(undone.tables[0].rows.map((row) => row.values['column-1'])).toEqual([null, '舊值']);
+  });
 });

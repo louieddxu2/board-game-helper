@@ -13,9 +13,10 @@ interface UseTableGesturesProps {
   workspacePageRef: React.RefObject<HTMLElement | null>;
   setNotice: (msg: string) => void;
   minTextScale: number;
+  onCellLongPress?: (rowId: string, columnId: string) => void;
 }
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -37,6 +38,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const panAxis = useRef<TableBounceAxis | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
+  const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
   
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
   const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
@@ -163,6 +165,28 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
+    if (pointers.current.size === 0 && onCellLongPress) {
+      const cell = (event.target as Element).closest<HTMLTableCellElement>('td[data-bulk-row-id][data-bulk-column-id]');
+      const rowId = cell?.dataset.bulkRowId;
+      const columnId = cell?.dataset.bulkColumnId;
+      if (rowId && columnId) {
+        const hold: { pointerId: number; startX: number; startY: number; timer?: number; active: boolean } = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+        hold.timer = window.setTimeout(() => {
+          if (cellHold.current !== hold) return;
+          hold.active = true;
+          pointers.current.clear();
+          panStart.current = undefined;
+          pinchStart.current = undefined;
+          setPanning(false);
+          ignoreNextTableClick.current = true;
+          onCellLongPress(rowId, columnId);
+        }, tableReorderHoldMs);
+        cellHold.current = hold;
+      }
+    } else if (cellHold.current?.timer) {
+      window.clearTimeout(cellHold.current.timer);
+      cellHold.current = undefined;
+    }
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     pointerMoved.current = false;
     if (pointers.current.size === 1) {
@@ -183,6 +207,16 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const moveTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const hold = cellHold.current;
+    if (hold?.pointerId === event.pointerId) {
+      if (!hold.active && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) > 8) {
+        if (hold.timer) window.clearTimeout(hold.timer);
+        cellHold.current = undefined;
+      } else if (hold.active) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (!pointers.current.has(event.pointerId)) return;
     const viewport = event.currentTarget;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -240,6 +274,15 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const hold = cellHold.current;
+    if (hold?.pointerId === event.pointerId) {
+      if (hold.timer) window.clearTimeout(hold.timer);
+      cellHold.current = undefined;
+      if (hold.active) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (!pointers.current.has(event.pointerId)) return;
     const viewport = event.currentTarget;
     const moved = pointerMoved.current;
@@ -272,6 +315,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   useEffect(() => () => {
+    if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
     if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
     momentumScroll.stop();
