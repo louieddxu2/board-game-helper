@@ -18,6 +18,32 @@ const ensureBlobArrayBuffer = () => {
   });
 };
 
+const readStoredWorkbook = async (blob: Blob) => {
+  ensureBlobArrayBuffer();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const decoder = new TextDecoder();
+  const read16 = (offset: number) => bytes[offset] | (bytes[offset + 1] << 8);
+  const read32 = (offset: number) => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+  const entries = new Map<string, string>();
+  let offset = 0;
+  while (offset + 4 <= bytes.length && read32(offset) === 0x04034b50) {
+    const size = read32(offset + 18);
+    const nameLength = read16(offset + 26);
+    const extraLength = read16(offset + 28);
+    const name = decoder.decode(bytes.subarray(offset + 30, offset + 30 + nameLength));
+    const contentStart = offset + 30 + nameLength + extraLength;
+    entries.set(name, decoder.decode(bytes.subarray(contentStart, contentStart + size)));
+    offset = contentStart + size;
+  }
+  const workbook = new DOMParser().parseFromString(entries.get('xl/workbook.xml')!, 'application/xml');
+  const sheetNames = Array.from(workbook.getElementsByTagName('sheet')).map((sheet) => sheet.getAttribute('name'));
+  const sheetRows = (index: number) => {
+    const document = new DOMParser().parseFromString(entries.get(`xl/worksheets/sheet${index + 1}.xml`)!, 'application/xml');
+    return Array.from(document.getElementsByTagName('row')).map((row) => Array.from(row.getElementsByTagName('c')).map((cell) => cell.getElementsByTagName('t')[0]?.textContent ?? cell.getElementsByTagName('v')[0]?.textContent ?? ''));
+  };
+  return { sheetNames, sheetRows };
+};
+
 const makeFixture = (): WorkspaceData => {
   const table = createTable('收藏清單');
   const status = createColumn('狀態', 'select'); status.options = ['已擁有', '想要'];
@@ -33,6 +59,19 @@ const makeFixture = (): WorkspaceData => {
 };
 
 describe('workspace spreadsheet format', () => {
+  it('exports a clean data sheet followed by a separate settings sheet', async () => {
+    const source = makeFixture();
+    source.tables[0].rowHeaderName = '桌遊收藏';
+    const workbook = await readStoredWorkbook(exportWorkspaceXlsx(source, source.tables[0]));
+
+    expect(workbook.sheetNames).toEqual(['收藏清單', '收藏清單__設定']);
+    expect(workbook.sheetRows(0)[0]).toEqual(['桌遊收藏', '屬性 1', '狀態', '數量']);
+    expect(workbook.sheetRows(0).flat()).not.toContain('__workspace_table');
+    expect(workbook.sheetRows(0).flat()).not.toContain('__workspace_table_settings');
+    expect(workbook.sheetRows(1)[0]).toEqual(['__workspace_table_settings', '1']);
+    expect(workbook.sheetRows(1)).toContainEqual(['data_sheet', '收藏清單']);
+  });
+
   it('round-trips one table through an xlsx workbook', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();
@@ -58,6 +97,14 @@ describe('workspace spreadsheet format', () => {
     source.tables[0].columns[1].options = ['第一行\n第二行', '單行'];
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
     expect(imported.table?.columns[1].options).toEqual(['第一行\n第二行', '單行']);
+  });
+
+  it('preserves the multi-select property setting through an xlsx round trip', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    source.tables[0].columns[1].isMultiple = true;
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+    expect(imported.table?.columns[1].isMultiple).toBe(true);
   });
 
   it('round-trips fixed option colors and numeric range colors', async () => {
@@ -93,8 +140,12 @@ describe('workspace spreadsheet format', () => {
     table.columns.push(link);
     table.rows[0].values[link.id] = { url: 'https://example.com/rules', label: '規則頁' };
 
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+    const exported = exportWorkspaceXlsx(source, table);
+    const workbook = await readStoredWorkbook(exported);
+    const imported = await importWorkspaceXlsx(exported);
 
+    expect(workbook.sheetRows(0)[1]).toContain('遊戲頁面\nhttps://example.com/game');
+    expect(workbook.sheetRows(0)[1]).toContain('規則頁\nhttps://example.com/rules');
     expect(imported.table?.rowHeader).toMatchObject({ name: '來源', inputType: 'link', overflowMode: 'ellipsis' });
     expect(imported.table?.rows[0].name).toEqual({ url: 'https://example.com/game', label: '遊戲頁面' });
     expect(imported.table?.columns.at(-1)).toMatchObject({ name: '規則', inputType: 'link', overflowMode: 'expand' });
@@ -134,6 +185,8 @@ describe('workspace spreadsheet format', () => {
     source.nodes[0].parentId = folder.id;
     source.nodes.push(folder);
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source));
+    const workbook = await readStoredWorkbook(exportWorkspaceXlsx(source));
+    expect(workbook.sheetNames).toEqual(['__workspace', '收藏清單', '收藏清單__設定']);
     expect(imported.isWorkspace).toBe(true);
     expect(imported.data?.nodes).toHaveLength(2);
     expect(imported.data?.tables[0].name).toBe('收藏清單');
