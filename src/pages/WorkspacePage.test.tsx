@@ -949,6 +949,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('group', { name: '名稱日期' })).toBeInTheDocument();
     expect(screen.queryByRole('listbox', { name: '時' })).not.toBeInTheDocument();
     expect(screen.queryByRole('listbox', { name: '分' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '今天' }));
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2}$/)).toBeInTheDocument();
@@ -957,6 +958,39 @@ describe('WorkspacePage', () => {
     const column = latest?.tables[0].columns[0];
     expect(column?.dateOnly).toBe(true);
     expect(latest?.tables[0].rows[0].values[column!.id]).toMatch(/T/);
+  });
+
+  it('keeps a blank date empty when the editor is closed without interaction', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(screen.getByRole('button', { name: '現在' })).toBeInTheDocument();
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
+  });
+
+  it('accepts a directly entered year from the selected year value', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+
+    const yearWheel = screen.getByRole('listbox', { name: '年' });
+    await user.click(within(yearWheel).getByRole('option', { selected: true }));
+    const yearInput = screen.getByRole('spinbutton', { name: '直接輸入年份' });
+    await user.clear(yearInput);
+    await user.type(yearInput, '1999{enter}');
+
+    expect(within(yearWheel).getByRole('option', { selected: true })).toHaveTextContent('1999');
   });
 
   it('clears an existing date-time value from the compact editor', async () => {
@@ -970,8 +1004,8 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     expect(document.querySelector('.workspace-datetime-timezone')).toBeInTheDocument();
     await user.click(document.querySelector('.workspace-datetime-clear')!);
-    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
+    expect(screen.queryByRole('dialog', { name: '名稱' })).not.toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
   });
 

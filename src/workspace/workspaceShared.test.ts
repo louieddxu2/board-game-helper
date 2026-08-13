@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, matchesWorkspaceFilter, measureWorkspaceText, searchableWorkspaceCellValue, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
 
 describe('workspace text measurements', () => {
+  it('uses only compact horizontal padding in width calculations', () => {
+    expect(workspaceCellPadding).toBe(8);
+  });
+
   it('searches only the visible date when time display is disabled', () => {
     const value = '2026-08-12T12:14:00.000Z';
     expect(searchableWorkspaceCellValue(value, 'datetime', true)).toMatch(/^\d{4}\/\d{2}\/\d{2}$/);

@@ -42,6 +42,15 @@ describe('workspace browser policies', () => {
     expect(dataCellRule).toMatch(/background:\s*var\(--white\)/);
   });
 
+  it('keeps table cells visually dense without removing their clickable area', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const tableCellRule = styles.match(/\.workspace-table th, \.workspace-table td\s*\{([^}]*)\}/)?.[1];
+    const rowHeadingRule = styles.match(/\.workspace-row-heading\s*\{([^}]*)\}/)?.[1];
+
+    expect(tableCellRule).toMatch(/padding:\s*2px 3px/);
+    expect(rowHeadingRule).toMatch(/padding:\s*2px 3px/);
+  });
+
   it('keeps the frozen header layer above body content during automatic scrolling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];

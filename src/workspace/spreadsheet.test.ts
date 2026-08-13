@@ -78,7 +78,8 @@ describe('workspace spreadsheet format', () => {
   it('infers conservative property types for ordinary spreadsheet imports', () => {
     expect(inferPlainColumnSettings([1, 2, 3])).toMatchObject({ inputType: 'number' });
     expect(inferPlainColumnSettings(['example.com/a', 'https://example.org/b'])).toMatchObject({ inputType: 'link' });
-    expect(inferPlainColumnSettings(['2026/08/12 20:14', '2026/08/13 09:00'])).toMatchObject({ inputType: 'datetime' });
+    expect(inferPlainColumnSettings(['2026/08/12 20:14', '2026/08/13 09:00'])).toMatchObject({ inputType: 'datetime', dateOnly: false });
+    expect(inferPlainColumnSettings(['2026/08/12', '2026/08/13'])).toMatchObject({ inputType: 'datetime', dateOnly: true });
     expect(inferPlainColumnSettings(['合作', '競爭', '合作'])).toEqual({ inputType: 'select', options: ['合作', '競爭'], overflowMode: 'wrap' });
     expect(inferPlainColumnSettings(['唯一一', '唯一二', '唯一三'])).toMatchObject({ inputType: 'text', options: [] });
   });

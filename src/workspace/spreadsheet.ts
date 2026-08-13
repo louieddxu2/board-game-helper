@@ -334,13 +334,16 @@ const uniqueColumnName = (candidate: string, used: Set<string>) => {
   return name;
 };
 
-export const inferPlainColumnSettings = (values: unknown[]): Pick<WorkspaceColumn, 'inputType' | 'options' | 'overflowMode'> => {
+export const inferPlainColumnSettings = (values: unknown[]): Pick<WorkspaceColumn, 'inputType' | 'options' | 'overflowMode' | 'dateOnly'> => {
   const populated = values.filter((value) => value !== null && value !== undefined && value !== '');
   if (!populated.length) return { inputType: 'text', options: [], overflowMode: 'wrap' };
   if (populated.every((value) => typeof value === 'number' && Number.isFinite(value))) return { inputType: 'number', options: [], overflowMode: 'wrap' };
   if (populated.every((value) => typeof value === 'string' && isWorkspaceUrlText(value))) return { inputType: 'link', options: [], overflowMode: 'ellipsis' };
   const dateLike = (value: unknown) => value instanceof Date || (typeof value === 'string' && /^\d{4}[/-]\d{1,2}[/-]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(value.trim()) && Boolean(normalizeWorkspaceDateTime(value)));
-  if (populated.every(dateLike)) return { inputType: 'datetime', options: [], overflowMode: 'wrap' };
+  const dateOnlyLike = (value: unknown) => value instanceof Date
+    ? value.getHours() === 0 && value.getMinutes() === 0 && value.getSeconds() === 0 && value.getMilliseconds() === 0
+    : typeof value === 'string' && /^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value.trim());
+  if (populated.every(dateLike)) return { inputType: 'datetime', options: [], overflowMode: 'wrap', dateOnly: populated.every(dateOnlyLike) };
   if (populated.every((value) => typeof value === 'string')) {
     const seen = new Set<string>();
     const options: string[] = [];

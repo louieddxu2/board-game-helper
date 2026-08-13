@@ -3,8 +3,9 @@ import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, is
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
-export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }: CellInputDialogProps) => {
+export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
+  const [dateDirty, setDateDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   useEffect(() => {
     if (column.inputType === 'datetime') return;
@@ -14,10 +15,10 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }:
     else input?.setSelectionRange(0, input.value.length);
   }, [column.inputType]);
 
-  const commit = () => onSave(draft);
+  const commit = () => column.inputType === 'datetime' && !dateDirty ? onDismiss?.() : onSave(draft);
   return <WorkspaceModal title={column.name} onClose={commit} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
-      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={setDraft} onClear={() => setDraft('')} />
+      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} />
       : column.inputType === 'number'
       ? <input ref={inputRef as React.RefObject<HTMLInputElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
@@ -26,7 +27,7 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onSave }:
 
 const range = (start: number, end: number) => Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
 
-const WheelPicker = ({ label, value, options, onChange, loop = false }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean }) => {
+const WheelPicker = ({ label, value, options, onChange, loop = false, centerEditor, onCenterClick }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean; centerEditor?: React.ReactNode; onCenterClick?(): void }) => {
   const dragRef = useRef<{ pointerId: number; startY: number; lastStep: number } | undefined>(undefined);
   const index = Math.max(0, options.indexOf(value));
   const valueAt = (offset: number) => {
@@ -55,9 +56,10 @@ const WheelPicker = ({ label, value, options, onChange, loop = false }: { label:
     onPointerUp={endDrag} onPointerCancel={endDrag}>
     {[-1, 0, 1].map((offset) => {
       const option = valueAt(offset);
+      if (offset === 0 && centerEditor) return <span className="workspace-datetime-wheel-center-editor" key="center-editor">{centerEditor}</span>;
       return option === undefined
         ? <span className="workspace-datetime-wheel-empty" aria-hidden="true" key={offset} />
-        : <button type="button" role="option" aria-selected={offset === 0} className={offset === 0 ? 'selected' : ''} key={option} onClick={() => onChange(option)}>{String(option)}</button>;
+        : <button type="button" role="option" aria-selected={offset === 0} className={offset === 0 ? 'selected' : ''} key={option} onClick={() => offset === 0 && onCenterClick ? onCenterClick() : onChange(option)}>{String(option)}</button>;
     })}
     <span className="workspace-datetime-wheel-unit">{label}</span>
   </div>;
@@ -65,6 +67,8 @@ const WheelPicker = ({ label, value, options, onChange, loop = false }: { label:
 
 export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChange, onClear }: { value: WorkspaceCellValue; ariaLabel: string; showTime?: boolean; onChange(value: string): void; onClear?(): void }) => {
   const [parts, setParts] = useState(() => workspaceDateTimeParts(value));
+  const [editingYear, setEditingYear] = useState(false);
+  const [yearDraft, setYearDraft] = useState(() => String(parts.year));
   const currentYear = new Date().getFullYear();
   const daysInMonth = new Date(parts.year, parts.month, 0).getDate();
   const updatePart = (key: keyof typeof parts, value: number) => {
@@ -75,9 +79,24 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
     setParts(next);
     onChange(normalized);
   };
+  const commitYear = () => {
+    const year = Number(yearDraft);
+    setEditingYear(false);
+    if (Number.isInteger(year) && year >= 1 && year <= 9999) updatePart('year', year);
+    else setYearDraft(String(parts.year));
+  };
+  const setCurrent = () => {
+    const now = new Date();
+    const next = { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate(), hour: now.getHours(), minute: now.getMinutes() };
+    const normalized = workspaceDateTimeFromParts(next);
+    if (!normalized) return;
+    setParts(next);
+    setYearDraft(String(next.year));
+    onChange(normalized);
+  };
   return <div className={`workspace-datetime-editor ${showTime ? '' : 'is-date-only'}`} role="group" aria-label={ariaLabel}>
     <div className="workspace-datetime-wheel-row" aria-label="日期">
-      <WheelPicker label="年" value={parts.year} options={range(Math.min(currentYear - 100, parts.year - 2), Math.max(currentYear + 100, parts.year + 2))} onChange={(next) => updatePart('year', next)} />
+      <WheelPicker label="年" value={parts.year} options={range(Math.min(currentYear - 100, parts.year - 2), Math.max(currentYear + 100, parts.year + 2))} onChange={(next) => updatePart('year', next)} onCenterClick={() => { setYearDraft(String(parts.year)); setEditingYear(true); }} centerEditor={editingYear ? <input autoFocus aria-label="直接輸入年份" className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={commitYear} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(); } if (event.key === 'Escape') { setYearDraft(String(parts.year)); setEditingYear(false); } }} /> : undefined} />
       <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop onChange={(next) => updatePart('month', next)} />
       <WheelPicker label="日" value={parts.day} options={range(1, daysInMonth)} loop onChange={(next) => updatePart('day', next)} />
     </div>
@@ -87,7 +106,7 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
         <WheelPicker label="分" value={parts.minute} options={range(0, 59)} loop onChange={(next) => updatePart('minute', next)} />
       </div></>}
     <div className="workspace-datetime-footer">
-      <button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button>
+      <div className="workspace-datetime-footer-actions"><button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button><button type="button" className="workspace-datetime-current" onClick={setCurrent}>{showTime ? '現在' : '今天'}</button></div>
       {showTime && <span className="workspace-datetime-timezone">依裝置時區</span>}
     </div>
   </div>;
@@ -530,5 +549,6 @@ export interface CellInputDialogProps {
   value: WorkspaceCellValue;
   inputLabel?: string;
   onDelete?(): void;
+  onDismiss?(): void;
   onSave(value: string): void;
 }

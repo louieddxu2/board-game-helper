@@ -33,7 +33,7 @@ export const inputSubtypeLabels: Record<WorkspaceInputCategory, Array<{ value: W
 export const overflowModeLabels: Record<WorkspaceOverflowMode, string> = {
   expand: '推擠寬度', ellipsis: '超過省略', wrap: '自動換行',
 };
-export const workspaceCellPadding = 22;
+export const workspaceCellPadding = 8;
 export const workspaceMinColumnWidth = 40;
 export const workspaceMaxTextScale = 2.5;
 export const expandedFoldersStorageKey = 'board-game-helper-workspace-expanded-folders';
