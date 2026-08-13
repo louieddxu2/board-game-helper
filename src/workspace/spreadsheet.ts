@@ -3,15 +3,12 @@ import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, i
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
 
-const TABLE_MARKER = '__workspace_table';
 const TABLE_SETTINGS_MARKER = '__workspace_table_settings';
 const WORKSPACE_MARKER = '__workspace';
-const LEGACY_XLSX_FORMAT_VERSION = 1;
-const CURRENT_XLSX_FORMAT_VERSION = 2;
+const CURRENT_XLSX_FORMAT_VERSION = 1;
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
 const OPTION_COLORS_JSON_MARKER = '__workspace_option_colors_json:';
 const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
-const LINK_JSON_MARKER = '__workspace_link_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
 type AssertNever<T extends never> = T;
@@ -122,34 +119,6 @@ const workspaceRows = (data: WorkspaceData): unknown[][] => [
   ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
 ];
 
-const legacyWorkspaceRows = (data: WorkspaceData): unknown[][] => [
-  [WORKSPACE_MARKER, LEGACY_XLSX_FORMAT_VERSION],
-  ['format', WORKSPACE_FORMAT],
-  ['active_node_id', data.activeNodeId ?? ''],
-  ['nodes', 'id', 'type', 'name', 'parentId', 'order', 'tableId'],
-  ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
-];
-
-const legacyTableRows = (table: WorkspaceTable): unknown[][] => {
-  const rowHeader = getRowHeaderColumn(table);
-  return [
-    [TABLE_MARKER, LEGACY_XLSX_FORMAT_VERSION],
-    ['table_id', table.id],
-    ['table_name', table.name],
-    ['row_header_name', rowHeader.name],
-    ['text_scale', table.textScale ?? 1],
-    ['transposed_view', table.transposed ? 'true' : 'false'],
-    serializeColumnSettings('row_header', rowHeader).slice(0, 10),
-    ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden'],
-    ...table.columns.map((column) => serializeColumnSettings('column', column).slice(0, 10)),
-    ['data', 'row_id', 'row_name', ...table.columns.map((column) => column.id)],
-    ...table.rows.map((row) => [row.id, isWorkspaceLinkValue(row.name) ? `${LINK_JSON_MARKER}${JSON.stringify(row.name)}` : row.name, ...table.columns.map((column) => {
-      const value = row.values[column.id] ?? null;
-      return isWorkspaceLinkValue(value) ? `${LINK_JSON_MARKER}${JSON.stringify(value)}` : value;
-    })]),
-  ];
-};
-
 const contentTypesXml = (sheetCount: number) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${Array.from({ length: sheetCount }, (_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`;
 
 const workbookXml = (names: string[]) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((name, index) => `<sheet name="${escapeXml(name.slice(0, 31))}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}</sheets></workbook>`;
@@ -247,27 +216,6 @@ export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable)
   return zipStore(files);
 };
 
-/** Creates the last published v1 layout for compatibility regression tests and recovery tooling. */
-export const exportLegacyWorkspaceXlsxV1 = (data: WorkspaceData, table?: WorkspaceTable) => {
-  const tables = table ? [table] : data.tables;
-  const files: Array<{ name: string; content: string }> = [];
-  const names: string[] = [];
-  const usedNames = new Set<string>();
-  if (!table) {
-    names.push(safeSheetName('__workspace', usedNames));
-    files.push({ name: 'xl/worksheets/sheet1.xml', content: sheetXml(legacyWorkspaceRows(data)) });
-  }
-  for (const currentTable of tables) {
-    names.push(safeSheetName(currentTable.name, usedNames));
-    files.push({ name: `xl/worksheets/sheet${files.length + 1}.xml`, content: sheetXml(legacyTableRows(currentTable)) });
-  }
-  files.push({ name: 'xl/workbook.xml', content: workbookXml(names) });
-  files.push({ name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml(names.length) });
-  files.push({ name: '_rels/.rels', content: rootRelsXml });
-  files.push({ name: '[Content_Types].xml', content: contentTypesXml(names.length) });
-  return zipStore(files);
-};
-
 type SheetCell = CellValue<number> | null;
 type SheetRows = SheetCell[][];
 const stringValue = (value: SheetCell | undefined) => value === null || value === undefined ? '' : String(value);
@@ -324,14 +272,6 @@ const parseNumberRanges = (value: string): WorkspaceNumberRange[] => {
 const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): WorkspaceCellValue => {
   if (raw === null || raw === undefined || raw === '') return null;
   const text = stringValue(raw);
-  if (text.startsWith(LINK_JSON_MARKER)) {
-    try {
-      const parsed: unknown = JSON.parse(text.slice(LINK_JSON_MARKER.length));
-      if (parsed && typeof parsed === 'object' && 'url' in parsed && typeof parsed.url === 'string' && 'label' in parsed && typeof parsed.label === 'string') return { url: parsed.url, label: parsed.label };
-    } catch {
-      // Fall through and retain the original text if the JSON was hand-edited.
-    }
-  }
   if (column.inputType === 'link') {
     const parts = text.split(/\r?\n/);
     const possibleUrl = parts.at(-1)?.trim() ?? '';
@@ -354,36 +294,6 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   column.hidden = stringValue(row?.[9]) === 'true';
   column.isMultiple = stringValue(row?.[10]) === 'true';
   return column;
-};
-
-const parseTable = (rows: SheetRows): WorkspaceTable => {
-  assertSheetVersion(rows, TABLE_MARKER, LEGACY_XLSX_FORMAT_VERSION);
-  const tableName = stringValue(rows[2]?.[1]) || '匯入表格';
-  const rowHeaderName = stringValue(rows.find((row) => stringValue(row[0]) === 'row_header_name')?.[1]);
-  const textScaleValue = Number(rows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
-  const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
-  const transposed = stringValue(rows.find((row) => stringValue(row[0]) === 'transposed_view')?.[1]) === 'true';
-  const columns: WorkspaceColumn[] = [];
-  for (const row of rows) {
-    if (stringValue(row[0]) !== 'column') continue;
-    columns.push(parseColumnSettings(row, '未命名屬性', 'wrap'));
-  }
-  if (!columns.length) throw new Error('匯入表格沒有欄位');
-  const dataIndex = rows.findIndex((row) => stringValue(row[0]) === 'data');
-  if (dataIndex < 0) throw new Error('匯入表格沒有資料區');
-  const hasRowName = stringValue(rows[dataIndex]?.[2]) === 'row_name';
-  const rowHeaderMetadata = rows.find((row) => stringValue(row[0]) === 'row_header');
-  const rowHeader = parseColumnSettings(rowHeaderMetadata, rowHeaderName || '物件', 'expand');
-  rowHeader.hidden = false;
-  const rowsData: WorkspaceRow[] = rows.slice(dataIndex + 1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
-    id: stringValue(row[0]) || makeId('row'),
-    name: hasRowName ? parseCellValue(row[1], rowHeader) ?? '' : '',
-    values: Object.fromEntries(columns.map((column, columnIndex) => {
-      const raw = row[columnIndex + (hasRowName ? 2 : 1)];
-      return [column.id, parseCellValue(raw, column)];
-    })),
-  }));
-  return { id: stringValue(rows[1]?.[1]) || makeId('table'), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
 const parseSeparatedTable = (settingsRows: SheetRows, dataRows: SheetRows): WorkspaceTable => {
@@ -443,8 +353,7 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
 };
 
 const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
-  const version = sheetVersion(rows);
-  if (version !== LEGACY_XLSX_FORMAT_VERSION && version !== CURRENT_XLSX_FORMAT_VERSION) throw new Error(`不支援的 ${WORKSPACE_MARKER} 格式版本：${stringValue(rows[0]?.[1]) || '未知'}`);
+  assertSheetVersion(rows, WORKSPACE_MARKER, CURRENT_XLSX_FORMAT_VERSION);
   const activeNodeId = stringValue(rows[2]?.[1]) || null;
   const nodes = rows.filter((row) => stringValue(row[0]) === 'node').map((row) => ({
     id: stringValue(row[1]) || makeId('node'), type: stringValue(row[2]) === 'folder' ? 'folder' : 'table', name: stringValue(row[3]) || '未命名項目', parentId: stringValue(row[4]) || null, order: typeof row[5] === 'number' ? row[5] : Number(row[5]) || 0, ...(stringValue(row[6]) ? { tableId: stringValue(row[6]) } : {}),
@@ -528,11 +437,9 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
   if (workspaceSheets.length > 1) throw new Error('試算表包含多個 Workspace 設定頁');
   const workspaceSheet = workspaceSheets[0];
   const settingsSheets = sheets.filter((sheet: Sheet<number>) => stringValue(sheet.data[0]?.[0]) === TABLE_SETTINGS_MARKER);
-  const legacyTableSheets = sheets.filter((sheet) => markerOf(sheet) === TABLE_MARKER);
-  const unknownReservedSheet = sheets.find((sheet) => markerOf(sheet).startsWith('__workspace') && ![WORKSPACE_MARKER, TABLE_SETTINGS_MARKER, TABLE_MARKER].includes(markerOf(sheet)));
+  const unknownReservedSheet = sheets.find((sheet) => markerOf(sheet).startsWith('__workspace') && ![WORKSPACE_MARKER, TABLE_SETTINGS_MARKER].includes(markerOf(sheet)));
   if (unknownReservedSheet) throw new Error(`無法辨識的 Workspace 格式標記：${markerOf(unknownReservedSheet)}`);
   for (const settingsSheet of settingsSheets) assertSheetVersion(settingsSheet.data, TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION);
-  for (const legacySheet of legacyTableSheets) assertSheetVersion(legacySheet.data, TABLE_MARKER, LEGACY_XLSX_FORMAT_VERSION);
   const parseSettingsSheet = (settingsSheet: Sheet<number>) => {
     const dataSheetName = stringValue(settingsSheet.data.find((row) => stringValue(row[0]) === 'data_sheet')?.[1]);
     const matchingDataSheets = sheets.filter((sheet) => sheet.sheet === dataSheetName);
@@ -542,23 +449,14 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
     return parseSeparatedTable(settingsSheet.data, dataSheet.data);
   };
   if (!workspaceSheet) {
-    if (settingsSheets.length && legacyTableSheets.length) throw new Error('試算表混用了不同版本的 Workspace 表格格式');
     if (settingsSheets.length > 1) throw new Error('匯入單表時只能包含一組表格設定');
-    if (legacyTableSheets.length && (legacyTableSheets.length !== 1 || legacyTableSheets[0] !== sheets[0])) throw new Error('舊版單表格式必須是工作簿的第一個且唯一 Workspace 表格頁');
     const table = settingsSheets.length
       ? parseSettingsSheet(settingsSheets[0])
-      : markerOf(sheets[0]) === TABLE_MARKER
-        ? parseTable(sheets[0].data)
-        : parsePlainTable(sheets[0].data, sheets[0].sheet);
+      : parsePlainTable(sheets[0].data, sheets[0].sheet);
     return { isWorkspace: false, table: remapTable(table) };
   }
-  const workspaceVersion = sheetVersion(workspaceSheet.data);
   const parsed = parseWorkspace(workspaceSheet.data);
-  if (workspaceVersion === LEGACY_XLSX_FORMAT_VERSION && settingsSheets.length) throw new Error('舊版 Workspace 不可包含新版表格設定頁');
-  if (workspaceVersion === CURRENT_XLSX_FORMAT_VERSION && legacyTableSheets.length) throw new Error('新版 Workspace 不可包含舊版表格頁');
-  const tables = workspaceVersion === CURRENT_XLSX_FORMAT_VERSION
-    ? settingsSheets.map(parseSettingsSheet)
-    : legacyTableSheets.map((sheet) => parseTable(sheet.data));
+  const tables = settingsSheets.map(parseSettingsSheet);
   const tableMap = new Map(tables.map((table) => [table.id, table]));
   const data: WorkspaceData = { version: 1, nodes: parsed.nodes, tables, activeNodeId: parsed.activeNodeId };
   for (const node of data.nodes) {

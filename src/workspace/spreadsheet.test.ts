@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
-import { cloneImportedWorkspace, exportLegacyWorkspaceXlsxV1, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
 import type { WorkspaceData } from './types';
 
 const ensureBlobArrayBuffer = () => {
@@ -84,27 +84,27 @@ describe('workspace spreadsheet format', () => {
     expect(workbook.sheetRows(0)[0]).toEqual(['桌遊收藏', '屬性 1', '狀態', '數量']);
     expect(workbook.sheetRows(0).flat()).not.toContain('__workspace_table');
     expect(workbook.sheetRows(0).flat()).not.toContain('__workspace_table_settings');
-    expect(workbook.sheetRows(1)[0]).toEqual(['__workspace_table_settings', '2']);
+    expect(workbook.sheetRows(1)[0]).toEqual(['__workspace_table_settings', '1']);
     expect(workbook.sheetRows(1)).toContainEqual(['data_sheet', '收藏清單']);
   });
 
-  it('continues to import the published v1 single-sheet table layout', async () => {
+  it('imports the v1 split-sheet table layout', async () => {
     const source = makeFixture();
     source.tables[0].columns[1].isMultiple = true;
-    const legacyWorkbook = exportLegacyWorkspaceXlsxV1(source, source.tables[0]);
-    const workbook = await readStoredWorkbook(legacyWorkbook);
-    const imported = await importWorkspaceXlsx(legacyWorkbook);
+    const workbookBlob = exportWorkspaceXlsx(source, source.tables[0]);
+    const workbook = await readStoredWorkbook(workbookBlob);
+    const imported = await importWorkspaceXlsx(workbookBlob);
 
-    expect(workbook.sheetNames).toEqual(['收藏清單']);
-    expect(workbook.sheetRows(0)[0]).toEqual(['__workspace_table', '1']);
+    expect(workbook.sheetNames).toEqual(['收藏清單', '收藏清單__設定']);
+    expect(workbook.sheetRows(1)[0]).toEqual(['__workspace_table_settings', '1']);
     expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number']);
-    expect(imported.table?.columns[1].isMultiple).toBe(false);
+    expect(imported.table?.columns[1].isMultiple).toBe(true);
     expect(imported.table?.rows[0].values[imported.table.columns[2].id]).toBe(2);
   });
 
-  it('continues to import the published v1 whole-workspace layout', async () => {
+  it('imports the v1 whole-workspace layout', async () => {
     const source = makeFixture();
-    const imported = await importWorkspaceXlsx(exportLegacyWorkspaceXlsxV1(source));
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source));
 
     expect(imported.isWorkspace).toBe(true);
     expect(imported.data?.nodes).toEqual(source.nodes);
@@ -114,17 +114,25 @@ describe('workspace spreadsheet format', () => {
   it('rejects an unknown settings version instead of guessing another layout', async () => {
     const source = makeFixture();
     const workbook = exportWorkspaceXlsx(source, source.tables[0]);
-    const unknownVersion = await replaceStoredWorkbookText(workbook, '__workspace_table_settings</t></is></c><c r="B1"><v>2</v>', '__workspace_table_settings</t></is></c><c r="B1"><v>9</v>');
+    const unknownVersion = await replaceStoredWorkbookText(workbook, '__workspace_table_settings</t></is></c><c r="B1"><v>1</v>', '__workspace_table_settings</t></is></c><c r="B1"><v>9</v>');
 
     await expect(importWorkspaceXlsx(unknownVersion)).rejects.toThrow('不支援的 __workspace_table_settings 格式版本：9');
   });
 
-  it('rejects mixed manifest and table architectures instead of cross-parsing them', async () => {
+  it('does not treat a pre-release internal marker as a supported legacy format', async () => {
+    const source = makeFixture();
+    const workbook = exportWorkspaceXlsx(source, source.tables[0]);
+    const internalFormat = await replaceStoredWorkbookText(workbook, '__workspace_table_settings', '__workspace_table_internal');
+
+    await expect(importWorkspaceXlsx(internalFormat)).rejects.toThrow('無法辨識的 Workspace 格式標記：__workspace_table_internal');
+  });
+
+  it('rejects an unknown workspace version instead of guessing another layout', async () => {
     const source = makeFixture();
     const workbook = exportWorkspaceXlsx(source);
-    const mixedVersions = await replaceStoredWorkbookText(workbook, '__workspace</t></is></c><c r="B1"><v>2</v>', '__workspace</t></is></c><c r="B1"><v>1</v>');
+    const unknownVersion = await replaceStoredWorkbookText(workbook, '__workspace</t></is></c><c r="B1"><v>1</v>', '__workspace</t></is></c><c r="B1"><v>9</v>');
 
-    await expect(importWorkspaceXlsx(mixedVersions)).rejects.toThrow('舊版 Workspace 不可包含新版表格設定頁');
+    await expect(importWorkspaceXlsx(unknownVersion)).rejects.toThrow('不支援的 __workspace 格式版本：9');
   });
 
   it('rejects a changed data header instead of assigning values to the wrong property', async () => {
