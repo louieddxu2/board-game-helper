@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, getChildren, getDynamicOptions, getRowHeaderColumn, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { NameDialogState } from './workspaceShared';
@@ -46,7 +46,7 @@ export function useWorkspaceActions({
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
   const addTable = (parentId: string | null) => openNameDialog('table', '', parentId);
   const renameNode = (node: WorkspaceNode) => openNameDialog('rename', node.name, undefined, node);
-  const renameRow = (row: WorkspaceRow) => setNameDialog({ mode: 'row', initialValue: displayWorkspaceCellValue(row.name, rowHeader?.inputType), row });
+  const renameRow = (row: WorkspaceRow) => setNameDialog({ mode: 'row', initialValue: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name), row });
   const renameRowHeader = (currentTable: WorkspaceTable) => setNameDialog({ mode: 'axis', initialValue: getRowHeaderColumn(currentTable).name, table: currentTable });
 
   const submitName = (name: string) => {
@@ -154,7 +154,7 @@ export function useWorkspaceActions({
     setFocusTarget({ rowId: row.id, columnId: table.transposed ? table.columns[0]?.id ?? rowHeader.id : rowHeader.id });
     setNotice('已新增物件');
   };
-  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
+  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
   const addColumn = () => {
     if (!data || !table || !table.rows.length) return;
     const column = createColumn(`屬性 ${table.columns.length + 1}`);

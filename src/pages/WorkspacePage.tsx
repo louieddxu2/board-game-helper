@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
-import { coerceCellValue, displayWorkspaceCellValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
+import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
@@ -145,7 +145,7 @@ const WorkspacePage = () => {
     const seen = new Set<string>();
     const options: string[] = [];
     for (const value of values) {
-      const items = configuring.column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [displayWorkspaceCellValue(value, configuring.column.inputType)];
+      const items = configuring.column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [displayWorkspaceColumnValue(value, configuring.column)];
       for (const item of items) {
         const option = item.trim();
         const key = option.toLocaleLowerCase();
@@ -176,7 +176,7 @@ const WorkspacePage = () => {
     if (!table || !rowHeader) return [];
     const widthFor = (column: WorkspaceColumn, headerValue = column.name, values: WorkspaceCellValue[] = []) => {
       const shouldMeasureValues = column.overflowMode === 'expand' || Boolean(column.widthLimitChars);
-      const measuredValues = shouldMeasureValues ? values.map((value) => measureWorkspaceText(displayWorkspaceCellValue(value, column.inputType), 20, 400)) : [];
+      const measuredValues = shouldMeasureValues ? values.map((value) => measureWorkspaceText(displayWorkspaceColumnValue(value, column), 20, 400)) : [];
       const valueWidth = measuredValues.length ? Math.max(...measuredValues) : 0;
       const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
         ? Math.min(valueWidth, column.widthLimitChars * 20)
@@ -189,10 +189,10 @@ const WorkspacePage = () => {
     const properties = [rowHeader, ...displayedColumns];
     const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
     const rowWidths = filteredRows.map((row) => Math.max(
-      widthFor(rowHeader, displayWorkspaceCellValue(row.name, rowHeader.inputType)),
+      widthFor(rowHeader, displayWorkspaceColumnValue(row.name, rowHeader)),
       ...properties.map((column) => {
         if (column.overflowMode !== 'expand' && !column.widthLimitChars) return column.inputType === 'link' ? 46 : 0;
-        const measured = measureWorkspaceText(displayWorkspaceCellValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column.inputType), 20, 400);
+        const measured = measureWorkspaceText(displayWorkspaceColumnValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column), 20, 400);
         const visibleWidth = column.overflowMode === 'expand' ? measured : column.widthLimitChars ? Math.min(measured, column.widthLimitChars * 20) : 0;
         return visibleWidth + (column.inputType === 'link' ? 46 : 0);
       }),
@@ -321,7 +321,7 @@ const WorkspacePage = () => {
   const bulkSummary = bulkSelection?.distributedValues
     ? `比例分配：${displayWorkspaceCellValue(bulkSelection.sharedValue, 'number')}`
     : bulkColumn && bulkSelection?.hasDraft
-      ? displayWorkspaceCellValue(bulkSelection.sharedValue, bulkColumn.inputType, bulkColumn.isMultiple)
+      ? displayWorkspaceColumnValue(bulkSelection.sharedValue, bulkColumn)
       : '';
 
   const toggleColumnVisibility = (columnId: string) => {
@@ -334,7 +334,7 @@ const WorkspacePage = () => {
       columns: current.columns.map((column) => column.id === columnId ? { ...column, hidden: !column.hidden } : column),
     })));
   };
-  const openHiddenFields = (row: WorkspaceRow) => setHiddenFieldsEditor({ rowId: row.id, title: displayWorkspaceCellValue(row.name, rowHeader?.inputType) });
+  const openHiddenFields = (row: WorkspaceRow) => setHiddenFieldsEditor({ rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' });
   const saveHiddenFields = (rowId: string, values: Record<string, WorkspaceCellValue>) => {
     let currentData = dataRef.current;
     if (!currentData) return;
@@ -493,7 +493,7 @@ const WorkspacePage = () => {
                </tr></thead>
               <tbody>{filteredRows.map((row) => {
                 const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
                 const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
                 const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                 const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
@@ -503,7 +503,7 @@ const WorkspacePage = () => {
                   {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                    {displayedColumns.map((column) => {
                     const value = row.values[column.id] ?? null;
-                    const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
+                    const displayValue = displayWorkspaceColumnValue(value, column);
                     const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
                     const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
                      const isBulkSelected = bulkSelection?.columnId === column.id && bulkSelectedRowIds.has(row.id);
@@ -526,7 +526,7 @@ const WorkspacePage = () => {
                 {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}${activeCell?.columnId === rowHeader.id ? ' workspace-context-active' : ''}`} style={{ textAlign: 'center' }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={isHeaderFilterActive('column', rowHeader.id)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
                 {filteredRows.map((row) => {
                   const originalIndex = table.rows.findIndex((item) => item.id === row.id);
-                  const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                  const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
                   const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
@@ -540,10 +540,10 @@ const WorkspacePage = () => {
                   return <tr key={column.id}>
                     <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCell?.columnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center' }} onPointerDown={(event) => beginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                     {filteredRows.map((row) => {
-                      const rowLabel = displayWorkspaceCellValue(row.name, rowHeader!.inputType);
+                      const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
                       const rowAccessibleLabel = rowLabel || `第 ${filteredRows.findIndex((item) => item.id === row.id) + 1} 個物件`;
                       const value = row.values[column.id] ?? null;
-                      const displayValue = displayWorkspaceCellValue(value, column.inputType, column.isMultiple);
+                      const displayValue = displayWorkspaceColumnValue(value, column);
                       const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
                       const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
                        const isBulkSelected = bulkSelection?.columnId === column.id && bulkSelectedRowIds.has(row.id);
@@ -585,7 +585,7 @@ const WorkspacePage = () => {
      {configuring && <ColumnConfig column={configuring.column} suggestedOptions={fixedListSuggestions} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
      {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
      {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
-       ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />
+       ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: (rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />
        : bulkColumn.inputType === 'link'
        ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} onSave={setBulkSharedValue} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'

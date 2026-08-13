@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
+import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
@@ -66,9 +66,9 @@ export const externalHref = (raw: string) => {
     return '';
   }
 };
-export const searchableWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType) => isWorkspaceLinkValue(value)
+export const searchableWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType, dateOnly?: boolean) => isWorkspaceLinkValue(value)
   ? `${value.label}\n${value.url}`
-  : inputType === 'datetime' ? formatWorkspaceDateTime(value) : value == null ? '' : String(value);
+  : inputType === 'datetime' ? dateOnly ? formatWorkspaceDate(value) : formatWorkspaceDateTime(value) : value == null ? '' : String(value);
 export const workspaceFilterValueKey = (value: WorkspaceCellValue) => value == null
   ? 'empty:'
   : typeof value === 'number'
@@ -84,7 +84,7 @@ export const numericWorkspaceValue = (value: WorkspaceCellValue) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 export const workspaceValueCollator = new Intl.Collator('zh-Hant', { numeric: true, sensitivity: 'base' });
-export const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue, inputType?: WorkspaceInputType) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left, inputType), searchableWorkspaceCellValue(right, inputType));
+export const compareWorkspaceCellValues = (left: WorkspaceCellValue, right: WorkspaceCellValue, inputType?: WorkspaceInputType, dateOnly?: boolean) => workspaceValueCollator.compare(searchableWorkspaceCellValue(left, inputType, dateOnly), searchableWorkspaceCellValue(right, inputType, dateOnly));
 export const updateTable = (data: WorkspaceData, tableId: string, updater: (table: WorkspaceTable) => WorkspaceTable): WorkspaceData => ({
   ...data,
   tables: data.tables.map((table) => table.id === tableId ? updater(table) : table),

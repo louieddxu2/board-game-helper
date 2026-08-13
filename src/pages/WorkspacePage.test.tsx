@@ -936,6 +936,29 @@ describe('WorkspacePage', () => {
     expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
+  it('can display only the date without discarding the stored time', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.click(screen.getByRole('checkbox', { name: '只顯示年月日' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(screen.getByRole('group', { name: '名稱日期' })).toBeInTheDocument();
+    expect(screen.queryByRole('listbox', { name: '時' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox', { name: '分' })).not.toBeInTheDocument();
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2}$/)).toBeInTheDocument();
+    await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalled());
+    const latest = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    const column = latest?.tables[0].columns[0];
+    expect(column?.dateOnly).toBe(true);
+    expect(latest?.tables[0].rows[0].values[column!.id]).toMatch(/T/);
+  });
+
   it('clears an existing date-time value from the compact editor', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

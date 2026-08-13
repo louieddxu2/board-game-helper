@@ -12,7 +12,7 @@ const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
 type AssertNever<T extends never> = T;
-type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars';
+type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'dateOnly';
 type SerializedTableFields = 'id' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
@@ -86,6 +86,7 @@ const serializeColumnSettings = (kind: 'row_header' | 'column', column: Workspac
   kind === 'column' && column.hidden ? 'true' : 'false',
   column.isMultiple ? 'true' : 'false',
   column.widthLimitChars ?? '',
+  column.dateOnly ? 'true' : 'false',
 ];
 
 const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknown[][] => {
@@ -99,7 +100,7 @@ const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknow
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
   serializeColumnSettings('row_header', rowHeader),
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars', 'dateOnly'],
   ...table.columns.map((column) => serializeColumnSettings('column', column)),
   ];
 };
@@ -296,6 +297,7 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   column.isMultiple = stringValue(row?.[10]) === 'true';
   const widthLimitChars = Number(row?.[11]);
   column.widthLimitChars = Number.isFinite(widthLimitChars) && widthLimitChars > 0 ? Math.max(1, Math.round(widthLimitChars)) : undefined;
+  column.dateOnly = stringValue(row?.[12]) === 'true';
   return column;
 };
 

@@ -23,9 +23,9 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     const query = deferredSearchQuery.trim().toLocaleLowerCase();
     if (!query) return table.rows;
     return table.rows.filter((row) => [
-      { value: row.name, inputType: rowHeader?.inputType },
-      ...table.columns.map((column) => ({ value: row.values[column.id] ?? null, inputType: column.inputType })),
-    ].some(({ value, inputType }) => searchableWorkspaceCellValue(value, inputType).toLocaleLowerCase().includes(query)));
+      { value: row.name, inputType: rowHeader?.inputType, dateOnly: rowHeader?.dateOnly },
+      ...table.columns.map((column) => ({ value: row.values[column.id] ?? null, inputType: column.inputType, dateOnly: column.dateOnly })),
+    ].some(({ value, inputType, dateOnly }) => searchableWorkspaceCellValue(value, inputType, dateOnly).toLocaleLowerCase().includes(query)));
   }, [deferredSearchQuery, rowHeader, table]);
 
   const filteredRows = useMemo(() => {
@@ -46,8 +46,8 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     return rows.map((row, index) => ({ row, index })).sort((left, right) => {
       const leftValue = columnId === rowHeader.id ? left.row.name : left.row.values[columnId] ?? null;
       const rightValue = columnId === rowHeader.id ? right.row.name : right.row.values[columnId] ?? null;
-      const inputType = columnId === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === columnId)?.inputType;
-      return compareWorkspaceCellValues(leftValue, rightValue, inputType) * direction || left.index - right.index;
+      const column = columnId === rowHeader.id ? rowHeader : table.columns.find((item) => item.id === columnId);
+      return compareWorkspaceCellValues(leftValue, rightValue, column?.inputType, column?.dateOnly) * direction || left.index - right.index;
     }).map(({ row }) => row);
   }, [headerFilters, rowHeader, searchedRows, table]);
 

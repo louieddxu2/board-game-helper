@@ -57,6 +57,7 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
   widthLimitChars: normalizeWidthLimitChars(column.widthLimitChars),
+  dateOnly: Boolean(column.dateOnly),
 });
 
 export const isWorkspaceLinkValue = (value: WorkspaceCellValue | unknown): value is WorkspaceLinkValue => Boolean(value && typeof value === 'object' && 'url' in value && typeof value.url === 'string' && 'label' in value && typeof value.label === 'string');
@@ -103,6 +104,12 @@ export const formatWorkspaceDateTime = (value: WorkspaceCellValue) => {
   const date = new Date(normalized);
   return `${date.getFullYear()}/${padDateTimePart(date.getMonth() + 1)}/${padDateTimePart(date.getDate())} ${padDateTimePart(date.getHours())}:${padDateTimePart(date.getMinutes())}`;
 };
+export const formatWorkspaceDate = (value: WorkspaceCellValue) => {
+  const normalized = normalizeWorkspaceDateTime(value);
+  if (!normalized) return '';
+  const date = new Date(normalized);
+  return `${date.getFullYear()}/${padDateTimePart(date.getMonth() + 1)}/${padDateTimePart(date.getDate())}`;
+};
 export const workspaceDateMonthKey = (value: WorkspaceCellValue): string | null => {
   const normalized = normalizeWorkspaceDateTime(value);
   if (!normalized) return null;
@@ -131,8 +138,8 @@ export const parseMultiSelectValues = (value: WorkspaceCellValue): string[] => {
 
 export const formatMultiSelectValues = (values: string[]): string => values.filter(Boolean).join(', ');
 
-export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType, isMultiple?: boolean) => {
-  if (inputType === 'datetime') return formatWorkspaceDateTime(value);
+export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType, isMultiple?: boolean, dateOnly?: boolean) => {
+  if (inputType === 'datetime') return dateOnly ? formatWorkspaceDate(value) : formatWorkspaceDateTime(value);
   if (isWorkspaceLinkValue(value)) return value.label.trim() || value.url;
   if (value == null) return '';
   if (isMultiple && typeof value === 'string') {
@@ -141,6 +148,9 @@ export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?:
   }
   return String(value);
 };
+
+export const displayWorkspaceColumnValue = (value: WorkspaceCellValue, column: Pick<WorkspaceColumn, 'inputType' | 'isMultiple' | 'dateOnly'>) =>
+  displayWorkspaceCellValue(value, column.inputType, column.isMultiple, column.dateOnly);
 
 export const workspaceOptionColor = (column: WorkspaceColumn | undefined, option: string) => column?.inputType === 'select' ? column.optionColors?.[option] : undefined;
 export const workspaceNumberRangeColor = (column: WorkspaceColumn | undefined, value: WorkspaceCellValue) => {

@@ -355,6 +355,7 @@ footer a { color: inherit; }
 .workspace-datetime-wheel-unit { position: absolute; right: 0; bottom: 0; left: 0; color: var(--muted); font-size: 11px; line-height: 12px; text-align: center; }
 .workspace-datetime-divider { height: 1px; margin: 0 8px; background: rgba(22,53,47,.18); }
 .workspace-datetime-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; padding: 0 2px; }
+.workspace-datetime-editor.is-date-only .workspace-datetime-footer { justify-content: flex-start; }
 .workspace-datetime-clear { min-height: 30px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--orange); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
 .workspace-datetime-clear:hover { background: rgba(213,102,47,.1); }
 .workspace-datetime-timezone { color: var(--muted); font-size: 11px; }

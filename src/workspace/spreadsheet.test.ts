@@ -244,6 +244,18 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 8 });
   });
 
+  it('round-trips the date-only display preference without changing the stored date-time', async () => {
+    const source = makeFixture();
+    source.tables[0].columns[0].inputType = 'datetime';
+    source.tables[0].columns[0].dateOnly = true;
+    source.tables[0].rows[0].values[source.tables[0].columns[0].id] = '2026-08-12T12:14:00.000Z';
+
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+
+    expect(imported.table?.columns[0].dateOnly).toBe(true);
+    expect(imported.table?.rows[0].values[imported.table.columns[0].id]).toBe('2026-08-12T12:14:00.000Z');
+  });
+
   it('round-trips link values, overflow modes, and the editable first-column property', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();

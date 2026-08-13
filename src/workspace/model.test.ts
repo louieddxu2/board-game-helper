@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, displayWorkspaceColumnValue, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -81,7 +81,7 @@ describe('workspace model', () => {
     delete table.columns[0].optionColors;
     delete table.columns[0].numberRanges;
 
-    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [], hidden: false });
+    expect(normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0].columns[0]).toMatchObject({ optionColors: undefined, numberRanges: [], hidden: false, dateOnly: false });
   });
 
   it('normalizes date-time values for storage and formats them with zero-padded local parts', () => {
@@ -89,6 +89,15 @@ describe('workspace model', () => {
     expect(normalized).toMatch(/^2024-02-03T/);
     expect(formatWorkspaceDateTime(normalized)).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/);
     expect(normalizeWorkspaceDateTime('不是時間')).toBeNull();
+  });
+
+  it('keeps the stored time while a date column displays only year, month, and day', () => {
+    const value = normalizeWorkspaceDateTime('2024-02-03T14:05');
+    const column = { ...createColumn('日期', 'datetime'), dateOnly: true };
+
+    expect(formatWorkspaceDate(value)).toBe('2024/02/03');
+    expect(displayWorkspaceColumnValue(value, column)).toBe('2024/02/03');
+    expect(value).toMatch(/T/);
   });
 
   it('round-trips editable date-time wheel parts in local time', () => {
