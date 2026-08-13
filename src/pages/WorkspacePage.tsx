@@ -296,9 +296,9 @@ const WorkspacePage = () => {
   }, [bulkColumn, bulkSelection, closeBulkSelection, commit, table]);
 
   const bulkInitialValue = bulkRows[0] && bulkColumn ? bulkRows[0].values[bulkColumn.id] ?? null : null;
-  const bulkDraftValue = bulkSelection?.hasDraft && !bulkSelection.distributedValues ? bulkSelection.sharedValue : bulkInitialValue;
+  const bulkDraftValue = bulkSelection?.hasDraft ? bulkSelection.sharedValue : bulkInitialValue;
   const bulkSummary = bulkSelection?.distributedValues
-    ? '比例分配已設定'
+    ? `比例分配：${displayWorkspaceCellValue(bulkSelection.sharedValue, 'number')}`
     : bulkColumn && bulkSelection?.hasDraft
       ? displayWorkspaceCellValue(bulkSelection.sharedValue, bulkColumn.inputType, bulkColumn.isMultiple)
       : '';
@@ -568,7 +568,7 @@ const WorkspacePage = () => {
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
          ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />
          : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
-     {bulkDistributionOpen && bulkColumn?.inputType === 'number' && <WorkspaceRatioDistributionDialog rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} onClose={(distributedValues) => { if (distributedValues) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: null, distributedValues } : current); setBulkDistributionOpen(false); }} />}
+     {bulkDistributionOpen && bulkColumn?.inputType === 'number' && <WorkspaceRatioDistributionDialog rows={bulkRows.map((row, index) => ({ rowId: row.id, label: displayWorkspaceCellValue(row.name, rowHeader?.inputType) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkSelection?.sharedValue === 'number' ? bulkSelection.sharedValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkDistributionOpen(false); }} />}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
   </section>;

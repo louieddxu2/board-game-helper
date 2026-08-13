@@ -51,6 +51,17 @@ describe('WorkspacePage', () => {
     fireEvent.click(target);
   };
 
+  const longPressWithoutSyntheticClick = async (target: Element) => {
+    const dispatchPointer = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 20 });
+      Object.defineProperties(event, { pointerId: { value: 19 }, pointerType: { value: 'touch' } });
+      fireEvent(target, event);
+    };
+    dispatchPointer('pointerdown');
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    dispatchPointer('pointerup');
+  };
+
   it('selects same-property cells by long press and commits one shared value', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -80,6 +91,22 @@ describe('WorkspacePage', () => {
     expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
   });
 
+  it('accepts the first real cell tap after a long press that produces no synthetic click', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+
+    const first = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    await longPressWithoutSyntheticClick(first);
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+
+    await user.click(second);
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+  });
+
   it('previews proportional number allocation before the toolbar confirmation', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -102,6 +129,31 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '套用批次編輯' }));
     expect(screen.getByRole('cell', { name: '花火，數量：3' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
+  });
+
+  it('keeps the shared number input and proportional total synchronized', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await longPress(screen.getByRole('cell', { name: '花火，數量：2' }));
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
+
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    const sharedInput = screen.getByRole('spinbutton', { name: '數量批次輸入' });
+    await user.clear(sharedInput);
+    await user.type(sharedInput, '12');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    expect(screen.getByRole('spinbutton', { name: '總和' })).toHaveValue(12);
+    await user.clear(screen.getByRole('spinbutton', { name: '總和' }));
+    await user.type(screen.getByRole('spinbutton', { name: '總和' }), '20');
+    fireEvent.click(document.querySelector('.workspace-ratio-dialog-overlay')!);
+
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    expect(screen.getByRole('spinbutton', { name: '數量批次輸入' })).toHaveValue(20);
   });
 
   it('invalidates a staged ratio instead of clearing cells when the selection changes', async () => {

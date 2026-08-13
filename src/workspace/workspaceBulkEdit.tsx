@@ -24,13 +24,21 @@ export const WorkspaceBulkEditToolbar = ({ column, count, summary, hasDraft, onC
   </div>
 </div>;
 
-export const WorkspaceRatioDistributionDialog = ({ rows, initialValues, onClose }: {
+export interface WorkspaceRatioDistributionResult {
+  total: number;
+  values: Record<string, number>;
+}
+
+export const WorkspaceRatioDistributionDialog = ({ rows, initialValues, initialTotal, onClose }: {
   rows: Array<{ rowId: string; label: string }>;
   initialValues?: Record<string, number>;
-  onClose(values?: Record<string, number>): void;
+  initialTotal?: number | null;
+  onClose(result?: WorkspaceRatioDistributionResult): void;
 }) => {
   const initialNumbers = rows.map((row) => initialValues?.[row.rowId]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const [total, setTotal] = useState(() => initialNumbers.length === rows.length ? String(initialNumbers.reduce((sum, value) => sum + value, 0)) : '');
+  const [total, setTotal] = useState(() => typeof initialTotal === 'number' && Number.isFinite(initialTotal)
+    ? String(initialTotal)
+    : initialNumbers.length === rows.length ? String(initialNumbers.reduce((sum, value) => sum + value, 0)) : '');
   const [roundToIntegers, setRoundToIntegers] = useState(() => initialNumbers.length === 0 || initialNumbers.every(Number.isInteger));
   const [ratios, setRatios] = useState<Record<string, string>>(() => {
     const magnitudes = rows.map((row) => Math.abs(initialValues?.[row.rowId] ?? 0));
@@ -39,17 +47,25 @@ export const WorkspaceRatioDistributionDialog = ({ rows, initialValues, onClose 
   });
   const values = useMemo(() => distributeWorkspaceTotal(Number(total), rows.map((row) => ({ rowId: row.rowId, ratio: Number(ratios[row.rowId]) })), roundToIntegers), [ratios, roundToIntegers, rows, total]);
   const valid = total.trim() !== '' && values !== undefined;
-  const finish = () => onClose(valid ? values : undefined);
+  const finish = () => {
+    if (!valid || !values) {
+      onClose(undefined);
+      return;
+    }
+    onClose({ total: Number(total), values });
+  };
   return <WorkspaceModal title="比例分配" onClose={finish} className="workspace-ratio-dialog">
     <form onSubmit={(event) => { event.preventDefault(); if (valid) finish(); }}>
-    <label className="workspace-form-field">總和<input autoFocus type="number" inputMode="decimal" step="any" value={total} onChange={(event) => setTotal(event.target.value)} /></label>
-    <label className="workspace-ratio-round"><input type="checkbox" checked={roundToIntegers} onChange={(event) => setRoundToIntegers(event.target.checked)} />四捨五入為整數</label>
+    <div className="workspace-ratio-controls">
+      <label className="workspace-form-field workspace-ratio-total">總和<input autoFocus type="number" inputMode="decimal" step="any" value={total} onChange={(event) => setTotal(event.target.value)} /></label>
+      <label className="workspace-ratio-round"><input className="workspace-compact-checkbox" type="checkbox" checked={roundToIntegers} onChange={(event) => setRoundToIntegers(event.target.checked)} />四捨五入為整數</label>
+    </div>
     <div className="workspace-ratio-list">
       <div className="workspace-ratio-row workspace-ratio-heading" aria-hidden="true"><span>物件</span><span>比例</span><span>結果</span></div>
       {rows.map((row) => <div className="workspace-ratio-row" key={row.rowId}>
-        <span title={row.label}>{row.label}</span>
-        <label><span className="sr-only">{row.label}比例</span><input aria-label={`${row.label}比例`} type="number" inputMode="decimal" min="0" step="any" value={ratios[row.rowId]} onChange={(event) => setRatios((current) => ({ ...current, [row.rowId]: event.target.value }))} /></label>
-        <output aria-label={`${row.label}分配結果`}>{valid ? values[row.rowId] : '—'}</output>
+        <span className="workspace-ratio-name" title={row.label}>{row.label}</span>
+        <label className="workspace-ratio-input"><span className="workspace-ratio-field-label">比例</span><input aria-label={`${row.label}比例`} type="number" inputMode="decimal" min="0" step="any" value={ratios[row.rowId]} onChange={(event) => setRatios((current) => ({ ...current, [row.rowId]: event.target.value }))} /></label>
+        <span className="workspace-ratio-result"><span className="workspace-ratio-field-label">結果</span><output aria-label={`${row.label}分配結果`}>{valid ? values[row.rowId] : '—'}</output></span>
       </div>)}
     </div>
     </form>

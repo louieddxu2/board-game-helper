@@ -279,6 +279,13 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (hold.timer) window.clearTimeout(hold.timer);
       cellHold.current = undefined;
       if (hold.active) {
+        pointers.current.delete(event.pointerId);
+        panStart.current = undefined;
+        pinchStart.current = undefined;
+        panAxis.current = undefined;
+        pointerMoved.current = false;
+        setPanning(false);
+        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 0);
         event.preventDefault();
         return;
       }

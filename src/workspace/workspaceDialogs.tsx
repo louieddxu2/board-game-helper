@@ -237,7 +237,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
         const isSelected = selectedSet.has(option);
         if (isMultiple) {
           return <label key={`${index}-${option}`} className={`workspace-selection-checkbox-item ${isSelected ? 'selected' : ''}`}>
-            <input type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
+            <input className="workspace-compact-checkbox" type="checkbox" checked={isSelected} onChange={() => toggleOption(option)} />
             <span className="workspace-selection-checkbox-label" style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
           </label>;
         }
