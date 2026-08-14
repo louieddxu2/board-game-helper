@@ -51,6 +51,16 @@ describe('workspace browser policies', () => {
     expect(rowHeadingRule).toMatch(/padding:\s*2px 3px/);
   });
 
+  it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];
+    const bottomSpacerRule = mobileStyles?.match(/\.workspace-table-viewport::after\s*\{([^}]*)\}/)?.[1];
+
+    expect(bottomSpacerRule).toMatch(/display:\s*block/);
+    expect(bottomSpacerRule).toMatch(/height:\s*max\(32px,\s*calc\(env\(safe-area-inset-bottom,\s*0px\) \+ 14px\)\)/);
+    expect(bottomSpacerRule).toMatch(/pointer-events:\s*none/);
+  });
+
   it('keeps the frozen header layer above body content during automatic scrolling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];

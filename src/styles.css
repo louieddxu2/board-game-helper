@@ -498,6 +498,7 @@ footer a { color: inherit; }
   .workspace-appbar-title { height: 44px; padding: 0 6px; }
   .workspace-appbar-title span { max-width: calc(100vw - 144px); font-size: 22px; }
   .workspace-table th, .workspace-table td { min-width: 0; padding: 2px 3px; }
+  .workspace-table-viewport::after { content: ''; display: block; width: 1px; height: max(32px, calc(env(safe-area-inset-bottom, 0px) + 14px)); pointer-events: none; }
   .workspace-table .workspace-row-corner, .workspace-row-heading { min-width: 0 !important; }
   .workspace-import-column { grid-template-columns: minmax(0, 1fr) 116px; }
   .workspace-import-date-only { grid-column: 1 / -1; justify-self: end; }
