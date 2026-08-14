@@ -84,6 +84,7 @@ const WorkspacePage = () => {
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const filterbarRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
@@ -513,6 +514,13 @@ const WorkspacePage = () => {
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
   const renderedColumnWidths = table?.transposed || !hasHiddenColumns ? columnWidths : [...columnWidths, 44];
   const renderedTableWidth = table?.transposed || !hasHiddenColumns ? tableWidth : tableWidth + 44;
+  const filterbarSlots = useMemo<Array<HeaderFilterTarget | undefined>>(() => {
+    if (!table) return [];
+    const slots: Array<HeaderFilterTarget | undefined> = table.transposed ? [undefined, ...searchFilterTargets] : [...searchFilterTargets];
+    if (!table.transposed && hasHiddenColumns) slots.push(undefined);
+    return slots;
+  }, [hasHiddenColumns, searchFilterTargets, table]);
+  const filterbarTrackStyle = { gridTemplateColumns: renderedColumnWidths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` };
 
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
   const activeEditingRowIndex = activeEditingRow && table ? table.rows.findIndex((item) => item.id === activeEditingRow.id) : -1;
@@ -536,6 +544,18 @@ const WorkspacePage = () => {
   const setActiveCellElement = useCallback((element: HTMLElement | null) => {
     activeCellElementRef.current = element;
   }, []);
+  const syncFilterbarScroll = useCallback((source: HTMLDivElement) => {
+    const viewport = viewportRef.current;
+    const filterbar = filterbarRef.current;
+    if (!viewport || !filterbar) return;
+    if (source === viewport) filterbar.scrollLeft = viewport.scrollLeft;
+    else viewport.scrollLeft = filterbar.scrollLeft;
+  }, []);
+
+  useEffect(() => {
+    if (!searchOpen || !filterbarRef.current || !viewportRef.current) return;
+    filterbarRef.current.scrollLeft = viewportRef.current.scrollLeft;
+  }, [renderedTableWidth, searchOpen]);
 
   useEffect(() => {
     if (!activeCellKey) return;
@@ -589,7 +609,7 @@ const WorkspacePage = () => {
       </div>
     </header>
     {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onConfirm={commitBulkSelection} />}
-    {searchOpen && table && <div className="workspace-filterbar" aria-label="欄位篩選工具列"><div className="workspace-filterbar-scroll">{searchFilterTargets.map((target) => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} /><span>{target.label}</span>{summary && <small>{summary}</small>}</button>; })}</div><span className="workspace-filterbar-count">{bulkSelection ? `已選 ${bulkSelection.rowIds.length} · ` : ''}顯示 {filteredRows.length} / {table.rows.length} 項</span></div>}
+    {searchOpen && table && <div ref={filterbarRef} className="workspace-filterbar" aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{filterbarSlots.map((target, index) => target ? (() => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} /><span>{target.label}</span>{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className="workspace-filterbar-spacer" aria-hidden="true" />)}</div></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
         <button type="button" className="workspace-editbar-button" aria-label="復原" title={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
@@ -609,7 +629,7 @@ const WorkspacePage = () => {
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
         {!table || !tableNode ? <div className="workspace-empty"><div className="workspace-empty-icon"><WorkspaceIcon name="table" size={34} /></div><h2>建立你的第一張表格</h2><p>資料只會儲存在這個瀏覽器。你可以建立桌遊收藏，也可以建立任何自己的資料表。</p><button type="button" className="workspace-dialog-button primary" onClick={() => addTable(null)}>建立表格</button></div> : <>
-          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
+          <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => syncFilterbarScroll(event.currentTarget)} onPointerDown={beginTablePan} onPointerMove={(event) => { if (!moveTableReorder(event)) moveTablePan(event); }} onPointerUp={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onPointerCancel={(event) => { if (!endTableReorder(event)) endTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
             <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, width: `${renderedTableWidth}px` } as React.CSSProperties}>
               <colgroup>{renderedColumnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
               {!table.transposed ? <><thead><tr>

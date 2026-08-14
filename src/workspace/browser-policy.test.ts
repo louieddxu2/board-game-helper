@@ -100,6 +100,9 @@ describe('workspace browser policies', () => {
     expect(overlayRule).toMatch(/--workspace-text-scale:\s*1/);
 
     const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
+    const filterbarRule = styles.match(/\.workspace-filterbar\s*\{([^}]*)\}/)?.[1];
+    const filterbarTrackRule = styles.match(/\.workspace-filterbar-scroll\s*\{([^}]*)\}/)?.[1];
+    const filterbarButtonRule = styles.match(/\.workspace-filterbar-button\s*\{([^}]*)\}/)?.[1];
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
@@ -120,6 +123,12 @@ describe('workspace browser policies', () => {
     expect(filterRule).toMatch(/min-height:\s*20px/);
     expect(filterRule).toMatch(/opacity:\s*\.42/);
     expect(filterRule).not.toMatch(/flex:\s*0 0/);
+    expect(filterbarRule).toMatch(/overflow-x:\s*auto/);
+    expect(filterbarTrackRule).toMatch(/display:\s*grid/);
+    expect(filterbarTrackRule).toMatch(/touch-action:\s*pan-x/);
+    expect(filterbarButtonRule).toMatch(/width:\s*100%/);
+    expect(filterbarButtonRule).toMatch(/border-right:\s*1px solid var\(--line\)/);
+    expect(styles).not.toContain('.workspace-filterbar-count');
     expect(styles).not.toContain('.workspace-empty-cell::after');
   });
 

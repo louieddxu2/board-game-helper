@@ -124,7 +124,8 @@ describe('WorkspacePage', () => {
     await user.clear(search);
     await user.type(search, '花火');
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('已選 2 · 顯示 1 / 2 項')).toBeInTheDocument();
+    expect(screen.queryByText('已選 2 · 顯示 1 / 2 項')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: '搜尋後繼續選取' }).parentElement).toHaveTextContent('1 / 2');
   });
 
   it('pastes a rectangular range from the last selected cell and undoes it as one action', async () => {
@@ -1189,7 +1190,8 @@ describe('WorkspacePage', () => {
     await user.clear(search);
     await user.type(search, '不存在');
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
-    expect(screen.getByText('顯示 0 / 1 項')).toBeInTheDocument();
+    expect(document.querySelector('.workspace-filterbar-count')).not.toBeInTheDocument();
+    expect(document.querySelector('.workspace-appbar-search-count')).toHaveTextContent('0 / 1');
     expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
@@ -1206,6 +1208,9 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '關閉搜尋' })).not.toBeInTheDocument();
     expect(document.querySelector('.workspace-appbar-search svg')).not.toBeInTheDocument();
     expect(document.querySelectorAll('.workspace-filterbar-button')).toHaveLength(5);
+    expect(document.querySelector('.workspace-filterbar-count')).not.toBeInTheDocument();
+    expect((document.querySelector('.workspace-filterbar-scroll') as HTMLElement).style.gridTemplateColumns.split(' ')).toHaveLength(5);
+    expect((document.querySelector('.workspace-filterbar-scroll') as HTMLElement).style.width).not.toBe('');
 
     await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '合作');
     await user.click(screen.getByRole('button', { name: '清除搜尋與篩選' }));
