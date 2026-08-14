@@ -336,9 +336,10 @@ export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel,
 
   const allOptions = useMemo(() => Array.from(new Set([...options, ...selectedSet].filter(Boolean))), [options, selectedSet]);
   const filtered = useMemo(() => {
+    if (!isDynamic) return allOptions;
     const normalized = query.trim().toLocaleLowerCase();
     return normalized ? allOptions.filter((option) => option.toLocaleLowerCase().includes(normalized)) : allOptions;
-  }, [allOptions, query]);
+  }, [allOptions, isDynamic, query]);
 
   const normalizedQuery = query.trim();
 
@@ -393,7 +394,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel,
 
   return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
     <WorkspaceValueContext label={contextLabel} /><div className="workspace-selection-head">
-      <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">{isDynamic ? '搜尋或新增選項' : '搜尋選項'}</span><input ref={inputRef} inputMode="text" enterKeyHint={isDynamic ? 'done' : undefined} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && isDynamic) { event.preventDefault(); submitQuery(); } }} placeholder={isDynamic ? '搜尋或輸入…' : '搜尋選項…'} /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
+      {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>}
       <div className="workspace-selection-meta">
         <span className="workspace-selection-count">{isMultiple ? `已選 ${selectedSet.size} 項` : `${filtered.length} 項`}</span>
         <div className="workspace-selection-tools">
@@ -406,7 +407,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel,
       {filtered.map((option, index) => {
         const isSelected = selectedSet.has(option);
         return <button type="button" key={`${index}-${option}`} role="option" aria-selected={isSelected} className={`workspace-selection-option ${isSelected ? 'selected' : ''}`} onClick={() => toggleOption(option)}>
-          <span className="workspace-selection-option-indicator" aria-hidden="true" />
+          {isMultiple && <span className="workspace-selection-option-indicator" aria-hidden="true" />}
           <span className="workspace-selection-option-label" style={{ color: workspaceOptionColor(column, option) }}>{option}</span>
         </button>;
       })}

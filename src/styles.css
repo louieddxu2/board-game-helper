@@ -450,7 +450,7 @@ footer a { color: inherit; }
 .workspace-link-dialog .workspace-dialog-content { padding: 16px; }
 .workspace-link-fields { display: grid; gap: 12px; }
 .workspace-link-fields input { background: rgba(255,253,248,.68); font-size: 16px; }
-.workspace-selection-dialog { width: min(360px, calc(100vw - 28px)); height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border: 1px solid rgba(22,53,47,.28); border-radius: 12px; background: rgba(255,253,248,.72); box-shadow: 0 12px 30px rgba(23,47,40,.2); }
+.workspace-selection-dialog { width: min(430px, 50vw); height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border: 1px solid rgba(22,53,47,.28); border-radius: 12px; background: rgba(255,253,248,.72); box-shadow: 0 12px 30px rgba(23,47,40,.2); }
 .workspace-selection-dialog-overlay { background: transparent; }
 .workspace-selection-dialog .workspace-dialog-heading { display: none; }
 .workspace-selection-dialog .workspace-dialog-content { display: flex; flex-direction: column; gap: 0; min-height: 0; overflow: hidden; padding: 0; }
@@ -614,7 +614,7 @@ footer a { color: inherit; }
   .workspace-link-dialog .workspace-dialog-content { padding: 10px; }
   .workspace-link-fields { gap: 8px; }
   .workspace-column-dialog { width: min(520px, calc(100vw - 24px)); max-height: min(58dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); }
-  .workspace-selection-dialog { align-self: center; width: min(360px, calc(100vw - 28px)); height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border-radius: 12px; }
+  .workspace-selection-dialog { align-self: center; width: min(430px, 50vw); height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border-radius: 12px; }
   .workspace-overlay { align-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
   .workspace-drawer { width: min(88vw, 360px); }
 }

@@ -109,6 +109,7 @@ describe('workspace browser policies', () => {
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
+    expect(selectionDialogRule).toMatch(/width:\s*min\(430px,\s*50vw\)/);
     expect(selectionDialogRule).toMatch(/height:\s*min\(75dvh/);
     expect(selectionDialogRule).toMatch(/margin-top:\s*clamp\(10px,\s*4dvh,\s*28px\)/);
     expect(selectionDialogRule).not.toMatch(/backdrop-filter/);

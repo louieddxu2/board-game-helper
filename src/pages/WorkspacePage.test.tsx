@@ -328,8 +328,11 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.getByText('合作')).toBeInTheDocument());
 
     await user.click(screen.getAllByText('合作')[0]);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: '競爭' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '競爭' }).querySelector('.workspace-selection-option-indicator')).toBeNull();
 
     await user.click(screen.getByRole('option', { name: '競爭' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
