@@ -326,7 +326,7 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
       : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finish(); } }} />}</label>
   </WorkspaceModal>;
 };
-export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" leadingAction={<button type="button" className="workspace-dialog-delete" onClick={onConfirm} aria-label="確認刪除"><WorkspaceIcon name="trash" size={20} /></button>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
+export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" actions={<><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button danger" onClick={onConfirm}>確認</button></>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
 export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; contextLabel?: string; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
   const isMultiple = Boolean(column.isMultiple);
   const isDynamic = column.inputType === 'dynamic-select';

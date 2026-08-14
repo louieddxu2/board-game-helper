@@ -69,7 +69,7 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
           <div className="workspace-ratio-row workspace-ratio-heading" aria-hidden="true"><span>物件</span><span>比例</span><span>→</span></div>
           {rows.map((row) => <div className="workspace-ratio-row" key={row.rowId}>
             <span className="workspace-ratio-name" title={row.label}>{row.label}</span>
-            <label className="workspace-ratio-input"><span className="workspace-ratio-field-label">比例</span><input aria-label={`${row.label}比例`} type="number" inputMode="decimal" min="0" step="any" value={ratios[row.rowId]} onChange={(event) => setRatios((current) => ({ ...current, [row.rowId]: event.target.value }))} /></label>
+            <label className="workspace-ratio-input"><span className="workspace-ratio-field-label">比例</span><input aria-label={`${row.label}比例`} type="number" inputMode="decimal" min="0" step="any" value={ratios[row.rowId]} onFocus={(event) => event.currentTarget.select()} onClick={(event) => event.currentTarget.select()} onChange={(event) => setRatios((current) => ({ ...current, [row.rowId]: event.target.value }))} /></label>
             <span className="workspace-ratio-result"><span className="workspace-ratio-field-label" aria-hidden="true">→</span><output aria-label={`${row.label}分配結果`}>{validDistribution ? values[row.rowId] : '—'}</output></span>
           </div>)}
         </div>

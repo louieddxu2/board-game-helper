@@ -162,8 +162,12 @@ describe('WorkspacePage', () => {
     await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
-    await user.clear(screen.getByRole('spinbutton', { name: '物件 2比例' }));
-    await user.type(screen.getByRole('spinbutton', { name: '物件 2比例' }), '3');
+    const ratioInput = screen.getByRole('spinbutton', { name: '物件 2比例' }) as HTMLInputElement;
+    const selectContents = vi.spyOn(ratioInput, 'select');
+    await user.click(ratioInput);
+    expect(selectContents).toHaveBeenCalled();
+    await user.clear(ratioInput);
+    await user.type(ratioInput, '3');
     expect(screen.getByRole('status', { name: '花火分配結果' })).toHaveTextContent('3');
     expect(screen.getByRole('status', { name: '物件 2分配結果' })).toHaveTextContent('7');
     expect(screen.queryByRole('button', { name: '套用預覽' })).not.toBeInTheDocument();
@@ -652,8 +656,10 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '取消' })).not.toBeInTheDocument();
 
     await user.click(deleteButton);
-    const confirmedDelete = screen.getByRole('button', { name: '確認刪除' });
-    expect(confirmedDelete.parentElement).toHaveClass('workspace-dialog-leading-action');
+    expect(screen.queryByRole('button', { name: '確認刪除' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '確認' })).toBeInTheDocument();
+    expect(document.querySelector('.workspace-dialog-leading-action')).not.toBeInTheDocument();
   });
 
   it('keeps baseline fill while zooming text-driven column widths', async () => {
