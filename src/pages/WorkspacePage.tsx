@@ -353,9 +353,9 @@ const WorkspacePage = () => {
     setBulkEditorOpen(false);
   }, []);
 
-  const setBulkSharedValue = useCallback((value: WorkspaceCellValue) => {
+  const setBulkSharedValue = useCallback((value: WorkspaceCellValue, close = true) => {
     setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: value, distributedValues: undefined } : current);
-    setBulkEditorOpen(false);
+    if (close) setBulkEditorOpen(false);
   }, []);
 
   const commitBulkSelection = useCallback(() => {
@@ -712,13 +712,13 @@ const WorkspacePage = () => {
       ? <LinkInputDialog column={activeEditingColumn} value={activeEditingValue} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onSave={(next) => saveCellValue(activeEditingRow.id, activeEditingColumn, next)} />
       : <CellInputDialog column={activeEditingColumn} value={activeEditingValue} inputLabel={activeEditingColumn.id === rowHeader?.id ? '物件名稱' : undefined} onDelete={activeEditingColumn.id === rowHeader?.id ? () => { setEditing(undefined); askDeleteRow(activeEditingRow, activeEditingRowIndex); } : undefined} onDismiss={() => setEditing(undefined)} onSave={(next) => updateCell(activeEditingRow.id, activeEditingColumn, next)} />)}
      {configuring && <ColumnConfig column={configuring.column} suggestedOptions={fixedListSuggestions} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
-     {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} />}
+     {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} onChange={selectionEditor.column.isMultiple ? selectCellValue : undefined} />}
      {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
        ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: (rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />
        : bulkColumn.inputType === 'link'
        ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} onSave={setBulkSharedValue} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
-         ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />
+       ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} onChange={bulkColumn.isMultiple ? (value) => setBulkSharedValue(coerceCellValue(bulkColumn, value), false) : undefined} />
          : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {pasteDialogOpen && pasteTarget && <WorkspacePasteDialog targetLabel={pasteTargetLabel} onClose={() => setPasteDialogOpen(false)} onApply={pasteMatrix} />}

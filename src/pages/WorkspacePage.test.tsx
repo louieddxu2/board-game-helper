@@ -281,7 +281,7 @@ describe('WorkspacePage', () => {
     const fixedListCell = screen.getAllByRole('cell')[2];
     await user.click(fixedListCell);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(document.querySelector('.workspace-selection-clear-row button')!);
+    await user.click(screen.getByRole('button', { name: '清除選取' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(fixedListCell).toHaveTextContent('');
   });
@@ -379,6 +379,36 @@ describe('WorkspacePage', () => {
     expect(screen.queryByText('tag')).not.toBeInTheDocument();
   });
 
+  it('uses the same compact dynamic-list surface for immediate multi-selection', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('columnheader', { name: '標籤' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('columnheader', { name: '標籤' }));
+    await user.click(screen.getByRole('checkbox', { name: '多選' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，標籤：空白' });
+    await user.click(cell);
+    const search = screen.getByRole('textbox', { name: '搜尋或新增選項' });
+    expect(screen.queryByRole('button', { name: /確定/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '清除選取' })).toBeInTheDocument();
+
+    await user.type(search, '第一項');
+    await user.keyboard('{Enter}');
+    await user.type(search, '第二項');
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('option', { name: '第一項' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: '第二項' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(cell).toHaveTextContent('第一項');
+    expect(cell).toHaveTextContent('第二項');
+  });
+
   it('keeps item names and the item axis separate from attribute columns', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -465,7 +495,7 @@ describe('WorkspacePage', () => {
     expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#2F6F5E' });
 
     await user.click(cell);
-    expect(screen.getByRole('option', { name: '合作' }).querySelector('span')).toHaveStyle({ color: '#2F6F5E' });
+    expect(screen.getByRole('option', { name: '合作' }).querySelector('.workspace-selection-option-label')).toHaveStyle({ color: '#2F6F5E' });
   });
 
   it('configures inclusive open-ended numeric color ranges', async () => {

@@ -152,7 +152,7 @@ export function useWorkspaceActions({
   const selectCellValue = (value: string) => {
     if (!selectionEditor) return;
     updateCell(selectionEditor.rowId, selectionEditor.column, value);
-    setSelectionEditor(undefined);
+    if (!selectionEditor.column.isMultiple) setSelectionEditor(undefined);
   };
 
   const addRow = () => {

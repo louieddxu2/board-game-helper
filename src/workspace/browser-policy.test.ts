@@ -82,8 +82,8 @@ describe('workspace browser policies', () => {
     const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
-    const selectionListRule = styles.match(/\.workspace-selection-list button\s*\{([^}]*)\}/)?.[1];
-    const selectionCheckboxRule = styles.match(/\.workspace-selection-checkbox-item\s*\{([^}]*)\}/)?.[1];
+    const selectionListRule = styles.match(/\.workspace-selection-option\s*\{([^}]*)\}/)?.[1];
+    const selectionIndicatorRule = styles.match(/\.workspace-selection-option-indicator\s*\{([^}]*)\}/)?.[1];
     const dragSurfaceRule = styles.match(/\.workspace-table-viewport, \.workspace-table-viewport \*, \.workspace-tree, \.workspace-tree \*\s*\{([^}]*)\}/)?.[1];
     const editableSurfaceRule = styles.match(/\.workspace-dialog input, \.workspace-dialog textarea, \.workspace-dialog select, \.workspace-dialog \[contenteditable="true"\]\s*\{([^}]*)\}/)?.[1];
 
@@ -98,10 +98,11 @@ describe('workspace browser policies', () => {
     const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
-    expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.62\)/);
+    expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
     expect(selectionDialogRule).not.toMatch(/backdrop-filter/);
-    expect(selectionListRule).toMatch(/background:\s*rgba\(255,253,248,\.38\)/);
-    expect(selectionCheckboxRule).toMatch(/grid-template-columns:\s*16px\s+minmax\(0,\s*1fr\)/);
+    expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
+    expect(selectionListRule).toMatch(/font-size:\s*16px/);
+    expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
     expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
     expect(dragSurfaceRule).toMatch(/-webkit-touch-callout:\s*none/);
     expect(editableSurfaceRule).toMatch(/user-select:\s*text/);
