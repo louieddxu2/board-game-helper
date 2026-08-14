@@ -267,8 +267,13 @@ describe('WorkspacePage', () => {
     const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
 
     await user.click(cell);
+    expect(screen.getByLabelText('花火／數量，直接輸入')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '增加數值' }));
     const input = screen.getByRole('spinbutton', { name: '數量輸入加法' });
+    expect(input).toHaveValue(0);
+    expect(screen.getByLabelText('花火／數量，增加')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: '數量計算結果' })).toHaveTextContent('→2');
+    expect(document.activeElement).toBe(input);
     await user.type(input, '0.25');
 
     expect(document.querySelector('.workspace-number-editor')).toHaveAttribute('data-mode', 'add');
@@ -278,6 +283,22 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '花火，數量：2.25' })).toBeInTheDocument();
+  });
+
+  it('treats an empty adjustment as zero and keeps the original result visible', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
+
+    await user.click(cell);
+    await user.click(screen.getByRole('button', { name: '減少數值' }));
+    const input = screen.getByRole('spinbutton', { name: '數量輸入減法' });
+    await user.clear(input);
+    expect(input).toHaveValue(null);
+    expect(screen.getByRole('status', { name: '數量計算結果' })).toHaveTextContent('→2');
+
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
   });
 
   it('returns to direct numeric editing when the original value is clicked', async () => {

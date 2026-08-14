@@ -39,7 +39,7 @@ const formatDecimal = (value: bigint, scale: number) => {
 const calculateNumericAdjustment = (original: string, delta: string, mode: NumericEditMode) => {
   if (mode === 'direct') return null;
   const base = parseDecimal(original.trim() || '0');
-  const change = parseDecimal(delta);
+  const change = parseDecimal(delta.trim() || '0');
   if (!base || !change) return null;
   const scale = Math.max(base.scale, change.scale);
   const baseValue = rescaleDecimal(base.scaled, base.scale, scale);
@@ -57,11 +57,20 @@ const NumericAlignedValue = ({ value }: { value: string }) => {
   </span>;
 };
 
+const WorkspaceValueContext = ({ label, mode }: { label?: string; mode?: string }) => {
+  if (!label && !mode) return null;
+  const modeLabel = mode === 'direct' ? '直接輸入' : mode === 'add' ? '增加' : mode === 'subtract' ? '減少' : mode;
+  return <div className="workspace-value-context" aria-label={[label, modeLabel].filter(Boolean).join('，')}>
+    {label && <span className="workspace-value-context-label">{label}</span>}
+    {mode && <span className={`workspace-value-context-mode workspace-value-context-mode-${mode}`}>{modeLabel}</span>}
+  </div>;
+};
+
 export interface NumericCellEditorHandle {
   commit(): void;
 }
 
-const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, onDismiss, onSave }, forwardedRef) => {
+const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'contextLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, contextLabel, onDismiss, onSave }, forwardedRef) => {
   const initialDraft = displayWorkspaceCellValue(value, column.inputType);
   const [mode, setMode] = useState<NumericEditMode>('direct');
   const [draft, setDraft] = useState(initialDraft);
@@ -82,12 +91,15 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   useEffect(() => { focusInput(true); }, []);
 
   const chooseMode = (nextMode: Exclude<NumericEditMode, 'direct'>) => {
+    const enteringAdjustment = mode === 'direct';
     if (mode === 'direct') {
       setOriginalDraft(draft);
-      setDraft('');
+      setDraft('0');
+    } else if (!draft.trim()) {
+      setDraft('0');
     }
     setMode(nextMode);
-    focusInput();
+    focusInput(enteringAdjustment);
   };
   const restoreOriginal = () => {
     setMode('direct');
@@ -107,21 +119,24 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   };
   useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
 
-  return <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
-    {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
+  return <div className="workspace-number-editor-shell">
+    <WorkspaceValueContext label={contextLabel} mode={mode} />
+    <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
+    {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onPointerDown={(event) => event.preventDefault()} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
     <div className="workspace-number-input-shell">
       <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" style={mode === 'direct' || inputDecimal?.fraction ? undefined : { paddingRight: `calc(${fractionDigits}ch + .6ch)` }} type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
     </div>
     <div className="workspace-number-operators">
-      <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onClick={() => chooseMode('subtract')}>−</button>
-      <button type="button" className={`workspace-number-operation workspace-number-operation-add${mode === 'add' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '增加數值' : '切換為加法'} aria-pressed={mode === 'add'} onClick={() => chooseMode('add')}>＋</button>
+      <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('subtract')}>−</button>
+      <button type="button" className={`workspace-number-operation workspace-number-operation-add${mode === 'add' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '增加數值' : '切換為加法'} aria-pressed={mode === 'add'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('add')}>＋</button>
     </div>
     {mode !== 'direct' && <output className="workspace-number-result" role="status" aria-label={`${column.name}計算結果`}>{result && <><span aria-hidden="true">→</span><NumericAlignedValue value={result} /></>}</output>}
+    </div>
   </div>;
 });
 NumericCellEditor.displayName = 'NumericCellEditor';
 
-export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
+export const CellInputDialog = ({ column, value, inputLabel, contextLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
   const [dateDirty, setDateDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -138,10 +153,10 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
   const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
   return <WorkspaceModal title={column.name} onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
-      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} />
+      ? <><WorkspaceValueContext label={contextLabel} /><DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} /></>
       : column.inputType === 'number'
-      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
-      : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
+      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} contextLabel={contextLabel} onDismiss={onDismiss} onSave={onSave} />
+      : <><WorkspaceValueContext label={contextLabel} /><AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} /></>}
   </WorkspaceModal>;
 };
 
@@ -231,13 +246,13 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
     </div>
   </div>;
 };
-export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: WorkspaceColumn; value: WorkspaceCellValue; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void }) => {
+export const LinkInputDialog = ({ column, value, contextLabel, onDelete, onSave }: { column: WorkspaceColumn; value: WorkspaceCellValue; contextLabel?: string; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void }) => {
   const initial = isWorkspaceLinkValue(value) ? value : { url: typeof value === 'string' ? value : '', label: '' };
   const [url, setUrl] = useState(initial.url);
   const [label, setLabel] = useState(initial.label);
   const commit = () => onSave(url.trim() || label.trim() ? { url: url.trim(), label: label.trim() } : null);
   return <WorkspaceModal title={column.name} onClose={commit} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
-    <div className="workspace-link-fields">
+    <WorkspaceValueContext label={contextLabel} /><div className="workspace-link-fields">
       <label className="workspace-form-field">連結<input autoFocus type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
       <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
     </div>
@@ -311,7 +326,7 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
   </WorkspaceModal>;
 };
 export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" leadingAction={<button type="button" className="workspace-dialog-delete" onClick={onConfirm} aria-label="確認刪除"><WorkspaceIcon name="trash" size={20} /></button>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
-export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
+export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; contextLabel?: string; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
   const isMultiple = Boolean(column.isMultiple);
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
@@ -376,7 +391,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
   };
 
   return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
-    <div className="workspace-selection-head">
+    <WorkspaceValueContext label={contextLabel} /><div className="workspace-selection-head">
       <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">{isDynamic ? '搜尋或新增選項' : '搜尋選項'}</span><input ref={inputRef} inputMode="text" enterKeyHint={isDynamic ? 'done' : undefined} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && isDynamic) { event.preventDefault(); submitQuery(); } }} placeholder={isDynamic ? '搜尋或輸入…' : '搜尋選項…'} /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
       <div className="workspace-selection-meta">
         <span className="workspace-selection-count">{isMultiple ? `已選 ${selectedSet.size} 項` : `${filtered.length} 項`}</span>
@@ -679,6 +694,7 @@ export interface CellInputDialogProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
   inputLabel?: string;
+  contextLabel?: string;
   onDelete?(): void;
   onDismiss?(): void;
   onSave(value: string): void;
