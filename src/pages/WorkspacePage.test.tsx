@@ -261,6 +261,41 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('spinbutton')).toHaveAttribute('enterkeyhint', 'done');
   });
 
+  it('supports vertical numeric adjustments with decimal-point alignment', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
+
+    await user.click(cell);
+    await user.click(screen.getByRole('button', { name: '增加數值' }));
+    const input = screen.getByRole('spinbutton', { name: '數量輸入加法' });
+    await user.type(input, '0.25');
+
+    expect(document.querySelector('.workspace-number-editor')).toHaveAttribute('data-mode', 'add');
+    expect(screen.getByRole('status', { name: '數量計算結果' })).toHaveTextContent('→2.25');
+    expect(screen.getByRole('button', { name: '編輯原始數值 2' })).toHaveTextContent('2');
+
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '花火，數量：2.25' })).toBeInTheDocument();
+  });
+
+  it('returns to direct numeric editing when the original value is clicked', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
+
+    await user.click(cell);
+    await user.click(screen.getByRole('button', { name: '增加數值' }));
+    await user.type(screen.getByRole('spinbutton', { name: '數量輸入加法' }), '5');
+    await user.click(screen.getByRole('button', { name: '編輯原始數值 2' }));
+
+    expect(screen.getByRole('spinbutton', { name: '數量輸入' })).toHaveValue(2);
+    expect(screen.queryByRole('status', { name: '數量計算結果' })).not.toBeInTheDocument();
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
+  });
+
   it('opens the fixed selection list immediately and saves a choice', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

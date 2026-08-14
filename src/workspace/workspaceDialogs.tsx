@@ -1,14 +1,133 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceCellColor, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceOptionColor } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
+
+type NumericEditMode = 'direct' | 'add' | 'subtract';
+
+interface DecimalParts {
+  sign: 1 | -1;
+  integer: string;
+  fraction: string;
+  scaled: bigint;
+  scale: number;
+}
+
+const decimalPattern = /^([+-]?)(\d*)(?:\.(\d*))?$/;
+const parseDecimal = (raw: string): DecimalParts | null => {
+  const match = decimalPattern.exec(raw.trim());
+  if (!match || (!match[2] && !match[3])) return null;
+  const fraction = match[3] ?? '';
+  const integer = (match[2] || '0').replace(/^0+(?=\d)/, '');
+  const sign: 1 | -1 = match[1] === '-' ? -1 : 1;
+  const digits = `${integer}${fraction}` || '0';
+  const magnitude = BigInt(digits);
+  return { sign, integer, fraction, scaled: sign === -1 ? -magnitude : magnitude, scale: fraction.length };
+};
+
+const decimalScale = (raw: string) => parseDecimal(raw)?.scale ?? 0;
+const rescaleDecimal = (value: bigint, fromScale: number, toScale: number) => value * (10n ** BigInt(toScale - fromScale));
+const formatDecimal = (value: bigint, scale: number) => {
+  const negative = value < 0n;
+  const magnitude = (negative ? -value : value).toString().padStart(scale + 1, '0');
+  if (scale === 0) return `${negative && value !== 0n ? '-' : ''}${magnitude}`;
+  const integer = magnitude.slice(0, -scale) || '0';
+  const fraction = magnitude.slice(-scale);
+  return `${negative && value !== 0n ? '-' : ''}${integer}.${fraction}`;
+};
+
+const calculateNumericAdjustment = (original: string, delta: string, mode: NumericEditMode) => {
+  if (mode === 'direct') return null;
+  const base = parseDecimal(original.trim() || '0');
+  const change = parseDecimal(delta);
+  if (!base || !change) return null;
+  const scale = Math.max(base.scale, change.scale);
+  const baseValue = rescaleDecimal(base.scaled, base.scale, scale);
+  const changeValue = rescaleDecimal(change.scaled, change.scale, scale);
+  return formatDecimal(baseValue + (mode === 'add' ? changeValue : -changeValue), scale);
+};
+
+const NumericAlignedValue = ({ value }: { value: string }) => {
+  const parts = parseDecimal(value);
+  if (!parts) return <span className="workspace-number-aligned-value">{value}</span>;
+  return <span className="workspace-number-aligned-value" aria-label={value}>
+    <span className="workspace-number-integer">{parts.sign === -1 ? '-' : ''}{parts.integer}</span>
+    <span className="workspace-number-decimal">{parts.fraction ? '.' : ''}</span>
+    <span className="workspace-number-fraction">{parts.fraction}</span>
+  </span>;
+};
+
+export interface NumericCellEditorHandle {
+  commit(): void;
+}
+
+const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, onDismiss, onSave }, forwardedRef) => {
+  const initialDraft = displayWorkspaceCellValue(value, column.inputType);
+  const [mode, setMode] = useState<NumericEditMode>('direct');
+  const [draft, setDraft] = useState(initialDraft);
+  const [originalDraft, setOriginalDraft] = useState(initialDraft);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const baseLabel = inputLabel ?? `${column.name}輸入`;
+  const result = calculateNumericAdjustment(originalDraft, draft, mode);
+  const fractionDigits = Math.max(2, decimalScale(originalDraft), decimalScale(draft), result ? decimalScale(result) : 0);
+  const inputDecimal = parseDecimal(draft);
+
+  const focusInput = (select = false) => {
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current;
+      input?.focus();
+      if (select) input?.select();
+    });
+  };
+  useEffect(() => { focusInput(true); }, []);
+
+  const chooseMode = (nextMode: Exclude<NumericEditMode, 'direct'>) => {
+    if (mode === 'direct') {
+      setOriginalDraft(draft);
+      setDraft('');
+    }
+    setMode(nextMode);
+    focusInput();
+  };
+  const restoreOriginal = () => {
+    setMode('direct');
+    setDraft(originalDraft);
+    focusInput(true);
+  };
+  const commit = () => {
+    if (mode === 'direct') {
+      onSave(draft);
+      return;
+    }
+    if (!result) {
+      onDismiss?.();
+      return;
+    }
+    onSave(result);
+  };
+  useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
+
+  return <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
+    {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
+    <div className="workspace-number-input-shell">
+      <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" style={mode === 'direct' || inputDecimal?.fraction ? undefined : { paddingRight: `calc(${fractionDigits}ch + .6ch)` }} type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+    </div>
+    <div className="workspace-number-operators">
+      <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onClick={() => chooseMode('subtract')}>−</button>
+      <button type="button" className={`workspace-number-operation workspace-number-operation-add${mode === 'add' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '增加數值' : '切換為加法'} aria-pressed={mode === 'add'} onClick={() => chooseMode('add')}>＋</button>
+    </div>
+    {mode !== 'direct' && <output className="workspace-number-result" role="status" aria-label={`${column.name}計算結果`}>{result && <><span aria-hidden="true">→</span><NumericAlignedValue value={result} /></>}</output>}
+  </div>;
+});
+NumericCellEditor.displayName = 'NumericCellEditor';
 
 export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
   const [dateDirty, setDateDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const numericEditorRef = useRef<NumericCellEditorHandle>(null);
   useEffect(() => {
-    if (column.inputType === 'datetime') return;
+    if (column.inputType === 'datetime' || column.inputType === 'number') return;
     const input = inputRef.current;
     input?.focus();
     if (input instanceof HTMLInputElement) input.select();
@@ -16,11 +135,12 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
   }, [column.inputType]);
 
   const commit = () => column.inputType === 'datetime' && !dateDirty ? onDismiss?.() : onSave(draft);
-  return <WorkspaceModal title={column.name} onClose={commit} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
+  return <WorkspaceModal title={column.name} onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
       ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} />
       : column.inputType === 'number'
-      ? <input ref={inputRef as React.RefObject<HTMLInputElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
   </WorkspaceModal>;
 };
