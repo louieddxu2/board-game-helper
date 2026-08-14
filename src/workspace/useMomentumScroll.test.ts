@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
-import { getTablePanAxis, useMomentumScroll } from './useMomentumScroll';
+import { clampTableMomentumVelocity, getTablePanAxis, MAX_TABLE_MOMENTUM_VELOCITY, useMomentumScroll } from './useMomentumScroll';
 
 describe('useMomentumScroll', () => {
   test('locks clear horizontal and vertical gestures while preserving near-diagonal movement', () => {
@@ -65,6 +65,7 @@ describe('useMomentumScroll', () => {
       scrollTop: { configurable: true, writable: true, value: 200 },
     });
     const frames: FrameRequestCallback[] = [];
+    if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
     const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       frames.push(callback);
       return frames.length;
@@ -117,5 +118,11 @@ describe('useMomentumScroll', () => {
     result.current.stop();
     requestAnimationFrame.mockRestore();
     vi.useRealTimers();
+  });
+
+  test('allows a faster fling before applying the momentum cap', () => {
+    expect(MAX_TABLE_MOMENTUM_VELOCITY).toBeGreaterThan(60);
+    expect(clampTableMomentumVelocity(250)).toBe(MAX_TABLE_MOMENTUM_VELOCITY);
+    expect(clampTableMomentumVelocity(-250)).toBe(-MAX_TABLE_MOMENTUM_VELOCITY);
   });
 });

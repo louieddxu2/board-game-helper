@@ -1,11 +1,14 @@
 import { useCallback, useRef } from 'react';
 
-const MAX_VELOCITY = 60; // Max speed cap for consecutive swipe acceleration
+export const MAX_TABLE_MOMENTUM_VELOCITY = 100; // Max speed cap for consecutive swipe acceleration
+const MAX_VELOCITY = MAX_TABLE_MOMENTUM_VELOCITY;
 const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous swipe
 const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 
 export type TableBounceAxis = 'x' | 'y';
 export type TablePanAxis = TableBounceAxis | 'both';
+
+export const clampTableMomentumVelocity = (velocity: number) => Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, velocity));
 
 const DIAGONAL_SLOPE_MIN = 0.72;
 const DIAGONAL_SLOPE_MAX = 1 / DIAGONAL_SLOPE_MIN;
@@ -116,8 +119,8 @@ export function useMomentumScroll() {
       : Math.abs(vx) >= Math.abs(vy) ? 'x' : 'y';
 
     // Clamp speed limits
-    vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, vx));
-    vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, vy));
+    vx = clampTableMomentumVelocity(vx);
+    vy = clampTableMomentumVelocity(vy);
 
     points.current = [];
 

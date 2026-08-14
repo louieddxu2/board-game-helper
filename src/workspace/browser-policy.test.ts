@@ -128,6 +128,9 @@ describe('workspace browser policies', () => {
     expect(filterbarTrackRule).toMatch(/touch-action:\s*pan-x/);
     expect(filterbarButtonRule).toMatch(/width:\s*100%/);
     expect(filterbarButtonRule).toMatch(/border-right:\s*1px solid var\(--line\)/);
+    const frozenFilterbarRule = styles.match(/\.workspace-filterbar-button\.is-frozen, \.workspace-filterbar-spacer\.is-frozen\s*\{([^}]*)\}/)?.[1];
+    expect(frozenFilterbarRule).toMatch(/position:\s*sticky/);
+    expect(frozenFilterbarRule).toMatch(/left:\s*0/);
     expect(styles).not.toContain('.workspace-filterbar-count');
     expect(styles).not.toContain('.workspace-empty-cell::after');
   });

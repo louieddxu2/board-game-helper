@@ -117,11 +117,13 @@ footer a { color: inherit; }
 .workspace-filterbar-scroll { display: grid; align-items: stretch; min-width: 100%; gap: 0; overflow: visible; touch-action: pan-x; scrollbar-width: none; }
 .workspace-filterbar-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-filterbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
-.workspace-filterbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-width: 0; min-height: 52px; padding: 4px 7px; overflow: hidden; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: rgba(255,253,248,.7); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-filterbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 52px; padding: 4px 3px; overflow: hidden; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: rgba(255,253,248,.7); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; }
 .workspace-filterbar-button:hover, .workspace-filterbar-button.is-filtered { background: var(--cream); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
-.workspace-filterbar-button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-filterbar-button small { min-width: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-filterbar-button.is-filtered small { color: var(--orange); }
+.workspace-filterbar-button.is-frozen, .workspace-filterbar-spacer.is-frozen { position: sticky; left: 0; z-index: 3; box-shadow: 2px 0 5px rgba(22,53,47,.12); }
+.workspace-filterbar-button.is-frozen { background: var(--white); }
+.workspace-filterbar-button.is-frozen.is-filtered { background: var(--cream); }
 .workspace-filterbar-spacer { display: block; min-width: 0; border-right: 1px solid var(--line); background: var(--paper); }
 .workspace-editbar { position: relative; z-index: 11; display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--white); color: var(--green); }
 .workspace-editbar-group { display: flex; align-items: center; gap: 4px; }
@@ -411,13 +413,11 @@ footer a { color: inherit; }
 .workspace-datetime-wheel-unit { position: absolute; right: 0; bottom: 0; left: 0; color: var(--muted); font-size: 11px; line-height: 12px; text-align: center; }
 .workspace-datetime-divider { height: 1px; margin: 0 8px; background: rgba(22,53,47,.18); }
 .workspace-datetime-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; padding: 0 2px; }
-.workspace-datetime-editor.is-date-only .workspace-datetime-footer { justify-content: flex-start; }
-.workspace-datetime-footer-actions { display: flex; align-items: center; gap: 2px; }
 .workspace-datetime-clear { min-height: 30px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--orange); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
 .workspace-datetime-clear:hover { background: rgba(213,102,47,.1); }
 .workspace-datetime-current { min-height: 30px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--green); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
 .workspace-datetime-current:hover { background: rgba(47,111,94,.1); }
-.workspace-datetime-timezone { color: var(--muted); font-size: 11px; }
+.workspace-datetime-timezone { flex: 1 1 auto; color: var(--muted); font-size: 11px; text-align: center; }
 .workspace-link-dialog { align-self: center; justify-self: center; width: min(380px, 80vw); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
 .workspace-link-dialog-overlay { place-items: center; align-content: center; background: transparent; }
 .workspace-link-dialog .workspace-dialog-heading { display: none; }

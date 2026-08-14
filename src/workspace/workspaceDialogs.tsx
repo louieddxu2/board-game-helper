@@ -241,8 +241,9 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
         <WheelPicker label="分" value={parts.minute} options={range(0, 59)} loop onChange={(next) => updatePart('minute', next)} />
       </div></>}
     <div className="workspace-datetime-footer">
-      <div className="workspace-datetime-footer-actions"><button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button><button type="button" className="workspace-datetime-current" onClick={setCurrent}>{showTime ? '現在' : '今天'}</button></div>
+      <button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button>
       {showTime && <span className="workspace-datetime-timezone">依裝置時區</span>}
+      <button type="button" className="workspace-datetime-current" onClick={setCurrent}>{showTime ? '現在' : '今天'}</button>
     </div>
   </div>;
 };

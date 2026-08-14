@@ -1071,6 +1071,11 @@ describe('WorkspacePage', () => {
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     expect(screen.getByRole('group', { name: '名稱日期時間' })).toBeInTheDocument();
+    const today = new Date();
+    expect(within(screen.getByRole('listbox', { name: '年' })).getByRole('option', { selected: true })).toHaveTextContent(String(today.getFullYear()));
+    expect(within(screen.getByRole('listbox', { name: '月' })).getByRole('option', { selected: true })).toHaveTextContent(String(today.getMonth() + 1));
+    expect(within(screen.getByRole('listbox', { name: '日' })).getByRole('option', { selected: true })).toHaveTextContent(String(today.getDate()));
+    expect(document.querySelector('.workspace-datetime-footer')?.lastElementChild).toHaveClass('workspace-datetime-current');
     const minuteWheel = screen.getByRole('listbox', { name: '分' });
     const currentMinute = within(minuteWheel).getByRole('option', { selected: true }).textContent;
     fireEvent.wheel(minuteWheel, { deltaY: -30 });
@@ -1275,6 +1280,8 @@ describe('WorkspacePage', () => {
     expect(document.querySelector('.workspace-filterbar-count')).not.toBeInTheDocument();
     expect((document.querySelector('.workspace-filterbar-scroll') as HTMLElement).style.gridTemplateColumns.split(' ')).toHaveLength(5);
     expect((document.querySelector('.workspace-filterbar-scroll') as HTMLElement).style.width).not.toBe('');
+    expect(document.querySelector('.workspace-filterbar-button.is-frozen')).toBe(document.querySelector('.workspace-filterbar-button'));
+    expect([...document.querySelectorAll('.workspace-filterbar-button')].every((button) => !button.textContent?.includes('物件') && !button.textContent?.includes('名稱'))).toBe(true);
 
     await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '合作');
     await user.click(screen.getByRole('button', { name: '清除搜尋與篩選' }));
