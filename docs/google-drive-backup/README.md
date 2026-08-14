@@ -10,20 +10,20 @@
 
 目前網站的 Google 登入只驗證使用者身分，並不代表已取得 Google Drive 操作權限。Drive 備份需要另外走 Google Identity Services 的 OAuth 授權流程。
 
-建議使用 authorization code flow：
+目前依照 `C:\architecture-kits\kits\google-drive-single-file-backup` 採用瀏覽器端 Google Identity Services token flow：
 
-1. 使用者在自訂的「Google Drive 備份」介面按下連結。
-2. 前端透過 Google Identity Services 取得授權碼。
-3. Cloudflare Worker 後端交換 access token 與 refresh token。
-4. refresh token 加密保存於伺服器端，前端只知道連結狀態，不接觸長期 token。
-5. Worker 代表使用者呼叫 Drive API 上傳或下載備份檔。
+1. 使用者只在 workspace 的目錄彈窗中按下「Google Drive 備份」。
+2. 前端以既有的 Google OAuth Web Client ID，向 Google 申請 `drive.file` access token。
+3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
+4. 前端直接呼叫 Drive v3，建立／更新一個固定備份檔，或下載該檔案後交給既有 XLSX 匯入預覽。
 
-這和現有 Google 登入保持分離：使用者可以登入網站，但不連結 Drive；也可以在 workspace 中稍後才授權備份。
+這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
+
+若未來需要無人值守的排程備份、多裝置背景同步，才另行評估 authorization code flow、refresh token 加密保存與 Worker 端 API；那會是不同的安全與資料責任範圍，不屬於目前第一版。
 
 官方文件：
 
-- [Google Identity Services：使用 authorization code model](https://developers.google.com/identity/oauth2/web/guides/use-code-model)
-- [Google OAuth 2.0：Web server applications](https://developers.google.com/identity/protocols/oauth2/web-server)
+- [Google Identity Services：Web 上的 OAuth 2.0](https://developers.google.com/identity/oauth2/web/guides/overview)
 - [Google Drive API：選擇授權 scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 
 ## Scope 選擇
@@ -48,12 +48,12 @@
 IndexedDB 儲存
    ↓
 標記「有未備份變更」
-   ↓ 使用者按下立即備份，或線上時執行排程備份
+   ↓ 使用者在目錄彈窗按下立即備份
 產生目前完整 XLSX
    ↓
-Drive files.create / files.update
+瀏覽器直接呼叫 Drive files.create / files.update
    ↓
-保存 fileId、checksum、備份時間與格式版本
+保存 fileId、備份時間與格式版本（不保存 access token）
 ```
 
 還原則反向執行，但在真正覆蓋本機資料前，必須先經過自訂衝突確認介面。第一版不做單格合併：選擇「保留本機」、「使用雲端」或「取消」。
@@ -65,7 +65,7 @@ Drive files.create / files.update
 - 顯示名稱：`玩錯動態表格-備份.xlsx`
 - MIME type：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
 - 內容：目前完整 Workspace XLSX，不另建第二種資料格式
-- `appProperties`：`schemaVersion`、`workspaceFormat`、`exportedAt`、`checksum`
+- `appProperties`：`backupKey`、`workspaceFormat`、`schemaVersion`、`exportedAt`、`backedUpAt`、`sourceUpdatedAt`
 - 本機保存：Drive `fileId`、最後備份 checksum、最後備份時間、目前是否 dirty
 
 `appProperties` 可讓 App 在不掃描整個 Drive 的情況下找回自己的備份檔。Drive API 支援使用 `appProperties` 搜尋檔案：[Search for files and folders](https://developers.google.com/workspace/drive/api/guides/search-files)。
@@ -73,23 +73,23 @@ Drive files.create / files.update
 ## PWA 與離線行為
 
 - 離線時仍可照常編輯本機資料。
-- 沒有網路時，備份按鈕應顯示「待上傳」，不能假裝已完成。
-- 恢復連線後，可依設定自動備份，或只提示使用者手動按下備份。
+- 沒有網路時，備份按鈕顯示離線狀態，不能假裝已完成。
+- 恢復連線後仍由使用者手動按下備份；目前不偷偷執行背景上傳。
 - 還原屬於高風險動作，不應在背景自動執行。
 - Service Worker 不需要保存 Google token，也不應代替 OAuth 流程。
 
 ## 目前不做的事情
 
 - 不把 Google Drive 當成即時資料庫。
-- 不在伺服器保存使用者的整份 workspace 內容。
+- 不在伺服器保存 access token、refresh token 或使用者的整份 workspace 內容。
 - 不掃描或列出使用者整個 Drive。
 - 不自動合併兩台裝置的格子變更。
 - 不把資料轉成 Google Sheets 原生格式。
 
-## 待確認決策
+## 第一版已決定的範圍
 
-1. 備份檔要讓使用者在 Drive 中看得到（`drive.file`），還是完全隱藏（`drive.appdata`）。
-2. 第一版只提供手動備份，還是加入「連線後自動備份」。
-3. Drive 上只保留一個目前備份檔，還是保留最近 N 個版本。
-4. Google 帳號是否沿用目前網站登入的帳號，或允許連結另一個 Drive 帳號。
-5. refresh token 的加密保存與解除連結後的刪除政策。
+1. 備份檔讓使用者在 Drive 中看得到，使用 `drive.file`。
+2. 只提供使用者主動觸發的備份與還原，不做自動背景備份。
+3. Drive 上只維護一個目前備份檔，靠 `appProperties.backupKey` 找回並更新，不每次建立新檔。
+4. 不在本機保存 Drive access token；使用者重新整理後，必要時重新走 GIS 授權。
+5. 還原仍先回到既有的「合併／取代」匯入預覽，不直接覆蓋目前 workspace。

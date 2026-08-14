@@ -986,6 +986,19 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
+  it('keeps Google Drive backup entry and actions inside the drawer flow', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const drawerButton = await screen.findByRole('button', { name: '開啟目錄' });
+    await user.click(drawerButton);
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    expect(within(drawer).getByRole('button', { name: 'Google Drive 備份' })).toBeInTheDocument();
+    await user.click(within(drawer).getByRole('button', { name: 'Google Drive 備份' }));
+    expect(screen.getByRole('dialog', { name: 'Google Drive' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '立即備份' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
+  });
+
   it('searches tables and folders from the drawer', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

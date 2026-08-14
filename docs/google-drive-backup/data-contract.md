@@ -2,7 +2,7 @@
 
 ## 本機備份狀態
 
-建議將備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；備份 metadata 可放在同一個 local database 的獨立 key/store。
+備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；目前備份 metadata 以獨立 localStorage key 保存，僅包含檔案識別與時間，不包含 access token。
 
 ```ts
 interface WorkspaceBackupState {
@@ -18,7 +18,19 @@ interface WorkspaceBackupState {
 }
 ```
 
-`driveAccountHint` 只保存顯示用的遮罩資訊，不保存 access token 或 refresh token。
+目前實作的最小資料形狀是：
+
+```ts
+interface WorkspaceDriveBackupRecord {
+  fileId: string | null;
+  fileName: string | null;
+  lastBackupAt: number | null;
+  sourceUpdatedAt: number | null;
+  remoteModifiedTime: string | null;
+}
+```
+
+不保存 access token、refresh token、帳號識別資訊或 workspace 內容。`dirty` 狀態由目前 workspace 的 `updatedAt` 與上次備份的 `sourceUpdatedAt` 比較而來。
 
 ## 雲端檔案識別
 
@@ -29,36 +41,35 @@ interface WorkspaceBackupState {
   "name": "玩錯動態表格-備份.xlsx",
   "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "appProperties": {
+    "backupKey": "dynamic-sheet-primary-workspace-v1",
     "workspaceFormat": "dynamic-sheet-v1",
     "schemaVersion": "1",
-    "checksum": "sha256:...",
-    "exportedAt": "2026-08-15T00:00:00.000Z"
+    "exportedAt": "2026-08-15T00:00:00.000Z",
+    "backedUpAt": "1765766400000",
+    "sourceUpdatedAt": "1765766400000"
   }
 }
 ```
 
 更新既有備份使用該 `fileId`，不因每次備份都建立新檔案。未來若要版本保留，再另外增加 retention 設定，不要一開始就讓 Drive 裡產生大量檔案。
 
-## 預計程式分層
+## 目前程式分層
 
 ```text
-src/workspace/backup/
-  types.ts                 # 前端狀態與 UI 所需型別
-  backupState.ts           # 本機 backup metadata
-  backupState.test.ts
-  googleDriveClient.ts     # 只處理前端授權回呼與 API client 邊界
+src/workspace/googleDriveBackup/
+  types.ts                         # Drive、GIS 與備份服務的邊界型別
+  googleIdentityTokenProvider.ts  # 瀏覽器端 GIS token provider，token 僅在記憶體
+  googleDriveApi.ts                # Drive v3 查找、資料夾與 multipart 上傳／下載
+  singleFileBackup.ts              # 固定 backupKey 的單檔 upsert／restore facade
+  useWorkspaceGoogleDriveBackup.ts # workspace XLSX 序列化與還原預覽整合
+  GoogleDriveBackupDialog.tsx      # 目錄入口開啟的自訂彈窗
 
-worker/routes/
-  google-drive.ts          # OAuth callback、連結狀態、備份／還原 endpoint
-
-worker/data/
-  googleDriveConnections.ts # 使用者與 refresh token 的加密保存
-
-migrations/
-  xxxx_google_drive_connections.sql
+src/pages/WorkspacePage.tsx        # 只在 Drawer 放置備份入口
 ```
 
-真正開始實作時，需先確認 Worker 是否能安全保存加密 refresh token，以及 OAuth redirect URI／production origin 的設定方式；在此之前不應新增半成品 token table。
+目前不新增 Worker route、refresh token table 或 D1 migration。Google client ID 沿用既有 `/api/session` 提供的公開設定，Drive API 由瀏覽器直接呼叫。
+
+如果未來要支援排程備份或背景同步，才需要另開一版設計，重新確認 Worker 保存 refresh token 的安全邊界與 OAuth redirect URI；不能把那套責任混進目前的前端手動備份。
 
 ## 版本與相容性
 

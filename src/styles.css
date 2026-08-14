@@ -252,6 +252,10 @@ footer a { color: inherit; }
 .workspace-storage-status .needs-attention { color: var(--orange); font-weight: 700; }
 .workspace-storage-status.is-error { background: rgba(165,47,35,.09); }
 .workspace-storage-status.is-error span:first-child { color: #a52f23; }
+.workspace-drive-storage-status { background: rgba(233,180,76,.1); }
+.workspace-drive-storage-status.needs-attention span:first-child { color: var(--orange); }
+.workspace-drawer-backup-action { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--orange); border-radius: 6px; background: rgba(233,180,76,.1); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.workspace-drawer-backup-action:hover { background: var(--cream); color: var(--orange); }
 .workspace-drawer-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .workspace-drawer-data-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .workspace-drawer-data-actions button:hover { border-color: var(--orange); background: var(--cream); color: var(--orange); }
@@ -288,6 +292,21 @@ footer a { color: inherit; }
 .workspace-dialog-button.primary { background: var(--orange); color: var(--white); }
 .workspace-dialog-button.secondary { border-color: var(--line); background: var(--white); color: var(--green); }
 .workspace-dialog-button.danger { background: #a52f23; color: var(--white); }
+.workspace-google-drive-dialog { width: min(440px, 100%); }
+.workspace-google-drive-status { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 8px; background: rgba(47,111,94,.08); color: var(--green); }
+.workspace-google-drive-status > div { display: grid; min-width: 0; gap: 3px; }
+.workspace-google-drive-status small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.workspace-google-drive-message, .workspace-google-drive-error { margin: 0; padding: 9px 10px; border-radius: 6px; line-height: 1.5; }
+.workspace-google-drive-message { background: rgba(47,111,94,.08); color: var(--green); }
+.workspace-google-drive-error { background: rgba(165,47,35,.09); color: #a52f23; }
+.workspace-google-drive-meta { display: grid; gap: 6px; margin: 0; }
+.workspace-google-drive-meta div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 5px; border-bottom: 1px solid rgba(117,137,128,.22); }
+.workspace-google-drive-meta dt { color: var(--muted); font-size: 13px; }
+.workspace-google-drive-meta dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-google-drive-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.workspace-google-drive-actions button:first-child, .workspace-google-drive-actions button:last-child { grid-column: 1 / -1; }
+.workspace-google-drive-disconnect { justify-self: end; padding: 3px 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-google-drive-disconnect:hover { color: var(--orange); }
 .workspace-action-dialog { width: min(390px, 100%); }
 .workspace-column-visibility-dialog { width: min(390px, calc(100vw - 28px)); }
 .workspace-column-visibility-list { display: grid; gap: 4px; }
