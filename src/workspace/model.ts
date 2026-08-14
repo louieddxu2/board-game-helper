@@ -63,6 +63,7 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
 });
 
 export const isWorkspaceLinkValue = (value: WorkspaceCellValue | unknown): value is WorkspaceLinkValue => Boolean(value && typeof value === 'object' && 'url' in value && typeof value.url === 'string' && 'label' in value && typeof value.label === 'string');
+export const displayWorkspaceLinkUrl = (url: string) => url.trim().replace(/^https?:\/\//i, '');
 
 export const isWorkspaceUrlText = (value: unknown): value is string => {
   if (typeof value !== 'string') return false;
@@ -142,7 +143,7 @@ export const formatMultiSelectValues = (values: string[]): string => values.filt
 
 export const displayWorkspaceCellValue = (value: WorkspaceCellValue, inputType?: WorkspaceInputType, isMultiple?: boolean, dateOnly?: boolean) => {
   if (inputType === 'datetime') return dateOnly ? formatWorkspaceDate(value) : formatWorkspaceDateTime(value);
-  if (isWorkspaceLinkValue(value)) return value.label.trim() || value.url;
+  if (isWorkspaceLinkValue(value)) return value.label.trim() || displayWorkspaceLinkUrl(value.url);
   if (value == null) return '';
   if (isMultiple && typeof value === 'string') {
     const list = parseMultiSelectValues(value);

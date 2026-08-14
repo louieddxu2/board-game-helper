@@ -367,10 +367,11 @@ footer a { color: inherit; }
 .workspace-value-context-mode-subtract { background: rgba(47,111,94,.14); color: var(--green); }
 .workspace-number-editor-shell { display: block; min-width: 0; }
 .workspace-number-editor { --workspace-number-fraction-width: 2ch; display: grid; grid-template-columns: 30px minmax(0, 12ch); justify-content: center; align-items: center; min-height: 104px; padding: 8px 4px 10px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.workspace-number-input-shell { grid-column: 2; grid-row: 1; min-width: 0; }
+.workspace-number-input-shell { grid-column: 2; grid-row: 1; min-width: 0; border: 1px solid rgba(22,53,47,.28); border-radius: 8px; background: rgba(255,253,248,.56); box-shadow: inset 0 0 0 1px rgba(255,253,248,.22); }
+.workspace-number-input-shell:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(233,180,76,.22); }
 .workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-column: 2; grid-row: 1; }
 .workspace-number-editor[data-mode="add"] .workspace-number-input-shell, .workspace-number-editor[data-mode="subtract"] .workspace-number-input-shell { grid-column: 2; grid-row: 2; }
-.workspace-number-editor .workspace-value-input { display: block; min-width: 0; padding-inline: 0; text-align: right; direction: ltr; font-variant-numeric: tabular-nums; }
+.workspace-number-editor .workspace-value-input { display: block; min-width: 0; padding-inline: 8px; border: 0; background: transparent; cursor: text; text-align: right; direction: ltr; font-variant-numeric: tabular-nums; }
 .workspace-number-editor[data-mode="direct"] .workspace-value-input { text-align: center; }
 .workspace-number-editor input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 .workspace-number-editor input[type="number"]::-webkit-inner-spin-button, .workspace-number-editor input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }
@@ -549,6 +550,7 @@ footer a { color: inherit; }
   .workspace-editbar { min-height: 46px; padding: 0 6px; }
   .workspace-editbar-group { gap: 0; }
   .workspace-editbar-button { width: 40px; height: 40px; }
+  .workspace-paste-button { display: none; }
   .workspace-appbar-title { height: 44px; padding: 0 6px; }
   .workspace-appbar-title span { max-width: calc(100vw - 144px); font-size: 22px; }
   .workspace-appbar-search { flex: 1 1 auto; width: auto; height: 44px; padding: 0 6px; }

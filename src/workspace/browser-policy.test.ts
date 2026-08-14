@@ -78,6 +78,7 @@ describe('workspace browser policies', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+    const numberInputShellRule = styles.match(/\.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
     const appbarTitleRule = styles.match(/\.workspace-appbar-title span\s*\{([^}]*)\}/)?.[1];
     const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
@@ -94,6 +95,8 @@ describe('workspace browser policies', () => {
     expect(valueOverlayRule).toMatch(/place-items:\s*center/);
     expect(valueInputRule).toMatch(/font-size:\s*28px/);
     expect(valueInputRule).not.toContain('--workspace-text-scale');
+    expect(numberInputShellRule).toMatch(/border:\s*1px solid/);
+    expect(numberInputShellRule).toMatch(/background:\s*rgba\(/);
     expect(appbarTitleRule).toMatch(/font-size:\s*24px/);
     expect(appbarTitleRule).toMatch(/line-height:\s*1\.2/);
     expect(overlayRule).toMatch(/font-size:\s*16px/);
@@ -131,6 +134,7 @@ describe('workspace browser policies', () => {
     const frozenFilterbarRule = styles.match(/\.workspace-filterbar-button\.is-frozen, \.workspace-filterbar-spacer\.is-frozen\s*\{([^}]*)\}/)?.[1];
     expect(frozenFilterbarRule).toMatch(/position:\s*sticky/);
     expect(frozenFilterbarRule).toMatch(/left:\s*0/);
+    expect(styles).toMatch(/\.workspace-paste-button\s*\{\s*display:\s*none;\s*\}/);
     expect(styles).not.toContain('.workspace-filterbar-count');
     expect(styles).not.toContain('.workspace-empty-cell::after');
   });

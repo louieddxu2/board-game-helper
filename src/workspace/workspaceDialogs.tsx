@@ -59,7 +59,7 @@ const NumericAlignedValue = ({ value }: { value: string }) => {
 
 const WorkspaceValueContext = ({ label, mode }: { label?: string; mode?: string }) => {
   if (!label && !mode) return null;
-  const modeLabel = mode === 'direct' ? '直接輸入' : mode === 'add' ? '增加' : mode === 'subtract' ? '減少' : mode;
+  const modeLabel = mode === 'direct' ? '輸入' : mode === 'add' ? '增加' : mode === 'subtract' ? '減少' : mode;
   return <div className="workspace-value-context" aria-label={[label, modeLabel].filter(Boolean).join('，')}>
     {label && <span className="workspace-value-context-label">{label}</span>}
     {mode && <span className={`workspace-value-context-mode workspace-value-context-mode-${mode}`}>{modeLabel}</span>}
@@ -231,7 +231,7 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
   };
   return <div className={`workspace-datetime-editor ${showTime ? '' : 'is-date-only'}`} role="group" aria-label={ariaLabel}>
     <div className="workspace-datetime-wheel-row" aria-label="日期">
-      <WheelPicker label="年" value={parts.year} options={range(Math.min(currentYear - 100, parts.year - 2), Math.max(currentYear + 100, parts.year + 2))} onChange={(next) => updatePart('year', next)} onCenterClick={() => { setYearDraft(String(parts.year)); setEditingYear(true); }} centerEditor={editingYear ? <input autoFocus aria-label="直接輸入年份" className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={commitYear} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(); } if (event.key === 'Escape') { setYearDraft(String(parts.year)); setEditingYear(false); } }} /> : undefined} />
+      <WheelPicker label="年" value={parts.year} options={range(Math.min(currentYear - 100, parts.year - 2), Math.max(currentYear + 100, parts.year + 2))} onChange={(next) => updatePart('year', next)} onCenterClick={() => { setYearDraft(String(parts.year)); setEditingYear(true); }} centerEditor={editingYear ? <input autoFocus aria-label="輸入年份" className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={commitYear} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(); } if (event.key === 'Escape') { setYearDraft(String(parts.year)); setEditingYear(false); } }} /> : undefined} />
       <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop onChange={(next) => updatePart('month', next)} />
       <WheelPicker label="日" value={parts.day} options={range(1, daysInMonth)} loop onChange={(next) => updatePart('day', next)} />
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, displayWorkspaceColumnValue, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
@@ -9,6 +9,11 @@ describe('workspace model', () => {
     expect(isWorkspaceUrlText('example.com/game')).toBe(true);
     expect(isWorkspaceUrlText('花火')).toBe(false);
     expect(isWorkspaceUrlText('example')).toBe(false);
+  });
+
+  it('hides the protocol prefix when displaying a link property without a label', () => {
+    expect(displayWorkspaceCellValue({ url: 'https://example.com/game', label: '' }, 'link')).toBe('example.com/game');
+    expect(displayWorkspaceCellValue({ url: 'HTTP://example.com/game', label: '' }, 'link')).toBe('example.com/game');
   });
 
   it('derives dynamic options in first-seen order without empty or duplicate values', () => {

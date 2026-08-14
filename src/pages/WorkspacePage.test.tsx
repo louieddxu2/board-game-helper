@@ -271,7 +271,7 @@ describe('WorkspacePage', () => {
     const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
 
     await user.click(cell);
-    expect(screen.getByLabelText('花火／數量，直接輸入')).toBeInTheDocument();
+    expect(screen.getByLabelText('花火／數量，輸入')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '增加數值' }));
     const input = screen.getByRole('spinbutton', { name: '數量輸入加法' });
     expect(input).toHaveValue(0);
@@ -1141,7 +1141,7 @@ describe('WorkspacePage', () => {
 
     const yearWheel = screen.getByRole('listbox', { name: '年' });
     await user.click(within(yearWheel).getByRole('option', { selected: true }));
-    const yearInput = screen.getByRole('spinbutton', { name: '直接輸入年份' });
+    const yearInput = screen.getByRole('spinbutton', { name: '輸入年份' });
     await user.clear(yearInput);
     await user.type(yearInput, '1999{enter}');
 

@@ -434,6 +434,7 @@ const WorkspacePage = () => {
   }, [commit, pasteTarget]);
   const handleWorkspacePaste = useCallback((event: React.ClipboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && !window.matchMedia('(pointer: fine)').matches) return;
     if (target.closest('input, textarea, select, [contenteditable="true"]') || !pasteTarget || (!lastPasteTarget && !focusTarget)) return;
     const text = event.clipboardData.getData('text/plain');
     if (!text) return;
@@ -621,7 +622,7 @@ const WorkspacePage = () => {
       <div className="workspace-editbar-group workspace-editbar-history">
         <button type="button" className="workspace-editbar-button" aria-label="復原" title={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
         <button type="button" className="workspace-editbar-button" aria-label="重做" title={currentTableHistory?.future.at(-1) ? `重做：${currentTableHistory.future.at(-1)!.label}` : '沒有可重做的操作'} onClick={redoTable} disabled={!currentTableHistory?.future.length}><WorkspaceIcon name="redo" size={22} /></button>
-        <button type="button" className="workspace-editbar-button" aria-label="貼上多格" onClick={() => setPasteDialogOpen(true)} disabled={!pasteTarget}><WorkspaceIcon name="clipboard" size={21} /></button>
+        <button type="button" className="workspace-editbar-button workspace-paste-button" aria-label="貼上多格" onClick={() => setPasteDialogOpen(true)} disabled={!pasteTarget}><WorkspaceIcon name="clipboard" size={21} /></button>
       </div>
       <div className="workspace-editbar-group workspace-editbar-add">
         <button type="button" className="workspace-editbar-button" aria-label="新增物件" onClick={addRow}><WorkspaceIcon name="rows-plus" size={24} /></button>
