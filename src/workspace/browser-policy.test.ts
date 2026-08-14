@@ -82,8 +82,10 @@ describe('workspace browser policies', () => {
     const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
+    const selectionListContainerRule = styles.match(/\.workspace-selection-list\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-option\s*\{([^}]*)\}/)?.[1];
     const selectionIndicatorRule = styles.match(/\.workspace-selection-option-indicator\s*\{([^}]*)\}/)?.[1];
+    const contextActiveRule = styles.match(/\.workspace-table \.workspace-context-active\s*\{([^}]*)\}/)?.[1];
     const lineLimitRule = styles.match(/\.workspace-overflow-line-limited \.workspace-cell-value\s*\{([^}]*)\}/)?.[1];
     const multiEllipsisRule = styles.match(/\.workspace-overflow-ellipsis \.workspace-multi-chip-list\s*\{([^}]*)\}/)?.[1];
     const dragSurfaceRule = styles.match(/\.workspace-table-viewport, \.workspace-table-viewport \*, \.workspace-tree, \.workspace-tree \*\s*\{([^}]*)\}/)?.[1];
@@ -101,10 +103,14 @@ describe('workspace browser policies', () => {
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
+    expect(selectionDialogRule).toMatch(/height:\s*min\(75dvh/);
+    expect(selectionDialogRule).toMatch(/margin-top:\s*clamp\(10px,\s*4dvh,\s*28px\)/);
     expect(selectionDialogRule).not.toMatch(/backdrop-filter/);
+    expect(selectionListContainerRule).toMatch(/max-height:\s*none/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
+    expect(contextActiveRule).toMatch(/background:\s*#fff4d6/);
     expect(lineLimitRule).toMatch(/-webkit-line-clamp:\s*var\(--workspace-line-limit\)/);
     expect(multiEllipsisRule).toMatch(/text-overflow:\s*ellipsis/);
     expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
