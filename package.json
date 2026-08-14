@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run check:protected-copy && cross-env XDG_CONFIG_HOME=.wrangler/xdg vite",
-    "build": "npm run check:protected-copy && npm run check:d1-boundary && cross-env XDG_CONFIG_HOME=.wrangler/xdg vite build",
+    "build": "npm run check:protected-copy && npm run check:d1-boundary && cross-env NODE_OPTIONS=--disable-warning=DEP0040 XDG_CONFIG_HOME=.wrangler/xdg vite build",
     "preview": "cross-env XDG_CONFIG_HOME=.wrangler/xdg vite preview",
     "test": "npm run check:protected-copy && npm run check:d1-boundary && vitest run",
     "test:watch": "npm run check:protected-copy && vitest",
