@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
-import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey } from "../workspace/workspaceShared";
+import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, HeaderFilterDialog, HiddenFieldsDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
@@ -16,6 +16,30 @@ import { WorkspacePasteDialog, WorkspaceTableImportPreviewDialog } from '../work
 import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from '../workspace/workspacePaste';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
+const workspaceFilterKeyLabel = (key: string) => key === 'empty:'
+  ? '空白'
+  : key.startsWith('text:')
+    ? key.slice(5)
+    : key.startsWith('number:')
+      ? key.slice(7)
+      : key.startsWith('date-month:')
+        ? key.slice(11).replace('-', '/')
+        : key.startsWith('link:')
+          ? key.slice(5).split('\u0000')[0]
+          : key;
+const workspaceFilterSummary = (state?: HeaderFilterState) => {
+  if (!state) return '';
+  const parts: string[] = [];
+  const query = state.query?.trim();
+  if (query) parts.push(`含「${query}」`);
+  if (state.min?.trim() || state.max?.trim()) parts.push(`${state.min?.trim() || '-∞'}～${state.max?.trim() || '+∞'}`);
+  if (state.includedKeys !== null) {
+    const selected = state.includedKeys.map(workspaceFilterKeyLabel);
+    parts.push(selected.length ? `${selected.slice(0, 2).join('、')}${selected.length > 2 ? '…' : ''}` : '無結果');
+  }
+  if (state.sort) parts.push(state.sort === 'asc' ? '升冪' : '降冪');
+  return parts.join(' · ');
+};
 const workspaceLastExportStorageKey = 'board-game-helper-workspace-last-export';
 const workspaceBackupReminderMs = 7 * 24 * 60 * 60 * 1000;
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
@@ -144,7 +168,7 @@ const WorkspacePage = () => {
 
   const {
     searchQuery, setSearchQuery, searchOpen, setSearchOpen,
-    filterTarget, setFilterTarget, clearFilters,
+    headerFilters, filterTarget, setFilterTarget, clearFilters,
     searchedRows, filteredRows, visibleColumns,
     activeFilterState, activeFilterOptions, activeFilterInputType, activeNumericValues,
     setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveFilterAggregate, toggleActiveFilterOption,
@@ -153,6 +177,20 @@ const WorkspacePage = () => {
 
   const hiddenColumns = useMemo(() => table?.columns.filter((column) => column.hidden) ?? [], [table]);
   const displayedColumns = useMemo(() => visibleColumns.filter((column) => !column.hidden), [visibleColumns]);
+  const searchFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
+    if (!table || !rowHeader) return [];
+    if (table.transposed) return table.rows.map((row) => ({ axis: 'row', id: row.id, label: displayWorkspaceColumnValue(row.name, rowHeader) || '未命名物件' }));
+    return [
+      { axis: 'column', id: rowHeader.id, label: rowHeader.name || '未命名欄位' },
+      ...displayedColumns.map((column) => ({ axis: 'column' as const, id: column.id, label: column.name || '未命名欄位' })),
+    ];
+  }, [displayedColumns, rowHeader, table]);
+  const hasActiveSearchState = Boolean(searchQuery.trim()) || Object.values(headerFilters).some((state) => hasWorkspaceFilterCriteria(state) || Boolean(state.sort));
+  const clearSearchAndFilters = useCallback(() => {
+    setSearchQuery('');
+    clearFilters();
+    setSearchOpen(false);
+  }, [clearFilters, setSearchOpen, setSearchQuery]);
   const hasHiddenColumns = hiddenColumns.length > 0;
   const hiddenOptionsByColumn = useMemo(() => Object.fromEntries(hiddenColumns.map((column) => [column.id, column.inputType === 'dynamic-select' && table ? getDynamicOptions(table, column.id) : column.options])), [hiddenColumns, table]);
   const bulkColumn = useMemo(() => bulkSelection && table?.id === bulkSelection.tableId ? table.columns.find((column) => column.id === bulkSelection.columnId) : undefined, [bulkSelection, table]);
@@ -539,15 +577,18 @@ const WorkspacePage = () => {
   return <section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
-      <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>
+      <div className="workspace-appbar-leading">
+        <button type="button" className="workspace-appbar-button workspace-menu-button" aria-label={searchOpen ? '清除搜尋與篩選' : '開啟目錄'} onClick={searchOpen ? clearSearchAndFilters : () => setDrawerOpen(true)} disabled={!table}><WorkspaceIcon name={searchOpen ? 'filter-off' : 'menu'} size={29} /></button>
+        {searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-appbar-search-count">{filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
+      </div>
       <div className="workspace-appbar-actions">
-        <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''}`} aria-label={bulkSelection ? '搜尋並繼續批次選取' : '搜尋'} onClick={() => { if (!bulkSelection) closeBulkSelection(); setSearchOpen((open) => !open); }} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
+        <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''} ${hasActiveSearchState ? 'has-active-filter' : ''}`} aria-label={bulkSelection ? '搜尋並繼續批次選取' : '搜尋'} onClick={() => { if (!bulkSelection) closeBulkSelection(); setSearchOpen((open) => !open); }} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${editBarOpen ? 'active' : ''}`} aria-label="編輯" onClick={() => { closeBulkSelection(); setEditBarOpen((open) => !open); setTableActionsOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="edit" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => { closeBulkSelection(); setTableActionsOpen((open) => !open); setEditBarOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
     {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onConfirm={commitBulkSelection} />}
-    {searchOpen && table && <div className={`workspace-searchbar ${bulkSelection ? 'is-bulk-search' : ''}`} role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">{bulkSelection ? `已選 ${bulkSelection.rowIds.length} · ` : ''}顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
+    {searchOpen && table && <div className="workspace-filterbar" aria-label="欄位篩選工具列"><div className="workspace-filterbar-scroll">{searchFilterTargets.map((target) => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} /><span>{target.label}</span>{summary && <small>{summary}</small>}</button>; })}</div><span className="workspace-filterbar-count">{bulkSelection ? `已選 ${bulkSelection.rowIds.length} · ` : ''}顯示 {filteredRows.length} / {table.rows.length} 項</span></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
         <button type="button" className="workspace-editbar-button" aria-label="復原" title={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>

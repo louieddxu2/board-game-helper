@@ -1131,6 +1131,27 @@ describe('WorkspacePage', () => {
     expect([...document.querySelectorAll('.workspace-appbar-actions button')].map((btn) => btn.getAttribute('aria-label'))).toEqual(['搜尋', '編輯', '設定']);
   });
 
+  it('moves search into the title slot and uses the second row for column filters', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    expect(document.querySelector('.workspace-filterbar')).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: '搜尋' }));
+
+    expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '重新命名表格' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '清除搜尋與篩選' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '關閉搜尋' })).not.toBeInTheDocument();
+    expect(document.querySelector('.workspace-appbar-search svg')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.workspace-filterbar-button')).toHaveLength(5);
+
+    await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '合作');
+    await user.click(screen.getByRole('button', { name: '清除搜尋與篩選' }));
+
+    expect(screen.queryByRole('searchbox', { name: '搜尋此表' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '開啟目錄' })).toBeInTheDocument();
+  });
+
   it('filters, sorts, and searches values from every first-row header', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -1140,6 +1161,7 @@ describe('WorkspacePage', () => {
     await user.type(screen.getByRole('spinbutton'), '10');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
+    await user.click(screen.getByRole('button', { name: '搜尋' }));
     expect(screen.getAllByRole('button', { name: /^篩選 / })).toHaveLength(5);
     await user.click(screen.getByRole('button', { name: '篩選 數量' }));
     expect(screen.getByRole('dialog', { name: '篩選 數量' })).toBeInTheDocument();
@@ -1169,11 +1191,13 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '篩選 數量' })).toHaveTextContent('5～10');
   });
 
   it('searches text filter values without option checkboxes', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '搜尋' }));
     await user.click(await screen.findByRole('button', { name: '篩選 物件' }));
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();

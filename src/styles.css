@@ -98,21 +98,30 @@ footer a { color: inherit; }
 .workspace-loading { display: grid; place-items: center; color: var(--muted); }
 .workspace-appbar { position: relative; z-index: 12; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 4px 18px; border-bottom: 1px solid var(--line); background: var(--white); }
 .workspace-appbar-leading, .workspace-appbar-actions { display: flex; align-items: center; gap: 9px; }
-.workspace-appbar-leading { min-width: 0; }
+.workspace-appbar-leading { flex: 1 1 auto; min-width: 0; }
 .workspace-appbar-button { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
 .workspace-appbar-button:hover, .workspace-appbar-button.active { background: var(--cream); color: var(--orange); }
 .workspace-appbar-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
+.workspace-appbar-button.has-active-filter { position: relative; }
+.workspace-appbar-button.has-active-filter::after { content: ''; position: absolute; top: 9px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 2px var(--white); }
 .workspace-menu-button { margin-right: 4px; }
 .workspace-appbar-title { display: flex; align-items: center; align-self: center; height: 48px; min-width: 0; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; cursor: text; text-align: left; }
 .workspace-appbar-title:hover, .workspace-appbar-title.is-editing { background: var(--cream); box-shadow: inset 0 -2px var(--yellow); }
 .workspace-appbar-title:disabled { cursor: default; }
 .workspace-appbar-title span { display: block; max-width: min(46vw, 520px); overflow: hidden; color: var(--green); font-size: 24px; font-weight: 800; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-appbar-title small { color: var(--muted); font-size: 9px; letter-spacing: .16em; }
-.workspace-searchbar { position: relative; z-index: 11; display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--white); color: var(--green); }
-.workspace-searchbar input { flex: 1; min-width: 0; min-height: 36px; padding: 0 2px; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; }
-.workspace-search-count { flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.workspace-searchbar button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
-.workspace-searchbar button:hover { background: var(--cream); color: var(--orange); }
+.workspace-appbar-search { display: flex; align-items: center; gap: 8px; min-width: 0; width: min(52vw, 560px); height: 48px; padding: 0 10px; border-radius: 6px; background: var(--cream); box-shadow: inset 0 -2px var(--yellow); }
+.workspace-appbar-search input { flex: 1 1 auto; min-width: 0; min-height: 36px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 18px; }
+.workspace-appbar-search-count { flex: 0 0 auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.workspace-filterbar { position: relative; z-index: 11; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--white); color: var(--green); }
+.workspace-filterbar-scroll { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.workspace-filterbar-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.workspace-filterbar-button { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; max-width: 220px; min-height: 38px; padding: 4px 9px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,253,248,.7); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-filterbar-button:hover, .workspace-filterbar-button.is-filtered { border-color: var(--orange); background: var(--cream); color: var(--orange); }
+.workspace-filterbar-button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-filterbar-button small { min-width: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-filterbar-button.is-filtered small { color: var(--orange); }
+.workspace-filterbar-count { flex: 0 0 auto; margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .workspace-editbar { position: relative; z-index: 11; display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--white); color: var(--green); }
 .workspace-editbar-group { display: flex; align-items: center; gap: 4px; }
 .workspace-editbar-button { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
@@ -497,6 +506,11 @@ footer a { color: inherit; }
   .workspace-editbar-button { width: 40px; height: 40px; }
   .workspace-appbar-title { height: 44px; padding: 0 6px; }
   .workspace-appbar-title span { max-width: calc(100vw - 144px); font-size: 22px; }
+  .workspace-appbar-search { flex: 1 1 auto; width: auto; height: 44px; padding: 0 6px; }
+  .workspace-appbar-search input { font-size: 16px; }
+  .workspace-filterbar { min-height: 46px; padding: 0 6px; }
+  .workspace-filterbar-button { min-height: 36px; max-width: 180px; padding: 3px 7px; }
+  .workspace-filterbar-count { font-size: 10px; }
   .workspace-table th, .workspace-table td { min-width: 0; padding: 2px 3px; }
   .workspace-table-viewport::after { content: ''; display: block; width: 1px; height: max(32px, calc(env(safe-area-inset-bottom, 0px) + 14px)); pointer-events: none; }
   .workspace-table .workspace-row-corner, .workspace-row-heading { min-width: 0 !important; }
