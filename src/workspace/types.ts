@@ -27,6 +27,7 @@ export interface WorkspaceColumn {
   alignment?: WorkspaceTextAlign;
   overflowMode?: WorkspaceOverflowMode;
   widthLimitChars?: number;
+  lineLimit?: number;
   dateOnly?: boolean;
 }
 

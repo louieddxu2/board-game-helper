@@ -110,7 +110,10 @@ export const measureWorkspaceText = (text: string, fontSize: number, fontWeight:
   context.font = `${fontWeight} ${fontSize}px "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif`;
   return Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
 };
-export const overflowClassName = (column: WorkspaceColumn) => `workspace-overflow-${column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap')}`;
+export const overflowClassName = (column: WorkspaceColumn) => {
+  const mode = column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap');
+  return `workspace-overflow-${mode}${mode === 'wrap' && column.lineLimit ? ' workspace-overflow-line-limited' : ''}`;
+};
 export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLElement) => {
   const elementRect = element.getBoundingClientRect();
   const viewportRect = viewport.getBoundingClientRect();

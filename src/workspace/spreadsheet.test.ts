@@ -259,6 +259,21 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.rows[0].values[imported.table.columns[0].id]).toBe('2026-08-12T12:14:00.000Z');
   });
 
+  it('round-trips the wrapped line limit without shifting the date-only setting', async () => {
+    const source = makeFixture();
+    source.tables[0].columns[0].dateOnly = true;
+    source.tables[0].columns[0].lineLimit = 3;
+
+    const exported = exportWorkspaceXlsx(source, source.tables[0]);
+    const workbook = await readStoredWorkbook(exported);
+    const columnSettings = workbook.sheetRows(1).find((row) => row[0] === 'column');
+    const imported = await importWorkspaceXlsx(exported);
+
+    expect(columnSettings).toContain('true');
+    expect(columnSettings).toContain('3');
+    expect(imported.table?.columns[0]).toMatchObject({ dateOnly: true, lineLimit: 3 });
+  });
+
   it('round-trips link values, overflow modes, and the editable first-column property', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();

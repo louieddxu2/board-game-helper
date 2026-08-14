@@ -84,6 +84,8 @@ describe('workspace browser policies', () => {
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-option\s*\{([^}]*)\}/)?.[1];
     const selectionIndicatorRule = styles.match(/\.workspace-selection-option-indicator\s*\{([^}]*)\}/)?.[1];
+    const lineLimitRule = styles.match(/\.workspace-overflow-line-limited \.workspace-cell-value\s*\{([^}]*)\}/)?.[1];
+    const multiEllipsisRule = styles.match(/\.workspace-overflow-ellipsis \.workspace-multi-chip-list\s*\{([^}]*)\}/)?.[1];
     const dragSurfaceRule = styles.match(/\.workspace-table-viewport, \.workspace-table-viewport \*, \.workspace-tree, \.workspace-tree \*\s*\{([^}]*)\}/)?.[1];
     const editableSurfaceRule = styles.match(/\.workspace-dialog input, \.workspace-dialog textarea, \.workspace-dialog select, \.workspace-dialog \[contenteditable="true"\]\s*\{([^}]*)\}/)?.[1];
 
@@ -103,6 +105,8 @@ describe('workspace browser policies', () => {
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
+    expect(lineLimitRule).toMatch(/-webkit-line-clamp:\s*var\(--workspace-line-limit\)/);
+    expect(multiEllipsisRule).toMatch(/text-overflow:\s*ellipsis/);
     expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
     expect(dragSurfaceRule).toMatch(/-webkit-touch-callout:\s*none/);
     expect(editableSurfaceRule).toMatch(/user-select:\s*text/);

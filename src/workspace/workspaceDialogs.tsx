@@ -502,11 +502,13 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
 export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
   const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
+  const [lineLimitEnabled, setLineLimitEnabled] = useState(() => column.lineLimit !== undefined);
   const save = () => {
     const options = draft.options.map((option) => option.trim()).filter(Boolean);
     const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
     const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
-    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars });
+    const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
+    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
   };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
@@ -544,6 +546,10 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
         </> : <div className="workspace-overflow-panel">
           <div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={currentOverflowMode === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div>
           {currentOverflowMode !== 'expand' && <label className="workspace-form-field">欄寬上限（全形字數）<input type="number" inputMode="numeric" min="1" step="1" value={draft.widthLimitChars ?? ''} placeholder="未設定" onChange={(event) => setDraft((current) => ({ ...current, widthLimitChars: event.target.value ? Number(event.target.value) : undefined }))} /></label>}
+          {currentOverflowMode === 'wrap' && <>
+            <label className="workspace-line-limit-toggle"><input type="checkbox" checked={lineLimitEnabled} onChange={(event) => { setLineLimitEnabled(event.target.checked); setDraft((current) => ({ ...current, lineLimit: event.target.checked ? current.lineLimit ?? 2 : undefined })); }} />行數上限（超過省略）</label>
+            {lineLimitEnabled && <label className="workspace-form-field">最多顯示行數<input type="number" inputMode="numeric" min="1" max="20" step="1" value={draft.lineLimit ?? ''} aria-label="最多顯示行數" onChange={(event) => setDraft((current) => ({ ...current, lineLimit: event.target.value ? Number(event.target.value) : undefined }))} /></label>}
+          </>}
         </div>}
       </div>
     </div>

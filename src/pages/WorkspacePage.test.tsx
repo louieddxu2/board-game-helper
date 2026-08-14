@@ -1103,6 +1103,38 @@ describe('WorkspacePage', () => {
     expect(latest?.tables[0].columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 6 });
   });
 
+  it('configures a wrapped line limit and applies overflow ellipsis to multi-select chips', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '類型' }));
+    await user.click(screen.getByRole('button', { name: '自動換行' }));
+    await user.click(screen.getByRole('checkbox', { name: '行數上限（超過省略）' }));
+    const lineLimit = screen.getByRole('spinbutton', { name: '最多顯示行數' });
+    await user.clear(lineLimit);
+    await user.type(lineLimit, '1');
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalled());
+    const savedWrap = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
+    expect(savedWrap?.tables[0].columns[2]).toMatchObject({ overflowMode: 'wrap', lineLimit: 1 });
+
+    await user.click(screen.getByRole('columnheader', { name: '類型' }));
+    await user.click(screen.getByRole('checkbox', { name: '多選' }));
+    await user.click(screen.getByRole('button', { name: '自動換行' }));
+    await user.click(screen.getByRole('button', { name: '超過省略' }));
+    await user.type(screen.getByRole('spinbutton', { name: '欄寬上限（全形字數）' }), '6');
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    const cell = screen.getByRole('cell', { name: '花火，類型：合作' });
+    await user.click(cell);
+    await user.click(screen.getByRole('option', { name: '競爭' }));
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+
+    expect(cell).toHaveClass('workspace-overflow-ellipsis');
+    expect(cell.querySelector('.workspace-multi-chip-list')).toHaveClass('workspace-cell-value');
+    expect(cell.querySelectorAll('.workspace-multi-chip')).toHaveLength(2);
+  });
+
   it('keeps database import in the drawer instead of the current-table settings', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

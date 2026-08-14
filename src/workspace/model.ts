@@ -28,6 +28,7 @@ export const createTable = (name: string): WorkspaceTable => {
 
 const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
 const normalizeWidthLimitChars = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : undefined;
+const normalizeLineLimit = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : undefined;
 
 export const isWorkspaceColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 const normalizeOptionColors = (value: unknown) => {
@@ -57,6 +58,7 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),
   widthLimitChars: normalizeWidthLimitChars(column.widthLimitChars),
+  lineLimit: normalizeLineLimit(column.lineLimit),
   dateOnly: Boolean(column.dateOnly),
 });
 
