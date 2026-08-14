@@ -76,16 +76,21 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     const canScrollRight = viewport.scrollLeft < viewport.scrollWidth - viewport.clientWidth;
     const canScrollUp = viewport.scrollTop > 0;
     const canScrollDown = viewport.scrollTop < viewport.scrollHeight - viewport.clientHeight;
-    const deltaX = pointer.x < rect.left + edge && canScrollLeft
-      ? -speed(pointer.x - rect.left)
-      : pointer.x > rect.right - edge && canScrollRight
-        ? speed(rect.right - pointer.x)
-        : 0;
-    const deltaY = pointer.y < rect.top + edge && canScrollUp
-      ? -speed(pointer.y - rect.top)
-      : pointer.y > rect.bottom - edge && canScrollDown
-        ? speed(rect.bottom - pointer.y)
-        : 0;
+    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    const deltaX = horizontal
+      ? pointer.x < rect.left + edge && canScrollLeft
+        ? -speed(pointer.x - rect.left)
+        : pointer.x > rect.right - edge && canScrollRight
+          ? speed(rect.right - pointer.x)
+          : 0
+      : 0;
+    const deltaY = horizontal
+      ? 0
+      : pointer.y < rect.top + edge && canScrollUp
+        ? -speed(pointer.y - rect.top)
+        : pointer.y > rect.bottom - edge && canScrollDown
+          ? speed(rect.bottom - pointer.y)
+          : 0;
     if (!deltaX && !deltaY) return;
     viewport.scrollLeft += deltaX;
     viewport.scrollTop += deltaY;

@@ -285,8 +285,8 @@ export const WorkspaceHeaderContent = ({ label, labelColor, nameClass, editLabel
   <button type="button" className={nameClass} style={{ color: labelColor }} aria-label={editLabel ?? accessibleLabel}>{label}</button>
   {showFilter && <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>}
 </div>;
-export const ExternalLinkAction = ({ value }: { value: WorkspaceCellValue }) => {
+export const ExternalLinkAction = ({ value, pushWidth = false }: { value: WorkspaceCellValue; pushWidth?: boolean }) => {
   const rawUrl = isWorkspaceLinkValue(value) ? value.url : isWorkspaceUrlText(value) ? value : '';
   const href = externalHref(rawUrl);
-  return href ? <a className="workspace-cell-external" href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /></a> : null;
+  return href ? <a className={`workspace-cell-external${pushWidth ? ' is-push-width' : ''}`} href={href} target="_blank" rel="noreferrer" aria-label="外連" onClick={(event) => event.stopPropagation()}><WorkspaceIcon name="external" size={16} /></a> : null;
 };

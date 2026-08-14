@@ -249,7 +249,7 @@ const WorkspacePage = () => {
       const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
         ? Math.min(valueWidth, column.widthLimitChars * 20)
         : column.overflowMode === 'expand' ? valueWidth : 0;
-      return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' ? 46 : 0);
+      return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
     };
     const rowHeaderValues = table.rows.map((row) => row.name);
     const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, rowHeaderValues);
@@ -259,10 +259,10 @@ const WorkspacePage = () => {
     const rowWidths = filteredRows.map((row) => Math.max(
       widthFor(rowHeader, displayWorkspaceColumnValue(row.name, rowHeader)),
       ...properties.map((column) => {
-        if (column.overflowMode !== 'expand' && !column.widthLimitChars) return column.inputType === 'link' ? 46 : 0;
+        if (column.overflowMode !== 'expand' && !column.widthLimitChars) return 0;
         const measured = measureWorkspaceText(displayWorkspaceColumnValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column), 20, 400);
         const visibleWidth = column.overflowMode === 'expand' ? measured : column.widthLimitChars ? Math.min(measured, column.widthLimitChars * 20) : 0;
-        return visibleWidth + (column.inputType === 'link' ? 46 : 0);
+        return visibleWidth + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
       }),
     ));
     return [propertyWidth, ...rowWidths];
@@ -650,7 +650,7 @@ const WorkspacePage = () => {
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                  const isActiveRow = activeCell?.rowId === row.id || bulkSelectedRowIds.has(row.id);
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left', ...workspaceLineLimitStyle(rowHeader) }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => { setLastPasteTarget({ rowId: row.id, columnId: rowHeader.id }); openCell(row, rowHeader); }} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left', ...workspaceLineLimitStyle(rowHeader) }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => { setLastPasteTarget({ rowId: row.id, columnId: rowHeader.id }); openCell(row, rowHeader); }} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} pushWidth={rowHeader.inputType === 'link' && rowHeader.overflowMode === 'expand'} /></div></th>}
                    {displayedColumns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceColumnValue(value, column);
@@ -666,7 +666,7 @@ const WorkspacePage = () => {
                         ) : (
                            <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: workspaceCellColor(column, value) }}>{displayValue}</span>
                         )}
-                        <ExternalLinkAction value={value} />
+                        <ExternalLinkAction value={value} pushWidth={column.inputType === 'link' && column.overflowMode === 'expand'} />
                       </div>
                     </td>;
                    })}
@@ -706,7 +706,7 @@ const WorkspacePage = () => {
                           ) : (
                              <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: workspaceCellColor(column, value) }}>{displayValue}</span>
                           )}
-                          <ExternalLinkAction value={value} />
+                          <ExternalLinkAction value={value} pushWidth={column.inputType === 'link' && column.overflowMode === 'expand'} />
                         </div>
                       </td>;
                     })}
