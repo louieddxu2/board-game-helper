@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
-import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { NameDialogState } from './workspaceShared';
 import { download, fileBaseName, updateTable } from './workspaceShared';
@@ -25,17 +25,25 @@ interface UseWorkspaceActionsProps {
   setNameDialog: (state: NameDialogState | undefined) => void;
   setConfirmDialog: (dialog: { title: string; message: string; onConfirm(): void } | undefined) => void;
   setWorkspaceImport: (data: WorkspaceData | undefined) => void;
+  setTableImportPreview: (preview: WorkspaceTableImportPreview | undefined) => void;
+  onExported: () => void;
   nameDialog: NameDialogState | undefined;
   selectionEditor: { rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean } | undefined;
   configuring: { column: WorkspaceColumn; isRowHeader: boolean } | undefined;
   workspaceImport: WorkspaceData | undefined;
 }
 
+export type WorkspaceTableImportPreview = {
+  table: WorkspaceTable;
+  source: WorkspaceImportSource;
+  parentId: string | null;
+};
+
 export function useWorkspaceActions({
   data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
   setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
   setTableActionsOpen, setTableCreateParentId, setNameDialog,
-  setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
+  setConfirmDialog, setWorkspaceImport, setTableImportPreview, onExported, nameDialog, selectionEditor, configuring, workspaceImport
 }: UseWorkspaceActionsProps) {
 
   const importTableInputRef = useRef<HTMLInputElement>(null);
@@ -172,8 +180,8 @@ export function useWorkspaceActions({
     setConfiguring(undefined);
   };
 
-  const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
-  const exportAll = () => { if (!data) return; download(exportWorkspaceXlsx(data), 'workspace.xlsx'); setDrawerOpen(false); setNotice('已匯出整個資料庫'); };
+  const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); onExported(); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
+  const exportAll = () => { if (!data) return; download(exportWorkspaceXlsx(data), 'workspace.xlsx'); onExported(); setDrawerOpen(false); setNotice('已匯出整個資料庫'); };
   
   const chooseImport = (kind: 'table' | 'workspace') => {
     const input = kind === 'table' ? importTableInputRef.current : importWorkspaceInputRef.current;
@@ -198,12 +206,8 @@ export function useWorkspaceActions({
       const imported = await importWorkspaceXlsx(file);
       if (kind === 'table') {
         if (imported.isWorkspace || !imported.table || !data) throw new Error('請選擇單張表格檔案');
-        const tableCopy = imported.table;
-        const parentId = importTableParentId.current;
-        const node = createNode('table', tableCopy.name, parentId, getChildren(data, parentId).length, tableCopy.id);
-        commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id });
-        setNotice('單張表格已匯入');
-        setDrawerOpen(false);
+        setTableImportPreview({ table: imported.table, source: imported.source, parentId: importTableParentId.current });
+        setNotice('檔案已讀取，請檢查匯入內容');
       } else {
         if (!imported.isWorkspace || !imported.data || !data) throw new Error('請選擇整個資料庫檔案');
         setWorkspaceImport(imported.data);
@@ -212,6 +216,16 @@ export function useWorkspaceActions({
       console.error('[workspace-import] failed', { kind, fileName: file.name, fileSize: file.size, error });
       setNotice(error instanceof Error ? `匯入失敗：${error.message}` : '匯入失敗');
     }
+  };
+
+  const finishTableImport = (tableCopy: WorkspaceTable) => {
+    if (!data) return;
+    const parentId = importTableParentId.current;
+    const node = createNode('table', tableCopy.name, parentId, getChildren(data, parentId).length, tableCopy.id);
+    commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id });
+    setTableImportPreview(undefined);
+    setDrawerOpen(false);
+    setNotice(`已匯入「${tableCopy.name}」`);
   };
 
   const finishWorkspaceImport = (mode: 'replace' | 'merge') => {
@@ -255,6 +269,7 @@ export function useWorkspaceActions({
     exportAll,
     chooseImport,
     readImport,
+    finishTableImport,
     finishWorkspaceImport,
   };
 }

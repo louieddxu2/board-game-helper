@@ -66,4 +66,26 @@ describe('workspace table history', () => {
     const undone = applyWorkspaceTableHistoryAction(redone, 'table-1', action, 'undo');
     expect(undone.tables[0].rows.map((row) => row.values['column-1'])).toEqual([null, '舊值']);
   });
+
+  it('undoes and redoes a pasted range including appended rows and columns', () => {
+    const addedColumn = { id: 'column-2', name: '屬性 2', inputType: 'text' as const, options: [] };
+    const addedRow = { id: 'row-2', name: '物件 2', values: { 'column-1': null, 'column-2': null } };
+    const action = {
+      type: 'paste-range' as const,
+      addedColumns: [addedColumn],
+      addedRows: [addedRow],
+      changes: [
+        { rowId: 'row-1', columnId: 'column-1', before: null, after: '甲' },
+        { rowId: 'row-2', columnId: 'column-2', before: null, after: '乙' },
+      ],
+    };
+    const redone = applyWorkspaceTableHistoryAction(data(), 'table-1', action, 'redo');
+    expect(redone.tables[0].columns).toHaveLength(2);
+    expect(redone.tables[0].rows).toHaveLength(2);
+    expect(redone.tables[0].rows[1].values['column-2']).toBe('乙');
+    const undone = applyWorkspaceTableHistoryAction(redone, 'table-1', action, 'undo');
+    expect(undone.tables[0].columns).toHaveLength(1);
+    expect(undone.tables[0].rows).toHaveLength(1);
+    expect(undone.tables[0].rows[0].values['column-1']).toBe(null);
+  });
 });

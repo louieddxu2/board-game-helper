@@ -107,6 +107,46 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
   });
 
+  it('keeps batch selections while searching different content', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await longPress(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+
+    await user.click(screen.getByRole('button', { name: '搜尋並繼續批次選取' }));
+    const search = screen.getByRole('searchbox', { name: '搜尋後繼續選取' });
+    await user.type(search, '物件 2');
+    await user.click(screen.getByRole('cell', { name: '物件 2，名稱：空白' }));
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+
+    await user.clear(search);
+    await user.type(search, '花火');
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('已選 2 · 顯示 1 / 2 項')).toBeInTheDocument();
+  });
+
+  it('pastes a rectangular range from the last selected cell and undoes it as one action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const firstCell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await user.click(firstCell);
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '貼上多格' }));
+    expect(screen.getByText('起點：花火／名稱')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: '貼上試算表內容' }), { target: { value: '甲\t5\n乙\t6' } });
+    await user.click(screen.getByRole('button', { name: '貼上 2 × 2' }));
+
+    expect(screen.getByRole('cell', { name: '花火，名稱：甲' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '物件 2，數量：6' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: /物件 2，/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('已復原：貼上 2 × 2 格');
+  });
+
   it('previews proportional number allocation before the toolbar confirmation', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -841,6 +881,15 @@ describe('WorkspacePage', () => {
 
     expect(showPicker).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows local save and backup status in the drawer', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    expect(within(drawer).getByText(/已儲存於此裝置/)).toBeInTheDocument();
+    expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
   it('edits the first column through the same property settings as other columns', async () => {

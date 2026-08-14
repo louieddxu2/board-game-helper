@@ -226,6 +226,11 @@ footer a { color: inherit; }
 .workspace-tree-children { padding-left: 18px; }
 .workspace-tree-empty { padding: 18px 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .workspace-drawer-footer { display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.workspace-storage-status { display: grid; gap: 2px; padding: 7px 9px; border-radius: 6px; background: rgba(47,111,94,.07); color: var(--muted); font-size: 11px; }
+.workspace-storage-status span:first-child { color: var(--green); font-weight: 700; }
+.workspace-storage-status .needs-attention { color: var(--orange); font-weight: 700; }
+.workspace-storage-status.is-error { background: rgba(165,47,35,.09); }
+.workspace-storage-status.is-error span:first-child { color: #a52f23; }
 .workspace-drawer-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .workspace-drawer-data-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .workspace-drawer-data-actions button:hover { border-color: var(--orange); background: var(--cream); color: var(--orange); }
@@ -465,6 +470,20 @@ footer a { color: inherit; }
 .workspace-action-list button.danger { color: var(--orange); }
 .workspace-action-divider { height: 1px; margin: 7px 0; background: var(--line); }
 .workspace-import-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.workspace-paste-dialog, .workspace-import-preview-dialog { align-self: center; justify-self: center; width: min(520px, calc(100vw - 24px)); max-height: min(78vh, 680px); }
+.workspace-paste-dialog textarea { box-sizing: border-box; width: 100%; min-height: 150px; max-height: 42vh; resize: vertical; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,253,248,.72); color: var(--ink); font: inherit; line-height: 1.35; }
+.workspace-import-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; color: var(--muted); font-size: 12px; }
+.workspace-import-summary strong { color: var(--green); font-size: 15px; }
+.workspace-import-column-list { display: grid; gap: 5px; min-height: 0; max-height: 52vh; overflow: auto; scrollbar-width: none; }
+.workspace-import-column-list::-webkit-scrollbar { display: none; }
+.workspace-import-column { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(118px, auto) auto; align-items: center; gap: 7px; padding: 5px 7px; border: 1px solid rgba(22,53,47,.13); border-radius: 6px; background: rgba(255,253,248,.48); }
+.workspace-import-column-name { display: grid; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-import-column-name small { color: var(--muted); font-size: 10px; }
+.workspace-import-column select { min-width: 0; min-height: 32px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: rgba(255,253,248,.72); color: var(--ink); }
+.workspace-import-date-only { display: flex; align-items: center; gap: 4px; color: var(--green); font-size: 11px; white-space: nowrap; }
+.workspace-import-table-names { display: flex; flex-wrap: wrap; gap: 5px; max-height: 32vh; overflow: auto; }
+.workspace-import-table-names span { padding: 3px 7px; border-radius: 999px; background: rgba(47,111,94,.08); color: var(--green); font-size: 12px; }
+.workspace-dialog-button:has(svg) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 @keyframes workspace-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes workspace-toast-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
@@ -480,6 +499,9 @@ footer a { color: inherit; }
   .workspace-appbar-title span { max-width: calc(100vw - 144px); font-size: 22px; }
   .workspace-table th, .workspace-table td { min-width: 0; padding: 2px 3px; }
   .workspace-table .workspace-row-corner, .workspace-row-heading { min-width: 0 !important; }
+  .workspace-import-column { grid-template-columns: minmax(0, 1fr) 116px; }
+  .workspace-import-date-only { grid-column: 1 / -1; justify-self: end; }
+  .workspace-paste-dialog textarea { min-height: 120px; }
   .workspace-cell-external { width: 28px; justify-content: center; padding: 3px; }
   .workspace-zoom-indicator { padding-right: 10px; }
   .workspace-notice { top: 75px; right: 10px; }

@@ -104,6 +104,7 @@ describe('workspace spreadsheet format', () => {
     const dataOnlyWorkbook = await replaceStoredWorkbookText(exported, settingsSheetTag, ' '.repeat(new TextEncoder().encode(settingsSheetTag).length));
 
     const imported = await importWorkspaceXlsx(dataOnlyWorkbook);
+    expect(imported.source).toBe('plain');
 
     expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number', 'link', 'datetime']);
     expect(imported.table?.columns[1].options).toEqual(['已擁有']);
@@ -189,6 +190,7 @@ describe('workspace spreadsheet format', () => {
     table.rows[0].name = '花磚物語';
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
     expect(imported.isWorkspace).toBe(false);
+    expect(imported.source).toBe('structured');
     expect(imported.table?.name).toBe('收藏清單（匯入）');
     expect(imported.table?.columns.map((column) => column.inputType)).toEqual(['text', 'select', 'number']);
     expect(imported.table?.rowHeaderName).toBe('桌遊收藏');
@@ -317,6 +319,7 @@ describe('workspace spreadsheet format', () => {
     const workbook = await readStoredWorkbook(exportWorkspaceXlsx(source));
     expect(workbook.sheetNames).toEqual(['__workspace', '收藏清單', '收藏清單__設定']);
     expect(imported.isWorkspace).toBe(true);
+    expect(imported.source).toBe('workspace');
     expect(imported.data?.nodes).toHaveLength(2);
     expect(imported.data?.tables[0].name).toBe('收藏清單');
     const copy = cloneImportedWorkspace(imported.data!);

@@ -9,11 +9,15 @@ import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, H
 import { Tree } from "../workspace/workspaceSidebar";
 import { useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
-import { useWorkspaceActions } from "../workspace/useWorkspaceActions";
+import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
 import type { WorkspaceBulkSelection } from '../workspace/bulkEdit';
 import { WorkspaceBulkEditToolbar, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
+import { WorkspacePasteDialog, WorkspaceTableImportPreviewDialog } from '../workspace/workspaceDataDialogs';
+import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from '../workspace/workspacePaste';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
+const workspaceLastExportStorageKey = 'board-game-helper-workspace-last-export';
+const workspaceBackupReminderMs = 7 * 24 * 60 * 60 * 1000;
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
   const selected = selection.rowIds.includes(rowId);
   const rowIds = selected ? selection.rowIds.filter((id) => id !== rowId) : [...selection.rowIds, rowId];
@@ -47,12 +51,19 @@ const WorkspacePage = () => {
   const [visualViewportHeight, setVisualViewportHeight] = useState<number>();
   const [bulkSelection, setBulkSelection] = useState<WorkspaceBulkSelection>();
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
+  const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
+  const [lastPasteTarget, setLastPasteTarget] = useState<{ rowId: string; columnId: string }>();
+  const [tableImportPreview, setTableImportPreview] = useState<WorkspaceTableImportPreview>();
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState<number>();
+  const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
+  const saveRevisionRef = useRef(0);
 
   useEffect(() => {
     if (!notice) return;
@@ -66,6 +77,7 @@ const WorkspacePage = () => {
     dataRef.current = loaded;
     historyRef.current = histories;
     setHistoryByTable(histories);
+    setLastSavedAt(Math.max(0, ...loaded.tables.map((table) => table.updatedAt)) || undefined);
     const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
     let restored = new Set(folderIds);
     try {
@@ -112,7 +124,17 @@ const WorkspacePage = () => {
       setHistoryByTable(nextHistories);
       void saveWorkspaceHistory(nextHistory);
     }
-    void saveWorkspace(next).catch(() => setNotice('本機儲存失敗，請先匯出資料備份'));
+    const saveRevision = ++saveRevisionRef.current;
+    setSaveState('saving');
+    void saveWorkspace(next).then(() => {
+      if (saveRevision !== saveRevisionRef.current) return;
+      setSaveState('saved');
+      setLastSavedAt(Date.now());
+    }).catch(() => {
+      if (saveRevision !== saveRevisionRef.current) return;
+      setSaveState('error');
+      setNotice('本機儲存失敗，請先匯出資料備份');
+    });
   }, []);
 
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
@@ -157,6 +179,12 @@ const WorkspacePage = () => {
     }
     return options;
   }, [configuring, rowHeader, table]);
+  const markExported = useCallback(() => {
+    const now = Date.now();
+    setLastExportAt(now);
+    window.localStorage.setItem(workspaceLastExportStorageKey, String(now));
+  }, []);
+  const backupNeedsAttention = !lastExportAt || Date.now() - lastExportAt > workspaceBackupReminderMs;
 
   useEffect(() => {
     if (searchOpen) setEditBarOpen(false);
@@ -259,15 +287,17 @@ const WorkspacePage = () => {
     openNameDialog, addFolder, addTable, renameNode, submitName,
     askDeleteNode, relocateNode, openNode, saveCellValue, updateCell, openCell,
     selectCellValue, addRow, askDeleteRow, addColumn, askDeleteColumn, saveColumn,
-    exportCurrent, exportAll, chooseImport, readImport, finishWorkspaceImport
+    exportCurrent, exportAll, chooseImport, readImport, finishTableImport, finishWorkspaceImport
   } = useWorkspaceActions({
     data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
     setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
     setTableActionsOpen, setTableCreateParentId, setNameDialog,
-    setConfirmDialog, setWorkspaceImport, nameDialog, selectionEditor, configuring, workspaceImport
+    setConfirmDialog, setWorkspaceImport, setTableImportPreview, onExported: markExported,
+    nameDialog, selectionEditor, configuring, workspaceImport
   });
 
   const handleDataCellClick = useCallback((row: WorkspaceRow, column: WorkspaceColumn) => {
+    setLastPasteTarget({ rowId: row.id, columnId: column.id });
     if (!bulkSelection) {
       openCell(row, column);
       return;
@@ -324,6 +354,53 @@ const WorkspacePage = () => {
       ? displayWorkspaceColumnValue(bulkSelection.sharedValue, bulkColumn)
       : '';
 
+  const pasteTarget = useMemo(() => {
+    if (!table || !rowHeader || !table.rows.length) return undefined;
+    const requested = lastPasteTarget ?? focusTarget;
+    const requestedRow = requested && table.rows.some((row) => row.id === requested.rowId) ? requested.rowId : table.rows[0].id;
+    const requestedColumn = requested && [rowHeader.id, ...table.columns.map((column) => column.id)].includes(requested.columnId) ? requested.columnId : rowHeader.id;
+    return { rowId: requestedRow, columnId: requestedColumn };
+  }, [focusTarget, lastPasteTarget, rowHeader, table]);
+  const pasteTargetLabel = useMemo(() => {
+    if (!table || !rowHeader || !pasteTarget) return '';
+    const row = table.rows.find((item) => item.id === pasteTarget.rowId);
+    const column = pasteTarget.columnId === rowHeader.id ? rowHeader : table.columns.find((item) => item.id === pasteTarget.columnId);
+    return `${row ? displayWorkspaceColumnValue(row.name, rowHeader) || `第 ${table.rows.indexOf(row) + 1} 個物件` : ''}／${column?.name || '未命名屬性'}`;
+  }, [pasteTarget, rowHeader, table]);
+  const pasteMatrix = useCallback((matrix: string[][]) => {
+    const currentData = dataRef.current;
+    const currentTable = currentData ? getTableForNode(currentData, currentData.activeNodeId) : undefined;
+    if (!currentData || !currentTable || !pasteTarget) return;
+    const result = applyWorkspaceMatrixPaste(currentTable, pasteTarget.rowId, pasteTarget.columnId, matrix);
+    if (result.invalidCells.length) {
+      const first = result.invalidCells[0];
+      setNotice(`第 ${first.row} 列第 ${first.column} 欄的「${first.value}」不符合欄位型態`);
+      return;
+    }
+    if (!result.changes.length && !result.addedRows.length && !result.addedColumns.length) {
+      setNotice('貼上的內容沒有造成變更');
+      setPasteDialogOpen(false);
+      return;
+    }
+    const height = matrix.length;
+    const width = Math.max(0, ...matrix.map((row) => row.length));
+    commit(updateTable(currentData, currentTable.id, () => result.table), {
+      tableId: currentTable.id,
+      label: `貼上 ${height} × ${width} 格`,
+      action: { type: 'paste-range', changes: result.changes, addedRows: result.addedRows, addedColumns: result.addedColumns },
+    });
+    setPasteDialogOpen(false);
+    setNotice(`已貼上 ${height} × ${width} 格`);
+  }, [commit, pasteTarget]);
+  const handleWorkspacePaste = useCallback((event: React.ClipboardEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('input, textarea, select, [contenteditable="true"]') || !pasteTarget || (!lastPasteTarget && !focusTarget)) return;
+    const text = event.clipboardData.getData('text/plain');
+    if (!text) return;
+    event.preventDefault();
+    pasteMatrix(parseWorkspaceClipboard(text));
+  }, [focusTarget, lastPasteTarget, pasteMatrix, pasteTarget]);
+
   const toggleColumnVisibility = (columnId: string) => {
     const currentData = dataRef.current;
     const currentTable = currentData ? getTableForNode(currentData, currentData.activeNodeId) : undefined;
@@ -374,7 +451,17 @@ const WorkspacePage = () => {
     dataRef.current = nextData;
     setEditing(undefined);
     setSelectionEditor(undefined);
-    void saveWorkspace(nextData).catch(() => setNotice('本機儲存失敗'));
+    const saveRevision = ++saveRevisionRef.current;
+    setSaveState('saving');
+    void saveWorkspace(nextData).then(() => {
+      if (saveRevision !== saveRevisionRef.current) return;
+      setSaveState('saved');
+      setLastSavedAt(Date.now());
+    }).catch(() => {
+      if (saveRevision !== saveRevisionRef.current) return;
+      setSaveState('error');
+      setNotice('本機儲存失敗');
+    });
     void saveWorkspaceHistory(nextHistory);
     setNotice(direction === 'undo' ? `已復原：${entry.label}` : `已重做：${entry.label}`);
   }, [data, table]);
@@ -449,22 +536,23 @@ const WorkspacePage = () => {
 
   if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
 
-  return <section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle}>
+  return <section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading"><button type="button" className="workspace-appbar-button workspace-menu-button" aria-label="開啟目錄" onClick={() => setDrawerOpen(true)}><WorkspaceIcon name="menu" size={29} /></button><button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button></div>
       <div className="workspace-appbar-actions">
-        <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''}`} aria-label="搜尋" onClick={() => { closeBulkSelection(); setSearchOpen((open) => !open); }} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
+        <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''}`} aria-label={bulkSelection ? '搜尋並繼續批次選取' : '搜尋'} onClick={() => { if (!bulkSelection) closeBulkSelection(); setSearchOpen((open) => !open); }} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${editBarOpen ? 'active' : ''}`} aria-label="編輯" onClick={() => { closeBulkSelection(); setEditBarOpen((open) => !open); setTableActionsOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="edit" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => { closeBulkSelection(); setTableActionsOpen((open) => !open); setEditBarOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
     </header>
     {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onConfirm={commitBulkSelection} />}
-    {searchOpen && table && <div className="workspace-searchbar" role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label="搜尋此表" placeholder="搜尋此表" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
+    {searchOpen && table && <div className={`workspace-searchbar ${bulkSelection ? 'is-bulk-search' : ''}`} role="search"><WorkspaceIcon name="search" size={21} /><input type="search" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-search-count">{bulkSelection ? `已選 ${bulkSelection.rowIds.length} · ` : ''}顯示 {filteredRows.length} / {table.rows.length} 項</span><button type="button" aria-label="關閉搜尋" onClick={() => { setSearchOpen(false); setSearchQuery(''); }}><WorkspaceIcon name="close" size={20} /></button></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
-        <button type="button" className="workspace-editbar-button" aria-label="復原" onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
-        <button type="button" className="workspace-editbar-button" aria-label="重做" onClick={redoTable} disabled={!currentTableHistory?.future.length}><WorkspaceIcon name="redo" size={22} /></button>
+        <button type="button" className="workspace-editbar-button" aria-label="復原" title={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
+        <button type="button" className="workspace-editbar-button" aria-label="重做" title={currentTableHistory?.future.at(-1) ? `重做：${currentTableHistory.future.at(-1)!.label}` : '沒有可重做的操作'} onClick={redoTable} disabled={!currentTableHistory?.future.length}><WorkspaceIcon name="redo" size={22} /></button>
+        <button type="button" className="workspace-editbar-button" aria-label="貼上多格" onClick={() => setPasteDialogOpen(true)} disabled={!pasteTarget}><WorkspaceIcon name="clipboard" size={21} /></button>
       </div>
       <div className="workspace-editbar-group workspace-editbar-add">
         <button type="button" className="workspace-editbar-button" aria-label="新增物件" onClick={addRow}><WorkspaceIcon name="rows-plus" size={24} /></button>
@@ -500,7 +588,7 @@ const WorkspacePage = () => {
                 const isRowHeaderActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
                  const isActiveRow = activeCell?.rowId === row.id || bulkSelectedRowIds.has(row.id);
                 return <tr key={row.id}>
-                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
+                  {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left' }} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => { setLastPasteTarget({ rowId: row.id, columnId: rowHeader.id }); openCell(row, rowHeader); }} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} /></div></th>}
                    {displayedColumns.map((column) => {
                     const value = row.values[column.id] ?? null;
                     const displayValue = displayWorkspaceColumnValue(value, column);
@@ -531,7 +619,7 @@ const WorkspacePage = () => {
                   const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
                   const isTarget = tableReorderVisual?.kind === 'row' && tableReorderVisual.targetId === row.id;
                   const isActive = activeCell?.rowId === row.id && activeCell.columnId === rowHeader?.id;
-                     return <th key={row.id} data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader!.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${activeCell?.rowId === row.id || bulkSelectedRowIds.has(row.id) ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => rowHeader && openCell(row, rowHeader)} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-transposed-object-heading"><WorkspaceHeaderContent label={rowLabel} labelColor={workspaceCellColor(rowHeader, row.name)} accessibleLabel={rowAccessibleLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowAccessibleLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} />{hasHiddenColumns && <button type="button" className="workspace-hidden-fields-trigger" aria-label={`編輯 ${rowAccessibleLabel} 的隱藏欄位`} onClick={(event) => { event.stopPropagation(); openHiddenFields(row); }}><WorkspaceIcon name="chevron" size={18} /></button>}</div></th>;
+                     return <th key={row.id} data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader!.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(rowHeader!)} ${isActive ? 'is-editing ' : ''}${activeCell?.rowId === row.id || bulkSelectedRowIds.has(row.id) ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} onPointerDown={(event) => beginTableReorder('row', row.id, event)} onClick={() => { if (rowHeader) { setLastPasteTarget({ rowId: row.id, columnId: rowHeader.id }); openCell(row, rowHeader); } }} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-transposed-object-heading"><WorkspaceHeaderContent label={rowLabel} labelColor={workspaceCellColor(rowHeader, row.name)} accessibleLabel={rowAccessibleLabel} nameClass="workspace-column-name" editLabel={`編輯物件 ${rowAccessibleLabel}`} filterActive={isHeaderFilterActive('row', row.id)} onFilter={() => setFilterTarget({ axis: 'row', id: row.id, label: rowLabel })} />{hasHiddenColumns && <button type="button" className="workspace-hidden-fields-trigger" aria-label={`編輯 ${rowAccessibleLabel} 的隱藏欄位`} onClick={(event) => { event.stopPropagation(); openHiddenFields(row); }}><WorkspaceIcon name="chevron" size={18} /></button>}</div></th>;
                 })}
               </tr></thead><tbody>
                  {displayedColumns.map((column) => {
@@ -569,7 +657,7 @@ const WorkspacePage = () => {
         </>}
       </main>
     </div>
-    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><Tree data={data} expanded={expanded} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className="workspace-drawer-data-actions"><button type="button" onClick={exportAll}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
+    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><Tree data={data} expanded={expanded} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className="workspace-drawer-data-actions"><button type="button" onClick={exportAll}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
@@ -592,7 +680,9 @@ const WorkspacePage = () => {
          ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />
          : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
-    {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)}><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
+    {pasteDialogOpen && pasteTarget && <WorkspacePasteDialog targetLabel={pasteTargetLabel} onClose={() => setPasteDialogOpen(false)} onApply={pasteMatrix} />}
+    {tableImportPreview && <WorkspaceTableImportPreviewDialog table={tableImportPreview.table} source={tableImportPreview.source} onClose={() => setTableImportPreview(undefined)} onImport={finishTableImport} />}
+    {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)} className="workspace-import-preview-dialog"><div className="workspace-import-summary"><strong>{workspaceImport.tables.length} 張表格 · {workspaceImport.nodes.filter((node) => node.type === 'folder').length} 個資料夾</strong><span>{workspaceImport.tables.reduce((total, item) => total + item.rows.length, 0)} 個物件</span></div><div className="workspace-import-table-names">{workspaceImport.tables.map((item) => <span key={item.id}>{item.name}</span>)}</div><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
   </section>;
 };
 

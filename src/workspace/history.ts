@@ -1,5 +1,6 @@
 import { getRowHeaderColumn } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspacePasteCellChange } from './workspacePaste';
 
 export const workspaceHistoryRetentionMs = 6 * 60 * 60 * 1000;
 export const workspaceHistoryLimit = 50;
@@ -7,6 +8,7 @@ export const workspaceHistoryLimit = 50;
 export type WorkspaceTableHistoryAction =
   | { type: 'set-cell'; rowId: string; columnId: string; before: WorkspaceCellValue; after: WorkspaceCellValue }
   | { type: 'set-cells'; columnId: string; changes: Array<{ rowId: string; before: WorkspaceCellValue; after: WorkspaceCellValue }> }
+  | { type: 'paste-range'; changes: WorkspacePasteCellChange[]; addedRows: WorkspaceRow[]; addedColumns: WorkspaceColumn[] }
   | { type: 'add-row'; row: WorkspaceRow; index: number }
   | { type: 'remove-row'; row: WorkspaceRow; index: number }
   | { type: 'reorder-rows'; beforeIds: string[]; afterIds: string[] }
@@ -112,6 +114,41 @@ export const applyWorkspaceTableHistoryAction = (
             const change = changes.get(row.id);
             if (!change) return row;
             return { ...row, values: { ...row.values, [action.columnId]: forward ? change.after : change.before } };
+          }),
+        });
+      }
+      case 'paste-range': {
+        const addedRowIds = new Set(action.addedRows.map((row) => row.id));
+        const addedColumnIds = new Set(action.addedColumns.map((column) => column.id));
+        const baseRows = forward
+          ? [...current.rows, ...action.addedRows.filter((row) => !current.rows.some((item) => item.id === row.id))]
+          : current.rows;
+        const baseColumns = forward
+          ? [...current.columns, ...action.addedColumns.filter((column) => !current.columns.some((item) => item.id === column.id))]
+          : current.columns;
+        const changesByRow = new Map<string, WorkspacePasteCellChange[]>();
+        for (const change of action.changes) changesByRow.set(change.rowId, [...(changesByRow.get(change.rowId) ?? []), change]);
+        const rowHeaderId = getRowHeaderColumn(current).id;
+        const changedRows = baseRows.map((row) => {
+          const changes = changesByRow.get(row.id);
+          if (!changes) return row;
+          let name = row.name;
+          const values = { ...row.values };
+          for (const change of changes) {
+            const value = forward ? change.after : change.before;
+            if (change.columnId === rowHeaderId) name = value;
+            else values[change.columnId] = value;
+          }
+          return { ...row, name, values };
+        });
+        return tableWithUpdatedAt({
+          ...current,
+          columns: forward ? baseColumns : baseColumns.filter((column) => !addedColumnIds.has(column.id)),
+          rows: forward ? changedRows : changedRows.filter((row) => !addedRowIds.has(row.id)).map((row) => {
+            if (!addedColumnIds.size) return row;
+            const values = { ...row.values };
+            addedColumnIds.forEach((columnId) => delete values[columnId]);
+            return { ...row, values };
           }),
         });
       }

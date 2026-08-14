@@ -452,9 +452,12 @@ const remapTable = (table: WorkspaceTable): WorkspaceTable => {
 
 export interface ImportedWorkspace {
   isWorkspace: boolean;
+  source: WorkspaceImportSource;
   table?: WorkspaceTable;
   data?: WorkspaceData;
 }
+
+export type WorkspaceImportSource = 'plain' | 'structured' | 'workspace';
 
 export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace> => {
   let sheets: Array<Sheet<number>>;
@@ -485,7 +488,7 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
     const table = settingsSheets.length
       ? parseSettingsSheet(settingsSheets[0])
       : parsePlainTable(sheets[0].data, sheets[0].sheet);
-    return { isWorkspace: false, table: remapTable(table) };
+    return { isWorkspace: false, source: settingsSheets.length ? 'structured' : 'plain', table: remapTable(table) };
   }
   const parsed = parseWorkspace(workspaceSheet.data);
   const tables = settingsSheets.map(parseSettingsSheet);
@@ -494,7 +497,7 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
   for (const node of data.nodes) {
     if (node.type === 'table' && (!node.tableId || !tableMap.has(node.tableId))) throw new Error(`找不到表格：${node.name}`);
   }
-  return { isWorkspace: true, data };
+  return { isWorkspace: true, source: 'workspace', data };
 };
 
 export const cloneImportedWorkspace = (data: WorkspaceData): WorkspaceData => {

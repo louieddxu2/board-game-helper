@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
-export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
+export type IconName = 'menu' | 'search' | 'filter' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'clipboard' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
 export type WorkspaceInputCategory = 'text' | 'select' | 'other';
 export type TableReorderKind = 'row' | 'column';
 export type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
@@ -207,6 +207,7 @@ export const WorkspaceIcon = ({ name, size = 24 }: { name: IconName; size?: numb
     case 'back': return <svg {...common}><path d="m15 18-6-6 6-6" /><path d="M9 12h11" /></svg>;
     case 'download': return <svg {...common}><path d="M12 3v12M7 10l5 5 5-5M4 20h16" /></svg>;
     case 'upload': return <svg {...common}><path d="M12 15V3M7 8l5-5 5 5M4 20h16" /></svg>;
+    case 'clipboard': return <svg {...common}><path d="M9 5H6a2 2 0 0 0-2 2v13h16V7a2 2 0 0 0-2-2h-3" /><rect x="8" y="3" width="8" height="4" rx="1" /><path d="M8 11h8M8 15h8" /></svg>;
     case 'rows': return <svg {...common}><path d="M4 5h16M4 12h16M4 19h16" /><path d="M8 3v18" /></svg>;
     case 'columns': return <svg {...common}><rect x="3" y="4" width="13" height="16" rx="1.5" /><path d="M8 4v16M3 9h13M20 10v8M16 14h8" /></svg>;
     case 'rows-plus': return <svg {...common}><path d="M3 5h13M3 12h13M3 19h13" /><path d="M7 3v18" /><path d="M20 10v8M16 14h8" /></svg>;
