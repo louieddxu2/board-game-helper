@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { SessionProvider } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
+import { isInstalledPwa, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './lib/pwaNavigation';
 
 const LoadingFallback = () => (
   <section className="narrow-page workspace-loading">
@@ -36,5 +37,16 @@ const router = createBrowserRouter([
     { path: 'admin', lazy: async () => ({ Component: (await import('./pages/AdminPage')).AdminPage }) },
   ] },
 ]);
+
+const shouldRestorePwaRoute = isInstalledPwa() && typeof window !== 'undefined' && pwaRouteToRestore(window.location.pathname, readPwaLastRoute());
+if (shouldRestorePwaRoute) {
+  void router.navigate(shouldRestorePwaRoute);
+} else if (isInstalledPwa()) {
+  savePwaLastRoute(router.state.location);
+}
+
+router.subscribe((state) => {
+  savePwaLastRoute(state.location);
+});
 
 export const App = () => <ToastProvider><ConfirmProvider><RouterProvider router={router} /></ConfirmProvider></ToastProvider>;
