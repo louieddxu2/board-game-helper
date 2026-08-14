@@ -257,6 +257,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
     expect(screen.getByRole('textbox').closest('[role="dialog"]')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveAttribute('inputmode', 'text');
+    expect(document.querySelector('.workspace-value-context')).not.toBeInTheDocument();
 
     await user.keyboard('{Escape}');
     await user.click(screen.getByText('2'));

@@ -156,7 +156,7 @@ export const CellInputDialog = ({ column, value, inputLabel, contextLabel, onDel
       ? <><WorkspaceValueContext label={contextLabel} /><DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} /></>
       : column.inputType === 'number'
       ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} contextLabel={contextLabel} onDismiss={onDismiss} onSave={onSave} />
-      : <><WorkspaceValueContext label={contextLabel} /><AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} /></>}
+      : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
   </WorkspaceModal>;
 };
 
