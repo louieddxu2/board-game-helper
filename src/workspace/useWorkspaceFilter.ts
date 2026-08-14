@@ -1,8 +1,9 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
 import { displayWorkspaceCellValue, formatWorkspaceDateMonth, parseMultiSelectValues, workspaceCellColor, workspaceDateMonthKey, workspaceOptionColor } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
+import { loadWorkspaceTableViewState, saveWorkspaceTableViewState } from './viewState';
 
 interface UseWorkspaceFilterProps {
   table: WorkspaceTable | undefined;
@@ -15,6 +16,32 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerFilters, setHeaderFilters] = useState<Record<string, HeaderFilterState>>({});
   const [filterTarget, setFilterTarget] = useState<HeaderFilterTarget>();
+  const [viewTableId, setViewTableId] = useState<string>();
+  const [scrollPosition, setScrollPosition] = useState({ left: 0, top: 0 });
+
+  useEffect(() => {
+    if (!table) {
+      setViewTableId(undefined);
+      setSearchQuery('');
+      setSearchOpen(false);
+      setHeaderFilters({});
+      setFilterTarget(undefined);
+      setScrollPosition({ left: 0, top: 0 });
+      return;
+    }
+    const restored = loadWorkspaceTableViewState(table.id);
+    setViewTableId(table.id);
+    setSearchQuery(restored.searchQuery);
+    setSearchOpen(restored.searchOpen);
+    setHeaderFilters(restored.headerFilters);
+    setFilterTarget(undefined);
+    setScrollPosition({ left: restored.scrollLeft, top: restored.scrollTop });
+  }, [table?.id]);
+
+  useEffect(() => {
+    if (!table || viewTableId !== table.id) return;
+    saveWorkspaceTableViewState(table.id, { searchQuery, searchOpen, headerFilters, scrollLeft: scrollPosition.left, scrollTop: scrollPosition.top });
+  }, [headerFilters, searchOpen, searchQuery, scrollPosition.left, scrollPosition.top, table, viewTableId]);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -163,6 +190,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     searchedRows, filteredRows, visibleColumns, clearFilters,
     activeFilterKey, activeFilterState, activeFilterOptions, activeFilterInputType, activeNumericValues,
     setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveFilterAggregate, toggleActiveFilterOption,
-    updateActiveFilter, isHeaderFilterActive
+    updateActiveFilter, isHeaderFilterActive,
+    viewStateReady: Boolean(table && viewTableId === table.id), scrollPosition, setScrollPosition
   };
 }

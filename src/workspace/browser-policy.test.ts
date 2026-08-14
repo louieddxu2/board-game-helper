@@ -152,6 +152,13 @@ describe('workspace browser policies', () => {
     expect(styles).not.toMatch(/\.workspace-(?:name|cell-name|value|link)-dialog[^{}]*\{[^}]*backdrop-filter:\s*blur/);
   });
 
+  it('keeps the main website as the PWA entry while offering a workspace shortcut', () => {
+    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { start_url?: string; scope?: string; shortcuts?: Array<{ url?: string }> };
+    expect(manifest.start_url).toBe('/');
+    expect(manifest.scope).toBe('/');
+    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
+  });
+
   it('expands proportional allocation without resizing the number editor', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];

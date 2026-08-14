@@ -986,6 +986,31 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
+  it('searches tables and folders from the drawer', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    const search = within(drawer).getByRole('searchbox', { name: '搜尋表格與資料夾' });
+
+    await user.type(search, '收藏');
+    expect(within(drawer).getByText('收藏資料夾')).toBeInTheDocument();
+    expect(within(drawer).queryByText('測試表格')).not.toBeInTheDocument();
+    await user.clear(search);
+    expect(within(drawer).getByText('測試表格')).toBeInTheDocument();
+  });
+
+  it('restores a table search when returning to the workspace', async () => {
+    const user = userEvent.setup();
+    const firstRender = render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '搜尋' }));
+    await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '花火');
+    firstRender.unmount();
+
+    render(<WorkspacePage />);
+    expect(await screen.findByRole('searchbox', { name: '搜尋此表' })).toHaveValue('花火');
+  });
+
   it('edits the first column through the same property settings as other columns', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

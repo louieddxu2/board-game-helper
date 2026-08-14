@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getChildren } from "./model";
 import { WorkspaceData, WorkspaceNode } from "./types";
 import { WorkspaceIcon } from "./workspaceShared";
@@ -15,21 +15,24 @@ export interface TreeNodeProps {
   onContext(node: WorkspaceNode): void;
   onDragPointerDown(node: WorkspaceNode, event: React.PointerEvent<HTMLDivElement>): void;
   shouldSuppressClick(): boolean;
+  visibleNodeIds?: Set<string>;
+  filterQuery?: string;
 }
 
-export const TreeNode = ({ node, data, expanded, depth, draggingId, dragTargetId, onToggle, onOpen, onContext, onDragPointerDown, shouldSuppressClick }: TreeNodeProps) => {
+export const TreeNode = ({ node, data, expanded, depth, draggingId, dragTargetId, onToggle, onOpen, onContext, onDragPointerDown, shouldSuppressClick, visibleNodeIds, filterQuery }: TreeNodeProps) => {
   const children = node.type === 'folder' ? getChildren(data, node.id) : [];
-  const isOpen = expanded.has(node.id);
+  const visibleChildren = visibleNodeIds ? children.filter((child) => visibleNodeIds.has(child.id)) : children;
+  const isOpen = filterQuery ? visibleChildren.length > 0 : expanded.has(node.id);
   return <div className="workspace-tree-item">
     <div data-node-id={node.id} data-node-type={node.type} className={`workspace-tree-row ${data.activeNodeId === node.id ? 'active' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${dragTargetId === node.id ? 'is-drop-target' : ''}`} style={{ '--workspace-depth': depth } as React.CSSProperties} onPointerDown={(event) => onDragPointerDown(node, event)} onContextMenu={(event) => { event.preventDefault(); onContext(node); }} onClick={(event) => { if (shouldSuppressClick()) { event.preventDefault(); return; } if (node.type === 'folder') onToggle(node.id); else onOpen(node); }}>
       {node.type === 'folder' ? <span className={`workspace-tree-toggle ${isOpen ? 'open' : ''}`} aria-hidden="true"><WorkspaceIcon name="chevron" size={17} /></span> : <span className="workspace-tree-spacer" />}
       <span className="workspace-tree-name"><WorkspaceIcon name={node.type === 'folder' ? 'folder' : 'table'} size={19} /><span className="workspace-tree-name-text">{node.name}</span></span>
       <button type="button" className="workspace-tree-more" aria-label={`開啟${node.name}操作`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onContext(node); }}><WorkspaceIcon name="more" size={19} /></button>
     </div>
-    {node.type === 'folder' && isOpen && <div className="workspace-tree-children">{children.map((child) => <TreeNode key={child.id} node={child} data={data} expanded={expanded} depth={depth + 1} draggingId={draggingId} dragTargetId={dragTargetId} onToggle={onToggle} onOpen={onOpen} onContext={onContext} onDragPointerDown={onDragPointerDown} shouldSuppressClick={shouldSuppressClick} />)}</div>}
+    {node.type === 'folder' && isOpen && <div className="workspace-tree-children">{visibleChildren.map((child) => <TreeNode key={child.id} node={child} data={data} expanded={expanded} depth={depth + 1} draggingId={draggingId} dragTargetId={dragTargetId} onToggle={onToggle} onOpen={onOpen} onContext={onContext} onDragPointerDown={onDragPointerDown} shouldSuppressClick={shouldSuppressClick} visibleNodeIds={visibleNodeIds} filterQuery={filterQuery} />)}</div>}
   </div>;
 };
-export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { data: WorkspaceData; expanded: Set<string>; onToggle(id: string): void; onOpen(node: WorkspaceNode): void; onContext(node: WorkspaceNode): void; onMove(node: WorkspaceNode, parentId: string | null): void }) => {
+export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, filterQuery = '' }: { data: WorkspaceData; expanded: Set<string>; onToggle(id: string): void; onOpen(node: WorkspaceNode): void; onContext(node: WorkspaceNode): void; onMove(node: WorkspaceNode, parentId: string | null): void; filterQuery?: string }) => {
   const treeRef = useRef<HTMLDivElement>(null);
   const autoScrollFrame = useRef<number | undefined>(undefined);
   const autoScrollVelocity = useRef(0);
@@ -39,6 +42,31 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { 
   const [draggingNode, setDraggingNode] = useState<WorkspaceNode>();
   const [dragTargetId, setDragTargetId] = useState<string | null>();
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
+  const visibleNodeIds = useMemo(() => {
+    const query = filterQuery.trim().toLocaleLowerCase();
+    if (!query) return undefined;
+    const visible = new Set<string>();
+    const includeDescendants = (nodeId: string) => {
+      for (const child of getChildren(data, nodeId)) {
+        visible.add(child.id);
+        if (child.type === 'folder') includeDescendants(child.id);
+      }
+    };
+    const visit = (node: WorkspaceNode): boolean => {
+      const matched = node.name.toLocaleLowerCase().includes(query);
+      const childMatched = node.type === 'folder' && getChildren(data, node.id).some(visit);
+      if (matched) {
+        visible.add(node.id);
+        if (node.type === 'folder') includeDescendants(node.id);
+      } else if (childMatched) {
+        visible.add(node.id);
+      }
+      return matched || childMatched;
+    };
+    getChildren(data, null).forEach(visit);
+    return visible;
+  }, [data, filterQuery]);
+  const normalizedFilterQuery = filterQuery.trim();
   const stopAutoScroll = () => {
     autoScrollVelocity.current = 0;
     if (autoScrollFrame.current !== undefined) window.cancelAnimationFrame(autoScrollFrame.current);
@@ -126,9 +154,10 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove }: { 
     suppressNextClick.current = false;
     return true;
   };
+  const rootNodes = getChildren(data, null).filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id));
   return <div ref={treeRef} className={`workspace-tree ${draggingNode && dragTargetId === null ? 'is-root-drop-target' : ''}`} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-    {getChildren(data, null).map((node) => <TreeNode key={node.id} node={node} data={data} expanded={expanded} depth={0} draggingId={draggingNode?.id} dragTargetId={dragTargetId} onToggle={onToggle} onOpen={onOpen} onContext={onContext} onDragPointerDown={beginDrag} shouldSuppressClick={shouldSuppressClick} />)}
-    {!data.nodes.some((node) => node.parentId === null) && <p className="workspace-tree-empty">尚未建立資料夾或表格</p>}
+    {rootNodes.map((node) => <TreeNode key={node.id} node={node} data={data} expanded={expanded} depth={0} draggingId={draggingNode?.id} dragTargetId={dragTargetId} onToggle={onToggle} onOpen={onOpen} onContext={onContext} onDragPointerDown={beginDrag} shouldSuppressClick={shouldSuppressClick} visibleNodeIds={visibleNodeIds} filterQuery={normalizedFilterQuery} />)}
+    {!rootNodes.length && <p className="workspace-tree-empty">{normalizedFilterQuery ? '找不到符合的表格或資料夾' : '尚未建立資料夾或表格'}</p>}
     {draggingNode && <div className="workspace-drag-ghost" style={{ transform: `translate(${dragPoint.x + 12}px, ${dragPoint.y + 12}px)` }}><WorkspaceIcon name={draggingNode.type === 'folder' ? 'folder' : 'table'} size={18} />{draggingNode.name}</div>}
   </div>;
 };
