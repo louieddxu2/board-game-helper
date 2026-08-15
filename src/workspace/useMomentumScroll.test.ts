@@ -186,6 +186,86 @@ describe('useMomentumScroll', () => {
     vi.useRealTimers();
   });
 
+  test('makes repeated same-direction flings noticeably faster while the prior coast is active', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = {
+      scrollWidth: 2000,
+      clientWidth: 500,
+      scrollHeight: 100000,
+      clientHeight: 500,
+      scrollLeft: 0,
+      scrollTop: 1000,
+    } as unknown as HTMLDivElement;
+    const pendingFrames = new Map<number, FrameRequestCallback>();
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let nextFrameId = 0;
+    vi.useFakeTimers();
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (callback: FrameRequestCallback) => {
+        const id = ++nextFrameId;
+        pendingFrames.set(id, callback);
+        return id;
+      },
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (id: number) => { pendingFrames.delete(id); },
+    });
+    const runFrame = (timestamp: number) => {
+      const next = pendingFrames.entries().next();
+      expect(next.done).toBe(false);
+      const [id, callback] = next.value as [number, FrameRequestCallback];
+      pendingFrames.delete(id);
+      callback(timestamp);
+    };
+    const performSwipe = (startTime: number, reverse = false) => {
+      const samples = reverse
+        ? [[0, 0], [-2, 74], [1, 183], [0, 286], [2, 360]]
+        : [[1, 360], [-1, 300], [0, 205], [-2, 96], [1, 0]];
+      const sampleTimes = [0, 17, 43, 71, 103];
+      samples.forEach(([x, y], index) => {
+        vi.setSystemTime(startTime + sampleTimes[index]);
+        result.current.trackMove(x, y);
+      });
+      result.current.release(viewport, 'y');
+      const before = viewport.scrollTop;
+      runFrame(0);
+      return viewport.scrollTop - before;
+    };
+
+    try {
+      const now = Date.now();
+      const firstAdvance = performSwipe(now);
+      // Let the first coast continue, then interrupt it with another swipe in
+      // the same direction, as a user does with a quick repeated flick.
+      runFrame(17);
+      runFrame(34);
+      result.current.stop();
+      const secondAdvance = performSwipe(now + 180);
+      runFrame(17);
+      runFrame(34);
+      result.current.stop();
+      const thirdAdvance = performSwipe(now + 360);
+
+      expect(firstAdvance).toBeGreaterThan(0);
+      expect(secondAdvance).toBeGreaterThan(firstAdvance * 1.25);
+      expect(thirdAdvance).toBeGreaterThan(secondAdvance * 1.15);
+
+      result.current.stop();
+      const reverseAdvance = performSwipe(now + 540, true);
+      expect(reverseAdvance).toBeLessThan(0);
+    } finally {
+      pendingFrames.clear();
+      vi.useRealTimers();
+      Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: previousRequestAnimationFrame });
+      Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: previousCancelAnimationFrame });
+    }
+  });
+
   test('applies boundary bounce to one selected axis of body cells', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const viewport = document.createElement('div');
@@ -205,6 +285,7 @@ describe('useMomentumScroll', () => {
       scrollTop: { configurable: true, writable: true, value: 200 },
     });
     const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
     if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
     const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       frames.push(callback);
@@ -212,7 +293,6 @@ describe('useMomentumScroll', () => {
     });
     if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-    vi.useFakeTimers();
     const now = Date.now();
     vi.setSystemTime(now);
     result.current.trackMove(0, 0);
@@ -241,10 +321,10 @@ describe('useMomentumScroll', () => {
       scrollLeft: { configurable: true, writable: true, value: 0 }, scrollTop: { configurable: true, writable: true, value: 200 },
     });
     const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
     if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
     if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
     const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => { frames.push(callback); return frames.length; });
-    vi.useFakeTimers();
     const now = Date.now();
     vi.setSystemTime(now);
     result.current.trackMove(0, 0);

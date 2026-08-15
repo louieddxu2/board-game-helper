@@ -8,6 +8,13 @@ const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
 
+const stackMomentumVelocity = (residual: number, current: number) => {
+  if (current === 0 || residual === 0 || Math.sign(residual) === Math.sign(current)) {
+    return residual * ACCELERATION_STACK_FACTOR + current;
+  }
+  return current;
+};
+
 export type TableBounceAxis = 'x' | 'y';
 export type TablePanAxis = TableBounceAxis | 'both';
 
@@ -115,8 +122,8 @@ export function useMomentumScroll() {
     const rawVy = (last.y - first.y) / dt;
 
     // Stack residual velocity from previous coasting for consecutive swipe acceleration
-    let vx = activeVelocity.current.vx * ACCELERATION_STACK_FACTOR + rawVx;
-    let vy = activeVelocity.current.vy * ACCELERATION_STACK_FACTOR + rawVy;
+    let vx = stackMomentumVelocity(activeVelocity.current.vx, rawVx);
+    let vy = stackMomentumVelocity(activeVelocity.current.vy, rawVy);
     if (panAxis === 'x') vy = 0;
     if (panAxis === 'y') vx = 0;
     const preferredBounceAxis = panAxis === 'x' || panAxis === 'y'
