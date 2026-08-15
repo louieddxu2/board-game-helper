@@ -51,6 +51,24 @@ describe('workspace browser policies', () => {
     expect(rowHeadingRule).toMatch(/padding:\s*2px 3px/);
   });
 
+  it('overlays every second-row toolbar without changing the table position', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const toolbarLayerRule = styles.match(/\.workspace-toolbar-layer\s*\{([^}]*)\}/)?.[1];
+    const editbarRule = styles.match(/\.workspace-editbar\s*\{([^}]*)\}/)?.[1];
+    const filterbarRule = styles.match(/\.workspace-filterbar\s*\{([^}]*)\}/)?.[1];
+    const stackedFilterbarRule = styles.match(/\.workspace-filterbar\.has-bulk-toolbar\s*\{([^}]*)\}/)?.[1];
+
+    expect(toolbarLayerRule).toMatch(/position:\s*relative/);
+    expect(toolbarLayerRule).toMatch(/flex:\s*1/);
+    expect(editbarRule).toMatch(/position:\s*absolute/);
+    expect(editbarRule).toMatch(/top:\s*0/);
+    expect(editbarRule).toMatch(/left:\s*0/);
+    expect(editbarRule).toMatch(/right:\s*0/);
+    expect(filterbarRule).toMatch(/position:\s*absolute/);
+    expect(filterbarRule).toMatch(/top:\s*0/);
+    expect(stackedFilterbarRule).toMatch(/top:\s*var\(--workspace-toolbar-row-height\)/);
+  });
+
   it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];
