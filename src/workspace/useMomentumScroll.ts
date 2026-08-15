@@ -6,6 +6,7 @@ const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous sw
 const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
+const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
 
 export type TableBounceAxis = 'x' | 'y';
 export type TablePanAxis = TableBounceAxis | 'both';
@@ -185,8 +186,8 @@ export function useMomentumScroll() {
       viewport.scrollLeft -= vx * elapsed;
       viewport.scrollTop -= vy * elapsed;
       const frameRatio = elapsed / FRAME_INTERVAL_MS;
-      vx *= Math.pow(0.965, frameRatio);
-      vy *= Math.pow(0.965, frameRatio);
+      vx *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
+      vy *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
       coastingFrame.current = window.requestAnimationFrame(coast);
     };
 

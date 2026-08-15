@@ -129,6 +129,63 @@ describe('useMomentumScroll', () => {
     vi.useRealTimers();
   });
 
+  test('crosses 200 dense rows after three full phone-style upward flings', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const rowHeight = 28;
+    const viewport = {
+      scrollWidth: 2000,
+      clientWidth: 500,
+      scrollHeight: 100000,
+      clientHeight: 500,
+      scrollLeft: 0,
+      scrollTop: 0,
+    } as unknown as HTMLDivElement;
+    const pendingFrames = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 0;
+    vi.useFakeTimers();
+    if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
+    if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      const id = ++nextFrameId;
+      pendingFrames.set(id, callback);
+      return id;
+    });
+    const cancelAnimationFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+      pendingFrames.delete(id);
+    });
+
+    const runCoastToRest = () => {
+      let timestamp = 0;
+      let safety = 0;
+      while (pendingFrames.size > 0 && safety < 1000) {
+        const [id, callback] = pendingFrames.entries().next().value as [number, FrameRequestCallback];
+        pendingFrames.delete(id);
+        callback(timestamp);
+        timestamp += 1000 / 60;
+        safety += 1;
+      }
+      expect(safety).toBeLessThan(1000);
+    };
+
+    const now = Date.now();
+    vi.setSystemTime(now);
+    for (let swipe = 0; swipe < 3; swipe += 1) {
+      vi.setSystemTime(now + (swipe * 140));
+      result.current.trackMove(0, 320);
+      vi.setSystemTime(now + (swipe * 140) + 100);
+      result.current.trackMove(0, 0);
+      result.current.release(viewport, 'y');
+      runCoastToRest();
+    }
+
+    expect(viewport.scrollTop).toBeGreaterThanOrEqual(rowHeight * 200);
+
+    result.current.stop();
+    requestAnimationFrame.mockRestore();
+    cancelAnimationFrame.mockRestore();
+    vi.useRealTimers();
+  });
+
   test('applies boundary bounce to one selected axis of body cells', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const viewport = document.createElement('div');
