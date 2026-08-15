@@ -73,6 +73,7 @@ describe('WorkspacePage', () => {
     const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
     await longPress(first);
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+    expect(document.querySelector('.workspace-toolbar-layer')).toHaveStyle({ '--workspace-toolbar-row-count': '1' });
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
     expect(screen.getByRole('status')).toHaveTextContent('只能選取同一屬性');

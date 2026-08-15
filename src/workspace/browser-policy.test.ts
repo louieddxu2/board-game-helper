@@ -57,6 +57,7 @@ describe('workspace browser policies', () => {
     const editbarRule = styles.match(/\.workspace-editbar\s*\{([^}]*)\}/)?.[1];
     const filterbarRule = styles.match(/\.workspace-filterbar\s*\{([^}]*)\}/)?.[1];
     const stackedFilterbarRule = styles.match(/\.workspace-filterbar\.has-bulk-toolbar\s*\{([^}]*)\}/)?.[1];
+    const tableHeaderOffsetRule = styles.match(/\.workspace-toolbar-layer \.workspace-table thead th\s*\{([^}]*)\}/)?.[1];
 
     expect(toolbarLayerRule).toMatch(/position:\s*relative/);
     expect(toolbarLayerRule).toMatch(/flex:\s*1/);
@@ -67,6 +68,7 @@ describe('workspace browser policies', () => {
     expect(filterbarRule).toMatch(/position:\s*absolute/);
     expect(filterbarRule).toMatch(/top:\s*0/);
     expect(stackedFilterbarRule).toMatch(/top:\s*var\(--workspace-toolbar-row-height\)/);
+    expect(tableHeaderOffsetRule).toMatch(/top:\s*calc\(var\(--workspace-toolbar-row-height\) \* var\(--workspace-toolbar-row-count\)\)/);
   });
 
   it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
