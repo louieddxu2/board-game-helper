@@ -266,7 +266,7 @@ describe('useMomentumScroll', () => {
     }
   });
 
-  test('applies boundary bounce to one selected axis of body cells', () => {
+  test('does not bounce when residual momentum reaches a boundary', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const viewport = document.createElement('div');
     const table = document.createElement('table');
@@ -301,9 +301,10 @@ describe('useMomentumScroll', () => {
     result.current.release(viewport, 'x');
     frames.shift()?.(0);
 
-    expect(table.classList.contains('is-bouncing')).toBe(true);
-    expect(table.style.getPropertyValue('--workspace-bounce-x')).not.toBe('0px');
-    expect(table.style.getPropertyValue('--workspace-bounce-y')).toBe('0.0px');
+    expect(viewport.scrollLeft).toBe(0);
+    expect(table.classList.contains('is-bouncing')).toBe(false);
+    expect(table.style.getPropertyValue('--workspace-bounce-x')).toBe('');
+    expect(table.style.getPropertyValue('--workspace-bounce-y')).toBe('');
 
     result.current.stop();
     requestAnimationFrame.mockRestore();

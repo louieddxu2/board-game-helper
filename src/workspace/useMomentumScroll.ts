@@ -3,7 +3,6 @@ import { useCallback, useRef } from 'react';
 export const MAX_TABLE_MOMENTUM_VELOCITY = 100; // Max speed cap for consecutive swipe acceleration
 const MAX_VELOCITY = MAX_TABLE_MOMENTUM_VELOCITY;
 const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous swipe
-const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
@@ -92,12 +91,10 @@ export function useMomentumScroll() {
   const points = useRef<{ x: number; y: number; time: number }[]>([]);
   const coastingFrame = useRef<number | undefined>(undefined);
   const activeVelocity = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
-  const overscroll = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const activeTableRef = useRef<HTMLTableElement | null>(null);
 
   const resetTableTransform = useCallback((table: HTMLTableElement | null) => {
     if (!table) return;
-    overscroll.current = { x: 0, y: 0 };
     resetTableBounce(table);
   }, []);
 
@@ -136,9 +133,6 @@ export function useMomentumScroll() {
     let vy = stackMomentumVelocity(activeVelocity.current.vy, flingVy);
     if (panAxis === 'x') vy = 0;
     if (panAxis === 'y') vx = 0;
-    const preferredBounceAxis = panAxis === 'x' || panAxis === 'y'
-      ? panAxis
-      : Math.abs(vx) >= Math.abs(vy) ? 'x' : 'y';
 
     // Clamp speed limits
     vx = clampTableMomentumVelocity(vx);
@@ -161,50 +155,31 @@ export function useMomentumScroll() {
       const { maxLeft, maxTop } = bounds;
       const atBoundaryX = (viewport.scrollLeft <= 0 && vx > 0) || (viewport.scrollLeft >= maxLeft && vx < 0);
       const atBoundaryY = (viewport.scrollTop <= 0 && vy > 0) || (viewport.scrollTop >= maxTop && vy < 0);
-      const activeBounceAxis = preferredBounceAxis;
 
-      if (activeBounceAxis === 'x') {
-        if (atBoundaryX) {
-          vx *= 0.35;
-          overscroll.current.x += vx * 3;
-          overscroll.current.x = Math.max(-MAX_OVERSCROLL, Math.min(MAX_OVERSCROLL, overscroll.current.x));
-        } else {
-          overscroll.current.x *= 0.75;
-        }
-        overscroll.current.y = 0;
-      } else {
-        if (atBoundaryY) {
-          vy *= 0.35;
-          overscroll.current.y += vy * 3;
-          overscroll.current.y = Math.max(-MAX_OVERSCROLL, Math.min(MAX_OVERSCROLL, overscroll.current.y));
-        } else {
-          overscroll.current.y *= 0.75;
-        }
-        overscroll.current.x = 0;
-      }
+      // A rubber-band effect belongs to the active pointer gesture. Momentum that
+      // reaches an edge simply stops at that edge without creating a second bounce.
+      if (atBoundaryX) vx = 0;
+      if (atBoundaryY) vy = 0;
 
-      // CSS moves the content region with its matching header/row labels while keeping the corner fixed.
-      if (table) {
-        if (Math.abs(overscroll.current.x) > 0.5 || Math.abs(overscroll.current.y) > 0.5) {
-          applyTableBounce(table, overscroll.current.x, overscroll.current.y);
-        } else if (table.classList.contains('is-bouncing') || table.style.transform !== '') {
-          resetTableBounce(table);
-        }
-      }
-
-      const bounceOffset = activeBounceAxis === 'x' ? overscroll.current.x : overscroll.current.y;
-      if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1 && Math.abs(bounceOffset) < 0.5) {
+      if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
         activeVelocity.current = { vx: 0, vy: 0 };
         coastingFrame.current = undefined;
         resetTableTransform(table);
         return;
       }
 
-      viewport.scrollLeft -= vx * elapsed;
-      viewport.scrollTop -= vy * elapsed;
+      const nextScrollLeft = viewport.scrollLeft - vx * elapsed;
+      const nextScrollTop = viewport.scrollTop - vy * elapsed;
+      const clampedScrollLeft = Math.max(0, Math.min(maxLeft, nextScrollLeft));
+      const clampedScrollTop = Math.max(0, Math.min(maxTop, nextScrollTop));
+      if (clampedScrollLeft !== nextScrollLeft) vx = 0;
+      if (clampedScrollTop !== nextScrollTop) vy = 0;
+      viewport.scrollLeft = clampedScrollLeft;
+      viewport.scrollTop = clampedScrollTop;
       const frameRatio = elapsed / FRAME_INTERVAL_MS;
       vx *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
       vy *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
+      activeVelocity.current = { vx, vy };
       coastingFrame.current = window.requestAnimationFrame(coast);
     };
 
