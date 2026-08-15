@@ -9,6 +9,7 @@ import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, H
 import { Tree } from "../workspace/workspaceSidebar";
 import { useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
+import { useWorkspaceBrowserBack } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
 import type { WorkspaceBulkSelection } from '../workspace/bulkEdit';
 import { WorkspaceBulkEditToolbar, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
@@ -556,6 +557,79 @@ const WorkspacePage = () => {
   const hiddenEditorRow = hiddenFieldsEditor && table ? table.rows.find((row) => row.id === hiddenFieldsEditor.rowId) : undefined;
   const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined) ?? (bulkSelection?.rowIds[0] ? { rowId: bulkSelection.rowIds[0], columnId: bulkSelection.columnId } : focusTarget);
   const activeCellKey = activeCell ? workspaceCellKey(activeCell.rowId, activeCell.columnId) : undefined;
+
+  const browserBackLayer = driveBackup.dialogOpen
+    ? 'google-drive'
+    : confirmDialog
+      ? 'confirm'
+      : workspaceImport
+        ? 'workspace-import'
+        : tableImportPreview
+          ? 'table-import'
+          : pasteDialogOpen
+            ? 'paste'
+            : hiddenFieldsEditor
+              ? 'hidden-fields'
+              : bulkEditorOpen
+                ? 'bulk-editor'
+                : filterTarget
+                  ? 'filter'
+                  : configuring
+                    ? 'column-config'
+                    : selectionEditor
+                      ? 'selection-editor'
+                      : editing
+                        ? 'cell-editor'
+                        : movingNode
+                          ? 'move-node'
+                          : nodeMenu
+                            ? 'node-menu'
+                            : tableCreateParentId !== undefined
+                              ? 'table-create'
+                              : nameDialog
+                                ? 'name-editor'
+                                : columnVisibilityOpen
+                                  ? 'column-visibility'
+                                  : tableActionsOpen
+                                    ? 'table-actions'
+                                    : drawerOpen
+                                      ? 'drawer'
+                                      : bulkSelection
+                                        ? 'bulk-selection'
+                                        : editBarOpen
+                                          ? 'edit-bar'
+                                          : searchOpen || hasActiveSearchState
+                                            ? 'search'
+                                            : undefined;
+
+  const dismissBrowserLayer = useCallback(() => {
+    switch (browserBackLayer) {
+      case 'google-drive': driveBackup.close(); break;
+      case 'confirm': setConfirmDialog(undefined); break;
+      case 'workspace-import': setWorkspaceImport(undefined); break;
+      case 'table-import': setTableImportPreview(undefined); break;
+      case 'paste': setPasteDialogOpen(false); break;
+      case 'hidden-fields': setHiddenFieldsEditor(undefined); break;
+      case 'bulk-editor': setBulkEditorOpen(false); break;
+      case 'filter': setFilterTarget(undefined); break;
+      case 'column-config': setConfiguring(undefined); break;
+      case 'selection-editor': setSelectionEditor(undefined); break;
+      case 'cell-editor': setEditing(undefined); break;
+      case 'move-node': setMovingNode(undefined); break;
+      case 'node-menu': setNodeMenu(undefined); break;
+      case 'table-create': setTableCreateParentId(undefined); break;
+      case 'name-editor': setNameDialog(undefined); break;
+      case 'column-visibility': setColumnVisibilityOpen(false); break;
+      case 'table-actions': setTableActionsOpen(false); break;
+      case 'drawer': setDrawerOpen(false); break;
+      case 'bulk-selection': closeBulkSelection(); break;
+      case 'edit-bar': setEditBarOpen(false); break;
+      case 'search': clearSearchAndFilters(); break;
+      default: break;
+    }
+  }, [browserBackLayer, clearSearchAndFilters, closeBulkSelection, driveBackup]);
+
+  useWorkspaceBrowserBack({ active: Boolean(browserBackLayer), onBack: dismissBrowserLayer });
 
   useEffect(() => {
     if (!focusTarget) return;
