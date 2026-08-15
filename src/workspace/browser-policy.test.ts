@@ -110,10 +110,13 @@ describe('workspace browser policies', () => {
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
     expect(selectionDialogRule).toMatch(/width:\s*min\(430px,\s*50vw\)/);
-    expect(selectionDialogRule).toMatch(/height:\s*min\(75dvh/);
+    expect(selectionDialogRule).toMatch(/height:\s*auto/);
     expect(selectionDialogRule).toMatch(/margin-top:\s*clamp\(10px,\s*4dvh,\s*28px\)/);
     expect(selectionDialogRule).not.toMatch(/backdrop-filter/);
-    expect(selectionListContainerRule).toMatch(/max-height:\s*none/);
+    expect(selectionListContainerRule).toMatch(/flex:\s*0 1 auto/);
+    expect(selectionListContainerRule).toMatch(/max-height:\s*min\(calc\(75dvh - 80px\)/);
+    const dateHeadingRule = styles.match(/\.workspace-datetime-dialog \.workspace-dialog-heading\s*\{([^}]*)\}/)?.[1];
+    expect(dateHeadingRule).toMatch(/display:\s*none/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);

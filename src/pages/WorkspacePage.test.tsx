@@ -272,11 +272,11 @@ describe('WorkspacePage', () => {
     const cell = await screen.findByRole('cell', { name: '花火，數量：2' });
 
     await user.click(cell);
-    expect(screen.getByLabelText('花火／數量，輸入')).toBeInTheDocument();
+    expect(document.querySelector('.workspace-value-context')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '增加數值' }));
     const input = screen.getByRole('spinbutton', { name: '數量輸入加法' });
     expect(input).toHaveValue(0);
-    expect(screen.getByLabelText('花火／數量，增加')).toBeInTheDocument();
+    expect(document.querySelector('.workspace-value-context')).not.toBeInTheDocument();
     expect(screen.getByRole('status', { name: '數量計算結果' })).toHaveTextContent('→2');
     expect(document.activeElement).toBe(input);
     await user.type(input, '0.25');
@@ -1199,7 +1199,7 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
-    expect(document.querySelector('.workspace-datetime-timezone')).toBeInTheDocument();
+    expect(screen.queryByText('依裝置時區')).not.toBeInTheDocument();
     await user.click(document.querySelector('.workspace-datetime-clear')!);
 
     expect(screen.queryByRole('dialog', { name: '名稱' })).not.toBeInTheDocument();

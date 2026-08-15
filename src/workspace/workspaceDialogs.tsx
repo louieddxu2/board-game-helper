@@ -57,20 +57,11 @@ const NumericAlignedValue = ({ value }: { value: string }) => {
   </span>;
 };
 
-const WorkspaceValueContext = ({ label, mode }: { label?: string; mode?: string }) => {
-  if (!label && !mode) return null;
-  const modeLabel = mode === 'direct' ? '輸入' : mode === 'add' ? '增加' : mode === 'subtract' ? '減少' : mode;
-  return <div className="workspace-value-context" aria-label={[label, modeLabel].filter(Boolean).join('，')}>
-    {label && <span className="workspace-value-context-label">{label}</span>}
-    {mode && <span className={`workspace-value-context-mode workspace-value-context-mode-${mode}`}>{modeLabel}</span>}
-  </div>;
-};
-
 export interface NumericCellEditorHandle {
   commit(): void;
 }
 
-const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'contextLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, contextLabel, onDismiss, onSave }, forwardedRef) => {
+const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, onDismiss, onSave }, forwardedRef) => {
   const initialDraft = displayWorkspaceCellValue(value, column.inputType);
   const [mode, setMode] = useState<NumericEditMode>('direct');
   const [draft, setDraft] = useState(initialDraft);
@@ -120,7 +111,6 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
 
   return <div className="workspace-number-editor-shell">
-    <WorkspaceValueContext label={contextLabel} mode={mode} />
     <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
     {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onPointerDown={(event) => event.preventDefault()} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
     <div className="workspace-number-input-shell">
@@ -136,7 +126,7 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
 });
 NumericCellEditor.displayName = 'NumericCellEditor';
 
-export const CellInputDialog = ({ column, value, inputLabel, contextLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
+export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
   const [dateDirty, setDateDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -153,9 +143,9 @@ export const CellInputDialog = ({ column, value, inputLabel, contextLabel, onDel
   const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
   return <WorkspaceModal title={column.name} onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
-      ? <><WorkspaceValueContext label={contextLabel} /><DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} /></>
+      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} />
       : column.inputType === 'number'
-      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} contextLabel={contextLabel} onDismiss={onDismiss} onSave={onSave} />
+      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
   </WorkspaceModal>;
 };
@@ -242,18 +232,17 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
       </div></>}
     <div className="workspace-datetime-footer">
       <button type="button" className="workspace-datetime-clear" onClick={() => onClear?.()} aria-label={`${ariaLabel}清除`}>清除</button>
-      {showTime && <span className="workspace-datetime-timezone">依裝置時區</span>}
       <button type="button" className="workspace-datetime-current" onClick={setCurrent}>{showTime ? '現在' : '今天'}</button>
     </div>
   </div>;
 };
-export const LinkInputDialog = ({ column, value, contextLabel, onDelete, onSave }: { column: WorkspaceColumn; value: WorkspaceCellValue; contextLabel?: string; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void }) => {
+export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: WorkspaceColumn; value: WorkspaceCellValue; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void }) => {
   const initial = isWorkspaceLinkValue(value) ? value : { url: typeof value === 'string' ? value : '', label: '' };
   const [url, setUrl] = useState(initial.url);
   const [label, setLabel] = useState(initial.label);
   const commit = () => onSave(url.trim() || label.trim() ? { url: url.trim(), label: label.trim() } : null);
   return <WorkspaceModal title={column.name} onClose={commit} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
-    <WorkspaceValueContext label={contextLabel} /><div className="workspace-link-fields">
+    <div className="workspace-link-fields">
       <label className="workspace-form-field">連結<input autoFocus type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
       <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
     </div>
@@ -327,7 +316,7 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
   </WorkspaceModal>;
 };
 export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" actions={<><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button danger" onClick={onConfirm}>確認</button></>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
-export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; contextLabel?: string; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
+export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
   const isMultiple = Boolean(column.isMultiple);
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
@@ -383,6 +372,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel,
     }
     onSelect('');
   };
+  const hasSingleValue = !isMultiple && Array.from(selectedSet).some(Boolean);
 
   const finish = () => {
     if (isDynamic && normalizedQuery) {
@@ -393,16 +383,15 @@ export const WorkspaceSelectionDialog = ({ column, value, options, contextLabel,
   };
 
   return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
-    <WorkspaceValueContext label={contextLabel} /><div className="workspace-selection-head">
+    {(isDynamic || isMultiple || hasSingleValue) && <div className="workspace-selection-head">
       {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>}
-      <div className="workspace-selection-meta">
-        <span className="workspace-selection-count">{isMultiple ? `已選 ${selectedSet.size} 項` : `${filtered.length} 項`}</span>
+      {(isMultiple || hasSingleValue) && <div className="workspace-selection-meta">
         <div className="workspace-selection-tools">
           {isMultiple && <button type="button" className="workspace-selection-tool" onClick={selectAll} aria-label="全選" title="全選"><WorkspaceIcon name="check" size={17} /></button>}
           <button type="button" className="workspace-selection-tool is-clear" onClick={clearSelection} aria-label="清除選取" title="清除選取"><WorkspaceIcon name="close" size={17} /></button>
         </div>
-      </div>
-    </div>
+      </div>}
+    </div>}
     <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
       {filtered.map((option, index) => {
         const isSelected = selectedSet.has(option);
@@ -696,7 +685,6 @@ export interface CellInputDialogProps {
   column: WorkspaceColumn;
   value: WorkspaceCellValue;
   inputLabel?: string;
-  contextLabel?: string;
   onDelete?(): void;
   onDismiss?(): void;
   onSave(value: string): void;
