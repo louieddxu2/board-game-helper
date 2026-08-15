@@ -346,7 +346,7 @@ describe('WorkspacePage', () => {
     const fixedListCell = screen.getAllByRole('cell')[2];
     await user.click(fixedListCell);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '清除選取' }));
+    await user.click(screen.getByRole('button', { name: '清除' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(fixedListCell).toHaveTextContent('');
   });
@@ -457,7 +457,9 @@ describe('WorkspacePage', () => {
     await user.click(cell);
     const search = screen.getByRole('textbox', { name: '搜尋或新增選項' });
     expect(screen.queryByRole('button', { name: /確定/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '清除選取' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '清除' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全選' })).toBeInTheDocument();
+    expect(screen.getByRole('listbox').nextElementSibling).toHaveClass('workspace-selection-footer');
 
     await user.type(search, '第一項');
     await user.keyboard('{Enter}');
@@ -1147,7 +1149,6 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('listbox', { name: '時' })).not.toBeInTheDocument();
     expect(screen.queryByRole('listbox', { name: '分' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '今天' }));
-    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2}$/)).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalled());
@@ -1170,6 +1171,21 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
 
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toBeInTheDocument();
+  });
+
+  it('commits the current date-time immediately from the 現在 action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '其他' }));
+    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    await user.click(screen.getByRole('button', { name: '現在' }));
+
+    expect(screen.queryByRole('group', { name: '名稱日期時間' })).not.toBeInTheDocument();
+    expect(screen.getByText(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
   it('accepts a directly entered year from the selected year value', async () => {

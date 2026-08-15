@@ -84,6 +84,7 @@ describe('workspace browser policies', () => {
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionListContainerRule = styles.match(/\.workspace-selection-list\s*\{([^}]*)\}/)?.[1];
+    const selectionFooterRule = styles.match(/\.workspace-selection-footer\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-option\s*\{([^}]*)\}/)?.[1];
     const selectionIndicatorRule = styles.match(/\.workspace-selection-option-indicator\s*\{([^}]*)\}/)?.[1];
     const contextActiveRule = styles.match(/\.workspace-table \.workspace-context-active\s*\{([^}]*)\}/)?.[1];
@@ -115,6 +116,9 @@ describe('workspace browser policies', () => {
     expect(selectionDialogRule).not.toMatch(/backdrop-filter/);
     expect(selectionListContainerRule).toMatch(/flex:\s*0 1 auto/);
     expect(selectionListContainerRule).toMatch(/max-height:\s*min\(calc\(75dvh - 80px\)/);
+    expect(selectionFooterRule).toMatch(/justify-content:\s*flex-start/);
+    expect(selectionFooterRule).toMatch(/border-top:/);
+    expect(styles).toMatch(/\.workspace-datetime-dialog\s*\{[^}]*width:\s*min\(340px,\s*75vw\)/);
     const dateHeadingRule = styles.match(/\.workspace-datetime-dialog \.workspace-dialog-heading\s*\{([^}]*)\}/)?.[1];
     expect(dateHeadingRule).toMatch(/display:\s*none/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);

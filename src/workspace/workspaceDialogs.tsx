@@ -143,7 +143,7 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
   const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
   return <WorkspaceModal title={column.name} onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
-      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onClear={() => onSave('')} />
+      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onCurrent={(next) => onSave(next)} onClear={() => onSave('')} />
       : column.inputType === 'number'
       ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
@@ -190,7 +190,7 @@ const WheelPicker = ({ label, value, options, onChange, loop = false, centerEdit
   </div>;
 };
 
-export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChange, onClear }: { value: WorkspaceCellValue; ariaLabel: string; showTime?: boolean; onChange(value: string): void; onClear?(): void }) => {
+export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChange, onCurrent, onClear }: { value: WorkspaceCellValue; ariaLabel: string; showTime?: boolean; onChange(value: string): void; onCurrent?(value: string): void; onClear?(): void }) => {
   const [parts, setParts] = useState(() => workspaceDateTimeParts(value));
   const [editingYear, setEditingYear] = useState(false);
   const [yearDraft, setYearDraft] = useState(() => String(parts.year));
@@ -218,6 +218,7 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
     setParts(next);
     setYearDraft(String(next.year));
     onChange(normalized);
+    onCurrent?.(normalized);
   };
   return <div className={`workspace-datetime-editor ${showTime ? '' : 'is-date-only'}`} role="group" aria-label={ariaLabel}>
     <div className="workspace-datetime-wheel-row" aria-label="日期">
@@ -383,14 +384,8 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
   };
 
   return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
-    {(isDynamic || isMultiple || hasSingleValue) && <div className="workspace-selection-head">
-      {isDynamic && <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>}
-      {(isMultiple || hasSingleValue) && <div className="workspace-selection-meta">
-        <div className="workspace-selection-tools">
-          {isMultiple && <button type="button" className="workspace-selection-tool" onClick={selectAll} aria-label="全選" title="全選"><WorkspaceIcon name="check" size={17} /></button>}
-          <button type="button" className="workspace-selection-tool is-clear" onClick={clearSelection} aria-label="清除選取" title="清除選取"><WorkspaceIcon name="close" size={17} /></button>
-        </div>
-      </div>}
+    {isDynamic && <div className="workspace-selection-head">
+      <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
     </div>}
     <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
       {filtered.map((option, index) => {
@@ -402,6 +397,12 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
       })}
       {!filtered.length && <p className="workspace-selection-empty">{isDynamic && normalizedQuery ? '按 Enter 新增這個選項' : '目前沒有可選項目'}</p>}
     </div>
+    {(isMultiple || hasSingleValue) && <div className="workspace-selection-footer">
+      <div className="workspace-selection-tools">
+        {isMultiple && <button type="button" className="workspace-selection-tool" onClick={selectAll} aria-label="全選" title="全選">全選</button>}
+        <button type="button" className="workspace-selection-tool is-clear" onClick={clearSelection} aria-label="清除" title="清除">清除</button>
+      </div>
+    </div>}
   </WorkspaceModal>;
 };
 export const ColumnVisibilityDialog = ({ columns, onClose, onToggle }: { columns: WorkspaceColumn[]; onClose(): void; onToggle(columnId: string): void }) => <WorkspaceModal title="欄位顯示設定" onClose={onClose} className="workspace-column-visibility-dialog">
