@@ -46,6 +46,89 @@ describe('useMomentumScroll', () => {
     vi.useRealTimers();
   });
 
+  test('keeps rapid consecutive swipes accelerated even before the first animation frame', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = {
+      scrollWidth: 2000,
+      clientWidth: 500,
+      scrollHeight: 2000,
+      clientHeight: 500,
+      scrollLeft: 500,
+      scrollTop: 200,
+    } as unknown as HTMLDivElement;
+    const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
+    if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
+    if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const cancelAnimationFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+
+    const now = Date.now();
+    vi.setSystemTime(now);
+    result.current.trackMove(0, 0);
+    vi.setSystemTime(now + 40);
+    result.current.trackMove(40, 0);
+    result.current.release(viewport, 'x');
+    result.current.stop();
+
+    vi.setSystemTime(now + 80);
+    result.current.trackMove(40, 0);
+    vi.setSystemTime(now + 120);
+    result.current.trackMove(80, 0);
+    result.current.release(viewport, 'x');
+    frames.at(-1)?.(0);
+
+    // 1 px/ms from the second swipe plus the retained 0.65 px/ms from the first.
+    expect(viewport.scrollLeft).toBeCloseTo(500 - (1.65 * (1000 / 60)), 1);
+    expect(cancelAnimationFrame).toHaveBeenCalled();
+
+    requestAnimationFrame.mockRestore();
+    cancelAnimationFrame.mockRestore();
+    vi.useRealTimers();
+  });
+
+  test('uses elapsed animation time so a delayed frame does not slow momentum', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = {
+      scrollWidth: 2000,
+      clientWidth: 500,
+      scrollHeight: 2000,
+      clientHeight: 500,
+      scrollLeft: 500,
+      scrollTop: 200,
+    } as unknown as HTMLDivElement;
+    const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
+    if (!window.requestAnimationFrame) Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: () => 0 });
+    if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
+    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const cancelAnimationFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+
+    const now = Date.now();
+    vi.setSystemTime(now);
+    result.current.trackMove(0, 0);
+    vi.setSystemTime(now + 40);
+    result.current.trackMove(100, 0);
+    result.current.release(viewport, 'x');
+    frames.shift()?.(0);
+    frames.shift()?.(32);
+
+    // The second frame represents 32ms, so it should advance substantially
+    // farther than the old fixed-16ms integrator did.
+    expect(viewport.scrollLeft).toBeLessThan(400);
+
+    result.current.stop();
+    requestAnimationFrame.mockRestore();
+    cancelAnimationFrame.mockRestore();
+    vi.useRealTimers();
+  });
+
   test('applies boundary bounce to one selected axis of body cells', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const viewport = document.createElement('div');
@@ -70,6 +153,7 @@ describe('useMomentumScroll', () => {
       frames.push(callback);
       return frames.length;
     });
+    if (!window.cancelAnimationFrame) Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: () => undefined });
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
     vi.useFakeTimers();
     const now = Date.now();

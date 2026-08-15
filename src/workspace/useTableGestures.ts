@@ -36,6 +36,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
   const panStart = useRef<{ pointerId: number; x: number; y: number; scrollLeft: number; scrollTop: number } | undefined>(undefined);
   const panAxis = useRef<TablePanAxis | undefined>(undefined);
+  const panMetrics = useRef<{ table: HTMLTableElement | null; bounds: ReturnType<typeof getTableContentScrollBounds> } | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
@@ -170,6 +171,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
+    panMetrics.current = undefined;
     if (pointers.current.size === 0 && onCellLongPress) {
       const cell = (event.target as Element).closest<HTMLTableCellElement>('td[data-bulk-row-id][data-bulk-column-id]');
       const rowId = cell?.dataset.bulkRowId;
@@ -208,6 +210,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       pinchStart.current = { distance: Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)), scale: textScaleRef.current };
       panStart.current = undefined;
       panAxis.current = undefined;
+      panMetrics.current = undefined;
     }
   };
 
@@ -239,6 +242,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (!pointerMoved.current) {
         pointerMoved.current = true;
         panAxis.current = getTablePanAxis(deltaX, deltaY);
+        const table = viewport.querySelector('table');
+        panMetrics.current = { table, bounds: getTableContentScrollBounds(viewport, table) };
         setPanning(true);
         if ('setPointerCapture' in viewport) {
           try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
@@ -251,9 +256,12 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       viewport.scrollTop = targetScrollTop;
 
       // Calculate visual elastic tension on inner <table> when dragging beyond viewport boundaries
-      const table = viewport.querySelector('table');
+      const fallbackTable = viewport.querySelector('table');
+      const metrics = panMetrics.current ?? { table: fallbackTable, bounds: getTableContentScrollBounds(viewport, fallbackTable) };
+      panMetrics.current = metrics;
+      const { table } = metrics;
       if (table) {
-        const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
+        const { maxLeft, maxTop } = metrics.bounds;
         const beyondX = targetScrollLeft < 0 || targetScrollLeft > maxLeft;
         const beyondY = targetScrollTop < 0 || targetScrollTop > maxTop;
         const bounceAxis = panAxis.current === 'both'
@@ -308,14 +316,18 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (pointers.current.size === 1) {
       const [pointerId, point] = pointers.current.entries().next().value as [number, { x: number; y: number }];
       panStart.current = { pointerId, x: point.x, y: point.y, scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop };
-    } else {
+      panMetrics.current = undefined;
+    } else if (pointers.current.size > 1) {
       panStart.current = undefined;
+      panMetrics.current = undefined;
     }
     if (pointers.current.size === 0) {
-      const table = viewport.querySelector('table');
+      const metrics = panMetrics.current;
+      const table = metrics?.table ?? viewport.querySelector('table');
       if (table && (table.classList.contains('is-bouncing') || table.style.transform)) settleTableBounce(table);
       setPanning(false);
-      momentumScroll.release(viewport, panAxis.current);
+      momentumScroll.release(viewport, panAxis.current, metrics?.bounds);
+      panMetrics.current = undefined;
       panAxis.current = undefined;
       if (moved) {
         ignoreNextTableClick.current = true;

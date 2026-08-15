@@ -4,6 +4,8 @@ export const MAX_TABLE_MOMENTUM_VELOCITY = 100; // Max speed cap for consecutive
 const MAX_VELOCITY = MAX_TABLE_MOMENTUM_VELOCITY;
 const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous swipe
 const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
+const FRAME_INTERVAL_MS = 1000 / 60;
+const MAX_FRAME_DELTA_MS = 48;
 
 export type TableBounceAxis = 'x' | 'y';
 export type TablePanAxis = TableBounceAxis | 'both';
@@ -25,10 +27,12 @@ export const getTablePanAxis = (deltaX: number, deltaY: number): TablePanAxis =>
 
 export const getTableContentScrollBounds = (viewport: HTMLDivElement, table: HTMLTableElement | null) => {
   const corner = table?.querySelector<HTMLElement>('.workspace-row-corner');
-  const fixedColumnWidth = corner?.getBoundingClientRect().width ?? 0;
-  const fixedHeaderHeight = corner?.getBoundingClientRect().height ?? 0;
-  const tableWidth = Math.max(table?.getBoundingClientRect().width ?? 0, viewport.scrollWidth);
-  const tableHeight = Math.max(table?.getBoundingClientRect().height ?? 0, viewport.scrollHeight);
+  const cornerRect = corner?.getBoundingClientRect();
+  const tableRect = table?.getBoundingClientRect();
+  const fixedColumnWidth = cornerRect?.width ?? 0;
+  const fixedHeaderHeight = cornerRect?.height ?? 0;
+  const tableWidth = Math.max(tableRect?.width ?? 0, viewport.scrollWidth);
+  const tableHeight = Math.max(tableRect?.height ?? 0, viewport.scrollHeight);
   const contentWidth = Math.max(0, tableWidth - fixedColumnWidth);
   const contentHeight = Math.max(0, tableHeight - fixedHeaderHeight);
   const visibleContentWidth = Math.max(0, viewport.clientWidth - fixedColumnWidth);
@@ -47,7 +51,7 @@ export const applyTableBounce = (table: HTMLTableElement | null, x: number, y: n
   table.classList.toggle('is-bounce-x', Math.abs(x) > 0.5);
   table.classList.toggle('is-bounce-y', Math.abs(y) > 0.5);
   table.classList.remove('is-bounce-settling');
-  table.style.transform = '';
+  if (table.style.transform) table.style.transform = '';
 };
 
 export const resetTableBounce = (table: HTMLTableElement | null) => {
@@ -91,20 +95,20 @@ export function useMomentumScroll() {
   }, [resetTableTransform]);
 
   const trackMove = useCallback((x: number, y: number) => {
-    const now = Date.now();
+    const previous = points.current.at(-1);
+    const now = Math.max(Date.now(), previous?.time ?? 0);
     points.current.push({ x, y, time: now });
-    points.current = points.current.filter((p) => now - p.time <= 100).slice(-5);
+    points.current = points.current.filter((p) => now - p.time <= 120).slice(-8);
   }, []);
 
-  const release = useCallback((viewport: HTMLDivElement, panAxis?: TablePanAxis) => {
+  const release = useCallback((viewport: HTMLDivElement, panAxis?: TablePanAxis, cachedBounds?: ReturnType<typeof getTableContentScrollBounds>) => {
     const table = viewport.querySelector?.('table') ?? null;
     activeTableRef.current = table;
 
     if (points.current.length < 2) return;
     const first = points.current[0];
     const last = points.current[points.current.length - 1];
-    const dt = last.time - first.time;
-    if (dt <= 0) return;
+    const dt = Math.max(1, last.time - first.time);
 
     const rawVx = (last.x - first.x) / dt;
     const rawVy = (last.y - first.y) / dt;
@@ -123,11 +127,20 @@ export function useMomentumScroll() {
     vy = clampTableMomentumVelocity(vy);
 
     points.current = [];
+    // Save immediately so a second swipe that starts before the first rAF still
+    // receives the residual velocity for acceleration stacking.
+    activeVelocity.current = { vx, vy };
+    const bounds = cachedBounds ?? getTableContentScrollBounds(viewport, table);
+    let previousTimestamp: number | undefined;
 
-    const coast = () => {
+    const coast = (timestamp: number) => {
+      const elapsed = previousTimestamp === undefined
+        ? FRAME_INTERVAL_MS
+        : Math.min(MAX_FRAME_DELTA_MS, Math.max(1, timestamp - previousTimestamp));
+      previousTimestamp = timestamp;
       activeVelocity.current = { vx, vy };
 
-      const { maxLeft, maxTop } = getTableContentScrollBounds(viewport, table);
+      const { maxLeft, maxTop } = bounds;
       const atBoundaryX = (viewport.scrollLeft <= 0 && vx > 0) || (viewport.scrollLeft >= maxLeft && vx < 0);
       const atBoundaryY = (viewport.scrollTop <= 0 && vy > 0) || (viewport.scrollTop >= maxTop && vy < 0);
       const activeBounceAxis = preferredBounceAxis;
@@ -169,10 +182,11 @@ export function useMomentumScroll() {
         return;
       }
 
-      viewport.scrollLeft -= vx * 16;
-      viewport.scrollTop -= vy * 16;
-      vx *= 0.965;
-      vy *= 0.965;
+      viewport.scrollLeft -= vx * elapsed;
+      viewport.scrollTop -= vy * elapsed;
+      const frameRatio = elapsed / FRAME_INTERVAL_MS;
+      vx *= Math.pow(0.965, frameRatio);
+      vy *= Math.pow(0.965, frameRatio);
       coastingFrame.current = window.requestAnimationFrame(coast);
     };
 
