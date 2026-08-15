@@ -26,6 +26,7 @@ describe('workspace numeric input modes', () => {
     render(<CellInputDialog column={column} value={2} onSave={onSave} />);
 
     const input = screen.getByRole('spinbutton', { name: '數量輸入' });
+    expect(input).toHaveStyle({ textAlign: 'center' });
     await user.click(screen.getByRole('button', { name: '增加 1' }));
     expect(input).toHaveValue(3);
     expect(screen.getByRole('dialog')).toBeInTheDocument();

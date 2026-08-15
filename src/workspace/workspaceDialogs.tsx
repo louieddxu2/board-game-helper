@@ -156,7 +156,7 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-editor" data-mode="step" style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
       <button type="button" className="workspace-number-operation workspace-number-operation-subtract" aria-label="減少 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(-1)}>−</button>
       <div className="workspace-number-input-shell">
-        <input ref={inputRef} aria-label={baseLabel} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+        <input ref={inputRef} aria-label={baseLabel} autoFocus className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       </div>
       <button type="button" className="workspace-number-operation workspace-number-operation-add" aria-label="增加 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(1)}>＋</button>
     </div>
