@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceColor, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceCellColor, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceOptionColor } from "./model";
+import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, getWorkspaceNumberInputMode, isWorkspaceColor, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceCellColor, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceOptionColor } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
-import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
+import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 
 type NumericEditMode = 'direct' | 'add' | 'subtract';
 
@@ -63,6 +63,7 @@ export interface NumericCellEditorHandle {
 
 const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onDismiss' | 'onSave'>>(({ column, value, inputLabel, onDismiss, onSave }, forwardedRef) => {
   const initialDraft = displayWorkspaceCellValue(value, column.inputType);
+  const adjustmentEnabled = getWorkspaceNumberInputMode(column) === 'adjust';
   const [mode, setMode] = useState<NumericEditMode>('direct');
   const [draft, setDraft] = useState(initialDraft);
   const [originalDraft, setOriginalDraft] = useState(initialDraft);
@@ -116,15 +117,52 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-input-shell">
       <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" style={mode === 'direct' || inputDecimal?.fraction ? undefined : { paddingRight: `calc(${fractionDigits}ch + .6ch)` }} type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
     </div>
-    <div className="workspace-number-operators">
+    {adjustmentEnabled && <div className="workspace-number-operators">
       <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('subtract')}>−</button>
       <button type="button" className={`workspace-number-operation workspace-number-operation-add${mode === 'add' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '增加數值' : '切換為加法'} aria-pressed={mode === 'add'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('add')}>＋</button>
-    </div>
+    </div>}
     {mode !== 'direct' && <output className="workspace-number-result" role="status" aria-label={`${column.name}計算結果`}>{result && <><span aria-hidden="true">→</span><NumericAlignedValue value={result} /></>}</output>}
     </div>
   </div>;
 });
 NumericCellEditor.displayName = 'NumericCellEditor';
+
+const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onSave'>>(({ column, value, inputLabel, onSave }, forwardedRef) => {
+  const initialDraft = displayWorkspaceCellValue(value, column.inputType);
+  const [draft, setDraft] = useState(initialDraft);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const baseLabel = inputLabel ?? `${column.name}輸入`;
+  const fractionDigits = Math.max(2, decimalScale(draft));
+
+  const focusInput = (select = false) => {
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current;
+      input?.focus();
+      if (select) input?.select();
+    });
+  };
+  useEffect(() => { focusInput(true); }, []);
+
+  const step = (delta: 1 | -1) => {
+    const current = parseDecimal(draft.trim() || '0') ?? parseDecimal('0')!;
+    const next = current.scaled + BigInt(delta) * (10n ** BigInt(current.scale));
+    setDraft(formatDecimal(next, current.scale));
+    focusInput(false);
+  };
+  const commit = () => onSave(draft);
+  useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
+
+  return <div className="workspace-number-editor-shell">
+    <div className="workspace-number-editor" data-mode="step" style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
+      <button type="button" className="workspace-number-operation workspace-number-operation-subtract" aria-label="減少 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(-1)}>−</button>
+      <div className="workspace-number-input-shell">
+        <input ref={inputRef} aria-label={baseLabel} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+      </div>
+      <button type="button" className="workspace-number-operation workspace-number-operation-add" aria-label="增加 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(1)}>＋</button>
+    </div>
+  </div>;
+});
+NumericStepEditor.displayName = 'NumericStepEditor';
 
 export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
@@ -145,7 +183,9 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
     {column.inputType === 'datetime'
       ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onCurrent={(next) => onSave(next)} onClear={() => onSave('')} />
       : column.inputType === 'number'
-      ? <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
+      ? getWorkspaceNumberInputMode(column) === 'step'
+        ? <NumericStepEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onSave={onSave} />
+        : <NumericCellEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onDismiss={onDismiss} onSave={onSave} />
       : <AutoGrowTextarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} aria-label={inputLabel ?? `${column.name}輸入`} autoFocus className="workspace-value-input workspace-value-textarea" inputMode="text" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); } }} />}
   </WorkspaceModal>;
 };
@@ -635,7 +675,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
     const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
     const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
     const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
-    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
+    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
   };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
@@ -649,6 +689,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
   const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({
     ...current,
     inputType,
+    numberInputMode: inputType === 'number' && current.numberInputMode === undefined ? 'input' : current.numberInputMode,
     options: inputType === 'select' && current.options.length === 0 && suggestedOptions.length <= 10 ? suggestedOptions : current.options,
     overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode,
   }));
@@ -668,6 +709,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
             {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
             {draft.inputType === 'datetime' && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.dateOnly)} onChange={(event) => setDraft((current) => ({ ...current, dateOnly: event.target.checked }))} />只顯示年月日</label>}
           </div>
+          {draft.inputType === 'number' && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} onClick={() => setDraft((current) => ({ ...current, numberInputMode: mode }))}>{label}</button>)}</div></fieldset>}
           {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
           {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
         </> : <div className="workspace-overflow-panel">
@@ -678,8 +720,8 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
             {lineLimitEnabled && <label className="workspace-form-field">最多顯示行數<input type="number" inputMode="numeric" min="1" max="20" step="1" value={draft.lineLimit ?? ''} aria-label="最多顯示行數" onChange={(event) => setDraft((current) => ({ ...current, lineLimit: event.target.value ? Number(event.target.value) : undefined }))} /></label>}
           </>}
         </div>}
-      </div>
-    </div>
+          </div>
+        </div>
   </WorkspaceModal>;
 };
 export interface CellInputDialogProps {

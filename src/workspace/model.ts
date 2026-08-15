@@ -1,4 +1,4 @@
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
 
@@ -29,6 +29,7 @@ export const createTable = (name: string): WorkspaceTable => {
 const normalizeOverflowMode = (value: WorkspaceOverflowMode | undefined, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
 const normalizeWidthLimitChars = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : undefined;
 const normalizeLineLimit = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : undefined;
+const normalizeNumberInputMode = (value: unknown): WorkspaceNumberInputMode | undefined => value === 'input' || value === 'adjust' || value === 'step' ? value : undefined;
 
 export const isWorkspaceColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 const normalizeOptionColors = (value: unknown) => {
@@ -51,6 +52,7 @@ const normalizeNumberRanges = (value: unknown): WorkspaceNumberRange[] => {
 const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOverflowMode = 'wrap'): WorkspaceColumn => ({
   ...column,
   inputType: column.inputType === 'link' || column.inputType === 'datetime' || column.inputType === 'number' || column.inputType === 'select' || column.inputType === 'dynamic-select' ? column.inputType : 'text',
+  numberInputMode: normalizeNumberInputMode(column.numberInputMode),
   options: Array.isArray(column.options) ? column.options : [],
   optionColors: normalizeOptionColors(column.optionColors),
   numberRanges: normalizeNumberRanges(column.numberRanges),
@@ -167,6 +169,9 @@ export const workspaceCellColor = (column: WorkspaceColumn | undefined, value: W
   if (column.inputType === 'select' && typeof value === 'string') return workspaceOptionColor(column, value);
   return workspaceNumberRangeColor(column, value);
 };
+
+// Columns created before numeric modes were persisted keep the existing adjustment editor.
+export const getWorkspaceNumberInputMode = (column: Pick<WorkspaceColumn, 'numberInputMode'>): WorkspaceNumberInputMode => column.numberInputMode ?? 'adjust';
 
 export const getRowHeaderColumn = (table: WorkspaceTable): WorkspaceColumn => normalizeColumn(table.rowHeader
   ? { ...table.rowHeader, name: table.rowHeaderName?.trim() || table.rowHeader.name }

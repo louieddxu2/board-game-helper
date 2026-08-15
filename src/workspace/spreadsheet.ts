@@ -1,6 +1,6 @@
 import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
 import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
 
 const TABLE_SETTINGS_MARKER = '__workspace_table_settings';
@@ -12,7 +12,7 @@ const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
 const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-select', 'link', 'datetime'];
 
 type AssertNever<T extends never> = T;
-type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly';
+type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'numberInputMode' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly';
 type SerializedTableFields = 'id' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
@@ -88,6 +88,7 @@ const serializeColumnSettings = (kind: 'row_header' | 'column', column: Workspac
   column.widthLimitChars ?? '',
   column.dateOnly ? 'true' : 'false',
   column.lineLimit ?? '',
+  column.numberInputMode ?? '',
 ];
 
 const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknown[][] => {
@@ -101,7 +102,7 @@ const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknow
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
   serializeColumnSettings('row_header', rowHeader),
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars', 'dateOnly', 'lineLimit'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars', 'dateOnly', 'lineLimit', 'numberInputMode'],
   ...table.columns.map((column) => serializeColumnSettings('column', column)),
   ];
 };
@@ -229,6 +230,7 @@ const assertSheetVersion = (rows: SheetRows, marker: string, supportedVersion: n
   if (version !== supportedVersion) throw new Error(`不支援的 ${marker} 格式版本：${stringValue(rows[0]?.[1]) || '未知'}`);
 };
 const parseType = (value: string): WorkspaceInputType => INPUT_TYPES.includes(value as WorkspaceInputType) ? value as WorkspaceInputType : 'text';
+const parseNumberInputMode = (value: string): WorkspaceNumberInputMode | undefined => value === 'input' || value === 'adjust' || value === 'step' ? value : undefined;
 const parseAlignment = (value: string): WorkspaceTextAlign => value === 'center' || value === 'right' ? value : 'left';
 const parseOverflowMode = (value: string, inputType: WorkspaceInputType, fallback: WorkspaceOverflowMode = 'wrap'): WorkspaceOverflowMode => value === 'expand' || value === 'ellipsis' || value === 'wrap' ? value : inputType === 'link' ? 'ellipsis' : fallback;
 const parseOptions = (value: string) => {
@@ -301,6 +303,7 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   column.dateOnly = stringValue(row?.[12]) === 'true';
   const lineLimit = Number(row?.[13]);
   column.lineLimit = Number.isFinite(lineLimit) && lineLimit > 0 ? Math.max(1, Math.round(lineLimit)) : undefined;
+  column.numberInputMode = parseNumberInputMode(stringValue(row?.[14]));
   return column;
 };
 

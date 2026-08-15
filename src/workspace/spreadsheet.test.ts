@@ -216,6 +216,14 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[1].isMultiple).toBe(true);
   });
 
+  it('preserves the numeric input mode through an xlsx round trip', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    source.tables[0].columns[2].numberInputMode = 'step';
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
+    expect(imported.table?.columns[2].numberInputMode).toBe('step');
+  });
+
   it('round-trips fixed option colors and numeric range colors', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();

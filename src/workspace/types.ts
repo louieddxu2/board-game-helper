@@ -1,4 +1,5 @@
 export type WorkspaceInputType = 'text' | 'number' | 'select' | 'dynamic-select' | 'link' | 'datetime';
+export type WorkspaceNumberInputMode = 'input' | 'adjust' | 'step';
 export type WorkspaceTextAlign = 'left' | 'center' | 'right';
 export type WorkspaceOverflowMode = 'expand' | 'ellipsis' | 'wrap';
 
@@ -19,6 +20,7 @@ export interface WorkspaceColumn {
   id: string;
   name: string;
   inputType: WorkspaceInputType;
+  numberInputMode?: WorkspaceNumberInputMode;
   options: string[];
   optionColors?: Record<string, string>;
   numberRanges?: WorkspaceNumberRange[];

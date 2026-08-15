@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import type { WorkspaceNumberInputMode } from './types';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
@@ -29,6 +30,9 @@ export const inputSubtypeLabels: Record<WorkspaceInputCategory, Array<{ value: W
   text: [{ value: 'text', label: '文字' }, { value: 'number', label: '數字' }],
   select: [{ value: 'dynamic-select', label: '動態列表' }, { value: 'select', label: '固定列表' }],
   other: [{ value: 'datetime', label: '時間(含日期)' }, { value: 'link', label: '連結' }],
+};
+export const numberInputModeLabels: Record<WorkspaceNumberInputMode, string> = {
+  input: '輸入', adjust: '加減數字', step: '加減1',
 };
 export const overflowModeLabels: Record<WorkspaceOverflowMode, string> = {
   expand: '推擠寬度', ellipsis: '超過省略', wrap: '自動換行',
