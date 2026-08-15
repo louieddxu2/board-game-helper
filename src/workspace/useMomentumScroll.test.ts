@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
-import { clampTableMomentumVelocity, getTablePanAxis, MAX_TABLE_MOMENTUM_VELOCITY, useMomentumScroll } from './useMomentumScroll';
+import { accelerateTableFlingVelocity, clampTableMomentumVelocity, getTablePanAxis, MAX_TABLE_MOMENTUM_VELOCITY, TABLE_FLING_ACCELERATION_MULTIPLIER, TABLE_FLING_ACCELERATION_THRESHOLD, useMomentumScroll } from './useMomentumScroll';
 
 describe('useMomentumScroll', () => {
   test('locks clear horizontal and vertical gestures while preserving near-diagonal movement', () => {
@@ -345,5 +345,11 @@ describe('useMomentumScroll', () => {
     expect(MAX_TABLE_MOMENTUM_VELOCITY).toBeGreaterThan(60);
     expect(clampTableMomentumVelocity(250)).toBe(MAX_TABLE_MOMENTUM_VELOCITY);
     expect(clampTableMomentumVelocity(-250)).toBe(-MAX_TABLE_MOMENTUM_VELOCITY);
+  });
+
+  test('adds a large fling boost only after crossing the gesture-speed threshold', () => {
+    expect(accelerateTableFlingVelocity(TABLE_FLING_ACCELERATION_THRESHOLD - 0.01)).toBeCloseTo(TABLE_FLING_ACCELERATION_THRESHOLD - 0.01);
+    expect(accelerateTableFlingVelocity(TABLE_FLING_ACCELERATION_THRESHOLD)).toBeCloseTo(TABLE_FLING_ACCELERATION_THRESHOLD * TABLE_FLING_ACCELERATION_MULTIPLIER);
+    expect(accelerateTableFlingVelocity(-TABLE_FLING_ACCELERATION_THRESHOLD)).toBeCloseTo(-TABLE_FLING_ACCELERATION_THRESHOLD * TABLE_FLING_ACCELERATION_MULTIPLIER);
   });
 });

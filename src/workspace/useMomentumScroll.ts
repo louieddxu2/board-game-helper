@@ -7,6 +7,14 @@ const MAX_OVERSCROLL = 32; // Safe visual rubber-band offset limit (px)
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
+export const TABLE_FLING_ACCELERATION_THRESHOLD = 1.2; // CSS px/ms; below this is a deliberate drag
+export const TABLE_FLING_ACCELERATION_MULTIPLIER = 1.8;
+
+export const accelerateTableFlingVelocity = (velocity: number) => (
+  Math.abs(velocity) >= TABLE_FLING_ACCELERATION_THRESHOLD
+    ? velocity * TABLE_FLING_ACCELERATION_MULTIPLIER
+    : velocity
+);
 
 const stackMomentumVelocity = (residual: number, current: number) => {
   if (current === 0 || residual === 0 || Math.sign(residual) === Math.sign(current)) {
@@ -122,8 +130,10 @@ export function useMomentumScroll() {
     const rawVy = (last.y - first.y) / dt;
 
     // Stack residual velocity from previous coasting for consecutive swipe acceleration
-    let vx = stackMomentumVelocity(activeVelocity.current.vx, rawVx);
-    let vy = stackMomentumVelocity(activeVelocity.current.vy, rawVy);
+    const flingVx = accelerateTableFlingVelocity(rawVx);
+    const flingVy = accelerateTableFlingVelocity(rawVy);
+    let vx = stackMomentumVelocity(activeVelocity.current.vx, flingVx);
+    let vy = stackMomentumVelocity(activeVelocity.current.vy, flingVy);
     if (panAxis === 'x') vy = 0;
     if (panAxis === 'y') vx = 0;
     const preferredBounceAxis = panAxis === 'x' || panAxis === 'y'
