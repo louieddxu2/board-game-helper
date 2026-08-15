@@ -5,6 +5,8 @@ import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspa
 import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, useMomentumScroll, TablePanAxis } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 
+export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
+
 interface UseTableGesturesProps {
   table: WorkspaceTable | undefined;
   data: WorkspaceData | undefined;
@@ -14,9 +16,19 @@ interface UseTableGesturesProps {
   setNotice: (msg: string) => void;
   minTextScale: number;
   onCellLongPress?: (rowId: string, columnId: string) => void;
+  onOpenDrawer?: () => void;
+  onOpenSearch?: () => void;
+  searchOpen?: boolean;
 }
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress }: UseTableGesturesProps) {
+export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
+  if (axis !== 'y' || maxTop <= 0) return undefined;
+  if (startScrollTop <= 0 && targetScrollTop < 0 && deltaY > 0) return 'top';
+  if (startScrollTop >= maxTop && targetScrollTop > maxTop && deltaY < 0) return 'bottom';
+  return undefined;
+};
+
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onOpenDrawer, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -40,12 +52,44 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
+  const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; triggered: boolean } | undefined>(undefined);
+  const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
   const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
   const tableReorderAutoScrollFrame = useRef<number | undefined>(undefined);
 
   const momentumScroll = useMomentumScroll();
+
+  const clearBoundarySearchHold = () => {
+    if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
+    boundarySearchHold.current = undefined;
+  };
+
+  const armBoundarySearchHold = (pointerId: number, edge: 'top' | 'bottom') => {
+    if (!onOpenSearch || searchOpen) {
+      clearBoundarySearchHold();
+      return;
+    }
+    const current = boundarySearchHold.current;
+    if (current?.pointerId === pointerId && current.edge === edge) return;
+    clearBoundarySearchHold();
+    const hold: { pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } = { pointerId, edge, triggered: false };
+    hold.timer = window.setTimeout(() => {
+      if (boundarySearchHold.current !== hold || hold.triggered) return;
+      hold.triggered = true;
+      momentumScroll.stop();
+      panStart.current = undefined;
+      panAxis.current = undefined;
+      panMetrics.current = undefined;
+      pointerMoved.current = true;
+      setPanning(false);
+      ignoreNextTableClick.current = true;
+      window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+      onOpenSearch();
+    }, TABLE_BOUNDARY_SEARCH_HOLD_MS);
+    boundarySearchHold.current = hold;
+  };
 
   const updateTableReorderTarget = (session: TableReorderSession, clientX: number, clientY: number) => {
     const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
@@ -147,6 +191,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     stopTableReorderAutoScroll();
     tableReorderPointer.current = undefined;
     tableReorderSession.current = undefined;
+    drawerSwipe.current = undefined;
     setTableReorderVisual(undefined);
     if (!session.active) return false;
     const currentData = dataRef.current;
@@ -168,10 +213,20 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
 
   const beginTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
     momentumScroll.stop();
+    clearBoundarySearchHold();
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
+    if (pointers.current.size === 0 && event.pointerType !== 'mouse' && onOpenDrawer) {
+      const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
+      const firstColumnRect = firstColumn?.getBoundingClientRect();
+      drawerSwipe.current = firstColumnRect && event.clientX <= firstColumnRect.left + firstColumnRect.width / 2
+        ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, triggered: false }
+        : undefined;
+    } else if (pointers.current.size > 0) {
+      drawerSwipe.current = undefined;
+    }
     if (pointers.current.size === 0 && onCellLongPress) {
       const cell = (event.target as Element).closest<HTMLTableCellElement>('td[data-bulk-row-id][data-bulk-column-id]');
       const rowId = cell?.dataset.bulkRowId;
@@ -201,6 +256,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panAxis.current = undefined;
       pinchStart.current = undefined;
     } else if (pointers.current.size === 2) {
+      clearBoundarySearchHold();
       const points = [...pointers.current.values()];
       if ('setPointerCapture' in viewport) {
         for (const pointerId of pointers.current.keys()) {
@@ -215,6 +271,35 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const moveTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drawerGesture = drawerSwipe.current;
+    if (drawerGesture?.pointerId === event.pointerId) {
+      const deltaX = event.clientX - drawerGesture.startX;
+      const deltaY = event.clientY - drawerGesture.startY;
+      if (drawerGesture.triggered) {
+        event.preventDefault();
+        return;
+      }
+      if (deltaX > 24 && deltaX > Math.abs(deltaY)) {
+        drawerGesture.triggered = true;
+        if (cellHold.current?.pointerId === event.pointerId) {
+          if (cellHold.current.timer) window.clearTimeout(cellHold.current.timer);
+          cellHold.current = undefined;
+        }
+        pointers.current.delete(event.pointerId);
+        panStart.current = undefined;
+        panAxis.current = undefined;
+        panMetrics.current = undefined;
+        pointerMoved.current = true;
+        setPanning(false);
+        momentumScroll.stop();
+        ignoreNextTableClick.current = true;
+        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+        onOpenDrawer?.();
+        event.preventDefault();
+        return;
+      }
+      if (Math.hypot(deltaX, deltaY) > 10 && (deltaX <= 0 || Math.abs(deltaY) >= deltaX)) drawerSwipe.current = undefined;
+    }
     const hold = cellHold.current;
     if (hold?.pointerId === event.pointerId) {
       if (!hold.active && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) > 8) {
@@ -282,6 +367,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         } else if (table.classList.contains('is-bouncing') || table.style.transform !== '') {
           resetTableBounce(table);
         }
+
+        const boundaryEdge = getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, maxTop, deltaY, bounceAxis);
+        if (boundaryEdge && event.pointerType !== 'mouse') armBoundarySearchHold(event.pointerId, boundaryEdge);
+        else clearBoundarySearchHold();
       }
 
       event.preventDefault();
@@ -289,6 +378,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drawerGesture = drawerSwipe.current;
+    if (drawerGesture?.pointerId === event.pointerId) {
+      drawerSwipe.current = undefined;
+      if (drawerGesture.triggered) {
+        event.preventDefault();
+        return;
+      }
+    }
     const hold = cellHold.current;
     if (hold?.pointerId === event.pointerId) {
       if (hold.timer) window.clearTimeout(hold.timer);
@@ -306,6 +403,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       }
     }
     if (!pointers.current.has(event.pointerId)) return;
+    if (boundarySearchHold.current?.pointerId === event.pointerId) clearBoundarySearchHold();
     const viewport = event.currentTarget;
     const moved = pointerMoved.current;
     pointers.current.delete(event.pointerId);
@@ -344,6 +442,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
     if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
+    if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     momentumScroll.stop();
   }, [momentumScroll.stop]);
 

@@ -1585,4 +1585,48 @@ describe('WorkspacePage', () => {
       window.cancelAnimationFrame = previousCancelAnimationFrame;
     }
   });
+
+  it('opens the drawer from a rightward swipe started in the left half of the first column', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport')!;
+    const firstColumn = document.querySelector('[data-row-id="row-1"]')! as HTMLElement;
+    firstColumn.getBoundingClientRect = () => ({ top: 0, bottom: 80, left: 0, right: 100, width: 100, height: 80, x: 0, y: 0, toJSON: () => ({}) });
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 31 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(firstColumn, 'pointerdown', 20, 40);
+    dispatchPointer(viewport, 'pointermove', 70, 40);
+    expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
+    dispatchPointer(viewport, 'pointerup', 70, 40);
+  });
+
+  it('opens search after holding a vertical boundary bounce for half a second', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const cell = document.querySelector('[data-cell-id="row-1:column-text"]')!;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 800 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 32 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(cell, 'pointerdown', 120, 100);
+    dispatchPointer(viewport, 'pointermove', 120, 220);
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+    expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toBeInTheDocument();
+    dispatchPointer(viewport, 'pointerup', 120, 220);
+  });
 });

@@ -342,12 +342,19 @@ const WorkspacePage = () => {
     setLocalMinTextScale(low);
   }, [columnTextWidths, viewportWidth]);
 
+  const openDrawerFromGesture = useCallback(() => setDrawerOpen(true), []);
+  const openSearchFromGesture = useCallback(() => {
+    setSearchOpen(true);
+    setEditBarOpen(false);
+    setTableActionsOpen(false);
+  }, []);
+
   const {
     textScale, panning, tableReorderVisual, ignoreNextTableClick,
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onOpenDrawer: openDrawerFromGesture, onOpenSearch: openSearchFromGesture, searchOpen });
 
   const {
     importTableInputRef, importWorkspaceInputRef, importTableParentId,
