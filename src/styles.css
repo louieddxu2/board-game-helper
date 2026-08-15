@@ -405,8 +405,9 @@ footer a { color: inherit; }
 .workspace-number-editor[data-mode="add"] .workspace-number-operation-add, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-subtract { grid-row: 2; }
 .workspace-number-editor[data-mode="add"] .workspace-number-operation-subtract, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-add { grid-row: 3; }
 .workspace-number-editor[data-mode="add"] .workspace-number-operation.is-selected, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation.is-selected { opacity: 1; }
-.workspace-number-editor[data-mode="step"] { grid-template-columns: 42px minmax(0, 12ch) 42px; min-height: 78px; padding-inline: 0; }
-.workspace-number-editor[data-mode="step"] .workspace-number-operation { width: 42px; min-height: 42px; border-radius: 9px; font-size: 26px; }
+.workspace-number-editor[data-mode="step"] { grid-template-columns: 50px minmax(0, 10ch) 50px; min-height: 78px; padding-inline: 0; }
+.workspace-number-editor[data-mode="step"] .workspace-number-operation { width: 48px; min-height: 46px; border-radius: 9px; font-size: 26px; }
+.workspace-number-editor[data-mode="step"] .workspace-value-input { text-align: center; }
 .workspace-number-editor[data-mode="step"] .workspace-number-operation-subtract { grid-column: 1; grid-row: 1; }
 .workspace-number-editor[data-mode="step"] .workspace-number-input-shell { grid-column: 2; grid-row: 1; }
 .workspace-number-editor[data-mode="step"] .workspace-number-operation-add { grid-column: 3; grid-row: 1; }

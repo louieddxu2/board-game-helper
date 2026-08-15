@@ -178,4 +178,16 @@ describe('workspace browser policies', () => {
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
+
+  it('centers stepper numbers and reserves wider controls for three-digit values', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const stepRule = styles.match(/\.workspace-number-editor\[data-mode="step"\]\s*\{([^}]*)\}/)?.[1];
+    const stepOperationRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
+    const stepInputRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+
+    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(0, 10ch\) 50px/);
+    expect(stepOperationRule).toMatch(/width:\s*48px/);
+    expect(stepOperationRule).toMatch(/min-height:\s*46px/);
+    expect(stepInputRule).toMatch(/text-align:\s*center/);
+  });
 });
