@@ -6,6 +6,7 @@ import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTa
 import { useTableZoom } from './useTableZoom';
 
 export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
+const TABLE_BOUNDARY_SCROLL_TOLERANCE = 2;
 
 interface UseTableGesturesProps {
   table: WorkspaceTable | undefined;
@@ -23,8 +24,8 @@ interface UseTableGesturesProps {
 
 export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
   if (axis !== 'y' || maxTop <= 0) return undefined;
-  if (startScrollTop <= 0 && targetScrollTop < 0 && deltaY > 0) return 'top';
-  if (startScrollTop >= maxTop && targetScrollTop > maxTop && deltaY < 0) return 'bottom';
+  if (startScrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop < 0 && deltaY > 0) return 'top';
+  if (startScrollTop >= maxTop - TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop > maxTop && deltaY < 0) return 'bottom';
   return undefined;
 };
 
@@ -220,8 +221,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     panMetrics.current = undefined;
     if (pointers.current.size === 0 && event.pointerType !== 'mouse' && onOpenDrawer) {
       const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
-      const firstColumnRect = firstColumn?.getBoundingClientRect();
-      drawerSwipe.current = firstColumnRect && event.clientX <= firstColumnRect.left + firstColumnRect.width / 2
+      drawerSwipe.current = firstColumn
         ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, triggered: false }
         : undefined;
     } else if (pointers.current.size > 0) {
@@ -368,7 +368,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
           resetTableBounce(table);
         }
 
-        const boundaryEdge = getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, maxTop, deltaY, bounceAxis);
+        const viewportMaxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+        const boundaryMaxTop = viewportMaxTop > 0 ? viewportMaxTop : maxTop;
+        const boundaryEdge = getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, boundaryMaxTop, deltaY, bounceAxis);
         if (boundaryEdge && event.pointerType !== 'mouse') armBoundarySearchHold(event.pointerId, boundaryEdge);
         else clearBoundarySearchHold();
       }
