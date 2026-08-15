@@ -141,7 +141,7 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
 
   const commit = () => column.inputType === 'datetime' && !dateDirty ? onDismiss?.() : onSave(draft);
   const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
-  return <WorkspaceModal title={column.name} onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     {column.inputType === 'datetime'
       ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onCurrent={(next) => onSave(next)} onClear={() => onSave('')} />
       : column.inputType === 'number'
@@ -242,7 +242,7 @@ export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: W
   const [url, setUrl] = useState(initial.url);
   const [label, setLabel] = useState(initial.label);
   const commit = () => onSave(url.trim() || label.trim() ? { url: url.trim(), label: label.trim() } : null);
-  return <WorkspaceModal title={column.name} onClose={commit} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={commit} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     <div className="workspace-link-fields">
       <label className="workspace-form-field">連結<input autoFocus type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
       <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
@@ -310,7 +310,7 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
   const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : state.mode === 'row' ? '物件名稱' : state.mode === 'axis' ? '物件軸名稱' : '名稱';
   const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : state.mode === 'row' ? '編輯物件名稱' : state.mode === 'axis' ? '編輯物件軸' : '重新命名';
   const finish = () => { const value = name.trim(); if (value) onSubmit(value); else onClose(); };
-  return <WorkspaceModal title={title} onClose={finish} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  return <WorkspaceModal title={title} dialogKind="editor" onClose={finish} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
     <label className="workspace-form-field">{label}{isMultiline
       ? <AutoGrowTextarea autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(); } }} />
       : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finish(); } }} />}</label>
@@ -383,7 +383,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     }
   };
 
-  return <WorkspaceModal title={column.name} onClose={finish} className="workspace-selection-dialog">
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={finish} className="workspace-selection-dialog">
     {isDynamic && <div className="workspace-selection-head">
       <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
     </div>}
@@ -405,7 +405,7 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
     </div>}
   </WorkspaceModal>;
 };
-export const ColumnVisibilityDialog = ({ columns, onClose, onToggle }: { columns: WorkspaceColumn[]; onClose(): void; onToggle(columnId: string): void }) => <WorkspaceModal title="欄位顯示設定" onClose={onClose} className="workspace-column-visibility-dialog">
+export const ColumnVisibilityDialog = ({ columns, onClose, onToggle }: { columns: WorkspaceColumn[]; onClose(): void; onToggle(columnId: string): void }) => <WorkspaceModal title="欄位顯示設定" dialogKind="editor" onClose={onClose} className="workspace-column-visibility-dialog">
   <div className="workspace-column-visibility-list" role="group" aria-label="欄位顯示設定">
     {columns.map((column) => <div className={`workspace-column-visibility-row ${column.hidden ? 'is-hidden' : ''}`} key={column.id}>
       <span className="workspace-column-visibility-name">{column.name || '未命名屬性'}</span>
@@ -459,7 +459,7 @@ const HiddenFieldEditor = ({ column, value, options, onChange }: { column: Works
 export const HiddenFieldsDialog = ({ title, row, columns, optionsByColumn, onSave }: { title: string; row: WorkspaceRow; columns: WorkspaceColumn[]; optionsByColumn: Record<string, string[]>; onSave(values: Record<string, WorkspaceCellValue>): void }) => {
   const [draft, setDraft] = useState<Record<string, WorkspaceCellValue>>(() => Object.fromEntries(columns.map((column) => [column.id, row.values[column.id] ?? null])));
   const updateValue = (columnId: string, value: WorkspaceCellValue) => setDraft((current) => ({ ...current, [columnId]: value }));
-  return <WorkspaceModal title={title || '物件'} onClose={() => onSave(draft)} className="workspace-hidden-fields-dialog">
+  return <WorkspaceModal title={title || '物件'} dialogKind="editor" onClose={() => onSave(draft)} className="workspace-hidden-fields-dialog">
     <div className="workspace-hidden-fields-list">
       {columns.map((column) => <div className="workspace-hidden-field" key={column.id}>
         <span className="workspace-hidden-field-label">{column.name || '未命名屬性'}</span>
@@ -653,7 +653,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
     overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode,
   }));
   const currentOverflowMode = draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap');
-  return <WorkspaceModal title="屬性設定" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
+  return <WorkspaceModal title="屬性設定" dialogKind="editor" onClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
     <div className="workspace-column-config">
       <div className="workspace-column-config-rail">
         <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>

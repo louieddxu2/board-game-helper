@@ -59,7 +59,7 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
     onClose({ total: numericTotal, values: expanded ? values : undefined });
   };
   const validDistribution = total.trim() !== '' && values !== undefined;
-  return <WorkspaceModal title={column.name} onClose={finish} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`}>
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={finish} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`}>
     <form className="workspace-bulk-number-form" onSubmit={(event) => { event.preventDefault(); finish(); }}>
       <input autoFocus aria-label={`${column.name}批次輸入`} className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={total} onChange={(event) => setTotal(event.target.value)} />
       <button type="button" className="workspace-ratio-disclosure" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><WorkspaceIcon name="chevron" size={16} />比例分配</button>

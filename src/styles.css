@@ -273,6 +273,7 @@ footer a { color: inherit; }
 .workspace-dialog-delete { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 2px solid var(--white); border-radius: 50%; background: #a52f23; color: var(--white); box-shadow: 0 3px 10px rgba(95,20,15,.3); cursor: pointer; }
 .workspace-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 19px 20px 12px; }
 .workspace-dialog-heading h2 { margin: 0; color: var(--green); font-size: 20px; }
+.workspace-dialog-editor .workspace-dialog-heading { display: none; }
 .workspace-icon-button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
 .workspace-icon-button:hover { background: var(--cream); color: var(--orange); }
 .workspace-dialog-content { display: grid; min-height: 0; gap: 15px; overflow: auto; padding: 8px 20px 20px; }
@@ -371,7 +372,6 @@ footer a { color: inherit; }
 .workspace-name-dialog-overlay { background: transparent; }
 .workspace-cell-name-dialog { width: min(360px, 50vw); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.84); }
 .workspace-cell-name-dialog-overlay { background: transparent; }
-.workspace-cell-name-dialog .workspace-dialog-heading { display: none; }
 .workspace-cell-name-dialog.has-leading-action .workspace-dialog-content { padding-top: 16px; }
 .workspace-cell-name-dialog .workspace-dialog-content { padding: 16px 16px 8px; }
 .workspace-cell-name-dialog .workspace-form-field { font-size: 0; }
@@ -379,7 +379,6 @@ footer a { color: inherit; }
 .workspace-cell-name-dialog .workspace-dialog-actions { padding-top: 8px; }
 .workspace-value-dialog { width: min(360px, 50vw); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
 .workspace-value-dialog-overlay { place-items: center; align-content: center; background: transparent; }
-.workspace-value-dialog .workspace-dialog-heading { display: none; }
 .workspace-value-dialog .workspace-dialog-content { display: block; overflow: visible; padding: 0; }
 .workspace-value-dialog .workspace-value-input { width: 100%; min-height: 46px; padding: 10px 12px; border: 0; border-radius: 9px; outline: 0; background: transparent; color: var(--ink); font-size: 28px; font-weight: 700; line-height: 1.25; text-align: center; }
 .workspace-value-dialog .workspace-value-textarea { min-height: 46px; max-height: min(42dvh, 280px); overflow: auto; resize: none; white-space: pre-wrap; }
@@ -416,7 +415,6 @@ footer a { color: inherit; }
 .workspace-number-fraction { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-number-result > .workspace-number-aligned-value { min-width: 0; }
 .workspace-datetime-dialog { width: min(340px, 75vw); background: rgba(236,230,216,.94); backdrop-filter: none; }
-.workspace-datetime-dialog .workspace-dialog-heading { display: none; }
 .workspace-datetime-dialog .workspace-dialog-content { display: block; overflow: visible; padding: 6px 12px 14px; }
 .workspace-datetime-editor { display: grid; gap: 8px; width: 100%; color: var(--ink); user-select: none; -webkit-user-select: none; }
 .workspace-datetime-wheel-row { display: flex; align-items: stretch; justify-content: center; gap: 4px; }
@@ -437,13 +435,11 @@ footer a { color: inherit; }
 .workspace-datetime-current:hover { background: rgba(47,111,94,.1); }
 .workspace-link-dialog { align-self: center; justify-self: center; width: min(380px, 80vw); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
 .workspace-link-dialog-overlay { place-items: center; align-content: center; background: transparent; }
-.workspace-link-dialog .workspace-dialog-heading { display: none; }
 .workspace-link-dialog .workspace-dialog-content { padding: 16px; }
 .workspace-link-fields { display: grid; gap: 12px; }
 .workspace-link-fields input { background: rgba(255,253,248,.68); font-size: 16px; }
 .workspace-selection-dialog { width: min(430px, 50vw); height: auto; max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border: 1px solid rgba(22,53,47,.28); border-radius: 12px; background: rgba(255,253,248,.72); box-shadow: 0 12px 30px rgba(23,47,40,.2); }
 .workspace-selection-dialog-overlay { background: transparent; }
-.workspace-selection-dialog .workspace-dialog-heading { display: none; }
 .workspace-selection-dialog .workspace-dialog-content { display: flex; flex-direction: column; gap: 0; min-height: 0; overflow: hidden; padding: 0; }
 .workspace-selection-head { flex: 0 0 auto; border-bottom: 1px solid rgba(22,53,47,.16); background: rgba(255,253,248,.34); }
 .workspace-selection-search { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 0; color: var(--green); }
@@ -497,7 +493,6 @@ footer a { color: inherit; }
 .workspace-option-add:hover { background: var(--cream); }
 .workspace-column-dialog-overlay { background: transparent; }
 .workspace-column-dialog { width: min(520px, calc(100vw - 28px)); max-height: min(62dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 28px)); overflow: visible; border: 2px solid var(--green); }
-.workspace-column-dialog .workspace-dialog-heading { display: none; }
 .workspace-column-dialog .workspace-dialog-content { flex: 1; overflow: hidden; padding: 0; border-radius: 8px; }
 .workspace-column-config { min-height: 0; display: grid; grid-template-columns: minmax(130px, .9fr) minmax(0, 1.5fr); overflow: hidden; }
 .workspace-column-config-rail { display: flex; flex-direction: column; gap: 18px; min-width: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--line); background: var(--cream); }

@@ -1,5 +1,29 @@
-import { describe, expect, it } from 'vitest';
-import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, matchesWorkspaceFilter, measureWorkspaceText, searchableWorkspaceCellValue, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
+import { createElement } from 'react';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { WorkspaceModal, calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, matchesWorkspaceFilter, measureWorkspaceText, searchableWorkspaceCellValue, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
+
+afterEach(() => cleanup());
+
+describe('workspace editor dialog contract', () => {
+  it('uses a shared editor variant with an accessible name but no visual heading requirement', () => {
+    render(createElement(WorkspaceModal, { title: '編輯內容', dialogKind: 'editor', onClose: () => undefined, children: createElement('input', { 'aria-label': '內容' }) }));
+
+    const dialog = screen.getByRole('dialog', { name: '編輯內容' });
+    expect(dialog).toHaveClass('workspace-dialog-editor');
+    expect(dialog.querySelector('.workspace-dialog-heading')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '編輯內容' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '內容' })).toBeInTheDocument();
+  });
+
+  it('keeps standard dialogs on the titled modal variant', () => {
+    render(createElement(WorkspaceModal, { title: '操作', onClose: () => undefined, children: createElement('p', null, '內容') }));
+
+    const dialog = screen.getByRole('dialog', { name: '操作' });
+    expect(dialog).not.toHaveClass('workspace-dialog-editor');
+    expect(dialog).toHaveAttribute('aria-labelledby', 'workspace-dialog-title');
+  });
+});
 
 describe('workspace text measurements', () => {
   it('uses only compact horizontal padding in width calculations', () => {

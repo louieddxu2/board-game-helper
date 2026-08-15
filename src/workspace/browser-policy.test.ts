@@ -82,6 +82,7 @@ describe('workspace browser policies', () => {
     const appbarTitleRule = styles.match(/\.workspace-appbar-title span\s*\{([^}]*)\}/)?.[1];
     const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
+    const editorHeadingRule = styles.match(/\.workspace-dialog-editor \.workspace-dialog-heading\s*\{([^}]*)\}/)?.[1];
     const selectionDialogRule = styles.match(/\.workspace-selection-dialog\s*\{([^}]*)\}/)?.[1];
     const selectionListContainerRule = styles.match(/\.workspace-selection-list\s*\{([^}]*)\}/)?.[1];
     const selectionFooterRule = styles.match(/\.workspace-selection-footer\s*\{([^}]*)\}/)?.[1];
@@ -109,6 +110,7 @@ describe('workspace browser policies', () => {
     const filterbarButtonRule = styles.match(/\.workspace-filterbar-button\s*\{([^}]*)\}/)?.[1];
     expect(dialogRule).toMatch(/font-size:\s*16px/);
     expect(dialogRule).toMatch(/--workspace-text-scale:\s*1/);
+    expect(editorHeadingRule).toMatch(/display:\s*none/);
     expect(selectionDialogRule).toMatch(/background:\s*rgba\(255,253,248,\.72\)/);
     expect(selectionDialogRule).toMatch(/width:\s*min\(430px,\s*50vw\)/);
     expect(selectionDialogRule).toMatch(/height:\s*auto/);
@@ -119,8 +121,6 @@ describe('workspace browser policies', () => {
     expect(selectionFooterRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionFooterRule).toMatch(/border-top:/);
     expect(styles).toMatch(/\.workspace-datetime-dialog\s*\{[^}]*width:\s*min\(340px,\s*75vw\)/);
-    const dateHeadingRule = styles.match(/\.workspace-datetime-dialog \.workspace-dialog-heading\s*\{([^}]*)\}/)?.[1];
-    expect(dateHeadingRule).toMatch(/display:\s*none/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);

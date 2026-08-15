@@ -241,7 +241,7 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHT
   useLayoutEffect(() => { resize(); }, [props.value, resize]);
   return <textarea {...props} ref={textareaRef} rows={1} onInput={(event) => { resize(); props.onInput?.(event); }} />;
 });
-export const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string }) => {
+export const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '', dialogKind = 'standard' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string; dialogKind?: 'standard' | 'editor' }) => {
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -273,7 +273,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
   } as React.CSSProperties : undefined;
   const overlayClass = className.trim().split(/\s+/)[0];
   return <div className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-    <section className={`workspace-dialog ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-labelledby="workspace-dialog-title">
+    <section className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? 'workspace-dialog-title' : undefined}>
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
       <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={onClose} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
       <div className="workspace-dialog-content">{children}</div>

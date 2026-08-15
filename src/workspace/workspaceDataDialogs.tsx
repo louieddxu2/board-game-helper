@@ -22,7 +22,7 @@ export const WorkspacePasteDialog = ({ targetLabel, onClose, onApply }: {
   const [text, setText] = useState('');
   const matrix = useMemo(() => parseWorkspaceClipboard(text), [text]);
   const width = Math.max(0, ...matrix.map((row) => row.length));
-  return <WorkspaceModal title="貼上多格" onClose={onClose} className="workspace-paste-dialog" actions={<button type="button" className="workspace-dialog-button primary" disabled={!matrix.length || !width} onClick={() => onApply(matrix)}><WorkspaceIcon name="clipboard" size={18} />貼上 {matrix.length} × {width}</button>}>
+  return <WorkspaceModal title="貼上多格" dialogKind="editor" onClose={onClose} className="workspace-paste-dialog" actions={<button type="button" className="workspace-dialog-button primary" disabled={!matrix.length || !width} onClick={() => onApply(matrix)}><WorkspaceIcon name="clipboard" size={18} />貼上 {matrix.length} × {width}</button>}>
     <div className="workspace-import-summary"><strong>起點：{targetLabel}</strong><span>超出範圍時會自動新增物件或屬性</span></div>
     <textarea autoFocus aria-label="貼上試算表內容" placeholder="在這裡貼上試算表內容" value={text} onChange={(event) => setText(event.target.value)} />
   </WorkspaceModal>;
@@ -65,7 +65,7 @@ export const WorkspaceTableImportPreviewDialog = ({ table, source, onClose, onIm
 }) => {
   const [draft, setDraft] = useState(table);
   const columns = [getRowHeaderColumn(draft), ...draft.columns];
-  return <WorkspaceModal title="匯入預覽" onClose={onClose} className="workspace-import-preview-dialog" actions={<button type="button" className="workspace-dialog-button primary" onClick={() => onImport(draft)}><WorkspaceIcon name="upload" size={18} />匯入表格</button>}>
+  return <WorkspaceModal title="匯入預覽" dialogKind="editor" onClose={onClose} className="workspace-import-preview-dialog" actions={<button type="button" className="workspace-dialog-button primary" onClick={() => onImport(draft)}><WorkspaceIcon name="upload" size={18} />匯入表格</button>}>
     <div className="workspace-import-summary"><strong>{draft.name}</strong><span>{sourceLabels[source]}</span><span>{draft.rows.length} 個物件 · {draft.columns.length} 個屬性</span></div>
     <div className="workspace-import-column-list">
       {columns.map((column, index) => <div className="workspace-import-column" key={column.id}>
