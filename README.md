@@ -27,7 +27,9 @@ npm run build
 
 正式環境使用獨立的 `wrangler.production.jsonc`，不會覆用本機 D1。
 
-專案已固定 Cloudflare 登入流程：先檢查既有 Wrangler 登入狀態；只有在狀態失效時，才使用 `--no-use-keyring --browser=false` 產生一次性 OAuth 網址，並自動交給 Windows 預設瀏覽器開啟，等待本機回呼完成。這是目前 Windows 環境驗證成功的流程；不要改回 `--use-keyring` 或直接重複建立瀏覽器流程。
+專案已固定 Cloudflare 登入流程：先檢查既有 Wrangler 登入狀態；只有在狀態失效時，才使用 `--no-use-keyring --browser=false` 產生一次性 OAuth 網址，並交給 Windows 預設瀏覽器開啟，等待同一個 Wrangler 程序的本機回呼完成。這是目前 Windows 環境驗證成功的流程；不要改回 `--use-keyring`、重用舊網址或另外建立第二個登入程序。
+
+在 Codex 或其他受限執行環境中，Cloudflare 登入與部署必須使用可連外的 elevated PTY；否則本機回呼雖可能成功，最後向 `https://dash.cloudflare.com/oauth2/token` 交換 token 時仍會因 `EACCES` 的 `fetch failed` 失敗。若自動啟動瀏覽器被阻擋，需用 Windows 預設瀏覽器開啟同一輪流程剛產生的網址，不能改用內嵌瀏覽器。
 
 ```powershell
 npm run cloudflare:login
