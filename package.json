@@ -12,7 +12,7 @@
     "typecheck": "npm run check:protected-copy && npm run check:d1-boundary && tsc --noEmit",
     "check:protected-copy": "node scripts/check-protected-copy.mjs",
     "check:d1-boundary": "node scripts/check-d1-boundary.mjs",
-    "cloudflare:login": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler login",
+    "cloudflare:login": "node scripts/cloudflare-login.mjs",
     "cloudflare:whoami": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler whoami",
     "db:migrate:local": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-local --local",
     "db:migrate:remote": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-prod --remote --config wrangler.production.jsonc",

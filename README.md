@@ -27,6 +27,8 @@ npm run build
 
 正式環境使用獨立的 `wrangler.production.jsonc`，不會覆用本機 D1。
 
+專案已固定 Cloudflare 登入流程：先檢查既有 Wrangler 登入狀態；只有在狀態失效時，才使用 `--no-use-keyring --browser=false` 產生一次性 OAuth 網址，並自動交給 Windows 預設瀏覽器開啟，等待本機回呼完成。這是目前 Windows 環境驗證成功的流程；不要改回 `--use-keyring` 或直接重複建立瀏覽器流程。
+
 ```powershell
 npm run cloudflare:login
 npx wrangler d1 create board-game-rules-prod --config wrangler.production.jsonc
@@ -39,6 +41,8 @@ npm run db:migrate:remote
 npm run import:legacy -- --apply --remote --confirm-remote
 npm run deploy
 ```
+
+`npm run deploy` 會在檢查遠端 Migration 前自動確認 Cloudflare 登入狀態，因此平常發布不需要手動再次授權。若使用 CI，請改用 `CLOUDFLARE_API_TOKEN`，不會嘗試開啟瀏覽器。
 
 首次部署取得 `workers.dev` 或自訂網域後，把 `APP_ORIGIN` 改成正式來源並重新部署。接著在 Google Cloud 建立 Web Client ID，將正式來源加入 Authorized JavaScript origins，最後把 Client ID 設為 Worker 的 `GOOGLE_CLIENT_ID` 變數。
 

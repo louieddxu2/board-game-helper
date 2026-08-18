@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import readline from 'readline';
+import { ensureCloudflareAuth } from './cloudflare-login.mjs';
 
 const run = (command, options = {}) => {
   try {
@@ -43,6 +44,7 @@ const askQuestion = (query) => {
 };
 
 const main = async () => {
+  await ensureCloudflareAuth();
   console.log('🔍 正在檢查遠端 Cloudflare D1 資料庫的 Migration 狀態...');
   const pending = checkPendingMigrations();
   const isCI = process.env.CI === 'true' || !process.stdin.isTTY;
