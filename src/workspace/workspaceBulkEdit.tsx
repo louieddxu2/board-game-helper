@@ -14,7 +14,7 @@ export const WorkspaceBulkEditToolbar = ({ column, count, onCancel, onOpenEditor
     <span className="workspace-bulk-count">已選 {count} 格</span>
   </div>
   <div className="workspace-bulk-actions">
-    <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`設定 ${column.name} 的批次內容`}><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">設定內容</span></button>
+    <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`開啟 ${column.name} 批次輸入`}><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">批次輸入</span></button>
   </div>
 </div>;
 

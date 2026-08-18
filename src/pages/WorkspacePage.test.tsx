@@ -72,7 +72,10 @@ describe('WorkspacePage', () => {
     const first = screen.getByRole('cell', { name: '花火，名稱：空白' });
     const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
     await longPress(first);
-    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+    const bulkToolbar = screen.getByRole('toolbar', { name: '批次編輯 名稱' });
+    expect(bulkToolbar).toHaveTextContent('已選 1 格');
+    expect(within(bulkToolbar).getByText('批次輸入')).toBeInTheDocument();
+    expect(within(bulkToolbar).queryByText('設定內容')).not.toBeInTheDocument();
     expect(document.querySelector('.workspace-toolbar-layer')).toHaveStyle({ '--workspace-toolbar-row-count': '1' });
     expect(screen.queryByRole('button', { name: '輸入至已選方格' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
@@ -81,13 +84,13 @@ describe('WorkspacePage', () => {
     await user.click(second);
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
 
-    await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 名稱 批次輸入' }));
     await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
     expect(screen.getByRole('button', { name: '確認' })).toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 名稱 批次輸入' }));
     await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
     await user.click(screen.getByRole('button', { name: '確認' }));
 
@@ -165,7 +168,7 @@ describe('WorkspacePage', () => {
     const second = screen.getByRole('cell', { name: '物件 2，數量：空白' });
     await longPress(first);
     await user.click(second);
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
@@ -180,7 +183,7 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '套用預覽' })).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(first).toHaveTextContent('2');
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     const reopenedTotal = screen.getByRole('spinbutton', { name: '數量批次輸入' });
     await user.clear(reopenedTotal);
     await user.type(reopenedTotal, '10');
@@ -203,7 +206,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
 
     expect(screen.queryByRole('button', { name: '比例分配' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     const dialog = screen.getByRole('dialog');
     const disclosure = within(dialog).getByRole('button', { name: '比例分配' });
     expect(disclosure).toHaveAttribute('aria-expanded', 'false');
@@ -227,7 +230,7 @@ describe('WorkspacePage', () => {
     await longPress(screen.getByRole('cell', { name: '花火，數量：2' }));
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
 
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     const sharedInput = screen.getByRole('spinbutton', { name: '數量批次輸入' });
     await user.clear(sharedInput);
     await user.type(sharedInput, '12');
@@ -249,7 +252,7 @@ describe('WorkspacePage', () => {
     const second = screen.getByRole('cell', { name: '物件 2，數量：空白' });
     await longPress(first);
     await user.click(second);
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
