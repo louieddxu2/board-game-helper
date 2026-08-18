@@ -27,6 +27,7 @@ export interface Env {
   APP_ORIGIN?: string;
   TRUSTED_APP_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
+  GOOGLE_DRIVE_CLIENT_ID?: string;
   GOOGLE_CLIENT_IDS?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
   EMAIL_HASH_SECRET?: string;

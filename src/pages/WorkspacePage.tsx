@@ -85,7 +85,7 @@ const WorkspacePage = () => {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
   const [lastSavedAt, setLastSavedAt] = useState<number>();
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
-  const [googleClientId, setGoogleClientId] = useState<string | null | undefined>(undefined);
+  const [googleDriveClientId, setGoogleDriveClientId] = useState<string | null | undefined>(undefined);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const filterbarRef = useRef<HTMLDivElement>(null);
@@ -94,21 +94,22 @@ const WorkspacePage = () => {
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
   const saveRevisionRef = useRef(0);
-  const googleClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
+  const googleDriveClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
 
-  const loadGoogleClientId = useCallback(async () => {
-    if (googleClientId !== undefined) return googleClientId;
-    if (!googleClientIdPromiseRef.current) {
-      googleClientIdPromiseRef.current = api.session().then((session) => {
-        setGoogleClientId(session.googleClientId);
-        return session.googleClientId;
+  const loadGoogleDriveClientId = useCallback(async () => {
+    if (googleDriveClientId !== undefined) return googleDriveClientId;
+    if (!googleDriveClientIdPromiseRef.current) {
+      googleDriveClientIdPromiseRef.current = api.session().then((session) => {
+        const clientId = session.googleDriveClientId ?? null;
+        setGoogleDriveClientId(clientId);
+        return clientId;
       }).catch(() => {
-        setGoogleClientId(null);
+        setGoogleDriveClientId(null);
         return null;
-      }).finally(() => { googleClientIdPromiseRef.current = undefined; });
+      }).finally(() => { googleDriveClientIdPromiseRef.current = undefined; });
     }
-    return googleClientIdPromiseRef.current;
-  }, [googleClientId]);
+    return googleDriveClientIdPromiseRef.current;
+  }, [googleDriveClientId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -247,7 +248,7 @@ const WorkspacePage = () => {
 
   const driveBackup = useWorkspaceGoogleDriveBackup({
     data,
-    loadGoogleClientId,
+    loadGoogleClientId: loadGoogleDriveClientId,
     onRestored: (next) => setWorkspaceImport(next),
     setNotice,
   });

@@ -13,11 +13,11 @@
 目前依照 `C:\architecture-kits\kits\google-drive-single-file-backup` 採用瀏覽器端 Google Identity Services token flow：
 
 1. 使用者只在 workspace 的目錄彈窗中按下「Google Drive 備份」。
-2. 前端以既有的 Google OAuth Web Client ID，向 Google 申請 `drive.file` access token。
+2. 前端以獨立的 Google Drive OAuth Web Client ID，向 Google 申請 `drive.file` access token；網站登入使用的 Client ID 不會被替換。
 3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
 4. 前端直接呼叫 Drive v3，建立／更新一個固定備份檔，或下載該檔案後交給既有 XLSX 匯入預覽。
 
-這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
+這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
 
 若未來需要無人值守的排程備份、多裝置背景同步，才另行評估 authorization code flow、refresh token 加密保存與 Worker 端 API；那會是不同的安全與資料責任範圍，不屬於目前第一版。
 

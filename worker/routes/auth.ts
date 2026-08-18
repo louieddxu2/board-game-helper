@@ -23,6 +23,7 @@ const nicknameSchema = z.object({
 authRoutes.get('/api/session', (c) => c.json({
   user: c.get('user') ?? null,
   googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
+  googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null,
   localDevLogin: ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname),
 }));
 
