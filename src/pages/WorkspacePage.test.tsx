@@ -74,6 +74,7 @@ describe('WorkspacePage', () => {
     await longPress(first);
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
     expect(document.querySelector('.workspace-toolbar-layer')).toHaveStyle({ '--workspace-toolbar-row-count': '1' });
+    expect(screen.queryByRole('button', { name: '輸入至已選方格' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
     expect(screen.getByRole('status')).toHaveTextContent('只能選取同一屬性');
@@ -82,8 +83,13 @@ describe('WorkspacePage', () => {
 
     await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
     await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
+    expect(screen.getByRole('button', { name: '確認' })).toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-    await user.click(screen.getByRole('button', { name: '輸入至已選方格' }));
+    expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '設定 名稱 的批次內容' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱批次輸入' }), '共同內容');
+    await user.click(screen.getByRole('button', { name: '確認' }));
 
     expect(screen.getAllByText('共同內容')).toHaveLength(2);
     expect(screen.queryByRole('toolbar', { name: '批次編輯 名稱' })).not.toBeInTheDocument();
@@ -174,7 +180,15 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('button', { name: '套用預覽' })).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(first).toHaveTextContent('2');
-    await user.click(screen.getByRole('button', { name: '輸入至已選方格' }));
+    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
+    const reopenedTotal = screen.getByRole('spinbutton', { name: '數量批次輸入' });
+    await user.clear(reopenedTotal);
+    await user.type(reopenedTotal, '10');
+    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    const reopenedRatio = screen.getByRole('spinbutton', { name: '物件 2比例' });
+    await user.clear(reopenedRatio);
+    await user.type(reopenedRatio, '3');
+    await user.click(screen.getByRole('button', { name: '確認' }));
     expect(screen.getByRole('cell', { name: '花火，數量：3' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
   });
@@ -221,13 +235,11 @@ describe('WorkspacePage', () => {
     expect(sharedInput).toHaveValue(12);
     await user.clear(sharedInput);
     await user.type(sharedInput, '20');
-    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-
-    await user.click(screen.getByRole('button', { name: '設定 數量 的批次內容' }));
-    expect(screen.getByRole('spinbutton', { name: '數量批次輸入' })).toHaveValue(20);
+    expect(sharedInput).toHaveValue(20);
+    expect(screen.getByRole('button', { name: '確認' })).toBeInTheDocument();
   });
 
-  it('invalidates a staged ratio instead of clearing cells when the selection changes', async () => {
+  it('does not apply a batch value when its dialog is dismissed', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
@@ -242,12 +254,10 @@ describe('WorkspacePage', () => {
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
     await user.click(screen.getByRole('button', { name: '比例分配' }));
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
-    expect(screen.getByRole('button', { name: '輸入至已選方格' })).toBeEnabled();
-
-    await user.click(second);
-    expect(screen.getByRole('button', { name: '輸入至已選方格' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('請重新設定比例');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: '批次編輯 數量' })).toBeInTheDocument();
     expect(first).toHaveTextContent('2');
+    expect(second).toHaveAccessibleName('物件 2，數量：空白');
   });
 
   it('uses native text and number controls when cells enter edit mode', async () => {
@@ -800,7 +810,10 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('button', { name: '編輯' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '新增屬性' }));
-    expect(screen.getByRole('status')).toHaveTextContent('已新增屬性');
+    const toast = screen.getByRole('status');
+    expect(toast).toHaveTextContent('已新增屬性');
+    expect(toast).toHaveClass('workspace-appbar-notice');
+    expect(toast.closest('.workspace-appbar')).not.toBeNull();
     expect(screen.getByRole('columnheader', { name: /屬性 5/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '新增物件' }));

@@ -96,7 +96,7 @@ footer a { color: inherit; }
 /* Local-first dynamic tables: Android-like full-screen workspace */
 .workspace-page { position: relative; height: 100dvh; min-height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--paper); color: var(--ink); }
 .workspace-loading { display: grid; place-items: center; color: var(--muted); }
-.workspace-appbar { position: relative; z-index: 12; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 4px 18px; border-bottom: 1px solid var(--line); background: var(--white); }
+.workspace-appbar { position: relative; z-index: 12; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 4px 18px; border-bottom: 1px solid var(--line); background: var(--white); overflow: visible; }
 .workspace-appbar-leading, .workspace-appbar-actions { display: flex; align-items: center; gap: 9px; }
 .workspace-appbar-leading { flex: 1 1 auto; min-width: 0; }
 .workspace-appbar-button { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
@@ -161,7 +161,8 @@ footer a { color: inherit; }
 .workspace-toolbar-layer { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; --workspace-toolbar-row-height: 52px; --workspace-toolbar-row-count: 0; }
 .workspace-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .workspace-main { position: relative; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; padding: 0; }
-.workspace-notice { position: absolute; top: 88px; left: 50%; z-index: 120; max-width: min(360px, calc(100vw - 36px)); padding: 10px 16px; border-radius: 999px; background: var(--green); color: var(--white); box-shadow: 0 5px 18px rgba(23,47,40,.24); font-size: 13px; transform: translateX(-50%); animation: workspace-toast-in 160ms ease-out; }
+.workspace-notice { z-index: 120; max-width: min(360px, calc(100vw - 36px)); padding: 10px 16px; border-radius: 999px; background: var(--green); color: var(--white); box-shadow: 0 5px 18px rgba(23,47,40,.24); font-size: 13px; }
+.workspace-appbar-notice { position: absolute; top: 50%; left: 50%; z-index: 20; max-width: min(360px, calc(100% - 24px)); pointer-events: none; transform: translate(-50%, -50%); animation: workspace-appbar-toast-in 160ms ease-out; }
 .workspace-page, .workspace-page * { scrollbar-width: none; }
 .workspace-page::-webkit-scrollbar, .workspace-page *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table-viewport { flex: 1; min-height: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: var(--paper); touch-action: none; cursor: grab; scrollbar-width: none; }
@@ -563,7 +564,7 @@ footer a { color: inherit; }
 .workspace-import-table-names span { padding: 3px 7px; border-radius: 999px; background: rgba(47,111,94,.08); color: var(--green); font-size: 12px; }
 .workspace-dialog-button:has(svg) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 @keyframes workspace-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-@keyframes workspace-toast-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes workspace-appbar-toast-in { from { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); } to { opacity: 1; transform: translate(-50%, -50%); } }
 
 @media (max-width: 820px) {
   .workspace-appbar { height: 56px; min-height: 56px; padding: 2px; }
@@ -588,7 +589,6 @@ footer a { color: inherit; }
   .workspace-paste-dialog textarea { min-height: 120px; }
   .workspace-cell-external { width: 28px; justify-content: center; padding: 3px; }
   .workspace-zoom-indicator { padding-right: 10px; }
-  .workspace-notice { top: 75px; right: 10px; }
   .workspace-dialog { align-self: center; width: min(460px, 80vw); max-height: min(calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border-radius: 12px; }
   .workspace-dialog.workspace-bulk-number-dialog.is-expanded { max-height: calc(var(--workspace-visual-viewport-height, 100dvh) - 16px); }
   .workspace-bulk-number-dialog.is-expanded .workspace-dialog-content { overflow: hidden; }

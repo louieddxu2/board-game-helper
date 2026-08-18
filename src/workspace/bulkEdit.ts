@@ -1,12 +1,7 @@
-import type { WorkspaceCellValue } from './types';
-
 export interface WorkspaceBulkSelection {
   tableId: string;
   columnId: string;
   rowIds: string[];
-  hasDraft: boolean;
-  sharedValue: WorkspaceCellValue;
-  distributedValues?: Record<string, number>;
 }
 
 export interface WorkspaceRatioInput {

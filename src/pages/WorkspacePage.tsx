@@ -51,9 +51,7 @@ const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string
   const selected = selection.rowIds.includes(rowId);
   const rowIds = selected ? selection.rowIds.filter((id) => id !== rowId) : [...selection.rowIds, rowId];
   if (rowIds.length === 0) return undefined;
-  return selection.distributedValues
-    ? { ...selection, rowIds, hasDraft: false, sharedValue: null, distributedValues: undefined }
-    : { ...selection, rowIds };
+  return { ...selection, rowIds };
 };
 
 const WorkspacePage = () => {
@@ -304,7 +302,6 @@ const WorkspacePage = () => {
         setNotice('批次編輯只能選取同一屬性的格子');
         return;
       }
-      if (bulkSelection.distributedValues) setNotice('選取已變更，請重新設定比例');
       setBulkSelection(toggleBulkSelectionRow(bulkSelection, rowId));
       return;
     }
@@ -314,7 +311,7 @@ const WorkspacePage = () => {
     setSearchOpen(false);
     setEditBarOpen(false);
     setTableActionsOpen(false);
-    setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId], hasDraft: false, sharedValue: null });
+    setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId] });
     setNotice('已進入批次選取');
   }, [bulkSelection, table, setSearchOpen]);
 
@@ -380,7 +377,6 @@ const WorkspacePage = () => {
       setNotice('批次編輯只能選取同一屬性的格子');
       return;
     }
-    if (bulkSelection.distributedValues) setNotice('選取已變更，請重新設定比例');
     setBulkSelection(toggleBulkSelectionRow(bulkSelection, row.id));
   }, [bulkSelection, openCell]);
 
@@ -389,19 +385,14 @@ const WorkspacePage = () => {
     setBulkEditorOpen(false);
   }, []);
 
-  const setBulkSharedValue = useCallback((value: WorkspaceCellValue, close = true) => {
-    setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: value, distributedValues: undefined } : current);
-    if (close) setBulkEditorOpen(false);
-  }, []);
-
-  const commitBulkSelection = useCallback(() => {
+  const commitBulkSelection = useCallback((draft: { sharedValue: WorkspaceCellValue; distributedValues?: Record<string, number> }) => {
     const currentData = dataRef.current;
-    if (!currentData || !table || !bulkSelection || !bulkColumn || !bulkSelection.hasDraft) return;
+    if (!currentData || !table || !bulkSelection || !bulkColumn) return;
     const selectedIds = new Set(bulkSelection.rowIds);
     const changes = table.rows.flatMap((row) => {
       if (!selectedIds.has(row.id)) return [];
       const before = row.values[bulkColumn.id] ?? null;
-      const after = bulkSelection.distributedValues?.[row.id] ?? bulkSelection.sharedValue;
+      const after = draft.distributedValues?.[row.id] ?? draft.sharedValue;
       return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ rowId: row.id, before, after }];
     });
     if (changes.length === 0) {
@@ -421,12 +412,7 @@ const WorkspacePage = () => {
   }, [bulkColumn, bulkSelection, closeBulkSelection, commit, table]);
 
   const bulkInitialValue = bulkRows[0] && bulkColumn ? bulkRows[0].values[bulkColumn.id] ?? null : null;
-  const bulkDraftValue = bulkSelection?.hasDraft ? bulkSelection.sharedValue : bulkInitialValue;
-  const bulkSummary = bulkSelection?.distributedValues
-    ? `比例分配：${displayWorkspaceCellValue(bulkSelection.sharedValue, 'number')}`
-    : bulkColumn && bulkSelection?.hasDraft
-      ? displayWorkspaceColumnValue(bulkSelection.sharedValue, bulkColumn)
-      : '';
+  const bulkDraftValue = bulkInitialValue;
 
   const pasteTarget = useMemo(() => {
     if (!table || !rowHeader || !table.rows.length) return undefined;
@@ -742,9 +728,10 @@ const WorkspacePage = () => {
         <button type="button" className={`workspace-appbar-button ${editBarOpen ? 'active' : ''}`} aria-label="編輯" onClick={() => { closeBulkSelection(); setEditBarOpen((open) => !open); setTableActionsOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="edit" size={29} /></button>
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => { closeBulkSelection(); setTableActionsOpen((open) => !open); setEditBarOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
+      {notice && <div className="workspace-notice workspace-appbar-notice" role="status">{notice}</div>}
     </header>
     <div className="workspace-toolbar-layer" style={{ '--workspace-toolbar-row-count': workspaceToolbarRowCount } as React.CSSProperties}>
-    {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} summary={bulkSummary} hasDraft={bulkSelection.hasDraft} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} onConfirm={commitBulkSelection} />}
+    {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} />}
     {searchOpen && table && <div ref={filterbarRef} className={`workspace-filterbar${bulkSelection && bulkColumn ? ' has-bulk-toolbar' : ''}`} aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{filterbarSlots.map((target, index) => target ? (() => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${index === 0 ? 'is-frozen' : ''} ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className={`workspace-filterbar-spacer ${index === 0 ? 'is-frozen' : ''}`} aria-hidden="true" />)}</div></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
@@ -855,7 +842,6 @@ const WorkspacePage = () => {
       </main>
     </div>
     </div>
-    {notice && <div className="workspace-notice" role="status">{notice}</div>}
     {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className={`workspace-storage-status workspace-drive-storage-status ${driveBackup.status === 'dirty' ? 'needs-attention' : ''}`} role="status"><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? `Google Drive · 已備份${driveBackup.record.lastBackupAt ? ` · ${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}` : 'Google Drive · 尚未備份'}</span><span>{driveBackup.record.fileName ?? '點按設定備份'}</span></div><button type="button" className="workspace-drawer-backup-action" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><WorkspaceIcon name="upload" size={19} />Google Drive 備份</button><div className="workspace-drawer-data-actions"><button type="button" onClick={exportAll}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
@@ -872,12 +858,12 @@ const WorkspacePage = () => {
      {configuring && <ColumnConfig column={configuring.column} suggestedOptions={fixedListSuggestions} onSave={saveColumn} onDelete={configuring.isRowHeader ? undefined : () => { askDeleteColumn(configuring.column); setConfiguring(undefined); }} />}
      {selectionEditor && <WorkspaceSelectionDialog column={selectionEditor.column} value={selectionEditor.value} options={selectionEditor.options} onClose={() => setSelectionEditor(undefined)} onSelect={selectCellValue} onChange={selectionEditor.column.isMultiple ? selectCellValue : undefined} />}
      {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
-       ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: (rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${index + 1} 個物件` }))} initialValues={bulkSelection?.distributedValues} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={(result) => { if (result) setBulkSelection((current) => current ? { ...current, hasDraft: true, sharedValue: result.total, distributedValues: result.values } : current); setBulkEditorOpen(false); }} />
+       ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: (rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${index + 1} 個物件` }))} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={() => setBulkEditorOpen(false)} onConfirm={(result) => { setBulkEditorOpen(false); if (result) commitBulkSelection({ sharedValue: result.total, distributedValues: result.values }); }} />
        : bulkColumn.inputType === 'link'
-       ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} onSave={setBulkSharedValue} />
+       ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: value })} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
-       ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onSelect={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} onChange={bulkColumn.isMultiple ? (value) => setBulkSharedValue(coerceCellValue(bulkColumn, value), false) : undefined} />
-       : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => setBulkSharedValue(coerceCellValue(bulkColumn, value))} />)}
+       ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />
+       : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />)}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {pasteDialogOpen && pasteTarget && <WorkspacePasteDialog targetLabel={pasteTargetLabel} onClose={() => setPasteDialogOpen(false)} onApply={pasteMatrix} />}
     {tableImportPreview && <WorkspaceTableImportPreviewDialog table={tableImportPreview.table} source={tableImportPreview.source} onClose={() => setTableImportPreview(undefined)} onImport={finishTableImport} />}

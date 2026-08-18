@@ -3,22 +3,18 @@ import { distributeWorkspaceTotal } from './bulkEdit';
 import type { WorkspaceColumn } from './types';
 import { WorkspaceIcon, WorkspaceModal } from './workspaceShared';
 
-export const WorkspaceBulkEditToolbar = ({ column, count, summary, hasDraft, onCancel, onOpenEditor, onConfirm }: {
+export const WorkspaceBulkEditToolbar = ({ column, count, onCancel, onOpenEditor }: {
   column: WorkspaceColumn;
   count: number;
-  summary: string;
-  hasDraft: boolean;
   onCancel(): void;
   onOpenEditor(): void;
-  onConfirm(): void;
 }) => <div className="workspace-editbar workspace-bulk-toolbar" role="toolbar" aria-label={`批次編輯 ${column.name}`}>
   <div className="workspace-editbar-group">
     <button type="button" className="workspace-editbar-button" aria-label="結束批次選取" onClick={onCancel}><WorkspaceIcon name="close" size={21} /></button>
     <span className="workspace-bulk-count">已選 {count} 格</span>
   </div>
   <div className="workspace-bulk-actions">
-    <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`設定 ${column.name} 的批次內容`}><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">{hasDraft ? summary || '清除內容' : '設定內容'}</span></button>
-    <button type="button" className="workspace-editbar-button workspace-bulk-confirm" aria-label="輸入至已選方格" disabled={!hasDraft || count === 0} onClick={onConfirm}><WorkspaceIcon name="apply-cells" size={23} /></button>
+    <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`設定 ${column.name} 的批次內容`}><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">設定內容</span></button>
   </div>
 </div>;
 
@@ -27,12 +23,13 @@ export interface WorkspaceRatioDistributionResult {
   values?: Record<string, number>;
 }
 
-export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initialTotal, onClose }: {
+export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initialTotal, onClose, onConfirm }: {
   column: WorkspaceColumn;
   rows: Array<{ rowId: string; label: string }>;
   initialValues?: Record<string, number>;
   initialTotal?: number | null;
-  onClose(result?: WorkspaceRatioDistributionResult): void;
+  onClose(): void;
+  onConfirm(result?: WorkspaceRatioDistributionResult): void;
 }) => {
   const initialNumbers = rows.map((row) => initialValues?.[row.rowId]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const [total, setTotal] = useState(() => typeof initialTotal === 'number' && Number.isFinite(initialTotal)
@@ -48,18 +45,18 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
   const values = useMemo(() => distributeWorkspaceTotal(Number(total), rows.map((row) => ({ rowId: row.rowId, ratio: Number(ratios[row.rowId]) })), roundToIntegers), [ratios, roundToIntegers, rows, total]);
   const finish = () => {
     if (!total.trim()) {
-      onClose({ total: null });
+      onConfirm({ total: null });
       return;
     }
     const numericTotal = Number(total);
     if (!Number.isFinite(numericTotal)) {
-      onClose(undefined);
+      onConfirm(undefined);
       return;
     }
-    onClose({ total: numericTotal, values: expanded ? values : undefined });
+    onConfirm({ total: numericTotal, values: expanded ? values : undefined });
   };
   const validDistribution = total.trim() !== '' && values !== undefined;
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={finish} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`}>
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={onClose} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`} actions={<button type="button" className="workspace-dialog-button primary" onClick={finish}>確認</button>}>
     <form className="workspace-bulk-number-form" onSubmit={(event) => { event.preventDefault(); finish(); }}>
       <input autoFocus aria-label={`${column.name}批次輸入`} className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={total} onChange={(event) => setTotal(event.target.value)} />
       <button type="button" className="workspace-ratio-disclosure" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><WorkspaceIcon name="chevron" size={16} />比例分配</button>

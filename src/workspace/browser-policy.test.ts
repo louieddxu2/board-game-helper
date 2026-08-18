@@ -71,6 +71,15 @@ describe('workspace browser policies', () => {
     expect(tableHeaderOffsetRule).toMatch(/top:\s*calc\(var\(--workspace-toolbar-row-height\) \* var\(--workspace-toolbar-row-count\)\)/);
   });
 
+  it('anchors workspace toasts to the app bar instead of the first table row', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const noticeRule = styles.match(/\.workspace-appbar-notice\s*\{([^}]*)\}/)?.[1];
+
+    expect(noticeRule).toMatch(/top:\s*50%/);
+    expect(noticeRule).toMatch(/pointer-events:\s*none/);
+    expect(noticeRule).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+  });
+
   it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];

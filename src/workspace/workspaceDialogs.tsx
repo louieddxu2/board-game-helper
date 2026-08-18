@@ -164,7 +164,7 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
 });
 NumericStepEditor.displayName = 'NumericStepEditor';
 
-export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave }: CellInputDialogProps) => {
+export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss, onSave, showConfirm = false }: CellInputDialogProps) => {
   const [draft, setDraft] = useState(() => column.inputType === 'datetime' ? normalizeWorkspaceDateTime(value) ?? new Date().toISOString() : displayWorkspaceCellValue(value, column.inputType));
   const [dateDirty, setDateDirty] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -179,9 +179,10 @@ export const CellInputDialog = ({ column, value, inputLabel, onDelete, onDismiss
 
   const commit = () => column.inputType === 'datetime' && !dateDirty ? onDismiss?.() : onSave(draft);
   const close = column.inputType === 'number' ? () => numericEditorRef.current?.commit() : commit;
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={close} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  const dismiss = showConfirm ? (onDismiss ?? (() => undefined)) : close;
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={dismiss} className={`workspace-value-dialog ${column.inputType === 'datetime' ? 'workspace-datetime-dialog' : ''}`} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>} actions={showConfirm ? <button type="button" className="workspace-dialog-button primary" onClick={close}>確認</button> : undefined}>
     {column.inputType === 'datetime'
-      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onCurrent={(next) => onSave(next)} onClear={() => onSave('')} />
+      ? <DateTimeWheelEditor value={draft} ariaLabel={inputLabel ?? `${column.name}${column.dateOnly ? '日期' : '日期時間'}`} showTime={!column.dateOnly} onChange={(next) => { setDraft(next); setDateDirty(true); }} onCurrent={(next) => { if (showConfirm) { setDraft(next); setDateDirty(true); } else onSave(next); }} onClear={() => { if (showConfirm) { setDraft(''); setDateDirty(true); } else onSave(''); }} />
       : column.inputType === 'number'
       ? getWorkspaceNumberInputMode(column) === 'step'
         ? <NumericStepEditor ref={numericEditorRef} column={column} value={value} inputLabel={inputLabel} onSave={onSave} />
@@ -277,12 +278,13 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
     </div>
   </div>;
 };
-export const LinkInputDialog = ({ column, value, onDelete, onSave }: { column: WorkspaceColumn; value: WorkspaceCellValue; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void }) => {
+export const LinkInputDialog = ({ column, value, onDelete, onSave, onDismiss, showConfirm = false }: { column: WorkspaceColumn; value: WorkspaceCellValue; onDelete?(): void; onSave(value: WorkspaceLinkValue | null): void; onDismiss?(): void; showConfirm?: boolean }) => {
   const initial = isWorkspaceLinkValue(value) ? value : { url: typeof value === 'string' ? value : '', label: '' };
   const [url, setUrl] = useState(initial.url);
   const [label, setLabel] = useState(initial.label);
   const commit = () => onSave(url.trim() || label.trim() ? { url: url.trim(), label: label.trim() } : null);
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={commit} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+  const dismiss = showConfirm ? (onDismiss ?? (() => undefined)) : commit;
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={dismiss} className="workspace-link-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>} actions={showConfirm ? <button type="button" className="workspace-dialog-button primary" onClick={commit}>確認</button> : undefined}>
     <div className="workspace-link-fields">
       <label className="workspace-form-field">連結<input autoFocus type="url" inputMode="url" value={url} onChange={(event) => setUrl(event.target.value)} /></label>
       <label className="workspace-form-field">顯示名稱<input type="text" inputMode="text" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
@@ -357,7 +359,7 @@ export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: Name
   </WorkspaceModal>;
 };
 export const ConfirmDialog = ({ title, message, onClose, onConfirm }: { title: string; message: string; onClose(): void; onConfirm(): void }) => <WorkspaceModal title={title} onClose={onClose} className="workspace-confirm-dialog" actions={<><button type="button" className="workspace-dialog-button secondary" onClick={onClose}>取消</button><button type="button" className="workspace-dialog-button danger" onClick={onConfirm}>確認</button></>}><p className="workspace-dialog-message">{message}</p></WorkspaceModal>;
-export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect, onChange }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect(value: string): void; onChange?(value: string): void }) => {
+export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSelect, onChange, onConfirm }: { column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; onClose(): void; onSelect?(value: string): void; onChange?(value: string): void; onConfirm?(value: string): void }) => {
   const isMultiple = Boolean(column.isMultiple);
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
@@ -375,12 +377,13 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
 
   const applyMultiple = (next: Set<string>) => {
     setSelectedSet(next);
-    onChange?.(formatMultiSelectValues(Array.from(next)));
+    if (!onConfirm) onChange?.(formatMultiSelectValues(Array.from(next)));
   };
 
   const toggleOption = (option: string) => {
     if (!isMultiple) {
-      onSelect(option);
+      if (onConfirm) setSelectedSet(new Set([option]));
+      else onSelect?.(option);
       return;
     }
     const next = new Set(selectedSet);
@@ -399,7 +402,8 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
       applyMultiple(next);
       setQuery('');
     } else {
-      onSelect(optionToAdd);
+      if (onConfirm) setSelectedSet(new Set([optionToAdd]));
+      else onSelect?.(optionToAdd);
     }
   };
 
@@ -408,22 +412,33 @@ export const WorkspaceSelectionDialog = ({ column, value, options, onClose, onSe
   const clearSelection = () => {
     if (isMultiple) {
       applyMultiple(new Set());
-      onClose();
+      if (!onConfirm) onClose();
       return;
     }
-    onSelect('');
+    if (onConfirm) setSelectedSet(new Set());
+    else onSelect?.('');
   };
   const hasSingleValue = !isMultiple && Array.from(selectedSet).some(Boolean);
 
-  const finish = () => {
+  const confirmSelection = () => {
+    let nextSelection = selectedSet;
     if (isDynamic && normalizedQuery) {
-      submitQuery();
-    } else {
-      onClose();
+      const existingOption = allOptions.find((option) => option.toLocaleLowerCase() === normalizedQuery.toLocaleLowerCase());
+      const optionToAdd = existingOption ?? normalizedQuery;
+      nextSelection = isMultiple ? new Set([...selectedSet, optionToAdd]) : new Set([optionToAdd]);
     }
+    onConfirm?.(isMultiple ? formatMultiSelectValues(Array.from(nextSelection)) : Array.from(nextSelection)[0] ?? '');
+  };
+  const finish = () => {
+    if (onConfirm) {
+      onClose();
+      return;
+    }
+    if (isDynamic && normalizedQuery) submitQuery();
+    else onClose();
   };
 
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={finish} className="workspace-selection-dialog">
+  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={finish} className="workspace-selection-dialog" actions={onConfirm ? <button type="button" className="workspace-dialog-button primary" onClick={confirmSelection}>確認</button> : undefined}>
     {isDynamic && <div className="workspace-selection-head">
       <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
     </div>}
@@ -731,4 +746,5 @@ export interface CellInputDialogProps {
   onDelete?(): void;
   onDismiss?(): void;
   onSave(value: string): void;
+  showConfirm?: boolean;
 }
