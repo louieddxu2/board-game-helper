@@ -301,15 +301,17 @@ footer a { color: inherit; }
 .workspace-dialog-button.primary { background: var(--orange); color: var(--white); }
 .workspace-dialog-button.secondary { border-color: var(--line); background: var(--white); color: var(--green); }
 .workspace-dialog-button.danger { background: #a52f23; color: var(--white); }
-.workspace-google-drive-dialog { width: min(440px, 100%); }
-.workspace-google-drive-status { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 8px; background: rgba(47,111,94,.08); color: var(--green); }
+.workspace-google-drive-dialog { width: min(440px, 100%); border: 2px solid var(--green); background: var(--white); }
+.workspace-google-drive-dialog .workspace-dialog-heading { border-bottom: 1px solid var(--line); background: var(--cream); }
+.workspace-google-drive-dialog .workspace-dialog-content { background: var(--white); }
+.workspace-google-drive-status { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 8px; background: var(--cream); color: var(--green); }
 .workspace-google-drive-status > div { display: grid; min-width: 0; gap: 3px; }
 .workspace-google-drive-status small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .workspace-google-drive-message, .workspace-google-drive-error { margin: 0; padding: 9px 10px; border-radius: 6px; line-height: 1.5; }
-.workspace-google-drive-message { background: rgba(47,111,94,.08); color: var(--green); }
-.workspace-google-drive-error { background: rgba(165,47,35,.09); color: #a52f23; }
+.workspace-google-drive-message { background: var(--cream); color: var(--green); }
+.workspace-google-drive-error { background: #f8e4df; color: #a52f23; }
 .workspace-google-drive-meta { display: grid; gap: 6px; margin: 0; }
-.workspace-google-drive-meta div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 5px; border-bottom: 1px solid rgba(117,137,128,.22); }
+.workspace-google-drive-meta div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
 .workspace-google-drive-meta dt { color: var(--muted); font-size: 13px; }
 .workspace-google-drive-meta dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-google-drive-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
