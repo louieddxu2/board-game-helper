@@ -7,6 +7,8 @@ const TABLE_SETTINGS_MARKER = '__workspace_table_settings';
 const WORKSPACE_MARKER = '__workspace';
 const BACKUP_MANIFEST_MARKER = '__workspace_backup_manifest';
 const CURRENT_XLSX_FORMAT_VERSION = 1;
+export const WORKSPACE_ARCHIVE_ROOT = 'BoardGameHelper/動態表格備份';
+export const WORKSPACE_ARCHIVE_FILE_NAME = 'BoardGameHelper-動態表格備份.zip';
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
 const OPTION_COLORS_JSON_MARKER = '__workspace_option_colors_json:';
 const NUMBER_RANGES_JSON_MARKER = '__workspace_number_ranges_json:';
@@ -157,21 +159,21 @@ const writeUint32 = (target: Uint8Array, offset: number, value: number) => {
   target[offset + 3] = (value >>> 24) & 0xff;
 };
 
-const zipStore = (files: Array<{ name: string; content: string }>) => {
+const zipStoreBytes = (files: Array<{ name: string; content: Uint8Array }>, mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') => {
   const encoder = new TextEncoder();
-  const entries = files.map((file) => ({ name: encoder.encode(file.name), content: encoder.encode(file.content) }));
+  const entries = files.map((file) => ({ name: encoder.encode(file.name), content: file.content }));
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
   for (const entry of entries) {
     const header = new Uint8Array(30 + entry.name.length);
-    writeUint32(header, 0, 0x04034b50); writeUint16(header, 4, 20); writeUint16(header, 6, 0); writeUint16(header, 8, 0);
+    writeUint32(header, 0, 0x04034b50); writeUint16(header, 4, 20); writeUint16(header, 6, 0x0800); writeUint16(header, 8, 0);
     writeUint16(header, 10, 0); writeUint16(header, 12, 0); writeUint32(header, 14, crc32(entry.content));
     writeUint32(header, 18, entry.content.length); writeUint32(header, 22, entry.content.length); writeUint16(header, 26, entry.name.length); writeUint16(header, 28, 0); header.set(entry.name, 30);
     localParts.push(header, entry.content);
 
     const central = new Uint8Array(46 + entry.name.length);
-    writeUint32(central, 0, 0x02014b50); writeUint16(central, 4, 20); writeUint16(central, 6, 20); writeUint16(central, 8, 0); writeUint16(central, 10, 0);
+    writeUint32(central, 0, 0x02014b50); writeUint16(central, 4, 20); writeUint16(central, 6, 20); writeUint16(central, 8, 0x0800); writeUint16(central, 10, 0);
     writeUint16(central, 12, 0); writeUint16(central, 14, 0); writeUint32(central, 16, crc32(entry.content)); writeUint32(central, 20, entry.content.length); writeUint32(central, 24, entry.content.length);
     writeUint16(central, 28, entry.name.length); writeUint16(central, 30, 0); writeUint16(central, 32, 0); writeUint16(central, 34, 0); writeUint16(central, 36, 0); writeUint32(central, 38, 0); writeUint32(central, 42, offset); central.set(entry.name, 46);
     centralParts.push(central);
@@ -184,8 +186,10 @@ const zipStore = (files: Array<{ name: string; content: string }>) => {
   const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
   let position = 0;
   for (const part of parts) { bytes.set(part, position); position += part.length; }
-  return new Blob([bytes.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  return new Blob([bytes.buffer], { type: mimeType });
 };
+
+const zipStore = (files: Array<{ name: string; content: string }>) => zipStoreBytes(files.map((file) => ({ name: file.name, content: new TextEncoder().encode(file.content) })));
 
 const safeSheetName = (name: string, used: Set<string>) => {
   const base = name.replace(/[\\/*?:\[\]]/g, ' ').trim().slice(0, 31) || '表格';
@@ -269,6 +273,70 @@ export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable)
     sheets.push({ name: settingsSheetName, rows: tableSettingsRows(currentTable, dataSheetName) });
   }
   return workbookFromRows(sheets);
+};
+
+const archivePathSegment = (name: string) => name
+  .replace(/[\\/:*?"<>|]/g, ' ')
+  .replace(/[\u0000-\u001f]/g, ' ')
+  .trim() || '未命名';
+
+const archiveFolderSegments = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>) => {
+  const segments: string[] = [];
+  const visited = new Set<string>();
+  let parentId = node.parentId;
+  while (parentId) {
+    if (visited.has(parentId)) throw new Error('工作區資料夾結構包含循環');
+    visited.add(parentId);
+    const parent = nodes.get(parentId);
+    if (!parent) throw new Error(`找不到資料夾：${parentId}`);
+    if (parent.type !== 'folder') throw new Error(`表格父層不是資料夾：${node.name}`);
+    segments.unshift(archivePathSegment(parent.name));
+    parentId = parent.parentId;
+  }
+  return segments;
+};
+
+const localBackupRefs = (data: WorkspaceData) => {
+  const nodes = new Map(data.nodes.map((node) => [node.id, node]));
+  const folders: WorkspaceBackupFolderRef[] = data.nodes
+    .filter((node) => node.type === 'folder')
+    .map((node) => ({ id: node.id, name: node.name, parentId: node.parentId, order: node.order, driveFolderId: '' }));
+  const tables: WorkspaceBackupTableFileRef[] = data.nodes
+    .filter((node) => node.type === 'table' && node.tableId)
+    .map((node) => {
+      const table = data.tables.find((item) => item.id === node.tableId);
+      if (!table) throw new Error(`找不到表格資料：${node.name}`);
+      const baseName = (table.name || node.name || table.id).replace(/\.xlsx$/i, '');
+      return { id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, driveFileId: '', fileName: `${archivePathSegment(baseName)}.xlsx` };
+    });
+  return { nodes, folders, tables };
+};
+
+const blobBytes = async (blob: Blob) => new Uint8Array(await (typeof blob.arrayBuffer === 'function'
+  ? blob.arrayBuffer()
+  : new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error('無法讀取備份內容'));
+    reader.readAsArrayBuffer(blob);
+  })));
+
+const blobFromBytes = (bytes: Uint8Array, type: string) => new Blob([bytes.slice().buffer as ArrayBuffer], { type });
+
+export const exportWorkspaceArchive = async (data: WorkspaceData) => {
+  const { nodes, folders, tables } = localBackupRefs(data);
+  const entries: Array<{ name: string; content: Uint8Array }> = [{
+    name: `${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`,
+    content: await blobBytes(exportWorkspaceBackupManifestXlsx(data, folders, tables, Date.now())),
+  }];
+  for (const ref of tables) {
+    const node = data.nodes.find((item) => item.id === ref.nodeId);
+    const table = data.tables.find((item) => item.id === ref.id);
+    if (!node || !table) throw new Error(`找不到匯出表格：${ref.name}`);
+    const path = [WORKSPACE_ARCHIVE_ROOT, ...archiveFolderSegments(node, nodes), ref.fileName].join('/');
+    entries.push({ name: path, content: await blobBytes(exportWorkspaceXlsx(data, table)) });
+  }
+  return zipStoreBytes(entries, 'application/zip');
 };
 
 type SheetCell = CellValue<number> | null;
@@ -461,7 +529,7 @@ const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest =
     parentId: stringValue(row[3]) || null,
     order: Number(row[4]) || 0,
     driveFolderId: stringValue(row[5]),
-  })).filter((folder) => folder.id && folder.driveFolderId);
+  })).filter((folder) => folder.id);
   const tables = rows.filter((row) => stringValue(row[0]) === 'table_file').map((row) => ({
     id: stringValue(row[1]),
     nodeId: stringValue(row[2]),
@@ -470,7 +538,7 @@ const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest =
     updatedAt: Number(row[5]) || 0,
     driveFileId: stringValue(row[6]),
     fileName: stringValue(row[7]),
-  })).filter((table) => table.id && table.nodeId && table.driveFileId && table.fileName);
+  })).filter((table) => table.id && table.nodeId && table.fileName);
   if (!Number.isFinite(sourceUpdatedAt)) throw new Error('備份試算表缺少來源更新時間');
   return { ...parsed, sourceUpdatedAt, folders, tables };
 };
@@ -479,14 +547,7 @@ const readUint16 = (bytes: Uint8Array, offset: number) => bytes[offset] | (bytes
 const readUint32 = (bytes: Uint8Array, offset: number) => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 
 const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
-  const bytes = new Uint8Array(await (typeof file.arrayBuffer === 'function'
-    ? file.arrayBuffer()
-    : new Promise<ArrayBuffer>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as ArrayBuffer);
-      reader.onerror = () => reject(reader.error ?? new Error('無法讀取試算表'));
-      reader.readAsArrayBuffer(file);
-    })));
+  const bytes = await blobBytes(file);
   const decoder = new TextDecoder();
   const entries = new Map<string, string>();
   let offset = 0;
@@ -530,6 +591,33 @@ const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
   });
 };
 
+const readStoredZip = async (file: Blob) => {
+  const bytes = await blobBytes(file);
+  const decoder = new TextDecoder();
+  const entries = new Map<string, Uint8Array>();
+  let offset = 0;
+  let entryCount = 0;
+  while (offset + 4 <= bytes.length && readUint32(bytes, offset) === 0x04034b50) {
+    const flags = readUint16(bytes, offset + 6);
+    const method = readUint16(bytes, offset + 8);
+    const compressedSize = readUint32(bytes, offset + 18);
+    const nameLength = readUint16(bytes, offset + 26);
+    const extraLength = readUint16(bytes, offset + 28);
+    const nameStart = offset + 30;
+    const contentStart = nameStart + nameLength + extraLength;
+    const name = decoder.decode(bytes.subarray(nameStart, nameStart + nameLength));
+    if (flags & 0x0008) throw new Error('備份 ZIP 使用不支援的資料描述格式');
+    if (method !== 0) throw new Error('備份 ZIP 必須使用標準試算表封裝格式');
+    if (!name || name.includes('..') || name.startsWith('/') || name.includes('\\')) throw new Error('備份 ZIP 的檔案路徑不安全');
+    if (contentStart + compressedSize > bytes.length) throw new Error('備份 ZIP 內容不完整');
+    if (!name.endsWith('/')) entries.set(name, bytes.slice(contentStart, contentStart + compressedSize));
+    offset = contentStart + compressedSize;
+    entryCount += 1;
+  }
+  if (!entryCount || !entries.size) throw new Error('不是有效的 Workspace ZIP 備份');
+  return entries;
+};
+
 export const importWorkspaceBackupManifestXlsx = async (file: Blob): Promise<ImportedWorkspaceBackupManifest> => {
   let sheets: Array<Sheet<number>>;
   try {
@@ -540,6 +628,32 @@ export const importWorkspaceBackupManifestXlsx = async (file: Blob): Promise<Imp
   const manifestSheet = sheets.find((sheet) => stringValue(sheet.data[0]?.[0]) === BACKUP_MANIFEST_MARKER);
   if (!manifestSheet) throw new Error('不是支援的 Workspace 試算表備份索引');
   return parseBackupManifest(manifestSheet.data);
+};
+
+export const importWorkspaceArchive = async (file: Blob): Promise<ImportedWorkspace> => {
+  const entries = await readStoredZip(file);
+  const manifestPath = `${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`;
+  const manifestBytes = entries.get(manifestPath);
+  if (!manifestBytes) throw new Error('ZIP 備份缺少 manifest.xlsx');
+  const manifest = await importWorkspaceBackupManifestXlsx(blobFromBytes(manifestBytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+  const nodeMap = new Map(manifest.nodes.map((node) => [node.id, node]));
+  const tableRefs = new Map(manifest.tables.map((ref) => [ref.id, ref]));
+  const tables: WorkspaceTable[] = [];
+  for (const ref of manifest.tables) {
+    const node = nodeMap.get(ref.nodeId);
+    if (!node || node.type !== 'table' || node.tableId !== ref.id) throw new Error(`備份索引的表格結構錯誤：${ref.name}`);
+    if (!ref.fileName || ref.fileName.includes('/') || ref.fileName.includes('\\') || ref.fileName.includes('..')) throw new Error(`備份索引的表格檔名不安全：${ref.name}`);
+    const tablePath = [WORKSPACE_ARCHIVE_ROOT, ...archiveFolderSegments(node, nodeMap), ref.fileName].join('/');
+    const tableBytes = entries.get(tablePath);
+    if (!tableBytes) throw new Error(`ZIP 備份缺少表格：${ref.name}`);
+    const imported = await importWorkspaceXlsx(blobFromBytes(tableBytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'), { preserveIds: true });
+    if (!imported.table || imported.table.id !== ref.id) throw new Error(`ZIP 備份表格格式錯誤：${ref.name}`);
+    tables.push(imported.table);
+  }
+  for (const node of manifest.nodes.filter((item) => item.type === 'table')) {
+    if (!node.tableId || !tableRefs.has(node.tableId)) throw new Error(`ZIP 備份缺少表格索引：${node.name}`);
+  }
+  return { isWorkspace: true, source: 'workspace', data: { version: 1, nodes: manifest.nodes, tables, activeNodeId: manifest.activeNodeId } };
 };
 
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {

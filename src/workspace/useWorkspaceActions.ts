@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
-import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx, type WorkspaceImportSource } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { NameDialogState } from './workspaceShared';
 import { download, fileBaseName, updateTable } from './workspaceShared';
@@ -181,7 +181,19 @@ export function useWorkspaceActions({
   };
 
   const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); onExported(); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
-  const exportAll = () => { if (!data) return; download(exportWorkspaceXlsx(data), 'workspace.xlsx'); onExported(); setDrawerOpen(false); setNotice('已匯出整個資料庫'); };
+  const exportAll = async () => {
+    if (!data) return;
+    setNotice('正在準備整個資料庫備份…');
+    try {
+      download(await exportWorkspaceArchive(data), WORKSPACE_ARCHIVE_FILE_NAME);
+      onExported();
+      setDrawerOpen(false);
+      setNotice('已匯出整個資料庫備份');
+    } catch (error) {
+      console.error('[workspace-export] failed', error);
+      setNotice(error instanceof Error ? `匯出失敗：${error.message}` : '匯出失敗');
+    }
+  };
   
   const chooseImport = (kind: 'table' | 'workspace') => {
     const input = kind === 'table' ? importTableInputRef.current : importWorkspaceInputRef.current;
@@ -203,7 +215,9 @@ export function useWorkspaceActions({
   const readImport = async (file: File, kind: 'table' | 'workspace') => {
     setNotice(`正在匯入「${file.name}」…`);
     try {
-      const imported = await importWorkspaceXlsx(file);
+      const imported = kind === 'workspace' && (/\.zip$/i.test(file.name) || file.type === 'application/zip')
+        ? await importWorkspaceArchive(file)
+        : await importWorkspaceXlsx(file);
       if (kind === 'table') {
         if (imported.isWorkspace || !imported.table || !data) throw new Error('請選擇單張表格檔案');
         setTableImportPreview({ table: imported.table, source: imported.source, parentId: importTableParentId.current });

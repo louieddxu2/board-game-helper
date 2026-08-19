@@ -57,6 +57,20 @@ interface WorkspaceDriveBackupRecord {
 
 表格檔使用 `backupKind=table`、`localId=表格 ID`，資料夾使用 `backupKind=folder`、`localId=資料夾 ID`。移動時更新 parent，重新命名時更新 name；刪除時只會將先前由本 App 標記的對應項目移到垃圾桶。
 
+## 本機 ZIP 匯出
+
+本機「匯出全部資料」使用與雲端相同的資料夾式檔案結構，但以 ZIP 打包：
+
+```text
+BoardGameHelper-動態表格備份.zip
+└─ BoardGameHelper/動態表格備份/
+   ├─ manifest.xlsx
+   ├─ 資料夾/表格.xlsx
+   └─ 其他表格.xlsx
+```
+
+`manifest.xlsx` 與每張表格的 XLSX 都沿用同一套 v1 試算表格式；本機 ZIP 的 manifest 會保留本機 ID 與階層，但不寫入 Google Drive file ID。整個資料庫匯入支援這種 ZIP，也保留單一 Workspace `.xlsx` 的相容讀取路徑。
+
 ## 目前程式分層
 
 ```text

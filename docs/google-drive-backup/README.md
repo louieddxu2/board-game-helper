@@ -4,7 +4,25 @@
 
 動態表格目前應維持「本機資料為主」：IndexedDB 是即時使用的資料來源，Google Drive 只提供備份與還原，不先做多裝置即時同步或自動合併。
 
-目前的完整匯出格式仍是可攜式 `.xlsx`，包含 Workspace 目錄、每張表的資料頁與獨立設定頁；Google Drive 備份則使用可逐表更新的資料夾格式，避免每次備份都重寫一個巨大檔案。
+本機「匯出全部資料」與 Google Drive 備份共用同一套資料夾式格式，外層以 ZIP 打包；每張表仍是可攜式 `.xlsx`，包含資料頁與獨立設定頁。Google Drive 版本可逐表更新，避免每次備份都重寫一個巨大檔案。
+
+## 本機下載格式
+
+「匯出全部資料」會下載 `BoardGameHelper-動態表格備份.zip`，內容與雲端資料夾結構一致：
+
+```text
+BoardGameHelper-動態表格備份.zip
+└─ BoardGameHelper/
+   └─ 動態表格備份/
+      ├─ manifest.xlsx
+      ├─ 桌遊/
+      │  ├─ 收藏表.xlsx
+      │  └─ 遊玩紀錄.xlsx
+      └─ 工作/
+         └─ 待辦事項.xlsx
+```
+
+ZIP 內不使用 JSON 檔。`manifest.xlsx` 保存本機資料夾與表格結構；本機版本不填入 Google Drive file ID，避免保存沒有意義的雲端指標。整個資料庫匯入優先讀取 ZIP，也仍相容既有的單一 Workspace `.xlsx`。
 
 ## 雲端結構
 
@@ -64,6 +82,13 @@ BoardGameHelper/
 ```
 
 還原則反向執行，但在真正覆蓋本機資料前，必須先經過自訂衝突確認介面。第一版不做單格合併：選擇「保留本機」、「使用雲端」或「取消」。
+
+本機下載／匯入則是：
+
+```text
+本機 Workspace → manifest.xlsx + 各表格 XLSX → ZIP 下載
+ZIP 上傳 → 驗證 manifest 與各表格 → 合併／取代預覽
+```
 
 上傳檔案可先採用單次 multipart upload；若未來備份檔變大或需要顯示進度，再改用 resumable upload。Drive API 官方說明：[Upload file data](https://developers.google.com/workspace/drive/api/guides/manage-uploads)。
 

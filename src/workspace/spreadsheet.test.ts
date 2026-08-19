@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
-import { cloneImportedWorkspace, exportWorkspaceXlsx, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
 import type { WorkspaceData } from './types';
 
 const ensureBlobArrayBuffer = () => {
@@ -349,5 +349,25 @@ describe('workspace spreadsheet format', () => {
     expect(copy.nodes.every((node) => node.id !== imported.data?.nodes.find((original) => original.name === node.name)?.id)).toBe(true);
     expect(copy.nodes.find((node) => node.type === 'table')?.tableId).toBe(copy.tables[0].id);
     expect(copy.nodes.find((node) => node.type === 'table')?.parentId).toBe(copy.nodes.find((node) => node.type === 'folder')?.id);
+  });
+
+  it('exports and imports the whole workspace as a folder-shaped ZIP archive', async () => {
+    const source = makeFixture();
+    const folder = createNode('folder', '桌遊', null, 0);
+    source.nodes[0].parentId = folder.id;
+    source.nodes.push(folder);
+
+    const archive = await exportWorkspaceArchive(source);
+    expect(archive.type).toBe('application/zip');
+
+    const imported = await importWorkspaceArchive(archive);
+    expect(imported.isWorkspace).toBe(true);
+    const importedData = imported.data;
+    expect(importedData).toBeDefined();
+    expect(importedData?.nodes).toEqual(source.nodes);
+    expect(importedData?.tables).toHaveLength(1);
+    expect(importedData?.tables[0].name).toBe(source.tables[0].name);
+    expect(importedData?.tables[0].columns[1].inputType).toBe('select');
+    expect(importedData?.tables[0].rows[0].values[importedData?.tables[0].columns[2].id]).toBe(2);
   });
 });
