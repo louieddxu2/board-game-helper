@@ -24,8 +24,8 @@ const stripAnsi = (value) => value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a
 export const extractAuthUrl = (output) => stripAnsi(output).match(AUTH_URL_PATTERN)?.[0] ?? null;
 
 const openWindowsBrowser = (url) => new Promise((resolve, reject) => {
-  const escapedUrl = url.replaceAll('"', '""');
-  const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "" "${escapedUrl}"`], {
+  const escapedUrl = url.replaceAll("'", "''");
+  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${escapedUrl}'`], {
     stdio: 'ignore',
     windowsHide: true,
   });
@@ -50,13 +50,17 @@ export const openDefaultBrowser = (url) => process.platform === 'win32'
   ? openWindowsBrowser(url)
   : openUnixBrowser(url);
 
-const runWrangler = (args, options = {}) => spawnSync(WRANGLER_COMMAND, args, {
-  cwd: PROJECT_ROOT,
-  env: wranglerEnvironment(),
-  stdio: options.stdio ?? 'ignore',
-  windowsHide: false,
-  ...options,
-});
+const runWrangler = (args, options = {}) => {
+  const result = spawnSync(WRANGLER_COMMAND, args, {
+    cwd: PROJECT_ROOT,
+    env: wranglerEnvironment(),
+    stdio: options.stdio ?? 'ignore',
+    windowsHide: false,
+    shell: process.platform === 'win32',
+    ...options,
+  });
+  return result;
+};
 
 export const hasCloudflareAuth = () => Boolean(process.env.CLOUDFLARE_API_TOKEN)
   || runWrangler(['wrangler', 'whoami']).status === 0;
