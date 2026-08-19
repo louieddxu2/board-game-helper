@@ -176,12 +176,13 @@ footer a { color: inherit; }
 .workspace-table { --workspace-grid-line: #c7bfaf; width: max-content; border-collapse: separate; border-spacing: 0; color: var(--ink); table-layout: fixed; font-size: calc(20px * var(--workspace-text-scale, 1)); isolation: isolate; }
 .workspace-table thead { position: relative; z-index: 4; }
 .workspace-table tbody { position: relative; z-index: 1; }
-.workspace-table.is-bouncing.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bouncing.is-bounce-x tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), 0, 0); }
+.workspace-table.is-bouncing.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bouncing.is-bounce-x tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), var(--workspace-table-header-offset, 0px), 0); }
 .workspace-table.is-bouncing.is-bounce-y tbody th[scope="row"], .workspace-table.is-bouncing.is-bounce-y tbody td { transform: translate3d(0, var(--workspace-bounce-y, 0px), 0); }
 .workspace-table.is-bounce-settling.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bounce-settling.is-bounce-x tbody td, .workspace-table.is-bounce-settling.is-bounce-y tbody th[scope="row"], .workspace-table.is-bounce-settling.is-bounce-y tbody td { transition: transform 0.2s ease-out; }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; padding: 2px 3px; border-right: 1px solid var(--workspace-grid-line); border-bottom: 1px solid var(--workspace-grid-line); vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 6; cursor: pointer; background: var(--cream); color: var(--green); font-size: inherit; font-weight: 700; }
-.workspace-toolbar-layer .workspace-table thead th { top: calc(var(--workspace-toolbar-row-height) * var(--workspace-toolbar-row-count)); }
+.workspace-toolbar-layer .workspace-table { --workspace-table-header-offset: calc(var(--workspace-toolbar-row-height) * var(--workspace-toolbar-row-count)); }
+.workspace-toolbar-layer .workspace-table thead th { top: 0; transform: translate3d(0, var(--workspace-table-header-offset, 0px), 0); }
 .workspace-table .workspace-row-corner { position: sticky; left: 0; z-index: 8; min-width: 0; padding: 2px 3px; background: var(--cream); color: var(--green); }
 .workspace-row-axis-name, .workspace-row-name { display: block; width: 100%; min-width: 0; min-height: 0; overflow: visible; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: inherit; }
 .workspace-row-axis-name { font-weight: 600; }
