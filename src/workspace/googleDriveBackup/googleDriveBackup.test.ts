@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { importWorkspaceBackupManifestXlsx, importWorkspaceXlsx } from '../spreadsheet';
 import { BackupNotFoundError, createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider } from './index';
 import { createNode, createTable } from '../model';
 import type { WorkspaceData } from '../types';
 
 const jsonResponse = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+const blobFromBytes = (bytes?: Uint8Array) => new Blob([bytes ? bytes.slice().buffer as ArrayBuffer : new ArrayBuffer(0)]);
 
 const createBackup = (fetchImpl: typeof fetch, folderPath: readonly string[] = ['Test App', 'Backups']) => createGoogleDriveSingleFileBackup({
   tokenProvider: { getAccessToken: vi.fn(async () => 'test-token') },
@@ -65,23 +67,34 @@ describe('Google Drive single-file backup boundary', () => {
 
 describe('Google Drive folder backup boundary', () => {
   it('stores a manifest and each table below the matching local folder', async () => {
-    const files = new Map<string, { id: string; name: string; mimeType: string; parents: string[]; appProperties?: Record<string, string>; body?: string }>();
+    const files = new Map<string, { id: string; name: string; mimeType: string; parents: string[]; appProperties?: Record<string, string>; body?: Uint8Array }>();
     let nextId = 1;
+    const indexOfBytes = (source: Uint8Array, needle: Uint8Array, from = 0) => {
+      outer: for (let index = from; index <= source.length - needle.length; index += 1) {
+        for (let offset = 0; offset < needle.length; offset += 1) if (source[index + offset] !== needle[offset]) continue outer;
+        return index;
+      }
+      return -1;
+    };
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
       if (url.includes('alt=media')) {
         const id = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
-        return { ok: true, status: 200, blob: async () => ({ text: async () => files.get(id)?.body ?? '' }) } as unknown as Response;
+        return { ok: true, status: 200, blob: async () => blobFromBytes(files.get(id)?.body) } as unknown as Response;
       }
       if (url.includes('/upload/drive/v3/files')) {
-        const text = new TextDecoder().decode(init?.body as Uint8Array);
+        const requestBody = init?.body as Uint8Array;
+        const text = new TextDecoder().decode(requestBody);
         const metadataMatch = text.match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{[\s\S]*?\})\r\n--/);
         const metadata = JSON.parse(metadataMatch?.[1] ?? '{}') as { id?: string; name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
-        const bodyHeader = `Content-Type: ${metadata.mimeType}\r\n\r\n`;
-        const bodyStart = text.indexOf(bodyHeader);
-        const bodyEnd = bodyStart < 0 ? -1 : text.indexOf('\r\n--', bodyStart + bodyHeader.length);
-        const bodyMatch = bodyStart < 0 || bodyEnd < 0 ? undefined : text.slice(bodyStart + bodyHeader.length, bodyEnd);
+        const boundary = new Headers(init?.headers).get('content-type')?.match(/boundary=([^;]+)/)?.[1] ?? '';
+        const encoder = new TextEncoder();
+        const bodyHeader = encoder.encode(`Content-Type: ${metadata.mimeType}\r\n\r\n`);
+        const bodyStart = indexOfBytes(requestBody, bodyHeader);
+        const bodyDelimiter = encoder.encode(`\r\n--${boundary}`);
+        const bodyEnd = bodyStart < 0 ? -1 : indexOfBytes(requestBody, bodyDelimiter, bodyStart + bodyHeader.length);
+        const bodyMatch = bodyStart < 0 || bodyEnd < 0 ? undefined : requestBody.slice(bodyStart + bodyHeader.length, bodyEnd);
         const idMatch = new URL(url).pathname.match(/\/files\/([^/]+)$/);
         const id = idMatch ? decodeURIComponent(idMatch[1]) : `file-${nextId++}`;
         files.set(id, { id, name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents ?? files.get(id)?.parents ?? [], appProperties: metadata.appProperties, body: bodyMatch });
@@ -112,13 +125,18 @@ describe('Google Drive folder backup boundary', () => {
     const receipt = await backup.backup(data, { sourceUpdatedAt: 42 });
     expect(receipt.manifest.folders).toHaveLength(1);
     expect(receipt.manifest.tables).toHaveLength(1);
-    expect(receipt.file.name).toBe('manifest.json');
-    expect(files.get(receipt.file.id)?.body).toContain('board-game-helper-drive-manifest');
-    expect(() => JSON.parse(files.get(receipt.file.id)?.body ?? '')).not.toThrow();
+    expect(receipt.file.name).toBe('manifest.xlsx');
+    expect(receipt.file.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const manifest = await importWorkspaceBackupManifestXlsx(blobFromBytes(files.get(receipt.file.id)?.body));
+    expect(manifest.nodes).toEqual(data.nodes);
+    expect(manifest.folders[0].driveFolderId).toBe(receipt.manifest.folders[0].driveFolderId);
+    expect(manifest.tables[0].driveFileId).toBe(receipt.manifest.tables[0].driveFileId);
     const tableFile = [...files.values()].find((file) => file.appProperties?.backupKind === 'table');
     expect(tableFile?.parents).toContain(receipt.manifest.folders[0].driveFolderId);
-    expect(tableFile?.body).toContain('board-game-helper-drive-table');
-    expect(() => JSON.parse(tableFile?.body ?? '')).not.toThrow();
+    expect(tableFile?.name).toBe('收藏表.xlsx');
+    const importedTable = await importWorkspaceXlsx(blobFromBytes(tableFile?.body), { preserveIds: true });
+    expect(importedTable.table?.id).toBe(table.id);
+    expect(importedTable.table?.name).toBe(table.name);
 
     const restored = await backup.restore();
     expect(restored.nodes).toEqual(data.nodes);

@@ -41,8 +41,8 @@ interface WorkspaceDriveBackupRecord {
 
 ```json
 {
-  "name": "manifest.json",
-  "mimeType": "application/json",
+  "name": "manifest.xlsx",
+  "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "appProperties": {
     "backupKey": "dynamic-sheet-primary-workspace-v2",
     "backupKind": "manifest",
@@ -65,7 +65,7 @@ src/workspace/googleDriveBackup/
   googleIdentityTokenProvider.ts  # 瀏覽器端 GIS token provider，token 僅在記憶體
   googleDriveApi.ts                # Drive v3 查找、資料夾與 multipart 上傳／下載
   singleFileBackup.ts              # 舊版單一 XLSX 備份的相容還原 facade
-  folderBackup.ts                  # manifest + 目錄資料夾 + 逐表 JSON 備份／還原
+  folderBackup.ts                  # manifest 試算表 + 目錄資料夾 + 逐表 XLSX 備份／還原
   useWorkspaceGoogleDriveBackup.ts # folder manifest 備份、舊 XLSX 相容還原與預覽整合
   GoogleDriveBackupDialog.tsx      # 目錄入口開啟的自訂彈窗
 
@@ -79,6 +79,6 @@ Google Drive 備份不新增 Worker route 或 refresh token table；Google clien
 ## 版本與相容性
 
 - 雲端 manifest 與表格檔各自明確標記 format 與 version。
-- 新版資料夾備份會驗證 manifest 和每張表格 JSON；舊版單一 XLSX 還原仍經過現有 `importWorkspaceXlsx()`。
+- 新版資料夾備份會驗證 manifest 試算表和每張表格 XLSX；每張表格沿用現有設定頁格式，還原仍經過 `importWorkspaceXlsx()`。
 - 未來格式升級時，解析器先判斷版本，再明確拒絕未知格式或執行受測試覆蓋的 migration。
 - checksum 只用來判斷是否有差異，不取代格式版本，也不作為安全驗證。

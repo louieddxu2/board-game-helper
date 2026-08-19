@@ -5,6 +5,7 @@ import { WORKSPACE_FORMAT } from './types';
 
 const TABLE_SETTINGS_MARKER = '__workspace_table_settings';
 const WORKSPACE_MARKER = '__workspace';
+const BACKUP_MANIFEST_MARKER = '__workspace_backup_manifest';
 const CURRENT_XLSX_FORMAT_VERSION = 1;
 const OPTIONS_JSON_MARKER = '__workspace_options_json:';
 const OPTION_COLORS_JSON_MARKER = '__workspace_option_colors_json:';
@@ -195,22 +196,14 @@ const safeSheetName = (name: string, used: Set<string>) => {
   return candidate;
 };
 
-export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable) => {
-  const tables = table ? [table] : data.tables;
+const workbookFromRows = (sheets: Array<{ name: string; rows: unknown[][] }>) => {
   const files: Array<{ name: string; content: string }> = [];
   const names: string[] = [];
   const usedNames = new Set<string>();
-  if (!table) {
-    names.push(safeSheetName('__workspace', usedNames));
-    files.push({ name: 'xl/worksheets/sheet1.xml', content: sheetXml(workspaceRows(data)) });
-  }
-  for (const currentTable of tables) {
-    const dataSheetName = safeSheetName(currentTable.name, usedNames);
-    const settingsSheetName = safeSheetName(`${dataSheetName}__設定`, usedNames);
-    names.push(dataSheetName);
-    files.push({ name: `xl/worksheets/sheet${files.length + 1}.xml`, content: sheetXml(tableDataRows(currentTable)) });
-    names.push(settingsSheetName);
-    files.push({ name: `xl/worksheets/sheet${files.length + 1}.xml`, content: sheetXml(tableSettingsRows(currentTable, dataSheetName)) });
+  for (const sheet of sheets) {
+    const sheetName = safeSheetName(sheet.name, usedNames);
+    names.push(sheetName);
+    files.push({ name: `xl/worksheets/sheet${files.length + 1}.xml`, content: sheetXml(sheet.rows) });
   }
   const sheetCount = names.length;
   files.push({ name: 'xl/workbook.xml', content: workbookXml(names) });
@@ -218,6 +211,64 @@ export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable)
   files.push({ name: '_rels/.rels', content: rootRelsXml });
   files.push({ name: '[Content_Types].xml', content: contentTypesXml(sheetCount) });
   return zipStore(files);
+};
+
+export interface WorkspaceBackupTableFileRef {
+  id: string;
+  nodeId: string;
+  folderId: string | null;
+  name: string;
+  updatedAt: number;
+  driveFileId: string;
+  fileName: string;
+}
+
+export interface WorkspaceBackupFolderRef {
+  id: string;
+  name: string;
+  parentId: string | null;
+  order: number;
+  driveFolderId: string;
+}
+
+export interface ImportedWorkspaceBackupManifest {
+  nodes: WorkspaceNode[];
+  activeNodeId: string | null;
+  sourceUpdatedAt: number;
+  folders: WorkspaceBackupFolderRef[];
+  tables: WorkspaceBackupTableFileRef[];
+}
+
+export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: WorkspaceBackupFolderRef[], tables: WorkspaceBackupTableFileRef[], sourceUpdatedAt: number) => workbookFromRows([{
+  name: '__workspace',
+  rows: [
+    [BACKUP_MANIFEST_MARKER, CURRENT_XLSX_FORMAT_VERSION],
+    ['format', 'board-game-helper-workspace-backup'],
+    ['source_updated_at', sourceUpdatedAt],
+    ['active_node_id', data.activeNodeId ?? ''],
+    ['nodes', 'id', 'type', 'name', 'parentId', 'order', 'tableId'],
+    ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
+    ['folder_files', 'id', 'name', 'parentId', 'order', 'driveFolderId'],
+    ...folders.map((folder) => ['folder_file', folder.id, folder.name, folder.parentId ?? '', folder.order, folder.driveFolderId]),
+    ['table_files', 'id', 'nodeId', 'folderId', 'name', 'updatedAt', 'driveFileId', 'fileName'],
+    ...tables.map((table) => ['table_file', table.id, table.nodeId, table.folderId ?? '', table.name, table.updatedAt, table.driveFileId, table.fileName]),
+  ],
+}]);
+
+export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable) => {
+  const tables = table ? [table] : data.tables;
+  const sheets: Array<{ name: string; rows: unknown[][] }> = [];
+  const usedNames = new Set<string>();
+  if (!table) {
+    sheets.push({ name: safeSheetName('__workspace', usedNames), rows: workspaceRows(data) });
+  }
+  for (const currentTable of tables) {
+    const dataSheetName = safeSheetName(currentTable.name, usedNames);
+    const settingsSheetName = safeSheetName(`${dataSheetName}__設定`, usedNames);
+    sheets.push({ name: dataSheetName, rows: tableDataRows(currentTable) });
+    sheets.push({ name: settingsSheetName, rows: tableSettingsRows(currentTable, dataSheetName) });
+  }
+  return workbookFromRows(sheets);
 };
 
 type SheetCell = CellValue<number> | null;
@@ -390,8 +441,8 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
   return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, rowHeader, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
-const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
-  assertSheetVersion(rows, WORKSPACE_MARKER, CURRENT_XLSX_FORMAT_VERSION);
+const parseWorkspaceRows = (rows: SheetRows, marker: string): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
+  assertSheetVersion(rows, marker, CURRENT_XLSX_FORMAT_VERSION);
   const activeNodeId = stringValue(rows[2]?.[1]) || null;
   const nodes = rows.filter((row) => stringValue(row[0]) === 'node').map((row) => ({
     id: stringValue(row[1]) || makeId('node'), type: stringValue(row[2]) === 'folder' ? 'folder' : 'table', name: stringValue(row[3]) || '未命名項目', parentId: stringValue(row[4]) || null, order: typeof row[5] === 'number' ? row[5] : Number(row[5]) || 0, ...(stringValue(row[6]) ? { tableId: stringValue(row[6]) } : {}),
@@ -399,11 +450,43 @@ const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeN
   return { nodes, activeNodeId };
 };
 
+const parseWorkspace = (rows: SheetRows): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => parseWorkspaceRows(rows, WORKSPACE_MARKER);
+
+const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest => {
+  const parsed = parseWorkspaceRows(rows, BACKUP_MANIFEST_MARKER);
+  const sourceUpdatedAt = Number(rows.find((row) => stringValue(row[0]) === 'source_updated_at')?.[1]);
+  const folders = rows.filter((row) => stringValue(row[0]) === 'folder_file').map((row) => ({
+    id: stringValue(row[1]),
+    name: stringValue(row[2]),
+    parentId: stringValue(row[3]) || null,
+    order: Number(row[4]) || 0,
+    driveFolderId: stringValue(row[5]),
+  })).filter((folder) => folder.id && folder.driveFolderId);
+  const tables = rows.filter((row) => stringValue(row[0]) === 'table_file').map((row) => ({
+    id: stringValue(row[1]),
+    nodeId: stringValue(row[2]),
+    folderId: stringValue(row[3]) || null,
+    name: stringValue(row[4]),
+    updatedAt: Number(row[5]) || 0,
+    driveFileId: stringValue(row[6]),
+    fileName: stringValue(row[7]),
+  })).filter((table) => table.id && table.nodeId && table.driveFileId && table.fileName);
+  if (!Number.isFinite(sourceUpdatedAt)) throw new Error('備份試算表缺少來源更新時間');
+  return { ...parsed, sourceUpdatedAt, folders, tables };
+};
+
 const readUint16 = (bytes: Uint8Array, offset: number) => bytes[offset] | (bytes[offset + 1] << 8);
 const readUint32 = (bytes: Uint8Array, offset: number) => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 
 const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = new Uint8Array(await (typeof file.arrayBuffer === 'function'
+    ? file.arrayBuffer()
+    : new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error ?? new Error('無法讀取試算表'));
+      reader.readAsArrayBuffer(file);
+    })));
   const decoder = new TextDecoder();
   const entries = new Map<string, string>();
   let offset = 0;
@@ -447,6 +530,18 @@ const readStoredXlsx = async (file: Blob): Promise<Array<Sheet<number>>> => {
   });
 };
 
+export const importWorkspaceBackupManifestXlsx = async (file: Blob): Promise<ImportedWorkspaceBackupManifest> => {
+  let sheets: Array<Sheet<number>>;
+  try {
+    sheets = await readStoredXlsx(file);
+  } catch {
+    sheets = await readXlsxFile(file);
+  }
+  const manifestSheet = sheets.find((sheet) => stringValue(sheet.data[0]?.[0]) === BACKUP_MANIFEST_MARKER);
+  if (!manifestSheet) throw new Error('不是支援的 Workspace 試算表備份索引');
+  return parseBackupManifest(manifestSheet.data);
+};
+
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {
   const columnMap = new Map(table.columns.map((column) => [column.id, makeId('column')]));
   const columns = table.columns.map((column) => ({ ...column, id: columnMap.get(column.id)!, options: [...column.options] }));
@@ -465,7 +560,7 @@ export interface ImportedWorkspace {
 
 export type WorkspaceImportSource = 'plain' | 'structured' | 'workspace';
 
-export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace> => {
+export const importWorkspaceXlsx = async (file: Blob, options: { preserveIds?: boolean } = {}): Promise<ImportedWorkspace> => {
   let sheets: Array<Sheet<number>>;
   try {
     sheets = await readStoredXlsx(file);
@@ -494,7 +589,7 @@ export const importWorkspaceXlsx = async (file: Blob): Promise<ImportedWorkspace
     const table = settingsSheets.length
       ? parseSettingsSheet(settingsSheets[0])
       : parsePlainTable(sheets[0].data, sheets[0].sheet);
-    return { isWorkspace: false, source: settingsSheets.length ? 'structured' : 'plain', table: remapTable(table) };
+    return { isWorkspace: false, source: settingsSheets.length ? 'structured' : 'plain', table: options.preserveIds ? table : remapTable(table) };
   }
   const parsed = parseWorkspace(workspaceSheet.data);
   const tables = settingsSheets.map(parseSettingsSheet);

@@ -11,15 +11,15 @@
 ```text
 BoardGameHelper/
 └─ 動態表格備份/
-   ├─ manifest.json
+   ├─ manifest.xlsx
    ├─ 桌遊/
-   │  ├─ 收藏表.json
-   │  └─ 遊玩紀錄.json
+   │  ├─ 收藏表.xlsx
+   │  └─ 遊玩紀錄.xlsx
    └─ 工作/
-      └─ 待辦事項.json
+      └─ 待辦事項.xlsx
 ```
 
-資料夾和表格檔案都帶有 `appProperties.backupKey`、`backupKind` 與本機穩定 ID。`manifest.json` 保存目錄樹、排序、表格與 Drive file ID；每張表格獨立保存完整欄位設定與資料。舊有單一 XLSX 備份仍可被尋找並還原；新的備份會使用資料夾格式。
+資料夾和表格檔案都帶有 `appProperties.backupKey`、`backupKind` 與本機穩定 ID。`manifest.xlsx` 是一張可開啟的索引試算表，保存目錄樹、排序、表格與 Drive file ID；每張表格的 `.xlsx` 內含資料頁與獨立設定頁，因此備份內容不使用 JSON 檔。舊有單一 XLSX 備份仍可被尋找並還原；新的備份會使用資料夾格式。
 
 ## Google 授權方向
 
@@ -30,7 +30,7 @@ BoardGameHelper/
 1. 使用者只在 workspace 的目錄彈窗中按下「Google Drive 備份」。
 2. 前端以獨立的 Google Drive OAuth Web Client ID，向 Google 申請 `drive.file` access token；網站登入使用的 Client ID 不會被替換。
 3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
-4. 前端直接呼叫 Drive v3，建立／更新標記過的資料夾、JSON 表格檔與 manifest。
+4. 前端直接呼叫 Drive v3，建立／更新標記過的資料夾、XLSX 表格檔與 manifest 試算表。
 
 這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
 
@@ -60,7 +60,7 @@ BoardGameHelper/
 ```text
 本機編輯 → IndexedDB 儲存 → 標記有未備份變更
                          ↓ 使用者在 drawer 按下立即備份
-       更新目錄資料夾 → 更新有變更的表格 JSON → 更新 manifest
+       更新目錄資料夾 → 更新有變更的表格 XLSX → 更新 manifest 試算表
 ```
 
 還原則反向執行，但在真正覆蓋本機資料前，必須先經過自訂衝突確認介面。第一版不做單格合併：選擇「保留本機」、「使用雲端」或「取消」。
@@ -69,9 +69,9 @@ BoardGameHelper/
 
 ## 雲端檔案
 
-- `manifest.json`：目錄樹、穩定 ID、排序、各表格 file ID、版本。
+- `manifest.xlsx`：目錄樹、穩定 ID、排序、各表格 file ID、版本；內容為可開啟的索引工作表。
 - `資料夾`：依本機資料夾樹建立，移動時更新 Drive parent。
-- `表格.json`：一張表一個檔案，包含完整欄位屬性和儲存格內容。
+- `表格.xlsx`：一張表一個檔案，包含資料工作表與完整欄位設定工作表。
 - `appProperties`：`backupKey`、`backupKind`、`localId`、`schemaVersion`、`backedUpAt`、`sourceUpdatedAt`。
 - 本機只保存 manifest file ID、時間與表格／資料夾數量，不保存 access token 或內容。
 

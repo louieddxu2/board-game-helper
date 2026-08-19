@@ -21,7 +21,15 @@ const escapeQueryLiteral = (value: string) => value.replace(/\\/g, '\\\\').repla
 
 const toBytes = (body: DriveBody): Promise<Uint8Array> => {
   if (typeof body === 'string') return Promise.resolve(new TextEncoder().encode(body));
-  if (body instanceof Blob) return body.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+  if (body instanceof Blob) {
+    if (typeof body.arrayBuffer === 'function') return body.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+    return new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject(reader.error ?? new Error('無法讀取試算表備份內容'));
+      reader.readAsArrayBuffer(body);
+    });
+  }
   if (body instanceof ArrayBuffer) return Promise.resolve(new Uint8Array(body));
   if (ArrayBuffer.isView(body)) return Promise.resolve(new Uint8Array(body.buffer as ArrayBuffer, body.byteOffset, body.byteLength));
   return Promise.reject(new TypeError('不支援的 Google Drive 上傳內容'));
