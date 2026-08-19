@@ -9,6 +9,13 @@ describe('workspace browser policies', () => {
     expect(contentSecurityPolicy).toContain("worker-src 'self' blob:");
   });
 
+  it('allows the Google Drive API used by workspace backups', () => {
+    const headers = readFileSync('public/_headers', 'utf8');
+    const contentSecurityPolicy = headers.split(/\r?\n/).find((line) => line.trimStart().startsWith('Content-Security-Policy:'));
+
+    expect(contentSecurityPolicy).toContain('https://www.googleapis.com');
+  });
+
   it('offers the installed PWA a stable shortcut back to the main website', () => {
     const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ url?: string }> };
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/')).toBe(true);
