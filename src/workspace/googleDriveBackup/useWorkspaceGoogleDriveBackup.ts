@@ -6,6 +6,7 @@ import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, creat
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
 const FOLDER_BACKUP_KEY = 'dynamic-sheet-primary-workspace-v2';
+const WORKSPACE_BACKUP_FOLDER_PATH = ['BoardGameHelper', '動態表格備份'] as const;
 const BACKUP_FILE_NAME = '玩錯動態表格-備份.xlsx';
 const BACKUP_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -92,7 +93,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     if (!backupRef.current) {
       backupRef.current = createGoogleDriveFolderBackup({
         tokenProvider: authRef.current,
-        folderPath: ['玩錯的桌遊規則', '動態表格備份'],
+        folderPath: WORKSPACE_BACKUP_FOLDER_PATH,
         backupKey: FOLDER_BACKUP_KEY,
         appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
       });
@@ -100,7 +101,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     if (!legacyBackupRef.current) {
       legacyBackupRef.current = createGoogleDriveSingleFileBackup({
         tokenProvider: authRef.current,
-        folderPath: ['玩錯的桌遊規則', '動態表格備份'],
+        folderPath: WORKSPACE_BACKUP_FOLDER_PATH,
         backupKey: BACKUP_KEY,
         fileName: BACKUP_FILE_NAME,
         mimeType: BACKUP_MIME_TYPE,

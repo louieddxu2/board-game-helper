@@ -9,7 +9,7 @@
 ## 雲端結構
 
 ```text
-玩錯的桌遊規則/
+BoardGameHelper/
 └─ 動態表格備份/
    ├─ manifest.json
    ├─ 桌遊/
