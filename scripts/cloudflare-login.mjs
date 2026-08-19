@@ -23,6 +23,10 @@ const stripAnsi = (value) => value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a
 
 export const extractAuthUrl = (output) => stripAnsi(output).match(AUTH_URL_PATTERN)?.[0] ?? null;
 
+// Keep the OAuth callback and browser launch in the same Wrangler login process.
+// On managed Windows, cmd.exe browser launches and direct npx.cmd status checks
+// can fail with EINVAL; PowerShell Start-Process and shell-backed npx are the
+// verified release path.
 const openWindowsBrowser = (url) => new Promise((resolve, reject) => {
   const escapedUrl = url.replaceAll("'", "''");
   const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${escapedUrl}'`], {
