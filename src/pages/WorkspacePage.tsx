@@ -7,7 +7,7 @@ import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode,
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, HeaderFilterDialog, HiddenFieldsDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
 import { Tree } from "../workspace/workspaceSidebar";
-import { useTableGestures } from "../workspace/useTableGestures";
+import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, shouldKeepDrawerOpen, useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
 import { useWorkspaceBrowserBack } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
@@ -47,6 +47,7 @@ const workspaceFilterSummary = (state?: HeaderFilterState) => {
 };
 const workspaceLastExportStorageKey = 'board-game-helper-workspace-last-export';
 const workspaceBackupReminderMs = 7 * 24 * 60 * 60 * 1000;
+const workspaceDrawerWidth = () => Math.min(360, window.innerWidth * 0.88);
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
   const selected = selection.rowIds.includes(rowId);
   const rowIds = selected ? selection.rowIds.filter((id) => id !== rowId) : [...selection.rowIds, rowId];
@@ -57,6 +58,8 @@ const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string
 const WorkspacePage = () => {
   const [data, setData] = useState<WorkspaceData>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOffset, setDrawerOffset] = useState(0);
+  const [drawerDragging, setDrawerDragging] = useState(false);
   const [drawerQuery, setDrawerQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ rowId: string; columnId: string }>();
@@ -95,6 +98,91 @@ const WorkspacePage = () => {
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
   const saveRevisionRef = useRef(0);
   const googleDriveClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
+  const drawerCloseTimerRef = useRef<number | undefined>(undefined);
+  const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
+
+  const openDrawer = useCallback(() => {
+    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
+    drawerCloseTimerRef.current = undefined;
+    setDrawerOpen(true);
+    setDrawerDragging(false);
+    setDrawerOffset(workspaceDrawerWidth());
+  }, []);
+  const closeDrawer = useCallback(() => {
+    setDrawerDragging(false);
+    setDrawerOffset(0);
+    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
+    drawerCloseTimerRef.current = window.setTimeout(() => {
+      setDrawerOpen(false);
+      drawerCloseTimerRef.current = undefined;
+    }, 180);
+  }, []);
+  const updateDrawerFromOpenSwipe = useCallback((deltaX: number) => {
+    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
+    drawerCloseTimerRef.current = undefined;
+    const width = workspaceDrawerWidth();
+    setDrawerOpen(true);
+    setDrawerDragging(true);
+    setDrawerOffset(getDrawerOpenSwipeOffset(deltaX, width));
+  }, []);
+  const settleDrawerFromOpenSwipe = useCallback((deltaX: number) => {
+    const width = workspaceDrawerWidth();
+    const offset = getDrawerOpenSwipeOffset(deltaX, width);
+    setDrawerDragging(false);
+    if (shouldKeepDrawerOpen(offset, width)) {
+      setDrawerOpen(true);
+      setDrawerOffset(width);
+    } else {
+      closeDrawer();
+    }
+  }, [closeDrawer]);
+  const beginDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if ((event.target as Element).closest('input, textarea, select, button, a')) return;
+    drawerSwipeRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, offset: drawerOffset };
+  }, [drawerOffset]);
+  const moveDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const gesture = drawerSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (!gesture.active) {
+      if (Math.hypot(deltaX, deltaY) <= 8) return;
+      if (deltaX >= -8 || Math.abs(deltaY) >= Math.abs(deltaX)) {
+        drawerSwipeRef.current = undefined;
+        return;
+      }
+      gesture.active = true;
+      setDrawerDragging(true);
+      try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+    }
+    gesture.offset = getDrawerCloseSwipeOffset(deltaX, workspaceDrawerWidth());
+    setDrawerOffset(gesture.offset);
+    event.preventDefault();
+  }, []);
+  const endDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const gesture = drawerSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    drawerSwipeRef.current = undefined;
+    if (!gesture.active) return;
+    const width = workspaceDrawerWidth();
+    const offset = clampDrawerOffset(gesture.offset, width);
+    setDrawerDragging(false);
+    if (shouldKeepDrawerOpen(offset, width)) setDrawerOffset(width);
+    else closeDrawer();
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have been released. */ }
+    event.preventDefault();
+  }, [closeDrawer]);
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      setDrawerOffset(0);
+      setDrawerDragging(false);
+    }
+  }, [drawerOpen]);
+  useEffect(() => () => {
+    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
+  }, []);
 
   const loadGoogleDriveClientId = useCallback(async () => {
     if (googleDriveClientId !== undefined) return googleDriveClientId;
@@ -342,7 +430,6 @@ const WorkspacePage = () => {
     setLocalMinTextScale(low);
   }, [columnTextWidths, viewportWidth]);
 
-  const openDrawerFromGesture = useCallback(() => setDrawerOpen(true), []);
   const openSearchFromGesture = useCallback(() => {
     setSearchOpen(true);
     setEditBarOpen(false);
@@ -354,7 +441,7 @@ const WorkspacePage = () => {
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onOpenDrawer: openDrawerFromGesture, onOpenSearch: openSearchFromGesture, searchOpen });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, searchOpen });
 
   const {
     importTableInputRef, importWorkspaceInputRef, importTableParentId,
@@ -617,13 +704,13 @@ const WorkspacePage = () => {
       case 'name-editor': setNameDialog(undefined); break;
       case 'column-visibility': setColumnVisibilityOpen(false); break;
       case 'table-actions': setTableActionsOpen(false); break;
-      case 'drawer': setDrawerOpen(false); break;
+      case 'drawer': closeDrawer(); break;
       case 'bulk-selection': closeBulkSelection(); break;
       case 'edit-bar': setEditBarOpen(false); break;
       case 'search': clearSearchAndFilters(); break;
       default: break;
     }
-  }, [browserBackLayer, clearSearchAndFilters, closeBulkSelection, driveBackup]);
+  }, [browserBackLayer, clearSearchAndFilters, closeBulkSelection, closeDrawer, driveBackup]);
 
   useWorkspaceBrowserBack({ active: Boolean(browserBackLayer), onBack: dismissBrowserLayer });
 
@@ -723,7 +810,7 @@ const WorkspacePage = () => {
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading">
-        <button type="button" className="workspace-appbar-button workspace-menu-button" aria-label={searchOpen ? '清除搜尋與篩選' : '開啟目錄'} onClick={searchOpen ? clearSearchAndFilters : () => setDrawerOpen(true)} disabled={!table}><WorkspaceIcon name={searchOpen ? 'filter-off' : 'menu'} size={29} /></button>
+        <button type="button" className="workspace-appbar-button workspace-menu-button" aria-label={searchOpen ? '清除搜尋與篩選' : '開啟目錄'} onClick={searchOpen ? clearSearchAndFilters : openDrawer} disabled={!table}><WorkspaceIcon name={searchOpen ? 'filter-off' : 'menu'} size={29} /></button>
         {searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-appbar-search-count">{filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
       </div>
       <div className="workspace-appbar-actions">
@@ -845,7 +932,7 @@ const WorkspacePage = () => {
       </main>
     </div>
     </div>
-    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={() => setDrawerOpen(false)} /><aside className="workspace-drawer" aria-label="Workspace 目錄"><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className={`workspace-storage-status workspace-drive-storage-status ${driveBackup.status === 'dirty' ? 'needs-attention' : ''}`} role="status"><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? `Google Drive · 已備份${driveBackup.record.lastBackupAt ? ` · ${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}` : 'Google Drive · 尚未備份'}</span><span>{driveBackup.record.fileName ?? '點按設定備份'}</span></div><button type="button" className="workspace-drawer-backup-action" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><WorkspaceIcon name="upload" size={19} />Google Drive 備份</button><div className="workspace-drawer-data-actions"><button type="button" onClick={() => void exportAll()}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
+    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={closeDrawer} style={{ opacity: Math.min(1, drawerOffset / Math.max(1, workspaceDrawerWidth())) }} /><aside className={`workspace-drawer${drawerDragging ? ' is-dragging' : ''}`} aria-label="Workspace 目錄" style={{ '--workspace-drawer-offset': `${drawerOffset}px` } as React.CSSProperties} onPointerDown={beginDrawerSwipe} onPointerMove={moveDrawerSwipe} onPointerUp={endDrawerSwipe} onPointerCancel={endDrawerSwipe}><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={closeDrawer} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className={`workspace-storage-status workspace-drive-storage-status ${driveBackup.status === 'dirty' ? 'needs-attention' : ''}`} role="status"><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? `Google Drive · 已備份${driveBackup.record.lastBackupAt ? ` · ${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}` : 'Google Drive · 尚未備份'}</span><span>{driveBackup.record.fileName ?? '點按設定備份'}</span></div><button type="button" className="workspace-drawer-backup-action" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><WorkspaceIcon name="upload" size={19} />Google Drive 備份</button><div className="workspace-drawer-data-actions"><button type="button" onClick={() => void exportAll()}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/"><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".zip,application/zip,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}

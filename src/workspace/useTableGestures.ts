@@ -17,7 +17,8 @@ interface UseTableGesturesProps {
   setNotice: (msg: string) => void;
   minTextScale: number;
   onCellLongPress?: (rowId: string, columnId: string) => void;
-  onOpenDrawer?: () => void;
+  onDrawerSwipeProgress?: (deltaX: number) => void;
+  onDrawerSwipeEnd?: (deltaX: number) => void;
   onOpenSearch?: () => void;
   searchOpen?: boolean;
 }
@@ -29,7 +30,12 @@ export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollT
   return undefined;
 };
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onOpenDrawer, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
+export const clampDrawerOffset = (offset: number, width: number) => Math.max(0, Math.min(Math.max(0, width), offset));
+export const getDrawerOpenSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(deltaX, width);
+export const getDrawerCloseSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(width + deltaX, width);
+export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0 && offset >= width * 0.35;
+
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -53,7 +59,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
   const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
-  const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; triggered: boolean } | undefined>(undefined);
+  const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
@@ -219,10 +225,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
-    if (pointers.current.size === 0 && event.pointerType !== 'mouse' && onOpenDrawer) {
+    if (pointers.current.size === 0 && event.pointerType !== 'mouse' && (onDrawerSwipeProgress || onDrawerSwipeEnd)) {
       const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
       drawerSwipe.current = firstColumn
-        ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, triggered: false }
+        ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, lastDeltaX: 0 }
         : undefined;
     } else if (pointers.current.size > 0) {
       drawerSwipe.current = undefined;
@@ -275,12 +281,15 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (drawerGesture?.pointerId === event.pointerId) {
       const deltaX = event.clientX - drawerGesture.startX;
       const deltaY = event.clientY - drawerGesture.startY;
-      if (drawerGesture.triggered) {
+      if (drawerGesture.active) {
+        drawerGesture.lastDeltaX = deltaX;
+        onDrawerSwipeProgress?.(Math.max(0, deltaX));
         event.preventDefault();
         return;
       }
-      if (deltaX > 24 && deltaX > Math.abs(deltaY)) {
-        drawerGesture.triggered = true;
+      if (deltaX > 8 && deltaX > Math.abs(deltaY)) {
+        drawerGesture.active = true;
+        drawerGesture.lastDeltaX = deltaX;
         if (cellHold.current?.pointerId === event.pointerId) {
           if (cellHold.current.timer) window.clearTimeout(cellHold.current.timer);
           cellHold.current = undefined;
@@ -294,7 +303,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         momentumScroll.stop();
         ignoreNextTableClick.current = true;
         window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
-        onOpenDrawer?.();
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
+        onDrawerSwipeProgress?.(deltaX);
         event.preventDefault();
         return;
       }
@@ -383,7 +393,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     const drawerGesture = drawerSwipe.current;
     if (drawerGesture?.pointerId === event.pointerId) {
       drawerSwipe.current = undefined;
-      if (drawerGesture.triggered) {
+      if (drawerGesture.active) {
+        onDrawerSwipeEnd?.(drawerGesture.lastDeltaX);
         event.preventDefault();
         return;
       }
