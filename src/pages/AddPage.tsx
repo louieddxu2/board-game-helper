@@ -14,6 +14,7 @@ import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import zhTWCopy from '../content/zh-TW.json';
 import type { ContributionQuota, FlowStage, GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
+import { navigateBackOr } from '../lib/inAppBack';
 
 type RuleInput = {
   id: string;
@@ -254,7 +255,7 @@ export const AddPage = () => {
   const handleCancel = async () => {
     const hasContent = validRules.some((rule) => rule.statement.trim() || rule.commonMistake?.trim()) || Boolean(game || gameQuery.trim());
     if (hasContent && !await confirm({ title: '離開草稿？', message: '草稿已自動儲存在這台裝置。', confirmLabel: '離開', cancelLabel: '繼續編輯', discardLabel: '捨棄草稿' })) return;
-    navigate(-1);
+    navigateBackOr(navigate, game ? `/games/${game.slug}` : '/');
   };
 
   if (!loading && !user) return <section className="add-page narrow-page">

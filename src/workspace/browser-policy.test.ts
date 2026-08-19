@@ -9,6 +9,11 @@ describe('workspace browser policies', () => {
     expect(contentSecurityPolicy).toContain("worker-src 'self' blob:");
   });
 
+  it('offers the installed PWA a stable shortcut back to the main website', () => {
+    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ url?: string }> };
+    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/')).toBe(true);
+  });
+
   it('constrains the workspace to the viewport so the table owns vertical scrolling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];

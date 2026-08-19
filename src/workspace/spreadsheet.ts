@@ -17,7 +17,7 @@ type SerializedTableFields = 'id' | 'name' | 'rowHeaderName' | 'rowHeader' | 'te
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
 type SerializedRowFields = 'id' | 'name' | 'values';
-type SerializedWorkspaceFields = 'version' | 'nodes' | 'tables' | 'activeNodeId';
+type SerializedWorkspaceFields = 'version' | 'updatedAt' | 'nodes' | 'tables' | 'activeNodeId';
 type SupportedCellValue = string | number | WorkspaceLinkValue | null;
 export type WorkspaceXlsxSchemaCoverage = [
   AssertNever<Exclude<keyof WorkspaceColumn, SerializedColumnFields>>,

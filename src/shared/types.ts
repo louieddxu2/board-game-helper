@@ -224,6 +224,20 @@ export interface RuleRevision {
 export interface GameDetail extends GameSummary {
   aliases: string[];
   rules: RuleCard[];
+  externalResources?: GameExternalResource[];
+}
+
+export const GAME_EXTERNAL_RESOURCE_CATEGORIES = ['teaching', 'help_card', 'faq'] as const;
+export type GameExternalResourceCategory = (typeof GAME_EXTERNAL_RESOURCE_CATEGORIES)[number];
+
+export interface GameExternalResource {
+  id: string;
+  gameId: string;
+  name: string;
+  category: GameExternalResourceCategory;
+  url: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface HomePayload {

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BackupNotFoundError, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider } from './index';
+import { BackupNotFoundError, createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider } from './index';
+import { createNode, createTable } from '../model';
+import type { WorkspaceData } from '../types';
 
 const jsonResponse = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -58,6 +60,69 @@ describe('Google Drive single-file backup boundary', () => {
   it('reports a missing backup without changing local state', async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({ files: [] }));
     await expect(createBackup(fetchImpl as typeof fetch, []).restore()).rejects.toBeInstanceOf(BackupNotFoundError);
+  });
+});
+
+describe('Google Drive folder backup boundary', () => {
+  it('stores a manifest and each table below the matching local folder', async () => {
+    const files = new Map<string, { id: string; name: string; mimeType: string; parents: string[]; appProperties?: Record<string, string>; body?: string }>();
+    let nextId = 1;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url.includes('alt=media')) {
+        const id = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
+        return { ok: true, status: 200, blob: async () => ({ text: async () => files.get(id)?.body ?? '' }) } as unknown as Response;
+      }
+      if (url.includes('/upload/drive/v3/files')) {
+        const text = new TextDecoder().decode(init?.body as Uint8Array);
+        const metadataMatch = text.match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{[\s\S]*?\})\r\n--/);
+        const metadata = JSON.parse(metadataMatch?.[1] ?? '{}') as { id?: string; name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
+        const bodyHeader = `Content-Type: ${metadata.mimeType}\r\n\r\n`;
+        const bodyStart = text.indexOf(bodyHeader);
+        const bodyEnd = bodyStart < 0 ? -1 : text.indexOf('\r\n--', bodyStart + bodyHeader.length);
+        const bodyMatch = bodyStart < 0 || bodyEnd < 0 ? undefined : text.slice(bodyStart + bodyHeader.length, bodyEnd);
+        const idMatch = new URL(url).pathname.match(/\/files\/([^/]+)$/);
+        const id = idMatch ? decodeURIComponent(idMatch[1]) : `file-${nextId++}`;
+        files.set(id, { id, name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents ?? files.get(id)?.parents ?? [], appProperties: metadata.appProperties, body: bodyMatch });
+        return jsonResponse(files.get(id));
+      }
+      if (url.endsWith('/files') && method === 'POST') {
+        const value = JSON.parse(String(init?.body ?? '{}')) as { name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
+        const id = `folder-${nextId++}`;
+        files.set(id, { id, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties });
+        return jsonResponse(files.get(id));
+      }
+      if (url.includes('/files?')) {
+        const query = decodeURIComponent(new URL(url).searchParams.get('q') ?? '');
+        const property = query.match(/key='([^']+)' and value='([^']+)'/);
+        const name = query.match(/name = '([^']+)'/);
+        const parent = query.match(/'([^']+)' in parents/);
+        const found = [...files.values()].filter((file) => (!property || file.appProperties?.[property[1]] === property[2]) && (!name || file.name === name[1]) && (!parent || file.parents.includes(parent[1])));
+        return jsonResponse({ files: found });
+      }
+      throw new Error(`Unexpected Drive request: ${method} ${url}`);
+    }) as typeof fetch;
+    const table = createTable('收藏表');
+    const folder = createNode('folder', '桌遊', null, 0);
+    const tableNode = createNode('table', table.name, folder.id, 0, table.id);
+    const data: WorkspaceData = { version: 1, nodes: [folder, tableNode], tables: [table], activeNodeId: tableNode.id };
+    const backup = createGoogleDriveFolderBackup({ tokenProvider: { getAccessToken: vi.fn(async () => 'token') }, folderPath: ['App', 'Backups'], backupKey: 'workspace-v2', fetchImpl });
+
+    const receipt = await backup.backup(data, { sourceUpdatedAt: 42 });
+    expect(receipt.manifest.folders).toHaveLength(1);
+    expect(receipt.manifest.tables).toHaveLength(1);
+    expect(receipt.file.name).toBe('manifest.json');
+    expect(files.get(receipt.file.id)?.body).toContain('board-game-helper-drive-manifest');
+    expect(() => JSON.parse(files.get(receipt.file.id)?.body ?? '')).not.toThrow();
+    const tableFile = [...files.values()].find((file) => file.appProperties?.backupKind === 'table');
+    expect(tableFile?.parents).toContain(receipt.manifest.folders[0].driveFolderId);
+    expect(tableFile?.body).toContain('board-game-helper-drive-table');
+    expect(() => JSON.parse(tableFile?.body ?? '')).not.toThrow();
+
+    const restored = await backup.restore();
+    expect(restored.nodes).toEqual(data.nodes);
+    expect(restored.tables[0].name).toBe('收藏表');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -144,6 +144,7 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
   latestRuleUpdatedAt: game.latestRuleUpdatedAt,
   reviewStatus: game.reviewStatus,
   reviewedByNickname: game.reviewedByNickname,
+  externalResources: (game.externalResources ?? []).map((resource) => [resource.id, resource.name, resource.category, resource.url, resource.updatedAt]),
   rules: game.rules.map((rule) => [
     rule.id, rule.gameId, rule.createdAt, rule.updatedAt, rule.status, rule.statement,
     rule.commonMistake, rule.details, rule.categories, rule.playerCounts, rule.editionNotes,
@@ -408,6 +409,12 @@ export const api = {
     await localDb.mergeCachedGame(response.sourceGame, response.targetGame).catch(() => undefined);
     return response;
   },
+  createGameExternalResource: (gameId: string, input: { name: string; category: GameExternalResource['category']; url: string }) => mutation<{ resource: GameExternalResource }>(`/api/games/${encodeURIComponent(gameId)}/external-resources`, {
+    method: 'POST', body: JSON.stringify(input),
+  }),
+  deleteGameExternalResource: (gameId: string, resourceId: string) => mutation<{ ok: true }>(`/api/games/${encodeURIComponent(gameId)}/external-resources/${encodeURIComponent(resourceId)}`, {
+    method: 'DELETE', body: '{}',
+  }),
   editors: () => uncachedRead<EditorAdminPayload>('/api/admin/editors', 'editor administration is private and intentionally always current'),
   inviteEditor: (email: string, role: 'admin' | 'editor', note?: string) => mutation<{ ok: true }>('/api/admin/editors/invite', {
     method: 'POST', body: JSON.stringify({ email, role, note }),

@@ -22,6 +22,8 @@ import { writeHomeMode } from '../lib/homeMode';
 import type { PersonalHomeGame } from '../shared/types';
 import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
+import { ExternalLinkGuard } from '../components/ExternalLinkGuard';
+import { GAME_EXTERNAL_RESOURCE_CATEGORIES, type GameExternalResource, type GameExternalResourceCategory } from '../shared/types';
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -38,6 +40,7 @@ export const GamePage = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
+  const [externalResourcesOpen, setExternalResourcesOpen] = useState(false);
   const [favorite, setFavorite] = useState<boolean>();
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [favoriteLimitGames, setFavoriteLimitGames] = useState<PersonalHomeGame[]>();
@@ -377,14 +380,17 @@ export const GamePage = () => {
           </button>}
         </div>
       </div>
-      {(user || canEdit) && <div className="inline-actions game-hero-actions">
-        {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
-        {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
-          ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
-          : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
-          {game.reviewStatus === 'pending' && <button type="button" className="button secondary" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
-        {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
-      </div>}
+      <div className="inline-actions game-hero-actions">
+        <button type="button" className="button secondary" onClick={() => setExternalResourcesOpen(true)}>外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</button>
+        {(user || canEdit) && <>
+          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
+          {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
+            ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
+            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
+            {game.reviewStatus === 'pending' && <button type="button" className="button secondary" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
+          {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
+        </>}
+      </div>
     </header>
     <section className="rule-filters" aria-label="篩選規則">
       {/* 第一列：規則分類 (Category Tabs) */}
@@ -517,9 +523,74 @@ export const GamePage = () => {
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
+    {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} onClose={() => setExternalResourcesOpen(false)} onChanged={async () => { await localDb.invalidateGame(game.slug); await load(); }} />}
     {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
       onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}
   </section>;
+};
+
+const RESOURCE_CATEGORY_LABELS: Record<GameExternalResourceCategory, string> = {
+  teaching: '教學',
+  help_card: '幫助卡',
+  faq: 'FAQ',
+};
+
+const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: { game: GameDetail; canEdit: boolean; onClose(): void; onChanged(): Promise<void> }) => {
+  const { confirm } = useConfirm();
+  const { showToast } = useToast();
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState<GameExternalResourceCategory>('teaching');
+  const [url, setUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string>();
+  const resources = game.externalResources ?? [];
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [onClose]);
+  const add = async () => {
+    if (!name.trim() || !url.trim()) return;
+    setSaving(true);
+    try {
+      await api.createGameExternalResource(game.id, { name: name.trim(), category, url: url.trim() });
+      setName(''); setUrl(''); setCategory('teaching');
+      await onChanged();
+      showToast('已新增外部資源');
+    } catch { showToast('外部資源新增失敗，請確認網址後再試。', 'error'); }
+    finally { setSaving(false); }
+  };
+  const remove = async (resource: GameExternalResource) => {
+    if (!(await confirm({ title: '刪除此資源？', message: resource.name, confirmLabel: '刪除', tone: 'danger' }))) return;
+    setDeleting(resource.id);
+    try {
+      await api.deleteGameExternalResource(game.id, resource.id);
+      await onChanged();
+      showToast('已刪除外部資源');
+    } catch { showToast('外部資源刪除失敗，請稍後再試。', 'error'); }
+    finally { setDeleting(undefined); }
+  };
+  return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="modal external-resource-dialog" role="dialog" aria-modal="true" aria-labelledby="external-resource-title">
+      <div className="modal-heading"><h2 id="external-resource-title">外部資源</h2><button type="button" aria-label="關閉外部資源" onClick={onClose}>×</button></div>
+      <div className="external-resource-list">
+        {resources.length === 0 && <p className="muted">尚未新增外部資源。</p>}
+        {resources.map((resource) => <div className="external-resource-item" key={resource.id}>
+          <div><strong>{resource.name}</strong><small>{RESOURCE_CATEGORY_LABELS[resource.category]}</small><ExternalLinkGuard url={resource.url}>{resource.url}</ExternalLinkGuard></div>
+          {canEdit && <button type="button" className="danger-link" disabled={deleting === resource.id} onClick={() => void remove(resource)}>刪除</button>}
+        </div>)}
+      </div>
+      {canEdit && <form className="external-resource-form" onSubmit={(event) => { event.preventDefault(); void add(); }}>
+        <strong>新增外部資源</strong>
+        <label>名稱<input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：官方教學" /></label>
+        <label>類別<select value={category} onChange={(event) => setCategory(event.target.value as GameExternalResourceCategory)}>{GAME_EXTERNAL_RESOURCE_CATEGORIES.map((value) => <option key={value} value={value}>{RESOURCE_CATEGORY_LABELS[value]}</option>)}</select></label>
+        <label>連結<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></label>
+        <small className="muted">若遊戲已有介紹文章，優先填入介紹文章連結。</small>
+        <button type="submit" className="button primary" disabled={saving || !name.trim() || !url.trim()}>{saving ? '新增中…' : '新增'}</button>
+      </form>}
+      <div className="modal-actions"><span /><button type="button" className="button secondary" onClick={onClose}>關閉</button></div>
+    </div>
+  </div>;
 };
 
 export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {

@@ -41,12 +41,12 @@ export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, 
   return <WorkspaceModal title="Google Drive" onClose={onClose} className="workspace-google-drive-dialog">
     <div className="workspace-google-drive-status">
       <WorkspaceIcon name="download" size={22} />
-      <div><strong>{statusLabel(status)}</strong><small>{record.fileName ?? '整個動態表格資料庫'}</small></div>
+      <div><strong>{statusLabel(status)}</strong><small>{record.lastBackupAt ? `${record.folderCount} 個資料夾 · ${record.tableCount} 張表格` : '整個動態表格資料庫'}</small></div>
     </div>
     {busy && <p className="workspace-dialog-message" role="status">{busyLabel(busy)}</p>}
     {message && <p className="workspace-google-drive-message" role="status">{message}</p>}
     {error && <p className="workspace-google-drive-error" role="alert">{error}</p>}
-    {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div><div><dt>雲端檔案</dt><dd>{record.fileName ?? '—'}</dd></div></dl>}
+    {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div><div><dt>雲端結構</dt><dd>{record.folderCount} 個資料夾 · {record.tableCount} 張表格</dd></div></dl>}
     {remoteFile && <dl className="workspace-google-drive-meta workspace-google-drive-remote"><div><dt>雲端檔案</dt><dd>{remoteFile.name}</dd></div><div><dt>雲端修改</dt><dd>{formatTime(remoteFile.modifiedTime)}</dd></div></dl>}
     <div className="workspace-google-drive-actions">
       <ActionButton onClick={onConnect} disabled={isBusy} variant="primary"><WorkspaceIcon name="external" size={18} />連結 Google Drive</ActionButton>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { exportWorkspaceXlsx, importWorkspaceXlsx } from '../spreadsheet';
+import { importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData } from '../types';
-import { createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, type DriveFile, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider } from './index';
+import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
+const FOLDER_BACKUP_KEY = 'dynamic-sheet-primary-workspace-v2';
 const BACKUP_FILE_NAME = '玩錯動態表格-備份.xlsx';
 const BACKUP_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -14,11 +15,13 @@ export interface WorkspaceDriveBackupRecord {
   lastBackupAt: number | null;
   sourceUpdatedAt: number | null;
   remoteModifiedTime: string | null;
+  tableCount: number;
+  folderCount: number;
 }
 
 type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
 
-const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null });
+const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0 });
 
 const loadRecord = (): WorkspaceDriveBackupRecord => {
   try {
@@ -31,6 +34,8 @@ const loadRecord = (): WorkspaceDriveBackupRecord => {
       lastBackupAt: typeof value.lastBackupAt === 'number' ? value.lastBackupAt : null,
       sourceUpdatedAt: typeof value.sourceUpdatedAt === 'number' ? value.sourceUpdatedAt : null,
       remoteModifiedTime: typeof value.remoteModifiedTime === 'string' ? value.remoteModifiedTime : null,
+      tableCount: typeof value.tableCount === 'number' ? value.tableCount : 0,
+      folderCount: typeof value.folderCount === 'number' ? value.folderCount : 0,
     };
   } catch {
     return emptyRecord();
@@ -41,7 +46,7 @@ const saveRecord = (record: WorkspaceDriveBackupRecord) => {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); } catch { /* Storage is optional. */ }
 };
 
-const workspaceUpdatedAt = (data?: WorkspaceData) => data ? Math.max(0, ...data.tables.map((table) => table.updatedAt)) : 0;
+const workspaceUpdatedAt = (data?: WorkspaceData) => data ? Math.max(data.updatedAt ?? 0, ...data.tables.map((table) => table.updatedAt)) : 0;
 
 export interface UseWorkspaceGoogleDriveBackupOptions {
   data?: WorkspaceData;
@@ -60,7 +65,8 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [authorized, setAuthorized] = useState(false);
   const authRef = useRef<GoogleIdentityTokenProvider | undefined>(undefined);
-  const backupRef = useRef<GoogleDriveSingleFileBackup | undefined>(undefined);
+  const backupRef = useRef<GoogleDriveFolderBackup | undefined>(undefined);
+  const legacyBackupRef = useRef<GoogleDriveSingleFileBackup | undefined>(undefined);
   const clientIdLoadedRef = useRef(false);
   const clientIdRef = useRef<string | null>(null);
   const localUpdatedAt = workspaceUpdatedAt(data);
@@ -84,7 +90,15 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
       authRef.current = createGoogleIdentityTokenProvider({ clientId, scopes: 'https://www.googleapis.com/auth/drive.file' });
     }
     if (!backupRef.current) {
-      backupRef.current = createGoogleDriveSingleFileBackup({
+      backupRef.current = createGoogleDriveFolderBackup({
+        tokenProvider: authRef.current,
+        folderPath: ['玩錯的桌遊規則', '動態表格備份'],
+        backupKey: FOLDER_BACKUP_KEY,
+        appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
+      });
+    }
+    if (!legacyBackupRef.current) {
+      legacyBackupRef.current = createGoogleDriveSingleFileBackup({
         tokenProvider: authRef.current,
         folderPath: ['玩錯的桌遊規則', '動態表格備份'],
         backupKey: BACKUP_KEY,
@@ -93,7 +107,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
         appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
       });
     }
-    return { auth: authRef.current, backup: backupRef.current };
+    return { auth: authRef.current, backup: backupRef.current, legacyBackup: legacyBackupRef.current };
   }, [loadGoogleClientId]);
 
   const open = useCallback(() => {
@@ -129,7 +143,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     try {
       const { backup: service } = await ensureBackup();
       const sourceUpdatedAt = workspaceUpdatedAt(data) || Date.now();
-      const receipt = await service.backup(exportWorkspaceXlsx(data), {
+      const receipt = await service.backup(data, {
         sourceUpdatedAt,
         appProperties: { exportedAt: new Date().toISOString() },
       });
@@ -139,6 +153,8 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
         lastBackupAt: Date.now(),
         sourceUpdatedAt,
         remoteModifiedTime: receipt.file.modifiedTime ?? null,
+        tableCount: receipt.manifest.tables.length,
+        folderCount: receipt.manifest.folders.length,
       };
       setAuthorized(true);
       setRecord(nextRecord); saveRecord(nextRecord); setMessage('已備份整個資料庫'); setNotice('已備份到 Google Drive');
@@ -151,9 +167,9 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     if (!online) { setError('目前離線，恢復連線後才能讀取雲端備份'); return; }
     setBusy('finding'); setError(''); setMessage('');
     try {
-      const { backup: service } = await ensureBackup();
+      const { backup: service, legacyBackup } = await ensureBackup();
       setAuthorized(true);
-      const file = await service.findRemoteFile();
+      const file = await service.findRemoteFile() ?? await legacyBackup.findRemoteFile();
       if (!file) { setRemoteFile(null); setError('找不到雲端備份檔'); return; }
       setRemoteFile(file); setMessage('已找到雲端備份，請確認後還原');
     } catch (cause) {
@@ -165,11 +181,17 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     if (!online) { setError('目前離線，恢復連線後才能還原'); return; }
     setBusy('restoring'); setError(''); setMessage('');
     try {
-      const { backup: service } = await ensureBackup();
+      const { backup: service, legacyBackup } = await ensureBackup();
       setAuthorized(true);
-      const imported = await importWorkspaceXlsx(await service.restore());
-      if (!imported.data) throw new Error('雲端檔案不是完整的 Workspace 備份');
-      setDialogOpen(false); setRemoteFile(null); onRestored(imported.data); setNotice('已載入雲端備份，請選擇合併或取代');
+      const remoteFolderFile = await service.findRemoteFile();
+      const restoredData = remoteFolderFile
+        ? await service.restore()
+        : await legacyBackup.restore().then(async (blob) => {
+          const imported = await importWorkspaceXlsx(blob);
+          if (!imported.data) throw new Error('雲端檔案不是完整的 Workspace 備份');
+          return imported.data;
+        });
+      setDialogOpen(false); setRemoteFile(null); onRestored(restoredData); setNotice('已載入雲端備份，請選擇合併或取代');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Google Drive 還原失敗');
     } finally { setBusy(null); }

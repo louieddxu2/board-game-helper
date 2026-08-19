@@ -1,10 +1,25 @@
-# Google Drive 備份研究與規劃
+# Google Drive 資料夾式備份
 
 ## 目前結論
 
 動態表格目前應維持「本機資料為主」：IndexedDB 是即時使用的資料來源，Google Drive 只提供備份與還原，不先做多裝置即時同步或自動合併。
 
-目前的完整匯出格式已經可以作為備份檔：整個資料庫匯出為一個 `.xlsx`，包含 Workspace 目錄、每張表的資料頁與獨立設定頁。備份功能應直接重用 `src/workspace/spreadsheet.ts` 的 `exportWorkspaceXlsx()`／`importWorkspaceXlsx()`，避免另做一套可能不一致的格式。
+目前的完整匯出格式仍是可攜式 `.xlsx`，包含 Workspace 目錄、每張表的資料頁與獨立設定頁；Google Drive 備份則使用可逐表更新的資料夾格式，避免每次備份都重寫一個巨大檔案。
+
+## 雲端結構
+
+```text
+玩錯的桌遊規則/
+└─ 動態表格備份/
+   ├─ manifest.json
+   ├─ 桌遊/
+   │  ├─ 收藏表.json
+   │  └─ 遊玩紀錄.json
+   └─ 工作/
+      └─ 待辦事項.json
+```
+
+資料夾和表格檔案都帶有 `appProperties.backupKey`、`backupKind` 與本機穩定 ID。`manifest.json` 保存目錄樹、排序、表格與 Drive file ID；每張表格獨立保存完整欄位設定與資料。舊有單一 XLSX 備份仍可被尋找並還原；新的備份會使用資料夾格式。
 
 ## Google 授權方向
 
@@ -15,7 +30,7 @@
 1. 使用者只在 workspace 的目錄彈窗中按下「Google Drive 備份」。
 2. 前端以獨立的 Google Drive OAuth Web Client ID，向 Google 申請 `drive.file` access token；網站登入使用的 Client ID 不會被替換。
 3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
-4. 前端直接呼叫 Drive v3，建立／更新一個固定備份檔，或下載該檔案後交給既有 XLSX 匯入預覽。
+4. 前端直接呼叫 Drive v3，建立／更新標記過的資料夾、JSON 表格檔與 manifest。
 
 這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
 
@@ -28,9 +43,9 @@
 
 ## Scope 選擇
 
-### 建議第一版：`drive.file`
+### 第一版：`drive.file`
 
-備份檔是使用者看得見、也能自行管理的 `.xlsx`。第一版建議使用 `drive.file`，只讓 App 建立或修改自己建立的檔案，不掃描使用者整個 Drive。這個 scope 較窄，也符合目前「一個本地資料庫對應一個備份檔」的需求。
+備份資料夾是使用者看得見、也能自行管理的檔案。`drive.file` 只讓 App 建立或修改自己建立的檔案，不掃描使用者整個 Drive；這符合資料夾式備份的需求。
 
 不需要 Google Sheets API，也不應把 XLSX 轉成 Google 試算表；目前的設定頁、欄位屬性與 v1 相容性都由既有 XLSX 格式負責。
 
@@ -43,30 +58,22 @@
 ## 第一版資料流
 
 ```text
-本機編輯
-   ↓
-IndexedDB 儲存
-   ↓
-標記「有未備份變更」
-   ↓ 使用者在目錄彈窗按下立即備份
-產生目前完整 XLSX
-   ↓
-瀏覽器直接呼叫 Drive files.create / files.update
-   ↓
-保存 fileId、備份時間與格式版本（不保存 access token）
+本機編輯 → IndexedDB 儲存 → 標記有未備份變更
+                         ↓ 使用者在 drawer 按下立即備份
+       更新目錄資料夾 → 更新有變更的表格 JSON → 更新 manifest
 ```
 
 還原則反向執行，但在真正覆蓋本機資料前，必須先經過自訂衝突確認介面。第一版不做單格合併：選擇「保留本機」、「使用雲端」或「取消」。
 
 上傳檔案可先採用單次 multipart upload；若未來備份檔變大或需要顯示進度，再改用 resumable upload。Drive API 官方說明：[Upload file data](https://developers.google.com/workspace/drive/api/guides/manage-uploads)。
 
-## 建議的備份檔
+## 雲端檔案
 
-- 顯示名稱：`玩錯動態表格-備份.xlsx`
-- MIME type：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-- 內容：目前完整 Workspace XLSX，不另建第二種資料格式
-- `appProperties`：`backupKey`、`workspaceFormat`、`schemaVersion`、`exportedAt`、`backedUpAt`、`sourceUpdatedAt`
-- 本機保存：Drive `fileId`、最後備份 checksum、最後備份時間、目前是否 dirty
+- `manifest.json`：目錄樹、穩定 ID、排序、各表格 file ID、版本。
+- `資料夾`：依本機資料夾樹建立，移動時更新 Drive parent。
+- `表格.json`：一張表一個檔案，包含完整欄位屬性和儲存格內容。
+- `appProperties`：`backupKey`、`backupKind`、`localId`、`schemaVersion`、`backedUpAt`、`sourceUpdatedAt`。
+- 本機只保存 manifest file ID、時間與表格／資料夾數量，不保存 access token 或內容。
 
 `appProperties` 可讓 App 在不掃描整個 Drive 的情況下找回自己的備份檔。Drive API 支援使用 `appProperties` 搜尋檔案：[Search for files and folders](https://developers.google.com/workspace/drive/api/guides/search-files)。
 
@@ -88,8 +95,8 @@ IndexedDB 儲存
 
 ## 第一版已決定的範圍
 
-1. 備份檔讓使用者在 Drive 中看得到，使用 `drive.file`。
+1. 備份資料夾讓使用者在 Drive 中看得到，使用 `drive.file`。
 2. 只提供使用者主動觸發的備份與還原，不做自動背景備份。
-3. Drive 上只維護一個目前備份檔，靠 `appProperties.backupKey` 找回並更新，不每次建立新檔。
+3. Drive 上維護一個 manifest 與每張表格／資料夾的對應項目，靠 app properties 找回，不每次建立重複檔案。
 4. 不在本機保存 Drive access token；使用者重新整理後，必要時重新走 GIS 授權。
 5. 還原仍先回到既有的「合併／取代」匯入預覽，不直接覆蓋目前 workspace。

@@ -142,9 +142,11 @@ const WorkspacePage = () => {
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
     const previous = dataRef.current;
     const mutation = explicitMutation ?? (previous ? inferWorkspaceTableMutation(previous, next) : undefined);
+    const meaningfulChange = !previous || JSON.stringify({ nodes: previous.nodes, tables: previous.tables }) !== JSON.stringify({ nodes: next.nodes, tables: next.tables });
+    const committed = meaningfulChange ? { ...next, updatedAt: Date.now() } : next;
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
-    setData(next);
-    dataRef.current = next;
+    setData(committed);
+    dataRef.current = committed;
     if (options?.clearAllHistory) {
       historyRef.current = new Map();
       setHistoryByTable(new Map());
@@ -172,7 +174,7 @@ const WorkspacePage = () => {
     }
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
-    void saveWorkspace(next).then(() => {
+      void saveWorkspace(committed).then(() => {
       if (saveRevision !== saveRevisionRef.current) return;
       setSaveState('saved');
       setLastSavedAt(Date.now());

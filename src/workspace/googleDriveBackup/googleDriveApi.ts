@@ -99,16 +99,21 @@ export class GoogleDriveApi {
   }
 
   async findFileByAppProperty(options: { key: string; value: string; parentId: string; mimeType?: string }): Promise<DriveFile | null> {
-    let query = `'${escapeQueryLiteral(options.parentId)}' in parents and appProperties has { key='${escapeQueryLiteral(options.key)}' and value='${escapeQueryLiteral(options.value)}' } and trashed = false`;
-    if (options.mimeType) query += ` and mimeType = '${escapeQueryLiteral(options.mimeType)}'`;
-    return (await this.listFiles({ query }))[0] ?? null;
+    return (await this.findFilesByAppProperty(options))[0] ?? null;
   }
 
-  async createFolder(name: string, parentId = 'root'): Promise<DriveFile> {
+  async findFilesByAppProperty(options: { key: string; value: string; parentId?: string; mimeType?: string }): Promise<DriveFile[]> {
+    let query = `appProperties has { key='${escapeQueryLiteral(options.key)}' and value='${escapeQueryLiteral(options.value)}' } and trashed = false`;
+    if (options.parentId) query = `'${escapeQueryLiteral(options.parentId)}' in parents and ${query}`;
+    if (options.mimeType) query += ` and mimeType = '${escapeQueryLiteral(options.mimeType)}'`;
+    return this.listFiles({ query });
+  }
+
+  async createFolder(name: string, parentId = 'root', appProperties?: Record<string, string>): Promise<DriveFile> {
     return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId], ...(appProperties ? { appProperties } : {}) }),
     });
   }
 
@@ -143,6 +148,28 @@ export class GoogleDriveApi {
       method: options.fileId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
       body: requestBody,
+    });
+  }
+
+  async moveFile(fileId: string, parentId: string, previousParentId?: string): Promise<DriveFile> {
+    const params = new URLSearchParams({ fields: 'id,name,mimeType,parents,createdTime,modifiedTime,appProperties', addParents: parentId });
+    if (previousParentId && previousParentId !== parentId) params.set('removeParents', previousParentId);
+    return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files/${encodeURIComponent(fileId)}?${params.toString()}`, { method: 'PATCH' });
+  }
+
+  async updateFileMetadata(fileId: string, metadata: { name?: string; appProperties?: Record<string, string> }): Promise<DriveFile> {
+    return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(metadata),
+    });
+  }
+
+  async trashFile(fileId: string): Promise<void> {
+    await this.requestJson<void>(`${this.driveBaseUrl}/files/${encodeURIComponent(fileId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trashed: true }),
     });
   }
 

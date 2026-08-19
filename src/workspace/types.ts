@@ -62,6 +62,8 @@ export interface WorkspaceNode {
 
 export interface WorkspaceData {
   version: 1;
+  /** Monotonic local revision for changes that are not owned by one table (for example folder moves). */
+  updatedAt?: number;
   nodes: WorkspaceNode[];
   tables: WorkspaceTable[];
   activeNodeId: string | null;

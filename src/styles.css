@@ -948,6 +948,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .checkbox input { width: auto; }
 .modal-actions { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
 .modal-actions > div { display: flex; gap: 8px; }
+.external-resource-dialog { width: min(620px, 100%); }
+.external-resource-list { display: grid; gap: 8px; max-height: 34vh; overflow: auto; }
+.external-resource-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.external-resource-item > div { display: grid; gap: 3px; min-width: 0; }
+.external-resource-item strong { overflow-wrap: anywhere; }
+.external-resource-item small { color: var(--muted); }
+.external-resource-item a { overflow-wrap: anywhere; color: var(--green); }
+.external-resource-form { display: grid; gap: 9px; padding-top: 6px; border-top: 1px solid var(--line); }
+.external-resource-form label { display: grid; gap: 4px; }
+.external-resource-form input, .external-resource-form select { box-sizing: border-box; width: 100%; }
 .rule-draft-import-modal { width: min(720px, 100%); }
 .rule-draft-import-modal > p { margin: 0; color: var(--muted); line-height: 1.6; }
 .rule-draft-import-modal > label { display: grid; gap: 7px; }

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
-import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, GAME_EXTERNAL_RESOURCE_CATEGORIES, type FlowStage, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
@@ -23,6 +23,26 @@ import {
 } from '../data/gameViews';
 
 const gamesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
+
+interface GameExternalResourceRow {
+  id: string;
+  game_id: string;
+  name: string;
+  category: GameExternalResourceCategory;
+  url: string;
+  created_at: number;
+  updated_at: number;
+}
+
+const toGameExternalResource = (row: GameExternalResourceRow): GameExternalResource => ({
+  id: row.id,
+  gameId: row.game_id,
+  name: row.name,
+  category: row.category,
+  url: row.url,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
 
 gamesRoutes.get('/api/games/search', async (c) => {
   const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
@@ -137,7 +157,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
 
   setNoCache(c);
 
-  const [aliasesResult, rulesResult] = await Promise.all([
+  const [aliasesResult, rulesResult, externalResourcesResult] = await Promise.all([
     getDatabase(c).statement('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
     getDatabase(c).statement(`${gameRuleSelect}
@@ -148,6 +168,12 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
         WHEN 'edition_player_count' THEN 6 ELSE 7 END,
         r.created_at DESC
     `).bind(game.id).all<RuleRow>(),
+    getDatabase(c).statement(`
+      SELECT id, game_id, name, category, url, created_at, updated_at
+      FROM game_external_resources
+      WHERE game_id = ?
+      ORDER BY CASE category WHEN 'teaching' THEN 1 WHEN 'help_card' THEN 2 ELSE 3 END, name, id
+    `).bind(game.id).all<GameExternalResourceRow>(),
   ]);
   const ruleRows = rulesResult.results ?? [];
   const nicknameMap = await resolvePublicNicknames(getDatabase(c), ruleRows);
@@ -156,6 +182,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     ruleCount: ruleRows.length,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
     rules: ruleRows.map((row) => toRule(row, undefined, nicknameMap)),
+    externalResources: (externalResourcesResult.results ?? []).map(toGameExternalResource),
   };
   setNoCache(c);
   return c.json({ game: detail, rulesComplete: includePrivate });
@@ -210,6 +237,52 @@ gamesRoutes.patch('/api/games/:id', requireUser, async (c) => {
     GROUP BY g.id
   `).bind(c.req.param('id')).first<GameRow>();
   return c.json({ ok: true, game: toGame(updatedGame!) });
+});
+
+const externalResourceSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  category: z.enum(GAME_EXTERNAL_RESOURCE_CATEGORIES),
+  url: z.string().trim().min(1).max(2000).refine((value) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch { return false; }
+  }, 'invalid_url'),
+});
+
+gamesRoutes.post('/api/games/:id/external-resources', requireRole('editor'), async (c) => {
+  const parsed = externalResourceSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_external_resource', issues: parsed.error.issues }, 400);
+  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string; slug: string }>();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const timestamp = now();
+  const resourceId = createId('resource');
+  await getDatabase(c).statement(`
+    INSERT INTO game_external_resources (id, game_id, name, category, url, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(resourceId, game.id, parsed.data.name, parsed.data.category, parsed.data.url, c.get('user')!.id, timestamp, timestamp).run();
+  const cache = (caches as any).default;
+  c.executionCtx.waitUntil(Promise.all([
+    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
+    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
+  ]));
+  return c.json({ resource: { id: resourceId, gameId: game.id, ...parsed.data, createdAt: timestamp, updatedAt: timestamp } satisfies GameExternalResource }, 201);
+});
+
+gamesRoutes.delete('/api/games/:id/external-resources/:resourceId', requireRole('editor'), async (c) => {
+  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string; slug: string }>();
+  if (!game) return c.json({ error: 'game_not_found' }, 404);
+  const deleted = await getDatabase(c).statement(`
+    DELETE FROM game_external_resources
+    WHERE id = ? AND game_id = ?
+  `).bind(c.req.param('resourceId'), c.req.param('id')).run();
+  if (!deleted.meta?.changes) return c.json({ error: 'external_resource_not_found' }, 404);
+  const cache = (caches as any).default;
+  c.executionCtx.waitUntil(Promise.all([
+    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
+    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
+  ]));
+  return c.json({ ok: true });
 });
 
 gamesRoutes.post('/api/games/:id/review', requireRole('editor'), async (c) => {
