@@ -263,14 +263,15 @@ footer a { color: inherit; }
 .workspace-storage-status.is-error span:first-child { color: #a52f23; }
 .workspace-drive-storage-status { background: rgba(233,180,76,.1); }
 .workspace-drive-storage-status.needs-attention span:first-child { color: var(--orange); }
+.workspace-drive-status-card { width: 100%; border: 0; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.workspace-drive-status-card:hover { background: var(--cream); }
+.workspace-drive-status-card:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .workspace-auto-backup-toggle { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; row-gap: 1px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; }
 .workspace-auto-backup-toggle input { width: 17px; height: 17px; margin: 0; accent-color: var(--green); }
 .workspace-auto-backup-toggle span { font-size: 13px; font-weight: 700; }
 .workspace-auto-backup-toggle small { grid-column: 2; color: var(--muted); font-size: 11px; }
 .workspace-auto-backup-toggle.is-paused { border-color: rgba(165,47,35,.35); background: rgba(165,47,35,.05); }
 .workspace-auto-backup-toggle.is-paused span { color: #a52f23; }
-.workspace-drawer-backup-action { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--orange); border-radius: 6px; background: rgba(233,180,76,.1); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
-.workspace-drawer-backup-action:hover { background: var(--cream); color: var(--orange); }
 .workspace-drawer-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .workspace-drawer-data-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .workspace-drawer-data-actions button:hover { border-color: var(--orange); background: var(--cream); color: var(--orange); }
@@ -321,8 +322,8 @@ footer a { color: inherit; }
 .workspace-google-drive-meta div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
 .workspace-google-drive-meta dt { color: var(--muted); font-size: 13px; }
 .workspace-google-drive-meta dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-google-drive-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.workspace-google-drive-actions button:first-child, .workspace-google-drive-actions button:last-child { grid-column: 1 / -1; }
+.workspace-google-drive-actions { display: grid; gap: 8px; }
+.workspace-google-drive-actions button { width: 100%; }
 .workspace-google-drive-disconnect { justify-self: end; padding: 3px 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
 .workspace-google-drive-disconnect:hover { color: var(--orange); }
 .workspace-action-dialog { width: min(390px, 100%); }

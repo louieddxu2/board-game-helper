@@ -1074,7 +1074,7 @@ describe('WorkspacePage', () => {
     await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     expect(within(drawer).getByText(/已儲存於此裝置/)).toBeInTheDocument();
-    expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
+    expect(within(drawer).getByText('尚未匯出資料')).toHaveClass('needs-attention');
   });
 
   it('provides one persisted automatic backup toggle in the drawer', async () => {
@@ -1135,16 +1135,18 @@ describe('WorkspacePage', () => {
     expect(window.localStorage.getItem('wrong-board-game-pwa-last-route')).toBe('/');
   });
 
-  it('keeps Google Drive backup entry and actions inside the drawer flow', async () => {
+  it('opens Google Drive backup settings from one status entry in the drawer', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     const drawerButton = await screen.findByRole('button', { name: '開啟目錄' });
     await user.click(drawerButton);
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
-    expect(within(drawer).getByRole('button', { name: 'Google Drive 備份' })).toBeInTheDocument();
-    await user.click(within(drawer).getByRole('button', { name: 'Google Drive 備份' }));
-    expect(screen.getByRole('dialog', { name: 'Google Drive' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '立即備份' })).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: '開啟 Google Drive 備份' })).toBeInTheDocument();
+    expect(within(drawer).queryByRole('button', { name: 'Google Drive 備份' })).not.toBeInTheDocument();
+    await user.click(within(drawer).getByRole('button', { name: '開啟 Google Drive 備份' }));
+    expect(screen.getByRole('dialog', { name: 'Google Drive 備份' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '連結 Google Drive' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
   });
 
