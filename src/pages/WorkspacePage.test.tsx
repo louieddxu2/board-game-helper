@@ -1077,6 +1077,17 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
+  it('provides one persisted automatic backup toggle in the drawer', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const toggle = within(screen.getByRole('complementary', { name: 'Workspace 目錄' })).getByRole('checkbox', { name: '自動備份' });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(window.localStorage.getItem('board-game-helper-google-drive-auto-backup')).toBe('true');
+  });
+
   it('closes the drawer when a child control consumes the left-swipe pointer events', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

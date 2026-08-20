@@ -3,7 +3,7 @@ export type DriveBody = string | Blob | ArrayBuffer | ArrayBufferView;
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export interface AccessTokenProvider {
-  getAccessToken(options?: { prompt?: string }): Promise<string>;
+  getAccessToken(options?: { prompt?: string; forceRefresh?: boolean }): Promise<string>;
 }
 
 export interface DriveFile {
@@ -58,6 +58,7 @@ export interface GoogleIdentityTokenProviderOptions {
 }
 
 export interface GoogleIdentityWindow {
+  localStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   google?: {
     accounts?: {
       oauth2?: {

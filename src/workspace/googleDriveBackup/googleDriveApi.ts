@@ -48,9 +48,9 @@ export class GoogleDriveApi {
     this.uploadBaseUrl = (options.uploadBaseUrl ?? DEFAULT_UPLOAD_BASE_URL).replace(/\/$/, '');
   }
 
-  private async authorizationHeaders(): Promise<Headers> {
+  private async authorizationHeaders(options: { forceRefresh?: boolean } = {}): Promise<Headers> {
     const headers = new Headers();
-    headers.set('Authorization', `Bearer ${await this.tokenProvider.getAccessToken()}`);
+    headers.set('Authorization', `Bearer ${await this.tokenProvider.getAccessToken(options)}`);
     return headers;
   }
 
@@ -61,9 +61,8 @@ export class GoogleDriveApi {
   }
 
   private async requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-    const headers = await this.authorizationHeaders();
-    new Headers(init.headers).forEach((value, key) => headers.set(key, value));
-    const response = await this.fetchImpl(url, { ...init, headers });
+    let response = await this.fetchAuthorized(url, init);
+    if (response.status === 401) response = await this.fetchAuthorized(url, init, { forceRefresh: true });
     if (!response.ok) {
       const details = await this.parseError(response);
       const message = typeof details === 'object' && details !== null && 'error' in details
@@ -77,9 +76,16 @@ export class GoogleDriveApi {
   }
 
   private async requestBlob(url: string): Promise<Blob> {
-    const response = await this.fetchImpl(url, { headers: await this.authorizationHeaders() });
+    let response = await this.fetchAuthorized(url);
+    if (response.status === 401) response = await this.fetchAuthorized(url, undefined, { forceRefresh: true });
     if (!response.ok) throw new GoogleDriveApiError(`Google Drive 下載失敗：${response.status}`, response.status, await this.parseError(response));
     return response.blob();
+  }
+
+  private async fetchAuthorized(url: string, init: RequestInit = {}, tokenOptions: { forceRefresh?: boolean } = {}) {
+    const headers = await this.authorizationHeaders(tokenOptions);
+    new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+    return this.fetchImpl(url, { ...init, headers });
   }
 
   async listFiles(options: { query: string; fields?: string; pageSize?: number }): Promise<DriveFile[]> {

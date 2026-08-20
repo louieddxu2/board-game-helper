@@ -223,6 +223,8 @@ export interface WorkspaceBackupTableFileRef {
   folderId: string | null;
   name: string;
   updatedAt: number;
+  /** Optional in v1 manifests so older backups remain importable. */
+  contentFingerprint?: string;
   driveFileId: string;
   fileName: string;
 }
@@ -254,8 +256,8 @@ export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: 
     ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
     ['folder_files', 'id', 'name', 'parentId', 'order', 'driveFolderId'],
     ...folders.map((folder) => ['folder_file', folder.id, folder.name, folder.parentId ?? '', folder.order, folder.driveFolderId]),
-    ['table_files', 'id', 'nodeId', 'folderId', 'name', 'updatedAt', 'driveFileId', 'fileName'],
-    ...tables.map((table) => ['table_file', table.id, table.nodeId, table.folderId ?? '', table.name, table.updatedAt, table.driveFileId, table.fileName]),
+    ['table_files', 'id', 'nodeId', 'folderId', 'name', 'updatedAt', 'contentFingerprint', 'driveFileId', 'fileName'],
+    ...tables.map((table) => ['table_file', table.id, table.nodeId, table.folderId ?? '', table.name, table.updatedAt, table.contentFingerprint ?? '', table.driveFileId, table.fileName]),
   ],
 }]);
 
@@ -530,14 +532,20 @@ const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest =
     order: Number(row[4]) || 0,
     driveFolderId: stringValue(row[5]),
   })).filter((folder) => folder.id);
+  const tableHeader = rows.find((row) => stringValue(row[0]) === 'table_files') ?? [];
+  const tableColumn = (name: string, fallback: number) => {
+    const index = tableHeader.findIndex((value) => stringValue(value) === name);
+    return index >= 0 ? index : fallback;
+  };
   const tables = rows.filter((row) => stringValue(row[0]) === 'table_file').map((row) => ({
     id: stringValue(row[1]),
     nodeId: stringValue(row[2]),
     folderId: stringValue(row[3]) || null,
     name: stringValue(row[4]),
-    updatedAt: Number(row[5]) || 0,
-    driveFileId: stringValue(row[6]),
-    fileName: stringValue(row[7]),
+    updatedAt: Number(row[tableColumn('updatedAt', 5)]) || 0,
+    ...(stringValue(row[tableColumn('contentFingerprint', -1)]) ? { contentFingerprint: stringValue(row[tableColumn('contentFingerprint', -1)]) } : {}),
+    driveFileId: stringValue(row[tableColumn('driveFileId', 6)]),
+    fileName: stringValue(row[tableColumn('fileName', 7)]),
   })).filter((table) => table.id && table.nodeId && table.fileName);
   if (!Number.isFinite(sourceUpdatedAt)) throw new Error('備份試算表缺少來源更新時間');
   return { ...parsed, sourceUpdatedAt, folders, tables };

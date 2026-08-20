@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { importWorkspaceBackupManifestXlsx, importWorkspaceXlsx } from '../spreadsheet';
-import { BackupNotFoundError, createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider } from './index';
+import { BackupNotFoundError, createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, GoogleDriveApi } from './index';
 import { createNode, createTable } from '../model';
 import type { WorkspaceData } from '../types';
 
@@ -76,7 +76,7 @@ describe('Google Drive folder backup boundary', () => {
       }
       return -1;
     };
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
       if (url.includes('alt=media')) {
@@ -106,6 +106,21 @@ describe('Google Drive folder backup boundary', () => {
         files.set(id, { id, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties });
         return jsonResponse(files.get(id));
       }
+      if (url.includes('/drive/v3/files/') && method === 'PATCH') {
+        const id = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
+        const file = files.get(id);
+        if (!file) return jsonResponse({ error: { message: 'missing file' } }, 404);
+        const body = JSON.parse(String(init?.body ?? '{}')) as { name?: string; appProperties?: Record<string, string>; trashed?: boolean };
+        const params = new URL(url).searchParams;
+        if (body.name !== undefined) file.name = body.name;
+        if (body.appProperties) file.appProperties = body.appProperties;
+        if (body.trashed !== undefined) file.appProperties = { ...file.appProperties, trashed: String(body.trashed) };
+        const addParent = params.get('addParents');
+        const removeParent = params.get('removeParents');
+        if (removeParent) file.parents = file.parents.filter((parent) => parent !== removeParent);
+        if (addParent && !file.parents.includes(addParent)) file.parents.push(addParent);
+        return jsonResponse(file);
+      }
       if (url.includes('/files?')) {
         const query = decodeURIComponent(new URL(url).searchParams.get('q') ?? '');
         const property = query.match(/key='([^']+)' and value='([^']+)'/);
@@ -115,7 +130,8 @@ describe('Google Drive folder backup boundary', () => {
         return jsonResponse({ files: found });
       }
       throw new Error(`Unexpected Drive request: ${method} ${url}`);
-    }) as typeof fetch;
+    });
+    const fetchImpl = fetchMock as unknown as typeof fetch;
     const table = createTable('收藏表');
     const folder = createNode('folder', '桌遊', null, 0);
     const tableNode = createNode('table', table.name, folder.id, 0, table.id);
@@ -141,6 +157,15 @@ describe('Google Drive folder backup boundary', () => {
     const restored = await backup.restore();
     expect(restored.nodes).toEqual(data.nodes);
     expect(restored.tables[0].name).toBe('收藏表');
+
+    const uploadCount = fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length;
+    await backup.backup(data, { sourceUpdatedAt: 42 });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount);
+
+    const renamedData: WorkspaceData = { ...data, nodes: data.nodes.map((node) => node.type === 'folder' ? { ...node, name: '桌遊收藏' } : node), updatedAt: 43 };
+    await backup.backup(renamedData, { sourceUpdatedAt: 43 });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount + 1);
+    expect(files.get(receipt.manifest.folders[0].driveFolderId)?.name).toBe('桌遊收藏');
   });
 });
 
@@ -161,8 +186,30 @@ describe('Google Identity token provider', () => {
     expect(await provider.getAccessToken()).toBe('token-1');
     expect(await provider.getAccessToken()).toBe('token-1');
     expect(tokenClient.requestAccessToken).toHaveBeenCalledTimes(1);
+    expect(await provider.getAccessToken({ forceRefresh: true })).toBe('token-1');
+    expect(tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
     await provider.signOut();
     expect(revoke).toHaveBeenCalledWith('token-1', expect.any(Function));
     expect(provider.isAuthorized).toBe(false);
+    await expect(provider.getAccessToken()).rejects.toThrow('主動斷線');
+    await expect(provider.signIn({ prompt: 'consent' })).resolves.toBe('token-1');
+  });
+});
+
+describe('Google Drive API token recovery', () => {
+  it('silently refreshes once after an expired access token response', async () => {
+    const getAccessToken = vi.fn()
+      .mockResolvedValueOnce('expired-token')
+      .mockResolvedValueOnce('fresh-token');
+    const api = new GoogleDriveApi({
+      tokenProvider: { getAccessToken },
+      fetchImpl: vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'expired' } }), { status: 401 }))
+        .mockResolvedValueOnce(jsonResponse({ files: [] })),
+    });
+
+    await expect(api.listFiles({ query: 'trashed = false' })).resolves.toEqual([]);
+    expect(getAccessToken).toHaveBeenNthCalledWith(1, {});
+    expect(getAccessToken).toHaveBeenNthCalledWith(2, { forceRefresh: true });
   });
 });

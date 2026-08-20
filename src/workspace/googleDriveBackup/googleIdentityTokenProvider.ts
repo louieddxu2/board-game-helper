@@ -12,6 +12,7 @@ const DEFAULT_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const DEFAULT_SCRIPT_ID = 'google-identity-services';
 const DEFAULT_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const DEFAULT_SCRIPT_TIMEOUT_MS = 10_000;
+export const GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY = 'board-game-helper-google-drive-manually-disconnected';
 
 const defaultWindow = (): GoogleIdentityWindow => {
   if (typeof window === 'undefined') throw new Error('Google Identity Services 需要瀏覽器視窗');
@@ -94,6 +95,7 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
   let tokenClient: GoogleTokenClient | null = null;
   let scriptPromise: Promise<void> | null = null;
   let signInPromise: Promise<string> | null = null;
+  let manuallyDisconnected = input.windowRef?.localStorage?.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY) === 'true';
 
   const ensureReady = async () => {
     if (!scriptPromise) scriptPromise = loadIdentityScript(documentRef, windowRef, scriptOptions);
@@ -120,6 +122,8 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
           }
           token = response.access_token;
           expiresAt = Date.now() + Math.max((response.expires_in ?? 3600) - 60, 1) * 1000;
+          manuallyDisconnected = false;
+          input.windowRef?.localStorage?.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
           resolve(token);
         };
         tokenClient!.requestAccessToken({ prompt });
@@ -131,7 +135,8 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
   return {
     get isAuthorized() { return Boolean(token && Date.now() < expiresAt); },
     async getAccessToken(options = {}) {
-      if (token && Date.now() < expiresAt) return token;
+      if (manuallyDisconnected && !options.prompt) throw new Error('Google Drive 已由使用者主動斷線，請重新連結後再備份');
+      if (!options.forceRefresh && token && Date.now() < expiresAt) return token;
       return signIn(options);
     },
     signIn,
@@ -143,6 +148,8 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
       }
       token = null;
       expiresAt = 0;
+      manuallyDisconnected = true;
+      input.windowRef?.localStorage?.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
     },
   };
 };

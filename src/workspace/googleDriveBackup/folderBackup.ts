@@ -29,6 +29,7 @@ export interface DriveWorkspaceTableRef {
   folderId: string | null;
   name: string;
   updatedAt: number;
+  contentFingerprint?: string;
   driveFileId: string;
   fileName: string;
 }
@@ -59,6 +60,32 @@ export interface GoogleDriveFolderBackup {
 }
 
 const parentOf = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>) => node.parentId ? nodes.get(node.parentId) : undefined;
+
+const stableSerialize = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(object[key])}`).join(',')}}`;
+};
+
+const tableContentFingerprint = (table: WorkspaceTable) => {
+  const { updatedAt: _updatedAt, ...content } = table;
+  return stableSerialize(content);
+};
+
+const nodeStructure = (data: WorkspaceData) => ({
+  activeNodeId: data.activeNodeId,
+  nodes: data.nodes.map(({ id, type, name, parentId, order, tableId }) => ({ id, type, name, parentId, order, tableId: tableId ?? null })),
+});
+
+const folderDepth = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>, visiting = new Set<string>()): number => {
+  if (!node.parentId) return 0;
+  if (visiting.has(node.id)) throw new Error('工作區資料夾結構包含循環');
+  const parent = nodes.get(node.parentId);
+  if (!parent || parent.type !== 'folder') throw new Error(`找不到資料夾父層：${node.name}`);
+  visiting.add(node.id);
+  return folderDepth(parent, nodes, visiting) + 1;
+};
 
 export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): GoogleDriveFolderBackup => {
   if (!options.backupKey.trim()) throw new Error('backupKey 不可為空白');
@@ -114,7 +141,10 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const driveFolderIds = new Map<string, string>();
     const folders: DriveWorkspaceFolderRef[] = [];
 
-    for (const node of data.nodes.filter((item) => item.type === 'folder')) {
+    const folderNodes = data.nodes
+      .filter((item) => item.type === 'folder')
+      .sort((left, right) => folderDepth(left, nodeMap) - folderDepth(right, nodeMap));
+    for (const node of folderNodes) {
       const parentNode = parentOf(node, nodeMap);
       const parentDriveId = parentNode ? driveFolderIds.get(parentNode.id) : root;
       if (!parentDriveId) throw new Error(`找不到資料夾父層：${node.name}`);
@@ -138,8 +168,18 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       if (!file) file = (await findTagged(DRIVE_TABLE_KIND, table.id, parentId, DRIVE_XLSX_MIME_TYPE))[0];
       const fileName = `${table.name || node.name || table.id}.xlsx`;
       if (file?.parents?.[0] && file.parents[0] !== parentId) file = await api.moveFile(file.id, parentId, file.parents[0]);
-      file = await api.uploadFile({ fileId: file?.id, parentId: file ? undefined : parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
-      tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, driveFileId: file.id, fileName });
+      const contentFingerprint = tableContentFingerprint(table);
+      const contentChanged = !file || !previousTable
+        ? true
+        : previousTable.contentFingerprint
+          ? previousTable.contentFingerprint !== contentFingerprint
+          : previousTable.updatedAt !== table.updatedAt;
+      if (contentChanged) {
+        file = await api.uploadFile({ fileId: file?.id, parentId: file ? undefined : parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
+      } else if (file.name !== fileName) {
+        file = await api.updateFileMetadata(file.id, { name: fileName });
+      }
+      tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, contentFingerprint, driveFileId: file.id, fileName });
     }
 
     const activeIds = new Set(folders.map((item) => item.id));
@@ -153,13 +193,20 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       format: DRIVE_MANIFEST_FORMAT,
       version: DRIVE_MANIFEST_VERSION,
       backupKey: options.backupKey,
-      updatedAt: Date.now(),
+      updatedAt: sourceUpdatedAt,
       sourceUpdatedAt,
       activeNodeId: data.activeNodeId,
       nodes: data.nodes,
       folders,
       tables: tableRefs,
     };
+    const manifestNeedsUpdate = !previousFile
+      || !previous
+      || stableSerialize(nodeStructure(data)) !== stableSerialize(nodeStructure({ ...data, nodes: previous.nodes }))
+      || stableSerialize(folders) !== stableSerialize(previous.folders)
+      || stableSerialize(tableRefs) !== stableSerialize(previous.tables)
+      || previous.sourceUpdatedAt !== sourceUpdatedAt;
+    if (!manifestNeedsUpdate && previousFile) return { file: previousFile, backupKey: options.backupKey, parentId: root, sourceUpdatedAt, manifest };
     const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));

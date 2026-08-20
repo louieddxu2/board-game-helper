@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData } from '../types';
-import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider } from './index';
+import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
@@ -9,6 +9,9 @@ const FOLDER_BACKUP_KEY = 'dynamic-sheet-primary-workspace-v2';
 const WORKSPACE_BACKUP_FOLDER_PATH = ['BoardGameHelper', '動態表格備份'] as const;
 const BACKUP_FILE_NAME = '玩錯動態表格-備份.xlsx';
 const BACKUP_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const AUTO_BACKUP_STORAGE_KEY = 'board-game-helper-google-drive-auto-backup';
+export const GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS = 30 * 60 * 1000;
+const AUTO_BACKUP_DEBOUNCE_MS = 1500;
 
 export interface WorkspaceDriveBackupRecord {
   fileId: string | null;
@@ -21,6 +24,7 @@ export interface WorkspaceDriveBackupRecord {
 }
 
 type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
+export type WorkspaceDriveBackupStatus = 'offline' | 'never' | 'dirty' | 'saved' | 'disconnected';
 
 const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0 });
 
@@ -65,6 +69,9 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
   const [remoteFile, setRemoteFile] = useState<DriveFile | null>(null);
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [authorized, setAuthorized] = useState(false);
+  const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => window.localStorage.getItem(AUTO_BACKUP_STORAGE_KEY) === 'true');
+  const [manuallyDisconnected, setManuallyDisconnected] = useState(() => window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY) === 'true');
+  const [autoRetryAt, setAutoRetryAt] = useState(0);
   const authRef = useRef<GoogleIdentityTokenProvider | undefined>(undefined);
   const backupRef = useRef<GoogleDriveFolderBackup | undefined>(undefined);
   const legacyBackupRef = useRef<GoogleDriveSingleFileBackup | undefined>(undefined);
@@ -73,7 +80,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
   const localUpdatedAt = workspaceUpdatedAt(data);
 
   useEffect(() => {
-    const onOnline = () => setOnline(true);
+    const onOnline = () => { setOnline(true); setAutoRetryAt(0); };
     const onOffline = () => setOnline(false);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
@@ -131,15 +138,20 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
       const { auth } = await ensureBackup();
       await auth.signIn({ prompt: 'consent' });
       setAuthorized(true);
+      setManuallyDisconnected(false);
+      window.localStorage.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
+      setAutoRetryAt(0);
       setMessage('已連結 Google Drive');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Google Drive 連結失敗');
     } finally { setBusy(null); }
   }, [ensureBackup]);
 
-  const backup = useCallback(async () => {
-    if (!data) return;
-    if (!online) { setError('目前離線，恢復連線後才能備份'); return; }
+  const backup = useCallback(async ({ automatic = false }: { automatic?: boolean } = {}) => {
+    if (!data) return false;
+    if (automatic && (!autoBackupEnabled || manuallyDisconnected)) return false;
+    if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return false; }
+    if (!online) { setError('目前離線，恢復連線後才能備份'); if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS); return false; }
     setBusy('backing-up'); setError(''); setMessage('');
     try {
       const { backup: service } = await ensureBackup();
@@ -159,12 +171,17 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
       };
       setAuthorized(true);
       setRecord(nextRecord); saveRecord(nextRecord); setMessage('已備份整個資料庫'); setNotice('已備份到 Google Drive');
+      setAutoRetryAt(0);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Google Drive 備份失敗');
+      if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
+      return false;
     } finally { setBusy(null); }
-  }, [data, ensureBackup, online, setNotice]);
+  }, [autoBackupEnabled, data, ensureBackup, manuallyDisconnected, online, setNotice]);
 
   const findRemote = useCallback(async () => {
+    if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
     if (!online) { setError('目前離線，恢復連線後才能讀取雲端備份'); return; }
     setBusy('finding'); setError(''); setMessage('');
     try {
@@ -176,9 +193,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '讀取 Google Drive 備份失敗');
     } finally { setBusy(null); }
-  }, [ensureBackup, online]);
+  }, [ensureBackup, manuallyDisconnected, online]);
 
   const restore = useCallback(async () => {
+    if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
     if (!online) { setError('目前離線，恢復連線後才能還原'); return; }
     setBusy('restoring'); setError(''); setMessage('');
     try {
@@ -196,22 +214,45 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Google Drive 還原失敗');
     } finally { setBusy(null); }
-  }, [ensureBackup, onRestored, online, setNotice]);
+  }, [ensureBackup, manuallyDisconnected, onRestored, online, setNotice]);
 
   const disconnect = useCallback(async () => {
-    if (!authRef.current) return;
+    if (!authRef.current) {
+      setManuallyDisconnected(true);
+      window.localStorage.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
+      return;
+    }
     setBusy('connecting'); setError('');
-    try { await authRef.current.signOut(); setAuthorized(false); setMessage('已解除本次工作階段的 Google Drive 授權'); }
+    try { await authRef.current.signOut(); setAuthorized(false); setManuallyDisconnected(true); setAutoRetryAt(0); setMessage('已解除授權；自動備份不會自行重新連結'); }
     catch { setError('解除 Google Drive 授權失敗'); }
     finally { setBusy(null); }
   }, []);
 
-  const status = useMemo(() => {
+  const setAutoBackupEnabled = useCallback((enabled: boolean) => {
+    setAutoBackupEnabledState(enabled);
+    window.localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, String(enabled));
+    if (!enabled) setAutoRetryAt(0);
+  }, []);
+
+  const status = useMemo<WorkspaceDriveBackupStatus>(() => {
+    if (manuallyDisconnected) return 'disconnected';
     if (!online) return 'offline' as const;
     if (!record.lastBackupAt) return 'never' as const;
     if (localUpdatedAt > (record.sourceUpdatedAt ?? 0)) return 'dirty' as const;
     return 'saved' as const;
-  }, [localUpdatedAt, online, record.lastBackupAt, record.sourceUpdatedAt]);
+  }, [localUpdatedAt, manuallyDisconnected, online, record.lastBackupAt, record.sourceUpdatedAt]);
+
+  const hasPendingBackup = status === 'never' || status === 'dirty';
+  useEffect(() => {
+    if (!autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy) return;
+    // A first automatic backup is allowed only after the user has connected once,
+    // so a background timer can never unexpectedly open an OAuth prompt.
+    if (!authorized && !record.lastBackupAt) return;
+    const nextAllowedAt = Math.max(autoRetryAt, (record.lastBackupAt ?? 0) + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
+    const delay = Math.max(AUTO_BACKUP_DEBOUNCE_MS, nextAllowedAt - Date.now());
+    const timer = window.setTimeout(() => { void backup({ automatic: true }); }, delay);
+    return () => window.clearTimeout(timer);
+  }, [autoBackupEnabled, autoRetryAt, authorized, backup, busy, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt]);
 
   return {
     dialogOpen,
@@ -222,6 +263,9 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     findRemote,
     restore,
     disconnect,
+    autoBackupEnabled,
+    setAutoBackupEnabled,
+    manuallyDisconnected,
     busy,
     message,
     error,
