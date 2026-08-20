@@ -94,6 +94,7 @@ const WorkspacePage = () => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const filterbarRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
+  const drawerElementRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
@@ -104,6 +105,7 @@ const WorkspacePage = () => {
   const suppressNextDrawerClickRef = useRef(false);
   const drawerItemDraggingRef = useRef(false);
   const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
+  const drawerTouchSwipeRef = useRef<{ identifier: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
 
   const openDrawer = useCallback(() => {
     if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
@@ -197,9 +199,72 @@ const WorkspacePage = () => {
     drawerItemDraggingRef.current = active;
     if (!active) return;
     drawerSwipeRef.current = undefined;
+    drawerTouchSwipeRef.current = undefined;
     setDrawerDragging(false);
     setDrawerOffset(workspaceDrawerWidth());
   }, []);
+
+  useEffect(() => {
+    const drawer = drawerElementRef.current;
+    if (!drawerOpen || !drawer) return;
+    const findTouch = (touches: TouchList, identifier: number) => Array.from(touches).find((touch) => touch.identifier === identifier);
+    const beginTouchSwipe = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || drawerItemDraggingRef.current) return;
+      const touch = event.touches[0];
+      drawerTouchSwipeRef.current = { identifier: touch.identifier, startX: touch.clientX, startY: touch.clientY, active: false, offset: workspaceDrawerWidth() };
+    };
+    const moveTouchSwipe = (event: TouchEvent) => {
+      const gesture = drawerTouchSwipeRef.current;
+      if (!gesture || drawerItemDraggingRef.current) return;
+      const touch = findTouch(event.touches, gesture.identifier);
+      if (!touch) return;
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
+      if (!gesture.active) {
+        if (Math.hypot(deltaX, deltaY) <= 8) return;
+        if (deltaX >= -8 || Math.abs(deltaY) >= Math.abs(deltaX)) {
+          drawerTouchSwipeRef.current = undefined;
+          return;
+        }
+        gesture.active = true;
+        drawerSwipeRef.current = undefined;
+        suppressNextDrawerClickRef.current = true;
+        setDrawerDragging(true);
+      }
+      gesture.offset = getDrawerCloseSwipeOffset(deltaX, workspaceDrawerWidth());
+      setDrawerOffset(gesture.offset);
+      event.preventDefault();
+    };
+    const endTouchSwipe = (event: TouchEvent) => {
+      const gesture = drawerTouchSwipeRef.current;
+      if (!gesture || !findTouch(event.changedTouches, gesture.identifier)) return;
+      drawerTouchSwipeRef.current = undefined;
+      if (!gesture.active) return;
+      const width = workspaceDrawerWidth();
+      const offset = clampDrawerOffset(gesture.offset, width);
+      setDrawerDragging(false);
+      if (shouldKeepDrawerOpen(offset, width)) setDrawerOffset(width);
+      else closeDrawer();
+      event.preventDefault();
+      if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
+      drawerClickResetTimerRef.current = window.setTimeout(() => {
+        suppressNextDrawerClickRef.current = false;
+        drawerClickResetTimerRef.current = undefined;
+      }, 400);
+    };
+
+    drawer.addEventListener('touchstart', beginTouchSwipe, { capture: true, passive: true });
+    drawer.addEventListener('touchmove', moveTouchSwipe, { capture: true, passive: false });
+    drawer.addEventListener('touchend', endTouchSwipe, { capture: true, passive: false });
+    drawer.addEventListener('touchcancel', endTouchSwipe, { capture: true, passive: false });
+    return () => {
+      drawer.removeEventListener('touchstart', beginTouchSwipe, true);
+      drawer.removeEventListener('touchmove', moveTouchSwipe, true);
+      drawer.removeEventListener('touchend', endTouchSwipe, true);
+      drawer.removeEventListener('touchcancel', endTouchSwipe, true);
+      drawerTouchSwipeRef.current = undefined;
+    };
+  }, [closeDrawer, drawerOpen]);
 
   useEffect(() => {
     if (!drawerOpen) {
@@ -966,7 +1031,7 @@ const WorkspacePage = () => {
       </main>
     </div>
     </div>
-    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={closeDrawer} style={{ opacity: Math.min(1, drawerOffset / Math.max(1, workspaceDrawerWidth())) }} /><aside className={`workspace-drawer${drawerDragging ? ' is-dragging' : ''}`} aria-label="Workspace 目錄" style={{ '--workspace-drawer-offset': `${drawerOffset}px` } as React.CSSProperties} onPointerDownCapture={beginDrawerSwipe} onPointerMoveCapture={moveDrawerSwipe} onPointerUpCapture={endDrawerSwipe} onPointerCancelCapture={endDrawerSwipe} onClickCapture={suppressDrawerSwipeClick}><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={closeDrawer} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} onDragStateChange={handleDrawerItemDragStateChange} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className={`workspace-storage-status workspace-drive-storage-status ${driveBackup.status === 'dirty' ? 'needs-attention' : ''}`} role="status"><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? `Google Drive · 已備份${driveBackup.record.lastBackupAt ? ` · ${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}` : 'Google Drive · 尚未備份'}</span><span>{driveBackup.record.fileName ?? '點按設定備份'}</span></div><button type="button" className="workspace-drawer-backup-action" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><WorkspaceIcon name="upload" size={19} />Google Drive 備份</button><div className="workspace-drawer-data-actions"><button type="button" onClick={() => void exportAll()}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/" onClick={() => savePwaLastRoute({ pathname: '/' })}><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
+    {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={closeDrawer} style={{ opacity: Math.min(1, drawerOffset / Math.max(1, workspaceDrawerWidth())) }} /><aside ref={drawerElementRef} className={`workspace-drawer${drawerDragging ? ' is-dragging' : ''}`} aria-label="Workspace 目錄" style={{ '--workspace-drawer-offset': `${drawerOffset}px` } as React.CSSProperties} onPointerDownCapture={beginDrawerSwipe} onPointerMoveCapture={moveDrawerSwipe} onPointerUpCapture={endDrawerSwipe} onPointerCancelCapture={endDrawerSwipe} onClickCapture={suppressDrawerSwipeClick}><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={closeDrawer} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} onDragStateChange={handleDrawerItemDragStateChange} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次備份：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出備份'}</span></div><div className={`workspace-storage-status workspace-drive-storage-status ${driveBackup.status === 'dirty' ? 'needs-attention' : ''}`} role="status"><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? `Google Drive · 已備份${driveBackup.record.lastBackupAt ? ` · ${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}` : 'Google Drive · 尚未備份'}</span><span>{driveBackup.record.fileName ?? '點按設定備份'}</span></div><button type="button" className="workspace-drawer-backup-action" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><WorkspaceIcon name="upload" size={19} />Google Drive 備份</button><div className="workspace-drawer-data-actions"><button type="button" onClick={() => void exportAll()}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/" onClick={() => savePwaLastRoute({ pathname: '/' })}><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".zip,application/zip,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
