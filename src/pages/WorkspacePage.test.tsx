@@ -1039,12 +1039,15 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
-  it('closes the drawer when a left swipe starts on an interactive control', async () => {
+  it('closes the drawer when a child control consumes the left-swipe pointer events', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
-    const start = within(drawer).getByRole('button', { name: 'Google Drive 備份' });
+    const start = within(drawer).getByRole('button', { name: '開啟測試表格操作' });
+    const consumePointerEvent = (event: Event) => event.stopPropagation();
+    start.addEventListener('pointermove', consumePointerEvent);
+    start.addEventListener('pointerup', consumePointerEvent);
     const dispatchPointer = (element: Element, type: string, x: number) => {
       const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 100 });
       Object.defineProperties(event, { pointerId: { value: 31 }, pointerType: { value: 'touch' } });
@@ -1056,7 +1059,7 @@ describe('WorkspacePage', () => {
     dispatchPointer(start, 'pointerup', 40);
 
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
-    expect(screen.queryByRole('dialog', { name: 'Google Drive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('marks 返回網站 as an explicit homepage navigation in installed mode', async () => {
