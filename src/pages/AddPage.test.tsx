@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AddPage } from './AddPage';
 import { RULE_DRAFT_IMPORT_FORMAT, RULE_DRAFT_IMPORT_SCHEMA_VERSION } from '../lib/ruleDraftImport';
@@ -100,6 +100,24 @@ describe('AddPage contribution constraints', () => {
     expect(screen.getByRole('link', { name: '隱私與資料說明' })).toHaveAttribute('href', '/privacy');
     expect(screen.getByLabelText('玩錯情況')).toBeInTheDocument();
     expect(mocks.contributions).not.toHaveBeenCalled();
+  });
+
+  test('returns directly to the homepage instead of the previous page', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    window.history.replaceState({ idx: 2 }, '', '/add');
+    render(
+      <MemoryRouter initialEntries={['/games/previous-game', '/add']} initialIndex={1}>
+        <Routes>
+          <Route path="/add" element={<AddPage />} />
+          <Route path="/" element={<p>網站首頁</p>} />
+          <Route path="/games/:identifier" element={<p>上一個遊戲頁</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(await screen.findByText('網站首頁')).toBeInTheDocument();
   });
 
   test('keeps Enter as a newline in the correct-rule textarea', () => {

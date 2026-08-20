@@ -1039,6 +1039,37 @@ describe('WorkspacePage', () => {
     expect(within(drawer).getByText('尚未匯出備份')).toHaveClass('needs-attention');
   });
 
+  it('closes the drawer when a left swipe starts on an interactive control', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    const start = within(drawer).getByRole('button', { name: 'Google Drive 備份' });
+    const dispatchPointer = (element: Element, type: string, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 100 });
+      Object.defineProperties(event, { pointerId: { value: 31 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(start, 'pointerdown', 320);
+    dispatchPointer(start, 'pointermove', 40);
+    dispatchPointer(start, 'pointerup', 40);
+
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('dialog', { name: 'Google Drive' })).not.toBeInTheDocument();
+  });
+
+  it('marks 返回網站 as an explicit homepage navigation in installed mode', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList));
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+
+    fireEvent.click(screen.getByRole('link', { name: '返回網站' }));
+
+    expect(window.localStorage.getItem('wrong-board-game-pwa-last-route')).toBe('/');
+  });
+
   it('keeps Google Drive backup entry and actions inside the drawer flow', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
