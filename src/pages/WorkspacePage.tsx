@@ -214,8 +214,13 @@ const WorkspacePage = () => {
       drawerTouchSwipeRef.current = { identifier: touch.identifier, startX: touch.clientX, startY: touch.clientY, active: false, offset: workspaceDrawerWidth() };
     };
     const moveTouchSwipe = (event: TouchEvent) => {
+      if (drawerItemDraggingRef.current) {
+        drawerTouchSwipeRef.current = undefined;
+        event.preventDefault();
+        return;
+      }
       const gesture = drawerTouchSwipeRef.current;
-      if (!gesture || drawerItemDraggingRef.current) return;
+      if (!gesture) return;
       const touch = findTouch(event.touches, gesture.identifier);
       if (!touch) return;
       const deltaX = touch.clientX - gesture.startX;

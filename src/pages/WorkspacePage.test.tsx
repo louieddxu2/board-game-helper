@@ -1047,7 +1047,12 @@ describe('WorkspacePage', () => {
 
     try {
       dispatchPointer(source, 'pointerdown', 320, 80);
+      fireEvent.touchStart(source, { touches: [{ identifier: 32, clientX: 320, clientY: 80 }] });
       await new Promise((resolve) => window.setTimeout(resolve, 500));
+      const nativeTouchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+      Object.defineProperty(nativeTouchMove, 'touches', { value: [{ identifier: 32, clientX: 40, clientY: 82 }] });
+      fireEvent(tree, nativeTouchMove);
+      expect(nativeTouchMove.defaultPrevented).toBe(true);
       dispatchPointer(tree, 'pointermove', 40, 82);
       dispatchPointer(tree, 'pointerup', 40, 82);
 
