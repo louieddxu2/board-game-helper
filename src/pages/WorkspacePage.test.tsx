@@ -1049,6 +1049,8 @@ describe('WorkspacePage', () => {
       dispatchPointer(source, 'pointerdown', 320, 80);
       fireEvent.touchStart(source, { touches: [{ identifier: 32, clientX: 320, clientY: 80 }] });
       await new Promise((resolve) => window.setTimeout(resolve, 500));
+      fireEvent.contextMenu(source);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       const nativeTouchMove = new Event('touchmove', { bubbles: true, cancelable: true });
       Object.defineProperty(nativeTouchMove, 'touches', { value: [{ identifier: 32, clientX: 40, clientY: 82 }] });
       fireEvent(tree, nativeTouchMove);
