@@ -1030,6 +1030,37 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('keeps the drawer open when an active item drag moves horizontally', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const source = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
+    const target = screen.getByText('收藏資料夾').closest('.workspace-tree-row')!;
+    const tree = document.querySelector('.workspace-tree')!;
+    const previousElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => target);
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 32 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    try {
+      dispatchPointer(source, 'pointerdown', 320, 80);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(tree, 'pointermove', 40, 82);
+      dispatchPointer(tree, 'pointerup', 40, 82);
+
+      await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
+        nodes: expect.arrayContaining([expect.objectContaining({ id: 'node-table', parentId: 'folder-1' })]),
+      })));
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+      expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
+    } finally {
+      document.elementFromPoint = previousElementFromPoint;
+    }
+  });
+
   it('shows local save and backup status in the drawer', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

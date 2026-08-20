@@ -32,7 +32,7 @@ export const TreeNode = ({ node, data, expanded, depth, draggingId, dragTargetId
     {node.type === 'folder' && isOpen && <div className="workspace-tree-children">{visibleChildren.map((child) => <TreeNode key={child.id} node={child} data={data} expanded={expanded} depth={depth + 1} draggingId={draggingId} dragTargetId={dragTargetId} onToggle={onToggle} onOpen={onOpen} onContext={onContext} onDragPointerDown={onDragPointerDown} shouldSuppressClick={shouldSuppressClick} visibleNodeIds={visibleNodeIds} filterQuery={filterQuery} />)}</div>}
   </div>;
 };
-export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, filterQuery = '' }: { data: WorkspaceData; expanded: Set<string>; onToggle(id: string): void; onOpen(node: WorkspaceNode): void; onContext(node: WorkspaceNode): void; onMove(node: WorkspaceNode, parentId: string | null): void; filterQuery?: string }) => {
+export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDragStateChange, filterQuery = '' }: { data: WorkspaceData; expanded: Set<string>; onToggle(id: string): void; onOpen(node: WorkspaceNode): void; onContext(node: WorkspaceNode): void; onMove(node: WorkspaceNode, parentId: string | null): void; onDragStateChange?(active: boolean): void; filterQuery?: string }) => {
   const treeRef = useRef<HTMLDivElement>(null);
   const autoScrollFrame = useRef<number | undefined>(undefined);
   const autoScrollVelocity = useRef(0);
@@ -104,6 +104,7 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, filt
   const clearDrag = () => {
     const session = dragSession.current;
     if (session?.timer) window.clearTimeout(session.timer);
+    if (session?.active) onDragStateChange?.(false);
     stopAutoScroll();
     dragSession.current = undefined;
     dragTargetRef.current = null;
@@ -112,6 +113,7 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, filt
   };
   useEffect(() => () => {
     if (dragSession.current?.timer) window.clearTimeout(dragSession.current.timer);
+    if (dragSession.current?.active) onDragStateChange?.(false);
     stopAutoScroll();
   }, []);
   const beginDrag = (node: WorkspaceNode, event: React.PointerEvent<HTMLDivElement>) => {
@@ -119,6 +121,7 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, filt
     const session = { node, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, timer: undefined as number | undefined };
     session.timer = window.setTimeout(() => {
       session.active = true;
+      onDragStateChange?.(true);
       suppressNextClick.current = true;
       setDraggingNode(node);
       setDragPoint({ x: session.startX, y: session.startY });
