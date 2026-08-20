@@ -1107,8 +1107,8 @@ describe('WorkspacePage', () => {
     const row = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
 
     fireEvent.touchStart(row, { touches: [{ identifier: 41, clientX: 320, clientY: 160 }] });
-    fireEvent.touchMove(row, { touches: [{ identifier: 41, clientX: 40, clientY: 162 }] });
-    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 41, clientX: 40, clientY: 162 }] });
+    fireEvent.touchMove(row, { touches: [{ identifier: 41, clientX: 190, clientY: 162 }] });
+    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 41, clientX: 190, clientY: 162 }] });
 
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
   });

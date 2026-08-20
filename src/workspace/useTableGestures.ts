@@ -33,7 +33,8 @@ export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollT
 export const clampDrawerOffset = (offset: number, width: number) => Math.max(0, Math.min(Math.max(0, width), offset));
 export const getDrawerOpenSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(deltaX, width);
 export const getDrawerCloseSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(width + deltaX, width);
-export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0 && offset >= width * 0.35;
+export const shouldOpenDrawer = (offset: number, width: number) => width > 0 && offset >= width * 0.35;
+export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0 && offset / width > 0.7;
 
 export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);

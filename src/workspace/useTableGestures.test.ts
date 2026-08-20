@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, shouldKeepDrawerOpen } from './useTableGestures';
+import { getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, shouldKeepDrawerOpen, shouldOpenDrawer } from './useTableGestures';
 
 describe('drawer swipe geometry', () => {
   it('follows the finger while opening from the table', () => {
@@ -14,10 +14,16 @@ describe('drawer swipe geometry', () => {
     expect(getDrawerCloseSwipeOffset(20, 360)).toBe(360);
   });
 
-  it('keeps the drawer open only after the drag passes the settle threshold', () => {
-    expect(shouldKeepDrawerOpen(125, 360)).toBe(false);
-    expect(shouldKeepDrawerOpen(126, 360)).toBe(true);
+  it('closes after a left drag passes thirty percent of the drawer width', () => {
+    expect(shouldKeepDrawerOpen(253, 360)).toBe(true);
+    expect(shouldKeepDrawerOpen(252, 360)).toBe(false);
     expect(shouldKeepDrawerOpen(0, 0)).toBe(false);
+  });
+
+  it('opens after a right drag passes thirty-five percent of the drawer width', () => {
+    expect(shouldOpenDrawer(125, 360)).toBe(false);
+    expect(shouldOpenDrawer(126, 360)).toBe(true);
+    expect(shouldOpenDrawer(0, 0)).toBe(false);
   });
 });
 

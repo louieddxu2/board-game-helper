@@ -7,7 +7,7 @@ import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode,
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, HeaderFilterDialog, HiddenFieldsDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
 import { Tree } from "../workspace/workspaceSidebar";
-import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, shouldKeepDrawerOpen, useTableGestures } from "../workspace/useTableGestures";
+import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, shouldKeepDrawerOpen, shouldOpenDrawer, useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
 import { useWorkspaceBrowserBack } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
@@ -135,7 +135,7 @@ const WorkspacePage = () => {
     const width = workspaceDrawerWidth();
     const offset = getDrawerOpenSwipeOffset(deltaX, width);
     setDrawerDragging(false);
-    if (shouldKeepDrawerOpen(offset, width)) {
+    if (shouldOpenDrawer(offset, width)) {
       setDrawerOpen(true);
       setDrawerOffset(width);
     } else {
