@@ -101,6 +101,37 @@ describe('WorkspacePage', () => {
     expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
   });
 
+  it('batch-adds a multi-select option using aggregate counts and undoes it as one action', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('cell', { name: '花火，類型：合作' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('columnheader', { name: '類型' }));
+    await user.click(screen.getByRole('checkbox', { name: '多選' }));
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await user.click(screen.getByRole('cell', { name: '物件 2，類型：空白' }));
+    await user.click(screen.getByRole('option', { name: '競爭' }));
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+
+    await longPress(screen.getByRole('cell', { name: '花火，類型：合作' }));
+    await user.click(screen.getByRole('cell', { name: '物件 2，類型：競爭' }));
+    await user.click(screen.getByRole('button', { name: '開啟 類型 批次輸入' }));
+
+    const cooperation = screen.getByRole('button', { name: '寫入 合作 至全部格子' });
+    await user.click(cooperation);
+    expect(cooperation.closest('.workspace-bulk-multi-row')).toHaveClass('is-add');
+    expect(cooperation.closest('.workspace-bulk-multi-row')).toHaveTextContent('2/2');
+    await user.click(screen.getByRole('button', { name: '確認' }));
+
+    expect(screen.getByRole('cell', { name: '物件 2，類型：競爭、合作' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    expect(screen.getByRole('cell', { name: '物件 2，類型：競爭' })).toBeInTheDocument();
+  });
+
   it('accepts the first real cell tap after a long press that produces no synthetic click', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

@@ -11,8 +11,8 @@ import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset,
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
 import { useWorkspaceBrowserBack } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
-import type { WorkspaceBulkSelection } from '../workspace/bulkEdit';
-import { WorkspaceBulkEditToolbar, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
+import { applyWorkspaceMultiSelectBatch, type WorkspaceBulkSelection } from '../workspace/bulkEdit';
+import { WorkspaceBulkEditToolbar, WorkspaceBulkMultiSelectDialog, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
 import { WorkspacePasteDialog, WorkspaceTableImportPreviewDialog } from '../workspace/workspaceDataDialogs';
 import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from '../workspace/workspacePaste';
 import { api } from '../lib/api';
@@ -311,6 +311,7 @@ const WorkspacePage = () => {
     const row = tableRowsById.get(rowId);
     return row ? [row] : [];
   }) : [], [bulkSelection, tableRowsById]);
+  const bulkMultiSelectRows = useMemo(() => bulkColumn ? bulkRows.map((row) => ({ rowId: row.id, value: row.values[bulkColumn.id] ?? null })) : [], [bulkColumn, bulkRows]);
   const fixedListSuggestions = useMemo(() => {
     if (!configuring || !table || !rowHeader) return [];
     const values = table.rows.map((row) => configuring.isRowHeader ? row.name : row.values[configuring.column.id] ?? null);
@@ -475,14 +476,14 @@ const WorkspacePage = () => {
     setBulkEditorOpen(false);
   }, []);
 
-  const commitBulkSelection = useCallback((draft: { sharedValue: WorkspaceCellValue; distributedValues?: Record<string, number> }) => {
+  const commitBulkCellUpdates = useCallback((updates: Array<{ rowId: string; value: WorkspaceCellValue }>) => {
     const currentData = dataRef.current;
     if (!currentData || !table || !bulkSelection || !bulkColumn) return;
-    const selectedIds = new Set(bulkSelection.rowIds);
+    const valuesByRowId = new Map(updates.map((update) => [update.rowId, update.value]));
     const changes = table.rows.flatMap((row) => {
-      if (!selectedIds.has(row.id)) return [];
+      if (!valuesByRowId.has(row.id)) return [];
       const before = row.values[bulkColumn.id] ?? null;
-      const after = draft.distributedValues?.[row.id] ?? draft.sharedValue;
+      const after = valuesByRowId.get(row.id)!;
       return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ rowId: row.id, before, after }];
     });
     if (changes.length === 0) {
@@ -500,6 +501,11 @@ const WorkspacePage = () => {
     setNotice(`已更新 ${changes.length} 格`);
     closeBulkSelection();
   }, [bulkColumn, bulkSelection, closeBulkSelection, commit, table]);
+
+  const commitBulkSelection = useCallback((draft: { sharedValue: WorkspaceCellValue; distributedValues?: Record<string, number> }) => {
+    if (!bulkSelection) return;
+    commitBulkCellUpdates(bulkSelection.rowIds.map((rowId) => ({ rowId, value: draft.distributedValues?.[rowId] ?? draft.sharedValue })));
+  }, [bulkSelection, commitBulkCellUpdates]);
 
   const bulkInitialValue = bulkRows[0] && bulkColumn ? bulkRows[0].values[bulkColumn.id] ?? null : null;
   const bulkDraftValue = bulkInitialValue;
@@ -952,7 +958,9 @@ const WorkspacePage = () => {
        : bulkColumn.inputType === 'link'
        ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: value })} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
-       ? <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />
+       ? bulkColumn.isMultiple
+         ? <WorkspaceBulkMultiSelectDialog column={bulkColumn} rows={bulkMultiSelectRows} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(intents) => { setBulkEditorOpen(false); commitBulkCellUpdates(applyWorkspaceMultiSelectBatch(bulkMultiSelectRows, intents)); }} />
+         : <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />
        : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />)}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {pasteDialogOpen && pasteTarget && <WorkspacePasteDialog targetLabel={pasteTargetLabel} onClose={() => setPasteDialogOpen(false)} onApply={pasteMatrix} />}
