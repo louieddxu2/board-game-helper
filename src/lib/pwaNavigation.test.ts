@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PWA_LAST_ROUTE_STORAGE_KEY, isInstalledPwa, pwaRouteFromLocation, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './pwaNavigation';
+import { PWA_LAST_ROUTE_STORAGE_KEY, isInstalledPwa, isPwaHomeShortcut, pwaRouteFromLocation, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './pwaNavigation';
 
 afterEach(() => {
   localStorage.clear();
@@ -15,6 +15,12 @@ describe('PWA route memory', () => {
     expect(pwaRouteToRestore('/', '/workspace')).toBe('/workspace');
     expect(pwaRouteToRestore('/workspace', '/add')).toBeNull();
     expect(pwaRouteToRestore('/', '/')).toBeNull();
+  });
+
+  it('does not restore the remembered route from the explicit homepage shortcut', () => {
+    expect(isPwaHomeShortcut({ pathname: '/', search: '?pwa-entry=home' })).toBe(true);
+    expect(pwaRouteToRestore('/', '/workspace', true)).toBeNull();
+    expect(pwaRouteToRestore('/', '/workspace', false)).toBe('/workspace');
   });
 
   it('does not let malformed or external-looking routes enter storage', () => {

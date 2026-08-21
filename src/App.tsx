@@ -3,7 +3,7 @@ import { Layout } from './components/Layout';
 import { SessionProvider } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
-import { isInstalledPwa, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './lib/pwaNavigation';
+import { isInstalledPwa, isPwaHomeShortcut, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './lib/pwaNavigation';
 
 const LoadingFallback = () => (
   <section className="narrow-page workspace-loading">
@@ -38,10 +38,14 @@ const router = createBrowserRouter([
   ] },
 ]);
 
-const shouldRestorePwaRoute = isInstalledPwa() && typeof window !== 'undefined' && pwaRouteToRestore(window.location.pathname, readPwaLastRoute());
-if (shouldRestorePwaRoute) {
+const installedPwa = isInstalledPwa();
+const launchedFromPwaHomeShortcut = installedPwa && typeof window !== 'undefined' && isPwaHomeShortcut({ pathname: window.location.pathname, search: window.location.search });
+const shouldRestorePwaRoute = installedPwa && typeof window !== 'undefined' && pwaRouteToRestore(window.location.pathname, readPwaLastRoute(), launchedFromPwaHomeShortcut);
+if (launchedFromPwaHomeShortcut) {
+  void router.navigate('/', { replace: true });
+} else if (shouldRestorePwaRoute) {
   void router.navigate(shouldRestorePwaRoute);
-} else if (isInstalledPwa()) {
+} else if (installedPwa) {
   savePwaLastRoute(router.state.location);
 }
 

@@ -1,4 +1,6 @@
 export const PWA_LAST_ROUTE_STORAGE_KEY = 'wrong-board-game-pwa-last-route';
+export const PWA_LAUNCH_QUERY_PARAM = 'pwa-entry';
+export const PWA_HOME_SHORTCUT_VALUE = 'home';
 
 export interface PwaRouteLocation {
   pathname: string;
@@ -21,6 +23,8 @@ export const isInstalledPwa = () => {
   return displayModeStandalone || iosStandalone;
 };
 
+export const isPwaHomeShortcut = ({ pathname, search = '' }: PwaRouteLocation) => pathname === '/' && new URLSearchParams(search).get(PWA_LAUNCH_QUERY_PARAM) === PWA_HOME_SHORTCUT_VALUE;
+
 export const readPwaLastRoute = () => {
   if (typeof localStorage === 'undefined') return null;
   try {
@@ -41,8 +45,8 @@ export const savePwaLastRoute = (location: PwaRouteLocation) => {
   }
 };
 
-export const pwaRouteToRestore = (currentPathname: string, lastRoute: string | null) => {
-  if (currentPathname !== '/') return null;
+export const pwaRouteToRestore = (currentPathname: string, lastRoute: string | null, explicitHomepageShortcut = false) => {
+  if (currentPathname !== '/' || explicitHomepageShortcut) return null;
   if (!lastRoute || lastRoute === '/') return null;
   return normalizeRoute(lastRoute);
 };

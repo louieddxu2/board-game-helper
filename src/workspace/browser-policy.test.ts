@@ -18,7 +18,7 @@ describe('workspace browser policies', () => {
 
   it('offers the installed PWA a stable shortcut back to the main website', () => {
     const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ url?: string }> };
-    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/')).toBe(true);
+    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
   });
 
   it('constrains the workspace to the viewport so the table owns vertical scrolling', () => {
@@ -208,6 +208,7 @@ describe('workspace browser policies', () => {
     const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { start_url?: string; scope?: string; shortcuts?: Array<{ url?: string }> };
     expect(manifest.start_url).toBe('/');
     expect(manifest.scope).toBe('/');
+    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 
