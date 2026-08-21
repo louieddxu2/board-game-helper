@@ -183,6 +183,23 @@ describe('Google Drive folder backup boundary', () => {
     expect((await backup.findRemoteFile())?.id).toBe(changedReceipt.file.id);
     expect((await backup.restore()).tables[0].name).toBe('新版收藏表');
 
+    const changedManifestFile = files.get(changedReceipt.file.id);
+    if (!changedManifestFile) throw new Error('missing changed manifest fixture');
+    changedManifestFile.appProperties = { ...changedManifestFile.appProperties, parentManifestIds: JSON.stringify([receipt.file.id]) };
+    files.set('manifest-competing-branch', {
+      ...changedManifestFile,
+      id: 'manifest-competing-branch',
+      appProperties: {
+        ...changedManifestFile.appProperties,
+        backedUpAt: String(Number(changedManifestFile.appProperties?.backedUpAt ?? 0) + 1),
+        parentManifestIds: JSON.stringify([receipt.file.id]),
+      },
+    });
+    expect((await backup.findRemoteFile())?.appProperties?.backupForkCount).toBe('2');
+    await expect(backup.backup(changedData, { sourceUpdatedAt: 43 }, { expectedRemoteFileId: changedReceipt.file.id })).rejects.toThrow('雲端備份已在其他裝置變更');
+    await backup.backup(changedData, { sourceUpdatedAt: 43 });
+    expect((await backup.findRemoteFile())?.appProperties?.backupForkCount).toBe('1');
+
     const renamedData: WorkspaceData = { ...changedData, nodes: data.nodes.map((node) => node.type === 'folder' ? { ...node, name: '桌遊收藏' } : node), updatedAt: 44 };
     await backup.backup(renamedData, { sourceUpdatedAt: 44 });
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBeGreaterThan(uploadCount + 1);

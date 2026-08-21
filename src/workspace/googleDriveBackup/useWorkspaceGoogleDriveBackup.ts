@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData } from '../types';
-import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_MANIFEST_FILE_NAME, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, workspaceStructureBackupFingerprint, workspaceTableBackupFingerprint, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
+import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, workspaceStructureBackupFingerprint, workspaceTableBackupFingerprint, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
@@ -96,6 +96,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
 
   const remoteMatchesRecord = useCallback((file: DriveFile | null) => {
     if (!file) return record.fileId === null;
+    if (Number(file.appProperties?.[DRIVE_BACKUP_FORK_COUNT_PROPERTY] ?? 1) > 1) return false;
     if (file.id !== record.fileId) return false;
     return !record.remoteModifiedTime || !file.modifiedTime || file.modifiedTime === record.remoteModifiedTime;
   }, [record.fileId, record.remoteModifiedTime]);

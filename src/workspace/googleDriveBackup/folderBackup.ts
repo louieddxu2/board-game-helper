@@ -13,6 +13,8 @@ export const DRIVE_LOCAL_ID_PROPERTY = 'localId';
 export const DRIVE_MANIFEST_KIND = 'manifest';
 export const DRIVE_FOLDER_KIND = 'folder';
 export const DRIVE_TABLE_KIND = 'table';
+export const DRIVE_PARENT_MANIFEST_IDS_PROPERTY = 'parentManifestIds';
+export const DRIVE_BACKUP_FORK_COUNT_PROPERTY = 'backupForkCount';
 export const DRIVE_XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export interface DriveWorkspaceFolderRef {
@@ -106,6 +108,34 @@ const folderDepth = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>, vis
   return folderDepth(parent, nodes, visiting) + 1;
 };
 
+const sortManifestFiles = (files: DriveFile[]) => [...files].sort((left, right) => {
+  const backedUpDifference = Number(right.appProperties?.backedUpAt ?? 0) - Number(left.appProperties?.backedUpAt ?? 0);
+  if (backedUpDifference) return backedUpDifference;
+  return String(right.modifiedTime ?? right.createdTime ?? '').localeCompare(String(left.modifiedTime ?? left.createdTime ?? ''));
+});
+
+const manifestParentIds = (file: DriveFile): string[] => {
+  const serialized = file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY];
+  if (serialized === undefined) return [];
+  try {
+    const parsed: unknown = JSON.parse(serialized);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+export const findDriveManifestHeads = (files: DriveFile[]): DriveFile[] => {
+  const sorted = sortManifestFiles(files);
+  const versioned = sorted.filter((file) => file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY] !== undefined);
+  if (versioned.length === 0) return sorted.slice(0, 1);
+  const referencedIds = new Set(versioned.flatMap(manifestParentIds));
+  const heads = versioned.filter((file) => !referencedIds.has(file.id));
+  const latestLegacy = sorted.find((file) => file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY] === undefined);
+  if (latestLegacy && !referencedIds.has(latestLegacy.id)) heads.push(latestLegacy);
+  return sortManifestFiles(heads);
+};
+
 export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): GoogleDriveFolderBackup => {
   if (!options.backupKey.trim()) throw new Error('backupKey 不可為空白');
   const api = new GoogleDriveApi(options);
@@ -134,14 +164,15 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     return api.findFilesByAppProperty({ key, value, parentId, mimeType }).then((files) => files.filter((file) => file.appProperties?.backupKey === options.backupKey && file.appProperties?.[DRIVE_BACKUP_KIND_PROPERTY] === kind));
   };
 
-  const findRemoteFile = async () => {
+  const findRemoteState = async () => {
     const files = await findTagged(DRIVE_MANIFEST_KIND, undefined, await ensureFolder(), DRIVE_XLSX_MIME_TYPE);
-    return files.sort((left, right) => {
-      const backedUpDifference = Number(right.appProperties?.backedUpAt ?? 0) - Number(left.appProperties?.backedUpAt ?? 0);
-      if (backedUpDifference) return backedUpDifference;
-      return String(right.modifiedTime ?? right.createdTime ?? '').localeCompare(String(left.modifiedTime ?? left.createdTime ?? ''));
-    })[0] ?? null;
+    const heads = findDriveManifestHeads(files);
+    const selected = heads[0]
+      ? { ...heads[0], appProperties: { ...heads[0].appProperties, [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(heads.length) } }
+      : null;
+    return { heads, selected };
   };
+  const findRemoteFile = async () => (await findRemoteState()).selected;
 
   const ensureFolderNode = async (node: WorkspaceNode, parentId: string, previous: DriveWorkspaceFolderRef | undefined) => {
     let file = previous?.driveFolderId
@@ -159,13 +190,14 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
 
   const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}, runOptions: FolderBackupRunOptions = {}): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }> => {
     const root = await ensureFolder();
-    const previousFile = await findRemoteFile();
+    const remoteState = await findRemoteState();
+    const previousFile = remoteState.selected;
     if ('expectedRemoteFileId' in runOptions) {
       const idChanged = (previousFile?.id ?? null) !== (runOptions.expectedRemoteFileId ?? null);
       const timeChanged = runOptions.expectedRemoteModifiedTime != null
         && previousFile?.modifiedTime != null
         && previousFile.modifiedTime !== runOptions.expectedRemoteModifiedTime;
-      if (idChanged || timeChanged) throw new RemoteBackupConflictError(previousFile);
+      if (remoteState.heads.length > 1 || idChanged || timeChanged) throw new RemoteBackupConflictError(previousFile);
     }
     const previous = previousFile ? await importWorkspaceBackupManifestXlsx(await api.downloadBlob(previousFile.id)).catch(() => undefined) : undefined;
     const previousFolders = new Map((previous?.folders ?? []).map((item) => [item.id, item]));
@@ -181,7 +213,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
         const oldFolder = previousFolders.get(node.id);
         return oldFolder?.name === node.name && oldFolder.parentId === node.parentId && oldFolder.order === node.order;
       });
-    if (previousFile && previous && previous.sourceUpdatedAt === sourceUpdatedAt && sameTables && sameFolders
+    if (remoteState.heads.length <= 1 && previousFile && previous && previous.sourceUpdatedAt === sourceUpdatedAt && sameTables && sameFolders
       && workspaceStructureBackupFingerprint(data) === workspaceStructureBackupFingerprint({ ...data, nodes: previous.nodes, activeNodeId: previous.activeNodeId })) {
       return {
         file: previousFile,
@@ -264,11 +296,16 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       || stableSerialize(folders) !== stableSerialize(previous.folders)
       || stableSerialize(tableRefs) !== stableSerialize(previous.tables)
       || previous.sourceUpdatedAt !== sourceUpdatedAt;
-    if (!manifestNeedsUpdate && previousFile) return { file: previousFile, backupKey: options.backupKey, parentId: root, sourceUpdatedAt, manifest };
-    const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION) };
+    if (remoteState.heads.length <= 1 && !manifestNeedsUpdate && previousFile) return { file: previousFile, backupKey: options.backupKey, parentId: root, sourceUpdatedAt, manifest };
+    const parentManifestIds = 'expectedRemoteFileId' in runOptions
+      ? previousFile ? [previousFile.id] : []
+      : remoteState.heads.map((file) => file.id);
+    const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION), [DRIVE_PARENT_MANIFEST_IDS_PROPERTY]: JSON.stringify(parentManifestIds) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
     const file = await api.uploadFile({ parentId: root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
+    const committedState = await findRemoteState();
+    if (committedState.heads.length > 1) throw new RemoteBackupConflictError(committedState.selected);
     return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest };
   };
 

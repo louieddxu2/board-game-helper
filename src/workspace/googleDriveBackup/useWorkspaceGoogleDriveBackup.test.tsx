@@ -44,6 +44,14 @@ const renderBackup = (data = createData()) => renderHook(({ value }) => useWorks
   setNotice: vi.fn(),
 }), { initialProps: { value: data } });
 
+const receiptFor = (data: WorkspaceData) => ({
+  file: { id: 'manifest-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T10:00:02.000Z' },
+  manifest: {
+    tables: data.tables.map((table) => ({ id: table.id, updatedAt: table.updatedAt, contentFingerprint: workspaceTableBackupFingerprint(table), driveFileId: `drive-${table.id}` })),
+    folders: [],
+  },
+});
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
@@ -53,13 +61,7 @@ beforeEach(() => {
   mocks.signOut.mockResolvedValue(undefined);
   mocks.findRemoteFile.mockResolvedValue(null);
   mocks.backup.mockImplementation(async (data: WorkspaceData) => {
-    const receipt = {
-      file: { id: 'manifest-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T10:00:02.000Z' },
-      manifest: {
-      tables: data.tables.map((table) => ({ id: table.id, updatedAt: table.updatedAt, contentFingerprint: workspaceTableBackupFingerprint(table), driveFileId: `drive-${table.id}` })),
-      folders: [],
-      },
-    };
+    const receipt = receiptFor(data);
     mocks.findRemoteFile.mockResolvedValue(receipt.file);
     return receipt;
   });
@@ -68,6 +70,16 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it('waits for the full debounce before the first automatic upload', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const { result } = renderBackup();
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_499); });
+    expect(mocks.backup).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
+  });
+
   it('never starts background authorization after a page reload', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     window.localStorage.setItem(recordKey, JSON.stringify({
@@ -92,6 +104,21 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(result.current.remoteConflict).toBe(true);
     expect(result.current.remoteFile?.id).toBe('manifest-remote');
     expect(mocks.backup).not.toHaveBeenCalled();
+  });
+
+  it('treats concurrent manifest branches as a conflict even when one head matches this device', async () => {
+    const data = createData();
+    window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: 'manifest-current', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: now.getTime(),
+      remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: 2, folderCount: 0,
+      structureFingerprint: workspaceStructureBackupFingerprint(data), tableBackups: {},
+    }));
+    mocks.findRemoteFile.mockResolvedValue({
+      id: 'manifest-current', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:59:00.000Z', appProperties: { backupForkCount: '2' },
+    });
+    const { result } = renderBackup(data);
+    await act(async () => { await result.current.connect(); });
+    expect(result.current.remoteConflict).toBe(true);
   });
 
   it('checks the remote version before upload and requires force to replace it', async () => {
@@ -137,5 +164,65 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     mocks.backup.mockClear();
     await act(async () => { await result.current.backup(); });
     expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: true, tableIds: [first.id, second.id] });
+  });
+
+  it('resumes a pending automatic backup after connectivity returns', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const { result } = renderBackup();
+    await act(async () => { await result.current.connect(); });
+    act(() => window.dispatchEvent(new Event('offline')));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(mocks.backup).not.toHaveBeenCalled();
+
+    act(() => window.dispatchEvent(new Event('online')));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an automatic failure after the retry interval', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    mocks.backup.mockRejectedValueOnce(new Error('temporary failure'));
+    const { result } = renderBackup();
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps edits made during an upload pending for that Excel next window', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    let resolveUpload!: (value: ReturnType<typeof receiptFor>) => void;
+    const pendingUpload = new Promise<ReturnType<typeof receiptFor>>((resolve) => { resolveUpload = resolve; });
+    let uploadedData: WorkspaceData | undefined;
+    mocks.backup.mockImplementationOnce(async (value: WorkspaceData) => {
+      uploadedData = value;
+      mocks.findRemoteFile.mockResolvedValue(receiptFor(value).file);
+      return pendingUpload;
+    });
+    const original = createData();
+    const hook = renderBackup(original);
+    await act(async () => { await hook.result.current.connect(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+
+    const edited = { ...original, tables: original.tables.map((table, index) => index === 0 ? { ...table, name: '上傳期間的新名稱', updatedAt: table.updatedAt + 1 } : table), updatedAt: original.updatedAt! + 1 };
+    hook.rerender({ value: edited });
+    await act(async () => { resolveUpload(receiptFor(uploadedData!)); await pendingUpload; });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(hook.result.current.busy).toBeNull();
+    expect(hook.result.current.status).toBe('dirty');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not schedule again after an explicit disconnect', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const { result } = renderBackup();
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { await result.current.disconnect(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 2_000); });
+    expect(mocks.backup).not.toHaveBeenCalled();
   });
 });
