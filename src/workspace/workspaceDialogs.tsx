@@ -2,6 +2,7 @@ import { Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, 
 import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, getWorkspaceNumberInputMode, isWorkspaceColor, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceCellColor, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceOptionColor } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
+import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 
 type NumericEditMode = 'direct' | 'add' | 'subtract';
 
@@ -595,7 +596,7 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   const visibleOptions = options.length ? options : [''];
   const visibleColors = visibleOptions.map((option) => optionColors?.[option] ?? '');
   const optionListRef = useRef<HTMLDivElement>(null);
-  const dragSessionRef = useRef<{ pointerId: number; currentIndex: number; active: boolean; startY: number } | undefined>(undefined);
+  const dragSessionRef = useRef<{ pointerId: number; currentIndex: number; active: boolean; dragIntentConfirmed: boolean; startY: number; pointerY: number } | undefined>(undefined);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const optionStateRef = useRef({ options: visibleOptions, colors: visibleColors });
@@ -642,6 +643,16 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     setDraggingIndex(nextIndex);
     setDropIndex(nextIndex);
   };
+  const optionAutoScroll = useDragEdgeAutoScroll({
+    getContainer: () => optionListRef.current?.closest<HTMLElement>('.workspace-column-config-panel') ?? null,
+    onScroll: () => {
+      const session = dragSessionRef.current;
+      if (!session) return;
+      const items = Array.from(optionListRef.current?.querySelectorAll<HTMLElement>('[data-option-index]') ?? []);
+      const destination = items.findIndex((item) => session.pointerY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
+      reorderOption(session.currentIndex, destination === -1 ? items.length : destination);
+    },
+  });
   useEffect(() => {
     const move = (event: PointerEvent) => {
       const session = dragSessionRef.current;
@@ -649,14 +660,18 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
       const distance = Math.abs(event.clientY - session.startY);
       if (!session.active && distance < 6) return;
       session.active = true;
+      if (distance >= DRAG_SCROLL_INTENT_DISTANCE) session.dragIntentConfirmed = true;
+      session.pointerY = event.clientY;
       const items = Array.from(optionListRef.current?.querySelectorAll<HTMLElement>('[data-option-index]') ?? []);
       const destination = items.findIndex((item) => event.clientY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
       const insertion = destination === -1 ? items.length : destination;
       setDropIndex(insertion);
       reorderOption(session.currentIndex, insertion);
+      optionAutoScroll.update({ x: event.clientX, y: event.clientY, axis: 'y' }, session.dragIntentConfirmed);
     };
     const end = (event: PointerEvent) => {
       if (dragSessionRef.current?.pointerId !== event.pointerId) return;
+      optionAutoScroll.stop();
       dragSessionRef.current = undefined;
       setDraggingIndex(null);
       setDropIndex(null);
@@ -674,7 +689,7 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    dragSessionRef.current = { pointerId: event.pointerId, currentIndex: index, active: false, startY: event.clientY };
+    dragSessionRef.current = { pointerId: event.pointerId, currentIndex: index, active: false, dragIntentConfirmed: false, startY: event.clientY, pointerY: event.clientY };
     setDraggingIndex(index);
     setDropIndex(index);
   };

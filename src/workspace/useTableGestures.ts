@@ -4,6 +4,7 @@ import type { TableReorderKind, TableReorderSession, TableReorderVisual } from '
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
 import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, useMomentumScroll, TablePanAxis } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
+import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 
 export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
 const TABLE_BOUNDARY_SCROLL_TOLERANCE = 2;
@@ -65,7 +66,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
   const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
-  const tableReorderAutoScrollFrame = useRef<number | undefined>(undefined);
 
   const momentumScroll = useMomentumScroll();
 
@@ -111,49 +111,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
   };
 
-  const stopTableReorderAutoScroll = () => {
-    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
-    tableReorderAutoScrollFrame.current = undefined;
-  };
-
-  const runTableReorderAutoScroll = () => {
-    tableReorderAutoScrollFrame.current = undefined;
-    const pointer = tableReorderPointer.current;
-    const session = tableReorderSession.current;
-    const viewport = viewportRef.current;
-    if (!pointer || !session || pointer.session !== session || !session.active || !viewport) return;
-    const rect = viewport.getBoundingClientRect();
-    const edge = Math.min(64, Math.max(32, Math.min(rect.width, rect.height) / 3));
-    const speed = (distance: number) => Math.min(18, Math.max(3, (edge - distance) / 2));
-    const canScrollLeft = viewport.scrollLeft > 0;
-    const canScrollRight = viewport.scrollLeft < viewport.scrollWidth - viewport.clientWidth;
-    const canScrollUp = viewport.scrollTop > 0;
-    const canScrollDown = viewport.scrollTop < viewport.scrollHeight - viewport.clientHeight;
-    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
-    const deltaX = horizontal
-      ? pointer.x < rect.left + edge && canScrollLeft
-        ? -speed(pointer.x - rect.left)
-        : pointer.x > rect.right - edge && canScrollRight
-          ? speed(rect.right - pointer.x)
-          : 0
-      : 0;
-    const deltaY = horizontal
-      ? 0
-      : pointer.y < rect.top + edge && canScrollUp
-        ? -speed(pointer.y - rect.top)
-        : pointer.y > rect.bottom - edge && canScrollDown
-          ? speed(rect.bottom - pointer.y)
-          : 0;
-    if (!deltaX && !deltaY) return;
-    viewport.scrollLeft += deltaX;
-    viewport.scrollTop += deltaY;
-    updateTableReorderTarget(session, pointer.x, pointer.y);
-    tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
-  };
-
-  const updateTableReorderAutoScroll = () => {
-    if (tableReorderAutoScrollFrame.current === undefined) tableReorderAutoScrollFrame.current = window.requestAnimationFrame(runTableReorderAutoScroll);
-  };
+  const tableReorderAutoScroll = useDragEdgeAutoScroll({
+    getContainer: () => viewportRef.current,
+    onScroll: () => {
+      const pointer = tableReorderPointer.current;
+      const session = tableReorderSession.current;
+      if (pointer && session && pointer.session === session) updateTableReorderTarget(session, pointer.x, pointer.y);
+    },
+  });
 
   const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -187,7 +152,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     }
     tableReorderPointer.current = { session, x: event.clientX, y: event.clientY };
     updateTableReorderTarget(session, event.clientX, event.clientY);
-    updateTableReorderAutoScroll();
+    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    const axisDistance = Math.abs(horizontal ? event.clientX - session.startX : event.clientY - session.startY);
+    if (axisDistance >= DRAG_SCROLL_INTENT_DISTANCE) session.dragIntentConfirmed = true;
+    tableReorderAutoScroll.update({ x: event.clientX, y: event.clientY, axis: horizontal ? 'x' : 'y' }, Boolean(session.dragIntentConfirmed));
     event.preventDefault();
     return true;
   };
@@ -196,7 +164,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     const session = tableReorderSession.current;
     if (!session || session.pointerId !== event.pointerId) return false;
     if (session.timer) window.clearTimeout(session.timer);
-    stopTableReorderAutoScroll();
+    tableReorderAutoScroll.stop();
     tableReorderPointer.current = undefined;
     tableReorderSession.current = undefined;
     drawerSwipe.current = undefined;
@@ -455,7 +423,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   useEffect(() => () => {
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
-    if (tableReorderAutoScrollFrame.current !== undefined) window.cancelAnimationFrame(tableReorderAutoScrollFrame.current);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     momentumScroll.stop();
   }, [momentumScroll.stop]);

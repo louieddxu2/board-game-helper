@@ -1683,11 +1683,56 @@ describe('WorkspacePage', () => {
       dispatchPointer(source, 'pointerdown', 100, 40);
       await new Promise((resolve) => window.setTimeout(resolve, 500));
       dispatchPointer(viewport, 'pointermove', 395, 295);
+      expect(viewport.scrollLeft).toBe(0);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
       animationFrame?.(0);
       expect(viewport.scrollLeft).toBeGreaterThan(0);
       expect(viewport.scrollTop).toBe(40);
     } finally {
       dispatchPointer(viewport, 'pointerup', 395, 150);
+      document.elementFromPoint = previousElementFromPoint;
+      window.requestAnimationFrame = previousRequestAnimationFrame;
+      window.cancelAnimationFrame = previousCancelAnimationFrame;
+    }
+  });
+
+  it('does not auto-scroll when a reorder starts at the edge and only jitters after pickup', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = document.querySelector('[data-column-id="column-text"]')!;
+    const previousElementFromPoint = document.elementFromPoint;
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let animationFrame: FrameRequestCallback | undefined;
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 29 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 800 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    viewport.getBoundingClientRect = () => ({ top: 0, bottom: 300, left: 0, right: 400, width: 400, height: 300, x: 0, y: 0, toJSON: () => ({}) });
+    document.elementFromPoint = vi.fn(() => source);
+    window.requestAnimationFrame = vi.fn((callback) => { animationFrame = callback; return 1; });
+    window.cancelAnimationFrame = vi.fn();
+
+    try {
+      dispatchPointer(source, 'pointerdown', 395, 40);
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+      dispatchPointer(viewport, 'pointermove', 398, 40);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      animationFrame?.(0);
+      expect(viewport.scrollLeft).toBe(0);
+    } finally {
+      dispatchPointer(viewport, 'pointerup', 398, 40);
       document.elementFromPoint = previousElementFromPoint;
       window.requestAnimationFrame = previousRequestAnimationFrame;
       window.cancelAnimationFrame = previousCancelAnimationFrame;
@@ -1726,6 +1771,7 @@ describe('WorkspacePage', () => {
       dispatchPointer(source, 'pointerdown', 40, 100);
       await new Promise((resolve) => window.setTimeout(resolve, 500));
       dispatchPointer(viewport, 'pointermove', 395, 295);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
       animationFrame?.(0);
       expect(viewport.scrollLeft).toBe(40);
       expect(viewport.scrollTop).toBeGreaterThan(0);
