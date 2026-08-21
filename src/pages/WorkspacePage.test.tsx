@@ -447,8 +447,13 @@ describe('WorkspacePage', () => {
       fireEvent(target, event);
     };
     dispatchPointer(dragHandle, 'pointerdown', 100);
+    expect(screen.getByText('拖曳中：第 2 個選項')).toBeInTheDocument();
+    expect(dragHandle).toHaveAttribute('aria-grabbed', 'true');
+    expect(document.activeElement).not.toBe(option);
+    expect(document.querySelector('.workspace-option-drop-indicator')).toBeInTheDocument();
     dispatchPointer(window, 'pointermove', -20);
     dispatchPointer(window, 'pointerup', -20);
+    expect(screen.queryByText('拖曳中：第 2 個選項')).not.toBeInTheDocument();
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Fragment, forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, getWorkspaceNumberInputMode, isWorkspaceColor, isWorkspaceLinkValue, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceCellColor, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceOptionColor } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
@@ -597,6 +597,7 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   const optionListRef = useRef<HTMLDivElement>(null);
   const dragSessionRef = useRef<{ pointerId: number; currentIndex: number; active: boolean; startY: number } | undefined>(undefined);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const optionStateRef = useRef({ options: visibleOptions, colors: visibleColors });
   const onChangeRef = useRef(onChange);
   optionStateRef.current = { options: visibleOptions, colors: visibleColors };
@@ -626,15 +627,20 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   };
   const reorderOption = (sourceIndex: number, destination: number) => {
     const { options: currentOptions, colors: currentColors } = optionStateRef.current;
-    if (sourceIndex === destination || sourceIndex < 0 || destination < 0 || sourceIndex >= currentOptions.length || destination >= currentOptions.length) return;
+    if (sourceIndex < 0 || destination < 0 || sourceIndex >= currentOptions.length || destination > currentOptions.length) return;
+    if (sourceIndex === destination || sourceIndex === currentOptions.length - 1 && destination === currentOptions.length) return;
     const nextOptions = [...currentOptions];
     const nextColors = [...currentColors];
-    [nextOptions[sourceIndex], nextOptions[destination]] = [nextOptions[destination], nextOptions[sourceIndex]];
-    [nextColors[sourceIndex], nextColors[destination]] = [nextColors[destination], nextColors[sourceIndex]];
+    const [movedOption] = nextOptions.splice(sourceIndex, 1);
+    const [movedColor] = nextColors.splice(sourceIndex, 1);
+    nextOptions.splice(destination, 0, movedOption);
+    nextColors.splice(destination, 0, movedColor);
     onChangeRef.current(nextOptions, Object.fromEntries(nextOptions.map((option, index) => [option.trim(), nextColors[index]]).filter(([option, color]) => Boolean(option) && Boolean(color))));
     optionStateRef.current = { options: nextOptions, colors: nextColors };
-    dragSessionRef.current!.currentIndex = destination;
-    setDraggingIndex(destination);
+    const nextIndex = sourceIndex < destination ? destination - 1 : destination;
+    dragSessionRef.current!.currentIndex = nextIndex;
+    setDraggingIndex(nextIndex);
+    setDropIndex(nextIndex);
   };
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -645,12 +651,15 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
       session.active = true;
       const items = Array.from(optionListRef.current?.querySelectorAll<HTMLElement>('[data-option-index]') ?? []);
       const destination = items.findIndex((item) => event.clientY < item.getBoundingClientRect().top + item.getBoundingClientRect().height / 2);
-      reorderOption(session.currentIndex, destination === -1 ? items.length - 1 : destination);
+      const insertion = destination === -1 ? items.length : destination;
+      setDropIndex(insertion);
+      reorderOption(session.currentIndex, insertion);
     };
     const end = (event: PointerEvent) => {
       if (dragSessionRef.current?.pointerId !== event.pointerId) return;
       dragSessionRef.current = undefined;
       setDraggingIndex(null);
+      setDropIndex(null);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
@@ -667,17 +676,23 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     event.stopPropagation();
     dragSessionRef.current = { pointerId: event.pointerId, currentIndex: index, active: false, startY: event.clientY };
     setDraggingIndex(index);
+    setDropIndex(index);
   };
 
   return <div ref={optionListRef} className="workspace-option-list">
-    {visibleOptions.map((option, index) => <div className={`workspace-option-row ${draggingIndex === index ? 'is-dragging' : ''}`} data-option-index={index} key={index}>
-      <button type="button" className="workspace-option-drag-handle" aria-label={`拖曳固定選項 ${index + 1}`} onPointerDown={(event) => beginOptionDrag(index, event)}><WorkspaceIcon name="more" size={20} /></button>
-      <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /></div>
-      <div className="workspace-option-controls">
-        <WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} />
-        <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`移除固定選項 ${index + 1}`}><WorkspaceIcon name="close" size={18} /></button>
+    {visibleOptions.map((option, index) => <Fragment key={index}>
+      {dropIndex === index && <div className="workspace-option-drop-indicator" role="status" aria-label={`放置在第 ${index + 1} 個選項前`} />}
+      <div className={`workspace-option-row ${draggingIndex === index ? 'is-dragging' : ''}`} data-option-index={index}>
+        <button type="button" className="workspace-option-drag-handle" aria-label={`拖曳固定選項 ${index + 1}`} aria-grabbed={draggingIndex === index} onPointerDown={(event) => beginOptionDrag(index, event)}><WorkspaceIcon name="more" size={20} /></button>
+        <div className="workspace-option-editor"><AutoGrowTextarea value={option} aria-label={`固定選項 ${index + 1}`} placeholder={`選項 ${index + 1}`} onChange={(event) => updateOption(index, event.target.value)} /></div>
+        <div className="workspace-option-controls">
+          <WorkspaceColorPalette value={visibleColors[index]} onChange={(color) => updateOptionColor(index, color)} ariaLabel={`固定選項 ${index + 1} 顏色`} />
+          <button type="button" className="workspace-option-remove" onClick={() => removeOption(index)} aria-label={`移除固定選項 ${index + 1}`}><WorkspaceIcon name="close" size={18} /></button>
+        </div>
       </div>
-    </div>)}
+    </Fragment>)}
+    {dropIndex === visibleOptions.length && <div className="workspace-option-drop-indicator" role="status" aria-label="放置在最後一個選項後" />}
+    {draggingIndex !== null && <div className="workspace-option-drag-status" role="status" aria-live="polite">拖曳中：第 {draggingIndex + 1} 個選項</div>}
     <button type="button" className="workspace-option-add" onClick={addOption}><WorkspaceIcon name="plus" size={18} />新增選項</button>
   </div>;
 };

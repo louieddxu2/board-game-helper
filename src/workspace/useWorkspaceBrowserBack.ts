@@ -18,6 +18,8 @@ export const isWorkspaceVirtualKeyboardOpen = () => {
 interface UseWorkspaceBrowserBackOptions {
   active: boolean;
   onBack(): void;
+  /** Number of transient layers currently stacked above the route. */
+  layerCount?: number;
 }
 
 /**
@@ -28,64 +30,84 @@ interface UseWorkspaceBrowserBackOptions {
  * shrinking the visual viewport, the entry is restored and no UI layer is
  * dismissed; this lets the first back press only hide the keyboard.
  */
-export const useWorkspaceBrowserBack = ({ active, onBack }: UseWorkspaceBrowserBackOptions) => {
+export const useWorkspaceBrowserBack = ({ active, onBack, layerCount = 1 }: UseWorkspaceBrowserBackOptions) => {
   const onBackRef = useRef(onBack);
-  const activeRef = useRef(active);
-  const guardActiveRef = useRef(false);
+  const historyDepthRef = useRef(0);
   const suppressPopRef = useRef(false);
+  const keyboardStateRef = useRef({ open: false, recentlyClosedUntil: 0 });
 
   useEffect(() => {
     onBackRef.current = onBack;
   }, [onBack]);
-  useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
 
   useEffect(() => {
+    const updateKeyboardState = () => {
+      const open = isWorkspaceVirtualKeyboardOpen();
+      if (open) {
+        keyboardStateRef.current = { open: true, recentlyClosedUntil: 0 };
+      } else if (keyboardStateRef.current.open) {
+        keyboardStateRef.current = { open: false, recentlyClosedUntil: Date.now() + 500 };
+      }
+    };
+    const viewport = window.visualViewport;
+    updateKeyboardState();
+    viewport?.addEventListener('resize', updateKeyboardState);
+    viewport?.addEventListener('scroll', updateKeyboardState);
+    window.addEventListener('resize', updateKeyboardState);
+
     const handlePopState = () => {
       if (suppressPopRef.current) {
         suppressPopRef.current = false;
         return;
       }
-      if (!guardActiveRef.current) return;
+      if (historyDepthRef.current <= 0) return;
 
-      if (isWorkspaceVirtualKeyboardOpen()) {
+      const keyboardState = keyboardStateRef.current;
+      const keyboardWasRecentlyActive = keyboardState.open || keyboardState.recentlyClosedUntil > Date.now();
+      if (keyboardWasRecentlyActive) {
+        keyboardStateRef.current = { open: false, recentlyClosedUntil: 0 };
         window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
-        guardActiveRef.current = true;
         return;
       }
 
-      guardActiveRef.current = false;
+      historyDepthRef.current = Math.max(0, historyDepthRef.current - 1);
       onBackRef.current();
-      window.setTimeout(() => {
-        if (!activeRef.current || guardActiveRef.current) return;
-        window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
-        guardActiveRef.current = true;
-      }, 0);
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      viewport?.removeEventListener('resize', updateKeyboardState);
+      viewport?.removeEventListener('scroll', updateKeyboardState);
+      window.removeEventListener('resize', updateKeyboardState);
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   useEffect(() => {
-    if (active) {
-      if (guardActiveRef.current) return;
-      window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
-      guardActiveRef.current = true;
+    const targetDepth = active ? Math.max(1, Math.floor(layerCount)) : 0;
+    const currentDepth = historyDepthRef.current;
+    if (targetDepth > currentDepth) {
+      for (let index = currentDepth; index < targetDepth; index += 1) {
+        window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
+      }
+      historyDepthRef.current = targetDepth;
       return;
     }
 
-    if (!guardActiveRef.current) return;
-    guardActiveRef.current = false;
+    if (targetDepth >= currentDepth) return;
+    const distance = currentDepth - targetDepth;
+    historyDepthRef.current = targetDepth;
     suppressPopRef.current = true;
-    window.history.back();
-  }, [active]);
+    if (distance === 1) window.history.back();
+    else window.history.go(-distance);
+  }, [active, layerCount]);
 
   useEffect(() => () => {
-    if (!guardActiveRef.current) return;
-    guardActiveRef.current = false;
+    if (historyDepthRef.current <= 0) return;
+    const distance = historyDepthRef.current;
+    historyDepthRef.current = 0;
     suppressPopRef.current = true;
-    window.history.back();
+    if (distance === 1) window.history.back();
+    else window.history.go(-distance);
   }, []);
 };

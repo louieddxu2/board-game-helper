@@ -24,6 +24,7 @@ import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCateg
 import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { ExternalLinkGuard } from '../components/ExternalLinkGuard';
 import { GAME_EXTERNAL_RESOURCE_CATEGORIES, type GameExternalResource, type GameExternalResourceCategory } from '../shared/types';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -536,31 +537,44 @@ const RESOURCE_CATEGORY_LABELS: Record<GameExternalResourceCategory, string> = {
 };
 
 const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: { game: GameDetail; canEdit: boolean; onClose(): void; onChanged(): Promise<void> }) => {
+  const [addOpen, setAddOpen] = useState(false);
+  const dismissLayer = () => {
+    if (addOpen) setAddOpen(false);
+    else onClose();
+  };
+  useWorkspaceBrowserBack({ active: true, layerCount: addOpen ? 2 : 1, onBack: dismissLayer });
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+  const resources = game.externalResources ?? [];
+  return <>
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal external-resource-dialog" role="dialog" aria-modal="true" aria-labelledby="external-resource-title">
+        <div className="modal-heading"><h2 id="external-resource-title">外部資源</h2><button type="button" aria-label="關閉外部資源" onClick={onClose}>×</button></div>
+        <div className="external-resource-list">
+          {resources.length === 0 && <p className="muted">尚未新增外部資源。</p>}
+          {resources.map((resource) => <div className="external-resource-item" key={resource.id}>
+            <div><strong>{resource.name}</strong><small>{RESOURCE_CATEGORY_LABELS[resource.category]}</small><ExternalLinkGuard url={resource.url}>{resource.url}</ExternalLinkGuard></div>
+            {canEdit && <ExternalResourceDeleteButton game={game} resource={resource} onChanged={onChanged} />}
+          </div>)}
+        </div>
+        <div className="modal-actions"><span />
+          {canEdit && <button type="button" className="button primary" onClick={() => setAddOpen(true)}>新增</button>}
+          <button type="button" className="button secondary" onClick={onClose}>關閉</button>
+        </div>
+      </div>
+    </div>
+    {canEdit && addOpen && <ExternalResourceAddDialog game={game} onClose={() => setAddOpen(false)} onSaved={async () => { await onChanged(); setAddOpen(false); }} />}
+  </>;
+};
+
+const ExternalResourceDeleteButton = ({ game, resource, onChanged }: { game: GameDetail; resource: GameExternalResource; onChanged(): Promise<void> }) => {
   const { confirm } = useConfirm();
   const { showToast } = useToast();
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<GameExternalResourceCategory>('teaching');
-  const [url, setUrl] = useState('');
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string>();
-  const resources = game.externalResources ?? [];
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [onClose]);
-  const add = async () => {
-    if (!name.trim() || !url.trim()) return;
-    setSaving(true);
-    try {
-      await api.createGameExternalResource(game.id, { name: name.trim(), category, url: url.trim() });
-      setName(''); setUrl(''); setCategory('teaching');
-      await onChanged();
-      showToast('已新增外部資源');
-    } catch { showToast('外部資源新增失敗，請確認網址後再試。', 'error'); }
-    finally { setSaving(false); }
-  };
-  const remove = async (resource: GameExternalResource) => {
+  const remove = async () => {
     if (!(await confirm({ title: '刪除此資源？', message: resource.name, confirmLabel: '刪除', tone: 'danger' }))) return;
     setDeleting(resource.id);
     try {
@@ -570,26 +584,34 @@ const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: { game: 
     } catch { showToast('外部資源刪除失敗，請稍後再試。', 'error'); }
     finally { setDeleting(undefined); }
   };
-  return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="modal external-resource-dialog" role="dialog" aria-modal="true" aria-labelledby="external-resource-title">
-      <div className="modal-heading"><h2 id="external-resource-title">外部資源</h2><button type="button" aria-label="關閉外部資源" onClick={onClose}>×</button></div>
-      <div className="external-resource-list">
-        {resources.length === 0 && <p className="muted">尚未新增外部資源。</p>}
-        {resources.map((resource) => <div className="external-resource-item" key={resource.id}>
-          <div><strong>{resource.name}</strong><small>{RESOURCE_CATEGORY_LABELS[resource.category]}</small><ExternalLinkGuard url={resource.url}>{resource.url}</ExternalLinkGuard></div>
-          {canEdit && <button type="button" className="danger-link" disabled={deleting === resource.id} onClick={() => void remove(resource)}>刪除</button>}
-        </div>)}
-      </div>
-      {canEdit && <form className="external-resource-form" onSubmit={(event) => { event.preventDefault(); void add(); }}>
-        <strong>新增外部資源</strong>
-        <label>名稱<input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：官方教學" /></label>
-        <label>類別<select value={category} onChange={(event) => setCategory(event.target.value as GameExternalResourceCategory)}>{GAME_EXTERNAL_RESOURCE_CATEGORIES.map((value) => <option key={value} value={value}>{RESOURCE_CATEGORY_LABELS[value]}</option>)}</select></label>
-        <label>連結<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></label>
-        <small className="muted">若遊戲已有介紹文章，優先填入介紹文章連結。</small>
-        <button type="submit" className="button primary" disabled={saving || !name.trim() || !url.trim()}>{saving ? '新增中…' : '新增'}</button>
-      </form>}
-      <div className="modal-actions"><span /><button type="button" className="button secondary" onClick={onClose}>關閉</button></div>
-    </div>
+  return <button type="button" className="danger-link" disabled={deleting === resource.id} onClick={() => void remove()}>刪除</button>;
+};
+
+const ExternalResourceAddDialog = ({ game, onClose, onSaved }: { game: GameDetail; onClose(): void; onSaved(): Promise<void> }) => {
+  const { showToast } = useToast();
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState<GameExternalResourceCategory>('teaching');
+  const [url, setUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const add = async () => {
+    if (!name.trim() || !url.trim()) return;
+    setSaving(true);
+    try {
+      await api.createGameExternalResource(game.id, { name: name.trim(), category, url: url.trim() });
+      await onSaved();
+      showToast('已新增外部資源');
+    } catch { showToast('外部資源新增失敗，請確認網址後再試。', 'error'); }
+    finally { setSaving(false); }
+  };
+  return <div className="modal-backdrop external-resource-add-backdrop" role="presentation">
+    <form className="modal text-input-dialog external-resource-add-dialog" role="dialog" aria-modal="true" aria-labelledby="external-resource-add-title" onSubmit={(event) => { event.preventDefault(); void add(); }}>
+      <div className="modal-heading"><h2 id="external-resource-add-title">新增外部資源</h2><button type="button" aria-label="關閉新增外部資源" onClick={onClose}>×</button></div>
+      <label>名稱<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：官方教學" /></label>
+      <label>類別<select value={category} onChange={(event) => setCategory(event.target.value as GameExternalResourceCategory)}>{GAME_EXTERNAL_RESOURCE_CATEGORIES.map((value) => <option key={value} value={value}>{RESOURCE_CATEGORY_LABELS[value]}</option>)}</select></label>
+      <label>連結<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></label>
+      <small className="muted">若遊戲已有介紹文章，優先填入介紹文章連結。</small>
+      <div className="confirm-dialog-actions"><button type="button" className="button secondary" onClick={onClose}>取消</button><button type="submit" className="button primary" disabled={saving || !name.trim() || !url.trim()}>{saving ? '新增中…' : '新增'}</button></div>
+    </form>
   </div>;
 };
 

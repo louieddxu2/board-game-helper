@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { GamePage } from './GamePage';
@@ -7,10 +8,14 @@ const mocks = vi.hoisted(() => ({
   game: vi.fn(),
   tags: vi.fn(),
   hydrateGameTags: vi.fn(),
+  canEdit: false,
+  createGameExternalResource: vi.fn(),
+  deleteGameExternalResource: vi.fn(),
+  invalidateGame: vi.fn(),
 }));
 
 vi.mock('../context/SessionContext', () => ({
-  useSession: () => ({ user: null, canEdit: false, isAdmin: false }),
+  useSession: () => ({ user: null, canEdit: mocks.canEdit, isAdmin: false }),
 }));
 vi.mock('../context/ToastContext', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../context/ToastContext')>();
@@ -19,9 +24,9 @@ vi.mock('../context/ToastContext', async (importOriginal) => {
 vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
-  api: { game: mocks.game, tags: mocks.tags },
+  api: { game: mocks.game, tags: mocks.tags, createGameExternalResource: mocks.createGameExternalResource, deleteGameExternalResource: mocks.deleteGameExternalResource },
 }));
-vi.mock('../lib/localDb', () => ({ localDb: {} }));
+vi.mock('../lib/localDb', () => ({ localDb: { invalidateGame: mocks.invalidateGame } }));
 vi.mock('../components/GameSearch', () => ({ clearSearchCache: vi.fn() }));
 vi.mock('../lib/tagHydration', () => ({ hydrateGameTags: mocks.hydrateGameTags }));
 vi.mock('../lib/rulePermissions', () => ({ canUserEditRule: () => false, canUserReviewRule: () => false }));
@@ -39,6 +44,7 @@ const game = {
 describe('GamePage compact rule view', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.canEdit = false;
     mocks.game.mockResolvedValue({ game });
     mocks.tags.mockResolvedValue({ tags: [] });
     mocks.hydrateGameTags.mockImplementation(async (value: typeof game) => value);
@@ -105,5 +111,29 @@ describe('GamePage compact rule view', () => {
       Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
       Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
     }
+  });
+
+  test('keeps external resource creation in a separate modal and closes only the top layer from browser back', async () => {
+    mocks.canEdit = true;
+    mocks.game.mockResolvedValue({ game: {
+      ...game,
+      externalResources: [{ id: 'resource-1', gameId: 'game-1', name: '官方教學', category: 'teaching', url: 'https://example.com/teach' }],
+    } });
+    renderGamePage();
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: /外部資源/ }));
+    expect(screen.getByRole('dialog', { name: '外部資源' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '新增外部資源' })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '新增' }));
+    expect(screen.getByRole('dialog', { name: '新增外部資源' })).toBeInTheDocument();
+
+    const addBackdrop = document.querySelector('.external-resource-add-backdrop')!;
+    fireEvent.pointerDown(addBackdrop);
+    expect(screen.getByRole('dialog', { name: '新增外部資源' })).toBeInTheDocument();
+
+    fireEvent(window, new PopStateEvent('popstate'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '新增外部資源' })).not.toBeInTheDocument());
+    expect(screen.getByRole('dialog', { name: '外部資源' })).toBeInTheDocument();
   });
 });

@@ -512,7 +512,9 @@ footer a { color: inherit; }
 .workspace-bulk-multi-actions .workspace-selection-tool.is-active { background: rgba(183,70,47,.1); color: var(--orange); }
 .workspace-option-list { display: grid; gap: 8px; }
 .workspace-option-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: start; gap: 6px; }
-.workspace-option-row.is-dragging { opacity: .58; }
+.workspace-option-row.is-dragging { opacity: .68; transform: scale(1.01); outline: 2px solid var(--orange); outline-offset: 3px; background: var(--cream); box-shadow: 0 8px 18px rgba(23,47,40,.16); }
+.workspace-option-drop-indicator { height: 4px; margin: -2px 0 2px 36px; border-radius: 999px; background: var(--orange); box-shadow: 0 0 0 2px rgba(229,115,0,.14); }
+.workspace-option-drag-status { padding: 4px 8px; border-radius: 6px; background: rgba(229,115,0,.1); color: var(--orange); font-size: 12px; font-weight: 700; }
 .workspace-option-editor { display: grid; gap: 6px; min-width: 0; }
 .workspace-option-row textarea { min-height: 42px !important; overflow: auto; resize: none; white-space: pre-wrap; }
 .workspace-option-drag-handle { display: grid; place-items: center; width: 30px; min-height: 42px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: grab; touch-action: none; user-select: none; }
@@ -979,15 +981,13 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .modal-actions { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
 .modal-actions > div { display: flex; gap: 8px; }
 .external-resource-dialog { width: min(620px, 100%); }
+.external-resource-add-backdrop { z-index: 110; }
 .external-resource-list { display: grid; gap: 8px; max-height: 34vh; overflow: auto; }
 .external-resource-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .external-resource-item > div { display: grid; gap: 3px; min-width: 0; }
 .external-resource-item strong { overflow-wrap: anywhere; }
 .external-resource-item small { color: var(--muted); }
 .external-resource-item a { overflow-wrap: anywhere; color: var(--green); }
-.external-resource-form { display: grid; gap: 9px; padding-top: 6px; border-top: 1px solid var(--line); }
-.external-resource-form label { display: grid; gap: 4px; }
-.external-resource-form input, .external-resource-form select { box-sizing: border-box; width: 100%; }
 .rule-draft-import-modal { width: min(720px, 100%); }
 .rule-draft-import-modal > p { margin: 0; color: var(--muted); line-height: 1.6; }
 .rule-draft-import-modal > label { display: grid; gap: 7px; }

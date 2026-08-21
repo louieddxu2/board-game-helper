@@ -59,4 +59,28 @@ describe('useWorkspaceBrowserBack', () => {
     Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: previousInnerHeight });
   });
+
+  it('does not dismiss the UI when the keyboard closes just before popstate', () => {
+    const previousVisualViewport = window.visualViewport;
+    const previousInnerHeight = window.innerHeight;
+    const visualViewport = Object.assign(new EventTarget(), { height: 300 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+
+    const onBack = vi.fn();
+    const pushState = vi.spyOn(window.history, 'pushState').mockImplementation(() => undefined);
+    const { unmount } = renderHook(() => useWorkspaceBrowserBack({ active: true, onBack }));
+
+    visualViewport.height = 800;
+    act(() => visualViewport.dispatchEvent(new Event('resize')));
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')));
+
+    expect(onBack).not.toHaveBeenCalled();
+    expect(pushState).toHaveBeenCalledTimes(2);
+
+    unmount();
+    pushState.mockRestore();
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: previousInnerHeight });
+  });
 });
