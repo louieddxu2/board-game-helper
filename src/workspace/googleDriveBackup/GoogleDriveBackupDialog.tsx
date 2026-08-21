@@ -29,20 +29,22 @@ export interface GoogleDriveBackupDialogProps {
   error: string;
   record: WorkspaceDriveBackupRecord;
   remoteFile: DriveFile | null;
+  remoteConflict: boolean;
   authorized: boolean;
   onClose(): void;
   onConnect(): void;
   onBackup(): void;
   onFindRemote(): void;
   onRestore(): void;
+  onOverwrite(): void;
   onDisconnect(): void;
 }
 
-const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { children: ReactNode; onClick(): void; disabled?: boolean; variant?: 'primary' | 'secondary' }) => (
+const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { children: ReactNode; onClick(): void; disabled?: boolean; variant?: 'primary' | 'secondary' | 'danger' }) => (
   <button type="button" className={`workspace-dialog-button ${variant}`} onClick={onClick} disabled={disabled}>{children}</button>
 );
 
-export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, remoteFile, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onDisconnect }: GoogleDriveBackupDialogProps) => {
+export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, remoteFile, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
   const isBusy = Boolean(busy);
   const canUseDrive = authorized && status !== 'offline' && status !== 'disconnected';
   const showConnect = !authorized || status === 'disconnected';
@@ -63,8 +65,9 @@ export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, 
     {remoteFile && <dl className="workspace-google-drive-meta workspace-google-drive-remote"><div><dt>雲端備份</dt><dd>已找到</dd></div><div><dt>雲端修改</dt><dd>{formatTime(remoteFile.modifiedTime)}</dd></div></dl>}
     <div className="workspace-google-drive-actions">
       {showConnect ? <ActionButton onClick={onConnect} disabled={isBusy || status === 'offline'} variant="primary"><WorkspaceIcon name="external" size={18} />連結 Google Drive</ActionButton> : primaryAction}
+      {canUseDrive && remoteFile && remoteConflict && <ActionButton onClick={onOverwrite} disabled={isBusy} variant="danger"><WorkspaceIcon name="upload" size={18} />以本機資料覆蓋雲端</ActionButton>}
       {canUseDrive && !remoteFile && status !== 'saved' && <ActionButton onClick={onFindRemote} disabled={isBusy}><WorkspaceIcon name="download" size={18} />尋找雲端備份</ActionButton>}
-      {canUseDrive && (remoteFile || status === 'saved') && <ActionButton onClick={onBackup} disabled={isBusy}><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>}
+      {canUseDrive && ((!remoteFile && status === 'saved') || (remoteFile && !remoteConflict)) && <ActionButton onClick={onBackup} disabled={isBusy}><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>}
     </div>
     {authorized && <button type="button" className="workspace-google-drive-disconnect" onClick={onDisconnect} disabled={isBusy}>主動解除授權</button>}
   </WorkspaceModal>;

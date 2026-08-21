@@ -69,6 +69,7 @@ describe('Google Drive folder backup boundary', () => {
   it('stores a manifest and each table below the matching local folder', async () => {
     const files = new Map<string, { id: string; name: string; mimeType: string; parents: string[]; appProperties?: Record<string, string>; body?: Uint8Array }>();
     let nextId = 1;
+    let failNextManifestUpload = false;
     const indexOfBytes = (source: Uint8Array, needle: Uint8Array, from = 0) => {
       outer: for (let index = from; index <= source.length - needle.length; index += 1) {
         for (let offset = 0; offset < needle.length; offset += 1) if (source[index + offset] !== needle[offset]) continue outer;
@@ -88,6 +89,10 @@ describe('Google Drive folder backup boundary', () => {
         const text = new TextDecoder().decode(requestBody);
         const metadataMatch = text.match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{[\s\S]*?\})\r\n--/);
         const metadata = JSON.parse(metadataMatch?.[1] ?? '{}') as { id?: string; name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
+        if (failNextManifestUpload && metadata.appProperties?.backupKind === 'manifest') {
+          failNextManifestUpload = false;
+          return jsonResponse({ error: { message: 'manifest upload failed' } }, 500);
+        }
         const boundary = new Headers(init?.headers).get('content-type')?.match(/boundary=([^;]+)/)?.[1] ?? '';
         const encoder = new TextEncoder();
         const bodyHeader = encoder.encode(`Content-Type: ${metadata.mimeType}\r\n\r\n`);
@@ -156,15 +161,31 @@ describe('Google Drive folder backup boundary', () => {
 
     const restored = await backup.restore();
     expect(restored.nodes).toEqual(data.nodes);
+    expect(restored.activeNodeId).toBe(data.activeNodeId);
     expect(restored.tables[0].name).toBe('收藏表');
 
     const uploadCount = fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length;
     await backup.backup(data, { sourceUpdatedAt: 42 });
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount);
 
-    const renamedData: WorkspaceData = { ...data, nodes: data.nodes.map((node) => node.type === 'folder' ? { ...node, name: '桌遊收藏' } : node), updatedAt: 43 };
-    await backup.backup(renamedData, { sourceUpdatedAt: 43 });
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount + 1);
+    const originalTableFileId = receipt.manifest.tables[0].driveFileId;
+    const changedTable = { ...table, name: '新版收藏表', updatedAt: 43 };
+    const changedData: WorkspaceData = { ...data, tables: [changedTable], updatedAt: 43 };
+    failNextManifestUpload = true;
+    await expect(backup.backup(changedData, { sourceUpdatedAt: 43 })).rejects.toThrow('manifest upload failed');
+    const restoredAfterFailure = await backup.restore();
+    expect(restoredAfterFailure.tables[0].name).toBe('收藏表');
+    expect(files.get(originalTableFileId)?.appProperties?.trashed).not.toBe('true');
+
+    const changedReceipt = await backup.backup(changedData, { sourceUpdatedAt: 43 });
+    expect(changedReceipt.file.id).not.toBe(receipt.file.id);
+    expect(changedReceipt.manifest.tables[0].driveFileId).not.toBe(originalTableFileId);
+    expect((await backup.findRemoteFile())?.id).toBe(changedReceipt.file.id);
+    expect((await backup.restore()).tables[0].name).toBe('新版收藏表');
+
+    const renamedData: WorkspaceData = { ...changedData, nodes: data.nodes.map((node) => node.type === 'folder' ? { ...node, name: '桌遊收藏' } : node), updatedAt: 44 };
+    await backup.backup(renamedData, { sourceUpdatedAt: 44 });
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBeGreaterThan(uploadCount + 1);
     expect(files.get(receipt.manifest.folders[0].driveFolderId)?.name).toBe('桌遊收藏');
   });
 });

@@ -513,7 +513,7 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
 
 const parseWorkspaceRows = (rows: SheetRows, marker: string): Pick<WorkspaceData, 'nodes' | 'activeNodeId'> => {
   assertSheetVersion(rows, marker, CURRENT_XLSX_FORMAT_VERSION);
-  const activeNodeId = stringValue(rows[2]?.[1]) || null;
+  const activeNodeId = stringValue(rows.find((row) => stringValue(row[0]) === 'active_node_id')?.[1]) || null;
   const nodes = rows.filter((row) => stringValue(row[0]) === 'node').map((row) => ({
     id: stringValue(row[1]) || makeId('node'), type: stringValue(row[2]) === 'folder' ? 'folder' : 'table', name: stringValue(row[3]) || '未命名項目', parentId: stringValue(row[4]) || null, order: typeof row[5] === 'number' ? row[5] : Number(row[5]) || 0, ...(stringValue(row[6]) ? { tableId: stringValue(row[6]) } : {}),
   } as WorkspaceNode));

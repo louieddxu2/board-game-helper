@@ -55,8 +55,25 @@ export interface FolderBackupOptions extends GoogleDriveApiOptions {
 export interface GoogleDriveFolderBackup {
   ensureFolder(): Promise<string>;
   findRemoteFile(): Promise<DriveFile | null>;
-  backup(data: WorkspaceData, metadata?: BackupMetadata): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }>;
+  backup(data: WorkspaceData, metadata?: BackupMetadata, runOptions?: FolderBackupRunOptions): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }>;
   restore(): Promise<WorkspaceData>;
+}
+
+export interface FolderBackupRunOptions {
+  tableIds?: string[];
+  complete?: boolean;
+  expectedRemoteFileId?: string | null;
+  expectedRemoteModifiedTime?: string | null;
+}
+
+export class RemoteBackupConflictError extends Error {
+  readonly remoteFile: DriveFile | null;
+
+  constructor(remoteFile: DriveFile | null) {
+    super('雲端備份已在其他裝置變更，請先載入雲端版本或明確選擇覆蓋');
+    this.name = 'RemoteBackupConflictError';
+    this.remoteFile = remoteFile;
+  }
 }
 
 const parentOf = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>) => node.parentId ? nodes.get(node.parentId) : undefined;
@@ -68,7 +85,7 @@ const stableSerialize = (value: unknown): string => {
   return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(object[key])}`).join(',')}}`;
 };
 
-const tableContentFingerprint = (table: WorkspaceTable) => {
+export const workspaceTableBackupFingerprint = (table: WorkspaceTable) => {
   const { updatedAt: _updatedAt, ...content } = table;
   return stableSerialize(content);
 };
@@ -77,6 +94,8 @@ const nodeStructure = (data: WorkspaceData) => ({
   activeNodeId: data.activeNodeId,
   nodes: data.nodes.map(({ id, type, name, parentId, order, tableId }) => ({ id, type, name, parentId, order, tableId: tableId ?? null })),
 });
+
+export const workspaceStructureBackupFingerprint = (data: WorkspaceData) => stableSerialize(nodeStructure(data));
 
 const folderDepth = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>, visiting = new Set<string>()): number => {
   if (!node.parentId) return 0;
@@ -115,7 +134,14 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     return api.findFilesByAppProperty({ key, value, parentId, mimeType }).then((files) => files.filter((file) => file.appProperties?.backupKey === options.backupKey && file.appProperties?.[DRIVE_BACKUP_KIND_PROPERTY] === kind));
   };
 
-  const findRemoteFile = async () => (await findTagged(DRIVE_MANIFEST_KIND, undefined, await ensureFolder(), DRIVE_XLSX_MIME_TYPE))[0] ?? null;
+  const findRemoteFile = async () => {
+    const files = await findTagged(DRIVE_MANIFEST_KIND, undefined, await ensureFolder(), DRIVE_XLSX_MIME_TYPE);
+    return files.sort((left, right) => {
+      const backedUpDifference = Number(right.appProperties?.backedUpAt ?? 0) - Number(left.appProperties?.backedUpAt ?? 0);
+      if (backedUpDifference) return backedUpDifference;
+      return String(right.modifiedTime ?? right.createdTime ?? '').localeCompare(String(left.modifiedTime ?? left.createdTime ?? ''));
+    })[0] ?? null;
+  };
 
   const ensureFolderNode = async (node: WorkspaceNode, parentId: string, previous: DriveWorkspaceFolderRef | undefined) => {
     let file = previous?.driveFolderId
@@ -131,12 +157,50 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     return file;
   };
 
-  const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}) => {
+  const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}, runOptions: FolderBackupRunOptions = {}): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }> => {
     const root = await ensureFolder();
     const previousFile = await findRemoteFile();
+    if ('expectedRemoteFileId' in runOptions) {
+      const idChanged = (previousFile?.id ?? null) !== (runOptions.expectedRemoteFileId ?? null);
+      const timeChanged = runOptions.expectedRemoteModifiedTime != null
+        && previousFile?.modifiedTime != null
+        && previousFile.modifiedTime !== runOptions.expectedRemoteModifiedTime;
+      if (idChanged || timeChanged) throw new RemoteBackupConflictError(previousFile);
+    }
     const previous = previousFile ? await importWorkspaceBackupManifestXlsx(await api.downloadBlob(previousFile.id)).catch(() => undefined) : undefined;
     const previousFolders = new Map((previous?.folders ?? []).map((item) => [item.id, item]));
     const previousTables = new Map((previous?.tables ?? []).map((item) => [item.id, item]));
+    const fallbackUpdatedAt = Math.max(0, ...data.tables.map((table) => table.updatedAt)) || Date.now();
+    const sourceUpdatedAt = typeof metadata.sourceUpdatedAt === 'number' ? metadata.sourceUpdatedAt : Number(metadata.sourceUpdatedAt ?? fallbackUpdatedAt);
+    const sameTables = previous?.tables.length === data.tables.length && data.tables.every((table) => {
+      const oldTable = previousTables.get(table.id);
+      return oldTable && (oldTable.contentFingerprint ? oldTable.contentFingerprint === workspaceTableBackupFingerprint(table) : oldTable.updatedAt === table.updatedAt);
+    });
+    const sameFolders = previous?.folders.length === data.nodes.filter((node) => node.type === 'folder').length
+      && data.nodes.filter((node) => node.type === 'folder').every((node) => {
+        const oldFolder = previousFolders.get(node.id);
+        return oldFolder?.name === node.name && oldFolder.parentId === node.parentId && oldFolder.order === node.order;
+      });
+    if (previousFile && previous && previous.sourceUpdatedAt === sourceUpdatedAt && sameTables && sameFolders
+      && workspaceStructureBackupFingerprint(data) === workspaceStructureBackupFingerprint({ ...data, nodes: previous.nodes, activeNodeId: previous.activeNodeId })) {
+      return {
+        file: previousFile,
+        backupKey: options.backupKey,
+        parentId: root,
+        sourceUpdatedAt,
+        manifest: {
+          format: DRIVE_MANIFEST_FORMAT,
+          version: DRIVE_MANIFEST_VERSION,
+          backupKey: options.backupKey,
+          updatedAt: sourceUpdatedAt,
+          sourceUpdatedAt,
+          activeNodeId: previous.activeNodeId,
+          nodes: previous.nodes,
+          folders: previous.folders,
+          tables: previous.tables,
+        },
+      };
+    }
     const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
     const driveFolderIds = new Map<string, string>();
     const folders: DriveWorkspaceFolderRef[] = [];
@@ -154,6 +218,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     }
 
     const tableRefs: DriveWorkspaceTableRef[] = [];
+    const selectedTableIds = new Set(runOptions.tableIds ?? data.tables.map((table) => table.id));
     for (const node of data.nodes.filter((item) => item.type === 'table')) {
       if (!node.tableId) continue;
       const table = data.tables.find((item) => item.id === node.tableId);
@@ -162,33 +227,26 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       const parentId = parentNode ? driveFolderIds.get(parentNode.id) : root;
       if (!parentId) throw new Error(`找不到表格父層：${node.name}`);
       const previousTable = previousTables.get(table.id);
-      let file = previousTable?.driveFileId
-        ? (await findTagged(DRIVE_TABLE_KIND, table.id, undefined, DRIVE_XLSX_MIME_TYPE))[0]
-        : undefined;
-      if (!file) file = (await findTagged(DRIVE_TABLE_KIND, table.id, parentId, DRIVE_XLSX_MIME_TYPE))[0];
       const fileName = `${table.name || node.name || table.id}.xlsx`;
-      if (file?.parents?.[0] && file.parents[0] !== parentId) file = await api.moveFile(file.id, parentId, file.parents[0]);
-      const contentFingerprint = tableContentFingerprint(table);
-      const contentChanged = !file || !previousTable
+      const contentFingerprint = workspaceTableBackupFingerprint(table);
+      const contentChanged = !previousTable
         ? true
         : previousTable.contentFingerprint
           ? previousTable.contentFingerprint !== contentFingerprint
           : previousTable.updatedAt !== table.updatedAt;
-      if (contentChanged) {
-        file = await api.uploadFile({ fileId: file?.id, parentId: file ? undefined : parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
-      } else if (file.name !== fileName) {
-        file = await api.updateFileMetadata(file.id, { name: fileName });
+      if (!selectedTableIds.has(table.id) && previousTable) {
+        tableRefs.push({ ...previousTable, nodeId: node.id, folderId: node.parentId });
+        continue;
+      }
+      let file: DriveFile;
+      if (contentChanged || !previousTable) {
+        file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
+      } else {
+        file = { id: previousTable.driveFileId, name: previousTable.fileName };
       }
       tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, contentFingerprint, driveFileId: file.id, fileName });
     }
 
-    const activeIds = new Set(folders.map((item) => item.id));
-    for (const folder of previous?.folders ?? []) if (!activeIds.has(folder.id)) await api.trashFile(folder.driveFolderId);
-    const activeTableIds = new Set(tableRefs.map((item) => item.id));
-    for (const table of previous?.tables ?? []) if (!activeTableIds.has(table.id)) await api.trashFile(table.driveFileId);
-
-    const fallbackUpdatedAt = Math.max(0, ...data.tables.map((table) => table.updatedAt)) || Date.now();
-    const sourceUpdatedAt = typeof metadata.sourceUpdatedAt === 'number' ? metadata.sourceUpdatedAt : Number(metadata.sourceUpdatedAt ?? fallbackUpdatedAt);
     const manifest: DriveWorkspaceManifest = {
       format: DRIVE_MANIFEST_FORMAT,
       version: DRIVE_MANIFEST_VERSION,
@@ -202,7 +260,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     };
     const manifestNeedsUpdate = !previousFile
       || !previous
-      || stableSerialize(nodeStructure(data)) !== stableSerialize(nodeStructure({ ...data, nodes: previous.nodes }))
+      || workspaceStructureBackupFingerprint(data) !== workspaceStructureBackupFingerprint({ ...data, nodes: previous.nodes, activeNodeId: previous.activeNodeId })
       || stableSerialize(folders) !== stableSerialize(previous.folders)
       || stableSerialize(tableRefs) !== stableSerialize(previous.tables)
       || previous.sourceUpdatedAt !== sourceUpdatedAt;
@@ -210,16 +268,17 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
-    const file = await api.uploadFile({ fileId: previousFile?.id, parentId: previousFile ? undefined : root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
+    const file = await api.uploadFile({ parentId: root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
     return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest };
   };
 
   return {
     ensureFolder,
     findRemoteFile,
-    backup(data, metadata) {
-      if (!backupPromise) backupPromise = performBackup(data, metadata).finally(() => { backupPromise = null; });
-      return backupPromise;
+    backup(data, metadata, runOptions) {
+      const currentBackup = backupPromise ?? performBackup(data, metadata, runOptions).finally(() => { backupPromise = null; });
+      backupPromise = currentBackup;
+      return currentBackup;
     },
     async restore() {
       const manifestFile = await findRemoteFile();
@@ -228,9 +287,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       const refs = manifest.tables;
       const tables: WorkspaceTable[] = [];
       for (const ref of refs) {
-        const file = (await findTagged(DRIVE_TABLE_KIND, ref.id, undefined, DRIVE_XLSX_MIME_TYPE))[0];
-        if (!file) throw new Error(`找不到雲端表格：${ref.name}`);
-        const imported = await importWorkspaceXlsx(await api.downloadBlob(file.id), { preserveIds: true });
+        const imported = await importWorkspaceXlsx(await api.downloadBlob(ref.driveFileId), { preserveIds: true });
         if (!imported.table) throw new Error(`雲端表格格式錯誤：${ref.name}`);
         tables.push(imported.table);
       }

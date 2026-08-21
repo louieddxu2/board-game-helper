@@ -10,7 +10,7 @@ const createProps = (overrides: Partial<GoogleDriveBackupDialogProps> = {}): Goo
   busy: null,
   message: '',
   error: '',
-  record: { fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0 },
+  record: { fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureFingerprint: null, tableBackups: {} },
   remoteFile: null,
   authorized: false,
   onClose: vi.fn(),
@@ -18,6 +18,8 @@ const createProps = (overrides: Partial<GoogleDriveBackupDialogProps> = {}): Goo
   onBackup: vi.fn(),
   onFindRemote: vi.fn(),
   onRestore: vi.fn(),
+  remoteConflict: false,
+  onOverwrite: vi.fn(),
   onDisconnect: vi.fn(),
   ...overrides,
 });
@@ -58,6 +60,19 @@ describe('GoogleDriveBackupDialog', () => {
 
     expect(screen.getByText('自動備份已暫停，請重新連結')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '連結 Google Drive' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
+  });
+
+  it('requires an explicit overwrite choice when the remote backup changed elsewhere', () => {
+    render(<GoogleDriveBackupDialog {...createProps({
+      status: 'dirty',
+      authorized: true,
+      remoteConflict: true,
+      remoteFile: { id: 'remote-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T11:00:00.000Z' },
+    })} />);
+
+    expect(screen.getByRole('button', { name: '使用此備份' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '以本機資料覆蓋雲端' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
   });
 });
