@@ -174,6 +174,7 @@ describe('api rule importance cache boundary', () => {
 describe('api mutation cache synchronization', () => {
   const game = { id: 'game-1', slug: 'emberleaf', displayName: 'Emberleaf', aliases: [], ruleCount: 1, updatedAt: 1 };
   const rule = { id: 'rule-1', gameId: game.id, gameName: game.displayName, gameSlug: game.slug, statement: 'Updated', status: 'published' as const, sourceLinks: [], tags: [], updatedAt: 2 };
+  const resource = { id: 'resource-1', gameId: 'game-1', name: '官方教學', category: 'teaching' as const, url: 'https://example.com/teach', createdAt: 2, updatedAt: 2 };
   const sourceGame = { ...game, id: 'game-source', slug: 'old-name', displayName: 'Old name' };
   const targetGame = { ...game, id: 'game-target', slug: 'new-name', displayName: 'New name' };
 
@@ -193,6 +194,28 @@ describe('api mutation cache synchronization', () => {
     await api.patchGame(game.id, { displayName: game.displayName });
 
     expect(update).toHaveBeenCalledWith(game);
+  });
+
+  test('adds a newly created external resource to the local game cache', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ resource }) }));
+    const update = vi.spyOn(localDb, 'updateCachedGameExternalResources').mockResolvedValue(undefined);
+
+    await api.createGameExternalResource('game-1', { name: resource.name, category: resource.category, url: resource.url });
+
+    expect(update).toHaveBeenCalledWith('game-1', expect.any(Function));
+    const updater = update.mock.calls[0][1];
+    expect(updater([])).toEqual([resource]);
+  });
+
+  test('removes a deleted external resource from the local game cache', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ ok: true }) }));
+    const update = vi.spyOn(localDb, 'updateCachedGameExternalResources').mockResolvedValue(undefined);
+
+    await api.deleteGameExternalResource('game-1', resource.id);
+
+    expect(update).toHaveBeenCalledWith('game-1', expect.any(Function));
+    const updater = update.mock.calls[0][1];
+    expect(updater([resource])).toEqual([]);
   });
 
   test('merges the local source game cache into the target game cache', async () => {

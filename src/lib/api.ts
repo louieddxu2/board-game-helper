@@ -412,9 +412,18 @@ export const api = {
   },
   createGameExternalResource: (gameId: string, input: { name: string; category: GameExternalResource['category']; url: string }) => mutation<{ resource: GameExternalResource }>(`/api/games/${encodeURIComponent(gameId)}/external-resources`, {
     method: 'POST', body: JSON.stringify(input),
+  }).then(async (response) => {
+    await localDb.updateCachedGameExternalResources(gameId, (resources) => [
+      ...resources.filter((resource) => resource.id !== response.resource.id),
+      response.resource,
+    ]).catch(() => undefined);
+    return response;
   }),
   deleteGameExternalResource: (gameId: string, resourceId: string) => mutation<{ ok: true }>(`/api/games/${encodeURIComponent(gameId)}/external-resources/${encodeURIComponent(resourceId)}`, {
     method: 'DELETE', body: '{}',
+  }).then(async (response) => {
+    await localDb.updateCachedGameExternalResources(gameId, (resources) => resources.filter((resource) => resource.id !== resourceId)).catch(() => undefined);
+    return response;
   }),
   editors: () => uncachedRead<EditorAdminPayload>('/api/admin/editors', 'editor administration is private and intentionally always current'),
   inviteEditor: (email: string, role: 'admin' | 'editor', note?: string) => mutation<{ ok: true }>('/api/admin/editors/invite', {

@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
@@ -95,6 +95,7 @@ export const toStoredRule = <T extends RuleCard>(rule: T): T => ({ ...rule, tags
 
 export interface CachedGameRow extends GameSummary {
   aliases: string[];
+  externalResources?: GameExternalResource[];
   cachedAt: number;
   rulesFetchedAt?: number;
   rulesComplete?: boolean;
@@ -468,6 +469,22 @@ export const localDb = {
         ...record,
         data: applyGameReferenceUpdate(record.data, undefined, referenceGame, ruleUpdates),
         cachedAt: key === HOME_VIEW_CACHE_KEY ? cachedAt : record.cachedAt,
+      });
+    }
+    await tx.done;
+  },
+  updateCachedGameExternalResources: async (
+    gameId: string,
+    update: (resources: GameExternalResource[]) => GameExternalResource[],
+  ) => {
+    const db = await getDatabase();
+    const tx = db.transaction('games', 'readwrite');
+    const game = await tx.store.get(gameId);
+    if (game) {
+      await tx.store.put({
+        ...game,
+        externalResources: update(game.externalResources ?? []),
+        cachedAt: Date.now(),
       });
     }
     await tx.done;
