@@ -6,8 +6,10 @@ import { GamePage } from './GamePage';
 
 const mocks = vi.hoisted(() => ({
   game: vi.fn(),
+  ruleFresh: vi.fn(),
   tags: vi.fn(),
   hydrateGameTags: vi.fn(),
+  hydrateRuleTags: vi.fn(),
   canEdit: false,
   createGameExternalResource: vi.fn(),
   deleteGameExternalResource: vi.fn(),
@@ -24,12 +26,12 @@ vi.mock('../context/ToastContext', async (importOriginal) => {
 vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
-  api: { game: mocks.game, tags: mocks.tags, createGameExternalResource: mocks.createGameExternalResource, deleteGameExternalResource: mocks.deleteGameExternalResource },
+  api: { game: mocks.game, ruleFresh: mocks.ruleFresh, tags: mocks.tags, createGameExternalResource: mocks.createGameExternalResource, deleteGameExternalResource: mocks.deleteGameExternalResource },
 }));
 vi.mock('../lib/localDb', () => ({ localDb: { invalidateGame: mocks.invalidateGame } }));
 vi.mock('../components/GameSearch', () => ({ clearSearchCache: vi.fn() }));
-vi.mock('../lib/tagHydration', () => ({ hydrateGameTags: mocks.hydrateGameTags }));
-vi.mock('../lib/rulePermissions', () => ({ canUserEditRule: () => false, canUserReviewRule: () => false }));
+vi.mock('../lib/tagHydration', () => ({ hydrateGameTags: mocks.hydrateGameTags, hydrateRuleTags: mocks.hydrateRuleTags }));
+vi.mock('../lib/rulePermissions', () => ({ canUserEditRule: vi.fn(() => false), canUserReviewRule: vi.fn(() => false) }));
 vi.mock('../components/FavoriteLimitDialog', () => ({ FavoriteLimitDialog: () => null }));
 
 const game = {
@@ -46,8 +48,10 @@ describe('GamePage compact rule view', () => {
     vi.clearAllMocks();
     mocks.canEdit = false;
     mocks.game.mockResolvedValue({ game });
+    mocks.ruleFresh.mockResolvedValue(game.rules[0]);
     mocks.tags.mockResolvedValue({ tags: [] });
     mocks.hydrateGameTags.mockImplementation(async (value: typeof game) => value);
+    mocks.hydrateRuleTags.mockImplementation(async (rules: typeof game.rules) => rules);
   });
 
   afterEach(() => cleanup());
@@ -135,5 +139,31 @@ describe('GamePage compact rule view', () => {
     fireEvent(window, new PopStateEvent('popstate'));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '新增外部資源' })).not.toBeInTheDocument());
     expect(screen.getByRole('dialog', { name: '外部資源' })).toBeInTheDocument();
+  });
+
+  test('refreshes the rule snapshot before opening an editor', async () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: false })) });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+    mocks.canEdit = true;
+    const freshRule = { ...game.rules[0], statement: '最新規則內容', updatedAt: 2 };
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [{ ...game.rules[0], updatedAt: 1 }, game.rules[1]] } });
+    mocks.ruleFresh.mockResolvedValue(freshRule);
+    const rulePermissions = await import('../lib/rulePermissions');
+    vi.mocked(rulePermissions.canUserEditRule).mockReturnValue(true);
+
+    try {
+      renderGamePage();
+      await screen.findByText('第一條正確規則');
+      fireEvent.click(screen.getByText('第一條正確規則'));
+      fireEvent.click(await screen.findByRole('button', { name: '編輯' }));
+
+      await waitFor(() => expect(screen.getByDisplayValue('最新規則內容')).toBeInTheDocument());
+      expect(mocks.ruleFresh).toHaveBeenCalledWith('rule-1');
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia });
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
+    }
   });
 });

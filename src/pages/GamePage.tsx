@@ -13,7 +13,7 @@ import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearSearchCache } from '../components/GameSearch';
 import zhTWCopy from '../content/zh-TW.json';
-import { hydrateGameTags } from '../lib/tagHydration';
+import { hydrateGameTags, hydrateRuleTags } from '../lib/tagHydration';
 import { canUserEditRule, canUserReviewRule } from '../lib/rulePermissions';
 import { collectEditionOptions, getRuleEditions } from '../lib/editionOptions';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
@@ -93,8 +93,23 @@ export const GamePage = () => {
 
   const beginRuleEdit = async (rule: RuleCardType) => {
     const ordinary = Boolean(user && !user.roles.some((role) => role === 'editor' || role === 'admin'));
+    const openLatestRule = async () => {
+      try {
+        const latestResponse = await api.ruleFresh(rule.id);
+        const [latestRule] = await hydrateRuleTags([latestResponse]);
+        setGame((current) => current ? {
+          ...current,
+          rules: current.rules.map((candidate) => candidate.id === latestRule.id ? latestRule : candidate),
+        } : current);
+        setEditing(latestRule);
+      } catch {
+        // Keep the cached page usable when the refresh is unavailable. The
+        // server-side optimistic concurrency check still protects the save.
+        setEditing(rule);
+      }
+    };
     if (!ordinary || rule.reviewStatus === 'pending') {
-      setEditing(rule);
+      await openLatestRule();
       return;
     }
     try {
@@ -103,7 +118,7 @@ export const GamePage = () => {
         showToast('待審核額度已用完，無法修改這條規則。', 'info');
         return;
       }
-      setEditing(rule);
+      await openLatestRule();
     } catch {
       showToast('暫時無法確認待審核額度，請稍後再試。', 'error');
     }
@@ -653,7 +668,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       showToast(caught instanceof ApiError && caught.code === 'PENDING_RULE_LIMIT_REACHED'
         ? '待審核額度已用完，無法修改這條規則。'
         : caught instanceof ApiError && caught.code === 'rule_changed_while_editing'
-          ? '這條規則已在其他分頁更新，請關閉編輯器後重新載入。'
+          ? '這條規則在你開始編輯後已有更新，請關閉編輯器後重新載入。'
           : '規則儲存失敗，請稍後再試。', 'error');
     } finally { setSaving(false); }
   };

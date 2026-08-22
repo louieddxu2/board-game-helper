@@ -390,6 +390,7 @@ export const api = {
     }).catch(() => undefined);
     return { rule: stale.data };
   },
+  ruleFresh: (id: string) => refreshRule(id),
   patchRule: (id: string, input: Record<string, unknown>) => mutation<{ ok: true; rule: ApiRule; reviewStatus?: 'not_required' | 'pending' | 'reviewed' }>(`/api/rules/${id}`, {
     method: 'PATCH', body: JSON.stringify(input),
   }).then(async (response) => {
