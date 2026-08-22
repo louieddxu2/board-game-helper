@@ -195,7 +195,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       {onShowPersonal && <button type="button" className="home-mode-button explore-mode-button" onClick={onShowPersonal}>我的收藏</button>}
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
-        <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={canEdit ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
+        <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
         {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
       </div>
       </div>
@@ -238,6 +238,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
 const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onShowExplore(): void }) => {
   const navigate = useNavigate();
+  const { user } = useSession();
   const [query, setQuery] = useState('');
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
 
@@ -255,7 +256,8 @@ const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onS
       <div className="personal-home-hero-bg" aria-hidden="true" />
       <div className="personal-home-search">
       <div className="personal-home-search-row">
-        <GameSearch value={query} onChange={setQuery} includeRules
+        <GameSearch value={query} onChange={setQuery} includeRules allowCreate={Boolean(user)}
+          onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined}
           onSelect={(game) => navigate(`/games/${game.slug}`)}
           onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
         <button type="button" className="home-mode-button personal-explore-btn" onClick={onShowExplore}>探索</button>
