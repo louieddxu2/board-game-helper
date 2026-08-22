@@ -98,7 +98,16 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
     setMockRole,
     devLogin: async () => { const response = await api.devLogin(); setUser(response.user); },
     googleLogin: async (credential) => { const response = await api.googleLogin(credential); setUser(response.user); },
-    logout: async () => { setMockRole(null); await api.logout(); setUser(null); },
+    logout: async () => {
+      setMockRole(null);
+      try {
+        await api.logout();
+      } finally {
+        // The local UI must not keep presenting an authenticated session when
+        // the server-side logout request is unavailable or fails.
+        setUser(null);
+      }
+    },
   }), [effectiveUser, user, loading, googleClientId, localDevLogin, refresh, canEdit, isAdmin, realIsAdmin, activeMockRole, setMockRole]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
