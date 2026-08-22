@@ -196,7 +196,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     panMetrics.current = undefined;
     if (pointers.current.size === 0 && event.pointerType !== 'mouse' && (onDrawerSwipeProgress || onDrawerSwipeEnd)) {
       const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
+      const startsInEmptyViewport = !(event.target as Element).closest('table');
       drawerSwipe.current = firstColumn
+        || startsInEmptyViewport
         ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, lastDeltaX: 0 }
         : undefined;
     } else if (pointers.current.size > 0) {

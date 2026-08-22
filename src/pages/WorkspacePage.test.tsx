@@ -1801,6 +1801,22 @@ describe('WorkspacePage', () => {
     dispatchPointer(viewport, 'pointerup', 130, 40);
   });
 
+  it('opens the drawer from a rightward swipe started in the empty viewport area', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport')!;
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 34 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(viewport, 'pointerdown', 320, 220);
+    dispatchPointer(viewport, 'pointermove', 360, 220);
+    expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
+    dispatchPointer(viewport, 'pointerup', 360, 220);
+  });
+
   it('opens search after holding a vertical boundary bounce for half a second', async () => {
     render(<WorkspacePage />);
     await screen.findByRole('table');
