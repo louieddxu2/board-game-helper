@@ -14,7 +14,7 @@ export interface TreeNodeProps {
   onOpen(node: WorkspaceNode): void;
   onContext(node: WorkspaceNode): void;
   onDragPointerDown(node: WorkspaceNode, event: React.PointerEvent<HTMLDivElement>): void;
-  shouldSuppressClick(): boolean;
+  shouldSuppressClick(nodeId: string): boolean;
   visibleNodeIds?: Set<string>;
   filterQuery?: string;
 }
@@ -24,7 +24,7 @@ export const TreeNode = ({ node, data, expanded, depth, draggingId, dragTargetId
   const visibleChildren = visibleNodeIds ? children.filter((child) => visibleNodeIds.has(child.id)) : children;
   const isOpen = filterQuery ? visibleChildren.length > 0 : expanded.has(node.id);
   return <div className="workspace-tree-item">
-    <div data-node-id={node.id} data-node-type={node.type} className={`workspace-tree-row ${data.activeNodeId === node.id ? 'active' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${dragTargetId === node.id ? 'is-drop-target' : ''}`} style={{ '--workspace-depth': depth } as React.CSSProperties} onPointerDown={(event) => onDragPointerDown(node, event)} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (shouldSuppressClick()) { event.preventDefault(); return; } if (node.type === 'folder') onToggle(node.id); else onOpen(node); }}>
+    <div data-node-id={node.id} data-node-type={node.type} className={`workspace-tree-row ${data.activeNodeId === node.id ? 'active' : ''} ${draggingId === node.id ? 'is-dragging' : ''} ${dragTargetId === node.id ? 'is-drop-target' : ''}`} style={{ '--workspace-depth': depth } as React.CSSProperties} onPointerDown={(event) => onDragPointerDown(node, event)} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (shouldSuppressClick(node.id)) { event.preventDefault(); return; } if (node.type === 'folder') onToggle(node.id); else onOpen(node); }}>
       {node.type === 'folder' ? <span className={`workspace-tree-toggle ${isOpen ? 'open' : ''}`} aria-hidden="true"><WorkspaceIcon name="chevron" size={17} /></span> : <span className="workspace-tree-spacer" />}
       <span className="workspace-tree-name"><WorkspaceIcon name={node.type === 'folder' ? 'folder' : 'table'} size={19} /><span className="workspace-tree-name-text">{node.name}</span></span>
       <button type="button" className="workspace-tree-more" aria-label={`開啟${node.name}操作`} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onContext(node); }}><WorkspaceIcon name="more" size={19} /></button>
@@ -38,7 +38,8 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
   const autoScrollVelocity = useRef(0);
   const dragSession = useRef<{ node: WorkspaceNode; pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
   const dragTargetRef = useRef<string | null>(null);
-  const suppressNextClick = useRef(false);
+  const suppressNextClick = useRef<string | undefined>(undefined);
+  const suppressClickResetTimer = useRef<number | undefined>(undefined);
   const [draggingNode, setDraggingNode] = useState<WorkspaceNode>();
   const [dragTargetId, setDragTargetId] = useState<string | null>();
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
@@ -111,18 +112,32 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
     setDraggingNode(undefined);
     setDragTargetId(undefined);
   };
+  const resetClickSuppression = () => {
+    if (suppressClickResetTimer.current !== undefined) window.clearTimeout(suppressClickResetTimer.current);
+    suppressClickResetTimer.current = undefined;
+    suppressNextClick.current = undefined;
+  };
+  const deferClickSuppressionReset = () => {
+    if (suppressClickResetTimer.current !== undefined) window.clearTimeout(suppressClickResetTimer.current);
+    suppressClickResetTimer.current = window.setTimeout(() => {
+      suppressNextClick.current = undefined;
+      suppressClickResetTimer.current = undefined;
+    }, 0);
+  };
   useEffect(() => () => {
     if (dragSession.current?.timer) window.clearTimeout(dragSession.current.timer);
+    if (suppressClickResetTimer.current !== undefined) window.clearTimeout(suppressClickResetTimer.current);
     if (dragSession.current?.active) onDragStateChange?.(false);
     stopAutoScroll();
   }, []);
   const beginDrag = (node: WorkspaceNode, event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    resetClickSuppression();
     const session = { node, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, timer: undefined as number | undefined };
     session.timer = window.setTimeout(() => {
       session.active = true;
       onDragStateChange?.(true);
-      suppressNextClick.current = true;
+      suppressNextClick.current = node.id;
       setDraggingNode(node);
       setDragPoint({ x: session.startX, y: session.startY });
       try { treeRef.current?.setPointerCapture(session.pointerId); } catch { /* The pointer may have ended before the long press. */ }
@@ -148,13 +163,17 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const session = dragSession.current;
     if (!session || session.pointerId !== event.pointerId) return;
-    if (session.active) onMove(session.node, dragTargetRef.current);
+    if (session.active) {
+      onMove(session.node, dragTargetRef.current);
+      event.preventDefault();
+      deferClickSuppressionReset();
+    }
     try { if (treeRef.current?.hasPointerCapture(event.pointerId)) treeRef.current.releasePointerCapture(event.pointerId); } catch { /* Pointer capture may already be released. */ }
     clearDrag();
   };
-  const shouldSuppressClick = () => {
-    if (!suppressNextClick.current) return false;
-    suppressNextClick.current = false;
+  const shouldSuppressClick = (nodeId: string) => {
+    if (suppressNextClick.current !== nodeId) return false;
+    resetClickSuppression();
     return true;
   };
   const rootNodes = getChildren(data, null).filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id));
