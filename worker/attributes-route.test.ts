@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { attributesRoutes, attributeResponseSchema } from './routes/attributes';
 
-describe('read-only attribute route', () => {
+describe('attribute route', () => {
   test('does not expose rating or comparison writes', async () => {
     const ratingResponse = await attributesRoutes.request('https://rules.example/api/attributes/ratings', {
       method: 'POST',
@@ -18,9 +18,12 @@ describe('read-only attribute route', () => {
     expect(comparisonResponse.status).toBe(404);
   });
 
-  test('requires at least one answer in a response', () => {
-    expect(attributeResponseSchema.safeParse({
+  test('requires a response id and at least one answer in a response', () => {
+    const base = {
       subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123',
-    }).success).toBe(false);
+    };
+    expect(attributeResponseSchema.safeParse(base).success).toBe(false);
+    expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123' }).success).toBe(false);
+    expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', comparison: 'SIMILAR' }).success).toBe(true);
   });
 });

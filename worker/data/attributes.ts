@@ -11,7 +11,15 @@ import type {
 } from '../../src/shared/types';
 import { createId } from '../utils';
 import type { Database } from './database';
-import { ATTRIBUTE_SCORE_MODEL_VERSION, calculateAttributeScores } from './attributeScoring';
+import {
+  ATTRIBUTE_INITIAL_SCORE,
+  ATTRIBUTE_SCORE_MODEL_VERSION,
+  applyComparison,
+  applyDirectRating,
+  emptyAttributeState,
+  kFactorForEvidenceCount,
+  type OnlineAttributeState,
+} from './attributeScoring';
 
 interface AttributeRow {
   id: string;
@@ -41,18 +49,22 @@ interface ComponentRow {
   label: string;
 }
 
-interface AttributeRatingAggregateRow {
+interface AttributeScoreStateRow {
   subject_id: string;
   attribute_id: string;
-  average_value: number;
-  rating_count: number;
+  score: number;
+  direct_sum: number;
+  direct_count: number;
+  comparison_count: number;
+  decisive_comparison_count: number;
+  evidence_count: number;
 }
 
-interface AttributeComparisonRow {
+interface AttributePairStatsRow {
   subject_a_id: string;
   subject_b_id: string;
   attribute_id: string;
-  result: AttributeComparisonResult;
+  comparison_count: number;
 }
 
 interface CandidateRow {
@@ -87,19 +99,6 @@ interface ActivityRow {
   created_at: number;
 }
 
-interface EvidenceRatingRow {
-  subject_id: string;
-  attribute_id: string;
-  rating_count: number;
-}
-
-interface EvidenceComparisonRow {
-  subject_a_id: string;
-  subject_b_id: string;
-  attribute_id: string;
-  comparison_count: number;
-}
-
 interface SessionRatingRow {
   subject_id: string;
   attribute_id: string;
@@ -124,6 +123,7 @@ export interface AttributeResponseInput {
   subjectAId: string;
   subjectBId: string;
   attributeId: string;
+  responseId: string;
   comparison?: AttributeComparisonResult | null;
   ratingA?: number | null;
   ratingB?: number | null;
@@ -214,31 +214,25 @@ export const queryAttributeSubjects = async (db: Database, subjectIds?: string[]
 };
 
 const queryAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
-  const [ratingResult, comparisonResult] = await Promise.all([
-    db.statement(`
-      SELECT subject_id, attribute_id, AVG(value) AS average_value, COUNT(*) AS rating_count
-      FROM attribute_ratings
-      GROUP BY subject_id, attribute_id
-    `).all<AttributeRatingAggregateRow>(),
-    db.statement(`
-      SELECT subject_a_id, subject_b_id, attribute_id, result
-      FROM attribute_comparisons
-    `).all<AttributeComparisonRow>(),
-  ]);
-  return calculateAttributeScores(
-    (ratingResult.results ?? []).map((row) => ({
-      subjectId: row.subject_id,
-      attributeId: row.attribute_id,
-      average: Number(row.average_value),
-      count: Number(row.rating_count),
-    })),
-    (comparisonResult.results ?? []).map((row) => ({
-      subjectAId: row.subject_a_id,
-      subjectBId: row.subject_b_id,
-      attributeId: row.attribute_id,
-      result: row.result,
-    })),
-  );
+  const result = await db.statement(`
+    SELECT subject_id, attribute_id, score, direct_sum, direct_count,
+      comparison_count, decisive_comparison_count, evidence_count
+    FROM attribute_score_states
+  `).all<AttributeScoreStateRow>();
+  return (result.results ?? []).map((row) => ({
+    subjectId: row.subject_id,
+    attributeId: row.attribute_id,
+    score: Number(Number(row.score).toFixed(2)),
+    directAverage: Number(row.direct_count) > 0
+      ? Number((Number(row.direct_sum) / Number(row.direct_count)).toFixed(2))
+      : undefined,
+    directCount: Number(row.direct_count),
+    comparisonCount: Number(row.comparison_count),
+    decisiveComparisonCount: Number(row.decisive_comparison_count),
+    evidenceCount: Number(row.evidence_count),
+    kFactor: kFactorForEvidenceCount(Number(row.evidence_count)),
+    modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
+  }));
 };
 
 const parseCandidateValues = (raw: string): Array<number | null> => {
@@ -290,46 +284,31 @@ const toActivity = (row: ActivityRow): AttributeActivity => ({
 
 const queryRecentActivities = async (db: Database): Promise<AttributeActivity[]> => {
   const result = await db.statement(`
-    SELECT id, kind, actor_name, attribute_id, attribute_name,
-      subject_id, subject_name, subject_slug,
-      subject_game_slug,
-      subject_a_id, subject_a_name, subject_a_slug, subject_a_game_slug,
-      subject_b_id, subject_b_name, subject_b_slug, subject_b_game_slug,
-      value, result, created_at
-    FROM (
-      SELECT r.id, 'rating' AS kind,
-        CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
-        r.attribute_id, t.name AS attribute_name,
-        r.subject_id, s.display_name AS subject_name, s.slug AS subject_slug,
-        g.slug AS subject_game_slug,
-        NULL AS subject_a_id, NULL AS subject_a_name, NULL AS subject_a_slug, NULL AS subject_a_game_slug,
-        NULL AS subject_b_id, NULL AS subject_b_name, NULL AS subject_b_slug, NULL AS subject_b_game_slug,
-        r.value, NULL AS result, r.created_at
-      FROM attribute_ratings r
-      JOIN attribute_subjects s ON s.id = r.subject_id
-      LEFT JOIN games g ON g.id = s.game_id
-      JOIN attribute_translations t ON t.attribute_id = r.attribute_id AND t.locale = 'zh-TW'
-      LEFT JOIN users u ON u.id = r.actor_id
-      WHERE r.session_id NOT LIKE 'seed:%'
-      UNION ALL
-      SELECT c.id, 'comparison' AS kind,
-        CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
-        c.attribute_id, t.name AS attribute_name,
-        NULL AS subject_id, NULL AS subject_name, NULL AS subject_slug,
-        NULL AS subject_game_slug,
-        c.subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
-        c.subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
-        NULL AS value, c.result, c.created_at
-      FROM attribute_comparisons c
-      JOIN attribute_subjects sa ON sa.id = c.subject_a_id
-      JOIN attribute_subjects sb ON sb.id = c.subject_b_id
-      LEFT JOIN games ga ON ga.id = sa.game_id
-      LEFT JOIN games gb ON gb.id = sb.game_id
-      JOIN attribute_translations t ON t.attribute_id = c.attribute_id AND t.locale = 'zh-TW'
-      LEFT JOIN users u ON u.id = c.actor_id
-      WHERE c.session_id NOT LIKE 'seed:%'
-    ) activities
-    ORDER BY created_at DESC, id DESC
+    SELECT v.id, v.kind,
+      CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
+      v.attribute_id, t.name AS attribute_name,
+      CASE WHEN v.kind = 'rating' THEN v.subject_a_id END AS subject_id,
+      CASE WHEN v.kind = 'rating' THEN sa.display_name END AS subject_name,
+      CASE WHEN v.kind = 'rating' THEN sa.slug END AS subject_slug,
+      CASE WHEN v.kind = 'rating' THEN ga.slug END AS subject_game_slug,
+      CASE WHEN v.kind = 'comparison' THEN v.subject_a_id END AS subject_a_id,
+      CASE WHEN v.kind = 'comparison' THEN sa.display_name END AS subject_a_name,
+      CASE WHEN v.kind = 'comparison' THEN sa.slug END AS subject_a_slug,
+      CASE WHEN v.kind = 'comparison' THEN ga.slug END AS subject_a_game_slug,
+      CASE WHEN v.kind = 'comparison' THEN v.subject_b_id END AS subject_b_id,
+      CASE WHEN v.kind = 'comparison' THEN sb.display_name END AS subject_b_name,
+      CASE WHEN v.kind = 'comparison' THEN sb.slug END AS subject_b_slug,
+      CASE WHEN v.kind = 'comparison' THEN gb.slug END AS subject_b_game_slug,
+      v.value, v.result, v.created_at
+    FROM attribute_vote_events v
+    JOIN attribute_translations t ON t.attribute_id = v.attribute_id AND t.locale = 'zh-TW'
+    JOIN attribute_subjects sa ON sa.id = v.subject_a_id
+    LEFT JOIN attribute_subjects sb ON sb.id = v.subject_b_id
+    LEFT JOIN games ga ON ga.id = sa.game_id
+    LEFT JOIN games gb ON gb.id = sb.game_id
+    LEFT JOIN users u ON u.id = v.actor_id
+    WHERE v.session_id NOT LIKE 'seed:%'
+    ORDER BY v.created_at DESC, v.id DESC
     LIMIT 12
   `).all<ActivityRow>();
   return (result.results ?? []).map(toActivity);
@@ -395,18 +374,21 @@ export const queryAttributeQuestion = async (
   sessionId: string,
   options: AttributeQuestionOptions = {},
 ): Promise<AttributeQuestion | null> => {
-  const [attributes, subjects, ratings, comparisons, sessionRatings, sessionComparisons] = await Promise.all([
+  const [attributes, subjects, states, pairs, sessionRatings, sessionComparisons] = await Promise.all([
     queryAttributeDefinitions(db),
     queryAttributeSubjects(db),
-    db.statement('SELECT subject_id, attribute_id, COUNT(*) AS rating_count FROM attribute_ratings GROUP BY subject_id, attribute_id').all<EvidenceRatingRow>(),
-    db.statement('SELECT subject_a_id, subject_b_id, attribute_id, COUNT(*) AS comparison_count FROM attribute_comparisons GROUP BY subject_a_id, subject_b_id, attribute_id').all<EvidenceComparisonRow>(),
-    db.statement('SELECT subject_id, attribute_id FROM attribute_ratings WHERE session_id = ?').bind(sessionId).all<SessionRatingRow>(),
-    db.statement('SELECT subject_a_id, subject_b_id, attribute_id FROM attribute_comparisons WHERE session_id = ?').bind(sessionId).all<SessionComparisonRow>(),
+    db.statement('SELECT subject_id, attribute_id, score, direct_sum, direct_count, comparison_count, decisive_comparison_count, evidence_count FROM attribute_score_states').all<AttributeScoreStateRow>(),
+    db.statement('SELECT subject_a_id, subject_b_id, attribute_id, comparison_count FROM attribute_pair_stats').all<AttributePairStatsRow>(),
+    db.statement("SELECT subject_a_id AS subject_id, attribute_id FROM attribute_vote_events WHERE session_id = ? AND kind = 'rating'").bind(sessionId).all<SessionRatingRow>(),
+    db.statement("SELECT subject_a_id, subject_b_id, attribute_id FROM attribute_vote_events WHERE session_id = ? AND kind = 'comparison'").bind(sessionId).all<SessionComparisonRow>(),
   ]);
   const subjectMap = new Map(subjects.map((subject) => [subject.id, subject]));
   const attributeMap = new Map(attributes.map((attribute) => [attribute.id, attribute]));
-  const ratingCounts = new Map((ratings.results ?? []).map((row) => [`${row.subject_id}:${row.attribute_id}`, Number(row.rating_count)]));
-  const comparisonCounts = new Map((comparisons.results ?? []).map((row) => [pairKey(row.subject_a_id, row.subject_b_id, row.attribute_id), Number(row.comparison_count)]));
+  const stateMap = new Map((states.results ?? []).map((row) => [`${row.subject_id}:${row.attribute_id}`, {
+    score: Number(row.score),
+    evidenceCount: Number(row.evidence_count),
+  }]));
+  const comparisonCounts = new Map((pairs.results ?? []).map((row) => [pairKey(row.subject_a_id, row.subject_b_id, row.attribute_id), Number(row.comparison_count)]));
   const sessionRatingKeys = new Set((sessionRatings.results ?? []).map((row) => `${row.subject_id}:${row.attribute_id}`));
   const sessionComparisonKeys = new Set((sessionComparisons.results ?? []).map((row) => pairKey(row.subject_a_id, row.subject_b_id, row.attribute_id)));
   const fixedA = options.fixedSubjectAId ? subjectMap.get(options.fixedSubjectAId) : undefined;
@@ -420,21 +402,26 @@ export const queryAttributeQuestion = async (
   const subjectBs = fixedB ? [fixedB] : subjects;
   const questionAttributes = fixedAttribute ? [fixedAttribute] : attributes;
   const buildCandidates = (allowAnswered: boolean) => {
-    const candidates: Array<AttributeQuestion & { weight: number }> = [];
+    const candidates: Array<AttributeQuestion & { evidenceCount: number; distance: number; comparisonCount: number }> = [];
     for (const attribute of questionAttributes) {
       for (const subjectA of subjectAs) {
         for (const subjectB of subjectBs) {
           if (subjectA.id === subjectB.id) continue;
           if (subjectA.id === options.excludeSubjectAId && subjectB.id === options.excludeSubjectBId && attribute.id === options.excludeAttributeId) continue;
           const key = pairKey(subjectA.id, subjectB.id, attribute.id);
-          const aRatingCount = ratingCounts.get(`${subjectA.id}:${attribute.id}`) ?? 0;
-          const bRatingCount = ratingCounts.get(`${subjectB.id}:${attribute.id}`) ?? 0;
+          const aState = stateMap.get(`${subjectA.id}:${attribute.id}`) ?? { score: ATTRIBUTE_INITIAL_SCORE, evidenceCount: 0 };
+          const bState = stateMap.get(`${subjectB.id}:${attribute.id}`) ?? { score: ATTRIBUTE_INITIAL_SCORE, evidenceCount: 0 };
           const alreadyRatedBoth = sessionRatingKeys.has(`${subjectA.id}:${attribute.id}`) && sessionRatingKeys.has(`${subjectB.id}:${attribute.id}`);
           if (!allowAnswered && (sessionComparisonKeys.has(key) || alreadyRatedBoth)) continue;
           const comparisonCount = comparisonCounts.get(key) ?? 0;
-          const missingRatings = (aRatingCount < 2 ? 2 : 0) + (bRatingCount < 2 ? 2 : 0);
-          const weight = (comparisonCount === 0 ? 9 : 1) + missingRatings + Math.random();
-          candidates.push({ subjectA, subjectB, attribute, weight });
+          candidates.push({
+            subjectA,
+            subjectB,
+            attribute,
+            evidenceCount: aState.evidenceCount + bState.evidenceCount,
+            distance: Math.abs(aState.score - bState.score),
+            comparisonCount,
+          });
         }
       }
     }
@@ -443,7 +430,19 @@ export const queryAttributeQuestion = async (
 
   const candidates = buildCandidates(false);
   const fallbackCandidates = candidates.length ? candidates : buildCandidates(true);
-  return weightedRandom(fallbackCandidates) ?? null;
+  if (!fallbackCandidates.length) return null;
+
+  const randomCandidate = () => fallbackCandidates[Math.floor(Math.random() * fallbackCandidates.length)];
+  const selectWeighted = (items: typeof fallbackCandidates, weight: (item: typeof fallbackCandidates[number]) => number) =>
+    weightedRandom(items.map((item) => ({ ...item, weight: Math.max(0.001, weight(item)) })));
+  const mode = Math.random();
+  if (mode < 0.4) {
+    return selectWeighted(fallbackCandidates, (candidate) => 1 / (1 + candidate.evidenceCount)) ?? randomCandidate();
+  }
+  if (mode < 0.8) {
+    return selectWeighted(fallbackCandidates, (candidate) => 1 / (1 + candidate.distance)) ?? randomCandidate();
+  }
+  return randomCandidate();
 };
 
 export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput) => {
@@ -451,34 +450,101 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
   await assertSubjectAndAttribute(db, input.subjectAId, input.attributeId);
   await assertSubjectAndAttribute(db, input.subjectBId, input.attributeId);
   if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
-  const statements = [];
+  const existingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
+    .bind(input.responseId)
+    .first<{ id: string }>();
+  if (existingResponse) return;
+
+  const stateResult = await db.statement(`
+    SELECT subject_id, attribute_id, score, direct_sum, direct_count,
+      comparison_count, decisive_comparison_count, evidence_count
+    FROM attribute_score_states
+    WHERE attribute_id = ? AND subject_id IN (?, ?)
+  `).bind(input.attributeId, input.subjectAId, input.subjectBId).all<AttributeScoreStateRow>();
+  const stateMap = new Map((stateResult.results ?? []).map((row) => [row.subject_id, {
+    score: Number(row.score),
+    directSum: Number(row.direct_sum),
+    directCount: Number(row.direct_count),
+    comparisonCount: Number(row.comparison_count),
+    decisiveComparisonCount: Number(row.decisive_comparison_count),
+    evidenceCount: Number(row.evidence_count),
+  } satisfies OnlineAttributeState]));
+  let stateA = stateMap.get(input.subjectAId) ?? emptyAttributeState();
+  let stateB = stateMap.get(input.subjectBId) ?? emptyAttributeState();
+  const touchedSubjects = new Set<string>();
+
+  // Process direct anchors first, then the explicit A/B relation. This order is
+  // fixed within one response even though the overall online model accepts
+  // order sensitivity between separate responses.
   if (input.ratingA != null) {
-    statements.push(db.statement(`
-      INSERT INTO attribute_ratings
-        (id, subject_id, attribute_id, value, actor_id, session_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(session_id, subject_id, attribute_id) DO UPDATE SET
-        value = excluded.value, actor_id = excluded.actor_id, updated_at = excluded.updated_at
-    `).bind(createId('attribute-rating'), input.subjectAId, input.attributeId, input.ratingA, input.actorId, input.sessionId, input.timestamp, input.timestamp));
+    stateA = applyDirectRating(stateA, input.ratingA).next;
+    touchedSubjects.add(input.subjectAId);
   }
   if (input.ratingB != null) {
-    statements.push(db.statement(`
-      INSERT INTO attribute_ratings
-        (id, subject_id, attribute_id, value, actor_id, session_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(session_id, subject_id, attribute_id) DO UPDATE SET
-        value = excluded.value, actor_id = excluded.actor_id, updated_at = excluded.updated_at
-    `).bind(createId('attribute-rating'), input.subjectBId, input.attributeId, input.ratingB, input.actorId, input.sessionId, input.timestamp, input.timestamp));
+    stateB = applyDirectRating(stateB, input.ratingB).next;
+    touchedSubjects.add(input.subjectBId);
   }
+
+  const canonical = input.comparison == null
+    ? undefined
+    : canonicalizeComparison(input.subjectAId, input.subjectBId, input.comparison);
   if (input.comparison != null) {
-    const canonical = canonicalizeComparison(input.subjectAId, input.subjectBId, input.comparison);
-    statements.push(db.statement(`
-      INSERT INTO attribute_comparisons
-        (id, attribute_id, subject_a_id, subject_b_id, result, actor_id, session_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(session_id, attribute_id, subject_a_id, subject_b_id) DO UPDATE SET
-        result = excluded.result, actor_id = excluded.actor_id, updated_at = excluded.updated_at
-    `).bind(createId('attribute-comparison'), input.attributeId, canonical.subjectAId, canonical.subjectBId, canonical.result, input.actorId, input.sessionId, input.timestamp, input.timestamp));
+    const updated = applyComparison(stateA, stateB, input.comparison);
+    stateA = updated.a.next;
+    stateB = updated.b.next;
+    touchedSubjects.add(input.subjectAId);
+    touchedSubjects.add(input.subjectBId);
   }
+
+  const statements = [];
+  const addEvent = (eventKey: string, kind: 'rating' | 'comparison', subjectAId: string, subjectBId: string | null, value: number | null, result: AttributeComparisonResult | null) => {
+    statements.push(db.statement(`
+      INSERT INTO attribute_vote_events
+        (id, response_id, event_key, kind, attribute_id, subject_a_id, subject_b_id, value, result, actor_id, session_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      createId('attribute-vote'), input.responseId, eventKey, kind, input.attributeId,
+      subjectAId, subjectBId, value, result, input.actorId, input.sessionId, input.timestamp, input.timestamp,
+    ));
+  };
+
+  if (input.ratingA != null) addEvent(`rating:${input.subjectAId}`, 'rating', input.subjectAId, null, input.ratingA, null);
+  if (input.ratingB != null) addEvent(`rating:${input.subjectBId}`, 'rating', input.subjectBId, null, input.ratingB, null);
+  if (canonical) addEvent(`comparison:${canonical.subjectAId}:${canonical.subjectBId}`, 'comparison', canonical.subjectAId, canonical.subjectBId, null, canonical.result);
+
+  const addStateUpsert = (subjectId: string, state: OnlineAttributeState) => {
+    statements.push(db.statement(`
+      INSERT INTO attribute_score_states
+        (subject_id, attribute_id, score, direct_sum, direct_count, comparison_count, decisive_comparison_count, evidence_count, model_version, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
+        score = excluded.score,
+        direct_sum = excluded.direct_sum,
+        direct_count = excluded.direct_count,
+        comparison_count = excluded.comparison_count,
+        decisive_comparison_count = excluded.decisive_comparison_count,
+        evidence_count = excluded.evidence_count,
+        model_version = excluded.model_version,
+        updated_at = excluded.updated_at
+    `).bind(
+      subjectId, input.attributeId, state.score, state.directSum, state.directCount,
+      state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount,
+      ATTRIBUTE_SCORE_MODEL_VERSION, input.timestamp,
+    ));
+  };
+  if (touchedSubjects.has(input.subjectAId)) addStateUpsert(input.subjectAId, stateA);
+  if (touchedSubjects.has(input.subjectBId)) addStateUpsert(input.subjectBId, stateB);
+
+  if (canonical) {
+    statements.push(db.statement(`
+      INSERT INTO attribute_pair_stats
+        (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at)
+      VALUES (?, ?, ?, 1, ?)
+      ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET
+        comparison_count = attribute_pair_stats.comparison_count + 1,
+        updated_at = excluded.updated_at
+    `).bind(canonical.subjectAId, canonical.subjectBId, input.attributeId, input.timestamp));
+  }
+
   await db.batch(statements);
 };

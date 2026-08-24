@@ -225,6 +225,8 @@ export interface AttributeMatrixValue {
   directCount: number;
   comparisonCount: number;
   decisiveComparisonCount: number;
+  evidenceCount?: number;
+  kFactor?: number;
   comparisonScore?: number;
   modelVersion: string;
 }

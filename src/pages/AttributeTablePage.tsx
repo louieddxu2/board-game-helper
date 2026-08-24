@@ -27,7 +27,7 @@ export const AttributeTablePage = () => {
         <h1>桌遊屬性總表</h1>
         <p>這裡集中查看所有已對應遊戲、尚未處理的匯入項目，以及各屬性的目前合成分數。頁面不提供編輯功能。</p>
       </div>
-      <span className="attributes-data-note">目前計分模型：{payload.scoreModelVersion ?? 'comparison-blend-v1'}。直接評分與兩兩比較會保留各自的資料量。</span>
+      <span className="attributes-data-note">目前計分模型：{payload.scoreModelVersion ?? 'bounded-k-elo-v1'}。直接評分與兩兩比較會保留各自的資料量。</span>
     </header>
     <AttributeMatrixTable payload={payload} />
   </section>;

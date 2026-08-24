@@ -25,6 +25,7 @@ export const attributeResponseSchema = z.object({
   subjectAId: z.string().trim().min(1).max(200),
   subjectBId: z.string().trim().min(1).max(200),
   attributeId: z.string().trim().min(1).max(200),
+  responseId: sessionIdSchema,
   comparison: z.enum(ATTRIBUTE_COMPARISON_RESULTS).nullable().optional(),
   ratingA: z.number().int().min(0).max(10).nullable().optional(),
   ratingB: z.number().int().min(0).max(10).nullable().optional(),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { getAttributeSessionId } from '../lib/attributeSession';
+import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributesPayload } from '../shared/types';
 
 const resultLabel = (result: AttributeComparisonResult) => {
@@ -107,6 +107,7 @@ export const AttributesPage = () => {
         subjectAId: question.subjectA.id,
         subjectBId: question.subjectB.id,
         attributeId: question.attribute.id,
+        responseId: createAttributeResponseId(),
         comparison,
         ratingA: parsedRatingA,
         ratingB: parsedRatingB,

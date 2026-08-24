@@ -8,10 +8,10 @@ import type { AttributesPayload } from '../shared/types';
 const payload: AttributesPayload = {
   attributes: [{ id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 }],
   subjects: [{ id: 'subject-a', slug: 'game-a', kind: 'game', displayName: '遊戲甲', gameSlug: 'game-a' }],
-  values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.25, directAverage: 8, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, comparisonScore: 6, modelVersion: 'comparison-blend-v1' }],
+  values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.25, directAverage: 8, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, kFactor: 0.6, modelVersion: 'bounded-k-elo-v1' }],
   candidates: [{ id: 'candidate-1', displayName: '尚未對應遊戲', values: [8], matchStatus: 'pending', sourceRowNumber: 3 }],
   activities: [],
-  scoreModelVersion: 'comparison-blend-v1',
+  scoreModelVersion: 'bounded-k-elo-v1',
 };
 
 describe('AttributeTablePage', () => {
@@ -28,6 +28,6 @@ describe('AttributeTablePage', () => {
     expect(await screen.findByRole('heading', { name: '桌遊屬性總表' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '屬性總表' })).toBeInTheDocument();
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
-    expect(screen.getByTitle(/最終 7.3/)).toBeInTheDocument();
+    expect(screen.getByTitle(/目前 7.3/)).toBeInTheDocument();
   });
 });
