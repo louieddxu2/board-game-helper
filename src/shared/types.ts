@@ -157,6 +157,42 @@ export interface AttributeSubject {
   components?: AttributeSubjectComponent[];
 }
 
+export interface AttributeImportCandidate {
+  id: string;
+  displayName: string;
+  values: Array<number | null>;
+  matchStatus: 'pending' | 'matched' | 'ambiguous' | 'skipped';
+  subjectId?: string;
+  sourceRowNumber: number;
+}
+
+export interface AttributeActivitySubject {
+  id: string;
+  displayName: string;
+  slug?: string;
+  gameSlug?: string;
+}
+
+export interface AttributeActivity {
+  id: string;
+  kind: 'rating' | 'comparison';
+  actorName: string;
+  attributeId: string;
+  attributeName: string;
+  subject?: AttributeActivitySubject;
+  subjectA?: AttributeActivitySubject;
+  subjectB?: AttributeActivitySubject;
+  value?: number;
+  result?: AttributeComparisonResult;
+  createdAt: number;
+}
+
+export interface AttributeQuestion {
+  subjectA: AttributeSubject;
+  subjectB: AttributeSubject;
+  attribute: AttributeDefinition;
+}
+
 export interface AttributeScoreSummary {
   average: number;
   count: number;
@@ -176,6 +212,8 @@ export interface AttributesPayload {
   attributes: AttributeDefinition[];
   subjects: AttributeSubject[];
   values: AttributeMatrixValue[];
+  candidates: AttributeImportCandidate[];
+  activities: AttributeActivity[];
 }
 
 export interface AttributeMatrixValue {

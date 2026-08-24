@@ -25,6 +25,18 @@ describe('Layout navigation', () => {
     expect(screen.queryByRole('link', { name: 'Workspace' })).not.toBeInTheDocument();
   });
 
+  test('keeps attribute voting reachable by direct URL instead of the main navigation', () => {
+    render(<MemoryRouter initialEntries={['/'] }>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Outlet />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+
+    expect(screen.queryByRole('link', { name: '屬性' })).not.toBeInTheDocument();
+  });
+
   test('prefills both desktop and mobile record links with the current game', () => {
     render(<MemoryRouter initialEntries={['/games/seize-the-bean']}>
       <Routes>

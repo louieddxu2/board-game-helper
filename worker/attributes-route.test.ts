@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { attributesRoutes } from './routes/attributes';
+import { attributesRoutes, attributeResponseSchema } from './routes/attributes';
 
 describe('read-only attribute route', () => {
   test('does not expose rating or comparison writes', async () => {
@@ -16,5 +16,11 @@ describe('read-only attribute route', () => {
 
     expect(ratingResponse.status).toBe(404);
     expect(comparisonResponse.status).toBe(404);
+  });
+
+  test('requires at least one answer in a response', () => {
+    expect(attributeResponseSchema.safeParse({
+      subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123',
+    }).success).toBe(false);
   });
 });
