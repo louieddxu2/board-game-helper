@@ -135,20 +135,10 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const baseLabel = inputLabel ?? `${column.name}輸入`;
   const fractionDigits = Math.max(2, decimalScale(draft));
 
-  const focusInput = (select = false) => {
-    window.requestAnimationFrame(() => {
-      const input = inputRef.current;
-      input?.focus();
-      if (select) input?.select();
-    });
-  };
-  useEffect(() => { focusInput(true); }, []);
-
   const step = (delta: 1 | -1) => {
     const current = parseDecimal(draft.trim() || '0') ?? parseDecimal('0')!;
     const next = current.scaled + BigInt(delta) * (10n ** BigInt(current.scale));
     setDraft(formatDecimal(next, current.scale));
-    focusInput(false);
   };
   const commit = () => onSave(draft);
   useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
@@ -157,7 +147,7 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-editor" data-mode="step" style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
       <button type="button" className="workspace-number-operation workspace-number-operation-subtract" aria-label="減少 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(-1)}>−</button>
       <div className="workspace-number-input-shell">
-        <input ref={inputRef} aria-label={baseLabel} autoFocus className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+        <input ref={inputRef} aria-label={baseLabel} className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       </div>
       <button type="button" className="workspace-number-operation workspace-number-operation-add" aria-label="增加 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(1)}>＋</button>
     </div>

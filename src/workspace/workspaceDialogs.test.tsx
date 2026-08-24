@@ -27,6 +27,7 @@ describe('workspace numeric input modes', () => {
 
     const input = screen.getByRole('spinbutton', { name: '數量輸入' });
     expect(input).toHaveStyle({ textAlign: 'center' });
+    expect(document.activeElement).not.toBe(input);
     await user.click(screen.getByRole('button', { name: '增加 1' }));
     expect(input).toHaveValue(3);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
