@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
-import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributesPayload } from '../shared/types';
+import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
 
 const resultLabel = (result: AttributeComparisonResult) => {
   if (result === 'A_HIGHER') return 'A 較高';
@@ -47,7 +47,7 @@ const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' |
 };
 
 export const AttributesPage = () => {
-  const [payload, setPayload] = useState<AttributesPayload>();
+  const [payload, setPayload] = useState<AttributeQuestionPayload>();
   const [question, setQuestion] = useState<AttributeQuestion>();
   const [loading, setLoading] = useState(true);
   const [questionLoading, setQuestionLoading] = useState(false);
@@ -81,11 +81,11 @@ export const AttributesPage = () => {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([api.attributes(), api.attributeQuestion(sessionId)])
-      .then(([nextPayload, nextQuestion]) => {
+    void api.attributeQuestion(sessionId)
+      .then((nextPayload) => {
         if (!active) return;
         setPayload(nextPayload);
-        setQuestion(nextQuestion.question ?? undefined);
+        setQuestion(nextPayload.question ?? undefined);
       })
       .catch(() => { if (active) setError(true); })
       .finally(() => { if (active) setLoading(false); });
@@ -113,12 +113,9 @@ export const AttributesPage = () => {
         ratingB: parsedRatingB,
         sessionId,
       });
-      const [nextPayload, nextQuestion] = await Promise.all([
-        api.attributes(),
-        api.attributeQuestion(sessionId, questionOptions(question, 'pair')),
-      ]);
+      const nextPayload = await api.attributeQuestion(sessionId, questionOptions(question, 'pair'));
       setPayload(nextPayload);
-      setQuestion(nextQuestion.question ?? undefined);
+      setQuestion(nextPayload.question ?? undefined);
       clearResponse();
     } catch {
       setResponseError('送出時發生問題，請稍後再試。');

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
-import { queryAttributeQuestion, queryAttributesPayload, saveAttributeResponse } from '../data/attributes';
+import { queryAttributeQuestionPayload, queryAttributesPayload, saveAttributeResponse } from '../data/attributes';
 import type { AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { now } from '../utils';
@@ -41,7 +41,14 @@ const respondWithAttributeError = (c: any, error: unknown) => {
 
 attributesRoutes.get('/api/attributes', async (c) => {
   c.header('Cache-Control', 'no-store');
-  return c.json(await queryAttributesPayload(getDatabase(c)));
+  const limit = Number(c.req.query('limit') ?? 50);
+  const scope = c.req.query('scope');
+  return c.json(await queryAttributesPayload(getDatabase(c), {
+    subjectCursor: c.req.query('subjectCursor') || undefined,
+    candidateCursor: c.req.query('candidateCursor') || undefined,
+    limit: Number.isFinite(limit) ? limit : undefined,
+    scope: scope === 'subjects' || scope === 'candidates' ? scope : undefined,
+  }));
 });
 
 attributesRoutes.get('/api/attributes/question', async (c) => {
@@ -57,7 +64,7 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
   if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
   try {
     c.header('Cache-Control', 'no-store');
-    return c.json({ question: await queryAttributeQuestion(getDatabase(c), parsed.data.sessionId, parsed.data) });
+    return c.json(await queryAttributeQuestionPayload(getDatabase(c), parsed.data.sessionId, parsed.data));
   } catch (error) {
     return respondWithAttributeError(c, error);
   }
@@ -67,12 +74,12 @@ attributesRoutes.post('/api/attributes/responses', async (c) => {
   const parsed = attributeResponseSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message === 'attribute_response_empty' ? 'attribute_response_empty' : 'invalid_input' }, 400);
   try {
-    await saveAttributeResponse(getDatabase(c), {
+    const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
       actorId: c.get('user')?.id ?? null,
       timestamp: now(),
     });
-    return c.json({ ok: true });
+    return c.json({ ok: true, ...result });
   } catch (error) {
     return respondWithAttributeError(c, error);
   }

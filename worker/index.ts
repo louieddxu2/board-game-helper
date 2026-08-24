@@ -6,6 +6,7 @@ import { createDatabase } from './data/database';
 import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
+import { cleanupAttributeActivityFeed } from './data/attributes';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -136,6 +137,7 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   await Promise.all([
     cleanupGameViewData(db, controller.scheduledTime),
     cleanupExpiredSessions(db, controller.scheduledTime),
+    cleanupAttributeActivityFeed(db),
   ]);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
     await rebuildGameCatalog(db, controller.scheduledTime);

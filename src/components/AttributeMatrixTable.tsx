@@ -26,8 +26,8 @@ const valueDetails = (value: AttributesPayload['values'][number] | undefined) =>
   const direct = value.directCount > 0 ? `直接 ${value.directCount} 筆` : '無直接分數';
   const comparison = value.comparisonCount > 0 ? `比較 ${value.comparisonCount} 次` : '無比較資料';
   const evidence = value.evidenceCount == null ? '' : `；有效資料 ${value.evidenceCount} 筆`;
-  const kFactor = value.kFactor == null ? '' : `；目前 K=${value.kFactor}`;
-  return `目前 ${value.score.toFixed(1)}；${direct}；${comparison}${evidence}${kFactor}`;
+  const rd = value.ratingDeviation == null ? '' : `；RD=${value.ratingDeviation.toFixed(2)}`;
+  return `目前 ${value.score.toFixed(1)}；${direct}；${comparison}${evidence}${rd}`;
 };
 
 export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }) => {
@@ -69,7 +69,7 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
 
   return <section className="attributes-table-card" aria-labelledby="attributes-table-heading">
     <div className="attributes-section-heading"><div><p className="eyebrow">完整資料</p><h2 id="attributes-table-heading">屬性總表</h2></div><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="輸入名稱" /></label></div>
-    <p className="attributes-table-description">分數由逐筆有界 κ-Elo 更新；將游標移到格子上可查看直接分數、比較次數與目前 K 值。尚未處理的來源項目會保留在表內，但不會冒充已對應遊戲。</p>
+    <p className="attributes-table-description">分數由逐筆 Glicko-RD 更新；將游標移到格子上可查看直接分數、比較次數與目前 RD。尚未處理的來源項目會保留在表內，但不會冒充已對應遊戲。</p>
     <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => setTableFilter(filter)}>{label}</button>)}</div><span>顯示 {visibleRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
     <div className="attributes-table-scroll">
       <table className="attributes-matrix">

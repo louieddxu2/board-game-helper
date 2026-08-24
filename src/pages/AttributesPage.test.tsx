@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
@@ -25,7 +25,7 @@ describe('AttributesPage question flow', () => {
 
   test('starts with a system-selected question without game selectors or the full table', async () => {
     vi.spyOn(api, 'attributes').mockResolvedValue(payload);
-    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question });
+    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [] });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
@@ -34,5 +34,20 @@ describe('AttributesPage question flow', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
+    expect(api.attributes).not.toHaveBeenCalled();
+  });
+
+  test('refreshes only the next question and activity feed after submitting', async () => {
+    vi.spyOn(api, 'attributes').mockResolvedValue(payload);
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [] });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲 較高' }));
+    fireEvent.click(screen.getByRole('button', { name: '送出回答，換下一題' }));
+
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(api.attributes).not.toHaveBeenCalled();
   });
 });

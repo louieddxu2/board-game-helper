@@ -215,6 +215,16 @@ export interface AttributesPayload {
   candidates: AttributeImportCandidate[];
   activities: AttributeActivity[];
   scoreModelVersion?: string;
+  nextSubjectCursor?: string | null;
+  nextCandidateCursor?: string | null;
+  hasMoreSubjects?: boolean;
+  hasMoreCandidates?: boolean;
+}
+
+export interface AttributeQuestionPayload {
+  question: AttributeQuestion | null;
+  activities: AttributeActivity[];
+  scoreModelVersion?: string;
 }
 
 export interface AttributeMatrixValue {
@@ -226,7 +236,7 @@ export interface AttributeMatrixValue {
   comparisonCount: number;
   decisiveComparisonCount: number;
   evidenceCount?: number;
-  kFactor?: number;
+  ratingDeviation?: number;
   comparisonScore?: number;
   modelVersion: string;
 }

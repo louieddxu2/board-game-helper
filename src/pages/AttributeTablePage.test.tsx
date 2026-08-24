@@ -8,10 +8,10 @@ import type { AttributesPayload } from '../shared/types';
 const payload: AttributesPayload = {
   attributes: [{ id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 }],
   subjects: [{ id: 'subject-a', slug: 'game-a', kind: 'game', displayName: '遊戲甲', gameSlug: 'game-a' }],
-  values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.25, directAverage: 8, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, kFactor: 0.6, modelVersion: 'bounded-k-elo-v1' }],
+  values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.25, ratingDeviation: 1.2, directAverage: 8, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, modelVersion: 'glicko-rd-v1' }],
   candidates: [{ id: 'candidate-1', displayName: '尚未對應遊戲', values: [8], matchStatus: 'pending', sourceRowNumber: 3 }],
   activities: [],
-  scoreModelVersion: 'bounded-k-elo-v1',
+  scoreModelVersion: 'glicko-rd-v1',
 };
 
 describe('AttributeTablePage', () => {

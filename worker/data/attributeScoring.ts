@@ -1,29 +1,25 @@
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
 
-export const ATTRIBUTE_SCORE_MODEL_VERSION = 'bounded-k-elo-v1';
+/**
+ * Glicko-1's rating/deviation update, expressed on the product's 0-10 scale.
+ * The classic Glicko equations use a 400 point scale, so one product point is
+ * represented by 40 classic points. Volatility is intentionally not part of
+ * this model: RD is the only uncertainty state we persist.
+ */
+export const ATTRIBUTE_SCORE_MODEL_VERSION = 'glicko-rd-v1';
 export const ATTRIBUTE_INITIAL_SCORE = 5;
 export const ATTRIBUTE_MIN_SCORE = 0;
 export const ATTRIBUTE_MAX_SCORE = 10;
-
-// These values are deliberately configuration, not magic numbers spread over
-// the route. The 20-evidence point is the current product decision: after it,
-// a single vote should only make a small correction.
-export const ATTRIBUTE_K_SCHEDULE = [
-  { throughEvidence: 4, value: 1 },
-  { throughEvidence: 9, value: 0.6 },
-  { throughEvidence: 14, value: 0.3 },
-  { throughEvidence: 19, value: 0.12 },
-  { throughEvidence: Number.POSITIVE_INFINITY, value: 0.05 },
-] as const;
-
-// κ-Elo's scale is expressed here in the user-facing 0–10 coordinate rather
-// than the traditional 400-point chess scale. κ=2 gives an explicit draw
-// outcome with a 50% draw probability when two ratings are equal.
-export const ATTRIBUTE_ELO_SCALE = 3;
-export const ATTRIBUTE_DRAW_KAPPA = 2;
+export const ATTRIBUTE_INITIAL_RD = 3;
+export const ATTRIBUTE_DIRECT_RATING_RD = ATTRIBUTE_INITIAL_RD / 2;
+export const ATTRIBUTE_MIN_RD = 0.25;
+export const ATTRIBUTE_MAX_RD = ATTRIBUTE_INITIAL_RD;
+export const ATTRIBUTE_CLASSIC_POINTS_PER_SCORE = 40;
+export const ATTRIBUTE_GLICKO_Q = Math.log(10) / 400;
 
 export interface OnlineAttributeState {
   score: number;
+  ratingDeviation: number;
   directSum: number;
   directCount: number;
   comparisonCount: number;
@@ -45,49 +41,56 @@ export interface AttributeComparisonEvidence {
   result: AttributeComparisonResult;
 }
 
+export interface AttributeVoteReplayEvent {
+  id: string;
+  createdAt: number;
+  kind: 'rating' | 'comparison';
+  attributeId: string;
+  subjectAId: string;
+  subjectBId?: string | null;
+  value?: number | null;
+  result?: AttributeComparisonResult | null;
+}
+
 export interface AttributeUpdateResult {
   next: OnlineAttributeState;
   delta: number;
 }
 
 const boundedScore = (value: number) => Math.min(ATTRIBUTE_MAX_SCORE, Math.max(ATTRIBUTE_MIN_SCORE, value));
+const boundedRd = (value: number) => Math.min(ATTRIBUTE_MAX_RD, Math.max(ATTRIBUTE_MIN_RD, value));
+const classicRating = (score: number) => score * ATTRIBUTE_CLASSIC_POINTS_PER_SCORE;
+const classicRd = (ratingDeviation: number) => ratingDeviation * ATTRIBUTE_CLASSIC_POINTS_PER_SCORE;
 
-export const kFactorForEvidenceCount = (evidenceCount: number) => {
-  const schedule = ATTRIBUTE_K_SCHEDULE.find((entry) => evidenceCount <= entry.throughEvidence);
-  return schedule?.value ?? ATTRIBUTE_K_SCHEDULE.at(-1)!.value;
+const gForRd = (ratingDeviation: number) => {
+  const rd = classicRd(ratingDeviation);
+  return 1 / Math.sqrt(1 + (3 * ATTRIBUTE_GLICKO_Q ** 2 * rd ** 2) / Math.PI ** 2);
 };
 
-export const emptyAttributeState = (): OnlineAttributeState => ({
-  score: ATTRIBUTE_INITIAL_SCORE,
-  directSum: 0,
-  directCount: 0,
-  comparisonCount: 0,
-  decisiveComparisonCount: 0,
-  evidenceCount: 0,
-});
-
-const ratioForDifference = (difference: number) => 10 ** (difference / (2 * ATTRIBUTE_ELO_SCALE));
-
-/** Expected Elo score for A, including the explicit draw outcome. */
-export const expectedAttributeScore = (scoreA: number, scoreB: number) => {
-  const ratio = ratioForDifference(scoreA - scoreB);
-  const inverse = 1 / ratio;
-  const denominator = ratio + inverse + ATTRIBUTE_DRAW_KAPPA;
-  const winProbability = ratio / denominator;
-  const drawProbability = ATTRIBUTE_DRAW_KAPPA / denominator;
-  return winProbability + (drawProbability / 2);
+const expectedForRatings = (score: number, opponentScore: number, opponentRd: number) => {
+  const g = gForRd(opponentRd);
+  const difference = g * (classicRating(score) - classicRating(opponentScore));
+  return 1 / (1 + 10 ** (-difference / 400));
 };
 
-const actualScoreForComparison = (result: AttributeComparisonResult): number => {
-  if (result === 'A_HIGHER') return 1;
-  if (result === 'B_HIGHER') return 0;
-  return 0.5;
-};
-
-const updateState = (state: OnlineAttributeState, delta: number, kind: 'rating' | 'comparison', result?: AttributeComparisonResult): AttributeUpdateResult => {
+const updateAgainst = (
+  state: OnlineAttributeState,
+  opponent: Pick<OnlineAttributeState, 'score' | 'ratingDeviation'>,
+  actualScore: number,
+  kind: 'rating' | 'comparison',
+  result?: AttributeComparisonResult,
+): AttributeUpdateResult => {
+  const g = gForRd(opponent.ratingDeviation);
+  const expected = expectedForRatings(state.score, opponent.score, opponent.ratingDeviation);
+  const variance = 1 / (ATTRIBUTE_GLICKO_Q ** 2 * g ** 2 * expected * (1 - expected));
+  const currentRd = classicRd(state.ratingDeviation);
+  const updatedClassicRd = Math.sqrt(1 / (1 / currentRd ** 2 + 1 / variance));
+  const updateFactor = ATTRIBUTE_GLICKO_Q / (1 / currentRd ** 2 + 1 / variance);
+  const updatedClassicRating = classicRating(state.score) + updateFactor * g * (actualScore - expected);
   const next: OnlineAttributeState = {
     ...state,
-    score: boundedScore(state.score + delta),
+    score: boundedScore(updatedClassicRating / ATTRIBUTE_CLASSIC_POINTS_PER_SCORE),
+    ratingDeviation: boundedRd(updatedClassicRd / ATTRIBUTE_CLASSIC_POINTS_PER_SCORE),
     comparisonCount: state.comparisonCount + (kind === 'comparison' ? 1 : 0),
     decisiveComparisonCount: state.decisiveComparisonCount + (kind === 'comparison' && result !== 'SIMILAR' ? 1 : 0),
     evidenceCount: state.evidenceCount + 1,
@@ -95,19 +98,40 @@ const updateState = (state: OnlineAttributeState, delta: number, kind: 'rating' 
   return { next, delta: next.score - state.score };
 };
 
+export const emptyAttributeState = (): OnlineAttributeState => ({
+  score: ATTRIBUTE_INITIAL_SCORE,
+  ratingDeviation: ATTRIBUTE_INITIAL_RD,
+  directSum: 0,
+  directCount: 0,
+  comparisonCount: 0,
+  decisiveComparisonCount: 0,
+  evidenceCount: 0,
+});
+
+/** The expected win probability for A against B under Glicko's g(RD) term. */
+export const expectedAttributeScore = (scoreA: number, scoreB: number, ratingDeviationB = ATTRIBUTE_INITIAL_RD) =>
+  expectedForRatings(scoreA, scoreB, ratingDeviationB);
+
+const actualScoreForComparison = (result: AttributeComparisonResult): number => {
+  if (result === 'A_HIGHER') return 1;
+  if (result === 'B_HIGHER') return 0;
+  return 0.5;
+};
+
 /**
- * A direct score is an observation that the subject is tied with a fixed
- * numeric anchor. The first real observation initializes a previously unseen
- * subject directly; later scores use the same draw update as every other
- * relationship.
+ * A direct number is a draw against a temporary numeric opponent. The
+ * opponent's default RD is tighter than an unscored subject, so an anchor at
+ * 8 influences a high-RD subject more than a well-established subject.
  */
 export const applyDirectRating = (state: OnlineAttributeState, value: number): AttributeUpdateResult => {
-  const directSum = state.directSum + value;
+  const boundedValue = boundedScore(value);
+  const directSum = state.directSum + boundedValue;
   const directCount = state.directCount + 1;
   if (state.evidenceCount === 0) {
-    const next = {
+    const next: OnlineAttributeState = {
       ...state,
-      score: boundedScore(value),
+      score: boundedValue,
+      ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD,
       directSum,
       directCount,
       evidenceCount: 1,
@@ -115,9 +139,12 @@ export const applyDirectRating = (state: OnlineAttributeState, value: number): A
     return { next, delta: next.score - state.score };
   }
 
-  const expected = expectedAttributeScore(state.score, value);
-  const delta = kFactorForEvidenceCount(state.evidenceCount) * (0.5 - expected);
-  const updated = updateState(state, delta, 'rating');
+  const updated = updateAgainst(
+    state,
+    { score: boundedValue, ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD },
+    0.5,
+    'rating',
+  );
   return { next: { ...updated.next, directSum, directCount }, delta: updated.delta };
 };
 
@@ -127,13 +154,10 @@ export const applyComparison = (
   stateB: OnlineAttributeState,
   result: AttributeComparisonResult,
 ): { a: AttributeUpdateResult; b: AttributeUpdateResult } => {
-  const expectedA = expectedAttributeScore(stateA.score, stateB.score);
   const actualA = actualScoreForComparison(result);
-  const deltaA = kFactorForEvidenceCount(stateA.evidenceCount) * (actualA - expectedA);
-  const deltaB = kFactorForEvidenceCount(stateB.evidenceCount) * ((1 - actualA) - (1 - expectedA));
   return {
-    a: updateState(stateA, deltaA, 'comparison', result),
-    b: updateState(stateB, deltaB, 'comparison', result),
+    a: updateAgainst(stateA, stateB, actualA, 'comparison', result),
+    b: updateAgainst(stateB, stateA, 1 - actualA, 'comparison', result),
   };
 };
 
@@ -141,20 +165,16 @@ const scoreFromState = (subjectId: string, attributeId: string, state: OnlineAtt
   subjectId,
   attributeId,
   score: Number(state.score.toFixed(2)),
+  ratingDeviation: Number(state.ratingDeviation.toFixed(3)),
   directAverage: state.directCount ? Number((state.directSum / state.directCount).toFixed(2)) : undefined,
   directCount: state.directCount,
   comparisonCount: state.comparisonCount,
   decisiveComparisonCount: state.decisiveComparisonCount,
   evidenceCount: state.evidenceCount,
-  kFactor: kFactorForEvidenceCount(state.evidenceCount),
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
-/**
- * Deterministic helper for tests, imports, and one-off state checks. Runtime
- * writes use the same operations against the materialized D1 state instead of
- * replaying this entire collection.
- */
+/** Deterministic helper used by tests, imports, and one-off state checks. */
 export const calculateAttributeScores = (
   ratings: AttributeRatingEvidence[],
   comparisons: AttributeComparisonEvidence[],
@@ -171,14 +191,15 @@ export const calculateAttributeScores = (
 
   ratings.forEach((rating) => {
     const { key, state } = getState(rating.subjectId, rating.attributeId);
-    const initialized: OnlineAttributeState = {
+    const next: OnlineAttributeState = {
       ...state,
       score: boundedScore(rating.average),
+      ratingDeviation: boundedRd(ATTRIBUTE_DIRECT_RATING_RD / Math.sqrt(Math.max(1, rating.count))),
       directSum: rating.average * rating.count,
       directCount: rating.count,
       evidenceCount: rating.count,
     };
-    states.set(key, initialized);
+    states.set(key, next);
   });
 
   comparisons.forEach((comparison) => {
@@ -193,4 +214,35 @@ export const calculateAttributeScores = (
     const separator = key.indexOf('\u0000');
     return scoreFromState(key.slice(0, separator), key.slice(separator + 1), state);
   });
+};
+
+/**
+ * One-time migration helper: replay the append-only stream in a fixed
+ * created_at/id order. Runtime requests use materialized rows instead, so
+ * this intentionally does not belong in the voting hot path.
+ */
+export const replayAttributeEvents = (events: AttributeVoteReplayEvent[]) => {
+  const states = new Map<string, OnlineAttributeState>();
+  const getState = (subjectId: string, attributeId: string) => {
+    const key = `${subjectId}\u0000${attributeId}`;
+    const state = states.get(key) ?? emptyAttributeState();
+    states.set(key, state);
+    return { key, state };
+  };
+  [...events]
+    .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    .forEach((event) => {
+      const a = getState(event.subjectAId, event.attributeId);
+      if (event.kind === 'rating' && event.value != null) {
+        states.set(a.key, applyDirectRating(a.state, event.value).next);
+        return;
+      }
+      if (event.kind === 'comparison' && event.subjectBId && event.result) {
+        const b = getState(event.subjectBId, event.attributeId);
+        const updated = applyComparison(a.state, b.state, event.result);
+        states.set(a.key, updated.a.next);
+        states.set(b.key, updated.b.next);
+      }
+    });
+  return states;
 };

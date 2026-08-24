@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
   ATTRIBUTE_SCORE_MODEL_VERSION,
+  ATTRIBUTE_DIRECT_RATING_RD,
+  ATTRIBUTE_INITIAL_RD,
   applyComparison,
   applyDirectRating,
   emptyAttributeState,
-  kFactorForEvidenceCount,
+  replayAttributeEvents,
   calculateAttributeScores,
 } from './data/attributeScoring';
 
@@ -14,11 +16,11 @@ const scoreFor = (scores: ReturnType<typeof calculateAttributeScores>, subjectId
   return score;
 };
 
-describe('bounded-k-elo-v1', () => {
+describe('glicko-rd-v1', () => {
   test('initializes the first direct score at the submitted absolute value', () => {
     const result = applyDirectRating(emptyAttributeState(), 8);
 
-    expect(result.next).toMatchObject({ score: 8, directSum: 8, directCount: 1, evidenceCount: 1 });
+    expect(result.next).toMatchObject({ score: 8, ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD, directSum: 8, directCount: 1, evidenceCount: 1 });
   });
 
   test('uses later direct scores as draws against fixed numeric anchors', () => {
@@ -58,10 +60,32 @@ describe('bounded-k-elo-v1', () => {
     expect(scoreFor(scores, 'b').score).toBeGreaterThan(5);
   });
 
-  test('reduces K after twenty pieces of evidence', () => {
-    expect(kFactorForEvidenceCount(0)).toBe(1);
-    expect(kFactorForEvidenceCount(19)).toBe(0.12);
-    expect(kFactorForEvidenceCount(20)).toBe(0.05);
+  test('reduces RD after repeated evidence', () => {
+    let state = emptyAttributeState();
+    for (let index = 0; index < 20; index += 1) state = applyDirectRating(state, 8).next;
+
+    expect(state.ratingDeviation).toBeLessThan(ATTRIBUTE_INITIAL_RD);
+    expect(state.ratingDeviation).toBeGreaterThanOrEqual(0.25);
+  });
+
+  test('lets a high-RD subject move more against the same direct anchor', () => {
+    const lowRdState = { ...emptyAttributeState(), score: 5, ratingDeviation: 0.5, evidenceCount: 10 };
+    const highRdState = { ...emptyAttributeState(), score: 5, ratingDeviation: ATTRIBUTE_INITIAL_RD };
+
+    const lowRdUpdate = applyDirectRating(lowRdState, 9).next;
+    const highRdUpdate = applyDirectRating(highRdState, 9).next;
+
+    expect(Math.abs(highRdUpdate.score - 5)).toBeGreaterThan(Math.abs(lowRdUpdate.score - 5));
+  });
+
+  test('uses the opponent RD when a direct score is the comparison anchor', () => {
+    const a = emptyAttributeState();
+    const uncertainAnchor = { ...emptyAttributeState(), score: 8, ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD };
+    const informativeAnchor = { ...uncertainAnchor, ratingDeviation: 0.5 };
+    const informative = applyComparison(a, informativeAnchor, 'A_HIGHER').a.next;
+    const uncertain = applyComparison(a, uncertainAnchor, 'A_HIGHER').a.next;
+
+    expect(informative.score - a.score).toBeGreaterThan(uncertain.score - a.score);
   });
 
   test('keeps all online updates inside the 0 to 10 range', () => {
@@ -75,5 +99,16 @@ describe('bounded-k-elo-v1', () => {
 
     expect(a.score).toBeLessThanOrEqual(10);
     expect(b.score).toBeGreaterThanOrEqual(0);
+  });
+
+  test('replays historical events in created_at/id order regardless of input order', () => {
+    const events = [
+      { id: '2', createdAt: 20, kind: 'comparison' as const, attributeId: 'luck', subjectAId: 'a', subjectBId: 'b', result: 'A_HIGHER' as const },
+      { id: '1', createdAt: 10, kind: 'rating' as const, attributeId: 'luck', subjectAId: 'a', value: 8 },
+    ];
+    const ordered = replayAttributeEvents(events);
+    const reversed = replayAttributeEvents([...events].reverse());
+
+    expect([...ordered.entries()]).toEqual([...reversed.entries()]);
   });
 });

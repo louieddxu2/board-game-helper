@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeComparisonResult, AttributeQuestion, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -369,7 +369,15 @@ export const api = {
   },
   catalogGames,
   syncCatalogGames,
-  attributes: () => uncachedRead<AttributesPayload>('/api/attributes', 'attribute definitions and comparison subjects are feature data and must be current'),
+  attributes: (options: { subjectCursor?: string; candidateCursor?: string; limit?: number; scope?: 'subjects' | 'candidates' } = {}) => {
+    const params = new URLSearchParams();
+    if (options.subjectCursor) params.set('subjectCursor', options.subjectCursor);
+    if (options.candidateCursor) params.set('candidateCursor', options.candidateCursor);
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.scope) params.set('scope', options.scope);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return uncachedRead<AttributesPayload>(`/api/attributes${suffix}`, 'attribute definitions and comparison subjects are feature data and must be current');
+  },
   attributeQuestion: (sessionId: string, options: { excludeSubjectAId?: string; excludeSubjectBId?: string; excludeAttributeId?: string; fixedSubjectAId?: string; fixedSubjectBId?: string; fixedAttributeId?: string } = {}) => {
     const params = new URLSearchParams({ session: sessionId });
     if (options.excludeSubjectAId) params.set('excludeA', options.excludeSubjectAId);
@@ -378,9 +386,9 @@ export const api = {
     if (options.fixedSubjectAId) params.set('fixedA', options.fixedSubjectAId);
     if (options.fixedSubjectBId) params.set('fixedB', options.fixedSubjectBId);
     if (options.fixedAttributeId) params.set('fixedAttribute', options.fixedAttributeId);
-    return uncachedRead<{ question: AttributeQuestion | null }>(`/api/attributes/question?${params.toString()}`, 'attribute questions are session-specific and must be current');
+    return uncachedRead<AttributeQuestionPayload>(`/api/attributes/question?${params.toString()}`, 'attribute questions are session-specific and must be current');
   },
-  saveAttributeResponse: (input: { subjectAId: string; subjectBId: string; attributeId: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => mutation<{ ok: true }>('/api/attributes/responses', {
+  saveAttributeResponse: (input: { subjectAId: string; subjectBId: string; attributeId: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
     method: 'POST', body: JSON.stringify(input),
   }),
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
