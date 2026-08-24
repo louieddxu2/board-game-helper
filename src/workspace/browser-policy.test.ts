@@ -235,4 +235,17 @@ describe('workspace browser policies', () => {
     expect(stepOperationRule).toMatch(/min-height:\s*46px/);
     expect(stepInputRule).toMatch(/text-align:\s*center/);
   });
+
+  it('restricts horizontal overscroll navigation on root and disables rubber-banding in standalone PWA', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const htmlRule = styles.match(/(?:^|\n)html\s*\{([^}]*)\}/)?.[1];
+    const bodyRule = styles.match(/(?:^|\n)body\s*\{([^}]*)\}/)?.[1];
+    const standaloneRule = styles.match(/html\[data-standalone='true'\],\s*html\[data-standalone='true'\] body\s*\{([^}]*)\}/)?.[1];
+    const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
+
+    expect(htmlRule).toMatch(/overscroll-behavior-x:\s*none/);
+    expect(bodyRule).toMatch(/overscroll-behavior-x:\s*none/);
+    expect(standaloneRule).toMatch(/overscroll-behavior:\s*none/);
+    expect(workspacePageRule).toMatch(/overscroll-behavior:\s*none/);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, shouldKeepDrawerOpen, shouldOpenDrawer } from './useTableGestures';
+import { canInitiateDrawerSwipe, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, shouldKeepDrawerOpen, shouldOpenDrawer } from './useTableGestures';
 
 describe('drawer swipe geometry', () => {
   it('follows the finger while opening from the table', () => {
@@ -24,6 +24,16 @@ describe('drawer swipe geometry', () => {
     expect(shouldOpenDrawer(125, 360)).toBe(false);
     expect(shouldOpenDrawer(126, 360)).toBe(true);
     expect(shouldOpenDrawer(0, 0)).toBe(false);
+  });
+
+  it('arbitrates drawer swipe starting edge based on standalone mode', () => {
+    // In standalone mode, edge-to-edge gestures are allowed
+    expect(canInitiateDrawerSwipe(10, true)).toBe(true);
+    expect(canInitiateDrawerSwipe(0, true)).toBe(true);
+    // In browser tab mode, extreme edge (<=20px) is ceded to system swipe-to-navigate
+    expect(canInitiateDrawerSwipe(15, false)).toBe(false);
+    expect(canInitiateDrawerSwipe(20, false)).toBe(false);
+    expect(canInitiateDrawerSwipe(25, false)).toBe(true);
   });
 });
 

@@ -36,6 +36,8 @@ export const getDrawerOpenSwipeOffset = (deltaX: number, width: number) => clamp
 export const getDrawerCloseSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(width + deltaX, width);
 export const shouldOpenDrawer = (offset: number, width: number) => width > 0 && offset >= width * 0.35;
 export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0 && offset / width > 0.7;
+export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
+export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
 
 export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
@@ -195,10 +197,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
     if (pointers.current.size === 0 && event.pointerType !== 'mouse' && (onDrawerSwipeProgress || onDrawerSwipeEnd)) {
+      const allowed = canInitiateDrawerSwipe(event.clientX);
       const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
       const startsInEmptyViewport = !(event.target as Element).closest('table');
-      drawerSwipe.current = firstColumn
-        || startsInEmptyViewport
+      drawerSwipe.current = allowed && (firstColumn || startsInEmptyViewport)
         ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, lastDeltaX: 0 }
         : undefined;
     } else if (pointers.current.size > 0) {

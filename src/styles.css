@@ -42,8 +42,8 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--paper); }
+html { scroll-behavior: smooth; overscroll-behavior-x: none; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--paper); overscroll-behavior-x: none; }
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button, input, textarea, select, summary, a { min-height: 44px; }
@@ -54,6 +54,13 @@ h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacin
 
 /* iOS PWA Standalone Safety Rules */
 button, .interactive-card, .workspace-table-cell { -webkit-touch-callout: none; }
+
+html[data-standalone='true'],
+html[data-standalone='true'] body {
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
+}
 
 html[data-standalone='true'] .site-header,
 html[data-standalone='true'] .workspace-appbar {
@@ -94,7 +101,7 @@ footer { padding: 34px 24px; text-align: center; border-top: 1px solid var(--lin
 footer a { color: inherit; }
 
 /* Local-first dynamic tables: Android-like full-screen workspace */
-.workspace-page { position: relative; height: 100dvh; min-height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--paper); color: var(--ink); }
+.workspace-page { position: relative; height: 100dvh; min-height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: none; overscroll-behavior-x: none; overscroll-behavior-y: none; background: var(--paper); color: var(--ink); }
 .workspace-loading { display: grid; place-items: center; color: var(--muted); }
 .workspace-appbar { position: relative; z-index: 12; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 4px 18px; border-bottom: 1px solid var(--line); background: var(--white); overflow: visible; }
 .workspace-appbar-leading, .workspace-appbar-actions { display: flex; align-items: center; gap: 9px; }
