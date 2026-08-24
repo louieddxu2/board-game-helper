@@ -175,6 +175,14 @@ export interface AttributeComparisonSummary {
 export interface AttributesPayload {
   attributes: AttributeDefinition[];
   subjects: AttributeSubject[];
+  values: AttributeMatrixValue[];
+}
+
+export interface AttributeMatrixValue {
+  subjectId: string;
+  attributeId: string;
+  average: number;
+  count: number;
 }
 
 export interface AttributeWorkbenchPayload {

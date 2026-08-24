@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeComparisonResult, AttributeWorkbenchPayload, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -370,16 +370,6 @@ export const api = {
   catalogGames,
   syncCatalogGames,
   attributes: () => uncachedRead<AttributesPayload>('/api/attributes', 'attribute definitions and comparison subjects are feature data and must be current'),
-  attributeWorkbench: (subjectAId: string, subjectBId: string, attributeId: string, sessionId: string) => {
-    const params = new URLSearchParams({ a: subjectAId, b: subjectBId, attribute: attributeId, session: sessionId });
-    return uncachedRead<AttributeWorkbenchPayload>(`/api/attributes/workbench?${params.toString()}`, 'attribute comparison state is session-specific and must be current');
-  },
-  saveAttributeRating: (input: { subjectId: string; attributeId: string; value: number; sessionId: string }) => mutation<{ ok: true }>('/api/attributes/ratings', {
-    method: 'POST', body: JSON.stringify(input),
-  }),
-  saveAttributeComparison: (input: { subjectAId: string; subjectBId: string; attributeId: string; result: AttributeComparisonResult; sessionId: string }) => mutation<{ ok: true }>('/api/attributes/comparisons', {
-    method: 'POST', body: JSON.stringify(input),
-  }),
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
   patchGame: async (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ ok: true; game: GameSummary }>(`/api/games/${id}`, {
