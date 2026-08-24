@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from 'vitest';
 import type { Database, DatabaseStatement } from './data/database';
 import {
   ATTRIBUTE_ACTIVITY_FEED_LIMIT,
-  ATTRIBUTE_QUESTION_CANDIDATE_LIMIT,
   ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS,
   ATTRIBUTE_QUESTION_PAIR_PROBE_LIMIT,
   ATTRIBUTE_RESPONSE_MAX_READ_ROWS,
@@ -20,7 +19,7 @@ const statement = (overrides: Partial<DatabaseStatement> = {}): DatabaseStatemen
 
 describe('attribute hot-path budgets', () => {
   test('question result stays bounded without a full matrix or pair scan', () => {
-    const boundedRows = 2 + 2 + ATTRIBUTE_QUESTION_CANDIDATE_LIMIT + ATTRIBUTE_QUESTION_PAIR_PROBE_LIMIT + ATTRIBUTE_ACTIVITY_FEED_LIMIT;
+    const boundedRows = 2 + 1 + ATTRIBUTE_QUESTION_PAIR_PROBE_LIMIT + ATTRIBUTE_QUESTION_PAIR_PROBE_LIMIT + 2 + ATTRIBUTE_ACTIVITY_FEED_LIMIT;
     expect(boundedRows).toBe(ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS);
     expect(boundedRows).toBeLessThan(100);
   });
