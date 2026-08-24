@@ -89,7 +89,11 @@ const querySubjectRows = async (db: Database, subjectIds?: string[]): Promise<Su
     LEFT JOIN games g ON g.id = s.game_id
     WHERE (
       s.kind = 'configuration'
-      OR (g.merged_into_game_id IS NULL AND g.visibility = 'public')
+      OR (
+        g.merged_into_game_id IS NULL
+        AND g.visibility = 'public'
+        AND g.published_rule_count > 0
+      )
     )
     ${filter}
     ORDER BY s.display_name COLLATE NOCASE, s.id
@@ -141,7 +145,11 @@ const assertSubjectAndAttribute = async (db: Database, subjectId: string, attrib
       LEFT JOIN games g ON g.id = s.game_id
       WHERE s.id = ? AND (
         s.kind = 'configuration'
-        OR (g.merged_into_game_id IS NULL AND g.visibility = 'public')
+        OR (
+          g.merged_into_game_id IS NULL
+          AND g.visibility = 'public'
+          AND g.published_rule_count > 0
+        )
       )
     `).bind(subjectId).first<{ id: string }>(),
     db.statement('SELECT id FROM attributes WHERE id = ? AND is_active = 1').bind(attributeId).first<{ id: string }>(),
