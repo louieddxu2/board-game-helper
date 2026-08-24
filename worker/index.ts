@@ -17,6 +17,7 @@ import { submissionsRoutes } from './routes/submissions';
 import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
+import { attributesRoutes } from './routes/attributes';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -104,6 +105,7 @@ app.onError((error, c) => {
     'google_auth_not_configured', 'invalid_google_identity', 'google_identity_conflict', 'not_found',
     'session_creation_failed', 'game_not_found', 'rule_not_found',
     'unknown_tag', 'tag_not_found',
+    'attribute_not_found', 'attribute_subject_not_found', 'attribute_subjects_must_differ',
   ]);
   return c.json({ error: safeCodes.has(message) ? message : 'internal_error' }, 500);
 });
@@ -127,6 +129,7 @@ app.route('/', submissionsRoutes);
 app.route('/', reviewRoutes);
 app.route('/', favoriteRoutes);
 app.route('/', contributionRoutes);
+app.route('/', attributesRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   const db = createDatabase(env);

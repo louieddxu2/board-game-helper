@@ -126,6 +126,73 @@ export interface GameCatalogPayload {
   games: GameSummary[];
 }
 
+export const ATTRIBUTE_COMPARISON_RESULTS = ['A_HIGHER', 'SIMILAR', 'B_HIGHER'] as const;
+export type AttributeComparisonResult = (typeof ATTRIBUTE_COMPARISON_RESULTS)[number];
+
+export interface AttributeDefinition {
+  id: string;
+  key: string;
+  name: string;
+  shortDescription?: string;
+  fullDescription?: string;
+  minValue: number;
+  maxValue: number;
+  sortOrder: number;
+}
+
+export interface AttributeSubjectComponent {
+  order: number;
+  gameId?: string;
+  type: 'base' | 'expansion' | 'label';
+  label: string;
+}
+
+export interface AttributeSubject {
+  id: string;
+  slug: string;
+  kind: 'game' | 'configuration';
+  displayName: string;
+  gameId?: string;
+  gameSlug?: string;
+  components?: AttributeSubjectComponent[];
+}
+
+export interface AttributeScoreSummary {
+  average: number;
+  count: number;
+  myValue?: number;
+}
+
+export interface AttributeProfileEntry extends AttributeScoreSummary {
+  attributeId: string;
+}
+
+export interface AttributeComparisonSummary {
+  result: AttributeComparisonResult;
+  count: number;
+}
+
+export interface AttributesPayload {
+  attributes: AttributeDefinition[];
+  subjects: AttributeSubject[];
+}
+
+export interface AttributeWorkbenchPayload {
+  subjectA: AttributeSubject;
+  subjectB: AttributeSubject;
+  attributeId: string;
+  scores: {
+    a: AttributeScoreSummary;
+    b: AttributeScoreSummary;
+  };
+  profile: {
+    a: AttributeProfileEntry[];
+    b: AttributeProfileEntry[];
+  };
+  comparisons: AttributeComparisonSummary[];
+  myComparison?: AttributeComparisonResult;
+}
+
 export interface GameCatalogChange {
   gameId: string;
   catalogVersion: number;
