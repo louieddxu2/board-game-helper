@@ -23,7 +23,7 @@ describe('AttributesPage question flow', () => {
     vi.restoreAllMocks();
   });
 
-  test('starts with a system-selected question and exposes pending source rows without game selectors', async () => {
+  test('starts with a system-selected question without game selectors or the full table', async () => {
     vi.spyOn(api, 'attributes').mockResolvedValue(payload);
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question });
 
@@ -32,7 +32,7 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByRole('heading', { name: '桌遊屬性比較' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '運氣成分' })).toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
   });
 });

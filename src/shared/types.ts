@@ -214,13 +214,19 @@ export interface AttributesPayload {
   values: AttributeMatrixValue[];
   candidates: AttributeImportCandidate[];
   activities: AttributeActivity[];
+  scoreModelVersion?: string;
 }
 
 export interface AttributeMatrixValue {
   subjectId: string;
   attributeId: string;
-  average: number;
-  count: number;
+  score: number;
+  directAverage?: number;
+  directCount: number;
+  comparisonCount: number;
+  decisiveComparisonCount: number;
+  comparisonScore?: number;
+  modelVersion: string;
 }
 
 export interface AttributeWorkbenchPayload {

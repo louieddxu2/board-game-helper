@@ -11,6 +11,7 @@ import type {
 } from '../../src/shared/types';
 import { createId } from '../utils';
 import type { Database } from './database';
+import { ATTRIBUTE_SCORE_MODEL_VERSION, calculateAttributeScores } from './attributeScoring';
 
 interface AttributeRow {
   id: string;
@@ -40,11 +41,18 @@ interface ComponentRow {
   label: string;
 }
 
-interface AttributeValueRow {
+interface AttributeRatingAggregateRow {
   subject_id: string;
   attribute_id: string;
   average_value: number;
   rating_count: number;
+}
+
+interface AttributeComparisonRow {
+  subject_a_id: string;
+  subject_b_id: string;
+  attribute_id: string;
+  result: AttributeComparisonResult;
 }
 
 interface CandidateRow {
@@ -206,17 +214,31 @@ export const queryAttributeSubjects = async (db: Database, subjectIds?: string[]
 };
 
 const queryAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
-  const result = await db.statement(`
-    SELECT subject_id, attribute_id, AVG(value) AS average_value, COUNT(*) AS rating_count
-    FROM attribute_ratings
-    GROUP BY subject_id, attribute_id
-  `).all<AttributeValueRow>();
-  return (result.results ?? []).map((row) => ({
-    subjectId: row.subject_id,
-    attributeId: row.attribute_id,
-    average: Number(Number(row.average_value).toFixed(2)),
-    count: Number(row.rating_count),
-  }));
+  const [ratingResult, comparisonResult] = await Promise.all([
+    db.statement(`
+      SELECT subject_id, attribute_id, AVG(value) AS average_value, COUNT(*) AS rating_count
+      FROM attribute_ratings
+      GROUP BY subject_id, attribute_id
+    `).all<AttributeRatingAggregateRow>(),
+    db.statement(`
+      SELECT subject_a_id, subject_b_id, attribute_id, result
+      FROM attribute_comparisons
+    `).all<AttributeComparisonRow>(),
+  ]);
+  return calculateAttributeScores(
+    (ratingResult.results ?? []).map((row) => ({
+      subjectId: row.subject_id,
+      attributeId: row.attribute_id,
+      average: Number(row.average_value),
+      count: Number(row.rating_count),
+    })),
+    (comparisonResult.results ?? []).map((row) => ({
+      subjectAId: row.subject_a_id,
+      subjectBId: row.subject_b_id,
+      attributeId: row.attribute_id,
+      result: row.result,
+    })),
+  );
 };
 
 const parseCandidateValues = (raw: string): Array<number | null> => {
@@ -321,7 +343,7 @@ export const queryAttributesPayload = async (db: Database): Promise<AttributesPa
     queryUnprocessedCandidates(db),
     queryRecentActivities(db),
   ]);
-  return { attributes, subjects, values, candidates, activities };
+  return { attributes, subjects, values, candidates, activities, scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION };
 };
 
 const assertSubjectAndAttribute = async (db: Database, subjectId: string, attributeId: string) => {

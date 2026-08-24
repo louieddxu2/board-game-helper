@@ -1448,6 +1448,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attributes-table-card { margin-top: 16px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); box-shadow: 0 8px 26px rgba(15,34,29,.06); }
 .attributes-search { display: grid; gap: 6px; min-width: min(260px, 100%); color: var(--muted); font-size: 12px; font-weight: 800; }
 .attributes-search input { min-height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); font: inherit; }
+.attributes-table-description { margin: -8px 0 14px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .attributes-table-meta { margin: -8px 0 14px; color: var(--muted); font-size: 12px; }
 .attributes-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
 .attributes-matrix { min-width: 1620px; border-spacing: 0; border-collapse: separate; color: var(--ink); font-size: 12px; }

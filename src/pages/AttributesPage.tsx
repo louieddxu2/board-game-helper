@@ -1,26 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { getAttributeSessionId } from '../lib/attributeSession';
-import type { AttributeActivity, AttributeComparisonResult, AttributeDefinition, AttributeQuestion, AttributeSubject, AttributesPayload } from '../shared/types';
-
-type TableFilter = 'all' | 'processed' | 'pending';
-
-interface AttributeTableRow {
-  id: string;
-  displayName: string;
-  kind: 'processed' | 'pending';
-  statusLabel: string;
-  gameSlug?: string;
-  values: Array<number | undefined>;
-}
-
-const formatScore = (value: number | undefined) => value == null ? '—' : value.toFixed(1);
-
-const scoreClass = (value: number | undefined) => {
-  if (value == null) return 'empty';
-  return value >= 7 ? 'high' : value >= 4 ? 'medium' : 'low';
-};
+import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributesPayload } from '../shared/types';
 
 const resultLabel = (result: AttributeComparisonResult) => {
   if (result === 'A_HIGHER') return 'A 較高';
@@ -75,8 +57,6 @@ export const AttributesPage = () => {
   const [comparison, setComparison] = useState<AttributeComparisonResult | null>(null);
   const [ratingA, setRatingA] = useState('');
   const [ratingB, setRatingB] = useState('');
-  const [tableQuery, setTableQuery] = useState('');
-  const [tableFilter, setTableFilter] = useState<TableFilter>('all');
   const [sessionId] = useState(getAttributeSessionId);
 
   const clearResponse = () => {
@@ -111,36 +91,6 @@ export const AttributesPage = () => {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [sessionId]);
-
-  const valueMap = useMemo(() => new Map((payload?.values ?? []).map((value) => [`${value.subjectId}:${value.attributeId}`, value])), [payload?.values]);
-  const tableRows = useMemo<AttributeTableRow[]>(() => {
-    if (!payload) return [];
-    const processed: AttributeTableRow[] = payload.subjects.map((subject) => ({
-      id: subject.id,
-      displayName: subject.displayName,
-      kind: 'processed',
-      statusLabel: subject.kind === 'configuration' ? '已建立配置' : '已對應遊戲',
-      gameSlug: subject.gameSlug,
-      values: payload.attributes.map((attribute) => valueMap.get(`${subject.id}:${attribute.id}`)?.average),
-    }));
-    const pending: AttributeTableRow[] = payload.candidates.map((candidate) => ({
-      id: `candidate:${candidate.id}`,
-      displayName: candidate.displayName,
-      kind: 'pending',
-      statusLabel: candidate.matchStatus === 'ambiguous' ? '待確認來源' : '待對應遊戲',
-      values: payload.attributes.map((_, index) => candidate.values[index] ?? undefined),
-    }));
-    return [...processed, ...pending];
-  }, [payload, valueMap]);
-
-  const visibleRows = useMemo(() => {
-    const normalizedQuery = tableQuery.trim().toLocaleLowerCase();
-    return tableRows.filter((row) => {
-      if (tableFilter === 'processed' && row.kind !== 'processed') return false;
-      if (tableFilter === 'pending' && row.kind !== 'pending') return false;
-      return !normalizedQuery || row.displayName.toLocaleLowerCase().includes(normalizedQuery);
-    });
-  }, [tableFilter, tableQuery, tableRows]);
 
   const submitResponse = async () => {
     if (!question) return;
@@ -186,7 +136,7 @@ export const AttributesPage = () => {
         <h1>桌遊屬性比較</h1>
         <p>系統會自動挑選兩款遊戲與一項屬性。你可以比較兩款遊戲，也可以同時填寫各自的 0～10 分數；送出後會自動換下一題。</p>
       </div>
-      <span className="attributes-data-note">題目會優先照顧比較資料少、屬性資料不足的組合，同時保留隨機性。</span>
+      <span className="attributes-data-note">題目會優先照顧比較資料少、屬性資料不足的組合，同時保留隨機性。兩兩比較也會納入總表的合成分數。</span>
     </header>
 
     <section className="attributes-activity-card" aria-labelledby="attributes-activity-heading">
@@ -211,15 +161,5 @@ export const AttributesPage = () => {
       <button type="button" className="button primary attributes-submit" onClick={() => void submitResponse()} disabled={submitting || questionLoading}>{submitting ? '儲存中…' : '送出回答，換下一題'}</button>
     </section>
 
-    <section className="attributes-table-card" aria-labelledby="attributes-table-heading">
-      <div className="attributes-section-heading"><div><p className="eyebrow">完整資料</p><h2 id="attributes-table-heading">屬性總表</h2></div><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="輸入名稱" /></label></div>
-      <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => setTableFilter(filter)}>{label}</button>)}</div><span>顯示 {visibleRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
-      <div className="attributes-table-scroll">
-        <table className="attributes-matrix">
-          <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => <th scope="col" key={attribute.id} title={attribute.fullDescription}>{attribute.name}</th>)}</tr></thead>
-          <tbody>{visibleRows.map((row) => <tr key={row.id} className={row.kind === 'pending' ? 'attributes-matrix-pending' : undefined}><th scope="row" className="attributes-matrix-subject">{row.gameSlug ? <Link to={`/games/${encodeURIComponent(row.gameSlug)}`}>{row.displayName}</Link> : <span>{row.displayName}</span>}<small>{row.statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={value == null ? '尚無資料' : `平均 ${formatScore(value)}`}>{formatScore(value)}</td>)}</tr>)}</tbody>
-        </table>
-      </div>
-    </section>
   </section>;
 };
