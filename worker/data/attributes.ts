@@ -21,15 +21,18 @@ import {
   type OnlineAttributeState,
 } from './attributeScoring';
 
-/** Logical low-confidence pool. The selector query returns only its choice. */
-export const ATTRIBUTE_QUESTION_CANDIDATE_LIMIT = 200;
+/** Number of random slots used to sample low-confidence subjects. */
+export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
+export const ATTRIBUTE_QUESTION_SLOT_PROBE_LIMIT = 16;
 export const ATTRIBUTE_QUESTION_SELECTED_LIMIT = 2;
 export const ATTRIBUTE_QUESTION_PAIR_PROBE_LIMIT = 4;
 export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
 export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 4;
 export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 7;
-export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 25;
+export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 37;
+/** Includes up to four excluded subject rows skipped by slot lookups. */
+export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 41;
 
 interface AttributeRow {
   id: string;
@@ -219,19 +222,28 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
     return result ? toAttribute(result) : null;
   }
 
-  const count = await db.statement('SELECT COUNT(*) AS count FROM attributes WHERE is_active = 1').first<{ count: number }>();
-  const total = Number(count?.count ?? 0);
-  if (!total) return null;
-  const offset = Math.floor(Math.random() * total);
-  const result = await db.statement(`
-    SELECT a.id, a.key, t.name, t.short_description, t.full_description,
-      a.min_value, a.max_value, a.sort_order
-    FROM attributes a
-    JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
-    WHERE a.is_active = 1
-    ORDER BY a.sort_order, a.id
-    LIMIT 1 OFFSET ?
-  `).bind(offset).first<AttributeRow>();
+  const pivot = randomKey();
+  const [after, before] = await Promise.all([
+    db.statement(`
+      SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+        a.min_value, a.max_value, a.sort_order
+      FROM attributes a
+      JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
+      WHERE a.is_active = 1 AND a.random_key >= ?
+      ORDER BY a.random_key, a.id
+      LIMIT 1
+    `).bind(pivot).first<AttributeRow>(),
+    db.statement(`
+      SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+        a.min_value, a.max_value, a.sort_order
+      FROM attributes a
+      JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
+      WHERE a.is_active = 1 AND a.random_key < ?
+      ORDER BY a.random_key, a.id
+      LIMIT 1
+    `).bind(pivot).first<AttributeRow>(),
+  ]);
+  const result = after ?? before;
   return result ? toAttribute(result) : null;
 };
 
@@ -424,54 +436,50 @@ export const cleanupAttributeActivityFeed = async (db: Database): Promise<void> 
 };
 
 const randomKey = () => crypto.randomUUID().replaceAll('-', '');
+const randomQuestionSlot = () => Math.floor(Math.random() * ATTRIBUTE_QUESTION_SLOT_COUNT) + 1;
+
+const randomQuestionSlots = (limit: number) => {
+  const slots = new Set<number>();
+  while (slots.size < Math.min(limit, ATTRIBUTE_QUESTION_SLOT_COUNT)) slots.add(randomQuestionSlot());
+  return [...slots];
+};
 
 const excludedSubjectFilter = (excludeSubjectIds: string[]) => excludeSubjectIds.length
   ? `AND subject_id NOT IN (${excludeSubjectIds.map(() => '?').join(',')})`
   : '';
 
-const queryCandidateStates = async (
+const queryCandidateIdsBySlots = async (
   db: Database,
   attributeId: string,
-  mode: 'low' | 'random',
+  excludeSubjectIds: string[] = [],
+): Promise<string[]> => {
+  const exclusion = excludedSubjectFilter(excludeSubjectIds);
+  const rows = await Promise.all(randomQuestionSlots(ATTRIBUTE_QUESTION_SLOT_PROBE_LIMIT).map((slot) => db.statement(`
+    SELECT subject_id
+    FROM attribute_score_states
+    WHERE attribute_id = ? AND question_slot = ? ${exclusion}
+    ORDER BY rating_deviation DESC, random_key, subject_id
+    LIMIT 1
+  `).bind(attributeId, slot, ...excludeSubjectIds).first<{ subject_id: string }>()));
+  return rows.filter((row): row is { subject_id: string } => Boolean(row))
+    .map((row) => row.subject_id)
+    .slice(0, ATTRIBUTE_QUESTION_SELECTED_LIMIT);
+};
+
+const queryCandidateStatesBySlots = async (
+  db: Database,
+  attributeId: string,
   excludeSubjectIds: string[] = [],
 ): Promise<CandidateStateRow[]> => {
-  if (mode === 'low') {
-    const pivot = randomKey();
-    const result = await db.statement(`
-      WITH candidate_pool AS (
-        SELECT subject_id, score, rating_deviation, random_key
-        FROM attribute_score_states
-        WHERE attribute_id = ? ${excludedSubjectFilter(excludeSubjectIds)}
-        ORDER BY rating_deviation DESC, random_key, subject_id
-        LIMIT ${ATTRIBUTE_QUESTION_CANDIDATE_LIMIT}
-      )
-      SELECT subject_id, score, rating_deviation, random_key
-      FROM candidate_pool
-      ORDER BY CASE WHEN random_key >= ? THEN 0 ELSE 1 END, random_key, subject_id
-      LIMIT ${ATTRIBUTE_QUESTION_SELECTED_LIMIT}
-    `).bind(attributeId, ...excludeSubjectIds, pivot).all<CandidateStateRow>();
-    return result.results ?? [];
-  }
-
-  const pivot = randomKey();
   const exclusion = excludedSubjectFilter(excludeSubjectIds);
-  const [after, before] = await Promise.all([
-    db.statement(`
-      SELECT subject_id, score, rating_deviation, random_key
-      FROM attribute_score_states
-      WHERE attribute_id = ? ${exclusion} AND random_key >= ?
-      ORDER BY random_key, subject_id
-      LIMIT 1
-    `).bind(attributeId, ...excludeSubjectIds, pivot).all<CandidateStateRow>(),
-    db.statement(`
-      SELECT subject_id, score, rating_deviation, random_key
-      FROM attribute_score_states
-      WHERE attribute_id = ? ${exclusion} AND random_key < ?
-      ORDER BY random_key, subject_id
-      LIMIT 1
-    `).bind(attributeId, ...excludeSubjectIds, pivot).all<CandidateStateRow>(),
-  ]);
-  return [...(after.results ?? []), ...(before.results ?? [])].slice(0, ATTRIBUTE_QUESTION_SELECTED_LIMIT);
+  const rows = await Promise.all(randomQuestionSlots(ATTRIBUTE_QUESTION_SLOT_PROBE_LIMIT).map((slot) => db.statement(`
+    SELECT subject_id, score, rating_deviation, random_key
+    FROM attribute_score_states
+    WHERE attribute_id = ? AND question_slot = ? ${exclusion}
+    ORDER BY rating_deviation DESC, random_key, subject_id
+    LIMIT 1
+  `).bind(attributeId, slot, ...excludeSubjectIds).first<CandidateStateRow>()));
+  return rows.filter((row): row is CandidateStateRow => Boolean(row));
 };
 
 const queryFixedCandidateState = async (db: Database, attributeId: string, subjectId: string): Promise<CandidateStateRow | null> => {
@@ -513,53 +521,27 @@ const queryClosePairCandidates = async (
     const fixedSubjectId = options.fixedSubjectAId ?? options.fixedSubjectBId;
     const fixed = fixedSubjectId ? await queryFixedCandidateState(db, attributeId, fixedSubjectId) : null;
     if (!fixed || !fixedSubjectId) return [];
-    const candidatePool = `
-      WITH candidate_pool AS (
-        SELECT subject_id, score, random_key
-        FROM attribute_score_states
-        WHERE attribute_id = ? AND subject_id <> ?
-        ORDER BY rating_deviation DESC, random_key, subject_id
-        LIMIT ${ATTRIBUTE_QUESTION_CANDIDATE_LIMIT}
-      )`;
-    const result = options.fixedSubjectAId
-      ? await db.statement(`${candidatePool}
-        SELECT ? AS subject_a_id, subject_id AS subject_b_id,
-          ABS(score - ?) AS distance
-        FROM candidate_pool
-        ORDER BY distance, random_key, subject_id
-        LIMIT ${limit}
-      `).bind(attributeId, fixedSubjectId, fixedSubjectId, fixed.score).all<PairCandidateRow>()
-      : await db.statement(`${candidatePool}
-        SELECT subject_id AS subject_a_id, ? AS subject_b_id,
-          ABS(score - ?) AS distance
-        FROM candidate_pool
-        ORDER BY distance, random_key, subject_id
-        LIMIT ${limit}
-      `).bind(attributeId, fixedSubjectId, fixedSubjectId, fixed.score).all<PairCandidateRow>();
-    return result.results ?? [];
+    const candidates = await queryCandidateStatesBySlots(db, attributeId, [fixedSubjectId]);
+    return candidates
+      .map((candidate) => options.fixedSubjectAId
+        ? { subject_a_id: fixedSubjectId, subject_b_id: candidate.subject_id, distance: Math.abs(fixed.score - candidate.score) }
+        : { subject_a_id: candidate.subject_id, subject_b_id: fixedSubjectId, distance: Math.abs(fixed.score - candidate.score) })
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, limit);
   }
 
-  const result = await db.statement(`
-    WITH candidate_pool AS (
-      SELECT subject_id, score, random_key
-      FROM attribute_score_states
-      WHERE attribute_id = ?
-      ORDER BY rating_deviation DESC, random_key, subject_id
-      LIMIT ${ATTRIBUTE_QUESTION_CANDIDATE_LIMIT}
-    ), ranked_candidates AS (
-      SELECT subject_id, score, random_key,
-        LAG(subject_id) OVER (ORDER BY score, random_key, subject_id) AS previous_subject_id,
-        LAG(score) OVER (ORDER BY score, random_key, subject_id) AS previous_score
-      FROM candidate_pool
-    )
-    SELECT previous_subject_id AS subject_a_id, subject_id AS subject_b_id,
-      ABS(previous_score - score) AS distance
-    FROM ranked_candidates
-    WHERE previous_subject_id IS NOT NULL
-    ORDER BY distance, random_key, subject_id
-    LIMIT ${limit}
-  `).bind(attributeId).all<PairCandidateRow>();
-  return result.results ?? [];
+  const candidates = await queryCandidateStatesBySlots(db, attributeId);
+  const pairs: PairCandidateRow[] = [];
+  for (let index = 0; index < candidates.length; index += 1) {
+    for (let next = index + 1; next < candidates.length; next += 1) {
+      pairs.push({
+        subject_a_id: candidates[index].subject_id,
+        subject_b_id: candidates[next].subject_id,
+        distance: Math.abs(candidates[index].score - candidates[next].score),
+      });
+    }
+  }
+  return pairs.sort((left, right) => left.distance - right.distance).slice(0, limit);
 };
 
 const isExcludedPair = (subjectAId: string, subjectBId: string, attributeId: string, options: AttributeQuestionOptions) => {
@@ -600,10 +582,10 @@ const queryQuestionWithAttribute = async (
       options.excludeSubjectAId,
       options.excludeSubjectBId,
     ].filter((id): id is string => Boolean(id));
-    const rows = await queryCandidateStates(db, attribute.id, mode, [...new Set(excludeSubjectIds)]);
-    if (options.fixedSubjectAId && rows[0]) selected = { subjectAId: options.fixedSubjectAId, subjectBId: rows[0].subject_id };
-    else if (options.fixedSubjectBId && rows[0]) selected = { subjectAId: rows[0].subject_id, subjectBId: options.fixedSubjectBId };
-    else if (rows.length >= 2) selected = { subjectAId: rows[0].subject_id, subjectBId: rows[1].subject_id };
+    const subjectIds = await queryCandidateIdsBySlots(db, attribute.id, [...new Set(excludeSubjectIds)]);
+    if (options.fixedSubjectAId && subjectIds[0]) selected = { subjectAId: options.fixedSubjectAId, subjectBId: subjectIds[0] };
+    else if (options.fixedSubjectBId && subjectIds[0]) selected = { subjectAId: subjectIds[0], subjectBId: options.fixedSubjectBId };
+    else if (subjectIds.length >= 2) selected = { subjectAId: subjectIds[0], subjectBId: subjectIds[1] };
   }
   if (!selected || selected.subjectAId === selected.subjectBId || isExcludedPair(selected.subjectAId, selected.subjectBId, attribute.id, options)) return null;
   const subjects = await queryQuestionSubjects(db, [selected.subjectAId, selected.subjectBId]);
@@ -756,8 +738,8 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
     statements.push(db.statement(`
       INSERT INTO attribute_score_states
         (subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
-         comparison_count, decisive_comparison_count, evidence_count, model_version, updated_at, random_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(hex(randomblob(16))))
+         comparison_count, decisive_comparison_count, evidence_count, model_version, updated_at, random_key, question_slot)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(hex(randomblob(16))), ?)
       ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
         score = excluded.score,
         rating_deviation = excluded.rating_deviation,
@@ -768,7 +750,7 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
         evidence_count = excluded.evidence_count,
         model_version = excluded.model_version,
         updated_at = excluded.updated_at
-    `).bind(subjectId, input.attributeId, state.score, state.ratingDeviation, state.directSum, state.directCount, state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount, ATTRIBUTE_SCORE_MODEL_VERSION, input.timestamp));
+    `).bind(subjectId, input.attributeId, state.score, state.ratingDeviation, state.directSum, state.directCount, state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount, ATTRIBUTE_SCORE_MODEL_VERSION, input.timestamp, randomQuestionSlot()));
   };
   if (touchedSubjects.has(input.subjectAId)) addStateUpsert(input.subjectAId, stateA);
   if (touchedSubjects.has(input.subjectBId)) addStateUpsert(input.subjectBId, stateB);
