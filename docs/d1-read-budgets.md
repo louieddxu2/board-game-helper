@@ -15,7 +15,7 @@
 | 收藏首頁 | 本機畫面優先；私人狀態不共用公共快取 | 受固定 LIMIT 與指定遊戲 ID 限制 |
 | 管理 Tag | 僅管理員主動開啟 | 可讀 active tags、rule_tags 使用量與 aliases；不屬於公共高頻路徑 |
 | 屬性比較題目 | Worker 先在記憶體抽出 1～200 的槽位編號，取得一個低信心度「遊戲＋屬性」項目，再固定屬性隨機抽第二款遊戲 | 第一項最多定位 1 列、屬性 1 列；第二款遊戲最多定位 2 列；遊戲資料 2 列；feed 最多 12 列；排除同遊戲與上一題配對時估算上限約 20 列；不掃描 200 列候選池 |
-| 屬性投票送出 | 先以 response_id 去重，再取得涉及之「屬性＋遊戲狀態」短期寫入鎖，最後以單一 D1 batch 原子寫入 | 邏輯上最多讀 response 去重 2 次、上下文 1 列、兩個 state；最多寫 3 個事件、2 個 state、1 個配對統計、1 個 feed，加上局部鎖的取得／釋放。score state 的 catalog trigger 與索引維護會增加實際 `rows_written`，因此必須以 D1 metrics 量測，不可只看 SQL statement 數量 |
+| 屬性投票送出 | 先以 response_id 去重，再取得涉及之「屬性＋遊戲狀態」短期寫入鎖，最後以單一 D1 batch 原子寫入 | 一次回答只寫 1 筆 durable response（包含兩個分數、比較結果與近期動態）、最多 2 個 state；不再同步寫 3 筆事件、pair_stats 或另一筆 feed。現有局部鎖、score state catalog trigger 與必要索引維護後，本機完整回答實測為讀 29、寫 25；必須以 D1 metrics 驗證，不可只看 SQL statement 數量 |
 | 屬性總表背景建立 | 初始 migration 建立第一代快照；之後僅由每週排程建立新 generation | 讀取完整屬性來源並寫入新的 snapshot generation；不在公開請求或投票熱路徑執行。建立完成後，投票、候選與遊戲主體變更由觸發器寫入增量目錄 |
 | 完整資料匯出 | 無自動呼叫 | 會讀取全部公開資料，所以只允許管理員人工執行，禁止列為公共快取端點 |
 

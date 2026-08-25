@@ -26,9 +26,10 @@ export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
 export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
 export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
-export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 7;
-/** Seven response rows plus two lock rows and stale-lock cleanup. */
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 12;
+/** Measured local-D1 maximum for a full answer with two ratings and a comparison. */
+export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 29;
+/** Measured local-D1 maximum, including indexes, triggers, locks, and catalog deltas. */
+export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 25;
 export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 18;
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
@@ -471,9 +472,9 @@ const parseActivities = (raw: string): AttributeActivity[] => {
 
 export const queryRecentActivities = async (db: Database): Promise<AttributeActivity[]> => {
   const result = await db.statement(`
-    SELECT id, payload_json
-    FROM attribute_activity_feed
-    ORDER BY created_at DESC, id DESC
+    SELECT response_id AS id, activity_json AS payload_json
+    FROM attribute_vote_responses
+    ORDER BY created_at DESC, response_id DESC
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
   return (result.results ?? []).flatMap((row) => parseActivities(row.payload_json)).slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
@@ -768,8 +769,9 @@ const saveAttributeResponseLocked = async (db: Database, input: AttributeRespons
     SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
       comparison_count, decisive_comparison_count, evidence_count
     FROM attribute_score_states
-    WHERE attribute_id = ? AND subject_id IN (?, ?)
-  `).bind(input.attributeId, input.subjectAId, input.subjectBId).all<AttributeScoreStateRow>();
+    WHERE (subject_id = ? AND attribute_id = ?)
+       OR (subject_id = ? AND attribute_id = ?)
+  `).bind(input.subjectAId, input.attributeId, input.subjectBId, input.attributeId).all<AttributeScoreStateRow>();
   const stateMap = new Map((stateResult.results ?? []).map((row) => [row.subject_id, {
     score: Number(row.score),
     ratingDeviation: Number(row.rating_deviation ?? ATTRIBUTE_INITIAL_RD),
@@ -803,13 +805,8 @@ const saveAttributeResponseLocked = async (db: Database, input: AttributeRespons
 
   const statements = [];
   const activities: AttributeActivity[] = [];
-  const addEvent = (eventKey: string, kind: 'rating' | 'comparison', subjectAId: string, subjectBId: string | null, value: number | null, result: AttributeComparisonResult | null) => {
+  const addActivity = (kind: 'rating' | 'comparison', subjectAId: string, subjectBId: string | null, value: number | null, result: AttributeComparisonResult | null) => {
     const id = createId('attribute-vote');
-    statements.push(db.statement(`
-      INSERT INTO attribute_vote_events
-        (id, response_id, event_key, kind, attribute_id, subject_a_id, subject_b_id, value, result, actor_id, session_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, input.responseId, eventKey, kind, input.attributeId, subjectAId, subjectBId, value, result, input.actorId, input.sessionId, input.timestamp, input.timestamp));
     if (kind === 'rating') {
       const subject = subjectAId === context.subject_a_id
         ? toResponseActivitySubject(context.subject_a_id, context.subject_a_name, context.subject_a_slug, context.subject_a_game_slug)
@@ -826,9 +823,9 @@ const saveAttributeResponseLocked = async (db: Database, input: AttributeRespons
     }
   };
 
-  if (input.ratingA != null) addEvent(`rating:${input.subjectAId}`, 'rating', input.subjectAId, null, input.ratingA, null);
-  if (input.ratingB != null) addEvent(`rating:${input.subjectBId}`, 'rating', input.subjectBId, null, input.ratingB, null);
-  if (canonical) addEvent(`comparison:${canonical.subjectAId}:${canonical.subjectBId}`, 'comparison', canonical.subjectAId, canonical.subjectBId, null, canonical.result);
+  if (input.ratingA != null) addActivity('rating', input.subjectAId, null, input.ratingA, null);
+  if (input.ratingB != null) addActivity('rating', input.subjectBId, null, input.ratingB, null);
+  if (canonical) addActivity('comparison', canonical.subjectAId, canonical.subjectBId, null, canonical.result);
 
   const addStateUpsert = (subjectId: string, state: OnlineAttributeState) => {
     statements.push(db.statement(`
@@ -851,21 +848,25 @@ const saveAttributeResponseLocked = async (db: Database, input: AttributeRespons
   if (touchedSubjects.has(input.subjectAId)) addStateUpsert(input.subjectAId, stateA);
   if (touchedSubjects.has(input.subjectBId)) addStateUpsert(input.subjectBId, stateB);
 
-  if (canonical) {
-    statements.push(db.statement(`
-      INSERT INTO attribute_pair_stats
-        (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at)
-      VALUES (?, ?, ?, 1, ?)
-      ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET
-        comparison_count = attribute_pair_stats.comparison_count + 1,
-        updated_at = excluded.updated_at
-    `).bind(canonical.subjectAId, canonical.subjectBId, input.attributeId, input.timestamp));
-  }
-
   statements.push(db.statement(`
-    INSERT INTO attribute_activity_feed (id, response_id, payload_json, created_at)
-    VALUES (?, ?, ?, ?)
-  `).bind(createId('attribute-feed'), input.responseId, JSON.stringify(activities), input.timestamp));
+    INSERT INTO attribute_vote_responses
+      (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b,
+       comparison, activity_json, actor_id, session_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    input.responseId,
+    input.attributeId,
+    input.subjectAId,
+    input.subjectBId,
+    input.ratingA ?? null,
+    input.ratingB ?? null,
+    input.comparison ?? null,
+    JSON.stringify(activities),
+    input.actorId,
+    input.sessionId,
+    input.timestamp,
+    input.timestamp,
+  ));
   await db.batch(statements);
 
   const updatedValues: AttributeMatrixValue[] = [];
@@ -878,16 +879,16 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
   if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
   if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
 
-  const existingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
+  const existingResponse = await db.statement('SELECT response_id FROM attribute_vote_responses WHERE response_id = ? LIMIT 1')
     .bind(input.responseId)
-    .first<{ id: string }>();
+    .first<{ response_id: string }>();
   if (existingResponse) return { updatedValues: [], activities: [] };
 
   const lock = await acquireAttributeWriteLock(db, input);
   try {
-    const lockedExistingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
+    const lockedExistingResponse = await db.statement('SELECT response_id FROM attribute_vote_responses WHERE response_id = ? LIMIT 1')
       .bind(input.responseId)
-      .first<{ id: string }>();
+      .first<{ response_id: string }>();
     if (lockedExistingResponse) return { updatedValues: [], activities: [] };
     return await saveAttributeResponseLocked(db, input);
   } finally {

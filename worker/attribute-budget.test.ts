@@ -26,16 +26,16 @@ describe('attribute hot-path budgets', () => {
   });
 
   test('response row budgets stay below the product limit', () => {
-    expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS).toBeLessThanOrEqual(8);
-    expect(ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThanOrEqual(12);
+    expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS).toBeLessThan(100);
+    expect(ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
     expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS + ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
   });
 
-  test('a complete response uses three bounded reads and at most seven writes', async () => {
+  test('a complete response uses bounded reads and three core writes', async () => {
     const statements: DatabaseStatement[] = [];
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
-        if (sql.includes('SELECT id FROM attribute_vote_events')) {
+        if (sql.includes('SELECT response_id FROM attribute_vote_responses')) {
           const prepared = statement({ first: vi.fn().mockResolvedValue(null) });
           statements.push(prepared);
           return prepared;
@@ -74,13 +74,13 @@ describe('attribute hot-path budgets', () => {
     const batchCalls = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(batchCalls).toHaveLength(2);
     expect(batchCalls[0][0]).toHaveLength(3);
-    expect(batchCalls[1][0]).toHaveLength(7);
+    expect(batchCalls[1][0]).toHaveLength(3);
   });
 
   test('rejects a concurrent response before reading or rewriting score states', async () => {
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
-        if (sql.includes('SELECT id FROM attribute_vote_events')) return statement({ first: vi.fn().mockResolvedValue(null) });
+        if (sql.includes('SELECT response_id FROM attribute_vote_responses')) return statement({ first: vi.fn().mockResolvedValue(null) });
         return statement({ run: vi.fn().mockResolvedValue({ meta: { changes: 0 } }) });
       }),
       batch: vi.fn().mockResolvedValue([
