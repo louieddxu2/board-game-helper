@@ -57,6 +57,7 @@ interface SubjectRow {
   display_name: string;
   game_id: string | null;
   game_slug: string | null;
+  game_english_name: string | null;
 }
 
 interface ComponentRow {
@@ -109,6 +110,7 @@ interface AttributeExtremeExampleRow {
   display_name: string;
   game_id: string | null;
   game_slug: string | null;
+  game_english_name: string | null;
   score: number;
   direction: 'lowest' | 'highest';
 }
@@ -188,6 +190,7 @@ const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComp
   slug: row.slug,
   kind: row.kind,
   displayName: row.display_name,
+  ...(row.game_english_name ? { secondaryName: row.game_english_name } : {}),
   gameId: row.game_id ?? undefined,
   gameSlug: row.game_slug ?? undefined,
   components: components.get(row.id) ?? [],
@@ -268,7 +271,8 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     ...(cursorParts?.length === 2 ? [cursorParts[0], cursorParts[0], cursorParts[1]] : []),
   ];
   const result = await db.statement(`
-    SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug
+    SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug,
+      g.english_name AS game_english_name
     FROM attribute_subjects s
     LEFT JOIN games g ON g.id = s.game_id
     WHERE (
@@ -291,7 +295,8 @@ const queryAttributeExtremeExamples = async (
     WITH eligible AS (
       SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
         candidate_subject.kind AS subject_kind, candidate_subject.display_name,
-        candidate_subject.game_id, candidate_game.slug AS game_slug
+        candidate_subject.game_id, candidate_game.slug AS game_slug,
+        candidate_game.english_name AS game_english_name
       FROM attribute_score_states s
       JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
@@ -315,10 +320,10 @@ const queryAttributeExtremeExamples = async (
       ORDER BY score DESC, subject_id
       LIMIT ?
     )
-    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, score, 'lowest' AS direction
+    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, game_english_name, score, 'lowest' AS direction
     FROM lowest
     UNION ALL
-    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, score, 'highest' AS direction
+    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, game_english_name, score, 'highest' AS direction
     FROM highest
   `).bind(attributeId, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT).all<AttributeExtremeExampleRow>();
 
@@ -331,6 +336,7 @@ const queryAttributeExtremeExamples = async (
         slug: row.subject_slug,
         kind: row.subject_kind,
         displayName: row.display_name,
+        ...(row.game_english_name ? { secondaryName: row.game_english_name } : {}),
         ...(row.game_id ? { gameId: row.game_id } : {}),
         ...(row.game_slug ? { gameSlug: row.game_slug } : {}),
       },

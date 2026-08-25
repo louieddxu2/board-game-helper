@@ -49,10 +49,17 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '換一組' })).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: 'A：遊戲甲' })).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: 'B：遊戲乙' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '← 左邊較高' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '差不多' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '右邊較高 →' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '🎲 換一組' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '換掉遊戲甲' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '換掉遊戲乙' })).toBeInTheDocument();
+    expect((document.querySelector('.attributes-rating-details') as HTMLDetailsElement).open).toBe(false);
+    fireEvent.click(screen.getByText('＋ 同時給兩款評分'));
+    expect((document.querySelector('.attributes-rating-details') as HTMLDetailsElement).open).toBe(true);
+    expect(screen.getByRole('slider', { name: '評分：遊戲甲' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '評分：遊戲乙' })).toBeInTheDocument();
     expect(api.attributes).not.toHaveBeenCalled();
   });
 
@@ -63,8 +70,7 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'A 較高' }));
-    fireEvent.click(screen.getByRole('button', { name: '送出回答，換下一題' }));
+    fireEvent.click(await screen.findByRole('button', { name: '← 左邊較高' }));
 
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.attributes).not.toHaveBeenCalled();
@@ -78,11 +84,9 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'A 較高' }));
-    const submit = screen.getByRole('button', { name: '送出回答，換下一題' });
-    fireEvent.click(submit);
+    fireEvent.click(await screen.findByRole('button', { name: '← 左邊較高' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('無法送出或暫存回答'));
-    fireEvent.click(submit);
+    fireEvent.click(screen.getByRole('button', { name: '← 左邊較高' }));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
     expect(saveSpy.mock.calls[0][0].responseId).toBe(saveSpy.mock.calls[1][0].responseId);

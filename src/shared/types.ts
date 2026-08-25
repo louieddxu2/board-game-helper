@@ -152,6 +152,11 @@ export interface AttributeSubject {
   slug: string;
   kind: 'game' | 'configuration';
   displayName: string;
+  secondaryName?: string;
+  year?: number;
+  thumbnailUrl?: string;
+  externalSource?: string;
+  externalId?: string;
   gameId?: string;
   gameSlug?: string;
   components?: AttributeSubjectComponent[];
