@@ -7,6 +7,8 @@ import type { AttributeQuestion, AttributesPayload } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
 const subjectB = { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙', gameSlug: 'game-b' };
+const subjectC = { id: 'subject-c', slug: 'game-c', kind: 'game' as const, displayName: '遊戲丙', gameSlug: 'game-c' };
+const subjectD = { id: 'subject-d', slug: 'game-d', kind: 'game' as const, displayName: '遊戲丁', gameSlug: 'game-d' };
 const attribute = { id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 };
 const payload: AttributesPayload = {
   attributes: [attribute],
@@ -17,8 +19,8 @@ const payload: AttributesPayload = {
 };
 const question: AttributeQuestion = { subjectA, subjectB, attribute };
 const extremeExamples = {
-  lowest: [{ subject: subjectA, score: 0 }],
-  highest: [{ subject: subjectB, score: 10 }],
+  lowest: [{ subject: subjectA, score: 0 }, { subject: subjectB, score: 2 }, { subject: subjectC, score: 3 }],
+  highest: [{ subject: subjectD, score: 10 }, { subject: subjectA, score: 8 }, { subject: subjectB, score: 7 }],
 };
 
 describe('AttributesPage question flow', () => {
@@ -36,8 +38,15 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
     expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
-    expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('0 遊戲甲');
-    expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('10 遊戲乙');
+    expect(document.querySelectorAll('.attributes-scoreline-marker')).toHaveLength(4);
+    expect(screen.getByTitle('0 分：遊戲甲')).toBeInTheDocument();
+    expect(screen.getByTitle('10 分：遊戲丁')).toBeInTheDocument();
+    expect(screen.queryByTitle('3 分：遊戲丙')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('7 分：遊戲乙')).not.toBeInTheDocument();
+    expect(document.querySelector('.attributes-scoreline-marker.is-low.is-lower')).toHaveTextContent('遊戲甲');
+    expect(document.querySelector('.attributes-scoreline-marker.is-low.is-upper')).toHaveTextContent('遊戲乙');
+    expect(document.querySelector('.attributes-scoreline-marker.is-high.is-lower')).toHaveTextContent('遊戲丁');
+    expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();

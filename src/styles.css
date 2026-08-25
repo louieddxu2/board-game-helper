@@ -1605,11 +1605,15 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-question-attribute h2 { font-size: clamp(20px, 5.2vw, 27px); line-height: 1.25; }
 .attribute-vote-page .attributes-question-attribute h2 strong { color: var(--orange); font-weight: 900; }
 .attribute-vote-page .attributes-question-examples { display: block; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
-.attribute-vote-page .attributes-scoreline-points { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; min-height: 30px; }
-.attribute-vote-page .attributes-scoreline-point { display: grid; align-content: end; gap: 1px; min-width: 0; }
-.attribute-vote-page .attributes-scoreline-point span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attribute-vote-page .attributes-scoreline-point.is-high { text-align: right; }
-.attribute-vote-page .attributes-scoreline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 4px; margin-top: 3px; color: var(--green); font-size: 10px; font-weight: 900; }
+.attribute-vote-page .attributes-scoreline-track { position: relative; min-height: 72px; padding: 28px 0; box-sizing: border-box; }
+.attribute-vote-page .attributes-scoreline-marker { position: absolute; z-index: 1; display: block; max-width: min(46%, 180px); overflow: hidden; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font-size: 10px; font-weight: 800; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.attribute-vote-page .attributes-scoreline-marker.is-low { transform: translateX(0); text-align: left; }
+.attribute-vote-page .attributes-scoreline-marker.is-high { transform: translateX(-100%); text-align: right; }
+.attribute-vote-page .attributes-scoreline-marker.is-upper { bottom: calc(50% + 5px); }
+.attribute-vote-page .attributes-scoreline-marker.is-lower { top: calc(50% + 5px); }
+.attribute-vote-page .attributes-scoreline-marker.is-low { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.attribute-vote-page .attributes-scoreline-marker.is-high { border-color: color-mix(in srgb, var(--orange) 55%, var(--line)); }
+.attribute-vote-page .attributes-scoreline { position: absolute; inset: 50% 0 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 4px; transform: translateY(-50%); color: var(--green); font-size: 10px; font-weight: 900; }
 .attribute-vote-page .attributes-scoreline i { display: block; height: 2px; border-radius: 999px; background: var(--line); }
 .attribute-vote-page .attributes-question-pair { grid-template-columns: minmax(0, 1fr) var(--attribute-center-column) minmax(0, 1fr); }
 .attribute-vote-page .attributes-answer-grid { grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }

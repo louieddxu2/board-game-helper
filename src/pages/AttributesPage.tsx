@@ -233,6 +233,15 @@ export const AttributesPage = () => {
   if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
   if (error || !payload || !question) return <section className="attribute-vote-page"><h1>屬性投票</h1><p>目前無法取得題目。</p><button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button></section>;
 
+  const lowestExamples = [...(payload.extremeExamples?.lowest ?? [])]
+    .filter((example) => example.score <= 2)
+    .sort((left, right) => left.score - right.score)
+    .slice(0, 2);
+  const highestExamples = [...(payload.extremeExamples?.highest ?? [])]
+    .filter((example) => example.score >= 8)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 2);
+
   return <section className="attribute-vote-page">
     <header className="attribute-vote-header">
       <h1>屬性投票</h1>
@@ -247,12 +256,12 @@ export const AttributesPage = () => {
       <div className="attributes-question-attribute">
         <h2 id="attributes-question-heading">哪款遊戲的<strong>「{question.attribute.name}」</strong>較多？</h2>
         {question.attribute.fullDescription && <p>{question.attribute.fullDescription}</p>}
-        {(payload.extremeExamples?.lowest.length || payload.extremeExamples?.highest.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
-          <div className="attributes-scoreline-points">
-            <div className="attributes-scoreline-point is-low">{payload.extremeExamples.lowest.map((example) => <span key={`low:${example.subject.id}`}>{example.score} {subjectName(example.subject)}</span>)}</div>
-            <div className="attributes-scoreline-point is-high">{payload.extremeExamples.highest.map((example) => <span key={`high:${example.subject.id}`}>{example.score} {subjectName(example.subject)}</span>)}</div>
+        {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
+          <div className="attributes-scoreline-track">
+            {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}>{subjectName(example.subject)}</span>)}
+            {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}>{subjectName(example.subject)}</span>)}
+            <div className="attributes-scoreline" aria-hidden="true"><span>0</span><i /><span>5</span><i /><span>10</span></div>
           </div>
-          <div className="attributes-scoreline" aria-hidden="true"><span>0</span><i /><span>5</span><i /><span>10</span></div>
         </div> : null}
       </div>
       <div className="attributes-question-pair">
