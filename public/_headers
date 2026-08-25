@@ -22,4 +22,4 @@
   Cache-Control: no-cache
 
 /manifest.webmanifest
-  Cache-Control: public, max-age=3600
+  Cache-Control: no-cache

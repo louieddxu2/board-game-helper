@@ -21,6 +21,11 @@ describe('workspace browser policies', () => {
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
   });
 
+  it('offers the installed PWA a long-press shortcut to attribute voting', () => {
+    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ name?: string; short_name?: string; url?: string }> };
+    expect(manifest.shortcuts).toContainEqual(expect.objectContaining({ name: '開啟屬性投票', short_name: '屬性投票', url: '/attributes' }));
+  });
+
   it('constrains the workspace to the viewport so the table owns vertical scrolling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
@@ -209,6 +214,7 @@ describe('workspace browser policies', () => {
     expect(manifest.start_url).toBe('/');
     expect(manifest.scope).toBe('/');
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
+    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/attributes')).toBe(true);
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 

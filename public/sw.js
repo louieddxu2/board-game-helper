@@ -1,5 +1,5 @@
-const SHELL_CACHE = 'wrong-rules-shell-v4';
-const PUBLIC_CACHE = 'wrong-rules-public-v4';
+const SHELL_CACHE = 'wrong-rules-shell-v5';
+const PUBLIC_CACHE = 'wrong-rules-public-v5';
 const SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 const expectedAssetType = (url) => {
