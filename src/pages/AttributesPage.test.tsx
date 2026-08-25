@@ -55,11 +55,15 @@ describe('AttributesPage question flow', () => {
     expect(screen.getByRole('button', { name: '🎲 換一組' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '換掉遊戲甲' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '換掉遊戲乙' })).toBeInTheDocument();
-    expect((document.querySelector('.attributes-rating-details') as HTMLDetailsElement).open).toBe(false);
-    fireEvent.click(screen.getByText('＋ 同時給兩款評分'));
-    expect((document.querySelector('.attributes-rating-details') as HTMLDetailsElement).open).toBe(true);
     expect(screen.getByRole('slider', { name: '評分：遊戲甲' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: '評分：遊戲乙' })).toBeInTheDocument();
+    expect(screen.queryByText('封面')).not.toBeInTheDocument();
+    expect(screen.queryByText('只送出分數')).not.toBeInTheDocument();
+    expect(screen.queryByText('＋ 同時給兩款評分')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('slider', { name: '評分：遊戲甲' }), { target: { value: '8' } });
+    expect(screen.getByText('遊戲甲 · 8')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '取消遊戲甲評分' }));
+    expect(screen.queryByText('遊戲甲 · 8')).not.toBeInTheDocument();
     expect(api.attributes).not.toHaveBeenCalled();
   });
 

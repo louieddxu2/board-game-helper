@@ -1677,6 +1677,42 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-change-all:disabled { cursor: wait; opacity: .55; }
 .attribute-vote-page .attributes-response-error { margin: 8px 0 0; }
 
+/* ===== Attribute vote score controls ===== */
+.attribute-vote-page .attributes-question-info summary { min-height: 0 !important; height: 28px; width: 28px; }
+.attribute-vote-page .attributes-question-pair { align-items: start; }
+.attribute-vote-page .attributes-question-side { display: grid; min-width: 0; gap: 7px; align-content: start; }
+.attribute-vote-page .attribute-game-card { position: relative; border-radius: 7px; padding: 7px 5px 8px; }
+.attribute-vote-page .attribute-game-card-media { min-height: 84px; }
+.attribute-vote-page .attribute-game-card-media img { width: 63px; height: 84px; }
+.attribute-vote-page .attribute-game-card-copy h3 { font-size: clamp(14px, 3.8vw, 18px); }
+.attribute-vote-page .attribute-game-card-refresh { min-height: 0 !important; }
+.attribute-vote-page .attribute-game-card-refresh-inline { position: absolute; top: 4px; right: 4px; }
+.attribute-rating-track { min-width: 0; padding: 0 2px; }
+.attribute-rating-track-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.2; }
+.attribute-rating-track-heading > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attribute-rating-track-heading output { flex: 0 0 auto; color: var(--ink); font-size: 11px; font-weight: 900; }
+.attribute-rating-line { position: relative; height: 35px; margin-top: 2px; }
+.attribute-rating-line input[type="range"] { position: absolute; right: 0; bottom: 0; left: 0; z-index: 1; width: 100%; min-height: 28px !important; margin: 0; padding: 0; accent-color: var(--orange); cursor: grab; }
+.attribute-rating-line input[type="range"]:active { cursor: grabbing; }
+.attribute-rating-marker { position: absolute; top: -1px; z-index: 2; display: flex; align-items: center; min-width: 0; max-width: 82%; padding: 2px 3px 2px 6px; border: 1px solid var(--orange); border-radius: 5px; background: var(--orange); color: var(--white); transform: translateX(-50%); pointer-events: none; font-size: 10px; font-weight: 900; line-height: 1.2; white-space: nowrap; }
+.attribute-rating-marker.is-start { transform: translateX(0); }
+.attribute-rating-marker.is-end { transform: translateX(-100%); }
+.attribute-rating-marker > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.attribute-rating-marker button { display: grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px !important; margin-left: 2px; padding: 0; border: 0; border-radius: 4px; background: rgba(255,255,255,.2); color: var(--white); cursor: pointer; font-size: 16px; font-weight: 900; line-height: 1; pointer-events: auto; }
+.attribute-rating-marker button:hover { background: rgba(255,255,255,.35); }
+.attribute-rating-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1; }
+.attribute-rating-scale span { overflow: visible !important; }
+.attribute-vote-page .attributes-scoreline-marker { overflow: visible; }
+.attribute-vote-page .attributes-scoreline-marker-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attribute-vote-page .attributes-scoreline-marker::before { content: ''; position: absolute; left: -1px; width: 2px; height: 8px; background: currentColor; }
+.attribute-vote-page .attributes-scoreline-marker::after { content: ''; position: absolute; left: -3px; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--white); }
+.attribute-vote-page .attributes-scoreline-marker.is-lower::before { top: -8px; }
+.attribute-vote-page .attributes-scoreline-marker.is-lower::after { top: -12px; }
+.attribute-vote-page .attributes-scoreline-marker.is-upper::before { bottom: -8px; }
+.attribute-vote-page .attributes-scoreline-marker.is-upper::after { bottom: -12px; }
+.attribute-vote-page .attributes-comparison-actions button { border-radius: 6px; }
+.attribute-vote-page .attributes-change-all { border-radius: 6px; }
+
 /* ===== Search Modal ===== */
 .search-modal-backdrop {
   position: fixed;

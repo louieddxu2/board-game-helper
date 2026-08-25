@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AttributeGameCard } from '../components/AttributeGameCard';
+import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { ApiError, api } from '../lib/api';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
@@ -50,7 +51,6 @@ export const AttributesPage = () => {
   const [comparison, setComparison] = useState<AttributeComparisonResult | null>(null);
   const [ratingA, setRatingA] = useState('');
   const [ratingB, setRatingB] = useState('');
-  const [ratingOpen, setRatingOpen] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
@@ -59,7 +59,6 @@ export const AttributesPage = () => {
     setComparison(null);
     setRatingA('');
     setRatingB('');
-    setRatingOpen(false);
     setResponseError('');
   };
 
@@ -268,41 +267,28 @@ export const AttributesPage = () => {
         {question.attribute.fullDescription && <details className="attributes-question-info"><summary aria-label={`查看「${question.attribute.name}」完整說明`}>?</summary><p>{question.attribute.fullDescription}</p></details>}
         {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
           <div className="attributes-scoreline-track">
-            {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}>{subjectName(example.subject)}</span>)}
-            {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}>{subjectName(example.subject)}</span>)}
+            {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
+            {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
             <div className="attributes-scoreline" aria-hidden="true"><span>0</span><i /><span>5</span><i /><span>10</span></div>
           </div>
         </div> : null}
       </div>
       <div className="attributes-question-pair">
-        <AttributeGameCard subject={question.subjectA} side="left" onRefresh={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext} />
+        <div className="attributes-question-side">
+          <AttributeGameCard subject={question.subjectA} side="left" onRefresh={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext} />
+          <AttributeRatingTrack subject={question.subjectA} value={ratingA} onChange={setRatingA} onClear={() => setRatingA('')} disabled={questionLoading || submitting || awaitingNext} />
+        </div>
         <span className="attributes-versus" aria-hidden="true">VS</span>
-        <AttributeGameCard subject={question.subjectB} side="right" onRefresh={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext} />
+        <div className="attributes-question-side">
+          <AttributeGameCard subject={question.subjectB} side="right" onRefresh={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext} />
+          <AttributeRatingTrack subject={question.subjectB} value={ratingB} onChange={setRatingB} onClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
+        </div>
       </div>
 
       <div className="attributes-comparison-actions" aria-label="比較回答">
         {([['A_HIGHER', '← 左邊較高'], ['SIMILAR', '差不多'], ['B_HIGHER', '右邊較高 →']] as const).map(([result, label]) => <button key={result} type="button" aria-pressed={comparison === result} className={comparison === result ? 'active' : ''} onClick={() => chooseComparison(result)} disabled={submitting || questionLoading || awaitingNext}>{label}</button>)}
       </div>
 
-      <details className="attributes-rating-details" open={ratingOpen} onToggle={(event) => setRatingOpen(event.currentTarget.open)}>
-        <summary>＋ 同時給兩款評分</summary>
-        <div className="attributes-rating-inputs">
-          <label>
-            <span>{question.subjectA.displayName}</span>
-            <output>{ratingA === '' ? '未設定' : `${ratingA} 分`}</output>
-            <input aria-label={`評分：${question.subjectA.displayName}`} type="range" min="0" max="10" step="1" value={ratingA === '' ? 5 : ratingA} onChange={(event) => setRatingA(event.target.value)} />
-            <span className="attributes-rating-scale" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
-          </label>
-          <span className="attributes-rating-center" aria-hidden="true"> </span>
-          <label>
-            <span>{question.subjectB.displayName}</span>
-            <output>{ratingB === '' ? '未設定' : `${ratingB} 分`}</output>
-            <input aria-label={`評分：${question.subjectB.displayName}`} type="range" min="0" max="10" step="1" value={ratingB === '' ? 5 : ratingB} onChange={(event) => setRatingB(event.target.value)} />
-            <span className="attributes-rating-scale" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
-          </label>
-        </div>
-        <button type="button" className="attributes-rating-save" onClick={() => void submitResponse(null)} disabled={submitting || questionLoading || awaitingNext}>只送出分數</button>
-      </details>
       {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
       <button type="button" className="attributes-change-pair attributes-change-all" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>🎲 換一組</button>
     </section>
