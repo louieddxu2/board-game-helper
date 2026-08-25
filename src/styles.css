@@ -1691,7 +1691,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-rating-shared-line { position: relative; height: 86px; touch-action: none; }
 .attribute-rating-rail { position: absolute; top: 50%; right: 0; left: 0; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
 .attribute-rating-marker { position: absolute; top: 0; z-index: 2; display: grid; place-items: center; min-width: 0; max-width: 43%; padding: 4px 22px 4px 9px; border: 1px solid var(--orange); border-radius: 6px; background: var(--white); color: var(--ink); transform: translateX(-50%); cursor: grab; font-size: 10px; font-weight: 900; line-height: 1.2; text-align: center; user-select: none; white-space: nowrap; }
-.attribute-rating-marker.is-right { top: calc(50% + 9px); border-color: var(--green); }
+.attribute-rating-marker.is-left { top: auto; bottom: calc(50% + 7px); }
+.attribute-rating-marker.is-right { top: calc(50% + 7px); border-color: var(--green); }
 .attribute-rating-marker.is-start { transform: translateX(0); }
 .attribute-rating-marker.is-end { transform: translateX(-100%); }
 .attribute-rating-marker > span { display: block; width: 100%; min-width: 0; overflow: hidden; text-align: center; text-overflow: ellipsis; }
@@ -1706,13 +1707,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-rating-scale span { overflow: visible !important; }
 .attribute-vote-page .attributes-scoreline-marker { --scoreline-arrow: var(--green); overflow: visible; text-align: center; }
 .attribute-vote-page .attributes-scoreline-marker.is-high { --scoreline-arrow: var(--orange); }
+.attribute-vote-page .attributes-scoreline-marker.is-low, .attribute-vote-page .attributes-scoreline-marker.is-high { transform: translateX(-50%); text-align: center; }
+.attribute-vote-page .attributes-scoreline-marker.is-edge-start { transform: translateX(0); }
+.attribute-vote-page .attributes-scoreline-marker.is-edge-end { transform: translateX(-100%); }
 .attribute-vote-page .attributes-scoreline-marker-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attribute-vote-page .attributes-scoreline-marker::before { content: ''; position: absolute; left: 50%; width: 0; height: 0; border-right: 6px solid transparent; border-left: 6px solid transparent; transform: translateX(-50%); }
 .attribute-vote-page .attributes-scoreline-marker::after { display: none; }
-.attribute-vote-page .attributes-scoreline-marker.is-lower::before { top: 100%; border-bottom: 7px solid var(--scoreline-arrow); }
-.attribute-vote-page .attributes-scoreline-marker.is-upper::before { bottom: 100%; border-top: 7px solid var(--scoreline-arrow); }
-.attribute-vote-page .attributes-scoreline-marker.is-low::before { left: 0; }
-.attribute-vote-page .attributes-scoreline-marker.is-high::before { left: 100%; }
+.attribute-vote-page .attributes-scoreline-marker.is-lower::before { bottom: 100%; border-bottom: 7px solid var(--scoreline-arrow); }
+.attribute-vote-page .attributes-scoreline-marker.is-upper::before { top: 100%; border-top: 7px solid var(--scoreline-arrow); }
+.attribute-vote-page .attributes-scoreline-marker.is-edge-start::before { left: 0; }
+.attribute-vote-page .attributes-scoreline-marker.is-edge-end::before { left: 100%; }
 .attribute-vote-page .attributes-comparison-actions button { border-radius: 6px; }
 .attribute-vote-page .attributes-change-all { border-radius: 6px; }
 
