@@ -201,7 +201,7 @@ export const AttributesPage = () => {
       await api.saveAttributeResponse(draft);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
-        setResponseError(caught.status === 409 ? '這題剛被回答，請再按一次比較按鈕。' : '這一題已經失效，請重新取得題目。');
+        setResponseError(caught.status === 409 ? '這題剛被回答，請重新作答。' : '這一題已經失效，請重新取得題目。');
         if (caught.status !== 409) void loadQuestion('pair');
         setSubmitting(false);
         return;
@@ -261,9 +261,9 @@ export const AttributesPage = () => {
 
     {(offline || pendingCount > 0) && <p className="attributes-offline-note" role="status">{pendingCount > 0 ? `有 ${pendingCount} 筆回答等待同步。` : '目前離線，回答會先暫存在本機。'} <button type="button" onClick={() => void syncPendingResponses()} disabled={syncing}>{syncing ? '同步中…' : '重新同步'}</button></p>}
 
-    <section className="attributes-question-card" aria-labelledby="attributes-question-heading">
+    <section className="attributes-question-card" aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
       <div className="attributes-question-attribute">
-        <h2 id="attributes-question-heading">哪款遊戲的<strong>「{question.attribute.name}」</strong>較多？</h2>
+        <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<strong>「{question.attribute.name}」</strong>較多？</h2>
         {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
           <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
@@ -274,21 +274,23 @@ export const AttributesPage = () => {
       </div>
       <div className="attributes-question-pair">
         <div className="attributes-question-side">
-          <AttributeGameCard subject={question.subjectA} side="left" onRefresh={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext} />
+          <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparison === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
         </div>
-        <span className="attributes-versus" aria-hidden="true">VS</span>
         <div className="attributes-question-side">
-          <AttributeGameCard subject={question.subjectB} side="right" onRefresh={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext} />
+          <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparison === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
         </div>
       </div>
+
+      <div className="attributes-pair-actions" aria-label="回答與換題">
+        <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
+        <button type="button" className={`attributes-similar ${comparison === 'SIMILAR' ? 'is-selected' : ''}`} aria-pressed={comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
+        <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
+        <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
+      </div>
+
       <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
 
-      <div className="attributes-comparison-actions" aria-label="比較回答">
-        {([['A_HIGHER', '← 左邊較高'], ['SIMILAR', '差不多'], ['B_HIGHER', '右邊較高 →']] as const).map(([result, label]) => <button key={result} type="button" aria-pressed={comparison === result} className={comparison === result ? 'active' : ''} onClick={() => chooseComparison(result)} disabled={submitting || questionLoading || awaitingNext}>{label}</button>)}
-      </div>
-
       {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
-      <button type="button" className="attributes-change-pair attributes-change-all" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>🎲 換一組</button>
     </section>
 
   </section>;

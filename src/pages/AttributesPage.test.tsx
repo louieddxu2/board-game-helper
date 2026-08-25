@@ -51,12 +51,14 @@ describe('AttributesPage question flow', () => {
     expect(screen.queryByRole('button', { name: /完整說明/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '← 左邊較高' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '遊戲甲較高' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '差不多' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '右邊較高 →' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '🎲 換一組' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '遊戲乙較高' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '不知道，換一組' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '換掉遊戲甲' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '換掉遊戲乙' })).toBeInTheDocument();
+    expect(screen.queryByText('VS')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '← 左邊較高' })).not.toBeInTheDocument();
     expect(document.querySelectorAll('.attribute-rating-track')).toHaveLength(1);
     expect(screen.getByRole('slider', { name: '評分：遊戲甲' })).toHaveAttribute('aria-valuenow', '5');
     expect(screen.getByRole('slider', { name: '評分：遊戲乙' })).toHaveAttribute('aria-valuenow', '5');
@@ -82,9 +84,11 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '← 左邊較高' }));
+    fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
 
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
     expect(api.attributes).not.toHaveBeenCalled();
   });
 
@@ -96,11 +100,30 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '← 左邊較高' }));
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('無法送出或暫存回答'));
-    fireEvent.click(screen.getByRole('button', { name: '← 左邊較高' }));
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
     expect(saveSpy.mock.calls[0][0].responseId).toBe(saveSpy.mock.calls[1][0].responseId);
+  });
+
+  test('treats similar as an answer and unknown as a write-free skip', async () => {
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    const saveSpy = vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+
+    const { unmount } = render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '差不多' }));
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'SIMILAR' })));
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    unmount();
+    vi.clearAllMocks();
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '不知道，換一組' }));
+
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 });
