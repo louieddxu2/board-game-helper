@@ -28,8 +28,8 @@ describe('AttributeTablePage', () => {
 
     render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
 
-    expect(await screen.findByRole('heading', { name: '桌遊屬性總表' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '屬性總表' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '屬性總表', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '屬性總表', level: 2 })).toBeInTheDocument();
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
     expect(screen.getByTitle(/目前 7.3/)).toBeInTheDocument();
   });

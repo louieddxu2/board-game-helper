@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import type { AttributesPayload } from '../shared/types';
 
 type TableFilter = 'all' | 'processed' | 'pending';
@@ -9,7 +8,6 @@ interface AttributeTableRow {
   displayName: string;
   kind: 'processed' | 'pending';
   statusLabel: string;
-  gameSlug?: string;
   values: Array<number | undefined>;
   details: Array<string | undefined>;
 }
@@ -42,7 +40,6 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
         displayName: subject.displayName,
         kind: 'processed',
         statusLabel: subject.kind === 'configuration' ? '已建立配置' : '已對應遊戲',
-        gameSlug: subject.gameSlug,
         values: cells.map((value) => value?.score),
         details: cells.map(valueDetails),
       };
@@ -69,12 +66,11 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
 
   return <section className="attributes-table-card" aria-labelledby="attributes-table-heading">
     <div className="attributes-section-heading"><div><p className="eyebrow">完整資料</p><h2 id="attributes-table-heading">屬性總表</h2></div><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="輸入名稱" /></label></div>
-    <p className="attributes-table-description">分數由逐筆 Glicko-RD 更新；將游標移到格子上可查看直接分數、比較次數與目前 RD。尚未處理的來源項目會保留在表內，但不會冒充已對應遊戲。</p>
     <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => setTableFilter(filter)}>{label}</button>)}</div><span>顯示 {visibleRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
     <div className="attributes-table-scroll">
       <table className="attributes-matrix">
         <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => <th scope="col" key={attribute.id} title={attribute.fullDescription}>{attribute.name}</th>)}</tr></thead>
-        <tbody>{visibleRows.map((row) => <tr key={row.id} className={row.kind === 'pending' ? 'attributes-matrix-pending' : undefined}><th scope="row" className="attributes-matrix-subject">{row.gameSlug ? <Link to={`/games/${encodeURIComponent(row.gameSlug)}`}>{row.displayName}</Link> : <span>{row.displayName}</span>}<small>{row.statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'}>{formatScore(value)}</td>)}</tr>)}</tbody>
+        <tbody>{visibleRows.map((row) => <tr key={row.id} className={row.kind === 'pending' ? 'attributes-matrix-pending' : undefined}><th scope="row" className="attributes-matrix-subject"><span>{row.displayName}</span><small>{row.statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'}>{formatScore(value)}</td>)}</tr>)}</tbody>
       </table>
     </div>
   </section>;

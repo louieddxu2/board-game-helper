@@ -17,18 +17,11 @@ export const AttributeTablePage = () => {
     return () => { active = false; };
   }, []);
 
-  if (loading) return <section className="narrow-page attributes-page"><p>載入屬性總表中…</p></section>;
-  if (error || !payload) return <section className="narrow-page attributes-page"><h1>屬性總表</h1><p>目前無法載入屬性資料，請稍後重新整理。</p></section>;
+  if (loading) return <section className="attribute-table-page"><p>載入中…</p></section>;
+  if (error || !payload) return <section className="attribute-table-page"><h1>屬性總表</h1><p>目前無法載入資料。</p></section>;
 
-  return <section className="narrow-page attributes-page">
-    <header className="attributes-header">
-      <div>
-        <p className="eyebrow">唯讀資料</p>
-        <h1>桌遊屬性總表</h1>
-        <p>這裡集中查看所有已對應遊戲、尚未處理的匯入項目，以及各屬性的目前合成分數。頁面不提供編輯功能。</p>
-      </div>
-      <span className="attributes-data-note">目前計分模型：{payload.scoreModelVersion ?? 'glicko-rd-v1'}。直接評分與兩兩比較會保留各自的資料量，RD 越高代表越需要補充資料。總表會以快照搭配增量資料同步。</span>
-    </header>
+  return <section className="attribute-table-page">
+    <header className="attribute-table-header"><h1>屬性總表</h1><span>{payload.subjects.length} 款遊戲・{payload.attributes.length} 項屬性</span></header>
     <AttributeMatrixTable payload={payload} />
   </section>;
 };

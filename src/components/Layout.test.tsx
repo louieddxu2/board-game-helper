@@ -37,6 +37,21 @@ describe('Layout navigation', () => {
     expect(screen.queryByRole('link', { name: '屬性' })).not.toBeInTheDocument();
   });
 
+  test('renders the attribute app without the main-site header, navigation, or footer', () => {
+    render(<MemoryRouter initialEntries={['/attributes']}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/attributes" element={<Outlet />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+
+    expect(document.querySelector('.attribute-app-shell')).toBeInTheDocument();
+    expect(document.querySelector('.site-header')).not.toBeInTheDocument();
+    expect(document.querySelector('.mobile-nav')).not.toBeInTheDocument();
+    expect(document.querySelector('footer')).not.toBeInTheDocument();
+  });
+
   test('prefills both desktop and mobile record links with the current game', () => {
     render(<MemoryRouter initialEntries={['/games/seize-the-bean']}>
       <Routes>

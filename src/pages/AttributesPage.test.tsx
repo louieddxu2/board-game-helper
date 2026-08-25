@@ -33,10 +33,10 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    expect(await screen.findByRole('heading', { name: '桌遊屬性比較' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '運氣成分' })).toBeInTheDocument();
-    expect(screen.getByText('0 分：')).toBeInTheDocument();
-    expect(screen.getByText('10 分：')).toBeInTheDocument();
+    expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('0 遊戲甲');
+    expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('10 遊戲乙');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲 較高' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'A 較高' }));
     fireEvent.click(screen.getByRole('button', { name: '送出回答，換下一題' }));
 
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
@@ -65,7 +65,7 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲 較高' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'A 較高' }));
     const submit = screen.getByRole('button', { name: '送出回答，換下一題' });
     fireEvent.click(submit);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('無法送出或暫存回答'));

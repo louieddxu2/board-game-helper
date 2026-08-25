@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ApiError, api } from '../lib/api';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
@@ -18,12 +17,7 @@ const formatActivityTime = (timestamp: number) => new Intl.DateTimeFormat('zh-TW
   minute: '2-digit',
 }).format(new Date(timestamp));
 
-const subjectName = (subject: { displayName: string; gameSlug?: string; slug?: string }) => {
-  const slug = subject.gameSlug;
-  return slug
-    ? <Link to={`/games/${encodeURIComponent(slug)}`}>{subject.displayName}</Link>
-  : <span>{subject.displayName}</span>;
-};
+const subjectName = (subject: { displayName: string }) => <span>{subject.displayName}</span>;
 
 const activityText = (activity: AttributeActivity) => {
   if (activity.kind === 'rating' && activity.subject) {
@@ -243,48 +237,43 @@ export const AttributesPage = () => {
     }
   };
 
-  if (loading) return <section className="narrow-page attributes-page"><p>載入屬性投票中…</p></section>;
-  if (error || !payload || !question) return <section className="narrow-page attributes-page"><h1>屬性比較</h1><p>目前無法取得屬性題目。</p><button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button></section>;
+  if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
+  if (error || !payload || !question) return <section className="attribute-vote-page"><h1>屬性投票</h1><p>目前無法取得題目。</p><button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button></section>;
 
-  return <section className="narrow-page attributes-page">
-    <header className="attributes-header">
-      <div>
-        <p className="eyebrow">無限投票</p>
-        <h1>桌遊屬性比較</h1>
-        <p>系統會先挑出一款信心度較低的遊戲，再從相同屬性的其他遊戲中隨機抽出另一款。你可以比較兩款遊戲，也可以同時填寫各自的 0～10 分數；送出後會自動換下一題。</p>
-      </div>
-      <span className="attributes-data-note">第一款依信心度抽選，第二款在同一屬性中隨機抽選；比較與分數都會納入總表的合成分數。</span>
+  return <section className="attribute-vote-page">
+    <header className="attribute-vote-header">
+      <h1>屬性投票</h1>
+      <button type="button" className="attributes-change-pair" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>換一組</button>
     </header>
 
     {(offline || pendingCount > 0) && <p className="attributes-offline-note" role="status">{pendingCount > 0 ? `有 ${pendingCount} 筆回答等待同步。` : '目前離線，回答會先暫存在本機。'} <button type="button" onClick={() => void syncPendingResponses()} disabled={syncing}>{syncing ? '同步中…' : '重新同步'}</button></p>}
 
-    <section className="attributes-activity-card" aria-labelledby="attributes-activity-heading">
-      <div className="attributes-section-heading"><div><p className="eyebrow">即時動態</p><h2 id="attributes-activity-heading">近期投票記錄</h2></div><small>最新 12 筆</small></div>
-      {payload.activities.length ? <ol className="attributes-activity-list">{payload.activities.map((activity) => <li key={`${activity.kind}:${activity.id}`}><span className="attributes-activity-icon" aria-hidden="true">{activity.kind === 'rating' ? '分' : '比'}</span><div><p>{activityText(activity)}</p><time dateTime={new Date(activity.createdAt).toISOString()}>{formatActivityTime(activity.createdAt)}</time></div></li>)}</ol> : <p className="attributes-empty-activity">還沒有投票記錄；你的第一筆回答會出現在這裡。</p>}
-    </section>
-
     <section className="attributes-question-card" aria-labelledby="attributes-question-heading">
-      <div className="attributes-question-topline"><span className="eyebrow">這一題</span><button type="button" className="attributes-change-pair" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>↻ 換一組</button></div>
       <div className="attributes-question-attribute">
         <h2 id="attributes-question-heading">{question.attribute.name}</h2>
         {question.attribute.fullDescription && <p>{question.attribute.fullDescription}</p>}
         {(payload.extremeExamples?.lowest.length || payload.extremeExamples?.highest.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
-          {payload.extremeExamples.lowest.length > 0 && <div><strong>目前較低</strong><ul>{payload.extremeExamples.lowest.map((example) => <li key={`low:${example.subject.id}`}>{example.score} 分：{subjectName(example.subject)}</li>)}</ul></div>}
-          {payload.extremeExamples.highest.length > 0 && <div><strong>目前較高</strong><ul>{payload.extremeExamples.highest.map((example) => <li key={`high:${example.subject.id}`}>{example.score} 分：{subjectName(example.subject)}</li>)}</ul></div>}
+          {payload.extremeExamples.lowest.length > 0 && <p><strong>低分參考</strong>{payload.extremeExamples.lowest.map((example) => <span key={`low:${example.subject.id}`}>{example.score} {subjectName(example.subject)}</span>)}</p>}
+          {payload.extremeExamples.highest.length > 0 && <p><strong>高分參考</strong>{payload.extremeExamples.highest.map((example) => <span key={`high:${example.subject.id}`}>{example.score} {subjectName(example.subject)}</span>)}</p>}
         </div> : null}
       </div>
       <div className="attributes-question-pair">
-        <article className="attributes-question-game"><span className="attributes-question-letter">A</span><h3>{subjectName(question.subjectA)}</h3><button type="button" onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting}>換 A</button></article>
+        <article className="attributes-question-game"><span className="attributes-question-letter">A</span><h3>{subjectName(question.subjectA)}</h3></article>
         <span className="attributes-versus" aria-hidden="true">VS</span>
-        <article className="attributes-question-game"><span className="attributes-question-letter attributes-question-letter-b">B</span><h3>{subjectName(question.subjectB)}</h3><button type="button" onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting}>換 B</button></article>
+        <article className="attributes-question-game"><span className="attributes-question-letter attributes-question-letter-b">B</span><h3>{subjectName(question.subjectB)}</h3></article>
       </div>
 
       <div className="attributes-answer-grid">
-        <fieldset className="attributes-comparison-fieldset"><legend>哪一款在「{question.attribute.name}」較高？</legend><div className="attributes-comparison-buttons">{([['A_HIGHER', `${question.subjectA.displayName} 較高`], ['SIMILAR', '差不多'], ['B_HIGHER', `${question.subjectB.displayName} 較高`]] as const).map(([result, label]) => <button key={result} type="button" className={comparison === result ? 'active' : ''} onClick={() => setComparison(result)}>{label}</button>)}</div></fieldset>
-        <fieldset className="attributes-rating-fieldset"><legend>也可以同時填分數（0～10）</legend><div className="attributes-rating-inputs"><label>A（{question.subjectA.displayName}）<input type="number" min="0" max="10" step="1" value={ratingA} onChange={(event) => setRatingA(event.target.value)} placeholder="—" /></label><label>B（{question.subjectB.displayName}）<input type="number" min="0" max="10" step="1" value={ratingB} onChange={(event) => setRatingB(event.target.value)} placeholder="—" /></label></div></fieldset>
+        <fieldset className="attributes-comparison-fieldset"><legend>哪一款較高？</legend><div className="attributes-comparison-buttons">{([['A_HIGHER', 'A 較高'], ['SIMILAR', '差不多'], ['B_HIGHER', 'B 較高']] as const).map(([result, label]) => <button key={result} type="button" className={comparison === result ? 'active' : ''} onClick={() => setComparison(result)}>{label}</button>)}</div></fieldset>
+        <fieldset className="attributes-rating-fieldset"><legend>也可給分（0～10）</legend><div className="attributes-rating-inputs"><label>A<input aria-label={`A：${question.subjectA.displayName}`} type="number" min="0" max="10" step="1" value={ratingA} onChange={(event) => setRatingA(event.target.value)} placeholder="—" /></label><label>B<input aria-label={`B：${question.subjectB.displayName}`} type="number" min="0" max="10" step="1" value={ratingB} onChange={(event) => setRatingB(event.target.value)} placeholder="—" /></label></div></fieldset>
       </div>
       {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
       <button type="button" className="button primary attributes-submit" onClick={() => void submitResponse()} disabled={submitting || questionLoading || awaitingNext || offline}>{submitting ? '儲存中…' : offline ? '離線暫存中' : '送出回答，換下一題'}</button>
+    </section>
+
+    <section className="attributes-activity-card" aria-labelledby="attributes-activity-heading">
+      <div className="attributes-section-heading"><h2 id="attributes-activity-heading">最近</h2><small>最新 3 筆</small></div>
+      {payload.activities.length ? <ol className="attributes-activity-list">{payload.activities.slice(0, 3).map((activity) => <li key={`${activity.kind}:${activity.id}`}><span className="attributes-activity-icon" aria-hidden="true">{activity.kind === 'rating' ? '分' : '比'}</span><div><p>{activityText(activity)}</p><time dateTime={new Date(activity.createdAt).toISOString()}>{formatActivityTime(activity.createdAt)}</time></div></li>)}</ol> : <p className="attributes-empty-activity">尚無投票記錄</p>}
     </section>
 
   </section>;

@@ -57,6 +57,13 @@ export const Layout = () => {
   const [headerAction, setHeaderAction] = useState<React.ReactNode>(null);
   const adminLabel = mockRole ? `管理 (${mockLabels[mockRole] || mockRole})` : '管理';
 
+  if (location.pathname === '/attributes' || location.pathname === '/attributes/table') {
+    return <div className="attribute-app-shell">
+      <ScrollToTop />
+      <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
+    </div>;
+  }
+
   return <div className={isAddFormPage ? 'app-shell is-add-page' : 'app-shell'}>
     <ScrollToTop />
     <a className="skip-link" href="#main-content">跳至主要內容</a>
