@@ -1605,7 +1605,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-question-attribute h2 { font-size: clamp(20px, 5.2vw, 27px); line-height: 1.25; }
 .attribute-vote-page .attributes-question-attribute h2 strong { color: var(--orange); font-weight: 900; }
 .attribute-vote-page .attributes-question-examples { display: block; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
-.attribute-vote-page .attributes-scoreline-track { position: relative; min-height: 72px; padding: 28px 0; box-sizing: border-box; }
+.attribute-score-axis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; min-width: 0; gap: 5px; }
+.attribute-score-axis-label { color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
+.attribute-score-axis-stage { position: relative; min-width: 0; height: 86px; touch-action: none; }
+.attribute-score-axis-rail { position: absolute; top: 50%; right: 0; left: 0; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
+.attribute-vote-page .attributes-scoreline-track { min-height: 0; padding: 0; }
 .attribute-vote-page .attributes-scoreline-marker { position: absolute; z-index: 1; display: block; max-width: min(46%, 180px); overflow: hidden; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font-size: 10px; font-weight: 800; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .attribute-vote-page .attributes-scoreline-marker.is-low { transform: translateX(0); text-align: left; }
 .attribute-vote-page .attributes-scoreline-marker.is-high { transform: translateX(-100%); text-align: right; }
@@ -1613,8 +1617,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-scoreline-marker.is-lower { top: calc(50% + 5px); }
 .attribute-vote-page .attributes-scoreline-marker.is-low { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
 .attribute-vote-page .attributes-scoreline-marker.is-high { border-color: color-mix(in srgb, var(--orange) 55%, var(--line)); }
-.attribute-vote-page .attributes-scoreline { position: absolute; inset: 50% 0 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 4px; transform: translateY(-50%); color: var(--green); font-size: 10px; font-weight: 900; }
-.attribute-vote-page .attributes-scoreline i { display: block; height: 2px; border-radius: 999px; background: var(--line); }
 .attribute-vote-page .attributes-question-pair { grid-template-columns: minmax(0, 1fr) var(--attribute-center-column) minmax(0, 1fr); }
 .attribute-vote-page .attributes-answer-grid { grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
 .attribute-vote-page .attributes-comparison-fieldset, .attribute-vote-page .attributes-rating-fieldset { padding: 7px 0; }
@@ -1631,13 +1633,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-submit-row .attributes-change-pair { flex: 0 0 44px; min-height: 44px; padding: 0; border-radius: 10px; font-size: 25px; line-height: 1; }
 
 /* ===== Attribute vote focus hierarchy ===== */
-.attribute-vote-page .attributes-question-attribute { position: relative; padding-right: 30px; }
+.attribute-vote-page .attributes-question-attribute { position: relative; padding-right: 0; }
 .attribute-vote-page .attributes-question-attribute h2 { text-align: center; }
-.attribute-vote-page .attributes-question-description { display: -webkit-box; margin: 4px auto 0; overflow: hidden; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
-.attribute-vote-page .attributes-question-info { position: absolute; top: 0; right: 0; z-index: 3; }
-.attribute-vote-page .attributes-question-info summary { display: grid; place-items: center; width: 23px; height: 23px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 50%; background: var(--paper); color: var(--green); cursor: pointer; font-size: 13px; font-weight: 900; list-style: none; }
-.attribute-vote-page .attributes-question-info summary::-webkit-details-marker { display: none; }
-.attribute-vote-page .attributes-question-info p { position: absolute; top: 28px; right: 0; width: min(280px, calc(100vw - 56px)); box-sizing: border-box; margin: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--white); box-shadow: 0 8px 22px rgba(15,34,29,.12); color: var(--muted); font-size: 12px; line-height: 1.45; text-align: left; }
+.attribute-vote-page .attributes-question-description { display: -webkit-box; margin: 4px auto 0; overflow: hidden; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .attribute-vote-page .attributes-question-pair { align-items: stretch; gap: 8px; }
 .attribute-vote-page .attributes-question-pair .attributes-versus { align-self: center; color: var(--muted); font-size: 10px; font-weight: 900; }
 .attribute-game-card { display: grid; min-width: 0; gap: 5px; padding: 8px 6px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--cream); text-align: center; }
@@ -1649,7 +1647,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-game-card-refresh:hover { border-color: var(--orange); color: var(--orange); }
 .attribute-game-card-refresh:disabled { cursor: wait; opacity: .55; }
 .attribute-game-card-copy { display: grid; justify-items: center; min-width: 0; gap: 2px; }
-.attribute-game-card-side { color: var(--muted); font-size: 10px; font-weight: 900; }
 .attribute-game-card-copy h3 { width: 100%; margin: 0; overflow: hidden; color: var(--ink); font-size: clamp(14px, 4vw, 19px); line-height: 1.2; overflow-wrap: anywhere; }
 .attribute-game-card-copy p { width: 100%; margin: 0; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .attribute-vote-page .attributes-comparison-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(76px, .72fr) minmax(0, 1fr); gap: 5px; margin-top: 10px; }
@@ -1678,7 +1675,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-response-error { margin: 8px 0 0; }
 
 /* ===== Attribute vote score controls ===== */
-.attribute-vote-page .attributes-question-info summary { min-height: 0 !important; height: 28px; width: 28px; }
 .attribute-vote-page .attributes-question-pair { align-items: start; }
 .attribute-vote-page .attributes-question-side { display: grid; min-width: 0; gap: 7px; align-content: start; }
 .attribute-vote-page .attribute-game-card { position: relative; border-radius: 7px; padding: 7px 5px 8px; }
@@ -1687,9 +1683,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attribute-game-card-copy h3 { font-size: clamp(14px, 3.8vw, 18px); }
 .attribute-vote-page .attribute-game-card-refresh { min-height: 0 !important; }
 .attribute-vote-page .attribute-game-card-refresh-inline { position: absolute; top: 4px; right: 4px; }
-.attribute-rating-track { grid-column: 1 / -1; min-width: 0; padding: 0 4px; }
-.attribute-rating-shared-line { position: relative; height: 86px; touch-action: none; }
-.attribute-rating-rail { position: absolute; top: 50%; right: 0; left: 0; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
+.attribute-rating-track { grid-column: 1 / -1; min-width: 0; }
 .attribute-rating-marker { position: absolute; top: 0; z-index: 2; display: grid; place-items: center; min-width: 0; max-width: 43%; padding: 4px 22px 4px 9px; border: 1px solid var(--orange); border-radius: 6px; background: var(--white); color: var(--ink); transform: translateX(-50%); cursor: grab; font-size: 10px; font-weight: 900; line-height: 1.2; text-align: center; user-select: none; white-space: nowrap; }
 .attribute-rating-marker.is-left { top: auto; bottom: calc(50% + 7px); }
 .attribute-rating-marker.is-right { top: calc(50% + 7px); border-color: var(--green); }
@@ -1703,8 +1697,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-rating-marker:active { cursor: grabbing; }
 .attribute-rating-marker button { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px; min-height: 18px !important; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; font-weight: 900; line-height: 1; }
 .attribute-rating-marker button:hover { background: var(--cream); color: var(--orange); }
-.attribute-rating-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; font-weight: 700; line-height: 1; }
-.attribute-rating-scale span { overflow: visible !important; }
 .attribute-vote-page .attributes-scoreline-marker { --scoreline-arrow: var(--green); overflow: visible; text-align: center; }
 .attribute-vote-page .attributes-scoreline-marker.is-high { --scoreline-arrow: var(--orange); }
 .attribute-vote-page .attributes-scoreline-marker.is-low, .attribute-vote-page .attributes-scoreline-marker.is-high { transform: translateX(-50%); text-align: center; }
@@ -1719,16 +1711,6 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-scoreline-marker.is-edge-end::before { left: 100%; }
 .attribute-vote-page .attributes-comparison-actions button { border-radius: 6px; }
 .attribute-vote-page .attributes-change-all { border-radius: 6px; }
-
-/* The axis itself owns the 0 and 10 endpoints; labels no longer interrupt the rail. */
-.attribute-vote-page .attributes-scoreline { position: absolute; top: 50%; right: 0; left: 0; display: block; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
-.attribute-vote-page .attributes-scoreline-end { position: absolute; top: 9px; color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
-.attribute-vote-page .attributes-scoreline-end.is-start { left: 0; }
-.attribute-vote-page .attributes-scoreline-end.is-end { right: 0; }
-.attribute-vote-page .attribute-rating-scale { position: relative; height: 11px; margin-top: 7px; color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
-.attribute-vote-page .attribute-rating-scale span { position: absolute; top: 0; }
-.attribute-vote-page .attribute-rating-scale span:first-child { left: 0; }
-.attribute-vote-page .attribute-rating-scale span:last-child { right: 0; }
 
 /* ===== Search Modal ===== */
 .search-modal-backdrop {

@@ -1,6 +1,7 @@
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { useRef } from 'react';
 import type { AttributeSubject } from '../shared/types';
+import { AttributeScoreAxis } from './AttributeScoreAxis';
 
 interface AttributeRatingTrackProps {
   leftSubject: AttributeSubject;
@@ -81,12 +82,10 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
     </div>;
   };
 
-  return <div className="attribute-rating-track" aria-label="兩款遊戲評分數線">
-    <div className="attribute-rating-shared-line" ref={trackRef}>
-      <span className="attribute-rating-rail" aria-hidden="true" />
+  return <div className="attribute-rating-track">
+    <AttributeScoreAxis ariaLabel="兩款遊戲評分數線" stageRef={trackRef}>
       {renderMarker('left', leftSubject, leftValue, onLeftChange, onLeftClear)}
       {renderMarker('right', rightSubject, rightValue, onRightChange, onRightClear)}
-    </div>
-    <div className="attribute-rating-scale" aria-hidden="true"><span>0</span><span>10</span></div>
+    </AttributeScoreAxis>
   </div>;
 };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
+import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
 import { ApiError, api } from '../lib/api';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
@@ -264,13 +265,11 @@ export const AttributesPage = () => {
       <div className="attributes-question-attribute">
         <h2 id="attributes-question-heading">哪款遊戲的<strong>「{question.attribute.name}」</strong>較多？</h2>
         {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
-        {question.attribute.fullDescription && <details className="attributes-question-info"><summary aria-label={`查看「${question.attribute.name}」完整說明`}>?</summary><p>{question.attribute.fullDescription}</p></details>}
-        {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
-          <div className="attributes-scoreline-track">
+        {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
+          <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
             {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${example.score <= 0 ? 'is-edge-start' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
             {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${example.score >= 10 ? 'is-edge-end' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
-            <div className="attributes-scoreline" aria-hidden="true"><span className="attributes-scoreline-end is-start">0</span><span className="attributes-scoreline-end is-end">10</span></div>
-          </div>
+          </AttributeScoreAxis>
         </div> : null}
       </div>
       <div className="attributes-question-pair">

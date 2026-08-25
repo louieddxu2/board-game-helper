@@ -47,7 +47,8 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelector('.attributes-scoreline-marker.is-low.is-upper')).toHaveTextContent('遊戲乙');
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-lower')).toHaveTextContent('遊戲丁');
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
-    expect(document.querySelector('.attributes-scoreline')?.textContent).toBe('010');
+    expect(screen.getByLabelText('目前資料中的極端分數範例')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /完整說明/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '← 左邊較高' })).toBeInTheDocument();
@@ -59,7 +60,8 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelectorAll('.attribute-rating-track')).toHaveLength(1);
     expect(screen.getByRole('slider', { name: '評分：遊戲甲' })).toHaveAttribute('aria-valuenow', '5');
     expect(screen.getByRole('slider', { name: '評分：遊戲乙' })).toHaveAttribute('aria-valuenow', '5');
-    expect(document.querySelector('.attribute-rating-scale')?.textContent).toBe('010');
+    expect(screen.getByLabelText('兩款遊戲評分數線')).toBeInTheDocument();
+    expect(document.querySelectorAll('.attribute-score-axis')).toHaveLength(2);
     expect(screen.queryByText('封面')).not.toBeInTheDocument();
     expect(screen.queryByText('只送出分數')).not.toBeInTheDocument();
     expect(screen.queryByText('＋ 同時給兩款評分')).not.toBeInTheDocument();
