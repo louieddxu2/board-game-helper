@@ -2,6 +2,7 @@ import type { KeyboardEvent, PointerEvent } from 'react';
 import { useRef } from 'react';
 import type { AttributeSubject } from '../shared/types';
 import { AttributeScoreAxis } from './AttributeScoreAxis';
+import { useClampedAxisMarker } from './useClampedAxisMarker';
 
 interface AttributeRatingTrackProps {
   leftSubject: AttributeSubject;
@@ -21,6 +22,8 @@ const scoreOf = (value: string) => value === '' ? 5 : Number(value);
 
 export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rightValue, disabled = false, onLeftChange, onRightChange, onLeftClear, onRightClear }: AttributeRatingTrackProps) => {
   const trackRef = useRef<HTMLDivElement>(null);
+  const leftMarkerRef = useClampedAxisMarker<HTMLDivElement>(scoreOf(leftValue), `${leftSubject.id}:${leftSubject.displayName}:${leftValue}`);
+  const rightMarkerRef = useClampedAxisMarker<HTMLDivElement>(scoreOf(rightValue), `${rightSubject.id}:${rightSubject.displayName}:${rightValue}`);
 
   const setScoreFromPointer = (side: RatingSide, event: PointerEvent<HTMLDivElement>) => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -58,11 +61,11 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
     else onRightChange(String(score));
   };
 
-  const renderMarker = (side: RatingSide, subject: AttributeSubject, value: string, onChange: (value: string) => void, onClear: () => void) => {
+  const renderMarker = (side: RatingSide, subject: AttributeSubject, value: string, onClear: () => void) => {
     const score = scoreOf(value);
-    const edgeClass = score <= 1 ? 'is-start' : score >= 9 ? 'is-end' : '';
     return <div
-      className={`attribute-rating-marker is-${side} ${edgeClass}`}
+      ref={side === 'left' ? leftMarkerRef : rightMarkerRef}
+      className={`attribute-rating-marker is-${side}`}
       style={{ left: `${score * 10}%` }}
       role="slider"
       tabIndex={disabled ? -1 : 0}
@@ -84,8 +87,8 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
 
   return <div className="attribute-rating-track">
     <AttributeScoreAxis ariaLabel="兩款遊戲評分數線" stageRef={trackRef}>
-      {renderMarker('left', leftSubject, leftValue, onLeftChange, onLeftClear)}
-      {renderMarker('right', rightSubject, rightValue, onRightChange, onRightClear)}
+      {renderMarker('left', leftSubject, leftValue, onLeftClear)}
+      {renderMarker('right', rightSubject, rightValue, onRightClear)}
     </AttributeScoreAxis>
   </div>;
 };

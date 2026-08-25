@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
+import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
-import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
+import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 const resultLabel = (result: AttributeComparisonResult) => {
   if (result === 'A_HIGHER') return 'A 較高';
@@ -23,6 +24,18 @@ const activityText = (activity: AttributeActivity) => {
     return <>{activity.actorName} 認為 {subjectName(activity.subjectA)} 與 {subjectName(activity.subjectB)} 的「{activity.attributeName}」{resultLabel(activity.result)}</>;
   }
   return `${activity.actorName} 完成了一筆屬性投票`;
+};
+
+const ExtremeScoreMarker = ({ example, direction, row }: { example: AttributeScoreExample; direction: 'low' | 'high'; row: 'lower' | 'upper' }) => {
+  const markerRef = useClampedAxisMarker<HTMLSpanElement>(example.score, `${example.subject.id}:${example.subject.displayName}:${example.score}`);
+  return <span
+    ref={markerRef}
+    className={`attributes-scoreline-marker is-${direction} is-${row}`}
+    style={{ left: `${example.score * 10}%` }}
+    title={`${example.score} 分：${example.subject.displayName}`}
+  >
+    <span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span>
+  </span>;
 };
 
 const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b') => {
@@ -267,8 +280,8 @@ export const AttributesPage = () => {
         {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
           <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
-            {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${example.score <= 0 ? 'is-edge-start' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
-            {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${example.score >= 10 ? 'is-edge-end' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
+            {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
+            {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
           </AttributeScoreAxis>
         </div> : null}
       </div>
