@@ -9,23 +9,40 @@ export interface DatabaseStatement {
   run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
 }
 
+export interface DatabaseMetrics {
+  rowsRead: number;
+  rowsWritten: number;
+  queries: number;
+}
+
 class Statement implements DatabaseStatement {
-  constructor(private readonly raw: D1PreparedStatement) {}
+  constructor(private readonly raw: D1PreparedStatement, private readonly metrics: DatabaseMetrics) {}
 
   bind(...values: unknown[]): DatabaseStatement {
-    return new Statement(this.raw.bind(...values));
+    return new Statement(this.raw.bind(...values), this.metrics);
   }
 
   first<T = Record<string, unknown>>(): Promise<T | null> {
-    return this.raw.first<T>();
+    return this.raw.all<T>().then((result) => {
+      this.metrics.queries += 1;
+      this.metrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+      return result.results?.[0] ?? null;
+    });
   }
 
-  all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
-    return this.raw.all<T>();
+  async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+    const result = await this.raw.all<T>();
+    this.metrics.queries += 1;
+    this.metrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+    return result;
   }
 
-  run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
-    return this.raw.run<T>();
+  async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+    const result = await this.raw.run<T>();
+    this.metrics.queries += 1;
+    this.metrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+    this.metrics.rowsWritten += Number(result.meta?.rows_written ?? result.meta?.changes ?? 0);
+    return result;
   }
 
   toRaw(): D1PreparedStatement {
@@ -36,20 +53,33 @@ class Statement implements DatabaseStatement {
 export interface Database {
   statement(sql: string): DatabaseStatement;
   batch(statements: DatabaseStatement[]): Promise<D1Result[]>;
+  metrics?(): DatabaseMetrics;
 }
 
 class D1DatabaseGateway implements Database {
+  private readonly queryMetrics: DatabaseMetrics = { rowsRead: 0, rowsWritten: 0, queries: 0 };
+
   constructor(private readonly raw: D1Database) {}
 
   statement(sql: string): DatabaseStatement {
-    return new Statement(this.raw.prepare(sql));
+    return new Statement(this.raw.prepare(sql), this.queryMetrics);
   }
 
-  batch(statements: DatabaseStatement[]): Promise<D1Result[]> {
-    return this.raw.batch(statements.map((statement) => {
+  async batch(statements: DatabaseStatement[]): Promise<D1Result[]> {
+    const results = await this.raw.batch(statements.map((statement) => {
       if (!(statement instanceof Statement)) throw new Error('Invalid database statement');
       return statement.toRaw();
     }));
+    this.queryMetrics.queries += results.length;
+    results.forEach((result) => {
+      this.queryMetrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+      this.queryMetrics.rowsWritten += Number(result.meta?.rows_written ?? result.meta?.changes ?? 0);
+    });
+    return results;
+  }
+
+  metrics(): DatabaseMetrics {
+    return { ...this.queryMetrics };
   }
 }
 

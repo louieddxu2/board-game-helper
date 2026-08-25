@@ -20,7 +20,7 @@ describe('attribute route', () => {
 
   test('requires a response id and at least one answer in a response', () => {
     const base = {
-      subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123',
+      subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123', questionToken: 'question-token-that-is-long-enough-for-schema',
     };
     expect(attributeResponseSchema.safeParse(base).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123' }).success).toBe(false);

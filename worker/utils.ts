@@ -35,6 +35,64 @@ export const hashEmail = async (email: string, secret: string | undefined): Prom
   return `v1:${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 };
 
+const base64UrlEncode = (value: string): string => {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+};
+
+const base64UrlDecode = (value: string): string | null => {
+  try {
+    const padded = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    const binary = atob(padded);
+    return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+  } catch {
+    return null;
+  }
+};
+
+const hmacHex = async (value: string, secret: string | undefined, usage: 'sign' | 'verify'): Promise<CryptoKey> => {
+  if (!secret || secret.length < 32) throw new Error('attribute_question_secret_not_configured');
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, [usage]);
+};
+
+export interface AttributeQuestionTokenPayload {
+  sessionId: string;
+  attributeId: string;
+  subjectAId: string;
+  subjectBId: string;
+}
+
+export const signAttributeQuestionToken = async (payload: AttributeQuestionTokenPayload, secret: string | undefined): Promise<string> => {
+  const body = base64UrlEncode(JSON.stringify({ v: 1, ...payload }));
+  const key = await hmacHex(body, secret, 'sign');
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  const hex = Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${body}.${hex}`;
+};
+
+export const verifyAttributeQuestionToken = async (
+  token: string,
+  expected: AttributeQuestionTokenPayload,
+  secret: string | undefined,
+): Promise<boolean> => {
+  const [body, signatureHex] = token.split('.');
+  if (!body || !signatureHex || !/^[0-9a-f]{64}$/u.test(signatureHex)) return false;
+  const decoded = base64UrlDecode(body);
+  if (!decoded) return false;
+  try {
+    const parsed = JSON.parse(decoded) as Partial<AttributeQuestionTokenPayload> & { v?: number };
+    if (parsed.v !== 1 || parsed.sessionId !== expected.sessionId || parsed.attributeId !== expected.attributeId
+      || parsed.subjectAId !== expected.subjectAId || parsed.subjectBId !== expected.subjectBId) return false;
+    const signature = Uint8Array.from(signatureHex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
+    const key = await hmacHex(body, secret, 'verify');
+    return crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(body));
+  } catch {
+    return false;
+  }
+};
+
 // Transitional lookup only. New writes must always use hashEmail/HMAC.
 export const legacyHashEmail = (email: string): Promise<string> =>
   sha256Hex(`${normalizeEmail(email)}:board_game_helper_salt`);

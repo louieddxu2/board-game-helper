@@ -52,10 +52,10 @@ app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (isPublicCacheableRequest(c.req.method, path)) {
     c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read, X-D1-Rows-Written');
   } else if (origin && isTrusted) {
     c.header('Access-Control-Allow-Origin', origin);
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read, X-D1-Rows-Written');
     c.header('Vary', 'Origin');
   }
 });

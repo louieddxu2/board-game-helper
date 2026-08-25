@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { assertMutationOrigin, cleanAliases, cleanOptional, hashEmail, isValidNickname, legacyHashEmail, normalizeEmail, normalizeNickname, normalizeText, slugify, trustedOrigins } from './utils';
+import { assertMutationOrigin, cleanAliases, cleanOptional, hashEmail, isValidNickname, legacyHashEmail, normalizeEmail, normalizeNickname, normalizeText, signAttributeQuestionToken, slugify, trustedOrigins, verifyAttributeQuestionToken } from './utils';
 
 describe('worker utilities', () => {
   test('normalizes names and email consistently', () => {
@@ -15,6 +15,16 @@ describe('worker utilities', () => {
     expect(first).toMatch(/^v1:[0-9a-f]{64}$/);
     expect(await legacyHashEmail('Editor@Example.com')).not.toBe(first);
     await expect(hashEmail('editor@example.com', 'too-short')).rejects.toThrow('email_hash_secret_not_configured');
+  });
+
+  test('binds an attribute response token to its session and exact question', async () => {
+    const secret = 'attribute-question-secret-at-least-32-characters';
+    const payload = { sessionId: 'session-123', attributeId: 'luck', subjectAId: 'a', subjectBId: 'b' };
+    const token = await signAttributeQuestionToken(payload, secret);
+
+    await expect(verifyAttributeQuestionToken(token, payload, secret)).resolves.toBe(true);
+    await expect(verifyAttributeQuestionToken(token, { ...payload, subjectBId: 'other' }, secret)).resolves.toBe(false);
+    await expect(verifyAttributeQuestionToken(`${token}x`, payload, secret)).resolves.toBe(false);
   });
 
   test('creates readable slugs and trims optional fields', () => {

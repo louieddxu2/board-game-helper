@@ -5,7 +5,7 @@ import { getDatabase } from '../data/database';
 import { queryAttributeQuestionPayload, queryAttributesPayload, saveAttributeResponse } from '../data/attributes';
 import type { AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
-import { now } from '../utils';
+import { now, signAttributeQuestionToken, verifyAttributeQuestionToken } from '../utils';
 
 const attributesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -26,6 +26,7 @@ export const attributeResponseSchema = z.object({
   subjectBId: z.string().trim().min(1).max(200),
   attributeId: z.string().trim().min(1).max(200),
   responseId: sessionIdSchema,
+  questionToken: z.string().trim().min(32).max(512),
   comparison: z.enum(ATTRIBUTE_COMPARISON_RESULTS).nullable().optional(),
   ratingA: z.number().int().min(0).max(10).nullable().optional(),
   ratingB: z.number().int().min(0).max(10).nullable().optional(),
@@ -35,20 +36,31 @@ export const attributeResponseSchema = z.object({
 const respondWithAttributeError = (c: any, error: unknown) => {
   const message = error instanceof Error ? error.message : '';
   if (message === 'attribute_not_found' || message === 'attribute_subject_not_found') return c.json({ error: message }, 404);
-  if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty') return c.json({ error: message }, 400);
+  if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty' || message === 'attribute_question_invalid') return c.json({ error: message }, 400);
+  if (message === 'attribute_response_busy') return c.json({ error: message }, 409);
   throw error;
+};
+
+const setD1MetricsHeader = (c: any, db: ReturnType<typeof getDatabase>) => {
+  const metrics = db.metrics?.();
+  if (!metrics) return;
+  c.header('X-D1-Rows-Read', String(metrics.rowsRead));
+  c.header('X-D1-Rows-Written', String(metrics.rowsWritten));
 };
 
 attributesRoutes.get('/api/attributes', async (c) => {
   c.header('Cache-Control', 'no-store');
   const limit = Number(c.req.query('limit') ?? 50);
   const scope = c.req.query('scope');
-  return c.json(await queryAttributesPayload(getDatabase(c), {
+  const db = getDatabase(c);
+  const payload = await queryAttributesPayload(db, {
     subjectCursor: c.req.query('subjectCursor') || undefined,
     candidateCursor: c.req.query('candidateCursor') || undefined,
     limit: Number.isFinite(limit) ? limit : undefined,
     scope: scope === 'subjects' || scope === 'candidates' ? scope : undefined,
-  }));
+  });
+  setD1MetricsHeader(c, db);
+  return c.json(payload);
 });
 
 attributesRoutes.get('/api/attributes/question', async (c) => {
@@ -62,10 +74,21 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
     fixedAttributeId: c.req.query('fixedAttribute') || undefined,
   });
   if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
+  const db = getDatabase(c);
   try {
     c.header('Cache-Control', 'no-store');
-    return c.json(await queryAttributeQuestionPayload(getDatabase(c), parsed.data.sessionId, parsed.data));
+    const payload = await queryAttributeQuestionPayload(db, parsed.data.sessionId, parsed.data);
+    setD1MetricsHeader(c, db);
+    if (!payload.question) return c.json(payload);
+    const questionToken = await signAttributeQuestionToken({
+      sessionId: parsed.data.sessionId,
+      attributeId: payload.question.attribute.id,
+      subjectAId: payload.question.subjectA.id,
+      subjectBId: payload.question.subjectB.id,
+    }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
+    return c.json({ ...payload, questionToken });
   } catch (error) {
+    setD1MetricsHeader(c, db);
     return respondWithAttributeError(c, error);
   }
 });
@@ -73,14 +96,24 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
 attributesRoutes.post('/api/attributes/responses', async (c) => {
   const parsed = attributeResponseSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message === 'attribute_response_empty' ? 'attribute_response_empty' : 'invalid_input' }, 400);
+  const db = getDatabase(c);
   try {
+    const validQuestion = await verifyAttributeQuestionToken(parsed.data.questionToken, {
+      sessionId: parsed.data.sessionId,
+      attributeId: parsed.data.attributeId,
+      subjectAId: parsed.data.subjectAId,
+      subjectBId: parsed.data.subjectBId,
+    }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
+    if (!validQuestion) return c.json({ error: 'attribute_question_invalid' }, 400);
     const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
       actorId: c.get('user')?.id ?? null,
       timestamp: now(),
     });
+    setD1MetricsHeader(c, db);
     return c.json({ ok: true, ...result });
   } catch (error) {
+    setD1MetricsHeader(c, db);
     return respondWithAttributeError(c, error);
   }
 });

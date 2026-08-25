@@ -26,9 +26,12 @@ export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
 export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
 export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
-export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 4;
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 7;
+export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 5;
+/** Seven response rows plus lock acquisition/release and stale-lock cleanup. */
+export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 10;
 export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 18;
+export const ATTRIBUTE_RESPONSE_LOCK_NAME = 'attribute-votes';
+export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
 /** Includes up to two excluded subject rows skipped by the random opponent lookup. */
 export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 20;
 
@@ -140,6 +143,7 @@ export interface AttributeResponseInput {
   subjectBId: string;
   attributeId: string;
   responseId: string;
+  questionToken?: string;
   comparison?: AttributeComparisonResult | null;
   ratingA?: number | null;
   ratingB?: number | null;
@@ -565,7 +569,9 @@ const queryQuestionWithAttribute = async (
   const subjectMap = new Map(subjects.map((subject) => [subject.id, subject]));
   const subjectA = subjectMap.get(selected.subjectAId);
   const subjectB = subjectMap.get(selected.subjectBId);
-  return subjectA && subjectB ? { subjectA, subjectB, attribute } : null;
+  if (!subjectA || !subjectB) return null;
+  if (subjectA.gameId && subjectB.gameId && subjectA.gameId === subjectB.gameId) return null;
+  return { subjectA, subjectB, attribute };
 };
 
 export const queryAttributeQuestion = async (
@@ -584,7 +590,9 @@ export const queryAttributeQuestion = async (
     const subjectMap = new Map(subjects.map((subject) => [subject.id, subject]));
     const subjectA = subjectMap.get(seed.subject_id);
     const subjectB = subjectMap.get(subjectBId);
-    return subjectA && subjectB ? { subjectA, subjectB, attribute } : null;
+    if (!subjectA || !subjectB) return null;
+    if (subjectA.gameId && subjectB.gameId && subjectA.gameId === subjectB.gameId) return null;
+    return { subjectA, subjectB, attribute };
   }
   const attribute = await querySingleAttribute(db, options.fixedAttributeId);
   if (!attribute) return null;
@@ -639,20 +647,32 @@ const responseContext = async (db: Database, input: AttributeResponseInput) => {
     WHERE a.id = ? AND a.is_active = 1
       AND (sa.kind = 'configuration' OR (ga.merged_into_game_id IS NULL AND ga.visibility = 'public' AND ga.published_rule_count > 0))
       AND (sb.kind = 'configuration' OR (gb.merged_into_game_id IS NULL AND gb.visibility = 'public' AND gb.published_rule_count > 0))
+      AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
   if (!row) throw new Error('attribute_subject_not_found');
   return row;
 };
 
-export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
-  if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
-  if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
+const acquireAttributeWriteLock = async (db: Database, timestamp: number): Promise<string> => {
+  const token = createId('attribute-lock');
+  const expiresAt = Math.max(Date.now(), timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
+  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND expires_at < ?')
+    .bind(ATTRIBUTE_RESPONSE_LOCK_NAME, Date.now()).run();
+  const result = await db.statement(`
+    INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
+    VALUES (?, ?, ?)
+  `).bind(ATTRIBUTE_RESPONSE_LOCK_NAME, token, expiresAt).run();
+  const changes = result?.meta?.changes;
+  if (changes != null && changes !== 1) throw new Error('attribute_response_busy');
+  return token;
+};
 
-  const existingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
-    .bind(input.responseId)
-    .first<{ id: string }>();
-  if (existingResponse) return { updatedValues: [], activities: [] };
+const releaseAttributeWriteLock = async (db: Database, token: string): Promise<void> => {
+  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND token = ?')
+    .bind(ATTRIBUTE_RESPONSE_LOCK_NAME, token).run();
+};
 
+const saveAttributeResponseLocked = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
   const context = await responseContext(db, input);
   const stateResult = await db.statement(`
     SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
@@ -762,4 +782,25 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
   if (touchedSubjects.has(input.subjectAId)) updatedValues.push(stateToMatrixValue(input.subjectAId, input.attributeId, stateA));
   if (touchedSubjects.has(input.subjectBId)) updatedValues.push(stateToMatrixValue(input.subjectBId, input.attributeId, stateB));
   return { updatedValues, activities };
+};
+
+export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
+  if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
+  if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
+
+  const existingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
+    .bind(input.responseId)
+    .first<{ id: string }>();
+  if (existingResponse) return { updatedValues: [], activities: [] };
+
+  const lockToken = await acquireAttributeWriteLock(db, input.timestamp);
+  try {
+    const lockedExistingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
+      .bind(input.responseId)
+      .first<{ id: string }>();
+    if (lockedExistingResponse) return { updatedValues: [], activities: [] };
+    return await saveAttributeResponseLocked(db, input);
+  } finally {
+    await releaseAttributeWriteLock(db, lockToken);
+  }
 };

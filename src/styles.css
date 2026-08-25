@@ -1498,6 +1498,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attributes-rating-inputs input { width: 100%; box-sizing: border-box; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; font-size: 16px; font-weight: 800; text-align: center; }
 .attributes-submit { display: block; width: min(100%, 360px); margin: 18px auto 0; }
 .attributes-response-error { margin: 14px 0 0; color: #a52f23; font-size: 13px; font-weight: 700; text-align: center; }
+.attributes-response-error button, .attributes-offline-note button { margin-left: 6px; border: 0; background: transparent; color: var(--green); cursor: pointer; font: inherit; font-weight: 900; text-decoration: underline; }
+.attributes-offline-note { margin: 0 0 16px; padding: 10px 14px; border: 1px solid #e9c978; border-radius: 10px; background: #fff8df; color: #73520b; font-size: 13px; font-weight: 700; text-align: center; }
 .attributes-activity-card { padding-bottom: 16px; }
 .attributes-activity-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .attributes-activity-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--line); }

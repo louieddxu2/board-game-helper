@@ -225,6 +225,7 @@ export interface AttributeQuestionPayload {
   question: AttributeQuestion | null;
   activities: AttributeActivity[];
   scoreModelVersion?: string;
+  questionToken?: string;
 }
 
 export interface AttributeMatrixValue {

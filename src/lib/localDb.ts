@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
@@ -126,11 +126,26 @@ interface RulesDb extends DBSchema {
   recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; englishName?: string; viewedAt: number }; indexes: { viewedAt: number } };
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
+  attributeResponses: { key: string; value: PendingAttributeResponse };
+}
+
+export interface PendingAttributeResponse {
+  id: string;
+  subjectAId: string;
+  subjectBId: string;
+  attributeId: string;
+  questionToken: string;
+  responseId: string;
+  comparison?: AttributeComparisonResult | null;
+  ratingA?: number | null;
+  ratingB?: number | null;
+  sessionId: string;
+  createdAt: number;
 }
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 3, {
+  return openDB<RulesDb>('wrong-board-game-rules', 4, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -147,6 +162,7 @@ const getDb = () => {
         const rules = db.createObjectStore('rules', { keyPath: 'id' });
         rules.createIndex('gameId', 'gameId');
       }
+      if (!db.objectStoreNames.contains('attributeResponses')) db.createObjectStore('attributeResponses', { keyPath: 'id' });
       if (oldVersion > 0 && oldVersion < 3) {
         transaction.objectStore('games').clear();
         transaction.objectStore('rules').clear();
@@ -231,6 +247,14 @@ export const localDb = {
   addPending: async (userId: string, payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, userId, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
   getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),
+  cacheAttributeQuestion: async (data: AttributeQuestionPayload) => (await getDatabase()).put('cache', { key: 'attributes:question:v1', data, cachedAt: Date.now() }),
+  getLatestAttributeQuestion: async () => (await getDatabase()).get('cache', 'attributes:question:v1') as Promise<CacheRecord<AttributeQuestionPayload> | undefined>,
+  addPendingAttributeResponse: async (payload: Omit<PendingAttributeResponse, 'id' | 'createdAt'> & { id?: string; createdAt?: number }) => {
+    const item: PendingAttributeResponse = { ...payload, id: payload.id ?? payload.responseId, createdAt: payload.createdAt ?? Date.now() };
+    return (await getDatabase()).put('attributeResponses', item);
+  },
+  getPendingAttributeResponses: async () => (await getDatabase()).getAll('attributeResponses'),
+  removePendingAttributeResponse: async (id: string) => (await getDatabase()).delete('attributeResponses', id),
   cacheSearch: async (key: string, data: SearchResponse) => {
     const record = { key: `search:${key}`, data, cachedAt: Date.now() } satisfies CacheRecord<SearchResponse>;
     if (searchMemoryCache.size >= 100 && !searchMemoryCache.has(key)) {
