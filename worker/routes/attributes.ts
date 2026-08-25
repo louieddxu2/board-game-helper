@@ -3,9 +3,16 @@ import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
 import { queryAttributeQuestionPayload, queryAttributesPayload, saveAttributeResponse } from '../data/attributes';
+import {
+  attributeCatalogChangesPayload,
+  attributeCatalogPayload,
+  queryAttributeCatalogChanges,
+  queryAttributeCatalogSnapshot,
+} from '../data/attributeCatalog';
 import type { AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { now, signAttributeQuestionToken, verifyAttributeQuestionToken } from '../utils';
+import { logD1Query } from './shared';
 
 const attributesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -61,6 +68,43 @@ attributesRoutes.get('/api/attributes', async (c) => {
   });
   setD1MetricsHeader(c, db);
   return c.json(payload);
+});
+
+attributesRoutes.get('/api/attributes/table', async (c) => {
+  const db = getDatabase(c);
+  try {
+    c.header('Cache-Control', 'no-store');
+    const snapshot = await queryAttributeCatalogSnapshot(db);
+    // Migration 0051 creates the initial generation. Never fall back to a
+    // full source scan on a public request; a missing snapshot is an
+    // operational error to repair with the weekly/background rebuild.
+    if (!snapshot.state.results?.length) throw new Error('attribute_catalog_unavailable');
+    logD1Query(c, 'attribute_catalog_snapshot_state', snapshot.state);
+    logD1Query(c, 'attribute_catalog_snapshot_chunks', snapshot.chunks);
+    const payload = attributeCatalogPayload(snapshot);
+    setD1MetricsHeader(c, db);
+    return c.json(payload);
+  } catch (error) {
+    setD1MetricsHeader(c, db);
+    return respondWithAttributeError(c, error);
+  }
+});
+
+attributesRoutes.get('/api/attributes/table/changes', async (c) => {
+  const rawAfter = c.req.query('after') ?? '0';
+  const after = Number(rawAfter);
+  if (!Number.isSafeInteger(after) || after < 0) return c.json({ error: 'invalid_catalog_version' }, 400);
+  const db = getDatabase(c);
+  try {
+    c.header('Cache-Control', 'no-store');
+    const result = logD1Query(c, 'attribute_catalog_changes', await queryAttributeCatalogChanges(db, after));
+    const payload = attributeCatalogChangesPayload(result, after);
+    setD1MetricsHeader(c, db);
+    return c.json(payload);
+  } catch (error) {
+    setD1MetricsHeader(c, db);
+    return respondWithAttributeError(c, error);
+  }
 });
 
 attributesRoutes.get('/api/attributes/question', async (c) => {

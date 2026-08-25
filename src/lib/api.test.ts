@@ -374,6 +374,67 @@ describe('api versioned game catalog boundary', () => {
 
 });
 
+describe('api versioned attribute table boundary', () => {
+  const table = {
+    generation: 1,
+    throughVersion: 10,
+    generatedAt: Date.now(),
+    attributes: [{ id: 'attribute-luck', key: 'luck', name: '運氣', minValue: 0, maxValue: 10, sortOrder: 0 }],
+    subjects: [{ id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' }],
+    values: [],
+    candidates: [],
+    activities: [],
+    scoreModelVersion: 'glicko-rd-v1',
+  };
+
+  test('uses the synchronized local attribute table without a network request', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue({ key: 'attributes:table:versioned:v1', data: table, cachedAt: Date.now() });
+
+    await expect(api.attributeTable()).resolves.toEqual(table);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('bootstraps the snapshot and then applies only newer attribute changes', async () => {
+    const noChanges = { changes: [], throughVersion: 10, hasMore: false };
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined).mockResolvedValue({ key: 'attributes:table:versioned:v1', data: table, cachedAt: Date.now() });
+    const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
+    const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => path === '/api/attributes/table' ? table : noChanges,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.attributeTable()).resolves.toEqual(table);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=10', expect.any(Object));
+    expect(cacheSnapshot).toHaveBeenCalledWith(table);
+    expect(cacheChanges).toHaveBeenCalledWith(noChanges);
+  });
+
+  test('returns a stale table immediately and publishes background deltas', async () => {
+    const stale = { key: 'attributes:table:versioned:v1', data: table, cachedAt: 1 };
+    const updated = { ...table, throughVersion: 11, values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 8, ratingDeviation: 2, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' }] };
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(stale).mockResolvedValue({ key: stale.key, data: updated, cachedAt: Date.now() });
+    vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ changes: [{ entryKey: 'value:subject-a:attribute-luck', catalogVersion: 11, deleted: false, value: updated.values[0] }], throughVersion: 11, hasMore: false }),
+    }));
+    const onUpdated = vi.fn();
+
+    await expect(api.attributeTable(onUpdated)).resolves.toEqual(table);
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(updated));
+  });
+});
+
 describe('api editor catalog cache boundary', () => {
   const catalog = {
     generation: 1,

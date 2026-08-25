@@ -31,7 +31,7 @@ export const isPublicReadRequest = (method: string, requestUrl: string): boolean
   const path = url.pathname;
   const isPublicGameDetail = /^\/api\/games\/[^/]+$/.test(path)
     && url.searchParams.get('includePrivate') !== '1';
-  return ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/tags/changes', '/api/game-catalog', '/api/game-catalog/changes', '/api/games/search', '/api/games/resolve'].includes(path)
+  return ['/api/health', '/api/home', '/api/search', '/api/tags', '/api/tags/changes', '/api/game-catalog', '/api/game-catalog/changes', '/api/attributes/table', '/api/attributes/table/changes', '/api/games/search', '/api/games/resolve'].includes(path)
     || isPublicGameDetail;
 };
 

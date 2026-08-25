@@ -1,6 +1,7 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
+import { applyAttributeCatalogChanges } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
@@ -11,15 +12,18 @@ const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v5';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
+const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v1';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
 const ruleImportanceCachePrefix = (userId: string) => `ruleImportance:${userId}:`;
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
+export type AttributeCatalogCacheRecord = CacheRecord<AttributeCatalogPayload> & { snapshotFetchedAt?: number };
 export type CachedRuleUpdate = RuleCard & { gameName?: string; gameSlug?: string };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 let gameCatalogMemoryCache: GameCatalogCacheRecord | undefined;
+let attributeTableMemoryCache: AttributeCatalogCacheRecord | undefined;
 
 export const applyGameReferenceUpdate = (
   home: HomePayload,
@@ -342,6 +346,52 @@ export const localDb = {
       if (remaining.length) await db.put('cache', { ...overrides, data: remaining });
       else await db.delete('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY);
     }
+  },
+  cacheAttributeCatalog: async (data: AttributeCatalogPayload) => {
+    const db = await getDatabase();
+    const cachedAt = Date.now();
+    const record = {
+      key: PUBLIC_ATTRIBUTE_TABLE_KEY,
+      data,
+      cachedAt,
+      snapshotFetchedAt: cachedAt,
+    } satisfies AttributeCatalogCacheRecord;
+    attributeTableMemoryCache = record;
+    await db.put('cache', record);
+  },
+  getSynchronizedAttributeCatalog: async () => {
+    if (attributeTableMemoryCache && Date.now() - attributeTableMemoryCache.cachedAt < CATALOG_SYNC_FRESH_MS) return attributeTableMemoryCache;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+    if (!cached || Date.now() - cached.cachedAt >= CATALOG_SYNC_FRESH_MS) return undefined;
+    attributeTableMemoryCache = cached;
+    return cached;
+  },
+  getLatestAttributeCatalog: async () => {
+    if (attributeTableMemoryCache) return attributeTableMemoryCache;
+    const cached = await (await getDatabase()).get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+    if (cached) attributeTableMemoryCache = cached;
+    return cached;
+  },
+  cacheAttributeCatalogChanges: async (data: AttributeCatalogChangesPayload) => {
+    const db = await getDatabase();
+    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+    if (!cached) throw new Error('attribute_catalog_cache_missing');
+    const updated = {
+      ...cached,
+      data: applyAttributeCatalogChanges(cached.data, data.changes, data.throughVersion),
+      cachedAt: data.hasMore ? cached.cachedAt : Date.now(),
+      snapshotFetchedAt: cached.snapshotFetchedAt ?? cached.data.generatedAt,
+    } satisfies AttributeCatalogCacheRecord;
+    attributeTableMemoryCache = updated;
+    await db.put('cache', updated);
+  },
+  invalidateAttributeCatalogSync: async () => {
+    const db = await getDatabase();
+    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+    if (!cached) return;
+    const invalidated = { ...cached, cachedAt: 0 };
+    attributeTableMemoryCache = invalidated;
+    await db.put('cache', invalidated);
   },
   invalidateGameCatalogSync: async () => {
     const db = await getDatabase();

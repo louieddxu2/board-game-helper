@@ -285,6 +285,21 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
   return map;
 };
 
+const queryAllComponents = async (db: Database): Promise<Map<string, AttributeSubjectComponent[]>> => {
+  const result = await db.statement(`
+    SELECT subject_id, component_order, game_id, component_type, label
+    FROM attribute_subject_components
+    ORDER BY subject_id, component_order
+  `).all<ComponentRow>();
+  const map = new Map<string, AttributeSubjectComponent[]>();
+  (result.results ?? []).forEach((row) => {
+    const components = map.get(row.subject_id) ?? [];
+    components.push({ order: row.component_order, gameId: row.game_id ?? undefined, type: row.component_type, label: row.label });
+    map.set(row.subject_id, components);
+  });
+  return map;
+};
+
 export const queryAttributeSubjects = async (db: Database, subjectIds?: string[], page?: SubjectPageOptions): Promise<AttributeSubject[]> => {
   const rows = await querySubjectRows(db, subjectIds, page);
   const components = await queryComponents(db, rows.map((row) => row.id));
@@ -322,6 +337,15 @@ const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promis
   return (result.results ?? []).map(toMatrixValue);
 };
 
+const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
+  const result = await db.statement(`
+    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
+      comparison_count, decisive_comparison_count, evidence_count
+    FROM attribute_score_states
+  `).all<AttributeScoreStateRow>();
+  return (result.results ?? []).map(toMatrixValue);
+};
+
 const parseCandidateValues = (raw: string): Array<number | null> => {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -354,6 +378,45 @@ const queryUnprocessedCandidates = async (db: Database, options: CandidatePageOp
     subjectId: row.subject_id ?? undefined,
     sourceRowNumber: row.source_row_number,
   }));
+};
+
+const queryAllUnprocessedCandidates = async (db: Database): Promise<AttributeImportCandidate[]> => {
+  const result = await db.statement(`
+    SELECT id, source_name, values_json, match_status, subject_id, source_row_number
+    FROM attribute_import_candidates
+    WHERE match_status IN ('pending', 'ambiguous')
+    ORDER BY source_row_number, id
+  `).all<CandidateRow>();
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    displayName: row.source_name,
+    values: parseCandidateValues(row.values_json),
+    matchStatus: row.match_status,
+    subjectId: row.subject_id ?? undefined,
+    sourceRowNumber: row.source_row_number,
+  }));
+};
+
+/** Full table source used only by the background snapshot builder. */
+export const queryAttributeTableSourcePayload = async (db: Database): Promise<AttributesPayload> => {
+  const [attributes, subjectRows, candidates, values] = await Promise.all([
+    queryAttributeDefinitions(db),
+    querySubjectRows(db),
+    queryAllUnprocessedCandidates(db),
+    queryAllAttributeValues(db),
+  ]);
+  const subjects = subjectRows.map((row) => toSubject(row, new Map()));
+  const components = await queryAllComponents(db);
+  const hydratedSubjects = subjects.map((subject) => ({ ...subject, components: components.get(subject.id) ?? [] }));
+  const visibleSubjectIds = new Set(hydratedSubjects.map((subject) => subject.id));
+  return {
+    attributes,
+    subjects: hydratedSubjects,
+    values: values.filter((value) => visibleSubjectIds.has(value.subjectId)),
+    candidates,
+    activities: [],
+    scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
+  };
 };
 
 const takePage = <T>(rows: T[], limit: number) => ({

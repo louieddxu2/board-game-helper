@@ -1,5 +1,5 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
-import { localDb, type GameCatalogCacheRecord } from './localDb';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
 
@@ -133,6 +133,59 @@ const catalogGames = async (includePrivate: boolean, onUpdated?: (data: { games:
 const syncCatalogGames = async (includePrivate: boolean) => {
   await localDb.invalidateGameCatalogSync();
   return toCatalog(await refreshGameCatalog(), includePrivate);
+};
+
+let attributeTableRequest: Promise<AttributeCatalogPayload> | undefined;
+export const ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+const isAttributeTableSnapshotExpired = (record: AttributeCatalogCacheRecord, currentTime = Date.now()) =>
+  currentTime - (record.snapshotFetchedAt ?? record.data.generatedAt) >= ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS;
+
+const synchronizeAttributeTable = async (catalog: AttributeCatalogPayload): Promise<AttributeCatalogPayload> => {
+  let afterVersion = catalog.throughVersion;
+  while (true) {
+    const changes = await transportRequest<AttributeCatalogChangesPayload>(
+      `/api/attributes/table/changes?after=${afterVersion}`,
+      undefined,
+      'cache-miss',
+    );
+    if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('attribute_catalog_sync_stalled');
+    await localDb.cacheAttributeCatalogChanges(changes);
+    afterVersion = changes.throughVersion;
+    if (!changes.hasMore) break;
+  }
+  return (await localDb.getLatestAttributeCatalog().catch(() => undefined))?.data ?? catalog;
+};
+
+const refreshAttributeTable = async (knownBase?: AttributeCatalogCacheRecord | null): Promise<AttributeCatalogPayload> => {
+  if (attributeTableRequest) return attributeTableRequest;
+  attributeTableRequest = (async () => {
+    const existing = knownBase === null ? undefined : knownBase ?? await localDb.getLatestAttributeCatalog().catch(() => undefined);
+    let base = existing?.data;
+    if (!base || (existing && isAttributeTableSnapshotExpired(existing))) {
+      base = await transportRequest<AttributeCatalogPayload>('/api/attributes/table', undefined, 'cache-miss');
+      await localDb.cacheAttributeCatalog(base);
+    }
+    return synchronizeAttributeTable(base);
+  })();
+  try { return await attributeTableRequest; }
+  finally { attributeTableRequest = undefined; }
+};
+
+const attributeTable = async (onUpdated?: (data: AttributeCatalogPayload) => void): Promise<AttributeCatalogPayload> => {
+  const cached = await localDb.getSynchronizedAttributeCatalog().catch(() => undefined);
+  if (cached) return cached.data;
+  const stale = await localDb.getLatestAttributeCatalog().catch(() => undefined);
+  if (!stale) return refreshAttributeTable(null);
+  void refreshAttributeTable(stale).then((updated) => {
+    if (updated.throughVersion !== stale.data.throughVersion || updated.generatedAt !== stale.data.generatedAt) onUpdated?.(updated);
+  }).catch(() => undefined);
+  return stale.data;
+};
+
+const syncAttributeTable = async () => {
+  await localDb.invalidateAttributeCatalogSync();
+  return refreshAttributeTable();
 };
 
 const gameContentKey = (game: GameDetail): string => JSON.stringify({
@@ -369,6 +422,8 @@ export const api = {
   },
   catalogGames,
   syncCatalogGames,
+  attributeTable,
+  syncAttributeTable,
   attributes: (options: { subjectCursor?: string; candidateCursor?: string; limit?: number; scope?: 'subjects' | 'candidates' } = {}) => {
     const params = new URLSearchParams();
     if (options.subjectCursor) params.set('subjectCursor', options.subjectCursor);

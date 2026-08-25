@@ -7,6 +7,7 @@ import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
 import { cleanupAttributeActivityFeed } from './data/attributes';
+import { rebuildAttributeCatalog } from './data/attributeCatalog';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -28,7 +29,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 const isPublicCacheableRequest = (method: string, path: string) => method === 'GET' && (
-  ['/api/home', '/api/search', '/api/tags', '/api/tags/changes', '/api/game-catalog', '/api/game-catalog/changes', '/api/games/search', '/api/games/resolve'].includes(path)
+  ['/api/home', '/api/search', '/api/tags', '/api/tags/changes', '/api/game-catalog', '/api/game-catalog/changes', '/api/attributes/table', '/api/attributes/table/changes', '/api/games/search', '/api/games/resolve'].includes(path)
   || /^\/api\/games\/[^/]+$/.test(path)
 );
 
@@ -140,7 +141,10 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupAttributeActivityFeed(db),
   ]);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
-    await rebuildGameCatalog(db, controller.scheduledTime);
+    await Promise.all([
+      rebuildGameCatalog(db, controller.scheduledTime),
+      rebuildAttributeCatalog(db, controller.scheduledTime),
+    ]);
   }
 };
 

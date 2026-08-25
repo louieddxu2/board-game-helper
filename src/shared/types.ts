@@ -221,6 +221,27 @@ export interface AttributesPayload {
   hasMoreCandidates?: boolean;
 }
 
+export interface AttributeCatalogPayload extends AttributesPayload {
+  generation: number;
+  throughVersion: number;
+  generatedAt: number;
+}
+
+export interface AttributeCatalogChange {
+  entryKey: string;
+  catalogVersion: number;
+  deleted: boolean;
+  value?: AttributeMatrixValue;
+  subject?: AttributeSubject;
+  candidate?: AttributeImportCandidate;
+}
+
+export interface AttributeCatalogChangesPayload {
+  changes: AttributeCatalogChange[];
+  throughVersion: number;
+  hasMore: boolean;
+}
+
 export interface AttributeQuestionPayload {
   question: AttributeQuestion | null;
   activities: AttributeActivity[];
