@@ -34,12 +34,16 @@ describe('AttributesPage question flow', () => {
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '運氣成分' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
+    expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
     expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('0 遊戲甲');
     expect(document.querySelector('.attributes-question-examples')?.textContent).toContain('10 遊戲乙');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '換一組' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'A：遊戲甲' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'B：遊戲乙' })).toBeInTheDocument();
     expect(api.attributes).not.toHaveBeenCalled();
   });
 
