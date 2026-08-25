@@ -268,11 +268,10 @@ export const AttributesPage = () => {
       <div className="attributes-question-attribute">
         <h2 id="attributes-question-heading">{question.attribute.name}</h2>
         {question.attribute.fullDescription && <p>{question.attribute.fullDescription}</p>}
-        {(question.attribute.minExample || question.attribute.maxExample) && <p className="attributes-question-examples" aria-label="極端值範例">
-          {question.attribute.minExample && <span>{question.attribute.minValue} 分：{question.attribute.minExample}</span>}
-          {question.attribute.minExample && question.attribute.maxExample && <span aria-hidden="true">—</span>}
-          {question.attribute.maxExample && <span>{question.attribute.maxValue} 分：{question.attribute.maxExample}</span>}
-        </p>}
+        {(payload.extremeExamples?.lowest.length || payload.extremeExamples?.highest.length) ? <div className="attributes-question-examples" aria-label="目前資料中的極端分數範例">
+          {payload.extremeExamples.lowest.length > 0 && <div><strong>目前較低</strong><ul>{payload.extremeExamples.lowest.map((example) => <li key={`low:${example.subject.id}`}>{example.score} 分：{subjectName(example.subject)}</li>)}</ul></div>}
+          {payload.extremeExamples.highest.length > 0 && <div><strong>目前較高</strong><ul>{payload.extremeExamples.highest.map((example) => <li key={`high:${example.subject.id}`}>{example.score} 分：{subjectName(example.subject)}</li>)}</ul></div>}
+        </div> : null}
       </div>
       <div className="attributes-question-pair">
         <article className="attributes-question-game"><span className="attributes-question-letter">A</span><h3>{subjectName(question.subjectA)}</h3><button type="button" onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting}>換 A</button></article>

@@ -1482,7 +1482,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attributes-question-attribute { margin: 10px 0 18px; text-align: center; }
 .attributes-question-attribute h2 { margin: 0; color: var(--ink); font-size: clamp(24px, 4vw, 34px); }
 .attributes-question-attribute p { max-width: 720px; margin: 8px auto 0; color: var(--muted); line-height: 1.6; white-space: pre-wrap; }
-.attributes-question-examples { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; color: var(--green) !important; font-size: 13px; font-weight: 800; }
+.attributes-question-examples { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 12px; color: var(--green); font-size: 13px; text-align: left; }
+.attributes-question-examples > div { min-width: min(230px, 100%); }
+.attributes-question-examples strong { display: block; margin-bottom: 3px; text-align: center; }
+.attributes-question-examples ul { margin: 0; padding-left: 18px; }
+.attributes-question-examples li { margin: 2px 0; }
 .attributes-question-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; }
 .attributes-question-game { display: grid; justify-items: center; gap: 8px; min-width: 0; padding: 18px 12px; border-radius: 12px; background: var(--cream); text-align: center; }
 .attributes-question-game h3 { margin: 0; color: var(--ink); font-size: clamp(20px, 3vw, 28px); line-height: 1.25; overflow-wrap: anywhere; }

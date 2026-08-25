@@ -135,8 +135,6 @@ export interface AttributeDefinition {
   name: string;
   shortDescription?: string;
   fullDescription?: string;
-  minExample?: string;
-  maxExample?: string;
   minValue: number;
   maxValue: number;
   sortOrder: number;
@@ -157,6 +155,16 @@ export interface AttributeSubject {
   gameId?: string;
   gameSlug?: string;
   components?: AttributeSubjectComponent[];
+}
+
+export interface AttributeScoreExample {
+  subject: AttributeSubject;
+  score: number;
+}
+
+export interface AttributeExtremeExamples {
+  lowest: AttributeScoreExample[];
+  highest: AttributeScoreExample[];
 }
 
 export interface AttributeImportCandidate {
@@ -248,6 +256,7 @@ export interface AttributeCatalogChangesPayload {
 export interface AttributeQuestionPayload {
   question: AttributeQuestion | null;
   activities: AttributeActivity[];
+  extremeExamples?: AttributeExtremeExamples;
   scoreModelVersion?: string;
   questionToken?: string;
 }
