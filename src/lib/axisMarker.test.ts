@@ -15,4 +15,9 @@ describe('calculateAxisMarkerPosition', () => {
     expect(calculateAxisMarkerPosition(300, 400, 0)).toEqual({ center: 150, arrow: 0 });
     expect(calculateAxisMarkerPosition(300, 400, 10)).toEqual({ center: 150, arrow: 300 });
   });
+
+  test('keeps score positions on an inset rail while labels use the full stage', () => {
+    expect(calculateAxisMarkerPosition(300, 100, 0, 18, 274)).toEqual({ center: 50, arrow: 18 });
+    expect(calculateAxisMarkerPosition(300, 100, 10, 18, 274)).toEqual({ center: 250, arrow: 74 });
+  });
 });

@@ -26,7 +26,7 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
   const rightMarkerRef = useClampedAxisMarker<HTMLDivElement>(scoreOf(rightValue), `${rightSubject.id}:${rightSubject.displayName}:${rightValue}`);
 
   const setScoreFromPointer = (side: RatingSide, event: PointerEvent<HTMLDivElement>) => {
-    const rect = trackRef.current?.getBoundingClientRect();
+    const rect = trackRef.current?.querySelector<HTMLElement>('.attribute-score-axis-rail')?.getBoundingClientRect();
     if (!rect || rect.width <= 0) return;
     const score = Math.max(0, Math.min(10, Math.round(((event.clientX - rect.left) / rect.width) * 10)));
     if (side === 'left') onLeftChange(String(score));

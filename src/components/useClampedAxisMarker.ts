@@ -12,7 +12,12 @@ export const useClampedAxisMarker = <T extends HTMLElement>(score: number, conte
     const updatePosition = () => {
       const stageWidth = stage.clientWidth;
       if (stageWidth <= 0) return;
-      const { center, arrow } = calculateAxisMarkerPosition(stageWidth, marker.offsetWidth, score);
+      const rail = stage.querySelector<HTMLElement>('.attribute-score-axis-rail');
+      const stageRect = stage.getBoundingClientRect();
+      const railRect = rail?.getBoundingClientRect();
+      const scaleStart = railRect ? railRect.left - stageRect.left : 0;
+      const scaleEnd = railRect ? railRect.right - stageRect.left : stageWidth;
+      const { center, arrow } = calculateAxisMarkerPosition(stageWidth, marker.offsetWidth, score, scaleStart, scaleEnd);
       marker.style.left = `${center}px`;
       marker.style.setProperty('--attribute-axis-arrow-left', `${arrow}px`);
     };

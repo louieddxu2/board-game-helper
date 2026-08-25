@@ -1605,10 +1605,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-question-attribute h2 { font-size: clamp(20px, 5.2vw, 27px); line-height: 1.25; }
 .attribute-vote-page .attributes-question-attribute h2 strong { color: var(--orange); font-weight: 900; }
 .attribute-vote-page .attributes-question-examples { display: block; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
-.attribute-score-axis { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; min-width: 0; gap: 5px; }
-.attribute-score-axis-label { color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
+.attribute-score-axis { position: relative; display: block; min-width: 0; }
+.attribute-score-axis-label { position: absolute; top: 50%; z-index: 1; color: var(--green); font-size: 13px; font-weight: 900; line-height: 1; transform: translateY(-50%); }
+.attribute-score-axis-label.is-min { left: 0; }
+.attribute-score-axis-label.is-max { right: 0; }
 .attribute-score-axis-stage { position: relative; min-width: 0; height: 86px; touch-action: none; }
-.attribute-score-axis-rail { position: absolute; top: 50%; right: 0; left: 0; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
+.attribute-score-axis-rail { position: absolute; top: 50%; right: 23px; left: 16px; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
 .attribute-vote-page .attributes-scoreline-track { min-height: 0; padding: 0; }
 .attribute-vote-page .attributes-scoreline-marker { position: absolute; z-index: 1; display: block; width: max-content; max-width: calc(100% - 2px); overflow: hidden; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font-size: 10px; font-weight: 800; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .attribute-vote-page .attributes-scoreline-marker.is-low { transform: translateX(0); text-align: left; }
@@ -1746,10 +1748,33 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   margin-bottom: 7px;
 }
 
+.attribute-vote-page .attributes-question-examples {
+  margin: 0 0 19px;
+}
+
 .attribute-vote-page .attributes-question-attribute h2 {
+  margin-top: 0;
   color: var(--attribute-ink);
   font-size: clamp(20px, 5.2vw, 26px);
   font-weight: 750;
+}
+
+.attribute-vote-page .attributes-question-term {
+  position: relative;
+  display: inline-block;
+}
+
+.attribute-vote-page .attributes-example-cue {
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: 50%;
+  color: var(--attribute-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .attribute-vote-page .attributes-question-attribute h2 strong {
@@ -1980,6 +2005,13 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 .attribute-vote-page .attributes-response-error {
   margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .attribute-vote-page .attribute-score-axis {
+    width: 100vw;
+    margin-left: calc((100% - 100vw) / 2);
+  }
 }
 
 @media (max-width: 380px) {

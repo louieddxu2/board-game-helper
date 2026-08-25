@@ -38,6 +38,7 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
     expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
+    expect(screen.getByText('↑ 範例')).toBeInTheDocument();
     expect(document.querySelectorAll('.attributes-scoreline-marker')).toHaveLength(4);
     expect(screen.getByTitle('0 分：遊戲甲')).toBeInTheDocument();
     expect(screen.getByTitle('10 分：遊戲丁')).toBeInTheDocument();
@@ -48,6 +49,7 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-lower')).toHaveTextContent('遊戲丁');
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
     expect(screen.getByLabelText('目前資料中的極端分數範例')).toBeInTheDocument();
+    expect(screen.getByLabelText('目前資料中的極端分數範例').compareDocumentPosition(screen.getByRole('heading', { name: /哪款遊戲的/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: /完整說明/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();

@@ -8,10 +8,10 @@ interface AttributeScoreAxisProps {
 }
 
 export const AttributeScoreAxis = ({ ariaLabel, children, className = '', stageRef }: AttributeScoreAxisProps) => <div className={`attribute-score-axis ${className}`.trim()} aria-label={ariaLabel}>
-  <span className="attribute-score-axis-label" aria-hidden="true">0</span>
+  <span className="attribute-score-axis-label is-min" aria-hidden="true">0</span>
   <div className="attribute-score-axis-stage" ref={stageRef}>
     <span className="attribute-score-axis-rail" aria-hidden="true" />
     {children}
   </div>
-  <span className="attribute-score-axis-label" aria-hidden="true">10</span>
+  <span className="attribute-score-axis-label is-max" aria-hidden="true">10</span>
 </div>;

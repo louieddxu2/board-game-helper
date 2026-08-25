@@ -4,6 +4,7 @@ import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
 import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
+import { attributeQuestionEnding } from '../lib/attributeQuestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
@@ -263,6 +264,7 @@ export const AttributesPage = () => {
     .sort((left, right) => right.score - left.score)
     .slice(0, 2);
   const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
+  const questionEnding = attributeQuestionEnding(question.attribute.key);
 
   return <section className="attribute-vote-page">
     <header className="attribute-vote-header">
@@ -276,14 +278,14 @@ export const AttributesPage = () => {
 
     <section className="attributes-question-card" aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
       <div className="attributes-question-attribute">
-        <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<strong>「{question.attribute.name}」</strong>較多？</h2>
-        {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
           <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
             {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
             {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
           </AttributeScoreAxis>
         </div> : null}
+        <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
+        {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
       </div>
       <div className="attributes-question-pair">
         <div className="attributes-question-side">
