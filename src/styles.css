@@ -1720,6 +1720,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-comparison-actions button { border-radius: 6px; }
 .attribute-vote-page .attributes-change-all { border-radius: 6px; }
 
+/* The axis itself owns the 0 and 10 endpoints; labels no longer interrupt the rail. */
+.attribute-vote-page .attributes-scoreline { position: absolute; top: 50%; right: 0; left: 0; display: block; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
+.attribute-vote-page .attributes-scoreline-end { position: absolute; top: 9px; color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
+.attribute-vote-page .attributes-scoreline-end.is-start { left: 0; }
+.attribute-vote-page .attributes-scoreline-end.is-end { right: 0; }
+.attribute-vote-page .attribute-rating-scale { position: relative; height: 11px; margin-top: 7px; color: var(--green); font-size: 10px; font-weight: 900; line-height: 1; }
+.attribute-vote-page .attribute-rating-scale span { position: absolute; top: 0; }
+.attribute-vote-page .attribute-rating-scale span:first-child { left: 0; }
+.attribute-vote-page .attribute-rating-scale span:last-child { right: 0; }
+
 /* ===== Search Modal ===== */
 .search-modal-backdrop {
   position: fixed;

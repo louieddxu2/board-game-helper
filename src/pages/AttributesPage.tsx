@@ -269,7 +269,7 @@ export const AttributesPage = () => {
           <div className="attributes-scoreline-track">
             {lowestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-low ${example.score <= 0 ? 'is-edge-start' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`low:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
             {highestExamples.map((example, index) => <span className={`attributes-scoreline-marker is-high ${example.score >= 10 ? 'is-edge-end' : ''} ${index === 0 ? 'is-lower' : 'is-upper'}`} key={`high:${example.subject.id}`} style={{ left: `${example.score * 10}%` }} title={`${example.score} 分：${example.subject.displayName}`}><span className="attributes-scoreline-marker-label">{subjectName(example.subject)}</span></span>)}
-            <div className="attributes-scoreline" aria-hidden="true"><span>0</span><i /><span>5</span><i /><span>10</span></div>
+            <div className="attributes-scoreline" aria-hidden="true"><span className="attributes-scoreline-end is-start">0</span><span className="attributes-scoreline-end is-end">10</span></div>
           </div>
         </div> : null}
       </div>

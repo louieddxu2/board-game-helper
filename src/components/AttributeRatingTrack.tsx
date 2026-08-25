@@ -87,6 +87,6 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
       {renderMarker('left', leftSubject, leftValue, onLeftChange, onLeftClear)}
       {renderMarker('right', rightSubject, rightValue, onRightChange, onRightClear)}
     </div>
-    <div className="attribute-rating-scale" aria-hidden="true"><span>0</span><span>5</span><span>10</span></div>
+    <div className="attribute-rating-scale" aria-hidden="true"><span>0</span><span>10</span></div>
   </div>;
 };
