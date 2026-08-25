@@ -276,14 +276,13 @@ export const AttributesPage = () => {
       <div className="attributes-question-pair">
         <div className="attributes-question-side">
           <AttributeGameCard subject={question.subjectA} side="left" onRefresh={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext} />
-          <AttributeRatingTrack subject={question.subjectA} value={ratingA} onChange={setRatingA} onClear={() => setRatingA('')} disabled={questionLoading || submitting || awaitingNext} />
         </div>
         <span className="attributes-versus" aria-hidden="true">VS</span>
         <div className="attributes-question-side">
           <AttributeGameCard subject={question.subjectB} side="right" onRefresh={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext} />
-          <AttributeRatingTrack subject={question.subjectB} value={ratingB} onChange={setRatingB} onClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
         </div>
       </div>
+      <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
 
       <div className="attributes-comparison-actions" aria-label="比較回答">
         {([['A_HIGHER', '← 左邊較高'], ['SIMILAR', '差不多'], ['B_HIGHER', '右邊較高 →']] as const).map(([result, label]) => <button key={result} type="button" aria-pressed={comparison === result} className={comparison === result ? 'active' : ''} onClick={() => chooseComparison(result)} disabled={submitting || questionLoading || awaitingNext}>{label}</button>)}

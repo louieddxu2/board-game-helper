@@ -1,28 +1,91 @@
+import type { KeyboardEvent, PointerEvent } from 'react';
+import { useRef } from 'react';
 import type { AttributeSubject } from '../shared/types';
 
 interface AttributeRatingTrackProps {
-  subject: AttributeSubject;
-  value: string;
+  leftSubject: AttributeSubject;
+  rightSubject: AttributeSubject;
+  leftValue: string;
+  rightValue: string;
   disabled?: boolean;
-  onChange: (value: string) => void;
-  onClear: () => void;
+  onLeftChange: (value: string) => void;
+  onRightChange: (value: string) => void;
+  onLeftClear: () => void;
+  onRightClear: () => void;
 }
 
-export const AttributeRatingTrack = ({ subject, value, disabled = false, onChange, onClear }: AttributeRatingTrackProps) => {
-  const score = value === '' ? 5 : Number(value);
-  const edgeClass = value !== '' && score <= 1 ? 'is-start' : value !== '' && score >= 9 ? 'is-end' : '';
+type RatingSide = 'left' | 'right';
 
-  return <div className="attribute-rating-track">
-    <div className="attribute-rating-track-heading">
-      <span title={subject.displayName}>{subject.displayName}</span>
-      <output>{value === '' ? '未設定' : `${value} 分`}</output>
-    </div>
-    <div className="attribute-rating-line">
-      {value !== '' && <span className={`attribute-rating-marker ${edgeClass}`} style={{ left: `${score * 10}%` }}>
-        <span>{subject.displayName} · {value}</span>
-        <button type="button" aria-label={`取消${subject.displayName}評分`} title="取消評分" onClick={onClear} disabled={disabled}>×</button>
-      </span>}
-      <input aria-label={`評分：${subject.displayName}`} type="range" min="0" max="10" step="1" value={score} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-valuetext={value === '' ? '未設定，目前位置 5 分' : `${value} 分`} />
+const scoreOf = (value: string) => value === '' ? 5 : Number(value);
+
+export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rightValue, disabled = false, onLeftChange, onRightChange, onLeftClear, onRightClear }: AttributeRatingTrackProps) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const setScoreFromPointer = (side: RatingSide, event: PointerEvent<HTMLDivElement>) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return;
+    const score = Math.max(0, Math.min(10, Math.round(((event.clientX - rect.left) / rect.width) * 10)));
+    if (side === 'left') onLeftChange(String(score));
+    else onRightChange(String(score));
+  };
+
+  const handlePointerDown = (side: RatingSide) => (event: PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setScoreFromPointer(side, event);
+  };
+
+  const handlePointerMove = (side: RatingSide) => (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) setScoreFromPointer(side, event);
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const handleKeyDown = (side: RatingSide, value: string) => (event: KeyboardEvent<HTMLDivElement>) => {
+    const current = scoreOf(value);
+    const next = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? current - 1
+      : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? current + 1
+        : event.key === 'Home' ? 0
+          : event.key === 'End' ? 10
+            : undefined;
+    if (next === undefined) return;
+    event.preventDefault();
+    const score = Math.max(0, Math.min(10, next));
+    if (side === 'left') onLeftChange(String(score));
+    else onRightChange(String(score));
+  };
+
+  const renderMarker = (side: RatingSide, subject: AttributeSubject, value: string, onChange: (value: string) => void, onClear: () => void) => {
+    const score = scoreOf(value);
+    const edgeClass = score <= 1 ? 'is-start' : score >= 9 ? 'is-end' : '';
+    return <div
+      className={`attribute-rating-marker is-${side} ${edgeClass}`}
+      style={{ left: `${score * 10}%` }}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={`評分：${subject.displayName}`}
+      aria-valuemin={0}
+      aria-valuemax={10}
+      aria-valuenow={score}
+      aria-valuetext={value === '' ? '未設定，目前位置 5 分' : `${value} 分`}
+      onKeyDown={handleKeyDown(side, value)}
+      onPointerDown={handlePointerDown(side)}
+      onPointerMove={handlePointerMove(side)}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
+      <span>{subject.displayName}{value === '' ? '' : ` · ${value}`}</span>
+      {value !== '' && <button type="button" aria-label={`取消${subject.displayName}評分`} title="取消評分" onPointerDown={(event) => event.stopPropagation()} onClick={onClear} disabled={disabled}>×</button>}
+    </div>;
+  };
+
+  return <div className="attribute-rating-track" aria-label="兩款遊戲評分數線">
+    <div className="attribute-rating-shared-line" ref={trackRef}>
+      <span className="attribute-rating-rail" aria-hidden="true" />
+      {renderMarker('left', leftSubject, leftValue, onLeftChange, onLeftClear)}
+      {renderMarker('right', rightSubject, rightValue, onRightChange, onRightClear)}
     </div>
     <div className="attribute-rating-scale" aria-hidden="true"><span>0</span><span>5</span><span>10</span></div>
   </div>;
