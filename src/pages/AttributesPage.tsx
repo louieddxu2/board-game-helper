@@ -265,7 +265,15 @@ export const AttributesPage = () => {
 
     <section className="attributes-question-card" aria-labelledby="attributes-question-heading">
       <div className="attributes-question-topline"><span className="eyebrow">這一題</span><button type="button" className="attributes-change-pair" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>↻ 換一組</button></div>
-      <div className="attributes-question-attribute"><h2 id="attributes-question-heading">{question.attribute.name}</h2><p>{question.attribute.fullDescription}</p></div>
+      <div className="attributes-question-attribute">
+        <h2 id="attributes-question-heading">{question.attribute.name}</h2>
+        {question.attribute.fullDescription && <p>{question.attribute.fullDescription}</p>}
+        {(question.attribute.minExample || question.attribute.maxExample) && <p className="attributes-question-examples" aria-label="極端值範例">
+          {question.attribute.minExample && <span>{question.attribute.minValue} 分：{question.attribute.minExample}</span>}
+          {question.attribute.minExample && question.attribute.maxExample && <span aria-hidden="true">—</span>}
+          {question.attribute.maxExample && <span>{question.attribute.maxValue} 分：{question.attribute.maxExample}</span>}
+        </p>}
+      </div>
       <div className="attributes-question-pair">
         <article className="attributes-question-game"><span className="attributes-question-letter">A</span><h3>{subjectName(question.subjectA)}</h3><button type="button" onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting}>換 A</button></article>
         <span className="attributes-versus" aria-hidden="true">VS</span>

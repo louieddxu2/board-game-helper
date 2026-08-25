@@ -109,6 +109,8 @@ const parseAttribute = (value: unknown): AttributeDefinition | undefined => {
     name: row.name,
     ...(typeof row.shortDescription === 'string' ? { shortDescription: row.shortDescription } : {}),
     ...(typeof row.fullDescription === 'string' ? { fullDescription: row.fullDescription } : {}),
+    ...(typeof row.minExample === 'string' ? { minExample: row.minExample } : {}),
+    ...(typeof row.maxExample === 'string' ? { maxExample: row.maxExample } : {}),
     minValue: row.minValue,
     maxValue: row.maxValue,
     sortOrder: row.sortOrder,

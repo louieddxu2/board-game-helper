@@ -42,6 +42,8 @@ interface AttributeRow {
   name: string;
   short_description: string | null;
   full_description: string | null;
+  min_example: string | null;
+  max_example: string | null;
   min_value: number;
   max_value: number;
   sort_order: number;
@@ -164,6 +166,8 @@ const toAttribute = (row: AttributeRow): AttributeDefinition => ({
   name: row.name,
   shortDescription: row.short_description ?? undefined,
   fullDescription: row.full_description ?? undefined,
+  minExample: row.min_example ?? undefined,
+  maxExample: row.max_example ?? undefined,
   minValue: row.min_value,
   maxValue: row.max_value,
   sortOrder: row.sort_order,
@@ -195,6 +199,7 @@ const decodeCursor = (cursor: string | undefined): string[] | undefined => {
 const queryAttributeDefinitions = async (db: Database): Promise<AttributeDefinition[]> => {
   const result = await db.statement(`
     SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+      t.min_example, t.max_example,
       a.min_value, a.max_value, a.sort_order
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -208,6 +213,7 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
   if (attributeId) {
     const result = await db.statement(`
       SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+        t.min_example, t.max_example,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -220,6 +226,7 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
   const [after, before] = await Promise.all([
     db.statement(`
       SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+        t.min_example, t.max_example,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -229,6 +236,7 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
     `).bind(pivot).first<AttributeRow>(),
     db.statement(`
       SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+        t.min_example, t.max_example,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'

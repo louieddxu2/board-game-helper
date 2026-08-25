@@ -135,6 +135,8 @@ export interface AttributeDefinition {
   name: string;
   shortDescription?: string;
   fullDescription?: string;
+  minExample?: string;
+  maxExample?: string;
   minValue: number;
   maxValue: number;
   sortOrder: number;

@@ -7,7 +7,7 @@ import type { AttributeQuestion, AttributesPayload } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
 const subjectB = { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙', gameSlug: 'game-b' };
-const attribute = { id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 };
+const attribute = { id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minExample: '聖托里尼', maxExample: '分數沙拉', minValue: 0, maxValue: 10, sortOrder: 0 };
 const payload: AttributesPayload = {
   attributes: [attribute],
   subjects: [subjectA, subjectB],
@@ -31,6 +31,8 @@ describe('AttributesPage question flow', () => {
 
     expect(await screen.findByRole('heading', { name: '桌遊屬性比較' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '運氣成分' })).toBeInTheDocument();
+    expect(screen.getByText('0 分：聖托里尼')).toBeInTheDocument();
+    expect(screen.getByText('10 分：分數沙拉')).toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '送出回答，換下一題' })).toBeInTheDocument();
