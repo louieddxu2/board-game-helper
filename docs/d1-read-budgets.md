@@ -8,14 +8,14 @@
 | 遊戲列表 | 先顯示本機總表；10 分鐘後查版本差額；每週重抓總表 | 差額為版本索引命中的變更列；每週總表為預先聚合分塊，不掃 games/rules |
 | 登入者目錄 | 與遊戲列表共用同一份本機總表 | 一般使用者只顯示公開數；editor 顯示預先聚合的總數，不另查 games |
 | 公共 Tag | 先顯示本機公共 Tag 目錄；每週同步 | 版本索引命中的 Tag 變更列，不 JOIN alias/rule_tags |
-| 屬性總表 | 先顯示 IndexedDB 的完整快照；同步檢查每 10 分鐘執行，快照本身每週更新 | 只讀 `attribute_catalog_snapshot_state` 與目前 generation 的分塊；同步時只讀 `(catalog_version, entry_key)` 索引命中的增量列，不掃描 score states、subjects 或 candidates |
+| 屬性總表 | 先顯示 IndexedDB 的完整快照；同步檢查每 10 分鐘執行，快照本身每週更新 | 只讀 `attribute_catalog_snapshot_state` 與目前 generation 的分塊；同步時只讀 `(catalog_version, entry_key)` 索引命中的增量列，每批最多 80 列，不掃描 score states、subjects 或 candidates |
 | 單款遊戲 | 一小時內直接使用 IndexedDB；過期內容先顯示再背景更新 | 只查該遊戲及該遊戲規則，不查其他遊戲 |
 | 規則重要票 | 公開總票數隨規則列取得；本人投票清單快取 10 分鐘 | 個人狀態只走 `(user_id, game_id)` 索引並讀回自己在該遊戲投過的列；投票寫入後只讀 1 列規則確認總數 |
 | 一般帳號頁 | 不讀規則活動 | 只回傳 session 中的使用者；editor/admin 才執行最多各 100 筆活動查詢 |
 | 收藏首頁 | 本機畫面優先；私人狀態不共用公共快取 | 受固定 LIMIT 與指定遊戲 ID 限制 |
 | 管理 Tag | 僅管理員主動開啟 | 可讀 active tags、rule_tags 使用量與 aliases；不屬於公共高頻路徑 |
 | 屬性比較題目 | Worker 先在記憶體抽出 1～200 的槽位編號，取得一個低信心度「遊戲＋屬性」項目，再固定屬性隨機抽第二款遊戲 | 第一項最多定位 1 列、屬性 1 列；第二款遊戲最多定位 2 列；遊戲資料 2 列；feed 最多 12 列；排除同遊戲與上一題配對時估算上限約 20 列；不掃描 200 列候選池 |
-| 屬性投票送出 | 先以 response_id 去重，再取得涉及之「屬性＋遊戲狀態」短期寫入鎖，最後以單一 D1 batch 原子寫入 | 最多讀 response 去重 2 次、上下文 1 列、兩個 state；最多寫 3 個事件、2 個 state、1 個配對統計、1 個 feed，加上局部鎖的取得／釋放；總量仍遠低於 100 列 |
+| 屬性投票送出 | 先以 response_id 去重，再取得涉及之「屬性＋遊戲狀態」短期寫入鎖，最後以單一 D1 batch 原子寫入 | 邏輯上最多讀 response 去重 2 次、上下文 1 列、兩個 state；最多寫 3 個事件、2 個 state、1 個配對統計、1 個 feed，加上局部鎖的取得／釋放。score state 的 catalog trigger 與索引維護會增加實際 `rows_written`，因此必須以 D1 metrics 量測，不可只看 SQL statement 數量 |
 | 屬性總表背景建立 | 初始 migration 建立第一代快照；之後僅由每週排程建立新 generation | 讀取完整屬性來源並寫入新的 snapshot generation；不在公開請求或投票熱路徑執行。建立完成後，投票、候選與遊戲主體變更由觸發器寫入增量目錄 |
 | 完整資料匯出 | 無自動呼叫 | 會讀取全部公開資料，所以只允許管理員人工執行，禁止列為公共快取端點 |
 

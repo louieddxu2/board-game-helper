@@ -1,4 +1,4 @@
-import type { AttributeCatalogChange, AttributeCatalogPayload, AttributeImportCandidate, AttributeMatrixValue, AttributeSubject } from '../shared/types';
+import type { AttributeCatalogChange, AttributeCatalogPayload, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeSubject } from '../shared/types';
 
 const valueKey = (value: Pick<AttributeMatrixValue, 'subjectId' | 'attributeId'>) => `${value.subjectId}:${value.attributeId}`;
 
@@ -8,16 +8,25 @@ const sortSubjects = (subjects: Iterable<AttributeSubject>) => [...subjects].sor
 const sortCandidates = (candidates: Iterable<AttributeImportCandidate>) => [...candidates].sort((left, right) =>
   left.sourceRowNumber - right.sourceRowNumber || left.id.localeCompare(right.id));
 
+const sortAttributes = (attributes: Iterable<AttributeDefinition>) => [...attributes].sort((left, right) =>
+  left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
+
 export const applyAttributeCatalogChanges = (
   cached: AttributeCatalogPayload,
   changes: AttributeCatalogChange[],
   throughVersion = changes.at(-1)?.catalogVersion ?? cached.throughVersion,
 ): AttributeCatalogPayload => {
+  const attributes = new Map(cached.attributes.map((attribute) => [attribute.id, attribute]));
   const subjects = new Map(cached.subjects.map((subject) => [subject.id, subject]));
   const values = new Map(cached.values.map((value) => [valueKey(value), value]));
   const candidates = new Map(cached.candidates.map((candidate) => [candidate.id, candidate]));
 
   changes.forEach((change) => {
+    if (change.entryKey.startsWith('attribute:')) {
+      const attributeId = change.entryKey.slice('attribute:'.length);
+      if (change.deleted) attributes.delete(attributeId);
+      else if (change.attribute) attributes.set(change.attribute.id, change.attribute);
+    }
     if (change.entryKey.startsWith('subject:')) {
       const subjectId = change.entryKey.slice('subject:'.length);
       if (change.deleted) subjects.delete(subjectId);
@@ -35,7 +44,8 @@ export const applyAttributeCatalogChanges = (
     if (change.entryKey.startsWith('candidate:')) {
       const candidateId = change.candidate?.id ?? change.entryKey.slice('candidate:'.length);
       if (change.deleted) candidates.delete(candidateId);
-      else if (change.candidate) candidates.set(candidateId, change.candidate);
+      else if (change.candidate && (change.candidate.matchStatus === 'pending' || change.candidate.matchStatus === 'ambiguous')) candidates.set(candidateId, change.candidate);
+      else candidates.delete(candidateId);
     }
   });
 
@@ -43,6 +53,7 @@ export const applyAttributeCatalogChanges = (
     ...cached,
     throughVersion: Math.max(cached.throughVersion, throughVersion),
     generatedAt: cached.generatedAt,
+    attributes: sortAttributes(attributes.values()),
     subjects: sortSubjects(subjects.values()),
     values: [...values.values()],
     candidates: sortCandidates(candidates.values()),

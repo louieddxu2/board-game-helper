@@ -6,6 +6,7 @@ import { queryAttributeQuestionPayload, queryAttributesPayload, saveAttributeRes
 import {
   attributeCatalogChangesPayload,
   attributeCatalogPayload,
+  ATTRIBUTE_CATALOG_CHANGE_LIMIT,
   queryAttributeCatalogChanges,
   queryAttributeCatalogSnapshot,
 } from '../data/attributeCatalog';
@@ -97,8 +98,8 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
   const db = getDatabase(c);
   try {
     c.header('Cache-Control', 'no-store');
-    const result = logD1Query(c, 'attribute_catalog_changes', await queryAttributeCatalogChanges(db, after));
-    const payload = attributeCatalogChangesPayload(result, after);
+    const result = logD1Query(c, 'attribute_catalog_changes', await queryAttributeCatalogChanges(db, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT));
+    const payload = attributeCatalogChangesPayload(result, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
     setD1MetricsHeader(c, db);
     return c.json(payload);
   } catch (error) {

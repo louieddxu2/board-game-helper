@@ -17,12 +17,14 @@ const base: AttributeCatalogPayload = {
 describe('attribute table catalog delta application', () => {
   test('updates score and subject metadata without rebuilding the complete matrix', () => {
     const updated = applyAttributeCatalogChanges(base, [
+      { entryKey: 'attribute:attribute-luck', catalogVersion: 10, deleted: false, attribute: { ...base.attributes[0], name: '新的運氣' } },
       { entryKey: 'subject:subject-a', catalogVersion: 11, deleted: false, subject: { ...base.subjects[0], displayName: '新名稱' } },
       { entryKey: 'value:subject-a:attribute-luck', catalogVersion: 12, deleted: false, value: { ...base.values[0], score: 7.5 }, subject: { ...base.subjects[0], displayName: '新名稱' } },
       { entryKey: 'candidate:candidate-2', catalogVersion: 13, deleted: false, candidate: { id: 'candidate-2', displayName: '新候選', values: [6], matchStatus: 'ambiguous', sourceRowNumber: 2 } },
     ]);
 
     expect(updated.throughVersion).toBe(13);
+    expect(updated.attributes[0].name).toBe('新的運氣');
     expect(updated.subjects[0].displayName).toBe('新名稱');
     expect(updated.values[0].score).toBe(7.5);
     expect(updated.candidates).toHaveLength(2);
@@ -37,6 +39,17 @@ describe('attribute table catalog delta application', () => {
 
     expect(updated.subjects).toEqual([]);
     expect(updated.values).toEqual([]);
+    expect(updated.candidates).toEqual([]);
+  });
+
+  test('does not retain a candidate once it is no longer unprocessed', () => {
+    const updated = applyAttributeCatalogChanges(base, [{
+      entryKey: 'candidate:candidate-1',
+      catalogVersion: 11,
+      deleted: false,
+      candidate: { ...base.candidates[0], matchStatus: 'matched', subjectId: 'subject-a' },
+    }]);
+
     expect(updated.candidates).toEqual([]);
   });
 });

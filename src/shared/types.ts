@@ -231,6 +231,7 @@ export interface AttributeCatalogChange {
   entryKey: string;
   catalogVersion: number;
   deleted: boolean;
+  attribute?: AttributeDefinition;
   value?: AttributeMatrixValue;
   subject?: AttributeSubject;
   candidate?: AttributeImportCandidate;

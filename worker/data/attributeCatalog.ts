@@ -2,6 +2,7 @@ import type {
   AttributeCatalogChange,
   AttributeCatalogChangesPayload,
   AttributeCatalogPayload,
+  AttributeDefinition,
   AttributeImportCandidate,
   AttributeMatrixValue,
   AttributeSubject,
@@ -14,6 +15,7 @@ import {
 
 const MAX_ENTRIES_PER_CHUNK = 1000;
 const MAX_CHUNK_BYTES = 1_000_000;
+export const ATTRIBUTE_CATALOG_CHANGE_LIMIT = 80;
 const textEncoder = new TextEncoder();
 
 interface SnapshotStateRow {
@@ -93,6 +95,23 @@ const parseValue = (value: unknown): AttributeMatrixValue | undefined => {
     decisiveComparisonCount: row.decisiveComparisonCount,
     ...(typeof row.evidenceCount === 'number' ? { evidenceCount: row.evidenceCount } : {}),
     modelVersion: row.modelVersion,
+  };
+};
+
+const parseAttribute = (value: unknown): AttributeDefinition | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const row = value as Record<string, unknown>;
+  if (typeof row.id !== 'string' || typeof row.key !== 'string' || typeof row.name !== 'string'
+    || typeof row.minValue !== 'number' || typeof row.maxValue !== 'number' || typeof row.sortOrder !== 'number') return undefined;
+  return {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    ...(typeof row.shortDescription === 'string' ? { shortDescription: row.shortDescription } : {}),
+    ...(typeof row.fullDescription === 'string' ? { fullDescription: row.fullDescription } : {}),
+    minValue: row.minValue,
+    maxValue: row.maxValue,
+    sortOrder: row.sortOrder,
   };
 };
 
@@ -181,7 +200,7 @@ export const attributeCatalogPayload = ({ state, chunks }: AttributeCatalogSnaps
 export const queryAttributeCatalogChanges = (
   db: Database,
   afterVersion: number,
-  limit = 1000,
+  limit = ATTRIBUTE_CATALOG_CHANGE_LIMIT,
 ): Promise<D1Result<CatalogEntryRow>> => db.statement(`
   SELECT entry_key, catalog_version, entry_json, deleted
   FROM attribute_catalog_entries
@@ -193,7 +212,7 @@ export const queryAttributeCatalogChanges = (
 export const attributeCatalogChangesPayload = (
   result: D1Result<CatalogEntryRow>,
   afterVersion: number,
-  limit = 1000,
+  limit = ATTRIBUTE_CATALOG_CHANGE_LIMIT,
 ): AttributeCatalogChangesPayload => {
   const changes: AttributeCatalogChange[] = [];
   for (const row of result.results ?? []) {
@@ -211,6 +230,15 @@ export const attributeCatalogChangesPayload = (
         deleted: false,
         value,
         subject: parseSubject(parsed.subject),
+      });
+    } else if (parsed.kind === 'attribute') {
+      const attribute = parseAttribute(parsed.attribute);
+      if (!attribute) continue;
+      changes.push({
+        entryKey: row.entry_key,
+        catalogVersion: Number(row.catalog_version),
+        deleted: false,
+        attribute,
       });
     } else if (parsed.kind === 'subject') {
       const subject = parseSubject(parsed.subject);
