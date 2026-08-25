@@ -26,11 +26,11 @@ export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
 export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
 export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
-export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 5;
-/** Seven response rows plus lock acquisition/release and stale-lock cleanup. */
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 10;
+export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 7;
+/** Seven response rows plus two lock rows and stale-lock cleanup. */
+export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 12;
 export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 18;
-export const ATTRIBUTE_RESPONSE_LOCK_NAME = 'attribute-votes';
+export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
 /** Includes up to two excluded subject rows skipped by the random opponent lookup. */
 export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 20;
@@ -653,23 +653,50 @@ const responseContext = async (db: Database, input: AttributeResponseInput) => {
   return row;
 };
 
-const acquireAttributeWriteLock = async (db: Database, timestamp: number): Promise<string> => {
-  const token = createId('attribute-lock');
-  const expiresAt = Math.max(Date.now(), timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
-  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND expires_at < ?')
-    .bind(ATTRIBUTE_RESPONSE_LOCK_NAME, Date.now()).run();
-  const result = await db.statement(`
-    INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
-    VALUES (?, ?, ?)
-  `).bind(ATTRIBUTE_RESPONSE_LOCK_NAME, token, expiresAt).run();
-  const changes = result?.meta?.changes;
-  if (changes != null && changes !== 1) throw new Error('attribute_response_busy');
-  return token;
+interface AttributeWriteLock {
+  token: string;
+  names: string[];
+}
+
+const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
+  const subjectIds = new Set<string>();
+  if (input.comparison != null || input.ratingA != null) subjectIds.add(input.subjectAId);
+  if (input.comparison != null || input.ratingB != null) subjectIds.add(input.subjectBId);
+  return [...subjectIds]
+    .map((subjectId) => `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:${input.attributeId}:${subjectId}`)
+    .sort();
 };
 
-const releaseAttributeWriteLock = async (db: Database, token: string): Promise<void> => {
-  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND token = ?')
-    .bind(ATTRIBUTE_RESPONSE_LOCK_NAME, token).run();
+const batchChangeCount = (result: { meta?: { changes?: number } } | undefined) => result?.meta?.changes ?? 1;
+
+const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
+  if (!lock.names.length) return;
+  await db.statement(`
+    DELETE FROM attribute_vote_lock
+    WHERE lock_name IN (${lock.names.map(() => '?').join(',')}) AND token = ?
+  `).bind(...lock.names, lock.token).run();
+};
+
+const acquireAttributeWriteLock = async (db: Database, input: AttributeResponseInput): Promise<AttributeWriteLock> => {
+  const token = createId('attribute-lock');
+  const names = attributeWriteLockNames(input);
+  const expiresAt = Math.max(Date.now(), input.timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
+  const results = await db.batch([
+    db.statement(`
+      DELETE FROM attribute_vote_lock
+      WHERE lock_name IN (${names.map(() => '?').join(',')}) AND expires_at < ?
+    `).bind(...names, Date.now()),
+    ...names.map((name) => db.statement(`
+      INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
+      VALUES (?, ?, ?)
+    `).bind(name, token, expiresAt)),
+  ]);
+  const acquired = names.filter((_, index) => batchChangeCount(results[index + 1]) === 1);
+  if (acquired.length !== names.length) {
+    await releaseAttributeWriteLock(db, { token, names: acquired });
+    throw new Error('attribute_response_busy');
+  }
+  return { token, names };
 };
 
 const saveAttributeResponseLocked = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
@@ -793,7 +820,7 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
     .first<{ id: string }>();
   if (existingResponse) return { updatedValues: [], activities: [] };
 
-  const lockToken = await acquireAttributeWriteLock(db, input.timestamp);
+  const lock = await acquireAttributeWriteLock(db, input);
   try {
     const lockedExistingResponse = await db.statement('SELECT id FROM attribute_vote_events WHERE response_id = ? LIMIT 1')
       .bind(input.responseId)
@@ -801,6 +828,6 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
     if (lockedExistingResponse) return { updatedValues: [], activities: [] };
     return await saveAttributeResponseLocked(db, input);
   } finally {
-    await releaseAttributeWriteLock(db, lockToken);
+    await releaseAttributeWriteLock(db, lock);
   }
 };

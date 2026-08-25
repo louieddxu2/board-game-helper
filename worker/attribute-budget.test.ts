@@ -27,7 +27,7 @@ describe('attribute hot-path budgets', () => {
 
   test('response row budgets stay below the product limit', () => {
     expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS).toBeLessThanOrEqual(8);
-    expect(ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThanOrEqual(10);
+    expect(ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThanOrEqual(12);
     expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS + ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
   });
 
@@ -71,19 +71,23 @@ describe('attribute hot-path budgets', () => {
       comparison: 'A_HIGHER', ratingA: 8, ratingB: 5, timestamp: 123,
     });
 
-    expect(statements.slice(0, 3)).toHaveLength(3);
-    expect(db.batch).toHaveBeenCalledWith(expect.arrayContaining([expect.anything()]));
-    expect((db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toHaveLength(7);
+    const batchCalls = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(batchCalls).toHaveLength(2);
+    expect(batchCalls[0][0]).toHaveLength(3);
+    expect(batchCalls[1][0]).toHaveLength(7);
   });
 
   test('rejects a concurrent response before reading or rewriting score states', async () => {
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
         if (sql.includes('SELECT id FROM attribute_vote_events')) return statement({ first: vi.fn().mockResolvedValue(null) });
-        if (sql.includes('INSERT OR IGNORE INTO attribute_vote_lock')) return statement({ run: vi.fn().mockResolvedValue({ meta: { changes: 0 } }) });
         return statement({ run: vi.fn().mockResolvedValue({ meta: { changes: 0 } }) });
       }),
-      batch: vi.fn(),
+      batch: vi.fn().mockResolvedValue([
+        { meta: { changes: 0 } },
+        { meta: { changes: 0 } },
+        { meta: { changes: 0 } },
+      ]),
     } as unknown as Database;
 
     await expect(saveAttributeResponse(db, {
@@ -91,7 +95,7 @@ describe('attribute hot-path budgets', () => {
       responseId: 'response-busy-1', sessionId: 'session-busy-1', actorId: null,
       comparison: 'SIMILAR', timestamp: 123,
     })).rejects.toThrow('attribute_response_busy');
-    expect(db.batch).not.toHaveBeenCalled();
+    expect(db.batch).toHaveBeenCalledTimes(1);
     expect(db.statement).not.toHaveBeenCalledWith(expect.stringContaining('FROM attribute_score_states'));
   });
 });
