@@ -291,9 +291,9 @@ export const AdminPage = () => {
       </section>
 
       <section className="admin-card"><h2>合併重複遊戲</h2><p className="muted">來源遊戲的規則與別名會移到目標遊戲，原名稱仍可搜尋。</p>
-        <GameSearch value={sourceQuery} selectedId={sourceGame?.id} onChange={(value) => { setSourceQuery(value); if (sourceGame && value !== sourceGame.displayName) setSourceGame(undefined); }} onSelect={(game) => { setSourceGame(game); setSourceQuery(game.displayName); }} />
+        <GameSearch value={sourceQuery} selectedId={sourceGame?.id} includeGamesWithoutPublishedRules onChange={(value) => { setSourceQuery(value); if (sourceGame && value !== sourceGame.displayName) setSourceGame(undefined); }} onSelect={(game) => { setSourceGame(game); setSourceQuery(game.displayName); }} />
         <div className="merge-arrow">↓ 合併到</div>
-        <GameSearch value={targetQuery} selectedId={targetGame?.id} onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
+        <GameSearch value={targetQuery} selectedId={targetGame?.id} includeGamesWithoutPublishedRules onChange={(value) => { setTargetQuery(value); if (targetGame && value !== targetGame.displayName) setTargetGame(undefined); }} onSelect={(game) => { setTargetGame(game); setTargetQuery(game.displayName); }} />
         <button type="button" className="button primary full-button" disabled={!sourceGame || !targetGame || sourceGame.id === targetGame.id}
           onClick={() => { if (sourceGame && targetGame) void confirm({ title: '合併遊戲？', message: `將「${sourceGame.displayName}」合併到「${targetGame.displayName}」？`, confirmLabel: '合併遊戲', tone: 'danger' }).then((confirmed) => { if (confirmed) return api.mergeGame(sourceGame.id, targetGame.id).then(async () => { await localDb.invalidateGame(sourceGame.slug); await localDb.invalidateGame(targetGame.slug); clearSearchCache(); showToast('遊戲已合併，舊名稱保留為別名。'); setSourceGame(undefined); setTargetGame(undefined); setSourceQuery(''); setTargetQuery(''); }); }); }}>合併遊戲</button>
       </section>

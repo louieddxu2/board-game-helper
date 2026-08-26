@@ -44,7 +44,7 @@ describe('versioned attribute table catalog', () => {
     const query = {
       state: { results: [{ active_generation: 4, through_version: 9, chunk_count: 1, attributes_json: JSON.stringify([{ id: 'attribute-luck', key: 'luck', name: '運氣', minValue: 0, maxValue: 10, sortOrder: 0 }]), score_model_version: 'glicko-rd-v1', generated_at: 123 }] },
       chunks: { results: [{ chunk_number: 0, entries_json: JSON.stringify([
-        { kind: 'subject', subject: subject(), values: [value()] },
+        { kind: 'subject', subject: { ...subject(), components: [{ order: 0, type: 'expansion', label: '擴充', bggId: 12345 }] }, values: [value()] },
         { kind: 'candidate', candidate: { id: 'candidate-1', displayName: '待處理', values: [8], matchStatus: 'pending', sourceRowNumber: 3 } },
         { kind: 'candidate', id: 'candidate-legacy', displayName: '初始快照待處理', valuesJson: JSON.stringify([2, null, 9]), matchStatus: 'pending', sourceRowNumber: 4 },
       ]) }] },
@@ -53,7 +53,10 @@ describe('versioned attribute table catalog', () => {
     expect(attributeCatalogPayload(query)).toMatchObject({
       generation: 4,
       throughVersion: 9,
-      subjects: [expect.objectContaining({ id: 'subject-a' })],
+      subjects: [expect.objectContaining({
+        id: 'subject-a',
+        components: [expect.objectContaining({ type: 'expansion', bggId: 12345 })],
+      })],
       values: [expect.objectContaining({ score: 6.5 })],
       candidates: [
         expect.objectContaining({ id: 'candidate-1' }),

@@ -145,6 +145,7 @@ export interface AttributeSubjectComponent {
   gameId?: string;
   type: 'base' | 'expansion' | 'label';
   label: string;
+  bggId?: number;
 }
 
 export interface AttributeSubject {

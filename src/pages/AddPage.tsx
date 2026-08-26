@@ -281,7 +281,7 @@ export const AddPage = () => {
     <div className={game ? 'record-game-fields two-columns' : 'record-game-fields'}>
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); }}>重新選擇</button>}</div>
-        {game ? <input value={game.displayName} readOnly aria-label="遊戲名稱" /> : <GameSearch value={gameQuery} onChange={setGameQuery} onSelect={selectGame} placeholder="搜尋或輸入遊戲名稱" />}
+        {game ? <input value={game.displayName} readOnly aria-label="遊戲名稱" /> : <GameSearch value={gameQuery} onChange={setGameQuery} onSelect={selectGame} includeGamesWithoutPublishedRules placeholder="搜尋或輸入遊戲名稱" />}
       </div>
       <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>
     </div>

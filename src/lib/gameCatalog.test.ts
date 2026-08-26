@@ -18,6 +18,17 @@ describe('local versioned game catalog', () => {
     expect(filterGameCatalog(games, 'Brass Birmingham')[0]?.id).toBe('2');
   });
 
+  test('hides games without published rules unless the caller is choosing a game for contribution', () => {
+    const emptyGame = { id: '3', slug: 'santorini', displayName: '聖托里尼', ruleCount: 0, updatedAt: 3 };
+    expect(filterGameCatalog([...games, emptyGame], '聖托里尼')).toEqual([]);
+    expect(filterGameCatalog(
+      [...games, emptyGame],
+      '聖托里尼',
+      20,
+      { includeGamesWithoutPublishedRules: true },
+    )).toEqual([emptyGame]);
+  });
+
   test('uses Taipei calendar days instead of a rolling 24-hour age', () => {
     expect(taipeiDateKey(Date.UTC(2026, 6, 28, 15, 59))).toBe('2026-07-28');
     expect(taipeiDateKey(Date.UTC(2026, 6, 28, 16, 0))).toBe('2026-07-29');

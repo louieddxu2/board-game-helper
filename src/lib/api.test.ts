@@ -341,7 +341,15 @@ describe('api versioned game catalog boundary', () => {
     const initial = await api.searchGames('New', onUpdated);
 
     expect(initial.games).toEqual([]);
-    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ games: [updated.games[1]] }));
+    await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ games: [] }));
+  });
+
+  test('includes zero-rule games when the contribution picker explicitly requests them', async () => {
+    const withEmptyGame = { ...catalog, games: [...catalog.games, { id: 'game-2', slug: 'santorini', displayName: '聖托里尼', ruleCount: 0, updatedAt: 2 }] };
+    vi.spyOn(localDb, 'getSynchronizedGameCatalog').mockResolvedValue({ key: 'games:list:versioned:v2', data: withEmptyGame, cachedAt: 1 });
+
+    expect((await api.searchGames('聖托里尼', undefined, { includeGamesWithoutPublishedRules: true })).games)
+      .toEqual([withEmptyGame.games[1]]);
   });
 
   test('replaces a full snapshot downloaded more than one week ago before requesting deltas', async () => {

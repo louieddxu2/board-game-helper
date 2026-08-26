@@ -66,6 +66,7 @@ interface ComponentRow {
   game_id: string | null;
   component_type: AttributeSubjectComponent['type'];
   label: string;
+  bgg_id: number | null;
 }
 
 interface AttributeScoreStateRow {
@@ -277,7 +278,8 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     LEFT JOIN games g ON g.id = s.game_id
     WHERE (
       s.kind = 'configuration'
-      OR (g.merged_into_game_id IS NULL AND g.visibility = 'public' AND g.published_rule_count > 0)
+      OR (g.merged_into_game_id IS NULL AND g.visibility = 'public'
+        AND (g.published_rule_count > 0 OR g.attribute_enabled = 1))
     )
     ${filter}
     ${cursorFilter}
@@ -306,7 +308,7 @@ const queryAttributeExtremeExamples = async (
           candidate_subject.kind = 'configuration'
           OR (candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
-            AND candidate_game.published_rule_count > 0)
+            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
     ),
     lowest AS (
@@ -349,7 +351,7 @@ const queryAttributeExtremeExamples = async (
 const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<string, AttributeSubjectComponent[]>> => {
   if (!subjectIds.length) return new Map();
   const result = await db.statement(`
-    SELECT subject_id, component_order, game_id, component_type, label
+    SELECT subject_id, component_order, game_id, component_type, label, bgg_id
     FROM attribute_subject_components
     WHERE subject_id IN (${subjectIds.map(() => '?').join(',')})
     ORDER BY subject_id, component_order
@@ -357,7 +359,7 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
   const map = new Map<string, AttributeSubjectComponent[]>();
   (result.results ?? []).forEach((row) => {
     const components = map.get(row.subject_id) ?? [];
-    components.push({ order: row.component_order, gameId: row.game_id ?? undefined, type: row.component_type, label: row.label });
+    components.push({ order: row.component_order, gameId: row.game_id ?? undefined, type: row.component_type, label: row.label, bggId: row.bgg_id ?? undefined });
     map.set(row.subject_id, components);
   });
   return map;
@@ -365,14 +367,14 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
 
 const queryAllComponents = async (db: Database): Promise<Map<string, AttributeSubjectComponent[]>> => {
   const result = await db.statement(`
-    SELECT subject_id, component_order, game_id, component_type, label
+    SELECT subject_id, component_order, game_id, component_type, label, bgg_id
     FROM attribute_subject_components
     ORDER BY subject_id, component_order
   `).all<ComponentRow>();
   const map = new Map<string, AttributeSubjectComponent[]>();
   (result.results ?? []).forEach((row) => {
     const components = map.get(row.subject_id) ?? [];
-    components.push({ order: row.component_order, gameId: row.game_id ?? undefined, type: row.component_type, label: row.label });
+    components.push({ order: row.component_order, gameId: row.game_id ?? undefined, type: row.component_type, label: row.label, bggId: row.bgg_id ?? undefined });
     map.set(row.subject_id, components);
   });
   return map;
@@ -607,7 +609,7 @@ const querySeedCandidate = async (
           candidate_subject.kind = 'configuration'
           OR (candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
-            AND candidate_game.published_rule_count > 0)
+            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
       ORDER BY s.rating_deviation DESC, s.random_key, s.attribute_id, s.subject_id
       LIMIT 1
@@ -645,7 +647,7 @@ const queryRandomSubjectForAttribute = async (
           candidate_subject.kind = 'configuration'
           OR (candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
-            AND candidate_game.published_rule_count > 0)
+            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
       ORDER BY s.random_key, s.subject_id
       LIMIT 1
@@ -662,7 +664,7 @@ const queryRandomSubjectForAttribute = async (
           candidate_subject.kind = 'configuration'
           OR (candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
-            AND candidate_game.published_rule_count > 0)
+            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
       ORDER BY s.random_key DESC, s.subject_id DESC
       LIMIT 1
@@ -799,8 +801,10 @@ const responseContext = async (db: Database, input: AttributeResponseInput) => {
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
-      AND (sa.kind = 'configuration' OR (ga.merged_into_game_id IS NULL AND ga.visibility = 'public' AND ga.published_rule_count > 0))
-      AND (sb.kind = 'configuration' OR (gb.merged_into_game_id IS NULL AND gb.visibility = 'public' AND gb.published_rule_count > 0))
+      AND (sa.kind = 'configuration' OR (ga.merged_into_game_id IS NULL AND ga.visibility = 'public'
+        AND (ga.published_rule_count > 0 OR ga.attribute_enabled = 1)))
+      AND (sb.kind = 'configuration' OR (gb.merged_into_game_id IS NULL AND gb.visibility = 'public'
+        AND (gb.published_rule_count > 0 OR gb.attribute_enabled = 1)))
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
   if (!row) throw new Error('attribute_subject_not_found');

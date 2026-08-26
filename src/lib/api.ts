@@ -358,8 +358,17 @@ export const api = {
   devLogin: () => mutation<{ user: SessionUser }>('/api/auth/dev', { method: 'POST', body: '{}' }),
   logout: () => mutation<{ ok: true }>('/api/logout', { method: 'POST', body: '{}' }),
   home,
-  searchGames: async (query: string, onUpdated?: (data: { games: GameSummary[] }) => void) => ({
-    games: filterGameCatalog((await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 20) }))).games, query, 20),
+  searchGames: async (
+    query: string,
+    onUpdated?: (data: { games: GameSummary[] }) => void,
+    options: { includeGamesWithoutPublishedRules?: boolean } = {},
+  ) => ({
+    games: filterGameCatalog(
+      (await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 20, options) }))).games,
+      query,
+      20,
+      options,
+    ),
   }),
   search: async (query: string, onUpdated?: (data: { games: GameSummary[]; rules: RuleSearchResult[] }) => void) => ({
     games: filterGameCatalog((await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 8), rules: [] }))).games, query, 8),

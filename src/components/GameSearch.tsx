@@ -15,6 +15,7 @@ interface Props {
   allowCreate?: boolean;
   onCreate?(name: string): void;
   includeRules?: boolean;
+  includeGamesWithoutPublishedRules?: boolean;
   onRuleSelect?(rule: RuleSearchResult): void;
   placeholder?: string;
 }
@@ -75,7 +76,7 @@ export function formatGameSearchDisplay(
   };
 }
 
-export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...' }: Props) => {
+export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, includeGamesWithoutPublishedRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...' }: Props) => {
   const inputId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,7 +121,11 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       };
       const request = includeRules
         ? api.search(query, applyUpdated)
-        : api.searchGames(query, (result) => applyUpdated({ ...result, rules: [] })).then((result) => ({ ...result, rules: [] }));
+        : api.searchGames(
+          query,
+          (result) => applyUpdated({ ...result, rules: [] }),
+          { includeGamesWithoutPublishedRules },
+        ).then((result) => ({ ...result, rules: [] }));
       request.then((response) => {
         if (active) { setGames(response.games); setRules(response.rules); setActiveIndex(-1); setSearchError(false); }
       }).catch(() => { if (active) { setGames([]); setRules([]); setSearchError(true); } }).finally(() => { if (active) setLoading(false); });
@@ -129,7 +134,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     fetchApi();
 
     return () => { active = false; };
-  }, [includeRules, isMinLengthSatisfied, query, selectedId]);
+  }, [includeGamesWithoutPublishedRules, includeRules, isMinLengthSatisfied, query, selectedId]);
 
   const hasExactMatch = games.some(
     (g) =>

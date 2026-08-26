@@ -9,10 +9,20 @@ export const normalizeGameSearchText = (value: string): string => value
   .toLocaleLowerCase('zh-Hant')
   .replace(/[\s\p{P}\p{S}]+/gu, '');
 
-export const filterGameCatalog = (games: GameSummary[], rawQuery: string, limit = 20): GameSummary[] => {
+export interface GameCatalogFilterOptions {
+  includeGamesWithoutPublishedRules?: boolean;
+}
+
+export const filterGameCatalog = (
+  games: GameSummary[],
+  rawQuery: string,
+  limit = 20,
+  options: GameCatalogFilterOptions = {},
+): GameSummary[] => {
   const query = normalizeGameSearchText(rawQuery);
   if (!query) return [];
   return games
+    .filter((game) => options.includeGamesWithoutPublishedRules || (game.publishedRuleCount ?? game.ruleCount) > 0)
     .filter((game) => [game.displayName, game.englishName, ...(game.aliases ?? [])]
       .some((name) => name && normalizeGameSearchText(name).includes(query)))
     .sort((left, right) => {
