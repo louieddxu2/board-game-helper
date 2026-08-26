@@ -376,7 +376,7 @@ describe('api versioned game catalog boundary', () => {
 
 describe('api versioned attribute table boundary', () => {
   const table = {
-    generation: 1,
+    generation: 2,
     throughVersion: 10,
     generatedAt: Date.now(),
     attributes: [{ id: 'attribute-luck', key: 'luck', name: '運氣', minValue: 0, maxValue: 10, sortOrder: 0 }],
@@ -415,6 +415,28 @@ describe('api versioned attribute table boundary', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=10', expect.any(Object));
     expect(cacheSnapshot).toHaveBeenCalledWith(table);
     expect(cacheChanges).toHaveBeenCalledWith(noChanges);
+  });
+
+  test('replaces a cached generation-one table that lost flat candidate entries', async () => {
+    const legacy = { ...table, generation: 1, candidates: [] };
+    const repaired = { ...legacy, candidates: [{ id: 'candidate-1', displayName: '待對應遊戲', values: [8], matchStatus: 'pending' as const, sourceRowNumber: 3 }] };
+    const cacheRecord = { key: 'attributes:table:versioned:v1', data: legacy, cachedAt: Date.now() };
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(cacheRecord);
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValue({ ...cacheRecord, data: repaired });
+    const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
+    const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => path === '/api/attributes/table'
+        ? repaired
+        : { changes: [], throughVersion: repaired.throughVersion, hasMore: false },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.attributeTable()).resolves.toEqual(repaired);
+    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table', expect.any(Object));
+    expect(cacheSnapshot).toHaveBeenCalledWith(repaired);
   });
 
   test('returns a stale table immediately and publishes background deltas', async () => {

@@ -184,7 +184,13 @@ export const attributeCatalogPayload = ({ state, chunks }: AttributeCatalogSnaps
         subjects.set(entry.subject.id, entry.subject);
         entry.values.forEach((value) => values.set(`${value.subjectId}:${value.attributeId}`, value));
       }
-      if (entry.kind === 'candidate' && entry.candidate?.id) candidates.set(entry.candidate.id, entry.candidate);
+      if (entry.kind === 'candidate') {
+        // Migration 0051 wrote candidate entries in the flat delta shape,
+        // while weekly TypeScript rebuilds use the nested snapshot shape.
+        // Accept both so generation 1 does not silently lose pending rows.
+        const candidate = parseCandidate(entry.candidate) ?? parseCandidate(entry);
+        if (candidate) candidates.set(candidate.id, candidate);
+      }
     });
   });
   const attributes = parseJson(stateRow.attributes_json);

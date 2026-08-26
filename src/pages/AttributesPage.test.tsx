@@ -25,6 +25,7 @@ const extremeExamples = {
 const recentActivities: AttributeActivity[] = [
   { id: 'rating-a', kind: 'rating', actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name, subject: subjectA, value: 8, createdAt: 1 },
   { id: 'comparison', kind: 'comparison', actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name, subjectA, subjectB, ratingA: 8, ratingB: 3, result: 'A_HIGHER', createdAt: 1 },
+  ...Array.from({ length: 4 }, (_, index) => ({ id: `comparison-${index}`, kind: 'comparison' as const, actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name, subjectA, subjectB, result: 'SIMILAR' as const, createdAt: index + 2 })),
 ];
 
 describe('AttributesPage question flow', () => {
@@ -46,8 +47,8 @@ describe('AttributesPage question flow', () => {
     const recentActivity = screen.getByLabelText('最近投票記錄');
     expect(voteHeader).not.toContainElement(recentActivity);
     expect((voteHeader?.compareDocumentPosition(recentActivity) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(recentActivity.querySelectorAll('li')).toHaveLength(1);
-    expect(screen.getByLabelText('最近投票記錄').querySelector('li > span:last-child')).toHaveTextContent(/玩家\s*認為\s*遊戲甲（8）\s*的「運氣成分」高於\s*遊戲乙（3）/);
+    expect(recentActivity.querySelectorAll('li')).toHaveLength(5);
+    expect(screen.getByLabelText('最近投票記錄').querySelector('li > span:last-child')).toHaveTextContent(/玩家\s*認為\s*遊戲甲（8）\s*的「運氣成分」比\s*遊戲乙（3）\s*更多/);
     expect(screen.getByLabelText('最近投票記錄')).not.toHaveTextContent('給');
     expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
     expect(screen.getByText('↑ 範例')).toBeInTheDocument();
@@ -64,6 +65,7 @@ describe('AttributesPage question flow', () => {
     expect(screen.getByLabelText('目前資料中的極端分數範例').compareDocumentPosition(screen.getByRole('heading', { name: /哪款遊戲的/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('heading', { name: /哪款遊戲的/ }).closest('.attributes-question-center')).toBeInTheDocument();
     expect(screen.getByLabelText('兩款遊戲評分數線').closest('.attributes-rating-zone')).toBeInTheDocument();
+    expect((document.querySelector('.attributes-pair-actions')?.compareDocumentPosition(screen.getByLabelText('兩款遊戲評分數線')) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: /完整說明/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();

@@ -5,7 +5,7 @@ import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
 import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
-import { attributeQuestionEnding } from '../lib/attributeQuestion';
+import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
@@ -26,9 +26,11 @@ const activitySubject = (subject: { displayName: string }, rating?: number) => <
 
 const activityText = (activity: AttributeActivity) => {
   if (activity.subjectA && activity.subjectB && activity.result) {
-    if (activity.result === 'A_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 的「{activity.attributeName}」高於 {activitySubject(activity.subjectB, activity.ratingB)}</>;
-    if (activity.result === 'B_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」高於 {activitySubject(activity.subjectA, activity.ratingA)}</>;
-    return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 與 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」差不多</>;
+    const attributeKey = activity.attributeId.replace(/^attribute[-_]/, '');
+    const wording = attributeComparisonWording(attributeKey);
+    if (activity.result === 'A_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 的「{activity.attributeName}」比 {activitySubject(activity.subjectB, activity.ratingB)} {wording.higher}</>;
+    if (activity.result === 'B_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」比 {activitySubject(activity.subjectA, activity.ratingA)} {wording.higher}</>;
+    return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 與 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」{wording.similar}</>;
   }
   return `${activity.actorName} 完成了一筆屬性投票`;
 };
@@ -319,7 +321,7 @@ export const AttributesPage = () => {
     .slice(0, 2);
   const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
-  const recentComparisons = payload.activities.filter((activity) => activity.kind === 'comparison').slice(0, 3);
+  const recentComparisons = payload.activities.filter((activity) => activity.kind === 'comparison').slice(0, 5);
   const ratingSuggestion = suggestedComparisonForRatings(ratingA, ratingB);
   const ratingSuggestionText = ratingSuggestion === 'A_HIGHER'
     ? `依照分數，建議點「${question.subjectA.displayName}」`
@@ -339,14 +341,13 @@ export const AttributesPage = () => {
     {(offline || pendingCount > 0) && <p className="attributes-offline-note" role="status">{pendingCount > 0 ? `有 ${pendingCount} 筆回答等待同步。` : '目前離線，回答會先暫存在本機。'} <button type="button" onClick={() => void syncPendingResponses()} disabled={syncing}>{syncing ? '同步中…' : '重新同步'}</button></p>}
 
     <section className={`attributes-question-card is-${questionMotion}`} aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
-      {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
-        <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
-          {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
-          {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
-        </AttributeScoreAxis>
-      </div> : null}
-
       <div className="attributes-question-center">
+        {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
+          <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
+            {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
+            {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
+          </AttributeScoreAxis>
+        </div> : null}
         <div className="attributes-question-attribute">
           <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
           {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
@@ -367,12 +368,11 @@ export const AttributesPage = () => {
           <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
           <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
         </div>
-      </div>
-
-      <div className="attributes-rating-zone">
-        <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
-        {ratingSuggestionText && !submitting && <p className="attributes-rating-suggestion" role="status"><span aria-hidden="true">↑</span> {ratingSuggestionText}</p>}
-        {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
+        <div className="attributes-rating-zone">
+          <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
+          {ratingSuggestionText && !submitting && <p className="attributes-rating-suggestion" role="status"><span aria-hidden="true">↑</span> {ratingSuggestionText}</p>}
+          {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
+        </div>
       </div>
     </section>
 

@@ -46,6 +46,7 @@ describe('versioned attribute table catalog', () => {
       chunks: { results: [{ chunk_number: 0, entries_json: JSON.stringify([
         { kind: 'subject', subject: subject(), values: [value()] },
         { kind: 'candidate', candidate: { id: 'candidate-1', displayName: '待處理', values: [8], matchStatus: 'pending', sourceRowNumber: 3 } },
+        { kind: 'candidate', id: 'candidate-legacy', displayName: '初始快照待處理', valuesJson: JSON.stringify([2, null, 9]), matchStatus: 'pending', sourceRowNumber: 4 },
       ]) }] },
     };
 
@@ -54,7 +55,10 @@ describe('versioned attribute table catalog', () => {
       throughVersion: 9,
       subjects: [expect.objectContaining({ id: 'subject-a' })],
       values: [expect.objectContaining({ score: 6.5 })],
-      candidates: [expect.objectContaining({ id: 'candidate-1' })],
+      candidates: [
+        expect.objectContaining({ id: 'candidate-1' }),
+        expect.objectContaining({ id: 'candidate-legacy', values: [2, null, 9] }),
+      ],
     });
   });
 

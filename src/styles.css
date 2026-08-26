@@ -1753,8 +1753,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 .attribute-vote-page .attributes-question-examples {
   position: absolute;
-  top: 0;
+  top: auto;
   right: 0;
+  bottom: calc(100% + 7px);
   left: 0;
   margin: 0;
 }
@@ -1794,7 +1795,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 }
 
 .attribute-vote-page > .attributes-inline-activity {
-  min-height: 38px;
+  min-height: 67px;
 }
 
 .attribute-vote-page > .attributes-inline-activity ol {
@@ -1807,7 +1808,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 .attribute-vote-page .attributes-question-center {
   position: absolute;
-  top: calc(50% - 41px);
+  top: calc(50% - 56px);
   right: 0;
   left: 0;
   display: grid;
@@ -1816,8 +1817,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 .attribute-vote-page .attributes-rating-zone {
   position: absolute;
+  top: calc(100% + 10px);
   right: 0;
-  bottom: 0;
+  bottom: auto;
   left: 0;
 }
 
@@ -1942,17 +1944,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 }
 
 .attribute-vote-page .attribute-game-card-copy h3 {
-  display: -webkit-box;
+  display: block;
   width: 100%;
   margin: 0;
   overflow: hidden;
   color: inherit;
-  font-size: clamp(15px, 4.2vw, 19px);
+  font-size: 21px;
   font-weight: 850;
   line-height: 1.18;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attribute-vote-page .attribute-game-card-copy p {

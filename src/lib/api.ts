@@ -141,6 +141,9 @@ export const ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const isAttributeTableSnapshotExpired = (record: AttributeCatalogCacheRecord, currentTime = Date.now()) =>
   currentTime - (record.snapshotFetchedAt ?? record.data.generatedAt) >= ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS;
 
+const needsInitialAttributeCandidateRepair = (record: AttributeCatalogCacheRecord) =>
+  record.data.generation === 1 && record.data.candidates.length === 0;
+
 const synchronizeAttributeTable = async (catalog: AttributeCatalogPayload): Promise<AttributeCatalogPayload> => {
   let afterVersion = catalog.throughVersion;
   while (true) {
@@ -174,8 +177,10 @@ const refreshAttributeTable = async (knownBase?: AttributeCatalogCacheRecord | n
 
 const attributeTable = async (onUpdated?: (data: AttributeCatalogPayload) => void): Promise<AttributeCatalogPayload> => {
   const cached = await localDb.getSynchronizedAttributeCatalog().catch(() => undefined);
-  if (cached) return cached.data;
+  if (cached && !needsInitialAttributeCandidateRepair(cached)) return cached.data;
+  if (cached) return refreshAttributeTable(null);
   const stale = await localDb.getLatestAttributeCatalog().catch(() => undefined);
+  if (stale && needsInitialAttributeCandidateRepair(stale)) return refreshAttributeTable(null);
   if (!stale) return refreshAttributeTable(null);
   void refreshAttributeTable(stale).then((updated) => {
     if (updated.throughVersion !== stale.data.throughVersion || updated.generatedAt !== stale.data.generatedAt) onUpdated?.(updated);
