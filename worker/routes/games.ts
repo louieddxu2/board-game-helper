@@ -13,6 +13,7 @@ import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges,
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 import { canEditContributionGame } from '../contributions';
+import { acquireAttributeMergeLock, prepareAttributeMergeReplay, releaseAttributeMergeLock } from '../data/attributes';
 import {
   anonymousGameViewKey,
   dailyViewToken,
@@ -315,77 +316,90 @@ const mergeSchema = z.object({ targetGameId: z.string().min(1), reason: z.string
 gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
   const parsed = mergeSchema.safeParse(await c.req.json());
   if (!parsed.success || parsed.data.targetGameId === c.req.param('id')) return c.json({ error: 'invalid_merge' }, 400);
+  const queryDb = getDatabase(c);
   const [source, target] = await Promise.all([
-    getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<Record<string, unknown>>(),
-    getDatabase(c).statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
+    queryDb.statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<Record<string, unknown>>(),
+    queryDb.statement('SELECT * FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(parsed.data.targetGameId).first<Record<string, unknown>>(),
   ]);
   if (!source || !target) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
-  await getDatabase(c).batch([
-    getDatabase(c).statement(`
-      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-      SELECT ?, ?, display_name, normalized_name, 'legacy', ? FROM games WHERE id = ?
-    `).bind(createId('alias'), parsed.data.targetGameId, timestamp, c.req.param('id')),
-    getDatabase(c).statement(`
-      INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
-      SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
-    `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    getDatabase(c).statement(`
-      INSERT INTO game_daily_view_counts (game_id, view_date, view_count, last_view_at)
-      SELECT ?, view_date, view_count, last_view_at
-      FROM game_daily_view_counts
-      WHERE game_id = ?
-      ON CONFLICT(game_id, view_date) DO UPDATE SET
-        view_count = game_daily_view_counts.view_count + excluded.view_count,
-        last_view_at = MAX(game_daily_view_counts.last_view_at, excluded.last_view_at)
-    `).bind(parsed.data.targetGameId, c.req.param('id')),
-    getDatabase(c).statement('DELETE FROM game_daily_view_counts WHERE game_id = ?').bind(c.req.param('id')),
-    getDatabase(c).statement('DELETE FROM game_view_dedup WHERE game_id = ?').bind(c.req.param('id')),
-    getDatabase(c).statement(`
-      UPDATE user_game_favorites
-      SET seen_rule_updated_at = MAX(seen_rule_updated_at, COALESCE((
-            SELECT source.seen_rule_updated_at FROM user_game_favorites source
-            WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
-          ), seen_rule_updated_at)),
-          created_at = MAX(created_at, COALESCE((
-            SELECT source.created_at FROM user_game_favorites source
-            WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
-          ), created_at))
-      WHERE game_id = ?
-    `).bind(c.req.param('id'), c.req.param('id'), parsed.data.targetGameId),
-    getDatabase(c).statement(`
-      DELETE FROM user_game_favorites
-      WHERE game_id = ? AND EXISTS (
-        SELECT 1 FROM user_game_favorites target
-        WHERE target.user_id = user_game_favorites.user_id AND target.game_id = ?
-      )
-    `).bind(c.req.param('id'), parsed.data.targetGameId),
-    getDatabase(c).statement('UPDATE user_game_favorites SET game_id = ? WHERE game_id = ?')
-      .bind(parsed.data.targetGameId, c.req.param('id')),
-    getDatabase(c).statement('UPDATE rule_importance_votes SET game_id = ? WHERE game_id = ?')
-      .bind(parsed.data.targetGameId, c.req.param('id')),
-    getDatabase(c).statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
-    getDatabase(c).statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    getDatabase(c).statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
-    getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
-  ]);
-  const updatedTarget = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
-      g.published_rule_count AS rule_count, g.published_rule_count,
-      g.total_rule_count, g.latest_rule_updated_at,
-      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
-    FROM games g
-    LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.id = ?
-    GROUP BY g.id
-  `).bind(parsed.data.targetGameId).first<GameRow>();
-  return c.json({
-    ok: true,
-    sourceGameId: c.req.param('id'),
-    targetGameId: parsed.data.targetGameId,
-    sourceGame: toGame(source as unknown as GameRow),
-    targetGame: toGame(updatedTarget!),
-  });
+  const mergeLock = await acquireAttributeMergeLock(queryDb, c.req.param('id'), parsed.data.targetGameId, timestamp);
+  try {
+    const attributeReplay = await prepareAttributeMergeReplay(queryDb, c.req.param('id'), parsed.data.targetGameId, timestamp);
+    await queryDb.batch([
+      queryDb.statement(`
+        INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+        SELECT ?, ?, display_name, normalized_name, 'legacy', ? FROM games WHERE id = ?
+      `).bind(createId('alias'), parsed.data.targetGameId, timestamp, c.req.param('id')),
+      queryDb.statement(`
+        INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
+        SELECT 'm_' || id, ?, alias, normalized_alias, 'legacy', ? FROM game_aliases WHERE game_id = ?
+      `).bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+      queryDb.statement(`
+        INSERT INTO game_daily_view_counts (game_id, view_date, view_count, last_view_at)
+        SELECT ?, view_date, view_count, last_view_at
+        FROM game_daily_view_counts
+        WHERE game_id = ?
+        ON CONFLICT(game_id, view_date) DO UPDATE SET
+          view_count = game_daily_view_counts.view_count + excluded.view_count,
+          last_view_at = MAX(game_daily_view_counts.last_view_at, excluded.last_view_at)
+      `).bind(parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement('DELETE FROM game_daily_view_counts WHERE game_id = ?').bind(c.req.param('id')),
+      queryDb.statement('DELETE FROM game_view_dedup WHERE game_id = ?').bind(c.req.param('id')),
+      queryDb.statement(`
+        UPDATE user_game_favorites
+        SET seen_rule_updated_at = MAX(seen_rule_updated_at, COALESCE((
+              SELECT source.seen_rule_updated_at FROM user_game_favorites source
+              WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
+            ), seen_rule_updated_at)),
+            created_at = MAX(created_at, COALESCE((
+              SELECT source.created_at FROM user_game_favorites source
+              WHERE source.user_id = user_game_favorites.user_id AND source.game_id = ?
+            ), created_at))
+        WHERE game_id = ?
+      `).bind(c.req.param('id'), c.req.param('id'), parsed.data.targetGameId),
+      queryDb.statement(`
+        DELETE FROM user_game_favorites
+        WHERE game_id = ? AND EXISTS (
+          SELECT 1 FROM user_game_favorites target
+          WHERE target.user_id = user_game_favorites.user_id AND target.game_id = ?
+        )
+      `).bind(c.req.param('id'), parsed.data.targetGameId),
+      queryDb.statement('UPDATE user_game_favorites SET game_id = ? WHERE game_id = ?')
+        .bind(parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement('UPDATE rule_importance_votes SET game_id = ? WHERE game_id = ?')
+        .bind(parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+      queryDb.statement(`
+        UPDATE attribute_subject_components
+        SET game_id = ?, label = (SELECT display_name FROM games WHERE id = ?)
+        WHERE game_id = ? AND component_type = 'base'
+      `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
+      queryDb.statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
+      ...attributeReplay.statements,
+    ]);
+    const updatedTarget = await queryDb.statement(`
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+        g.published_rule_count AS rule_count, g.published_rule_count,
+        g.total_rule_count, g.latest_rule_updated_at,
+        GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
+      FROM games g
+      LEFT JOIN game_aliases a ON a.game_id = g.id
+      WHERE g.id = ?
+      GROUP BY g.id
+    `).bind(parsed.data.targetGameId).first<GameRow>();
+    return c.json({
+      ok: true,
+      sourceGameId: c.req.param('id'),
+      targetGameId: parsed.data.targetGameId,
+      sourceGame: toGame(source as unknown as GameRow),
+      targetGame: toGame(updatedTarget!),
+    });
+  } finally {
+    await releaseAttributeMergeLock(queryDb, mergeLock);
+  }
 });
 
 

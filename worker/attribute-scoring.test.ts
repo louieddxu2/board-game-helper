@@ -7,6 +7,7 @@ import {
   applyDirectRating,
   emptyAttributeState,
   replayAttributeEvents,
+  replayAttributeResponses,
   calculateAttributeScores,
   expectedComparisonVarianceReduction,
 } from './data/attributeScoring';
@@ -125,5 +126,30 @@ describe('glicko-rd-v1', () => {
     const reversed = replayAttributeEvents([...events].reverse());
 
     expect([...ordered.entries()]).toEqual([...reversed.entries()]);
+  });
+
+  test('replays compact responses after mapping a merged subject into its target', () => {
+    const states = replayAttributeResponses([
+      {
+        responseId: '1', createdAt: 10, attributeId: 'luck', subjectAId: 'source', subjectBId: null,
+        ratingA: 8, ratingB: null, comparison: null,
+      },
+      {
+        responseId: '2', createdAt: 20, attributeId: 'luck', subjectAId: 'target', subjectBId: 'opponent',
+        ratingA: 5, ratingB: 5, comparison: 'A_HIGHER',
+      },
+      {
+        responseId: '3', createdAt: 30, attributeId: 'luck', subjectAId: 'source', subjectBId: 'opponent',
+        ratingA: null, ratingB: null, comparison: 'A_HIGHER',
+      },
+    ], (subjectId) => subjectId === 'source' ? 'target' : subjectId);
+
+    const target = states.get('target\u0000luck');
+    const opponent = states.get('opponent\u0000luck');
+    expect(target?.directSum).toBe(13);
+    expect(target?.directCount).toBe(2);
+    expect(target?.comparisonCount).toBe(2);
+    expect(opponent?.comparisonCount).toBe(2);
+    expect(target?.score).toBeGreaterThan(opponent?.score ?? 0);
   });
 });

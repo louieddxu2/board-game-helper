@@ -13,13 +13,15 @@ import type {
   AttributesPayload,
 } from '../../src/shared/types';
 import { createId } from '../utils';
-import type { Database } from './database';
+import type { Database, DatabaseStatement } from './database';
 import {
   ATTRIBUTE_INITIAL_RD,
   ATTRIBUTE_SCORE_MODEL_VERSION,
   applyComparison,
   applyDirectRating,
   emptyAttributeState,
+  replayAttributeResponses,
+  type AttributeResponseReplayRecord,
   type OnlineAttributeState,
 } from './attributeScoring';
 import {
@@ -115,6 +117,29 @@ interface ActivityFeedRow {
   payload_json: string;
 }
 
+interface AttributeResponseReplayRow {
+  response_id: string;
+  attribute_id: string | null;
+  subject_a_id: string | null;
+  subject_b_id: string | null;
+  rating_a: number | null;
+  rating_b: number | null;
+  comparison: AttributeComparisonResult | null;
+  created_at: number;
+}
+
+interface AttributeVoteEventReplayRow {
+  id: string;
+  response_id: string;
+  kind: 'rating' | 'comparison';
+  attribute_id: string;
+  subject_a_id: string;
+  subject_b_id: string | null;
+  value: number | null;
+  result: AttributeComparisonResult | null;
+  created_at: number;
+}
+
 interface AttributeExtremeExampleRow {
   subject_id: string;
   subject_slug: string;
@@ -184,6 +209,17 @@ export interface AttributeResponseInput {
 export interface SavedAttributeResponse {
   updatedValues: AttributeMatrixValue[];
   activities: AttributeActivity[];
+}
+
+export interface AttributeMergeLock {
+  token: string;
+  names: string[];
+}
+
+export interface AttributeMergeReplayPlan {
+  sourceSubjectId: string | null;
+  targetSubjectId: string | null;
+  statements: DatabaseStatement[];
 }
 
 const toAttribute = (row: AttributeRow): AttributeDefinition => ({
@@ -872,6 +908,216 @@ const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
 };
 
 const batchChangeCount = (result: { meta?: { changes?: number } } | undefined) => result?.meta?.changes ?? 1;
+
+const attributeMergeSubjectIds = async (db: Database, sourceGameId: string, targetGameId: string) => {
+  const result = await db.statement(`
+    SELECT game_id, id
+    FROM attribute_subjects
+    WHERE kind = 'game' AND game_id IN (?, ?)
+  `).bind(sourceGameId, targetGameId).all<{ game_id: string; id: string }>();
+  const byGameId = new Map((result.results ?? []).map((row) => [row.game_id, row.id]));
+  return { sourceSubjectId: byGameId.get(sourceGameId) ?? null, targetSubjectId: byGameId.get(targetGameId) ?? null };
+};
+
+/**
+ * Stop votes touching either canonical game while an editor merge rebuilds the
+ * materialized attribute states. This closes the small race between reading
+ * the historical answer stream and committing the rebuilt states.
+ */
+export const acquireAttributeMergeLock = async (
+  db: Database,
+  sourceGameId: string,
+  targetGameId: string,
+  timestamp: number,
+): Promise<AttributeMergeLock> => {
+  const [{ sourceSubjectId, targetSubjectId }, attributes] = await Promise.all([
+    attributeMergeSubjectIds(db, sourceGameId, targetGameId),
+    db.statement('SELECT id FROM attributes WHERE is_active = 1 ORDER BY id').all<{ id: string }>(),
+  ]);
+  const subjectIds = [sourceSubjectId, targetSubjectId].filter((id): id is string => Boolean(id));
+  const names = [...new Set((attributes.results ?? []).flatMap((attribute) => subjectIds.map((subjectId) => `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:${attribute.id}:${subjectId}`)))].sort();
+  if (!names.length) return { token: '', names: [] };
+  const token = createId('attribute-merge-lock');
+  const expiresAt = Math.max(Date.now(), timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
+  const results = await db.batch([
+    db.statement(`
+      DELETE FROM attribute_vote_lock
+      WHERE lock_name IN (${names.map(() => '?').join(',')}) AND expires_at < ?
+    `).bind(...names, Date.now()),
+    ...names.map((name) => db.statement(`
+      INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
+      VALUES (?, ?, ?)
+    `).bind(name, token, expiresAt)),
+  ]);
+  const acquired = names.filter((_, index) => batchChangeCount(results[index + 1]) === 1);
+  if (acquired.length !== names.length) {
+    await releaseAttributeMergeLock(db, { token, names: acquired });
+    throw new Error('attribute_response_busy');
+  }
+  return { token, names };
+};
+
+export const releaseAttributeMergeLock = async (db: Database, lock: AttributeMergeLock): Promise<void> => {
+  if (!lock.names.length) return;
+  await db.statement(`
+    DELETE FROM attribute_vote_lock
+    WHERE lock_name IN (${lock.names.map(() => '?').join(',')}) AND token = ?
+  `).bind(...lock.names, lock.token).run();
+};
+
+const ATTRIBUTE_MERGE_REPLAY_CHUNK_SIZE = 1000;
+
+const chunks = <T>(items: T[], size: number): T[][] => {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+};
+
+/**
+ * Prepare the state writes required by a game merge. The compact responses
+ * remain untouched as the audit trail; only their subject identity is mapped
+ * while replaying. Replaying the complete stream is intentional: a response
+ * involving the merged game may also have changed the historical state of an
+ * opponent, which can affect later comparisons.
+ */
+export const prepareAttributeMergeReplay = async (
+  db: Database,
+  sourceGameId: string,
+  targetGameId: string,
+  timestamp: number,
+): Promise<AttributeMergeReplayPlan> => {
+  const [{ sourceSubjectId, targetSubjectId }, attributeResult] = await Promise.all([
+    attributeMergeSubjectIds(db, sourceGameId, targetGameId),
+    db.statement('SELECT id FROM attributes WHERE is_active = 1 ORDER BY id').all<{ id: string }>(),
+  ]);
+  if (!sourceSubjectId || !targetSubjectId) return { sourceSubjectId, targetSubjectId, statements: [] };
+
+  const [responseResult, eventResult] = await Promise.all([
+    db.statement(`
+      SELECT response_id, attribute_id, subject_a_id, subject_b_id,
+        rating_a, rating_b, comparison, created_at
+      FROM attribute_vote_responses
+      WHERE attribute_id IS NOT NULL
+    `).all<AttributeResponseReplayRow>(),
+    db.statement(`
+      SELECT id, response_id, kind, attribute_id, subject_a_id, subject_b_id,
+        value, result, created_at
+      FROM attribute_vote_events
+    `).all<AttributeVoteEventReplayRow>(),
+  ]);
+  const mapSubject = (subjectId: string) => subjectId === sourceSubjectId ? targetSubjectId : subjectId;
+  const compactResponseRows = (responseResult.results ?? [])
+    .filter((row): row is AttributeResponseReplayRow & { attribute_id: string } => Boolean(row.attribute_id));
+  const compactResponseIds = new Set(compactResponseRows.map((row) => row.response_id));
+  const responses: AttributeResponseReplayRecord[] = [
+    ...(eventResult.results ?? [])
+      .filter((row) => !compactResponseIds.has(row.response_id))
+      .map((row): AttributeResponseReplayRecord => ({
+        responseId: `event:${row.id}`,
+        createdAt: Number(row.created_at),
+        attributeId: row.attribute_id,
+        subjectAId: row.subject_a_id,
+        subjectBId: row.subject_b_id,
+        ratingA: row.kind === 'rating' && row.value != null ? Number(row.value) : null,
+        ratingB: null,
+        comparison: row.kind === 'comparison' ? row.result : null,
+      })),
+    ...compactResponseRows.map((row): AttributeResponseReplayRecord => ({
+        responseId: row.response_id,
+        createdAt: Number(row.created_at),
+        attributeId: row.attribute_id,
+        subjectAId: row.subject_a_id,
+        subjectBId: row.subject_b_id,
+        ratingA: row.rating_a == null ? null : Number(row.rating_a),
+        ratingB: row.rating_b == null ? null : Number(row.rating_b),
+        comparison: row.comparison,
+      })),
+  ];
+  const mappedResponses = responses.map((response) => ({
+    ...response,
+    subjectAId: response.subjectAId ? mapSubject(response.subjectAId) : null,
+    subjectBId: response.subjectBId ? mapSubject(response.subjectBId) : null,
+  }));
+  const states = replayAttributeResponses(mappedResponses);
+
+  // A target must be reset even for attributes with no historical response;
+  // otherwise a stale target state would survive the merge.
+  const activeAttributeIds = (attributeResult.results ?? []).map((row) => row.id);
+  activeAttributeIds.forEach((attributeId) => {
+    const key = `${targetSubjectId}\u0000${attributeId}`;
+    if (!states.has(key)) states.set(key, emptyAttributeState());
+  });
+
+  const pairCounts = new Map<string, { subjectAId: string; subjectBId: string; attributeId: string; comparisonCount: number }>();
+  mappedResponses.forEach((row) => {
+    if (!row.comparison || !row.subjectAId || !row.subjectBId) return;
+    const subjectAId = row.subjectAId;
+    const subjectBId = row.subjectBId;
+    if (subjectAId === subjectBId || (subjectAId !== targetSubjectId && subjectBId !== targetSubjectId)) return;
+    const [canonicalA, canonicalB] = subjectAId < subjectBId ? [subjectAId, subjectBId] : [subjectBId, subjectAId];
+    const key = `${canonicalA}\u0000${canonicalB}\u0000${row.attributeId}`;
+    const existing = pairCounts.get(key);
+    if (existing) existing.comparisonCount += 1;
+    else pairCounts.set(key, { subjectAId: canonicalA, subjectBId: canonicalB, attributeId: row.attributeId, comparisonCount: 1 });
+  });
+
+  const stateRows = [...states.entries()]
+    .map(([key, state]) => {
+      const separator = key.indexOf('\u0000');
+      return {
+        s: key.slice(0, separator),
+        a: key.slice(separator + 1),
+        score: state.score,
+        rd: state.ratingDeviation,
+        directSum: state.directSum,
+        directCount: state.directCount,
+        comparisonCount: state.comparisonCount,
+        decisiveComparisonCount: state.decisiveComparisonCount,
+        evidenceCount: state.evidenceCount,
+      };
+    });
+  const statements: DatabaseStatement[] = [
+    db.statement('DELETE FROM attribute_score_states WHERE subject_id = ?').bind(sourceSubjectId),
+    db.statement('DELETE FROM attribute_pair_stats WHERE subject_a_id IN (?, ?) OR subject_b_id IN (?, ?)')
+      .bind(sourceSubjectId, targetSubjectId, sourceSubjectId, targetSubjectId),
+  ];
+  chunks(stateRows, ATTRIBUTE_MERGE_REPLAY_CHUNK_SIZE).forEach((chunk) => statements.push(db.statement(`
+    INSERT INTO attribute_score_states
+      (subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
+       comparison_count, decisive_comparison_count, evidence_count, model_version,
+       updated_at, random_key, question_slot)
+    SELECT json_extract(value, '$.s'), json_extract(value, '$.a'),
+      json_extract(value, '$.score'), json_extract(value, '$.rd'),
+      json_extract(value, '$.directSum'), json_extract(value, '$.directCount'),
+      json_extract(value, '$.comparisonCount'), json_extract(value, '$.decisiveComparisonCount'),
+      json_extract(value, '$.evidenceCount'), ?, ?, lower(hex(randomblob(16))),
+      (abs(random()) % ${ATTRIBUTE_QUESTION_SLOT_COUNT}) + 1
+    FROM json_each(?)
+    WHERE json_extract(value, '$.s') IS NOT NULL
+    ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
+      score = excluded.score,
+      rating_deviation = excluded.rating_deviation,
+      direct_sum = excluded.direct_sum,
+      direct_count = excluded.direct_count,
+      comparison_count = excluded.comparison_count,
+      decisive_comparison_count = excluded.decisive_comparison_count,
+      evidence_count = excluded.evidence_count,
+      model_version = excluded.model_version,
+      updated_at = excluded.updated_at
+  `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp, JSON.stringify(chunk))));
+  chunks([...pairCounts.values()], ATTRIBUTE_MERGE_REPLAY_CHUNK_SIZE).forEach((chunk) => statements.push(db.statement(`
+    INSERT INTO attribute_pair_stats
+      (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at)
+    SELECT json_extract(value, '$.subjectAId'), json_extract(value, '$.subjectBId'),
+      json_extract(value, '$.attributeId'), json_extract(value, '$.comparisonCount'), ?
+    FROM json_each(?)
+    WHERE json_extract(value, '$.subjectAId') IS NOT NULL
+    ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET
+      comparison_count = excluded.comparison_count,
+      updated_at = excluded.updated_at
+  `).bind(timestamp, JSON.stringify(chunk))));
+  return { sourceSubjectId, targetSubjectId, statements };
+};
 
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
   if (!lock.names.length) return;

@@ -8,8 +8,9 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
+import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv } from '../lib/attributeCollection';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
-import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
+import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
 type VoteFeedback = { state: 'saving' | 'saved'; text: string } | null;
@@ -82,7 +83,14 @@ export const AttributesPage = () => {
   const [ratingB, setRatingB] = useState('');
   const [questionMotion, setQuestionMotion] = useState<QuestionMotion>('idle');
   const [voteFeedback, setVoteFeedback] = useState<VoteFeedback>(null);
+  const [collectionIds, setCollectionIds] = useState<number[]>([]);
+  const [collectionMatchCount, setCollectionMatchCount] = useState(0);
+  const [collectionMessage, setCollectionMessage] = useState('');
+  const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
+  const collectionIdsRef = useRef<number[]>([]);
+  const collectionCatalogRef = useRef<AttributeCatalogPayload | undefined>(undefined);
+  const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
   const motionTimerRef = useRef<number | undefined>(undefined);
@@ -131,10 +139,46 @@ export const AttributesPage = () => {
     return pending;
   }, []);
 
+  const refreshCollectionScope = useCallback(async () => {
+    const ids = await localDb.getAttributeCollectionIds();
+    collectionIdsRef.current = ids;
+    setCollectionIds(ids);
+    if (!ids.length) {
+      collectionCatalogRef.current = undefined;
+      setCollectionMatchCount(0);
+      return;
+    }
+    const catalog = collectionCatalogRef.current ?? await api.attributeTable();
+    collectionCatalogRef.current = catalog;
+    setCollectionMatchCount(matchCollectionSubjects(catalog, ids).matchedBggIds.length);
+  }, []);
+
+  const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
+    const ids = collectionIdsRef.current;
+    if (!ids.length) return api.attributeQuestion(sessionId, questionOptions(currentQuestion, mode));
+    const catalog = collectionCatalogRef.current ?? await api.attributeTable();
+    collectionCatalogRef.current = catalog;
+    const { subjectIds } = matchCollectionSubjects(catalog, ids);
+    const selection = chooseScopedAttributeQuestion(catalog, subjectIds, questionOptions(currentQuestion, mode));
+    if (!selection) {
+      return {
+        question: null,
+        activities: [],
+        extremeExamples: { lowest: [], highest: [] },
+        scoreModelVersion: catalog.scoreModelVersion,
+      } satisfies AttributeQuestionPayload;
+    }
+    return api.attributeQuestion(sessionId, {
+      fixedSubjectAId: selection.subjectAId,
+      fixedSubjectBId: selection.subjectBId,
+      fixedAttributeId: selection.attributeId,
+    });
+  }, [sessionId]);
+
   const loadQuestion = useCallback(async (mode: 'pair' | 'a' | 'b' = 'pair') => {
     setQuestionLoading(true);
     try {
-      const next = await api.attributeQuestion(sessionId, questionOptions(question, mode));
+      const next = await requestQuestion(question, mode);
       setOffline(false);
       await animateQuestionChange(next, mode);
     } catch {
@@ -142,7 +186,7 @@ export const AttributesPage = () => {
     } finally {
       setQuestionLoading(false);
     }
-  }, [animateQuestionChange, question, sessionId]);
+  }, [animateQuestionChange, question, requestQuestion]);
 
   const syncPendingResponses = useCallback(async () => {
     if (syncingRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
@@ -165,7 +209,7 @@ export const AttributesPage = () => {
       const remaining = await refreshPendingCount();
       if (remaining.length < pending.length) {
         try {
-          const next = await api.attributeQuestion(sessionId, questionOptions(question, 'pair'));
+          const next = await requestQuestion(question, 'pair');
           setOffline(false);
           applyQuestionPayload(next);
         } catch {
@@ -177,19 +221,20 @@ export const AttributesPage = () => {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [applyQuestionPayload, question, refreshPendingCount, sessionId]);
+  }, [applyQuestionPayload, question, refreshPendingCount, requestQuestion, sessionId]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
       const pending = await refreshPendingCount();
+      await refreshCollectionScope().catch(() => undefined);
       const cached = await localDb.getLatestAttributeQuestion().catch(() => undefined);
       if (cached && active) {
         applyQuestionPayload(cached.data);
         setOffline(true);
       }
       try {
-        const nextPayload = await api.attributeQuestion(sessionId);
+        const nextPayload = await requestQuestion(undefined);
         if (!active) return;
         setOffline(false);
         setError(false);
@@ -205,7 +250,7 @@ export const AttributesPage = () => {
     return () => { active = false; };
   // This is intentionally a mount/load effect. The pending sync callback is
   // invoked after the first network result and on the browser online event.
-  }, [applyQuestionPayload, refreshPendingCount, sessionId]);
+  }, [applyQuestionPayload, refreshCollectionScope, refreshPendingCount, requestQuestion, sessionId]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -282,7 +327,7 @@ export const AttributesPage = () => {
     if (selectedComparison) setVoteFeedback({ state: 'saved', text: `已記錄：${comparisonChoiceText(question, selectedComparison)}` });
     try {
       const [nextPayload] = await Promise.all([
-        api.attributeQuestion(sessionId, questionOptions(question, 'pair')),
+        requestQuestion(question, 'pair'),
         reducedMotion() ? Promise.resolve() : wait(SAVED_FEEDBACK_MS),
       ]);
       setOffline(false);
@@ -308,8 +353,51 @@ export const AttributesPage = () => {
     void submitResponse(result);
   };
 
+  const handleCollectionImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCollectionImporting(true);
+    setCollectionMessage('');
+    try {
+      const parsed = parseGeekGroupCollectionCsv(await file.text());
+      await localDb.replaceAttributeCollectionIds(parsed.bggIds);
+      await refreshCollectionScope();
+      const next = await requestQuestion(question, 'pair');
+      setCollectionMessage(`已匯入 ${parsed.bggIds.length} 款，找到 ${matchCollectionSubjects(collectionCatalogRef.current!, parsed.bggIds).matchedBggIds.length} 款可投票遊戲。`);
+      if (next.question) {
+        setOffline(false);
+        await animateQuestionChange(next, 'pair');
+      } else {
+        applyQuestionPayload(next);
+        setResponseError('這份收藏中目前找不到至少兩款可投票的遊戲。');
+      }
+    } catch (caught) {
+      const message = caught instanceof Error && caught.message === 'csv_game_id_column_missing'
+        ? 'CSV 中找不到 Game ID 欄位。'
+        : caught instanceof Error && caught.message === 'csv_no_game_ids'
+          ? 'CSV 中沒有可辨識的 Game ID。'
+        : caught instanceof Error && caught.message === 'csv_file_too_large'
+          ? 'CSV 檔案不可超過 5 MB。'
+          : 'CSV 匯入失敗，請確認這是 GeekGroup 收藏匯出檔。';
+      setCollectionMessage(message);
+    } finally {
+      setCollectionImporting(false);
+    }
+  };
+
+  const collectionImportControl = <label className="attributes-collection-import">
+    <span>{collectionImporting ? '讀取中…' : '匯入收藏'}</span>
+    <input ref={collectionInputRef} type="file" accept=".csv,text/csv" onChange={(event) => void handleCollectionImport(event)} disabled={collectionImporting} />
+  </label>;
+
   if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
-  if (error || !payload || !question) return <section className="attribute-vote-page"><h1>屬性投票</h1><p>目前無法取得題目。</p><button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button></section>;
+  if (error || !payload || !question) return <section className="attribute-vote-page attributes-no-question">
+    <header className="attribute-vote-header"><h1>屬性投票</h1><div className="attributes-vote-actions">{collectionImportControl}<Link className="attributes-table-link" to="/attributes/table">屬性總表</Link></div></header>
+    <p>{collectionIds.length ? `本機收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。` : '目前無法取得題目。'}</p>
+    {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
+    <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
+  </section>;
 
   const lowestExamples = [...(payload.extremeExamples?.lowest ?? [])]
     .filter((example) => example.score <= 2)
@@ -332,8 +420,13 @@ export const AttributesPage = () => {
   return <section className="attribute-vote-page">
     <header className="attribute-vote-header">
       <h1>屬性投票</h1>
-      <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
+      <div className="attributes-vote-actions">
+        {collectionImportControl}
+        {collectionIds.length > 0 && <span className="attributes-collection-count">本機 {collectionMatchCount}/{collectionIds.length}</span>}
+        <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
+      </div>
     </header>
+    {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <div className="attributes-inline-activity" aria-label="最近投票記錄">
       {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
     </div>

@@ -52,6 +52,17 @@ export interface AttributeVoteReplayEvent {
   result?: AttributeComparisonResult | null;
 }
 
+export interface AttributeResponseReplayRecord {
+  responseId: string;
+  createdAt: number;
+  attributeId: string;
+  subjectAId: string | null;
+  subjectBId: string | null;
+  ratingA: number | null;
+  ratingB: number | null;
+  comparison: AttributeComparisonResult | null;
+}
+
 export interface AttributeUpdateResult {
   next: OnlineAttributeState;
   delta: number;
@@ -275,5 +286,49 @@ export const replayAttributeEvents = (events: AttributeVoteReplayEvent[]) => {
         states.set(b.key, updated.b.next);
       }
     });
+  return states;
+};
+
+/**
+ * Rebuild materialized states from the compact answer stream. A response is
+ * replayed in the same order as the online write path: A's direct score, B's
+ * direct score, then the comparison. The optional subject mapper is used by
+ * game merges to fold the old subject into the canonical subject without
+ * rewriting the append-only history rows.
+ */
+export const replayAttributeResponses = (
+  responses: AttributeResponseReplayRecord[],
+  subjectMapper: (subjectId: string) => string = (subjectId) => subjectId,
+) => {
+  const states = new Map<string, OnlineAttributeState>();
+  const getState = (subjectId: string, attributeId: string) => {
+    const key = `${subjectId}\u0000${attributeId}`;
+    const state = states.get(key) ?? emptyAttributeState();
+    states.set(key, state);
+    return { key, state };
+  };
+
+  [...responses]
+    .sort((left, right) => left.createdAt - right.createdAt || left.responseId.localeCompare(right.responseId))
+    .forEach((response) => {
+      const subjectAId = response.subjectAId ? subjectMapper(response.subjectAId) : null;
+      const subjectBId = response.subjectBId ? subjectMapper(response.subjectBId) : null;
+      if (subjectAId && response.ratingA != null) {
+        const a = getState(subjectAId, response.attributeId);
+        states.set(a.key, applyDirectRating(a.state, response.ratingA).next);
+      }
+      if (subjectBId && response.ratingB != null) {
+        const b = getState(subjectBId, response.attributeId);
+        states.set(b.key, applyDirectRating(b.state, response.ratingB).next);
+      }
+      if (subjectAId && subjectBId && subjectAId !== subjectBId && response.comparison != null) {
+        const a = getState(subjectAId, response.attributeId);
+        const b = getState(subjectBId, response.attributeId);
+        const updated = applyComparison(a.state, b.state, response.comparison);
+        states.set(a.key, updated.a.next);
+        states.set(b.key, updated.b.next);
+      }
+    });
+
   return states;
 };

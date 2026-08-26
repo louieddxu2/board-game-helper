@@ -131,6 +131,7 @@ interface RulesDb extends DBSchema {
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
   attributeResponses: { key: string; value: PendingAttributeResponse };
+  attributeCollectionIds: { key: number; value: { bggId: number; importedAt: number } };
 }
 
 export interface PendingAttributeResponse {
@@ -149,7 +150,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 4, {
+  return openDB<RulesDb>('wrong-board-game-rules', 5, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -167,6 +168,7 @@ const getDb = () => {
         rules.createIndex('gameId', 'gameId');
       }
       if (!db.objectStoreNames.contains('attributeResponses')) db.createObjectStore('attributeResponses', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('attributeCollectionIds')) db.createObjectStore('attributeCollectionIds', { keyPath: 'bggId' });
       if (oldVersion > 0 && oldVersion < 3) {
         transaction.objectStore('games').clear();
         transaction.objectStore('rules').clear();
@@ -253,6 +255,21 @@ export const localDb = {
   getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),
   cacheAttributeQuestion: async (data: AttributeQuestionPayload) => (await getDatabase()).put('cache', { key: 'attributes:question:v1', data, cachedAt: Date.now() }),
   getLatestAttributeQuestion: async () => (await getDatabase()).get('cache', 'attributes:question:v1') as Promise<CacheRecord<AttributeQuestionPayload> | undefined>,
+  replaceAttributeCollectionIds: async (bggIds: number[]) => {
+    const db = await getDatabase();
+    const transaction = db.transaction('attributeCollectionIds', 'readwrite');
+    await transaction.store.clear();
+    const importedAt = Date.now();
+    for (const bggId of [...new Set(bggIds)]) await transaction.store.put({ bggId, importedAt });
+    await transaction.done;
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('attribute-collection-change'));
+  },
+  getAttributeCollectionIds: async () => (await getDatabase()).getAll('attributeCollectionIds').then((rows) => rows.map((row) => row.bggId)),
+  clearAttributeCollectionIds: async () => {
+    const db = await getDatabase();
+    await db.clear('attributeCollectionIds');
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('attribute-collection-change'));
+  },
   addPendingAttributeResponse: async (payload: Omit<PendingAttributeResponse, 'id' | 'createdAt'> & { id?: string; createdAt?: number }) => {
     const item: PendingAttributeResponse = { ...payload, id: payload.id ?? payload.responseId, createdAt: payload.createdAt ?? Date.now() };
     return (await getDatabase()).put('attributeResponses', item);

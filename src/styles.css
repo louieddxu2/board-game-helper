@@ -2756,6 +2756,24 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   animation: ruleTargetPulse 2s ease;
 }
 
+/* ===== Local attribute collection import ===== */
+.attribute-vote-page .attributes-vote-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.attributes-collection-import { display: inline-flex; align-items: center; min-height: 32px; box-sizing: border-box; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); cursor: pointer; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.attributes-collection-import:hover, .attributes-collection-import:focus-within { border-color: var(--green); color: var(--green); }
+.attributes-collection-import input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.attributes-collection-count { max-width: 90px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.attributes-collection-message { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; text-align: right; }
+.attributes-no-question { align-content: center; justify-items: center; }
+.attributes-no-question .attribute-vote-header { width: 100%; }
+.attributes-no-question > p { margin: 0; color: var(--muted); text-align: center; }
+
+@media (max-width: 520px) {
+  .attribute-vote-page .attribute-vote-header { gap: 5px; }
+  .attribute-vote-page .attributes-vote-actions { gap: 4px; }
+  .attributes-collection-import { padding: 0 7px; font-size: 10px; }
+  .attributes-collection-count { max-width: 68px; }
+}
+
 @keyframes ruleTargetPulse {
   0% { transform: scale(1.02); box-shadow: 0 0 0 6px rgba(233,180,76,.6); }
   50% { transform: scale(1); box-shadow: 0 0 0 3px rgba(233,180,76,.4); }
