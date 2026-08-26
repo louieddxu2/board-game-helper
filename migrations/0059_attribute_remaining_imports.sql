@@ -36,7 +36,7 @@ VALUES
   ('attribute_candidate:37', 'game_attribute_import_gaia_project', 'gaia-project', '蓋亞計劃', 'Gaia Project', '蓋亞計劃', 220308, 1),
   ('attribute_candidate:38', 'game_attribute_import_fog_of_love', 'fog-of-love', 'Fog of Love', NULL, 'fogoflove', 175324, 1),
   ('attribute_candidate:39', 'game_attribute_import_and_then_we_held_hands', 'and-then-we-held-hands', '…and then, we held hands.', NULL, 'andthenweheldhands', 153999, 1),
-  ('attribute_candidate:41', 'game_attribute_import_hansa_teutonica', 'hansa-teutonica', '和薩同盟', 'Hansa Teutonica', '和薩同盟', 43015, 1),
+  ('attribute_candidate:41', 'game_attribute_import_hansa_teutonica', 'hansa-teutonica', '漢薩同盟', 'Hansa Teutonica', '漢薩同盟', 43015, 1),
   ('attribute_candidate:42', 'game_attribute_import_concordia', 'concordia', '和諧羅馬', 'Concordia', '和諧羅馬', 124361, 1),
   ('attribute_candidate:43', 'game_attribute_import_the_mind', 'the-mind', '心靈同步', 'The Mind', '心靈同步', 244992, 1),
   ('attribute_candidate:44', 'game_attribute_import_hanabi', 'hanabi', '花火', 'Hanabi', '花火', 98778, 1),
@@ -101,6 +101,37 @@ WHERE id IN (
   SELECT game_id FROM migration_0059_games
   WHERE candidate_id IS NOT NULL AND attribute_enabled = 1
 );
+
+-- Keep only useful alternative spellings that are not already found through
+-- display_name or english_name normalization. Raw spreadsheet concatenations
+-- and known misspellings remain audit data, not searchable aliases.
+INSERT OR IGNORE INTO game_aliases
+  (id, game_id, alias, normalized_alias, alias_type, created_at)
+VALUES
+  ('game_alias_attribute_import_hansa_teutonica_hansha',
+   'game_attribute_import_hansa_teutonica', '漢莎同盟', '漢莎同盟', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_hansa_teutonica_hansa',
+   'game_attribute_import_hansa_teutonica', '漢撒同盟', '漢撒同盟', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_gaia_project_traditional',
+   'game_attribute_import_gaia_project', '蓋亞計畫', '蓋亞計畫', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_railroad_ink_challenge_zh',
+   'game_a1c38db3091a9231100d', '鐵路墨軌：挑戰', '鐵路墨軌挑戰', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_paladins_west_kingdom_zh',
+   'game_ed273ed757f26dd483b8', '西國聖騎士', '西國聖騎士', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_barenpark_ascii',
+   'game_3b77f7f4b22d03184c5b', 'Barenpark', 'barenpark', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_heaven_ale_and',
+   'game_89d06dbb36089642bcc1', 'Heaven and Ale', 'heavenandale', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)),
+  ('game_alias_attribute_import_lovelace_babbage_and',
+   'game_7f41f30c5507cccef21c', 'Lovelace and Babbage', 'lovelaceandbabbage', 'attribute-import',
+   CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER));
 
 -- Base components are the canonical location for BGG identity in the
 -- attribute catalog. Existing shared games receive the same metadata without
