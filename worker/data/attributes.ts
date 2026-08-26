@@ -22,22 +22,28 @@ import {
   emptyAttributeState,
   type OnlineAttributeState,
 } from './attributeScoring';
+import {
+  chooseAttributeQuestionOpponent,
+  type AttributeQuestionOpponentCandidate,
+} from './attributeQuestionSelection';
 
 /** Number of random slots used to sample low-confidence game+attribute items. */
 export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
 export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
-export const ATTRIBUTE_EXTREME_EXAMPLE_LIMIT = 3;
+export const ATTRIBUTE_EXTREME_EXAMPLE_LIMIT = 2;
+export const ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT = 4;
+export const ATTRIBUTE_QUESTION_PAIR_STAT_LIMIT = 4;
 export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
 /** Measured local-D1 maximum for a full answer with two ratings and a comparison. */
 export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 29;
-/** Measured local-D1 maximum, including indexes, triggers, locks, and catalog deltas. */
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 25;
-export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 24;
+/** Conservative local-D1 ceiling, including the two extreme-band indexes. */
+export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 29;
+export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 28;
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
-/** Includes up to two excluded subject rows skipped by the random opponent lookup. */
-export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 26;
+/** Conservative ceiling above the measured local-D1 maximum of 53 rows. */
+export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 80;
 
 interface AttributeRow {
   id: string;
@@ -86,8 +92,13 @@ interface SeedCandidateRow {
   subject_id: string;
   attribute_id: string;
   game_id: string | null;
+  score: number;
   rating_deviation: number;
   random_key: string;
+}
+
+interface PairStatRow {
+  comparison_count: number;
 }
 
 interface CandidateRow {
@@ -293,8 +304,12 @@ const queryAttributeExtremeExamples = async (
   db: Database,
   attributeId: string,
 ): Promise<AttributeExtremeExamples> => {
-  const result = await db.statement(`
-    WITH eligible AS (
+  const querySlice = async (direction: 'lowest' | 'highest') => {
+    const pivot = randomKey();
+    const scoreFilter = direction === 'lowest'
+      ? 's.score >= 0 AND s.score <= 2'
+      : 's.score >= 8 AND s.score <= 10';
+    const query = (comparison: '>=' | '<', order: 'ASC' | 'DESC', limit: number) => db.statement(`
       SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
         candidate_subject.kind AS subject_kind, candidate_subject.display_name,
         candidate_subject.game_id, candidate_game.slug AS game_slug,
@@ -304,33 +319,32 @@ const queryAttributeExtremeExamples = async (
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
       WHERE s.attribute_id = ?
         AND s.evidence_count > 0
+        AND ${scoreFilter}
+        AND s.random_key ${comparison} ?
         AND (
           candidate_subject.kind = 'configuration'
           OR (candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
             AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
-    ),
-    lowest AS (
-      SELECT * FROM eligible
-      ORDER BY score ASC, subject_id
-      LIMIT ?
-    ),
-    highest AS (
-      SELECT * FROM eligible
-      WHERE subject_id NOT IN (SELECT subject_id FROM lowest)
-      ORDER BY score DESC, subject_id
-      LIMIT ?
-    )
-    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, game_english_name, score, 'lowest' AS direction
-    FROM lowest
-    UNION ALL
-    SELECT subject_id, subject_slug, subject_kind, display_name, game_id, game_slug, game_english_name, score, 'highest' AS direction
-    FROM highest
-  `).bind(attributeId, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT).all<AttributeExtremeExampleRow>();
+      ORDER BY s.random_key ${order}, s.subject_id ${order}
+      LIMIT ${limit}
+    `).bind(attributeId, pivot).all<Omit<AttributeExtremeExampleRow, 'direction'>>();
+    const after = await query('>=', 'ASC', ATTRIBUTE_EXTREME_EXAMPLE_LIMIT);
+    const afterRows = after.results ?? [];
+    const remaining = ATTRIBUTE_EXTREME_EXAMPLE_LIMIT - afterRows.length;
+    const before = remaining > 0 ? await query('<', 'DESC', remaining) : { results: [] };
+    const rows = [...afterRows, ...(before.results ?? [])];
+    return [...new Map(rows.map((row) => [row.subject_id, row])).values()]
+      .slice(0, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT)
+      .map((row) => ({ ...row, direction } satisfies AttributeExtremeExampleRow));
+  };
+
+  const [lowest, highest] = await Promise.all([querySlice('lowest'), querySlice('highest')]);
+  const rows = [...lowest, ...highest];
 
   const extremeExamples: AttributeExtremeExamples = { lowest: [], highest: [] };
-  (result.results ?? []).forEach((row) => {
+  rows.forEach((row) => {
     const example: AttributeScoreExample = {
       score: Number(Number(row.score).toFixed(2)),
       subject: {
@@ -598,7 +612,7 @@ const querySeedCandidate = async (
   for (let attempt = 0; attempt < ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT; attempt += 1) {
     const row = await db.statement(`
       SELECT s.subject_id, s.attribute_id, candidate_subject.game_id,
-        s.rating_deviation, s.random_key
+        s.score, s.rating_deviation, s.random_key
       FROM attribute_score_states s
       JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
@@ -619,65 +633,98 @@ const querySeedCandidate = async (
   return null;
 };
 
-const queryRandomSubjectForAttribute = async (
+const querySubjectQuestionState = async (
   db: Database,
+  subjectId: string,
   attributeId: string,
-  fixedSubjectId: string,
-  options: AttributeQuestionOptions,
-  fixedGameId: string | null = null,
-): Promise<string | null> => {
-  const excludeSubjectIds = [fixedSubjectId];
-  if (options.excludeAttributeId === attributeId) {
-    if (options.excludeSubjectAId === fixedSubjectId && options.excludeSubjectBId) excludeSubjectIds.push(options.excludeSubjectBId);
-    if (options.excludeSubjectBId === fixedSubjectId && options.excludeSubjectAId) excludeSubjectIds.push(options.excludeSubjectAId);
-  }
-  const exclusion = excludedSubjectFilter([...new Set(excludeSubjectIds)]);
-  const gameExclusion = fixedGameId ? 'AND (candidate_subject.game_id IS NULL OR candidate_subject.game_id <> ?)' : '';
-  const pivot = randomKey();
-  const [after, before] = await Promise.all([
-    db.statement(`
-      SELECT s.subject_id
-      FROM attribute_score_states s
-      JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
-      LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
-      WHERE s.attribute_id = ? AND s.random_key >= ?
-        ${gameExclusion}
-        ${exclusion}
-        AND (
-          candidate_subject.kind = 'configuration'
-          OR (candidate_game.merged_into_game_id IS NULL
-            AND candidate_game.visibility = 'public'
-            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
-        )
-      ORDER BY s.random_key, s.subject_id
-      LIMIT 1
-    `).bind(attributeId, pivot, ...(fixedGameId ? [fixedGameId] : []), ...[...new Set(excludeSubjectIds)]).first<{ subject_id: string }>(),
-    db.statement(`
-      SELECT s.subject_id
-      FROM attribute_score_states s
-      JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
-      LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
-      WHERE s.attribute_id = ? AND s.random_key < ?
-        ${gameExclusion}
-        ${exclusion}
-        AND (
-          candidate_subject.kind = 'configuration'
-          OR (candidate_game.merged_into_game_id IS NULL
-            AND candidate_game.visibility = 'public'
-            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
-        )
-      ORDER BY s.random_key DESC, s.subject_id DESC
-      LIMIT 1
-    `).bind(attributeId, pivot, ...(fixedGameId ? [fixedGameId] : []), ...[...new Set(excludeSubjectIds)]).first<{ subject_id: string }>(),
-  ]);
-  return after?.subject_id ?? before?.subject_id ?? null;
-};
+): Promise<SeedCandidateRow | null> => db.statement(`
+  SELECT s.subject_id, s.attribute_id, candidate_subject.game_id,
+    s.score, s.rating_deviation, s.random_key
+  FROM attribute_score_states s
+  JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
+  WHERE s.subject_id = ? AND s.attribute_id = ?
+  LIMIT 1
+`).bind(subjectId, attributeId).first<SeedCandidateRow>();
 
-const querySubjectGameId = async (db: Database, subjectId: string): Promise<string | null> => {
-  const row = await db.statement('SELECT game_id FROM attribute_subjects WHERE id = ? LIMIT 1')
-    .bind(subjectId)
-    .first<{ game_id: string | null }>();
-  return row?.game_id ?? null;
+const queryOpponentForAttribute = async (
+  db: Database,
+  seed: SeedCandidateRow,
+  options: AttributeQuestionOptions,
+): Promise<string | null> => {
+  const excludeSubjectIds = [seed.subject_id];
+  const attributeId = seed.attribute_id;
+  if (options.excludeAttributeId === attributeId) {
+    if (options.excludeSubjectAId === seed.subject_id && options.excludeSubjectBId) excludeSubjectIds.push(options.excludeSubjectBId);
+    if (options.excludeSubjectBId === seed.subject_id && options.excludeSubjectAId) excludeSubjectIds.push(options.excludeSubjectAId);
+  }
+  const uniqueExclusions = [...new Set(excludeSubjectIds)];
+  const exclusion = excludedSubjectFilter(uniqueExclusions);
+  const gameExclusion = seed.game_id ? 'AND (candidate_subject.game_id IS NULL OR candidate_subject.game_id <> ?)' : '';
+  const fixedBinds = [attributeId, ...(seed.game_id ? [seed.game_id] : []), ...uniqueExclusions];
+  const pivot = randomKey();
+  const selectCandidate = (extraFilter: string, orderBy: string, extraBinds: unknown[]) => db.statement(`
+    SELECT s.subject_id, s.attribute_id, candidate_subject.game_id,
+      s.score, s.rating_deviation, s.random_key
+    FROM attribute_score_states s
+    JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
+    LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
+    WHERE s.attribute_id = ?
+      ${gameExclusion}
+      ${exclusion}
+      ${extraFilter}
+      AND (
+        candidate_subject.kind = 'configuration'
+        OR (candidate_game.merged_into_game_id IS NULL
+          AND candidate_game.visibility = 'public'
+          AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
+      )
+    ORDER BY ${orderBy}
+    LIMIT 1
+  `).bind(...fixedBinds, ...extraBinds).first<SeedCandidateRow>();
+
+  const [nearestBelow, nearestAbove, randomAfter, randomBefore] = await Promise.all([
+    selectCandidate('AND s.score < ?', 's.score DESC, s.subject_id DESC', [seed.score]),
+    selectCandidate('AND s.score >= ?', 's.score ASC, s.subject_id ASC', [seed.score]),
+    selectCandidate('AND s.random_key >= ?', 's.random_key ASC, s.subject_id ASC', [pivot]),
+    selectCandidate('AND s.random_key < ?', 's.random_key DESC, s.subject_id DESC', [pivot]),
+  ]);
+
+  const candidates = new Map<string, AttributeQuestionOpponentCandidate>();
+  const addCandidate = (row: SeedCandidateRow | null, isRandomCandidate: boolean) => {
+    if (!row) return;
+    const existing = candidates.get(row.subject_id);
+    candidates.set(row.subject_id, {
+      subjectId: row.subject_id,
+      score: Number(row.score),
+      ratingDeviation: Number(row.rating_deviation),
+      comparisonCount: existing?.comparisonCount ?? 0,
+      isRandomCandidate: Boolean(existing?.isRandomCandidate || isRandomCandidate),
+    });
+  };
+  addCandidate(nearestBelow, false);
+  addCandidate(nearestAbove, false);
+  addCandidate(randomAfter, true);
+  addCandidate(randomBefore, true);
+
+  const boundedCandidates = [...candidates.values()].slice(0, ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT);
+  await Promise.all(boundedCandidates.map(async (candidate) => {
+    const subjectAId = seed.subject_id < candidate.subjectId ? seed.subject_id : candidate.subjectId;
+    const subjectBId = seed.subject_id < candidate.subjectId ? candidate.subjectId : seed.subject_id;
+    const pair = await db.statement(`
+      SELECT comparison_count
+      FROM attribute_pair_stats
+      WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = ?
+      LIMIT 1
+    `).bind(subjectAId, subjectBId, attributeId).first<PairStatRow>();
+    candidate.comparisonCount = Number(pair?.comparison_count ?? 0);
+  }));
+
+  const chosen = chooseAttributeQuestionOpponent({
+    subjectId: seed.subject_id,
+    score: Number(seed.score),
+    ratingDeviation: Number(seed.rating_deviation),
+  }, boundedCandidates);
+  return chosen?.subjectId ?? null;
 };
 
 export const canonicalizeComparison = (subjectAId: string, subjectBId: string, result: AttributeComparisonResult) => {
@@ -702,19 +749,18 @@ const queryQuestionWithAttribute = async (
 ): Promise<AttributeQuestion | null> => {
   let subjectAId: string | undefined = options.fixedSubjectAId;
   let subjectBId: string | undefined = options.fixedSubjectBId;
-  let subjectAGameId: string | null = null;
+  let subjectAState: SeedCandidateRow | null = null;
   if (!subjectAId && !subjectBId) {
-    const seed = await querySeedCandidate(db, attribute.id);
-    subjectAId = seed?.subject_id;
-    subjectAGameId = seed?.game_id ?? null;
+    subjectAState = await querySeedCandidate(db, attribute.id);
+    subjectAId = subjectAState?.subject_id;
   }
   if (subjectAId && !subjectBId) {
-    if (options.fixedSubjectAId) subjectAGameId = await querySubjectGameId(db, subjectAId);
-    subjectBId = (await queryRandomSubjectForAttribute(db, attribute.id, subjectAId, options, subjectAGameId)) ?? undefined;
+    subjectAState ??= await querySubjectQuestionState(db, subjectAId, attribute.id);
+    subjectBId = subjectAState ? (await queryOpponentForAttribute(db, subjectAState, options)) ?? undefined : undefined;
   }
   if (!subjectAId && subjectBId) {
-    const fixedGameId = await querySubjectGameId(db, subjectBId);
-    subjectAId = (await queryRandomSubjectForAttribute(db, attribute.id, subjectBId, options, fixedGameId)) ?? undefined;
+    const subjectBState = await querySubjectQuestionState(db, subjectBId, attribute.id);
+    subjectAId = subjectBState ? (await queryOpponentForAttribute(db, subjectBState, options)) ?? undefined : undefined;
   }
   const selected = subjectAId && subjectBId ? { subjectAId, subjectBId } : null;
   if (!selected || selected.subjectAId === selected.subjectBId || isExcludedPair(selected.subjectAId, selected.subjectBId, attribute.id, options)) return null;
@@ -737,7 +783,7 @@ export const queryAttributeQuestion = async (
     if (!seed) return null;
     const attribute = await querySingleAttribute(db, seed.attribute_id);
     if (!attribute) return null;
-    const subjectBId = await queryRandomSubjectForAttribute(db, seed.attribute_id, seed.subject_id, options, seed.game_id);
+    const subjectBId = await queryOpponentForAttribute(db, seed, options);
     if (!subjectBId || isExcludedPair(seed.subject_id, subjectBId, seed.attribute_id, options)) return null;
     const subjects = await queryQuestionSubjects(db, [seed.subject_id, subjectBId]);
     const subjectMap = new Map(subjects.map((subject) => [subject.id, subject]));

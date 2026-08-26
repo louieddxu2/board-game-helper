@@ -73,6 +73,19 @@ const expectedForRatings = (score: number, opponentScore: number, opponentRd: nu
   return 1 / (1 + 10 ** (-difference / 400));
 };
 
+const expectedRdAfterComparison = (
+  score: number,
+  ratingDeviation: number,
+  opponentScore: number,
+  opponentRatingDeviation: number,
+) => {
+  const g = gForRd(opponentRatingDeviation);
+  const expected = expectedForRatings(score, opponentScore, opponentRatingDeviation);
+  const variance = 1 / (ATTRIBUTE_GLICKO_Q ** 2 * g ** 2 * expected * (1 - expected));
+  const currentRd = classicRd(ratingDeviation);
+  return boundedRd(Math.sqrt(1 / (1 / currentRd ** 2 + 1 / variance)) / ATTRIBUTE_CLASSIC_POINTS_PER_SCORE);
+};
+
 const updateAgainst = (
   state: OnlineAttributeState,
   opponent: Pick<OnlineAttributeState, 'score' | 'ratingDeviation'>,
@@ -111,6 +124,24 @@ export const emptyAttributeState = (): OnlineAttributeState => ({
 /** The expected win probability for A against B under Glicko's g(RD) term. */
 export const expectedAttributeScore = (scoreA: number, scoreB: number, ratingDeviationB = ATTRIBUTE_INITIAL_RD) =>
   expectedForRatings(scoreA, scoreB, ratingDeviationB);
+
+/**
+ * Expected reduction in the pair's total rating variance after one comparison.
+ * Glicko's RD update does not depend on who wins, so this is known before the
+ * question is answered and can be used directly as an information-gain score.
+ */
+export const expectedComparisonVarianceReduction = (
+  scoreA: number,
+  ratingDeviationA: number,
+  scoreB: number,
+  ratingDeviationB: number,
+) => {
+  const nextRdA = expectedRdAfterComparison(scoreA, ratingDeviationA, scoreB, ratingDeviationB);
+  const nextRdB = expectedRdAfterComparison(scoreB, ratingDeviationB, scoreA, ratingDeviationA);
+  return Math.max(0,
+    ratingDeviationA ** 2 + ratingDeviationB ** 2
+      - nextRdA ** 2 - nextRdB ** 2);
+};
 
 const actualScoreForComparison = (result: AttributeComparisonResult): number => {
   if (result === 'A_HIGHER') return 1;

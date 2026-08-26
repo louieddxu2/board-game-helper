@@ -8,6 +8,7 @@ import {
   emptyAttributeState,
   replayAttributeEvents,
   calculateAttributeScores,
+  expectedComparisonVarianceReduction,
 } from './data/attributeScoring';
 
 const scoreFor = (scores: ReturnType<typeof calculateAttributeScores>, subjectId: string) => {
@@ -86,6 +87,20 @@ describe('glicko-rd-v1', () => {
     const uncertain = applyComparison(a, uncertainAnchor, 'A_HIGHER').a.next;
 
     expect(informative.score - a.score).toBeGreaterThan(uncertain.score - a.score);
+  });
+
+  test('predicts more information from similarly rated opponents', () => {
+    const close = expectedComparisonVarianceReduction(5, 3, 5.2, 1);
+    const far = expectedComparisonVarianceReduction(5, 3, 9, 1);
+
+    expect(close).toBeGreaterThan(far);
+  });
+
+  test('predicts more variance reduction when the pair is uncertain', () => {
+    const uncertain = expectedComparisonVarianceReduction(5, 3, 5, 3);
+    const established = expectedComparisonVarianceReduction(5, 0.5, 5, 0.5);
+
+    expect(uncertain).toBeGreaterThan(established);
   });
 
   test('keeps all online updates inside the 0 to 10 range', () => {
