@@ -1845,8 +1845,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 }
 
 .attribute-vote-page .attributes-question-attribute h2 strong {
+  display: inline-block;
   color: inherit;
+  font-size: 1.18em;
   font-weight: 900;
+  line-height: 1;
   text-decoration: underline;
   text-decoration-color: #d7ad58;
   text-decoration-thickness: 3px;
