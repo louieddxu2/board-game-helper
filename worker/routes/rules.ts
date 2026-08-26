@@ -178,7 +178,11 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
   try {
     if (parsed.data.baseUpdatedAt !== undefined) {
       const updateResult = await updateRuleStatement.run();
-      if (Number(updateResult.meta?.changes ?? 0) !== 1) {
+      // D1's change count may include writes performed by rules triggers (for
+      // example, refreshing the public-rule head). The optimistic UPDATE has
+      // a unique rule id, so any positive count means the guarded row matched;
+      // only zero indicates that another edit won the race.
+      if (Number(updateResult.meta?.changes ?? 0) < 1) {
         return c.json({ error: 'rule_changed_while_editing' }, 409);
       }
       await getDatabase(c).batch(followUpStatements);

@@ -16,7 +16,13 @@ const row = {
 };
 const hiddenOwnRow = { ...row, status: 'hidden', review_status: 'pending', hidden_by: 'ordinary-1' };
 
-const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false, sourceRow: typeof row & { hidden_by?: string | null } = row) => {
+const fakeDatabase = (
+  pendingRuleCount = 0,
+  rejectPendingRuleLimit = false,
+  sourceRow: typeof row & { hidden_by?: string | null } = row,
+  updateChanges = 1,
+  applyUpdate = false,
+) => {
   const statements: Array<DatabaseStatement & { sql: string; bindings: unknown[] }> = [];
   const statement = (sql: string) => {
     const item = {
@@ -30,13 +36,17 @@ const fakeDatabase = (pendingRuleCount = 0, rejectPendingRuleLimit = false, sour
         if (sql.includes('COUNT(*) count FROM rules')) return { count: pendingRuleCount } as T;
         if (sql.includes('COUNT(*) count FROM games')) return { count: 0 } as T;
         if (sql.includes('COUNT(*) count FROM review_proposals')) return { count: 0 } as T;
-        if (sql.includes('SELECT r.*, g.display_name')) return { ...row, review_status: 'pending', pending_review_by: 'ordinary-1' } as T;
+        if (sql.includes('SELECT r.*, g.display_name')) return { ...sourceRow, review_status: 'pending', pending_review_by: 'ordinary-1' } as T;
         return null as T;
       }),
       all: vi.fn(async () => ({ results: [], meta: {} })),
       run: vi.fn(async () => {
         if (rejectPendingRuleLimit && sql.includes('UPDATE rules SET')) throw new Error('D1_ERROR: pending_rule_limit');
-        return { results: [], meta: sql.includes('UPDATE rules SET') ? { changes: 1 } : {} };
+        if (applyUpdate && sql.includes('UPDATE rules SET')) {
+          sourceRow.statement = '修正後規則';
+          sourceRow.updated_at = 101;
+        }
+        return { results: [], meta: sql.includes('UPDATE rules SET') ? { changes: updateChanges } : {} };
       }),
     } as DatabaseStatement & { sql: string; bindings: unknown[] };
     statements.push(item);
@@ -107,6 +117,22 @@ describe('rule mutation URL validation', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: 'rule_changed_while_editing', currentUpdatedAt: 100 });
     expect(batch).not.toHaveBeenCalled();
+  });
+
+  test('does not report a conflict when trigger changes accompany a successful update', async () => {
+    const updatedRow = { ...row };
+    const { db, batch } = fakeDatabase(0, false, updatedRow, 3, true);
+    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
+    const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUpdatedAt: 100, statement: '修正後規則' }),
+    }, { WRITE_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) } } as unknown as Env);
+
+    expect(response.status).toBe(200);
+    expect(updatedRow.statement).toBe('修正後規則');
+    expect(batch).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 
   test('rejects an edit when the contributor has no pending-rule quota left', async () => {
