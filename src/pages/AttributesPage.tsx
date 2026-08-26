@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
@@ -329,46 +330,50 @@ export const AttributesPage = () => {
   return <section className="attribute-vote-page">
     <header className="attribute-vote-header">
       <h1>屬性投票</h1>
-      <div className="attributes-inline-activity" aria-label="最近投票記錄">
-        {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
-      </div>
+      <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
     </header>
+    <div className="attributes-inline-activity" aria-label="最近投票記錄">
+      {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
+    </div>
 
     {(offline || pendingCount > 0) && <p className="attributes-offline-note" role="status">{pendingCount > 0 ? `有 ${pendingCount} 筆回答等待同步。` : '目前離線，回答會先暫存在本機。'} <button type="button" onClick={() => void syncPendingResponses()} disabled={syncing}>{syncing ? '同步中…' : '重新同步'}</button></p>}
 
     <section className={`attributes-question-card is-${questionMotion}`} aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
-      <div className="attributes-question-attribute">
-        {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
-          <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
-            {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
-            {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
-          </AttributeScoreAxis>
-        </div> : null}
-        <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
-        {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
-      </div>
-      <div className="attributes-question-pair">
-        <div className="attributes-question-side">
-          <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+      {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
+        <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
+          {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
+          {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
+        </AttributeScoreAxis>
+      </div> : null}
+
+      <div className="attributes-question-center">
+        <div className="attributes-question-attribute">
+          <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
+          {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         </div>
-        <div className="attributes-question-side">
-          <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+        <div className="attributes-question-pair">
+          <div className="attributes-question-side">
+            <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+          </div>
+          <div className="attributes-question-side">
+            <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+          </div>
+          {voteFeedback && <p className={`attributes-vote-feedback is-${voteFeedback.state}`} role="status" aria-live="polite"><span aria-hidden="true">{voteFeedback.state === 'saved' ? '✓' : '…'}</span>{voteFeedback.text}</p>}
         </div>
-        {voteFeedback && <p className={`attributes-vote-feedback is-${voteFeedback.state}`} role="status" aria-live="polite"><span aria-hidden="true">{voteFeedback.state === 'saved' ? '✓' : '…'}</span>{voteFeedback.text}</p>}
+
+        <div className="attributes-pair-actions" aria-label="回答與換題">
+          <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
+          <button type="button" className={`attributes-similar ${comparison === 'SIMILAR' ? 'is-selected' : ''} ${!submitting && ratingSuggestion === 'SIMILAR' ? 'is-suggested' : ''}`} aria-pressed={comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
+          <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
+          <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
+        </div>
       </div>
 
-      <div className="attributes-pair-actions" aria-label="回答與換題">
-        <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
-        <button type="button" className={`attributes-similar ${comparison === 'SIMILAR' ? 'is-selected' : ''} ${!submitting && ratingSuggestion === 'SIMILAR' ? 'is-suggested' : ''}`} aria-pressed={comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
-        <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
-        <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
+      <div className="attributes-rating-zone">
+        <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
+        {ratingSuggestionText && !submitting && <p className="attributes-rating-suggestion" role="status"><span aria-hidden="true">↑</span> {ratingSuggestionText}</p>}
+        {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
       </div>
-
-      <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
-
-      {ratingSuggestionText && !submitting && <p className="attributes-rating-suggestion" role="status"><span aria-hidden="true">↑</span> {ratingSuggestionText}</p>}
-
-      {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
     </section>
 
   </section>;

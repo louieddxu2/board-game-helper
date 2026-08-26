@@ -40,8 +40,13 @@ describe('AttributesPage question flow', () => {
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '屬性總表' })).toHaveAttribute('href', '/attributes/table');
     expect(screen.getByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
-    expect(screen.getByLabelText('最近投票記錄').querySelectorAll('li')).toHaveLength(1);
+    const voteHeader = screen.getByRole('heading', { name: '屬性投票' }).closest('header');
+    const recentActivity = screen.getByLabelText('最近投票記錄');
+    expect(voteHeader).not.toContainElement(recentActivity);
+    expect((voteHeader?.compareDocumentPosition(recentActivity) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(recentActivity.querySelectorAll('li')).toHaveLength(1);
     expect(screen.getByLabelText('最近投票記錄').querySelector('li > span:last-child')).toHaveTextContent(/玩家\s*認為\s*遊戲甲（8）\s*的「運氣成分」高於\s*遊戲乙（3）/);
     expect(screen.getByLabelText('最近投票記錄')).not.toHaveTextContent('給');
     expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
@@ -57,6 +62,8 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
     expect(screen.getByLabelText('目前資料中的極端分數範例')).toBeInTheDocument();
     expect(screen.getByLabelText('目前資料中的極端分數範例').compareDocumentPosition(screen.getByRole('heading', { name: /哪款遊戲的/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /哪款遊戲的/ }).closest('.attributes-question-center')).toBeInTheDocument();
+    expect(screen.getByLabelText('兩款遊戲評分數線').closest('.attributes-rating-zone')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /完整說明/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '屬性總表' })).not.toBeInTheDocument();
