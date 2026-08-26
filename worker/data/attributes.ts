@@ -537,11 +537,21 @@ export const queryAttributesPayload = async (db: Database, options: AttributeTab
   };
 };
 
-const parseActivities = (raw: string): AttributeActivity[] => {
+export const parseAttributeActivityFeedEntry = (raw: string): AttributeActivity[] => {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is AttributeActivity => Boolean(item && typeof item === 'object' && 'id' in item && 'kind' in item));
+    const activities = parsed.filter((item): item is AttributeActivity => Boolean(item && typeof item === 'object' && 'id' in item && 'kind' in item));
+    const comparison = activities.find((item) => item.kind === 'comparison');
+    if (!comparison?.subjectA || !comparison.subjectB) return [];
+    const ratings = new Map(activities
+      .filter((item) => item.kind === 'rating' && item.subject && item.value != null)
+      .map((item) => [item.subject!.id, item.value!]));
+    return [{
+      ...comparison,
+      ratingA: comparison.ratingA ?? ratings.get(comparison.subjectA.id),
+      ratingB: comparison.ratingB ?? ratings.get(comparison.subjectB.id),
+    }];
   } catch {
     return [];
   }
@@ -554,7 +564,7 @@ export const queryRecentActivities = async (db: Database): Promise<AttributeActi
     ORDER BY created_at DESC, response_id DESC
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
-  return (result.results ?? []).flatMap((row) => parseActivities(row.payload_json)).slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
+  return (result.results ?? []).flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json)).slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
 };
 
 /** Keep the public feed intentionally small; this never runs in a vote request. */

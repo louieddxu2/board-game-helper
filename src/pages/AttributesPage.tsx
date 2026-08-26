@@ -9,20 +9,15 @@ import { createAttributeResponseId, getAttributeSessionId } from '../lib/attribu
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
-const resultLabel = (result: AttributeComparisonResult) => {
-  if (result === 'A_HIGHER') return 'A 較高';
-  if (result === 'B_HIGHER') return 'B 較高';
-  return '差不多';
-};
-
 const subjectName = (subject: { displayName: string }) => <span>{subject.displayName}</span>;
 
+const activitySubject = (subject: { displayName: string }, rating?: number) => <>{subjectName(subject)}{rating != null ? `（${rating}）` : null}</>;
+
 const activityText = (activity: AttributeActivity) => {
-  if (activity.kind === 'rating' && activity.subject) {
-    return <>{activity.actorName} 給 {subjectName(activity.subject)} 的「{activity.attributeName}」{activity.value} 分</>;
-  }
   if (activity.subjectA && activity.subjectB && activity.result) {
-    return <>{activity.actorName} 認為 {subjectName(activity.subjectA)} 與 {subjectName(activity.subjectB)} 的「{activity.attributeName}」{resultLabel(activity.result)}</>;
+    if (activity.result === 'A_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 的「{activity.attributeName}」高於 {activitySubject(activity.subjectB, activity.ratingB)}</>;
+    if (activity.result === 'B_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」高於 {activitySubject(activity.subjectA, activity.ratingA)}</>;
+    return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 與 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」差不多</>;
   }
   return `${activity.actorName} 完成了一筆屬性投票`;
 };
@@ -265,12 +260,13 @@ export const AttributesPage = () => {
     .slice(0, 2);
   const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
+  const recentComparisons = payload.activities.filter((activity) => activity.kind === 'comparison').slice(0, 3);
 
   return <section className="attribute-vote-page">
     <header className="attribute-vote-header">
       <h1>屬性投票</h1>
       <div className="attributes-inline-activity" aria-label="最近投票記錄">
-        {payload.activities.length ? <ol>{payload.activities.slice(0, 3).map((activity) => <li key={`${activity.kind}:${activity.id}`}><span className="attributes-inline-activity-icon" aria-hidden="true">{activity.kind === 'rating' ? '分' : '比'}</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
+        {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
       </div>
     </header>
 

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
-import type { AttributeQuestion, AttributesPayload } from '../shared/types';
+import type { AttributeActivity, AttributeQuestion, AttributesPayload } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
 const subjectB = { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙', gameSlug: 'game-b' };
@@ -22,6 +22,10 @@ const extremeExamples = {
   lowest: [{ subject: subjectA, score: 0 }, { subject: subjectB, score: 2 }, { subject: subjectC, score: 3 }],
   highest: [{ subject: subjectD, score: 10 }, { subject: subjectA, score: 8 }, { subject: subjectB, score: 7 }],
 };
+const recentActivities: AttributeActivity[] = [
+  { id: 'rating-a', kind: 'rating', actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name, subject: subjectA, value: 8, createdAt: 1 },
+  { id: 'comparison', kind: 'comparison', actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name, subjectA, subjectB, ratingA: 8, ratingB: 3, result: 'A_HIGHER', createdAt: 1 },
+];
 
 describe('AttributesPage question flow', () => {
   afterEach(() => {
@@ -31,12 +35,15 @@ describe('AttributesPage question flow', () => {
 
   test('starts with a system-selected question without game selectors or the full table', async () => {
     vi.spyOn(api, 'attributes').mockResolvedValue(payload);
-    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
+    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: recentActivities, extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '屬性投票' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('最近投票記錄').querySelectorAll('li')).toHaveLength(1);
+    expect(screen.getByLabelText('最近投票記錄').querySelector('li > span:last-child')).toHaveTextContent(/玩家\s*認為\s*遊戲甲（8）\s*的「運氣成分」高於\s*遊戲乙（3）/);
+    expect(screen.getByLabelText('最近投票記錄')).not.toHaveTextContent('給');
     expect(document.querySelector('.attributes-question-attribute h2 strong')?.textContent).toBe('「運氣成分」');
     expect(screen.getByText('↑ 範例')).toBeInTheDocument();
     expect(document.querySelectorAll('.attributes-scoreline-marker')).toHaveLength(4);

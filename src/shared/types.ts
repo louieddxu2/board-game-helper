@@ -198,6 +198,8 @@ export interface AttributeActivity {
   subjectA?: AttributeActivitySubject;
   subjectB?: AttributeActivitySubject;
   value?: number;
+  ratingA?: number;
+  ratingB?: number;
   result?: AttributeComparisonResult;
   createdAt: number;
 }

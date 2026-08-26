@@ -1607,8 +1607,8 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-question-examples { display: block; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
 .attribute-score-axis { position: relative; display: block; min-width: 0; }
 .attribute-score-axis-label { position: absolute; top: 50%; z-index: 1; color: var(--green); font-size: 13px; font-weight: 900; line-height: 1; transform: translateY(-50%); }
-.attribute-score-axis-label.is-min { left: 0; }
-.attribute-score-axis-label.is-max { right: 0; }
+.attribute-score-axis-label.is-min { left: 5px; }
+.attribute-score-axis-label.is-max { right: 5px; }
 .attribute-score-axis-stage { position: relative; min-width: 0; height: 86px; touch-action: none; }
 .attribute-score-axis-rail { position: absolute; top: 50%; right: 23px; left: 16px; height: 3px; border-radius: 2px; background: var(--line); transform: translateY(-50%); }
 .attribute-vote-page .attributes-scoreline-track { min-height: 0; padding: 0; }
