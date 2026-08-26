@@ -1572,9 +1572,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-activity-list time { display: none; }
 .attribute-vote-page .attributes-empty-activity { font-size: 11px; }
 .attribute-table-page { box-sizing: border-box; width: min(1120px, calc(100% - 24px)); min-height: 100dvh; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 0 max(14px, env(safe-area-inset-bottom)); }
-.attribute-table-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.attribute-table-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.attribute-table-header > div { display: flex; min-width: 0; align-items: baseline; gap: 10px; }
 .attribute-table-header h1 { margin: 0; color: var(--ink); font-size: 22px; }
 .attribute-table-header span { color: var(--muted); font-size: 11px; }
+.attribute-table-header .attributes-vote-link { display: inline-grid; min-height: 32px; box-sizing: border-box; flex: 0 0 auto; place-items: center; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font-size: 11px; font-weight: 800; text-decoration: none; }
+.attribute-table-header .attributes-vote-link:hover, .attribute-table-header .attributes-vote-link:focus-visible { border-color: var(--green); color: var(--green); }
 .attribute-table-page .attributes-table-card { margin-top: 0; padding: 12px; }
 .attribute-table-page .attributes-section-heading { align-items: center; margin-bottom: 10px; }
 .attribute-table-page .attributes-section-heading h2 { font-size: 16px; }
