@@ -16,7 +16,6 @@
   ],
   "shortcuts": [
     { "name": "玩錯規則首頁", "short_name": "網站首頁", "url": "/?pwa-entry=home", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "記錄玩錯規則", "url": "/add", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "開啟屬性投票", "short_name": "屬性投票", "url": "/attributes", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "開啟動態表格", "short_name": "動態表格", "url": "/workspace", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
