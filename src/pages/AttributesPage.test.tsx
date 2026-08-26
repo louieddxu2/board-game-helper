@@ -81,8 +81,17 @@ describe('AttributesPage question flow', () => {
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
     expect(screen.getByText('遊戲甲 · 8')).toBeInTheDocument();
+    const rightRating = screen.getByRole('slider', { name: '評分：遊戲乙' });
+    fireEvent.keyDown(rightRating, { key: 'ArrowRight' });
+    expect(screen.getByText('依照分數，建議點「遊戲甲」')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '遊戲甲較高' })).toHaveClass('is-suggested');
+    fireEvent.keyDown(rightRating, { key: 'ArrowRight' });
+    fireEvent.keyDown(rightRating, { key: 'ArrowRight' });
+    expect(screen.getByText('依照分數，建議選「差不多」')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '差不多' })).toHaveClass('is-suggested');
     fireEvent.click(screen.getByRole('button', { name: '取消遊戲甲評分' }));
     expect(screen.queryByText('遊戲甲 · 8')).not.toBeInTheDocument();
+    expect(screen.queryByText(/依照分數，建議/)).not.toBeInTheDocument();
     expect(api.attributes).not.toHaveBeenCalled();
   });
 
@@ -96,6 +105,8 @@ describe('AttributesPage question flow', () => {
     fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key: 'ArrowRight' });
     fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
 
+    expect(screen.getByRole('button', { name: '遊戲甲較高' })).toHaveClass('is-selected');
+    expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
     expect(api.attributes).not.toHaveBeenCalled();

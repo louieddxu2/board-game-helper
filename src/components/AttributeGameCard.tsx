@@ -6,17 +6,18 @@ interface AttributeGameCardProps {
   side: 'left' | 'right';
   disabled?: boolean;
   selected?: boolean;
+  suggested?: boolean;
   onChoose: () => void;
 }
 
-export const AttributeGameCard = ({ subject, side, disabled = false, selected = false, onChoose }: AttributeGameCardProps) => {
+export const AttributeGameCard = ({ subject, side, disabled = false, selected = false, suggested = false, onChoose }: AttributeGameCardProps) => {
   const [imageFailed, setImageFailed] = useState(false);
   const secondaryLine = [subject.secondaryName, subject.year ? `(${subject.year})` : undefined].filter(Boolean).join(' ');
   const hasThumbnail = Boolean(subject.thumbnailUrl && !imageFailed);
 
   return <button
     type="button"
-    className={`attribute-game-card is-${side} ${selected ? 'is-selected' : ''}`}
+    className={`attribute-game-card is-${side} ${selected ? 'is-selected' : ''} ${suggested ? 'is-suggested' : ''}`}
     aria-label={`${subject.displayName}較高`}
     aria-pressed={selected}
     onClick={onChoose}

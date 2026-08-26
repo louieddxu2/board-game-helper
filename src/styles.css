@@ -1801,6 +1801,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 }
 
 .attribute-vote-page .attributes-question-pair {
+  position: relative;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
   gap: 8px;
@@ -1856,6 +1857,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   background: var(--attribute-right-soft);
 }
 
+.attribute-vote-page .attribute-game-card.is-suggested:not(.is-selected) {
+  box-shadow: 0 0 0 2px #d7ad58;
+}
+
 .attribute-vote-page .attribute-game-card:active {
   transform: translateY(1px);
 }
@@ -1863,6 +1868,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attribute-game-card:disabled {
   cursor: wait;
   opacity: .68;
+}
+
+.attribute-vote-page .attribute-game-card.is-selected:disabled {
+  opacity: 1;
 }
 
 .attribute-vote-page .attribute-game-card-copy {
@@ -1961,6 +1970,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   color: #fff;
 }
 
+.attribute-vote-page .attributes-similar.is-suggested:not(.is-selected) {
+  border-color: #b78726;
+  box-shadow: 0 0 0 2px #e3bd68;
+}
+
 .attribute-vote-page .attributes-similar span {
   margin-right: 2px;
   font-size: 16px;
@@ -1981,6 +1995,135 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attributes-unknown:hover {
   color: var(--attribute-ink);
   text-decoration-color: currentColor;
+}
+
+.attribute-vote-page .attributes-vote-feedback {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  max-width: calc(100% - 24px);
+  min-height: 34px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid rgba(255,255,255,.4);
+  border-radius: 7px;
+  background: rgba(32,41,39,.94);
+  box-shadow: 0 7px 22px rgba(22,32,29,.2);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: attribute-feedback-arrive 180ms ease-out both;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.attribute-vote-page .attributes-vote-feedback.is-saving {
+  background: rgba(74,82,78,.94);
+}
+
+.attribute-vote-page .attributes-vote-feedback span {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.attribute-vote-page .attributes-rating-suggestion {
+  margin: -5px 0 0;
+  color: #88651f;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
+  animation: attribute-suggestion-arrive 180ms ease-out both;
+}
+
+.attribute-vote-page .attributes-rating-suggestion span {
+  display: inline-block;
+  margin-right: 2px;
+}
+
+.attribute-vote-page .attributes-inline-activity li:first-child {
+  animation: attribute-activity-arrive 260ms ease-out both;
+}
+
+.attribute-vote-page .attributes-question-card.is-answering .attribute-game-card.is-selected {
+  animation: attribute-answer-press 260ms ease-out both;
+}
+
+.attribute-vote-page .attributes-question-card.is-answering .attribute-rating-marker {
+  animation: attribute-rating-confirm 320ms ease-out both;
+}
+
+.attribute-vote-page .attributes-question-card.is-leaving {
+  animation: attribute-question-leave 150ms ease-in both;
+}
+
+.attribute-vote-page .attributes-question-card.is-entering {
+  animation: attribute-question-enter 260ms ease-out both;
+}
+
+.attribute-vote-page .attributes-question-card.is-leaving-a .attributes-question-side:first-child,
+.attribute-vote-page .attributes-question-card.is-leaving-b .attributes-question-side:last-child {
+  animation: attribute-card-leave 150ms ease-in both;
+}
+
+.attribute-vote-page .attributes-question-card.is-entering-a .attributes-question-side:first-child,
+.attribute-vote-page .attributes-question-card.is-entering-b .attributes-question-side:last-child {
+  animation: attribute-card-enter 230ms ease-out both;
+}
+
+@keyframes attribute-feedback-arrive {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 5px)) scale(.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes attribute-suggestion-arrive {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes attribute-activity-arrive {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes attribute-answer-press {
+  0% { transform: scale(1); }
+  45% { transform: scale(.975); }
+  100% { transform: scale(1); }
+}
+
+@keyframes attribute-rating-confirm {
+  0%, 100% { filter: brightness(1); }
+  45% { filter: brightness(1.12); }
+}
+
+@keyframes attribute-question-leave {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-14px); }
+}
+
+@keyframes attribute-question-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes attribute-card-leave {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-10px); }
+}
+
+@keyframes attribute-card-enter {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .attribute-vote-page .attribute-rating-track {
@@ -2037,8 +2180,15 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 
 @media (prefers-reduced-motion: reduce) {
   .attribute-vote-page .attribute-game-card,
-  .attribute-vote-page .attributes-pair-actions button {
+  .attribute-vote-page .attributes-pair-actions button,
+  .attribute-vote-page .attributes-vote-feedback,
+  .attribute-vote-page .attributes-rating-suggestion,
+  .attribute-vote-page .attributes-inline-activity li:first-child,
+  .attribute-vote-page .attributes-question-card,
+  .attribute-vote-page .attributes-question-side,
+  .attribute-vote-page .attribute-rating-marker {
     transition: none;
+    animation: none;
   }
 }
 
