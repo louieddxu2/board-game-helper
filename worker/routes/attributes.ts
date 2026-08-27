@@ -2,7 +2,13 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
-import { queryAttributeQuestionPayload, queryAttributesPayload, saveAttributeResponse } from '../data/attributes';
+import {
+  queryAttributeExpansionMetadata,
+  queryAttributeQuestionPayload,
+  queryAttributesPayload,
+  saveAttributeResponse,
+  updateAttributeExpansionMetadata,
+} from '../data/attributes';
 import {
   attributeCatalogChangesPayload,
   attributeCatalogPayload,
@@ -10,7 +16,7 @@ import {
   queryAttributeCatalogChanges,
   queryAttributeCatalogSnapshot,
 } from '../data/attributeCatalog';
-import type { AppVariables } from '../auth';
+import { requireRole, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { now, signAttributeQuestionToken, verifyAttributeQuestionToken } from '../utils';
 import { logD1Query } from './shared';
@@ -29,6 +35,11 @@ const questionQuerySchema = z.object({
   fixedAttributeId: z.string().trim().max(200).optional(),
 });
 
+const attributeExpansionMetadataSchema = z.object({
+  englishName: z.string().trim().max(200).nullable().optional(),
+  aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
+});
+
 export const attributeResponseSchema = z.object({
   subjectAId: z.string().trim().min(1).max(200),
   subjectBId: z.string().trim().min(1).max(200),
@@ -43,7 +54,7 @@ export const attributeResponseSchema = z.object({
 
 const respondWithAttributeError = (c: any, error: unknown) => {
   const message = error instanceof Error ? error.message : '';
-  if (message === 'attribute_not_found' || message === 'attribute_subject_not_found') return c.json({ error: message }, 404);
+  if (message === 'attribute_not_found' || message === 'attribute_subject_not_found' || message === 'attribute_expansion_not_found') return c.json({ error: message }, 404);
   if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty' || message === 'attribute_question_invalid') return c.json({ error: message }, 400);
   if (message === 'attribute_response_busy') return c.json({ error: message }, 409);
   throw error;
@@ -102,6 +113,34 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
     const payload = attributeCatalogChangesPayload(result, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
     setD1MetricsHeader(c, db);
     return c.json(payload);
+  } catch (error) {
+    setD1MetricsHeader(c, db);
+    return respondWithAttributeError(c, error);
+  }
+});
+
+attributesRoutes.get('/api/admin/attribute-expansions', requireRole('admin'), async (c) => {
+  const db = getDatabase(c);
+  try {
+    const expansions = await queryAttributeExpansionMetadata(db);
+    setD1MetricsHeader(c, db);
+    return c.json({ expansions });
+  } catch (error) {
+    setD1MetricsHeader(c, db);
+    return respondWithAttributeError(c, error);
+  }
+});
+
+attributesRoutes.patch('/api/admin/attribute-expansions/:subjectId/:componentOrder', requireRole('admin'), async (c) => {
+  const parsed = attributeExpansionMetadataSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
+  const componentOrder = Number(c.req.param('componentOrder'));
+  if (!Number.isSafeInteger(componentOrder) || componentOrder < 0) return c.json({ error: 'invalid_input' }, 400);
+  const db = getDatabase(c);
+  try {
+    const expansion = await updateAttributeExpansionMetadata(db, c.req.param('subjectId'), componentOrder, parsed.data);
+    setD1MetricsHeader(c, db);
+    return c.json({ ok: true, expansion });
   } catch (error) {
     setD1MetricsHeader(c, db);
     return respondWithAttributeError(c, error);

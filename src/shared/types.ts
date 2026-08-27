@@ -145,6 +145,19 @@ export interface AttributeSubjectComponent {
   gameId?: string;
   type: 'base' | 'expansion' | 'label';
   label: string;
+  englishName?: string;
+  aliases?: string[];
+  bggId?: number;
+}
+
+export interface AttributeExpansionMetadata {
+  subjectId: string;
+  componentOrder: number;
+  displayName: string;
+  baseGameName: string;
+  expansionName: string;
+  englishName?: string;
+  aliases: string[];
   bggId?: number;
 }
 

@@ -1053,6 +1053,17 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .admin-tag-merge h3, .admin-tag-merge p { margin: 0; }
 .admin-tag-merge label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
 .admin-tag-merge .button { justify-self: start; }
+.admin-attribute-expansions-card { grid-column: 1 / -1; }
+.admin-attribute-expansions-card > p { max-width: 760px; line-height: 1.6; }
+.admin-attribute-expansions-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.admin-attribute-expansion-editor { display: grid; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.admin-attribute-expansion-editor label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; }
+.admin-attribute-expansion-editor .button { justify-self: start; }
+.admin-attribute-expansion-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-attribute-expansion-heading > div { display: grid; gap: 4px; min-width: 0; }
+.admin-attribute-expansion-heading strong { overflow-wrap: anywhere; }
+.admin-attribute-expansion-heading small { color: var(--muted); line-height: 1.45; }
+.admin-attribute-expansion-label { flex: 0 0 auto; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; }
 .inline-actions { display: flex; gap: 14px; margin-top: 8px; }
 .merge-arrow { text-align: center; padding: 11px; color: var(--muted); font-size: 12px; }
 .full-button { width: 100%; margin-top: 18px; }
@@ -1212,6 +1223,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   .hero-preview { display: none; }
   .hero-recents { display: flex; margin-top: 14px; }
   .rule-grid, .rule-grid.compact, .admin-grid { grid-template-columns: 1fr; }
+  .admin-attribute-expansions-list { grid-template-columns: 1fr; }
   .game-grid { flex-direction: column; align-items: stretch; }
   .content-section { padding: 65px 18px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }

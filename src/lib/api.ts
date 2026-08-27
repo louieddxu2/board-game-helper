@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeExpansionMetadata, AttributeQuestionPayload, AttributeMatrixValue, AttributesPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -438,6 +438,10 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
+  adminAttributeExpansions: () => uncachedRead<{ expansions: AttributeExpansionMetadata[] }>('/api/admin/attribute-expansions', 'attribute expansion metadata is private and intentionally always current'),
+  updateAdminAttributeExpansion: (subjectId: string, componentOrder: number, input: { englishName: string | null; aliases: string[] }) => mutation<{ ok: true; expansion: AttributeExpansionMetadata }>(`/api/admin/attribute-expansions/${encodeURIComponent(subjectId)}/${componentOrder}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }),
   attributes: (options: { subjectCursor?: string; candidateCursor?: string; limit?: number; scope?: 'subjects' | 'candidates' } = {}) => {
     const params = new URLSearchParams();
     if (options.subjectCursor) params.set('subjectCursor', options.subjectCursor);

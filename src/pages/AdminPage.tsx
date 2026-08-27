@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { AdminTagEditor } from '../components/AdminTagEditor';
+import { AdminAttributeExpansionEditor } from '../components/AdminAttributeExpansionEditor';
 import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import type { EditorAccessUser, EditorAdminPayload, GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
+import type { AttributeExpansionMetadata, EditorAccessUser, EditorAdminPayload, GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 
@@ -32,9 +33,12 @@ export const AdminPage = () => {
   const [tagQuery, setTagQuery] = useState('');
   const [sourceTagId, setSourceTagId] = useState('');
   const [targetTagId, setTargetTagId] = useState('');
+  const [attributeExpansions, setAttributeExpansions] = useState<AttributeExpansionMetadata[]>([]);
+  const [attributeExpansionLoadError, setAttributeExpansionLoadError] = useState(false);
+  const [savingAttributeExpansion, setSavingAttributeExpansion] = useState<string>();
 
   const load = async () => {
-    const [, importData, hiddenData, tagData] = await Promise.all([
+    const [, importData, hiddenData, tagData, expansionData] = await Promise.all([
       api.editors().then((editorData) => {
         setEditors(editorData);
         setEditorLoadError(undefined);
@@ -42,10 +46,13 @@ export const AdminPage = () => {
       api.importRows().catch(() => ({ rows: [] })),
       api.hiddenRules().catch(() => ({ rules: [] })),
       api.adminTags().catch(() => ({ tags: [] })),
+      api.adminAttributeExpansions().catch(() => ({ expansions: [], failed: true })),
     ]);
     setImportRows(importData.rows);
     setHiddenRules(hiddenData.rules);
     setTags(tagData.tags);
+    setAttributeExpansions(expansionData.expansions);
+    setAttributeExpansionLoadError('failed' in expansionData && expansionData.failed === true);
   };
 
   const inviteEditor = async () => {
@@ -146,6 +153,20 @@ export const AdminPage = () => {
     setTargetTagId('');
     showToast(`已將 #${source.name} 合併到 #${target.name}`);
     await load();
+  };
+
+  const handleSaveAttributeExpansion = async (expansion: AttributeExpansionMetadata, input: { englishName: string | null; aliases: string[] }) => {
+    const key = `${expansion.subjectId}:${expansion.componentOrder}`;
+    setSavingAttributeExpansion(key);
+    try {
+      const result = await api.updateAdminAttributeExpansion(expansion.subjectId, expansion.componentOrder, input);
+      setAttributeExpansions((current) => current.map((item) => item.subjectId === expansion.subjectId && item.componentOrder === expansion.componentOrder ? result.expansion : item));
+      showToast('擴充英文名稱與別名已儲存。');
+    } catch {
+      showToast('擴充資料儲存失敗，請稍後再試。', 'error');
+    } finally {
+      setSavingAttributeExpansion(undefined);
+    }
   };
 
   const filteredTags = tags.filter((t) => !tagQuery || t.name.includes(tagQuery)
@@ -280,6 +301,24 @@ export const AdminPage = () => {
           <label>來源 Tag<select value={sourceTagId} onChange={(event) => setSourceTagId(event.target.value)}><option value="">請選擇</option>{tags.map((tag) => <option key={tag.id} value={tag.id}>#{tag.name}（{tag.usageCount ?? 0}）</option>)}</select></label>
           <label>合併到<select value={targetTagId} onChange={(event) => setTargetTagId(event.target.value)}><option value="">請選擇</option>{tags.filter((tag) => tag.id !== sourceTagId).map((tag) => <option key={tag.id} value={tag.id}>#{tag.name}（{tag.usageCount ?? 0}）</option>)}</select></label>
           <button type="button" className="button secondary" disabled={!sourceTagId || !targetTagId || sourceTagId === targetTagId} onClick={() => void handleMergeTags()}>合併 Tag</button>
+        </div>
+      </section>
+
+      <section className="admin-card admin-attribute-expansions-card">
+        <div className="list-heading"><h2>屬性投票的擴充名稱</h2><span>{attributeExpansions.length} 項</span></div>
+        <p className="muted">這裡只管理屬性投票配置中的擴充英文名稱與別名，不會加入一般遊戲搜尋，也不會修改玩錯規則資料。</p>
+        {attributeExpansionLoadError && <p className="form-error">無法載入擴充資料，請重試。</p>}
+        {!attributeExpansionLoadError && attributeExpansions.length === 0 && <p className="muted">目前沒有可編輯的擴充配置。</p>}
+        <div className="admin-attribute-expansions-list">
+          {attributeExpansions.map((expansion) => {
+            const key = `${expansion.subjectId}:${expansion.componentOrder}`;
+            return <AdminAttributeExpansionEditor
+              key={key}
+              expansion={expansion}
+              saving={savingAttributeExpansion === key}
+              onSave={(input) => handleSaveAttributeExpansion(expansion, input)}
+            />;
+          })}
         </div>
       </section>
 
