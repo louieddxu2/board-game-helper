@@ -3,7 +3,6 @@ import type {
   AttributeComparisonResult,
   AttributeDefinition,
   AttributeExtremeExamples,
-  AttributeExpansionMetadata,
   AttributeImportCandidate,
   AttributeMatrixValue,
   AttributeQuestion,
@@ -13,7 +12,7 @@ import type {
   AttributeScoreExample,
   AttributesPayload,
 } from '../../src/shared/types';
-import { cleanAliases, createId, normalizeText } from '../utils';
+import { createId } from '../utils';
 import type { Database, DatabaseStatement } from './database';
 import {
   ATTRIBUTE_INITIAL_RD,
@@ -77,7 +76,6 @@ interface ComponentRow {
   component_type: AttributeSubjectComponent['type'];
   label: string;
   english_name: string | null;
-  aliases_json: string;
   bgg_id: number | null;
 }
 
@@ -231,17 +229,6 @@ export interface AttributeMergeRebuildJobPlan {
   statement: DatabaseStatement | null;
 }
 
-interface AttributeExpansionMetadataRow {
-  subject_id: string;
-  component_order: number;
-  display_name: string;
-  base_game_name: string;
-  expansion_name: string;
-  english_name: string | null;
-  aliases_json: string;
-  bgg_id: number | null;
-}
-
 const toAttribute = (row: AttributeRow): AttributeDefinition => ({
   id: row.id,
   key: row.key,
@@ -251,29 +238,6 @@ const toAttribute = (row: AttributeRow): AttributeDefinition => ({
   minValue: row.min_value,
   maxValue: row.max_value,
   sortOrder: row.sort_order,
-});
-
-const parseStringArray = (raw: string | null | undefined): string[] => {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
-      : [];
-  } catch {
-    return [];
-  }
-};
-
-const toAttributeExpansionMetadata = (row: AttributeExpansionMetadataRow): AttributeExpansionMetadata => ({
-  subjectId: row.subject_id,
-  componentOrder: Number(row.component_order),
-  displayName: row.display_name,
-  baseGameName: row.base_game_name,
-  expansionName: row.expansion_name,
-  ...(row.english_name ? { englishName: row.english_name } : {}),
-  aliases: parseStringArray(row.aliases_json),
-  ...(row.bgg_id != null ? { bggId: Number(row.bgg_id) } : {}),
 });
 
 const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComponent[]>): AttributeSubject => ({
@@ -448,13 +412,7 @@ const queryAttributeExtremeExamples = async (
 const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<string, AttributeSubjectComponent[]>> => {
   if (!subjectIds.length) return new Map();
   const result = await db.statement(`
-    SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id,
-      COALESCE((
-        SELECT json_group_array(a.alias)
-        FROM attribute_subject_component_aliases a
-        WHERE a.subject_id = c.subject_id AND a.component_order = c.component_order
-        ORDER BY a.alias
-      ), '[]') AS aliases_json
+    SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id
     FROM attribute_subject_components
     AS c
     WHERE subject_id IN (${subjectIds.map(() => '?').join(',')})
@@ -469,7 +427,6 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
       type: row.component_type,
       label: row.label,
       ...(row.english_name ? { englishName: row.english_name } : {}),
-      aliases: parseStringArray(row.aliases_json),
       bggId: row.bgg_id ?? undefined,
     });
     map.set(row.subject_id, components);
@@ -479,13 +436,7 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
 
 const queryAllComponents = async (db: Database): Promise<Map<string, AttributeSubjectComponent[]>> => {
   const result = await db.statement(`
-    SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id,
-      COALESCE((
-        SELECT json_group_array(a.alias)
-        FROM attribute_subject_component_aliases a
-        WHERE a.subject_id = c.subject_id AND a.component_order = c.component_order
-        ORDER BY a.alias
-      ), '[]') AS aliases_json
+    SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id
     FROM attribute_subject_components
     AS c
     ORDER BY subject_id, component_order
@@ -499,80 +450,11 @@ const queryAllComponents = async (db: Database): Promise<Map<string, AttributeSu
       type: row.component_type,
       label: row.label,
       ...(row.english_name ? { englishName: row.english_name } : {}),
-      aliases: parseStringArray(row.aliases_json),
       bggId: row.bgg_id ?? undefined,
     });
     map.set(row.subject_id, components);
   });
   return map;
-};
-
-export interface AttributeExpansionMetadataInput {
-  englishName?: string | null;
-  aliases?: string[];
-}
-
-export const queryAttributeExpansionMetadata = async (db: Database): Promise<AttributeExpansionMetadata[]> => {
-  const result = await db.statement(`
-    SELECT c.subject_id, c.component_order,
-      display_names.display_name,
-      COALESCE(base_game.display_name, base_component.label) AS base_game_name,
-      c.label AS expansion_name,
-      c.english_name,
-      c.bgg_id,
-      COALESCE((
-        SELECT json_group_array(a.alias)
-        FROM attribute_subject_component_aliases a
-        WHERE a.subject_id = c.subject_id AND a.component_order = c.component_order
-        ORDER BY a.alias
-      ), '[]') AS aliases_json
-    FROM attribute_subject_components c
-    JOIN attribute_subjects subject ON subject.id = c.subject_id
-    JOIN attribute_subject_display_names display_names ON display_names.id = subject.id
-    LEFT JOIN attribute_subject_components base_component
-      ON base_component.subject_id = c.subject_id AND base_component.component_type = 'base'
-    LEFT JOIN games base_game ON base_game.id = base_component.game_id
-    WHERE subject.kind = 'configuration' AND c.component_type = 'expansion'
-    ORDER BY display_names.display_name COLLATE NOCASE, c.component_order, c.subject_id
-  `).all<AttributeExpansionMetadataRow>();
-  return (result.results ?? []).map(toAttributeExpansionMetadata);
-};
-
-export const updateAttributeExpansionMetadata = async (
-  db: Database,
-  subjectId: string,
-  componentOrder: number,
-  input: AttributeExpansionMetadataInput,
-): Promise<AttributeExpansionMetadata> => {
-  const component = await db.statement(`
-    SELECT label FROM attribute_subject_components
-    WHERE subject_id = ? AND component_order = ? AND component_type = 'expansion'
-  `).bind(subjectId, componentOrder).first<{ label: string }>();
-  if (!component) throw new Error('attribute_expansion_not_found');
-
-  const englishName = input.englishName?.trim() || null;
-  const aliases = cleanAliases(input.aliases ?? [], component.label, englishName ?? undefined);
-  const statements = [
-    db.statement(`
-      UPDATE attribute_subject_components
-      SET english_name = ?
-      WHERE subject_id = ? AND component_order = ? AND component_type = 'expansion'
-    `).bind(englishName, subjectId, componentOrder),
-    db.statement(`
-      DELETE FROM attribute_subject_component_aliases
-      WHERE subject_id = ? AND component_order = ?
-    `).bind(subjectId, componentOrder),
-    ...aliases.map((alias) => db.statement(`
-      INSERT INTO attribute_subject_component_aliases
-        (id, subject_id, component_order, alias, normalized_alias, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(createId('attribute-component-alias'), subjectId, componentOrder, alias, normalizeText(alias), Date.now())),
-  ];
-  await db.batch(statements);
-  const updated = await queryAttributeExpansionMetadata(db);
-  const row = updated.find((item) => item.subjectId === subjectId && item.componentOrder === componentOrder);
-  if (!row) throw new Error('attribute_expansion_not_found');
-  return row;
 };
 
 export const queryAttributeSubjects = async (db: Database, subjectIds?: string[], page?: SubjectPageOptions): Promise<AttributeSubject[]> => {
