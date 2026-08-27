@@ -317,7 +317,7 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
   const filter = subjectIds?.length ? `AND s.id IN (${subjectIds.map(() => '?').join(',')})` : '';
   const cursorParts = !subjectIds?.length ? decodeCursor(page?.cursor) : undefined;
   const cursorFilter = cursorParts?.length === 2
-    ? 'AND (LOWER(s.display_name) > LOWER(?) OR (LOWER(s.display_name) = LOWER(?) AND s.id > ?))'
+    ? 'AND (LOWER(display_names.display_name) > LOWER(?) OR (LOWER(display_names.display_name) = LOWER(?) AND s.id > ?))'
     : '';
   const pageLimit = !subjectIds?.length && page ? `LIMIT ${clampPageSize(page.limit) + 1}` : '';
   const binds = [
@@ -325,10 +325,11 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     ...(cursorParts?.length === 2 ? [cursorParts[0], cursorParts[0], cursorParts[1]] : []),
   ];
   const result = await db.statement(`
-    SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug,
+    SELECT s.id, s.slug, s.kind, display_names.display_name, s.game_id, g.slug AS game_slug,
       g.english_name AS game_english_name
     FROM attribute_subjects s
     LEFT JOIN games g ON g.id = s.game_id
+    JOIN attribute_subject_display_names display_names ON display_names.id = s.id
     WHERE (
       s.kind = 'configuration'
       OR (g.merged_into_game_id IS NULL AND g.visibility = 'public'
@@ -336,7 +337,7 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     )
     ${filter}
     ${cursorFilter}
-    ORDER BY s.display_name COLLATE NOCASE, s.id
+    ORDER BY display_names.display_name COLLATE NOCASE, s.id
     ${pageLimit}
   `).bind(...binds).all<SubjectRow>();
   return result.results ?? [];
@@ -353,12 +354,13 @@ const queryAttributeExtremeExamples = async (
       : 's.score >= 8 AND s.score <= 10';
     const query = (comparison: '>=' | '<', order: 'ASC' | 'DESC', limit: number) => db.statement(`
       SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
-        candidate_subject.kind AS subject_kind, candidate_subject.display_name,
+        candidate_subject.kind AS subject_kind, display_names.display_name,
         candidate_subject.game_id, candidate_game.slug AS game_slug,
         candidate_game.english_name AS game_english_name
       FROM attribute_score_states s
       JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
+      JOIN attribute_subject_display_names display_names ON display_names.id = candidate_subject.id
       WHERE s.attribute_id = ?
         AND s.evidence_count > 0
         AND ${scoreFilter}
@@ -615,6 +617,29 @@ export const parseAttributeActivityFeedEntry = (raw: string): AttributeActivity[
   }
 };
 
+const refreshActivitySubjectNames = async (db: Database, activities: AttributeActivity[]): Promise<AttributeActivity[]> => {
+  const subjectIds = [...new Set(activities.flatMap((activity) => [
+    activity.subject?.id,
+    activity.subjectA?.id,
+    activity.subjectB?.id,
+  ].filter((id): id is string => Boolean(id))))];
+  if (!subjectIds.length) return activities;
+  const subjects = await querySubjectRows(db, subjectIds);
+  const currentNames = new Map(subjects.map((subject) => [subject.id, subject]));
+  const refresh = (subject: NonNullable<AttributeActivity['subject']>) => {
+    const current = currentNames.get(subject.id);
+    return current
+      ? { ...subject, displayName: current.display_name, slug: current.slug, ...(current.game_slug ? { gameSlug: current.game_slug } : {}) }
+      : subject;
+  };
+  return activities.map((activity) => ({
+    ...activity,
+    subject: activity.subject ? refresh(activity.subject) : undefined,
+    subjectA: activity.subjectA ? refresh(activity.subjectA) : undefined,
+    subjectB: activity.subjectB ? refresh(activity.subjectB) : undefined,
+  }));
+};
+
 export const queryRecentActivities = async (db: Database): Promise<AttributeActivity[]> => {
   const result = await db.statement(`
     SELECT response_id AS id, activity_json AS payload_json
@@ -622,7 +647,10 @@ export const queryRecentActivities = async (db: Database): Promise<AttributeActi
     ORDER BY created_at DESC, response_id DESC
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
-  return (result.results ?? []).flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json)).slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
+  const activities = (result.results ?? [])
+    .flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json))
+    .slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
+  return refreshActivitySubjectNames(db, activities);
 };
 
 /** Keep the public feed intentionally small; this never runs in a vote request. */
@@ -878,13 +906,15 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
 const responseContext = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
     SELECT a.id AS attribute_id, t.name AS attribute_name,
-      sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
-      sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
+      sa.id AS subject_a_id, subject_a_names.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
+      sb.id AS subject_b_id, subject_b_names.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
       CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
     JOIN attribute_subjects sa ON sa.id = ?
     JOIN attribute_subjects sb ON sb.id = ?
+    JOIN attribute_subject_display_names subject_a_names ON subject_a_names.id = sa.id
+    JOIN attribute_subject_display_names subject_b_names ON subject_b_names.id = sb.id
     LEFT JOIN games ga ON ga.id = sa.game_id
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
