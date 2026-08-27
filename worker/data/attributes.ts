@@ -67,6 +67,7 @@ interface SubjectRow {
   game_id: string | null;
   game_slug: string | null;
   secondary_name: string | null;
+  bgg_ids_json: string | null;
 }
 
 interface ComponentRow {
@@ -240,16 +241,33 @@ const toAttribute = (row: AttributeRow): AttributeDefinition => ({
   sortOrder: row.sort_order,
 });
 
-const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComponent[]>): AttributeSubject => ({
-  id: row.id,
-  slug: row.slug,
-  kind: row.kind,
-  displayName: row.display_name,
-  ...(row.secondary_name ? { secondaryName: row.secondary_name } : {}),
-  gameId: row.game_id ?? undefined,
-  gameSlug: row.game_slug ?? undefined,
-  components: components.get(row.id) ?? [],
-});
+const parseBggIds = (value: string | null): number[] => {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed
+      .map((id) => typeof id === 'number' ? id : Number(id))
+      .filter((id): id is number => Number.isSafeInteger(id) && id > 0))];
+  } catch {
+    return [];
+  }
+};
+
+const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComponent[]>): AttributeSubject => {
+  const bggIds = parseBggIds(row.bgg_ids_json);
+  return {
+    id: row.id,
+    slug: row.slug,
+    kind: row.kind,
+    displayName: row.display_name,
+    ...(row.secondary_name ? { secondaryName: row.secondary_name } : {}),
+    gameId: row.game_id ?? undefined,
+    gameSlug: row.game_slug ?? undefined,
+    ...(bggIds.length ? { bggIds } : {}),
+    components: components.get(row.id) ?? [],
+  };
+};
 
 const clampPageSize = (limit: number | undefined) => Math.min(ATTRIBUTE_TABLE_PAGE_SIZE, Math.max(1, Math.floor(limit ?? ATTRIBUTE_TABLE_PAGE_SIZE)));
 
@@ -327,7 +345,13 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
   ];
   const result = await db.statement(`
     SELECT s.id, s.slug, s.kind, display_names.display_name, s.game_id, g.slug AS game_slug,
-      secondary_names.secondary_name
+      secondary_names.secondary_name,
+      COALESCE((
+        SELECT json_group_array(CAST(external_ids.external_id AS INTEGER))
+        FROM game_external_ids external_ids
+        WHERE external_ids.game_id = s.game_id
+          AND external_ids.source = 'bgg'
+      ), '[]') AS bgg_ids_json
     FROM attribute_subjects s
     LEFT JOIN games g ON g.id = s.game_id
     JOIN attribute_subject_display_names display_names ON display_names.id = s.id

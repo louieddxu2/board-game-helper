@@ -11,6 +11,14 @@ const sortCandidates = (candidates: Iterable<AttributeImportCandidate>) => [...c
 const sortAttributes = (attributes: Iterable<AttributeDefinition>) => [...attributes].sort((left, right) =>
   left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
 
+const mergeSubjectMetadata = (current: AttributeSubject | undefined, incoming: AttributeSubject) => {
+  if (!current) return incoming;
+  const merged = { ...current, ...incoming };
+  if (incoming.components === undefined && current.components !== undefined) merged.components = current.components;
+  if (incoming.bggIds === undefined && current.bggIds !== undefined) merged.bggIds = current.bggIds;
+  return merged;
+};
+
 export const applyAttributeCatalogChanges = (
   cached: AttributeCatalogPayload,
   changes: AttributeCatalogChange[],
@@ -30,7 +38,7 @@ export const applyAttributeCatalogChanges = (
     if (change.entryKey.startsWith('subject:')) {
       const subjectId = change.entryKey.slice('subject:'.length);
       if (change.deleted) subjects.delete(subjectId);
-      else if (change.subject) subjects.set(change.subject.id, change.subject);
+      else if (change.subject) subjects.set(change.subject.id, mergeSubjectMetadata(subjects.get(change.subject.id), change.subject));
     }
     if (change.entryKey.startsWith('value:')) {
       if (change.deleted) {
@@ -38,7 +46,7 @@ export const applyAttributeCatalogChanges = (
         if (subjectId && attributeId) values.delete(`${subjectId}:${attributeId}`);
       } else if (change.value) {
         values.set(valueKey(change.value), change.value);
-        if (change.subject) subjects.set(change.subject.id, change.subject);
+        if (change.subject) subjects.set(change.subject.id, mergeSubjectMetadata(subjects.get(change.subject.id), change.subject));
       }
     }
     if (change.entryKey.startsWith('candidate:')) {

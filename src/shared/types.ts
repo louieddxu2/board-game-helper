@@ -159,6 +159,8 @@ export interface AttributeSubject {
   thumbnailUrl?: string;
   externalSource?: string;
   externalId?: string;
+  /** All known BoardGameGeek IDs for this canonical game, including editions. */
+  bggIds?: number[];
   gameId?: string;
   gameSlug?: string;
   components?: AttributeSubjectComponent[];

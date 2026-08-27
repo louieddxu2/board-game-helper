@@ -56,6 +56,19 @@ describe('local attribute collection question selection', () => {
     });
   });
 
+  test('maps alternate BGG edition IDs to the same canonical subject', () => {
+    const withEditions = catalog();
+    withEditions.subjects[0] = {
+      ...withEditions.subjects[0],
+      bggIds: [306881, 306882],
+    };
+
+    expect(matchCollectionSubjects(withEditions, [306882, 306881, 456])).toEqual({
+      subjectIds: ['subject-a', 'subject-b'],
+      matchedBggIds: [306882, 306881, 456],
+    });
+  });
+
   test('selects a pair without adding IDs to a server query', () => {
     expect(chooseScopedAttributeQuestion(catalog(), ['subject-a', 'subject-b'], {}, 0)).toEqual({
       subjectAId: 'subject-a',

@@ -76,6 +76,9 @@ const parseSubject = (value: unknown): AttributeSubject | undefined => {
     ...(typeof row.thumbnailUrl === 'string' ? { thumbnailUrl: row.thumbnailUrl } : {}),
     ...(typeof row.externalSource === 'string' ? { externalSource: row.externalSource } : {}),
     ...(typeof row.externalId === 'string' ? { externalId: row.externalId } : {}),
+    ...(Array.isArray(row.bggIds) ? {
+      bggIds: [...new Set(row.bggIds.filter((id): id is number => Number.isSafeInteger(id) && id > 0))],
+    } : {}),
     ...(typeof row.gameId === 'string' ? { gameId: row.gameId } : {}),
     ...(typeof row.gameSlug === 'string' ? { gameSlug: row.gameSlug } : {}),
     ...(Array.isArray(row.components) ? { components: row.components } : {}),

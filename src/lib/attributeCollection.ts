@@ -94,11 +94,12 @@ export const parseGeekGroupCollectionCsv = (text: string): ParsedCsvCollection =
   };
 };
 
-const baseBggId = (subject: AttributeSubject) => {
+const baseBggIds = (subject: AttributeSubject) => {
+  const ids = new Set(subject.bggIds ?? []);
   const base = subject.components?.find((component) => component.type === 'base' && component.bggId != null);
-  if (base?.bggId != null) return base.bggId;
-  if (subject.externalSource?.toLowerCase() === 'bgg' && subject.externalId && /^\d+$/.test(subject.externalId)) return Number(subject.externalId);
-  return undefined;
+  if (base?.bggId != null) ids.add(base.bggId);
+  if (subject.externalSource?.toLowerCase() === 'bgg' && subject.externalId && /^\d+$/.test(subject.externalId)) ids.add(Number(subject.externalId));
+  return [...ids].filter((id) => Number.isSafeInteger(id) && id > 0);
 };
 
 export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds: number[]) => {
@@ -106,8 +107,9 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
   catalog.subjects
     .filter((subject) => subject.kind === 'game')
     .forEach((subject) => {
-      const bggId = baseBggId(subject);
-      if (bggId != null && !byBggId.has(bggId)) byBggId.set(bggId, subject.id);
+      baseBggIds(subject).forEach((bggId) => {
+        if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
+      });
     });
   const subjectIds = [...new Set(bggIds.map((id) => byBggId.get(id)).filter((id): id is string => Boolean(id)))];
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };

@@ -52,4 +52,24 @@ describe('attribute table catalog delta application', () => {
 
     expect(updated.candidates).toEqual([]);
   });
+
+  test('preserves snapshot metadata when a value delta has a compact subject payload', () => {
+    const catalogWithIds = {
+      ...base,
+      subjects: [{ ...base.subjects[0], bggIds: [326538, 999999], components: [{ order: 0, type: 'base' as const, label: '舊名稱', bggId: 326538 }] }],
+    };
+    const updated = applyAttributeCatalogChanges(catalogWithIds, [{
+      entryKey: 'value:subject-a:attribute-luck',
+      catalogVersion: 11,
+      deleted: false,
+      value: { ...base.values[0], score: 7 },
+      subject: { ...base.subjects[0], displayName: '新名稱' },
+    }]);
+
+    expect(updated.subjects[0]).toMatchObject({
+      displayName: '新名稱',
+      bggIds: [326538, 999999],
+      components: [{ bggId: 326538 }],
+    });
+  });
 });
