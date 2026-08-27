@@ -9,6 +9,7 @@ import {
   ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS,
   ATTRIBUTE_RESPONSE_MAX_READ_ROWS,
   ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS,
+  prepareAttributeMergeRebuildJob,
   saveAttributeResponse,
 } from './data/attributes';
 
@@ -105,5 +106,30 @@ describe('attribute hot-path budgets', () => {
     })).rejects.toThrow('attribute_response_busy');
     expect(db.batch).toHaveBeenCalledTimes(1);
     expect(db.statement).not.toHaveBeenCalledWith(expect.stringContaining('FROM attribute_score_states'));
+  });
+
+  test('merge preparation creates a rebuild job without loading historical votes', async () => {
+    const sqlCalls: string[] = [];
+    const db = {
+      statement: vi.fn().mockImplementation((sql: string) => {
+        sqlCalls.push(sql);
+        if (sql.includes('FROM attribute_subjects')) {
+          return statement({ all: vi.fn().mockResolvedValue({ results: [
+            { game_id: 'game-source', id: 'subject-source' },
+            { game_id: 'game-target', id: 'subject-target' },
+          ] }) });
+        }
+        if (sql.includes('FROM attribute_merge_rebuild_jobs')) {
+          return statement({ first: vi.fn().mockResolvedValue(null) });
+        }
+        return statement();
+      }),
+    } as unknown as Database;
+
+    const plan = await prepareAttributeMergeRebuildJob(db, 'game-source', 'game-target', 123);
+
+    expect(plan.statement).not.toBeNull();
+    expect(sqlCalls.some((sql) => sql.includes('attribute_vote_events'))).toBe(false);
+    expect(sqlCalls.some((sql) => sql.includes('attribute_vote_responses'))).toBe(false);
   });
 });

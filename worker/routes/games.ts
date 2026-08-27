@@ -13,7 +13,7 @@ import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges,
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 import { canEditContributionGame } from '../contributions';
-import { acquireAttributeMergeLock, prepareAttributeMergeReplay, releaseAttributeMergeLock } from '../data/attributes';
+import { acquireAttributeMergeLock, prepareAttributeMergeRebuildJob, processAttributeMergeRebuildJobs, releaseAttributeMergeLock } from '../data/attributes';
 import {
   anonymousGameViewKey,
   dailyViewToken,
@@ -325,7 +325,7 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
   const timestamp = now();
   const mergeLock = await acquireAttributeMergeLock(queryDb, c.req.param('id'), parsed.data.targetGameId, timestamp);
   try {
-    const attributeReplay = await prepareAttributeMergeReplay(queryDb, c.req.param('id'), parsed.data.targetGameId, timestamp);
+    const mergeJob = await prepareAttributeMergeRebuildJob(queryDb, c.req.param('id'), parsed.data.targetGameId, timestamp);
     await queryDb.batch([
       queryDb.statement(`
         INSERT OR IGNORE INTO game_aliases (id, game_id, alias, normalized_alias, alias_type, created_at)
@@ -378,7 +378,7 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
       queryDb.statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
       queryDb.statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
-      ...attributeReplay.statements,
+      ...(mergeJob.statement ? [mergeJob.statement] : []),
     ]);
     const updatedTarget = await queryDb.statement(`
       SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
@@ -390,6 +390,11 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       WHERE g.id = ?
       GROUP BY g.id
     `).bind(parsed.data.targetGameId).first<GameRow>();
+    if (mergeJob.statement) {
+      c.executionCtx.waitUntil(processAttributeMergeRebuildJobs(queryDb, timestamp).catch((error) => {
+        console.error('attribute_merge_rebuild_failed', error);
+      }));
+    }
     return c.json({
       ok: true,
       sourceGameId: c.req.param('id'),
@@ -397,6 +402,11 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       sourceGame: toGame(source as unknown as GameRow),
       targetGame: toGame(updatedTarget!),
     });
+  } catch (error) {
+    if (error instanceof Error && (error.message === 'attribute_merge_busy' || error.message === 'attribute_response_busy')) {
+      return c.json({ error: error.message }, 409);
+    }
+    throw error;
   } finally {
     await releaseAttributeMergeLock(queryDb, mergeLock);
   }

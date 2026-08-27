@@ -6,7 +6,7 @@ import { createDatabase } from './data/database';
 import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
-import { cleanupAttributeActivityFeed } from './data/attributes';
+import { cleanupAttributeActivityFeed, processAttributeMergeRebuildJobs } from './data/attributes';
 import { rebuildAttributeCatalog } from './data/attributeCatalog';
 
 import { authRoutes } from './routes/auth';
@@ -139,6 +139,7 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupGameViewData(db, controller.scheduledTime),
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
+    processAttributeMergeRebuildJobs(db, controller.scheduledTime),
   ]);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
     await Promise.all([
