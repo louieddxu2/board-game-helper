@@ -358,7 +358,7 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     LEFT JOIN attribute_subject_secondary_names secondary_names ON secondary_names.id = s.id
     WHERE (
       s.kind = 'configuration'
-      OR (g.merged_into_game_id IS NULL AND g.visibility = 'public'
+      OR (g.entity_kind IN ('base', 'expansion') AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
         AND (g.published_rule_count > 0 OR g.attribute_enabled = 1))
     )
     ${filter}
@@ -394,7 +394,7 @@ const queryAttributeExtremeExamples = async (
         AND s.random_key ${comparison} ?
         AND (
           candidate_subject.kind = 'configuration'
-          OR (candidate_game.merged_into_game_id IS NULL
+          OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
             AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
@@ -520,9 +520,15 @@ const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promis
 
 const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
   const result = await db.statement(`
-    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
+    SELECT state.subject_id, state.attribute_id, state.score, state.rating_deviation, state.direct_sum, state.direct_count,
       comparison_count, decisive_comparison_count, evidence_count
-    FROM attribute_score_states
+    FROM attribute_score_states state
+    JOIN attribute_subjects subject ON subject.id = state.subject_id
+    LEFT JOIN games game ON game.id = subject.game_id
+    WHERE subject.kind = 'configuration'
+      OR (game.entity_kind IN ('base', 'expansion') AND game.merged_into_game_id IS NULL
+        AND game.visibility = 'public'
+        AND (game.published_rule_count > 0 OR game.attribute_enabled = 1))
   `).all<AttributeScoreStateRow>();
   return (result.results ?? []).map(toMatrixValue);
 };
@@ -734,7 +740,7 @@ const querySeedCandidate = async (
         ${exclusion}
         AND (
           candidate_subject.kind = 'configuration'
-          OR (candidate_game.merged_into_game_id IS NULL
+          OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
             AND candidate_game.visibility = 'public'
             AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
         )
@@ -787,7 +793,7 @@ const queryOpponentForAttribute = async (
       ${extraFilter}
       AND (
         candidate_subject.kind = 'configuration'
-        OR (candidate_game.merged_into_game_id IS NULL
+        OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
           AND candidate_game.visibility = 'public'
           AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
       )
@@ -962,9 +968,9 @@ const responseContext = async (db: Database, input: AttributeResponseInput) => {
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
-      AND (sa.kind = 'configuration' OR (ga.merged_into_game_id IS NULL AND ga.visibility = 'public'
+      AND (sa.kind = 'configuration' OR (ga.entity_kind IN ('base', 'expansion') AND ga.merged_into_game_id IS NULL AND ga.visibility = 'public'
         AND (ga.published_rule_count > 0 OR ga.attribute_enabled = 1)))
-      AND (sb.kind = 'configuration' OR (gb.merged_into_game_id IS NULL AND gb.visibility = 'public'
+      AND (sb.kind = 'configuration' OR (gb.entity_kind IN ('base', 'expansion') AND gb.merged_into_game_id IS NULL AND gb.visibility = 'public'
         AND (gb.published_rule_count > 0 OR gb.attribute_enabled = 1)))
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
@@ -992,7 +998,8 @@ const attributeMergeSubjectIds = async (db: Database, sourceGameId: string, targ
   const result = await db.statement(`
     SELECT game_id, id
     FROM attribute_subjects
-    WHERE kind = 'game' AND game_id IN (?, ?)
+    JOIN games ON games.id = attribute_subjects.game_id
+    WHERE kind = 'game' AND games.entity_kind IN ('base', 'expansion') AND game_id IN (?, ?)
   `).bind(sourceGameId, targetGameId).all<{ game_id: string; id: string }>();
   const byGameId = new Map((result.results ?? []).map((row) => [row.game_id, row.id]));
   return { sourceSubjectId: byGameId.get(sourceGameId) ?? null, targetSubjectId: byGameId.get(targetGameId) ?? null };
@@ -1108,7 +1115,7 @@ const initializeAttributeMergeRebuild = async (
       WHERE a.is_active = 1
         AND (
           s.kind = 'configuration'
-          OR (g.merged_into_game_id IS NULL AND g.visibility = 'public'
+          OR (g.entity_kind IN ('base', 'expansion') AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
             AND (g.published_rule_count > 0 OR g.attribute_enabled = 1))
         )
     `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
