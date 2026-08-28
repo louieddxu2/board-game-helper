@@ -77,7 +77,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
   if (!rawName) return c.json({ game: null, suggestions: [] });
   const name = normalizeText(rawName);
   const exact = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
@@ -92,7 +92,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
     return c.json({ game: toGame(exact), suggestions: [] });
   }
   const result = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       0 AS rule_count,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
     FROM games g
@@ -142,7 +142,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
   const includePrivate = c.req.query('includePrivate') === '1'
     && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
   const game = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       g.rename_owner_id, g.rename_locked, g.visibility, g.review_status,
       CASE WHEN reviewer.show_nickname = 1 THEN g.reviewed_by_nickname END reviewed_by_nickname,
       g.reviewed_at,
@@ -228,7 +228,7 @@ gamesRoutes.patch('/api/games/:id', requireUser, async (c) => {
     cache.delete(new Request(new URL('/api/home', c.req.url))),
   ]));
   const updatedGame = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       g.published_rule_count AS rule_count, g.published_rule_count,
       g.total_rule_count, g.latest_rule_updated_at,
       GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
@@ -376,12 +376,28 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
         SET game_id = ?, label = (SELECT display_name FROM games WHERE id = ?)
         WHERE game_id = ? AND component_type = 'base'
       `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
+      queryDb.statement(`
+        DELETE FROM game_entity_relations
+        WHERE target_game_id = ?
+          AND EXISTS (
+            SELECT 1
+            FROM game_entity_relations existing
+            WHERE existing.source_game_id = game_entity_relations.source_game_id
+              AND existing.target_game_id = ?
+              AND existing.relation_type = game_entity_relations.relation_type
+          )
+      `).bind(c.req.param('id'), parsed.data.targetGameId),
+      queryDb.statement(`
+        UPDATE game_entity_relations
+        SET target_game_id = ?
+        WHERE target_game_id = ?
+      `).bind(parsed.data.targetGameId, c.req.param('id')),
       queryDb.statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?').bind(parsed.data.targetGameId, timestamp, c.req.param('id')),
       queryDb.statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, parsed.data.targetGameId),
       ...(mergeJob.statement ? [mergeJob.statement] : []),
     ]);
     const updatedTarget = await queryDb.statement(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
         g.published_rule_count AS rule_count, g.published_rule_count,
         g.total_rule_count, g.latest_rule_updated_at,
         GROUP_CONCAT(DISTINCT a.alias) AS aliases_str

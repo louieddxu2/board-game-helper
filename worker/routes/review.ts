@@ -8,6 +8,7 @@ import { normalizeText, now, sha256Hex, createId } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, cleanTagNames, tagWriteStatements, reviewContentFromRow, reviewRuleSelect, RuleRow, ReviewRuleRow } from './shared';
+import { ensureRuleGameVariantStatements } from '../data/gameEntities';
 
 const reviewRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -415,6 +416,13 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
         WHERE id = ? AND version = ?
       `).bind(JSON.stringify(proposed), user.id, timestamp, timestamp, row.id, row.version),
       getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id),
+    );
+
+    statements.push(
+      getDatabase(c).statement('DELETE FROM rule_game_variants WHERE rule_id = ?').bind(row.target_id),
+      ...(await ensureRuleGameVariantStatements(
+        getDatabase(c), row.game_id, row.target_id, editionNotes, timestamp,
+      )),
     );
 
     statements.push(...await tagWriteStatements(c, row.target_id, cleanTagNames(proposed.tagNames), user.id, timestamp));

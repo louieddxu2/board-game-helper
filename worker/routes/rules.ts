@@ -10,6 +10,7 @@ import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEdi
 import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportance';
 import { canEditContributionRule, canRestoreHiddenContributionRule, contributionErrorCode, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
+import { ensureRuleGameVariantStatements } from '../data/gameEntities';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -172,6 +173,10 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     `).bind(createId('rev'), c.req.param('id'), JSON.stringify({ ...row, tag_names: (existingTags.results ?? []).map((tag) => tag.name) }), user.id, parsed.data.reason ?? 'edit', timestamp),
     ...(!tagsRequested || tagIdsUnchanged ? [] : await tagWriteStatements(
       c, c.req.param('id'), requestedTagNames ?? [], user.id, timestamp, true, requestedTagIds,
+    )),
+    getDatabase(c).statement('DELETE FROM rule_game_variants WHERE rule_id = ?').bind(c.req.param('id')),
+    ...(await ensureRuleGameVariantStatements(
+      getDatabase(c), row.game_id as string, c.req.param('id'), updated.editionNotes, timestamp,
     )),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ];
@@ -342,6 +347,9 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
   let previous: Record<string, unknown>;
   try { previous = JSON.parse(revision.previous_json) as Record<string, unknown>; } catch { return c.json({ error: 'invalid_revision' }, 409); }
   const restoredTagNames = Array.isArray(previous.tag_names) ? previous.tag_names.filter((name): name is string => typeof name === 'string') : undefined;
+  const restoredEditionNotes = typeof previous.edition_notes_json === 'string'
+    ? parseEditionNotes({ edition_notes_json: previous.edition_notes_json, edition_note: typeof previous.edition_note === 'string' ? previous.edition_note : null })
+    : cleanEditionNotes(Array.isArray(previous.editionNotes) ? previous.editionNotes.filter((name): name is string => typeof name === 'string') : []);
   const timestamp = now();
   await getDatabase(c).batch([
     getDatabase(c).statement(`INSERT INTO rule_revisions (id, rule_id, previous_json, edited_by, reason, created_at) VALUES (?, ?, ?, ?, 'restore_revision', ?)`)
@@ -353,11 +361,14 @@ rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('ed
       previous.statement, previous.common_mistake ?? null, previous.details ?? null, previous.flow_stage,
       previous.categories_json ?? JSON.stringify(cleanRuleCategories(previous.categories)),
       previous.player_counts_json ?? '[]',
-      previous.edition_notes_json ?? JSON.stringify(cleanEditionNotes(typeof previous.edition_note === 'string' ? [previous.edition_note] : [])),
-      previous.edition_note ?? null, previous.status ?? 'published',
+      JSON.stringify(restoredEditionNotes), restoredEditionNotes[0] ?? null, previous.status ?? 'published',
       previous.hidden_at ?? null,
       previous.hidden_by ?? null, timestamp, c.req.param('id'),
     ),
+    getDatabase(c).statement('DELETE FROM rule_game_variants WHERE rule_id = ?').bind(c.req.param('id')),
+    ...(await ensureRuleGameVariantStatements(
+      getDatabase(c), current.game_id as string, c.req.param('id'), restoredEditionNotes, timestamp,
+    )),
     ...(restoredTagNames ? await tagWriteStatements(c, c.req.param('id'), restoredTagNames, user.id, timestamp) : []),
   ]);
   return c.json({ ok: true });

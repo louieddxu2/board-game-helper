@@ -7,6 +7,7 @@ import { getDatabase } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
+import type { GameEntityKind } from '../../src/shared/gameEntity';
 
 export const setNoCache = (c: AppContext) => {
   c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -278,6 +279,10 @@ export interface GameRow {
   reviewed_by_nickname?: string | null;
   reviewed_at?: number | null;
   pending_rule_count?: number | null;
+  entity_kind?: GameEntityKind | null;
+  parent_game_id?: string | null;
+  parent_game_name?: string | null;
+  parent_game_slug?: string | null;
 }
 
 export const toGame = (row: GameRow): GameSummary => ({
@@ -298,6 +303,10 @@ export const toGame = (row: GameRow): GameSummary => ({
   reviewedByNickname: row.reviewed_by_nickname ?? undefined,
   reviewedAt: row.reviewed_at ?? undefined,
   pendingRuleCount: row.pending_rule_count == null ? undefined : Number(row.pending_rule_count),
+  entityKind: row.entity_kind ?? undefined,
+  parentGameId: row.parent_game_id ?? undefined,
+  parentGameName: row.parent_game_name ?? undefined,
+  parentGameSlug: row.parent_game_slug ?? undefined,
 });
 
 export interface ReviewRuleRow {

@@ -1,3 +1,5 @@
+import type { GameEntityKind } from './gameEntity';
+
 export const FLOW_STAGES = [
   'setup',
   'round',
@@ -111,6 +113,10 @@ export interface GameSummary {
   reviewedByNickname?: string;
   reviewedAt?: number;
   pendingRuleCount?: number;
+  entityKind?: GameEntityKind;
+  parentGameId?: string;
+  parentGameName?: string;
+  parentGameSlug?: string;
 }
 
 export interface AccountDeletionSummary {

@@ -10,6 +10,7 @@ import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { contributionErrorCode, initialReviewStatus, isTrustedEditor, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
+import { ensureRuleGameVariantStatements } from '../data/gameEntities';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -163,6 +164,9 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
       cleanOptional(input.sourceUrl ?? parsed.data.sourceUrl, 2000) ?? null,
       initialReviewStatus(user) === 'pending' ? user.id : null,
       user.id, timestamp, timestamp, initialReviewStatus(user),
+    ));
+    statements.push(...await ensureRuleGameVariantStatements(
+      getDatabase(c), gameId, ruleId, editionNotes, timestamp,
     ));
     statements.push(...await tagWriteStatements(
       c, ruleId, input.newTagNames ?? input.tagNames ?? [], user.id, timestamp, false, input.tagIds ?? [],

@@ -65,7 +65,7 @@ homeRoutes.get('/api/home', async (c) => {
   const placeholders = popularGameIds.map(() => '?').join(',');
 
   const gamesResult = track('home:games-meta', await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       0 AS rule_count
     FROM games g
     WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL AND g.visibility = 'public'

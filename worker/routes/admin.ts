@@ -6,6 +6,7 @@ import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
+import { ensureRuleGameVariantStatements } from '../data/gameEntities';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -40,7 +41,7 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
 
   const [gamesResult, aliasesResult, rulesResult] = await Promise.all([
     getDatabase(c).statement(`
-      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at,
+      SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
         COUNT(r.id) AS rule_count
       FROM games g
       LEFT JOIN rules r ON r.game_id = g.id AND r.status = 'published'
@@ -364,6 +365,11 @@ adminRoutes.post('/api/admin/import-rows/:id/confirm', requireRole('editor'), as
     `).bind(gameId, timestamp, user.id, row.id),
   ];
 
+  statements.push(...await ensureRuleGameVariantStatements(
+    getDatabase(c), gameId, ruleId,
+    row.suggested_edition_note ? [row.suggested_edition_note] : [],
+    timestamp,
+  ));
   statements.push(...await tagWriteStatements(c, ruleId, cleanTagNames(tagNames), user.id, timestamp));
   await getDatabase(c).batch(statements);
 
