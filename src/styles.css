@@ -930,9 +930,11 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .edition-input-heading > span { font-size: 13px; font-weight: 700; }
 .edition-input-heading .text-action { flex: 0 0 auto; padding: 0; white-space: nowrap; }
 .edition-options { display: flex; flex-wrap: wrap; gap: 7px; }
-.edition-option { min-height: 36px; max-width: 100%; padding: 7px 12px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; }
+.edition-option { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; max-width: 100%; padding: 7px 12px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.edition-option small { color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .edition-option:hover { border-color: var(--green); }
 .edition-option.active { border-color: var(--green); background: var(--green); color: var(--white); }
+.edition-option.active small { color: rgba(255,255,255,.78); }
 .tag-input { position: relative; display: grid; gap: 8px; margin-top: 10px; }
 .tag-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
 .tag-composer:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }

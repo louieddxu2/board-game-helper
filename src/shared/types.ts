@@ -1,4 +1,4 @@
-import type { GameEntityKind } from './gameEntity';
+import type { GameEntityKind, GameVariantRelationType } from './gameEntity';
 
 export const FLOW_STAGES = [
   'setup',
@@ -117,6 +117,14 @@ export interface GameSummary {
   parentGameId?: string;
   parentGameName?: string;
   parentGameSlug?: string;
+}
+
+export interface GameVariantSummary {
+  id: string;
+  displayName: string;
+  englishName?: string;
+  entityKind: Exclude<GameEntityKind, 'base'>;
+  relationType: GameVariantRelationType;
 }
 
 export interface AccountDeletionSummary {
@@ -406,6 +414,7 @@ export interface RuleRevision {
 export interface GameDetail extends GameSummary {
   aliases: string[];
   rules: RuleCard[];
+  variants?: GameVariantSummary[];
   externalResources?: GameExternalResource[];
 }
 

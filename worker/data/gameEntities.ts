@@ -17,13 +17,15 @@ const stableVariantSuffix = (parentGameId: string, kind: GameEntityKind, normali
   }
   return (hash >>> 0).toString(36);
 };
-const variantRelationType = (kind: GameEntityKind): 'expansion_of' | 'version_of' => (
-  kind === 'expansion' ? 'expansion_of' : 'version_of'
-);
+const variantRelationType = (kind: GameEntityKind): 'expansion_of' | 'version_of' | 'variant_of' => {
+  if (kind === 'expansion') return 'expansion_of';
+  if (kind === 'version') return 'version_of';
+  return 'variant_of';
+};
 
 /**
  * Convert recognized legacy labels into entity rows during normal rule writes.
- * Unknown labels intentionally stay in the legacy text field for later review.
+ * Unknown labels are retained as hidden variant entities for later review.
  * IDs are deterministic so concurrent submissions converge on one entity.
  */
 export const ensureRuleGameVariantStatements = async (
@@ -36,19 +38,21 @@ export const ensureRuleGameVariantStatements = async (
   const normalizedLabels = Array.from(new Map(
     labels
       .map((label) => ({ label: label.trim(), normalizedName: normalizeGameEntityLabel(label), kind: classifyGameEntityLabel(label) }))
-      .filter(({ normalizedName, kind }) => Boolean(normalizedName) && (kind === 'expansion' || kind === 'version'))
+      .filter(({ normalizedName }) => Boolean(normalizedName))
       .map((value) => [`${value.kind}:${value.normalizedName}`, value] as const),
   ).values());
   if (!normalizedLabels.length) return [];
 
+  const normalizedNames = Array.from(new Set(normalizedLabels.map(({ normalizedName }) => normalizedName)));
+  const normalizedNamePlaceholders = normalizedNames.map(() => '?').join(', ');
   const existing = await db.statement(`
     SELECT relation.source_game_id AS game_id, game.normalized_name, game.entity_kind
     FROM game_entity_relations relation
     JOIN games game ON game.id = relation.source_game_id
     WHERE relation.target_game_id = ?
-      AND relation.relation_type IN ('expansion_of', 'version_of')
-    LIMIT 200
-  `).bind(parentGameId).all<ExistingVariantRow>();
+      AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+      AND game.normalized_name IN (${normalizedNamePlaceholders})
+  `).bind(parentGameId, ...normalizedNames).all<ExistingVariantRow>();
   const existingByKey = new Map(
     (existing.results ?? []).map((row) => [`${row.entity_kind}:${row.normalized_name}`, row.game_id]),
   );

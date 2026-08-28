@@ -698,7 +698,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       <TagInput value={tagSelections} onChange={setTagSelections} canCreate={isAdmin} availableTags={game.rules.flatMap((gameRule) => gameRule.tags).filter((tag) => !tag.unresolved)} detectionInput={{ statement, commonMistake, details }} />
       <RuleCategoryInput value={categories} onChange={setCategories} />
       <PlayerCountInput value={playerCounts} onChange={setPlayerCounts} />
-      <EditionInput value={editionNotes} options={editionOptions} onChange={setEditionNotes} />
+      <EditionInput value={editionNotes} options={editionOptions} variants={game.variants ?? []} onChange={setEditionNotes} />
       <div className="two-columns"><label>參考資料<input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} /></label><label>資料網址<input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} /></label></div>
       {user && <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>

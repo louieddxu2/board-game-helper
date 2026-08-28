@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyAttributeCatalogChanges } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
@@ -99,6 +99,7 @@ export const toStoredRule = <T extends RuleCard>(rule: T): T => ({ ...rule, tags
 
 export interface CachedGameRow extends GameSummary {
   aliases: string[];
+  variants?: GameVariantSummary[];
   externalResources?: GameExternalResource[];
   cachedAt: number;
   rulesFetchedAt?: number;

@@ -13,7 +13,7 @@ import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOption
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import zhTWCopy from '../content/zh-TW.json';
-import type { ContributionQuota, FlowStage, GameDetail, GameSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
+import type { ContributionQuota, FlowStage, GameDetail, GameSummary, GameVariantSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
 
 type RuleInput = {
   id: string;
@@ -39,7 +39,7 @@ export const AddPage = () => {
   const { showToast } = useToast();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
-  const [gameEditionOptions, setGameEditionOptions] = useState<{ gameId: string; options: string[] }>();
+  const [gameEditionOptions, setGameEditionOptions] = useState<{ gameId: string; options: string[]; variants: GameVariantSummary[] }>();
   const [englishName, setEnglishName] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
   const [activeRuleId, setActiveRuleId] = useState(() => rules[0].id);
@@ -113,7 +113,7 @@ export const AddPage = () => {
     let active = true;
     const gameId = selectedGameId;
     const applyOptions = ({ game: detail }: { game: GameDetail }) => {
-      if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules) });
+      if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules), variants: detail.variants ?? [] });
     };
     void api.game(gameId, canEdit, applyOptions).then(applyOptions).catch(() => undefined);
     return () => { active = false; };
@@ -303,7 +303,9 @@ export const AddPage = () => {
             <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: rule.details }} />
             <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
             <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />
-            <EditionInput value={rule.editionNotes ?? []} options={editionOptions} onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
+            <EditionInput value={rule.editionNotes ?? []} options={editionOptions}
+              variants={selectedGameId && gameEditionOptions?.gameId === selectedGameId ? gameEditionOptions.variants : []}
+              onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
             <div className="two-columns"><label>來源名稱<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} /></label></div>
           </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>{rule.statement.trim() || `新增${zhTWCopy.terms.correctRule}`}</button>}
           <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`移除第 ${index + 1} 條`}>×</button>

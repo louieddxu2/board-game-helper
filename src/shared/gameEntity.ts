@@ -1,6 +1,8 @@
 export const GAME_ENTITY_KINDS = ['base', 'expansion', 'version', 'unknown'] as const;
 
 export type GameEntityKind = (typeof GAME_ENTITY_KINDS)[number];
+export const GAME_VARIANT_RELATION_TYPES = ['expansion_of', 'version_of', 'variant_of'] as const;
+export type GameVariantRelationType = (typeof GAME_VARIANT_RELATION_TYPES)[number];
 
 const EXPANSION_MARKERS = ['expansion', 'expansions', '擴充', '擴展', '擴'];
 const VERSION_MARKERS = [

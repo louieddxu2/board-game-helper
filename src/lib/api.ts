@@ -200,6 +200,7 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
   englishName: game.englishName,
   updatedAt: game.updatedAt,
   latestRuleUpdatedAt: game.latestRuleUpdatedAt,
+  variants: (game.variants ?? []).map((variant) => [variant.id, variant.displayName, variant.englishName, variant.entityKind, variant.relationType]),
   reviewStatus: game.reviewStatus,
   reviewedByNickname: game.reviewedByNickname,
   externalResources: (game.externalResources ?? []).map((resource) => [resource.id, resource.name, resource.category, resource.url, resource.updatedAt]),

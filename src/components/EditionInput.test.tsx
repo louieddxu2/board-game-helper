@@ -39,4 +39,14 @@ describe('EditionInput', () => {
     expect(screen.getByRole('button', { name: '挪威人擴充' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '第二擴充' })).toHaveAttribute('aria-pressed', 'true');
   });
+
+  test('shows the stored classification for a variant, including unclassified ones', () => {
+    render(<EditionInput value={[]} options={[]} variants={[
+      { id: 'variant-1', displayName: '番茄醬擴', entityKind: 'expansion', relationType: 'expansion_of' },
+      { id: 'variant-2', displayName: '利格沃特計畫', entityKind: 'unknown', relationType: 'variant_of' },
+    ]} onChange={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '番茄醬擴' })).toHaveTextContent('擴充');
+    expect(screen.getByRole('button', { name: '利格沃特計畫' })).toHaveTextContent('待分類');
+  });
 });

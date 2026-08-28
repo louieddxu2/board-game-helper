@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
-import { FLOW_STAGES, GAME_EXTERNAL_RESOURCE_CATEGORIES, type FlowStage, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
+import { FLOW_STAGES, GAME_EXTERNAL_RESOURCE_CATEGORIES, type FlowStage, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type GameSummary, type GameVariantSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
 import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
@@ -33,6 +33,14 @@ interface GameExternalResourceRow {
   url: string;
   created_at: number;
   updated_at: number;
+}
+
+interface GameVariantRow {
+  id: string;
+  display_name: string;
+  english_name: string | null;
+  entity_kind: GameVariantSummary['entityKind'];
+  relation_type: GameVariantSummary['relationType'];
 }
 
 const toGameExternalResource = (row: GameExternalResourceRow): GameExternalResource => ({
@@ -158,7 +166,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
 
   setNoCache(c);
 
-  const [aliasesResult, rulesResult, externalResourcesResult] = await Promise.all([
+  const [aliasesResult, rulesResult, externalResourcesResult, variantsResult] = await Promise.all([
     getDatabase(c).statement('SELECT alias FROM game_aliases WHERE game_id = ? ORDER BY alias')
       .bind(game.id).all<{ alias: string }>(),
     getDatabase(c).statement(`${gameRuleSelect}
@@ -175,6 +183,27 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
       WHERE game_id = ?
       ORDER BY CASE category WHEN 'teaching' THEN 1 WHEN 'help_card' THEN 2 ELSE 3 END, name, id
     `).bind(game.id).all<GameExternalResourceRow>(),
+    getDatabase(c).statement(`
+      SELECT variant.id, variant.display_name, variant.english_name,
+        variant.entity_kind, relation.relation_type
+      FROM game_entity_relations relation
+      JOIN games variant ON variant.id = relation.source_game_id
+      WHERE relation.target_game_id = ?
+        AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+        AND variant.merged_into_game_id IS NULL
+        AND (
+          ? = 1
+          OR EXISTS (
+            SELECT 1
+            FROM rule_game_variants linked_variant
+            JOIN rules linked_rule ON linked_rule.id = linked_variant.rule_id
+            WHERE linked_variant.game_id = variant.id
+              AND linked_rule.status = 'published'
+          )
+        )
+      ORDER BY CASE variant.entity_kind WHEN 'expansion' THEN 1 WHEN 'version' THEN 2 ELSE 3 END,
+        variant.display_name, variant.id
+    `).bind(game.id, includePrivate ? 1 : 0).all<GameVariantRow>(),
   ]);
   const ruleRows = rulesResult.results ?? [];
   const nicknameMap = await resolvePublicNicknames(getDatabase(c), ruleRows);
@@ -183,6 +212,13 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     ruleCount: ruleRows.length,
     aliases: (aliasesResult.results ?? []).map((row) => row.alias),
     rules: ruleRows.map((row) => toRule(row, undefined, nicknameMap)),
+    variants: (variantsResult.results ?? []).map((row) => ({
+      id: row.id,
+      displayName: row.display_name,
+      englishName: row.english_name ?? undefined,
+      entityKind: row.entity_kind,
+      relationType: row.relation_type,
+    })),
     externalResources: (externalResourcesResult.results ?? []).map(toGameExternalResource),
   };
   setNoCache(c);
