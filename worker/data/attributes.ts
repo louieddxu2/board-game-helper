@@ -120,6 +120,86 @@ interface ActivityFeedRow {
   payload_json: string;
 }
 
+/**
+ * Keep the BGG voting boundary inline on the hot path.  The equivalent view
+ * is useful for administration and migrations, but SQLite may materialize it
+ * before applying a point lookup.  These predicates let the score-state
+ * indexes remain the driving tables for question selection.
+ */
+const votableSubjectCondition = (subjectAlias: string, gameAlias: string) => `(
+  (
+    ${subjectAlias}.kind = 'game'
+    AND ${gameAlias}.entity_kind IN ('base', 'expansion')
+    AND ${gameAlias}.merged_into_game_id IS NULL
+    AND ${gameAlias}.visibility = 'public'
+    AND (${gameAlias}.published_rule_count > 0 OR ${gameAlias}.attribute_enabled = 1)
+    AND (
+      ${gameAlias}.bgg_id IS NOT NULL
+      OR EXISTS (
+        SELECT 1 FROM game_external_ids external_id
+        WHERE external_id.game_id = ${gameAlias}.id AND external_id.source = 'bgg'
+      )
+      OR EXISTS (
+        SELECT 1 FROM attribute_subject_components component
+        WHERE component.subject_id = ${subjectAlias}.id
+          AND component.component_type = 'base'
+          AND component.bgg_id IS NOT NULL
+      )
+    )
+  )
+  OR (
+    ${subjectAlias}.kind = 'configuration'
+    AND EXISTS (
+      SELECT 1 FROM attribute_subject_components component
+      WHERE component.subject_id = ${subjectAlias}.id
+        AND component.component_type = 'base'
+        AND component.bgg_id IS NOT NULL
+    )
+    AND EXISTS (
+      SELECT 1 FROM attribute_subject_components component
+      WHERE component.subject_id = ${subjectAlias}.id
+        AND component.component_type = 'expansion'
+        AND component.bgg_id IS NOT NULL
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM attribute_subject_components component
+      WHERE component.subject_id = ${subjectAlias}.id
+        AND component.component_type IN ('base', 'expansion')
+        AND component.bgg_id IS NULL
+    )
+  )
+)`;
+
+/**
+ * Configuration English names are derived from only that subject's
+ * components.  Unlike attribute_subject_secondary_names, these correlated
+ * lookups do not aggregate every subject in the database for each question.
+ */
+const subjectSecondaryNameExpression = (subjectAlias: string, gameAlias: string) => {
+  const baseName = `(SELECT COALESCE(base_game.english_name, base_component.english_name)
+    FROM attribute_subject_components base_component
+    LEFT JOIN games base_game ON base_game.id = base_component.game_id
+    WHERE base_component.subject_id = ${subjectAlias}.id
+      AND base_component.component_type = 'base'
+    LIMIT 1)`;
+  const expansionName = `(SELECT group_concat(ordered_expansion.english_name, ' + ')
+    FROM (
+      SELECT component.english_name
+      FROM attribute_subject_components component
+      WHERE component.subject_id = ${subjectAlias}.id
+        AND component.component_type = 'expansion'
+        AND NULLIF(TRIM(component.english_name), '') IS NOT NULL
+      ORDER BY component.component_order
+    ) ordered_expansion)`;
+  return `(CASE WHEN ${subjectAlias}.kind = 'configuration' THEN
+    CASE
+      WHEN ${baseName} IS NULL THEN ${expansionName}
+      WHEN ${expansionName} IS NULL THEN ${baseName}
+      ELSE ${baseName} || ' + ' || ${expansionName}
+    END
+    ELSE ${gameAlias}.english_name END)`;
+};
+
 interface AttributeMergeHistoryRow {
   stream_id: string;
   attribute_id: string;
@@ -336,7 +416,7 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
   const filter = subjectIds?.length ? `AND s.id IN (${subjectIds.map(() => '?').join(',')})` : '';
   const cursorParts = !subjectIds?.length ? decodeCursor(page?.cursor) : undefined;
   const cursorFilter = cursorParts?.length === 2
-    ? 'AND (LOWER(display_names.display_name) > LOWER(?) OR (LOWER(display_names.display_name) = LOWER(?) AND s.id > ?))'
+    ? 'AND (LOWER(s.display_name) > LOWER(?) OR (LOWER(s.display_name) = LOWER(?) AND s.id > ?))'
     : '';
   const pageLimit = !subjectIds?.length && page ? `LIMIT ${clampPageSize(page.limit) + 1}` : '';
   const binds = [
@@ -344,8 +424,8 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     ...(cursorParts?.length === 2 ? [cursorParts[0], cursorParts[0], cursorParts[1]] : []),
   ];
   const result = await db.statement(`
-    SELECT s.id, s.slug, s.kind, display_names.display_name, s.game_id, g.slug AS game_slug,
-      secondary_names.secondary_name,
+    SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug,
+      ${subjectSecondaryNameExpression('s', 'g')} AS secondary_name,
       COALESCE((
         SELECT json_group_array(bgg_id)
         FROM (
@@ -365,15 +445,10 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
       ), '[]') AS bgg_ids_json
     FROM attribute_subjects s
     LEFT JOIN games g ON g.id = s.game_id
-    JOIN attribute_subject_display_names display_names ON display_names.id = s.id
-    LEFT JOIN attribute_subject_secondary_names secondary_names ON secondary_names.id = s.id
-    WHERE EXISTS (
-      SELECT 1 FROM attribute_votable_subjects eligible
-      WHERE eligible.subject_id = s.id
-    )
+    WHERE ${votableSubjectCondition('s', 'g')}
     ${filter}
     ${cursorFilter}
-    ORDER BY display_names.display_name COLLATE NOCASE, s.id
+    ORDER BY s.display_name COLLATE NOCASE, s.id
     ${pageLimit}
   `).bind(...binds).all<SubjectRow>();
   return result.results ?? [];
@@ -390,22 +465,17 @@ const queryAttributeExtremeExamples = async (
       : 's.score >= 8 AND s.score <= 10';
     const query = (comparison: '>=' | '<', order: 'ASC' | 'DESC', limit: number) => db.statement(`
       SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
-        candidate_subject.kind AS subject_kind, display_names.display_name,
+        candidate_subject.kind AS subject_kind, candidate_subject.display_name,
         candidate_subject.game_id, candidate_game.slug AS game_slug,
-        candidate_secondary.secondary_name
+        ${subjectSecondaryNameExpression('candidate_subject', 'candidate_game')} AS secondary_name
       FROM attribute_score_states s
       JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
-      JOIN attribute_subject_display_names display_names ON display_names.id = candidate_subject.id
-      LEFT JOIN attribute_subject_secondary_names candidate_secondary ON candidate_secondary.id = candidate_subject.id
       WHERE s.attribute_id = ?
         AND s.evidence_count > 0
         AND ${scoreFilter}
         AND s.random_key ${comparison} ?
-        AND EXISTS (
-          SELECT 1 FROM attribute_votable_subjects eligible
-          WHERE eligible.subject_id = candidate_subject.id
-        )
+        AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
       ORDER BY s.random_key ${order}, s.subject_id ${order}
       LIMIT ${limit}
     `).bind(attributeId, pivot).all<Omit<AttributeExtremeExampleRow, 'direction'>>();
@@ -533,7 +603,7 @@ const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixVal
     FROM attribute_score_states state
     JOIN attribute_subjects subject ON subject.id = state.subject_id
     LEFT JOIN games game ON game.id = subject.game_id
-    JOIN attribute_votable_subjects eligible ON eligible.subject_id = subject.id
+    WHERE ${votableSubjectCondition('subject', 'game')}
   `).all<AttributeScoreStateRow>();
   return (result.results ?? []).map(toMatrixValue);
 };
@@ -671,29 +741,6 @@ export const parseAttributeActivityFeedEntry = (raw: string): AttributeActivity[
   }
 };
 
-const refreshActivitySubjectNames = async (db: Database, activities: AttributeActivity[]): Promise<AttributeActivity[]> => {
-  const subjectIds = [...new Set(activities.flatMap((activity) => [
-    activity.subject?.id,
-    activity.subjectA?.id,
-    activity.subjectB?.id,
-  ].filter((id): id is string => Boolean(id))))];
-  if (!subjectIds.length) return activities;
-  const subjects = await querySubjectRows(db, subjectIds);
-  const currentNames = new Map(subjects.map((subject) => [subject.id, subject]));
-  const refresh = (subject: NonNullable<AttributeActivity['subject']>) => {
-    const current = currentNames.get(subject.id);
-    return current
-      ? { ...subject, displayName: current.display_name, slug: current.slug, ...(current.game_slug ? { gameSlug: current.game_slug } : {}) }
-      : subject;
-  };
-  return activities.map((activity) => ({
-    ...activity,
-    subject: activity.subject ? refresh(activity.subject) : undefined,
-    subjectA: activity.subjectA ? refresh(activity.subjectA) : undefined,
-    subjectB: activity.subjectB ? refresh(activity.subjectB) : undefined,
-  }));
-};
-
 export const queryRecentActivities = async (db: Database): Promise<AttributeActivity[]> => {
   const result = await db.statement(`
     SELECT response_id AS id, activity_json AS payload_json
@@ -704,7 +751,11 @@ export const queryRecentActivities = async (db: Database): Promise<AttributeActi
   const activities = (result.results ?? [])
     .flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json))
     .slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
-  return refreshActivitySubjectNames(db, activities);
+  // activity_json already contains the display snapshot shown to users.  Do
+  // not re-hydrate every subject through the derived-name and voting-boundary
+  // views on every question request; that turns a 12-row feed into a table
+  // scan as the collection grows.
+  return activities;
 };
 
 /** Keep the public feed intentionally small; this never runs in a vote request. */
@@ -743,10 +794,7 @@ const querySeedCandidate = async (
       WHERE s.question_slot = ?
         ${attributeFilter}
         ${exclusion}
-        AND EXISTS (
-          SELECT 1 FROM attribute_votable_subjects eligible
-          WHERE eligible.subject_id = candidate_subject.id
-        )
+        AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
       ORDER BY s.rating_deviation DESC, s.random_key, s.attribute_id, s.subject_id
       LIMIT 1
     `).bind(randomQuestionSlot(), ...(attributeId ? [attributeId] : []), ...excludeSubjectIds).first<SeedCandidateRow>();
@@ -794,10 +842,7 @@ const queryOpponentForAttribute = async (
       ${gameExclusion}
       ${exclusion}
       ${extraFilter}
-      AND EXISTS (
-        SELECT 1 FROM attribute_votable_subjects eligible
-        WHERE eligible.subject_id = candidate_subject.id
-      )
+      AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
     ORDER BY ${orderBy}
     LIMIT 1
   `).bind(...fixedBinds, ...extraBinds).first<SeedCandidateRow>();
@@ -956,27 +1001,19 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
 const responseContext = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
     SELECT a.id AS attribute_id, t.name AS attribute_name,
-      sa.id AS subject_a_id, subject_a_names.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
-      sb.id AS subject_b_id, subject_b_names.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
+      sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
+      sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
       CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
     JOIN attribute_subjects sa ON sa.id = ?
     JOIN attribute_subjects sb ON sb.id = ?
-    JOIN attribute_subject_display_names subject_a_names ON subject_a_names.id = sa.id
-    JOIN attribute_subject_display_names subject_b_names ON subject_b_names.id = sb.id
     LEFT JOIN games ga ON ga.id = sa.game_id
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
-      AND EXISTS (
-        SELECT 1 FROM attribute_votable_subjects eligible
-        WHERE eligible.subject_id = sa.id
-      )
-      AND EXISTS (
-        SELECT 1 FROM attribute_votable_subjects eligible
-        WHERE eligible.subject_id = sb.id
-      )
+      AND ${votableSubjectCondition('sa', 'ga')}
+      AND ${votableSubjectCondition('sb', 'gb')}
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
   if (!row) throw new Error('attribute_subject_not_found');
@@ -1001,11 +1038,12 @@ const batchChangeCount = (result: { meta?: { changes?: number } } | undefined) =
 
 const attributeMergeSubjectIds = async (db: Database, sourceGameId: string, targetGameId: string) => {
   const result = await db.statement(`
-    SELECT game_id, id
-    FROM attribute_subjects
-    JOIN games ON games.id = attribute_subjects.game_id
-    JOIN attribute_votable_subjects eligible ON eligible.subject_id = attribute_subjects.id
-    WHERE kind = 'game' AND games.entity_kind IN ('base', 'expansion') AND game_id IN (?, ?)
+    SELECT subject.game_id, subject.id
+    FROM attribute_subjects subject
+    JOIN games game ON game.id = subject.game_id
+    WHERE subject.kind = 'game'
+      AND subject.game_id IN (?, ?)
+      AND ${votableSubjectCondition('subject', 'game')}
   `).bind(sourceGameId, targetGameId).all<{ game_id: string; id: string }>();
   const byGameId = new Map((result.results ?? []).map((row) => [row.game_id, row.id]));
   return { sourceSubjectId: byGameId.get(sourceGameId) ?? null, targetSubjectId: byGameId.get(targetGameId) ?? null };
@@ -1119,10 +1157,7 @@ const initializeAttributeMergeRebuild = async (
       CROSS JOIN attributes a
       LEFT JOIN games g ON g.id = s.game_id
       WHERE a.is_active = 1
-        AND EXISTS (
-          SELECT 1 FROM attribute_votable_subjects eligible
-          WHERE eligible.subject_id = s.id
-        )
+        AND ${votableSubjectCondition('s', 'g')}
     `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
     db.statement(`
       UPDATE attribute_merge_rebuild_jobs
