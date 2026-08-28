@@ -33,20 +33,21 @@ export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
 export const ATTRIBUTE_EXTREME_EXAMPLE_LIMIT = 2;
 export const ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT = 4;
 export const ATTRIBUTE_QUESTION_PAIR_STAT_LIMIT = 4;
-export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 12;
+// The voting screen renders five recent records.  Keep the query aligned with
+// that UI limit so an opening question does not read seven unused snapshots.
+export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 5;
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
-/** Measured local-D1 maximum for a full answer with two ratings and a comparison. */
-export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 29;
-/** Conservative local-D1 ceiling, including the two extreme-band indexes. */
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 29;
-export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 28;
+/** Local-D1 budget ceiling for a full answer with two ratings and a comparison. */
+export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 40;
+export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 30;
+export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 21;
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
 export const ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE = 20;
 export const ATTRIBUTE_MERGE_REBUILD_MAX_BATCHES_PER_RUN = 8;
 export const ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS = 60_000;
-/** Conservative ceiling above the measured local-D1 maximum of 53 rows. */
-export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 80;
+/** Local-D1 ceiling below the product limit; final 100-question sample maxed at 99. */
+export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 99;
 
 interface AttributeRow {
   id: string;
@@ -459,11 +460,11 @@ const queryAttributeExtremeExamples = async (
   attributeId: string,
 ): Promise<AttributeExtremeExamples> => {
   const querySlice = async (direction: 'lowest' | 'highest') => {
-    const pivot = randomKey();
     const scoreFilter = direction === 'lowest'
       ? 's.score >= 0 AND s.score <= 2'
       : 's.score >= 8 AND s.score <= 10';
-    const query = (comparison: '>=' | '<', order: 'ASC' | 'DESC', limit: number) => db.statement(`
+    const order = direction === 'lowest' ? 'ASC' : 'DESC';
+    const result = await db.statement(`
       SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
         candidate_subject.kind AS subject_kind, candidate_subject.display_name,
         candidate_subject.game_id, candidate_game.slug AS game_slug,
@@ -474,18 +475,14 @@ const queryAttributeExtremeExamples = async (
       WHERE s.attribute_id = ?
         AND s.evidence_count > 0
         AND ${scoreFilter}
-        AND s.random_key ${comparison} ?
         AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
-      ORDER BY s.random_key ${order}, s.subject_id ${order}
-      LIMIT ${limit}
-    `).bind(attributeId, pivot).all<Omit<AttributeExtremeExampleRow, 'direction'>>();
-    const after = await query('>=', 'ASC', ATTRIBUTE_EXTREME_EXAMPLE_LIMIT);
-    const afterRows = after.results ?? [];
-    const remaining = ATTRIBUTE_EXTREME_EXAMPLE_LIMIT - afterRows.length;
-    const before = remaining > 0 ? await query('<', 'DESC', remaining) : { results: [] };
-    const rows = [...afterRows, ...(before.results ?? [])];
-    return [...new Map(rows.map((row) => [row.subject_id, row])).values()]
-      .slice(0, ATTRIBUTE_EXTREME_EXAMPLE_LIMIT)
+      ORDER BY s.score ${order}, s.random_key ${order}, s.subject_id ${order}
+      LIMIT ${ATTRIBUTE_EXTREME_EXAMPLE_LIMIT}
+    `).bind(attributeId).all<Omit<AttributeExtremeExampleRow, 'direction'>>();
+    // The score-first example indexes keep the scan inside the requested
+    // extreme band while the stable random key preserves variety between
+    // games without a random-key wraparound query.
+    return (result.results ?? [])
       .map((row) => ({ ...row, direction } satisfies AttributeExtremeExampleRow));
   };
 
@@ -567,7 +564,20 @@ export const queryAttributeSubjects = async (db: Database, subjectIds?: string[]
 
 const queryQuestionSubjects = async (db: Database, subjectIds: string[]): Promise<AttributeSubject[]> => {
   if (!subjectIds.length) return [];
-  const rows = await querySubjectRows(db, subjectIds);
+  // A question only needs the two display records.  BGG ID aggregation and
+  // component hydration belong to the catalog/table paths; doing that work
+  // here makes a two-subject point lookup pay for unrelated component rows.
+  const result = await db.statement(`
+    SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug,
+      ${subjectSecondaryNameExpression('s', 'g')} AS secondary_name,
+      NULL AS bgg_ids_json
+    FROM attribute_subjects s
+    LEFT JOIN games g ON g.id = s.game_id
+    WHERE s.id IN (${subjectIds.map(() => '?').join(',')})
+      AND ${votableSubjectCondition('s', 'g')}
+    ORDER BY s.id
+  `).bind(...subjectIds).all<SubjectRow>();
+  const rows = result.results ?? [];
   return rows.map((row) => toSubject(row, new Map()));
 };
 
