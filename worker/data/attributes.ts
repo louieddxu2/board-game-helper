@@ -347,19 +347,29 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     SELECT s.id, s.slug, s.kind, display_names.display_name, s.game_id, g.slug AS game_slug,
       secondary_names.secondary_name,
       COALESCE((
-        SELECT json_group_array(CAST(external_ids.external_id AS INTEGER))
-        FROM game_external_ids external_ids
-        WHERE external_ids.game_id = s.game_id
-          AND external_ids.source = 'bgg'
+        SELECT json_group_array(bgg_id)
+        FROM (
+          SELECT g.bgg_id AS bgg_id
+          WHERE s.kind = 'game' AND g.bgg_id IS NOT NULL
+          UNION
+          SELECT CAST(external_ids.external_id AS INTEGER) AS bgg_id
+          FROM game_external_ids external_ids
+          WHERE external_ids.game_id = s.game_id
+            AND external_ids.source = 'bgg'
+          UNION
+          SELECT component.bgg_id
+          FROM attribute_subject_components component
+          WHERE component.subject_id = s.id
+            AND component.bgg_id IS NOT NULL
+        )
       ), '[]') AS bgg_ids_json
     FROM attribute_subjects s
     LEFT JOIN games g ON g.id = s.game_id
     JOIN attribute_subject_display_names display_names ON display_names.id = s.id
     LEFT JOIN attribute_subject_secondary_names secondary_names ON secondary_names.id = s.id
-    WHERE (
-      s.kind = 'configuration'
-      OR (g.entity_kind IN ('base', 'expansion') AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
-        AND (g.published_rule_count > 0 OR g.attribute_enabled = 1))
+    WHERE EXISTS (
+      SELECT 1 FROM attribute_votable_subjects eligible
+      WHERE eligible.subject_id = s.id
     )
     ${filter}
     ${cursorFilter}
@@ -392,11 +402,9 @@ const queryAttributeExtremeExamples = async (
         AND s.evidence_count > 0
         AND ${scoreFilter}
         AND s.random_key ${comparison} ?
-        AND (
-          candidate_subject.kind = 'configuration'
-          OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
-            AND candidate_game.visibility = 'public'
-            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
+        AND EXISTS (
+          SELECT 1 FROM attribute_votable_subjects eligible
+          WHERE eligible.subject_id = candidate_subject.id
         )
       ORDER BY s.random_key ${order}, s.subject_id ${order}
       LIMIT ${limit}
@@ -525,10 +533,7 @@ const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixVal
     FROM attribute_score_states state
     JOIN attribute_subjects subject ON subject.id = state.subject_id
     LEFT JOIN games game ON game.id = subject.game_id
-    WHERE subject.kind = 'configuration'
-      OR (game.entity_kind IN ('base', 'expansion') AND game.merged_into_game_id IS NULL
-        AND game.visibility = 'public'
-        AND (game.published_rule_count > 0 OR game.attribute_enabled = 1))
+    JOIN attribute_votable_subjects eligible ON eligible.subject_id = subject.id
   `).all<AttributeScoreStateRow>();
   return (result.results ?? []).map(toMatrixValue);
 };
@@ -738,11 +743,9 @@ const querySeedCandidate = async (
       WHERE s.question_slot = ?
         ${attributeFilter}
         ${exclusion}
-        AND (
-          candidate_subject.kind = 'configuration'
-          OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
-            AND candidate_game.visibility = 'public'
-            AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
+        AND EXISTS (
+          SELECT 1 FROM attribute_votable_subjects eligible
+          WHERE eligible.subject_id = candidate_subject.id
         )
       ORDER BY s.rating_deviation DESC, s.random_key, s.attribute_id, s.subject_id
       LIMIT 1
@@ -791,11 +794,9 @@ const queryOpponentForAttribute = async (
       ${gameExclusion}
       ${exclusion}
       ${extraFilter}
-      AND (
-        candidate_subject.kind = 'configuration'
-        OR (candidate_game.entity_kind IN ('base', 'expansion') AND candidate_game.merged_into_game_id IS NULL
-          AND candidate_game.visibility = 'public'
-          AND (candidate_game.published_rule_count > 0 OR candidate_game.attribute_enabled = 1))
+      AND EXISTS (
+        SELECT 1 FROM attribute_votable_subjects eligible
+        WHERE eligible.subject_id = candidate_subject.id
       )
     ORDER BY ${orderBy}
     LIMIT 1
@@ -968,10 +969,14 @@ const responseContext = async (db: Database, input: AttributeResponseInput) => {
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
-      AND (sa.kind = 'configuration' OR (ga.entity_kind IN ('base', 'expansion') AND ga.merged_into_game_id IS NULL AND ga.visibility = 'public'
-        AND (ga.published_rule_count > 0 OR ga.attribute_enabled = 1)))
-      AND (sb.kind = 'configuration' OR (gb.entity_kind IN ('base', 'expansion') AND gb.merged_into_game_id IS NULL AND gb.visibility = 'public'
-        AND (gb.published_rule_count > 0 OR gb.attribute_enabled = 1)))
+      AND EXISTS (
+        SELECT 1 FROM attribute_votable_subjects eligible
+        WHERE eligible.subject_id = sa.id
+      )
+      AND EXISTS (
+        SELECT 1 FROM attribute_votable_subjects eligible
+        WHERE eligible.subject_id = sb.id
+      )
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
   if (!row) throw new Error('attribute_subject_not_found');
@@ -999,6 +1004,7 @@ const attributeMergeSubjectIds = async (db: Database, sourceGameId: string, targ
     SELECT game_id, id
     FROM attribute_subjects
     JOIN games ON games.id = attribute_subjects.game_id
+    JOIN attribute_votable_subjects eligible ON eligible.subject_id = attribute_subjects.id
     WHERE kind = 'game' AND games.entity_kind IN ('base', 'expansion') AND game_id IN (?, ?)
   `).bind(sourceGameId, targetGameId).all<{ game_id: string; id: string }>();
   const byGameId = new Map((result.results ?? []).map((row) => [row.game_id, row.id]));
@@ -1113,10 +1119,9 @@ const initializeAttributeMergeRebuild = async (
       CROSS JOIN attributes a
       LEFT JOIN games g ON g.id = s.game_id
       WHERE a.is_active = 1
-        AND (
-          s.kind = 'configuration'
-          OR (g.entity_kind IN ('base', 'expansion') AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
-            AND (g.published_rule_count > 0 OR g.attribute_enabled = 1))
+        AND EXISTS (
+          SELECT 1 FROM attribute_votable_subjects eligible
+          WHERE eligible.subject_id = s.id
         )
     `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
     db.statement(`

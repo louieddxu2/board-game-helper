@@ -37,7 +37,12 @@ export const applyAttributeCatalogChanges = (
     }
     if (change.entryKey.startsWith('subject:')) {
       const subjectId = change.entryKey.slice('subject:'.length);
-      if (change.deleted) subjects.delete(subjectId);
+      if (change.deleted) {
+        subjects.delete(subjectId);
+        for (const key of values.keys()) {
+          if (key.startsWith(`${subjectId}:`)) values.delete(key);
+        }
+      }
       else if (change.subject) subjects.set(change.subject.id, mergeSubjectMetadata(subjects.get(change.subject.id), change.subject));
     }
     if (change.entryKey.startsWith('value:')) {

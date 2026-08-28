@@ -42,6 +42,15 @@ describe('attribute table catalog delta application', () => {
     expect(updated.candidates).toEqual([]);
   });
 
+  test('removes a subject values when only the subject tombstone is present', () => {
+    const updated = applyAttributeCatalogChanges(base, [
+      { entryKey: 'subject:subject-a', catalogVersion: 11, deleted: true },
+    ]);
+
+    expect(updated.subjects).toHaveLength(0);
+    expect(updated.values).toHaveLength(0);
+  });
+
   test('does not retain a candidate once it is no longer unprocessed', () => {
     const updated = applyAttributeCatalogChanges(base, [{
       entryKey: 'candidate:candidate-1',
