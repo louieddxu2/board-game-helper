@@ -101,12 +101,32 @@ describe('AttributesPage question flow', () => {
     expect(screen.queryByText(/依照分數，建議/)).not.toBeInTheDocument();
   });
 
+  test('renders a fresh cached question without waiting for another opening request', async () => {
+    vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
+    vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue({
+      key: 'attributes:question:v1',
+      data: { question, activities: recentActivities, extremeExamples, questionToken: 'cached-question-token-that-is-long-enough' },
+      scope: 'all',
+      cachedAt: Date.now(),
+    });
+    vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
+    const questionSpy = vi.spyOn(api, 'attributeQuestion');
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
+    expect(screen.queryByText('載入中…')).not.toBeInTheDocument();
+    expect(questionSpy).not.toHaveBeenCalled();
+  });
+
   test('switches to an imported collection through the compact directory', async () => {
     vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([123, 456]);
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
-    vi.spyOn(localDb, 'setAttributeVoteScope').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'setAttributeVoteScope').mockResolvedValue('attributes:vote-scope:v1');
     const tableSpy = vi.spyOn(api, 'attributeTable');
     const directorySpy = vi.spyOn(api, 'attributeVoteSubjectDirectory').mockResolvedValue({
       subjects: [

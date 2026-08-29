@@ -19,6 +19,7 @@ type AttributeVoteScope = 'all' | 'collection';
 const QUESTION_EXIT_MS = 150;
 const QUESTION_ENTER_MS = 260;
 const SAVED_FEEDBACK_MS = 360;
+const ATTRIBUTE_QUESTION_CACHE_FRESH_MS = 5 * 60 * 1000;
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -107,13 +108,13 @@ export const AttributesPage = () => {
     setResponseError('');
   };
 
-  const applyQuestionPayload = useCallback((nextPayload: AttributeQuestionPayload) => {
+  const applyQuestionPayload = useCallback((nextPayload: AttributeQuestionPayload, scope: AttributeVoteScope = voteScopeRef.current) => {
     setPayload(nextPayload);
     setQuestion(nextPayload.question ?? undefined);
     responseIdRef.current = undefined;
     setAwaitingNext(false);
     clearResponse();
-    void localDb.cacheAttributeQuestion(nextPayload).catch(() => undefined);
+    void localDb.cacheAttributeQuestion(nextPayload, scope).catch(() => undefined);
   }, []);
 
   const animateQuestionChange = useCallback(async (nextPayload: AttributeQuestionPayload, mode: 'pair' | 'a' | 'b' = 'pair') => {
@@ -289,9 +290,22 @@ export const AttributesPage = () => {
         setCollectionMatchKnown(false);
       }
       const cached = await localDb.getLatestAttributeQuestion().catch(() => undefined);
-      if (cached && active) {
+      const cachedMatchesScope = cached?.data.question
+        && (cached.scope ? cached.scope === effectiveScope : effectiveScope === 'all');
+      if (cachedMatchesScope && active) {
         applyQuestionPayload(cached.data);
         setOffline(true);
+        // A cached question is immediately usable. The network call below is
+        // revalidation and must not keep the whole page in its loading state.
+        setLoading(false);
+        if (Date.now() - cached.cachedAt < ATTRIBUTE_QUESTION_CACHE_FRESH_MS) {
+          // Re-opening the page shortly after leaving it should resume the
+          // unanswered question instead of issuing another expensive random
+          // selection request. Voting or an explicit "不知道" still obtains
+          // a fresh question through the normal path.
+          if (pending.length && (typeof navigator === 'undefined' || navigator.onLine)) void syncPendingResponses();
+          return;
+        }
       }
       try {
         const nextPayload = await requestQuestion(undefined);

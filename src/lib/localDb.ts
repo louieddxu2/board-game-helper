@@ -21,6 +21,7 @@ const ruleImportanceCachePrefix = (userId: string) => `ruleImportance:${userId}:
 type CacheRecord<T> = { key: string; data: T; cachedAt: number };
 export type GameCatalogCacheRecord = CacheRecord<GameCatalogPayload> & { snapshotFetchedAt?: number };
 export type AttributeCatalogCacheRecord = CacheRecord<AttributeCatalogPayload> & { snapshotFetchedAt?: number };
+export type AttributeQuestionCacheRecord = CacheRecord<AttributeQuestionPayload> & { scope?: 'all' | 'collection' };
 export type CachedRuleUpdate = RuleCard & { gameName?: string; gameSlug?: string };
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 let gameCatalogMemoryCache: GameCatalogCacheRecord | undefined;
@@ -128,7 +129,7 @@ export interface DraftRecord {
 interface RulesDb extends DBSchema {
   drafts: { key: string; value: DraftRecord };
   pending: { key: string; value: { id: string; userId: string; payload: SubmissionInput; createdAt: number } };
-  cache: { key: string; value: { key: string; data: unknown; cachedAt: number } };
+  cache: { key: string; value: { key: string; data: unknown; cachedAt: number; scope?: 'all' | 'collection' } };
   recentGames: { key: string; value: { id: string; slug?: string; displayName?: string; englishName?: string; viewedAt: number }; indexes: { viewedAt: number } };
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
@@ -255,8 +256,8 @@ export const localDb = {
   addPending: async (userId: string, payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, userId, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
   getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),
-  cacheAttributeQuestion: async (data: AttributeQuestionPayload) => (await getDatabase()).put('cache', { key: 'attributes:question:v1', data, cachedAt: Date.now() }),
-  getLatestAttributeQuestion: async () => (await getDatabase()).get('cache', 'attributes:question:v1') as Promise<CacheRecord<AttributeQuestionPayload> | undefined>,
+  cacheAttributeQuestion: async (data: AttributeQuestionPayload, scope: 'all' | 'collection' = 'all') => (await getDatabase()).put('cache', { key: 'attributes:question:v1', data, scope, cachedAt: Date.now() }),
+  getLatestAttributeQuestion: async () => (await getDatabase()).get('cache', 'attributes:question:v1') as Promise<AttributeQuestionCacheRecord | undefined>,
   getAttributeVoteScope: async () => {
     const cached = await (await getDatabase()).get('cache', 'attributes:vote-scope:v1') as CacheRecord<'all' | 'collection'> | undefined;
     return cached?.data === 'collection' ? 'collection' : 'all';
