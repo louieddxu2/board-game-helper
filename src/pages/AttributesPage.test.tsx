@@ -118,6 +118,7 @@ describe('AttributesPage question flow', () => {
 
     expect(await screen.findByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
     expect(screen.queryByText('載入中…')).not.toBeInTheDocument();
+    expect(screen.queryByText('目前離線，回答會先暫存在本機。')).not.toBeInTheDocument();
     expect(questionSpy).not.toHaveBeenCalled();
   });
 

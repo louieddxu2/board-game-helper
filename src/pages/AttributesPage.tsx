@@ -15,6 +15,7 @@ import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, A
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
 type VoteFeedback = { state: 'saving' | 'saved'; text: string } | null;
 type AttributeVoteScope = 'all' | 'collection';
+type ConnectionState = 'online' | 'offline' | 'server-unavailable';
 
 const QUESTION_EXIT_MS = 150;
 const QUESTION_ENTER_MS = 260;
@@ -22,6 +23,8 @@ const SAVED_FEEDBACK_MS = 360;
 const ATTRIBUTE_QUESTION_CACHE_FRESH_MS = 5 * 60 * 1000;
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+const browserIsOffline = () => typeof navigator !== 'undefined' && !navigator.onLine;
+const connectionStateAfterFailure = (): ConnectionState => browserIsOffline() ? 'offline' : 'server-unavailable';
 
 const subjectName = (subject: { displayName: string }) => <span>{subject.displayName}</span>;
 
@@ -76,7 +79,7 @@ export const AttributesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
   const [responseError, setResponseError] = useState('');
-  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  const [connectionState, setConnectionState] = useState<ConnectionState>(() => browserIsOffline() ? 'offline' : 'online');
   const [pendingCount, setPendingCount] = useState(0);
   const [awaitingNext, setAwaitingNext] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -199,10 +202,11 @@ export const AttributesPage = () => {
     setQuestionLoading(true);
     try {
       const next = await requestQuestion(question, mode);
-      setOffline(false);
+      setConnectionState(browserIsOffline() ? 'offline' : 'online');
       await animateQuestionChange(next, mode);
     } catch {
-      setResponseError('目前無法換下一題，請稍後再試。');
+      setConnectionState(connectionStateAfterFailure());
+      setResponseError(browserIsOffline() ? '目前無法換下一題，請確認網路後再試。' : '目前無法連線到伺服器，請稍後再試。');
     } finally {
       setQuestionLoading(false);
     }
@@ -224,7 +228,7 @@ export const AttributesPage = () => {
       if (nextScope === 'collection') await refreshCollectionScope();
       await localDb.setAttributeVoteScope(nextScope);
       const nextPayload = await requestQuestion(undefined, 'pair');
-      setOffline(false);
+      setConnectionState(browserIsOffline() ? 'offline' : 'online');
       setError(false);
       await animateQuestionChange(nextPayload, 'pair');
     } catch {
@@ -248,10 +252,16 @@ export const AttributesPage = () => {
         try {
           await api.saveAttributeResponse(item);
           await localDb.removePendingAttributeResponse(item.id);
+          setConnectionState(browserIsOffline() ? 'offline' : 'online');
         } catch (caught) {
           if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
             await localDb.removePendingAttributeResponse(item.id);
             setResponseError('有一筆離線回答已失效，請重新回答目前題目。');
+            setConnectionState('online');
+          } else if (caught instanceof ApiError && caught.status === 409) {
+            setConnectionState('online');
+          } else {
+            setConnectionState(connectionStateAfterFailure());
           }
           break;
         }
@@ -260,9 +270,10 @@ export const AttributesPage = () => {
       if (remaining.length < pending.length) {
         try {
           const next = await requestQuestion(question, 'pair');
-          setOffline(false);
+          setConnectionState(browserIsOffline() ? 'offline' : 'online');
           applyQuestionPayload(next);
         } catch {
+          setConnectionState(connectionStateAfterFailure());
           setResponseError('回答已同步，但目前無法取得下一題，請按「重新取得下一題」。');
           setAwaitingNext(true);
         }
@@ -294,7 +305,6 @@ export const AttributesPage = () => {
         && (cached.scope ? cached.scope === effectiveScope : effectiveScope === 'all');
       if (cachedMatchesScope && active) {
         applyQuestionPayload(cached.data);
-        setOffline(true);
         // A cached question is immediately usable. The network call below is
         // revalidation and must not keep the whole page in its loading state.
         setLoading(false);
@@ -310,12 +320,17 @@ export const AttributesPage = () => {
       try {
         const nextPayload = await requestQuestion(undefined);
         if (!active) return;
-        setOffline(false);
+        setConnectionState(browserIsOffline() ? 'offline' : 'online');
         setError(false);
         applyQuestionPayload(nextPayload);
       } catch {
+        if (active) setConnectionState(connectionStateAfterFailure());
         if (active && !cached?.data.question) setError(true);
-        if (active && cached?.data.question) setResponseError('目前離線，顯示上次取得的題目；恢復連線後會自動同步。');
+        if (active && cached?.data.question) {
+          setResponseError(browserIsOffline()
+            ? '目前離線，顯示上次取得的題目；恢復連線後會自動同步。'
+            : '目前暫時無法連線到伺服器，先顯示上次取得的題目。');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -328,10 +343,10 @@ export const AttributesPage = () => {
 
   useEffect(() => {
     const handleOnline = () => {
-      setOffline(false);
+      setConnectionState((current) => current === 'offline' ? 'online' : current);
       void syncPendingResponses();
     };
-    const handleOffline = () => setOffline(true);
+    const handleOffline = () => setConnectionState('offline');
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -373,6 +388,7 @@ export const AttributesPage = () => {
       await api.saveAttributeResponse(draft);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
+        setConnectionState('online');
         setVoteFeedback(null);
         setQuestionMotion('idle');
         setResponseError(caught.status === 409 ? '這題剛被回答，請重新作答。' : '這一題已經失效，請重新取得題目。');
@@ -382,12 +398,15 @@ export const AttributesPage = () => {
       }
       try {
         await localDb.addPendingAttributeResponse(draft);
+        setConnectionState(connectionStateAfterFailure());
         await refreshPendingCount();
         setAwaitingNext(true);
         setVoteFeedback(selectedComparison ? { state: 'saved', text: `已暫存：${comparisonChoiceText(question, selectedComparison)}` } : null);
         setQuestionMotion('idle');
         clearResponse();
-        setResponseError('目前無法連線，回答已暫存在本機；恢復連線後會自動同步。');
+        setResponseError(browserIsOffline()
+          ? '目前離線，回答已暫存在本機；恢復連線後會自動同步。'
+          : '目前暫時無法連線到伺服器，回答已暫存在本機；稍後會自動同步。');
       } catch {
         setVoteFeedback(null);
         setQuestionMotion('idle');
@@ -404,9 +423,10 @@ export const AttributesPage = () => {
         requestQuestion(question, 'pair'),
         reducedMotion() ? Promise.resolve() : wait(SAVED_FEEDBACK_MS),
       ]);
-      setOffline(false);
+      setConnectionState(browserIsOffline() ? 'offline' : 'online');
       await animateQuestionChange(nextPayload, 'pair');
     } catch {
+      setConnectionState(connectionStateAfterFailure());
       setVoteFeedback(null);
       setQuestionMotion('idle');
       setAwaitingNext(true);
@@ -448,7 +468,7 @@ export const AttributesPage = () => {
       if (voteScopeRef.current !== 'collection') return;
       const next = await requestQuestion(question, 'pair');
       if (next.question) {
-        setOffline(false);
+        setConnectionState(browserIsOffline() ? 'offline' : 'online');
         await animateQuestionChange(next, 'pair');
       } else {
         applyQuestionPayload(next);
@@ -523,7 +543,20 @@ export const AttributesPage = () => {
       {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
     </div>
 
-    {(offline || pendingCount > 0) && <p className="attributes-offline-note" role="status">{pendingCount > 0 ? `有 ${pendingCount} 筆回答等待同步。` : '目前離線，回答會先暫存在本機。'} <button type="button" onClick={() => void syncPendingResponses()} disabled={syncing}>{syncing ? '同步中…' : '重新同步'}</button></p>}
+    {(connectionState !== 'online' || pendingCount > 0) && <p className="attributes-offline-note" role="status">
+      {pendingCount > 0
+        ? `有 ${pendingCount} 筆回答等待同步。`
+        : connectionState === 'offline'
+          ? '目前離線，回答會先暫存在本機。'
+          : '目前暫時無法連線到伺服器，回答會先暫存在本機。'}
+      <button
+        type="button"
+        onClick={() => pendingCount > 0 ? void syncPendingResponses() : void loadQuestion('pair')}
+        disabled={syncing || questionLoading}
+      >
+        {syncing ? '同步中…' : pendingCount > 0 ? '重新同步' : '重試連線'}
+      </button>
+    </p>}
 
     <section className={`attributes-question-card is-${questionMotion}`} aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
       <div className="attributes-question-center">
