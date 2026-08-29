@@ -398,7 +398,7 @@ describe('api versioned attribute table boundary', () => {
   test('uses the synchronized local attribute table without a network request', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue({ key: 'attributes:table:versioned:v2', data: table, cachedAt: Date.now() });
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue({ key: 'attributes:table:versioned:v3', data: table, cachedAt: Date.now() });
 
     await expect(api.attributeTable()).resolves.toEqual(table);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -407,7 +407,7 @@ describe('api versioned attribute table boundary', () => {
   test('bootstraps the snapshot and then applies only newer attribute changes', async () => {
     const noChanges = { changes: [], throughVersion: 10, hasMore: false };
     vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
-    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined).mockResolvedValue({ key: 'attributes:table:versioned:v2', data: table, cachedAt: Date.now() });
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined).mockResolvedValue({ key: 'attributes:table:versioned:v3', data: table, cachedAt: Date.now() });
     const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
     const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
     const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
@@ -428,7 +428,7 @@ describe('api versioned attribute table boundary', () => {
   test('replaces a cached generation-one table that lost flat candidate entries', async () => {
     const legacy = { ...table, generation: 1, candidates: [] };
     const repaired = { ...legacy, candidates: [{ id: 'candidate-1', displayName: '待對應遊戲', values: [8], matchStatus: 'pending' as const, sourceRowNumber: 3 }] };
-    const cacheRecord = { key: 'attributes:table:versioned:v2', data: legacy, cachedAt: Date.now() };
+    const cacheRecord = { key: 'attributes:table:versioned:v3', data: legacy, cachedAt: Date.now() };
     vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(cacheRecord);
     vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValue({ ...cacheRecord, data: repaired });
     const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
@@ -448,7 +448,7 @@ describe('api versioned attribute table boundary', () => {
   });
 
   test('returns a stale table immediately and publishes background deltas', async () => {
-    const stale = { key: 'attributes:table:versioned:v2', data: table, cachedAt: 1 };
+    const stale = { key: 'attributes:table:versioned:v3', data: table, cachedAt: 1 };
     const updated = { ...table, throughVersion: 11, values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 8, ratingDeviation: 2, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' }] };
     vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(stale).mockResolvedValue({ key: stale.key, data: updated, cachedAt: Date.now() });
