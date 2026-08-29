@@ -280,7 +280,8 @@ export const AttributesPage = () => {
       const pending = await refreshPendingCount();
       for (const item of pending) {
         try {
-          await api.saveAttributeResponse(item);
+          const saved = await api.saveAttributeResponse(item);
+          await localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
           await localDb.removePendingAttributeResponse(item.id);
           setConnectionState(browserIsOffline() ? 'offline' : 'online');
         } catch (caught) {
@@ -415,7 +416,8 @@ export const AttributesPage = () => {
     } satisfies Omit<PendingAttributeResponse, 'id' | 'createdAt'>;
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) throw new TypeError('offline');
-      await api.saveAttributeResponse(draft);
+      const saved = await api.saveAttributeResponse(draft);
+      await localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
       await Promise.all([
         localDb.clearDeferredAttributeSubject(question.subjectA.id),
         localDb.clearDeferredAttributeSubject(question.subjectB.id),

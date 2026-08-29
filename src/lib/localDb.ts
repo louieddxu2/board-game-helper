@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyAttributeCatalogChanges } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
@@ -83,6 +83,16 @@ export const applyGameCatalogChangesToCache = (
   cachedAt: data.hasMore ? cached.cachedAt : currentTime,
   snapshotFetchedAt: cached.snapshotFetchedAt ?? cached.data.generatedAt,
 });
+
+export const applyAttributeValueUpdates = (
+  catalog: AttributeCatalogPayload,
+  values: AttributeMatrixValue[],
+): AttributeCatalogPayload => {
+  if (!values.length) return catalog;
+  const replacements = new Map(values.map((value) => [`${value.subjectId}\u0000${value.attributeId}`, value]));
+  const retained = catalog.values.filter((value) => !replacements.has(`${value.subjectId}\u0000${value.attributeId}`));
+  return { ...catalog, values: [...retained, ...values] };
+};
 
 const getFreshCache = async <T>(key: string, maxAge: number): Promise<CacheRecord<T> | undefined> => {
   const cached = await (await getDatabase()).get('cache', key) as CacheRecord<T> | undefined;
@@ -444,6 +454,18 @@ export const localDb = {
       data: applyAttributeCatalogChanges(cached.data, data.changes, data.throughVersion),
       cachedAt: data.hasMore ? cached.cachedAt : Date.now(),
       snapshotFetchedAt: cached.snapshotFetchedAt ?? cached.data.generatedAt,
+    } satisfies AttributeCatalogCacheRecord;
+    attributeTableMemoryCache = updated;
+    await db.put('cache', updated);
+  },
+  updateAttributeCatalogValues: async (values: AttributeMatrixValue[]) => {
+    if (!values.length) return;
+    const db = await getDatabase();
+    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+    if (!cached) return;
+    const updated = {
+      ...cached,
+      data: applyAttributeValueUpdates(cached.data, values),
     } satisfies AttributeCatalogCacheRecord;
     attributeTableMemoryCache = updated;
     await db.put('cache', updated);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { applyGameCatalogChangesToCache, applyGameReferenceUpdate, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, RULE_IMPORTANCE_CACHE_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
-import type { GameSummary, HomePayload, RuleCard } from '../shared/types';
+import { applyAttributeValueUpdates, applyGameCatalogChangesToCache, applyGameReferenceUpdate, isCachedRuleSetUsable, PUBLIC_TAG_CATALOG_FRESH_MS, RULE_IMPORTANCE_CACHE_FRESH_MS, toStoredRule, type CachedGameRow } from './localDb';
+import type { AttributeCatalogPayload, GameSummary, HomePayload, RuleCard } from '../shared/types';
 
 const now = 10_000_000;
 
@@ -80,6 +80,24 @@ describe('weekly game catalog snapshot age', () => {
 
     expect(updated.cachedAt).toBe(200);
     expect(updated.snapshotFetchedAt).toBe(snapshotFetchedAt);
+  });
+});
+
+describe('local attribute catalog vote updates', () => {
+  test('replaces only the confirmed subject-attribute states', () => {
+    const catalog: AttributeCatalogPayload = {
+      generation: 1, throughVersion: 4, generatedAt: 1, attributes: [], subjects: [], candidates: [], activities: [], scoreModelVersion: 'glicko-rd-v1',
+      values: [
+        { subjectId: 'a', attributeId: 'luck', score: 5, ratingDeviation: 3, directCount: 0, comparisonCount: 0, decisiveComparisonCount: 0, modelVersion: 'glicko-rd-v1' },
+        { subjectId: 'b', attributeId: 'luck', score: 6, ratingDeviation: 2, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, modelVersion: 'glicko-rd-v1' },
+      ],
+    };
+    const confirmed = { subjectId: 'a', attributeId: 'luck', score: 7, ratingDeviation: 2.5, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, modelVersion: 'glicko-rd-v1' };
+
+    const updated = applyAttributeValueUpdates(catalog, [confirmed]);
+
+    expect(updated.values).toEqual([catalog.values[1], confirmed]);
+    expect(updated.throughVersion).toBe(catalog.throughVersion);
   });
 });
 

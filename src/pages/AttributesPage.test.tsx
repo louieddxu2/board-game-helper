@@ -49,6 +49,7 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'getDeferredAttributeSubjects').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeQuestionNumber').mockResolvedValue(0);
     vi.spyOn(localDb, 'advanceAttributeQuestionNumber').mockResolvedValue(1);
+    vi.spyOn(localDb, 'updateAttributeCatalogValues').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'deferAttributeSubject').mockResolvedValue({ subjectId: subjectA.id, bggIds: [], skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: Number.MAX_SAFE_INTEGER });
     vi.spyOn(localDb, 'clearDeferredAttributeSubject').mockResolvedValue(undefined);
   });
@@ -182,7 +183,8 @@ describe('AttributesPage question flow', () => {
 
   test('refreshes only the next question and activity feed after submitting', async () => {
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
-    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+    const updatedValue = { subjectId: subjectA.id, attributeId: attribute.id, score: 6, ratingDeviation: 2.5, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, modelVersion: 'glicko-rd-v1' };
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [updatedValue] });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
@@ -193,6 +195,7 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
+    expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
   });
 
   test('reuses the same response id when a network failure is retried', async () => {
