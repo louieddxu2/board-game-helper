@@ -12,7 +12,7 @@ const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v5';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
-const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v1';
+const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v2';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
