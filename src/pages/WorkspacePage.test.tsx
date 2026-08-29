@@ -1129,6 +1129,25 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
   });
 
+  it('does not swallow the first drawer item click after reopening from a touch close', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    const row = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
+
+    fireEvent.touchStart(row, { touches: [{ identifier: 51, clientX: 320, clientY: 160 }] });
+    fireEvent.touchMove(row, { touches: [{ identifier: 51, clientX: 190, clientY: 162 }] });
+    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 51, clientX: 190, clientY: 162 }] });
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: '開啟目錄' }));
+    const reopenedDrawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    await user.click(within(reopenedDrawer).getByText('測試表格'));
+
+    expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
+  });
+
   it('marks 返回網站 as an explicit homepage navigation in installed mode', async () => {
     const user = userEvent.setup();
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList));

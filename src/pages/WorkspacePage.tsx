@@ -110,6 +110,9 @@ const WorkspacePage = () => {
   const openDrawer = useCallback(() => {
     if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
     drawerCloseTimerRef.current = undefined;
+    if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
+    drawerClickResetTimerRef.current = undefined;
+    suppressNextDrawerClickRef.current = false;
     setDrawerOpen(true);
     setDrawerDragging(false);
     setDrawerOffset(workspaceDrawerWidth());
