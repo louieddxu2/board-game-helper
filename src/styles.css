@@ -2781,3 +2781,58 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   50% { transform: scale(1); box-shadow: 0 0 0 3px rgba(233,180,76,.4); }
   100% { transform: scale(1); }
 }
+
+/* Keep the source of questions visible without turning the voting page into a settings panel. */
+.attribute-vote-page .attributes-vote-scope {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3px;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 1px solid var(--attribute-line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--attribute-surface) 76%, var(--attribute-line));
+}
+.attribute-vote-page .attributes-vote-scope-label {
+  padding: 0 6px;
+  color: var(--attribute-muted);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.attribute-vote-page .attributes-vote-scope button {
+  min-width: 0;
+  min-height: 29px;
+  padding: 0 7px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--attribute-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attribute-vote-page .attributes-vote-scope button:hover:not(:disabled),
+.attribute-vote-page .attributes-vote-scope button:focus-visible {
+  border-color: var(--attribute-right);
+  color: var(--attribute-right);
+}
+.attribute-vote-page .attributes-vote-scope button.is-active {
+  background: var(--attribute-ink);
+  color: var(--attribute-surface);
+}
+.attribute-vote-page .attributes-vote-scope button:disabled:not(.is-active) {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+@media (max-width: 520px) {
+  .attribute-vote-page .attributes-vote-scope-label { padding: 0 4px; }
+  .attribute-vote-page .attributes-vote-scope button { padding: 0 4px; font-size: 10px; }
+}

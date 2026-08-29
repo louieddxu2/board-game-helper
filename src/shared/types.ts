@@ -262,6 +262,17 @@ export interface AttributeCatalogPayload extends AttributesPayload {
   generatedAt: number;
 }
 
+export interface AttributeVoteSubjectDirectoryEntry {
+  id: string;
+  kind: AttributeSubject['kind'];
+  gameId?: string;
+  bggIds: number[];
+}
+
+export interface AttributeVoteSubjectDirectoryPayload {
+  subjects: AttributeVoteSubjectDirectoryEntry[];
+}
+
 export interface AttributeCatalogChange {
   entryKey: string;
   catalogVersion: number;

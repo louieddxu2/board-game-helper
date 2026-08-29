@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { AttributeCatalogPayload } from '../shared/types';
-import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
+import { chooseScopedAttributePair, chooseScopedAttributeQuestion, matchCollectionDirectorySubjects, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
 
 describe('GeekGroup collection import', () => {
   test('parses quoted commas and keeps unique Game IDs only', () => {
@@ -49,6 +49,32 @@ const catalog = (): AttributeCatalogPayload => ({
 });
 
 describe('local attribute collection question selection', () => {
+  test('matches imported IDs using the compact subject directory', () => {
+    const directory = {
+      subjects: catalog().subjects.map((subject) => ({
+        id: subject.id,
+        kind: subject.kind,
+        bggIds: subject.components?.flatMap((component) => component.bggId ? [component.bggId] : []) ?? [],
+      })),
+    };
+
+    expect(matchCollectionDirectorySubjects(directory, [123, 123, 999, 456])).toEqual({
+      subjectIds: ['subject-a', 'subject-b'],
+      matchedBggIds: [123, 456],
+    });
+  });
+
+  test('chooses a pair from the compact directory without loading score values', () => {
+    const directory = {
+      subjects: catalog().subjects.map((subject) => ({ id: subject.id, kind: subject.kind, bggIds: [] })),
+    };
+
+    expect(chooseScopedAttributePair(directory, ['subject-a', 'subject-b', 'subject-c'], {}, 0)).toEqual({
+      subjectAId: 'subject-a',
+      subjectBId: 'subject-b',
+    });
+  });
+
   test('maps imported IDs to canonical game subjects', () => {
     expect(matchCollectionSubjects(catalog(), [123, 123, 999, 456])).toEqual({
       subjectIds: ['subject-a', 'subject-b'],

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
+import { localDb } from '../lib/localDb';
 import type { AttributeActivity, AttributeQuestion } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
@@ -28,6 +29,7 @@ describe('AttributesPage question flow', () => {
   });
 
   test('starts with a system-selected question without game selectors or the full table', async () => {
+    const tableSpy = vi.spyOn(api, 'attributeTable');
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: recentActivities, extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -77,6 +79,10 @@ describe('AttributesPage question flow', () => {
     expect(screen.queryByText('封面')).not.toBeInTheDocument();
     expect(screen.queryByText('只送出分數')).not.toBeInTheDocument();
     expect(screen.queryByText('＋ 同時給兩款評分')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '投票範圍' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全部遊戲' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '我的收藏' })).toBeDisabled();
+    expect(tableSpy).not.toHaveBeenCalled();
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
@@ -93,6 +99,34 @@ describe('AttributesPage question flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消遊戲甲評分' }));
     expect(screen.queryByText('遊戲甲 · 8')).not.toBeInTheDocument();
     expect(screen.queryByText(/依照分數，建議/)).not.toBeInTheDocument();
+  });
+
+  test('switches to an imported collection through the compact directory', async () => {
+    vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
+    vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([123, 456]);
+    vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'setAttributeVoteScope').mockResolvedValue(undefined);
+    const tableSpy = vi.spyOn(api, 'attributeTable');
+    const directorySpy = vi.spyOn(api, 'attributeVoteSubjectDirectory').mockResolvedValue({
+      subjects: [
+        { id: subjectA.id, kind: 'game', bggIds: [123] },
+        { id: subjectB.id, kind: 'game', bggIds: [456] },
+      ],
+    });
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '我的收藏 (2)' }));
+    await waitFor(() => expect(directorySpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: '全部遊戲' })).not.toBeDisabled());
+    expect(tableSpy).not.toHaveBeenCalled();
+    expect(questionSpy).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({
+      fixedSubjectAId: subjectA.id,
+      fixedSubjectBId: subjectB.id,
+    }));
   });
 
   test('refreshes only the next question and activity feed after submitting', async () => {

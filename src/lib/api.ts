@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, AttributeVoteSubjectDirectoryPayload, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -137,6 +137,7 @@ const syncCatalogGames = async (includePrivate: boolean) => {
 
 let attributeTableRequest: Promise<AttributeCatalogPayload> | undefined;
 export const ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
+export const ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_FRESH_MS = 24 * 60 * 60 * 1000;
 
 const isAttributeTableSnapshotExpired = (record: AttributeCatalogCacheRecord, currentTime = Date.now()) =>
   currentTime - (record.snapshotFetchedAt ?? record.data.generatedAt) >= ATTRIBUTE_TABLE_SNAPSHOT_FRESH_MS;
@@ -191,6 +192,20 @@ const attributeTable = async (onUpdated?: (data: AttributeCatalogPayload) => voi
 const syncAttributeTable = async () => {
   await localDb.invalidateAttributeCatalogSync();
   return refreshAttributeTable();
+};
+
+const attributeVoteSubjectDirectory = async (): Promise<AttributeVoteSubjectDirectoryPayload> => {
+  const cached = await localDb.getFreshAttributeVoteSubjectDirectory(ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_FRESH_MS).catch(() => undefined);
+  if (cached) return cached.data;
+  const stale = await localDb.getLatestAttributeVoteSubjectDirectory().catch(() => undefined);
+  try {
+    const data = await transportRequest<AttributeVoteSubjectDirectoryPayload>('/api/attributes/vote-subjects', undefined, 'cache-miss');
+    await localDb.cacheAttributeVoteSubjectDirectory(data);
+    return data;
+  } catch (error) {
+    if (stale) return stale.data;
+    throw error;
+  }
 };
 
 const gameContentKey = (game: GameDetail): string => JSON.stringify({
@@ -439,6 +454,7 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
+  attributeVoteSubjectDirectory,
   attributeQuestion: (sessionId: string, options: { excludeSubjectAId?: string; excludeSubjectBId?: string; excludeAttributeId?: string; fixedSubjectAId?: string; fixedSubjectBId?: string; fixedAttributeId?: string } = {}) => {
     const params = new URLSearchParams({ session: sessionId });
     if (options.excludeSubjectAId) params.set('excludeA', options.excludeSubjectAId);

@@ -8,12 +8,13 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
-import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv } from '../lib/attributeCollection';
+import { chooseScopedAttributePair, matchCollectionDirectorySubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
-import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
+import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
 type VoteFeedback = { state: 'saving' | 'saved'; text: string } | null;
+type AttributeVoteScope = 'all' | 'collection';
 
 const QUESTION_EXIT_MS = 150;
 const QUESTION_ENTER_MS = 260;
@@ -48,7 +49,7 @@ const ExtremeScoreMarker = ({ example, direction, row }: { example: AttributeSco
   </span>;
 };
 
-const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b') => {
+const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b'): ScopedAttributeQuestionOptions => {
   if (!question) return {};
   const base = {
     excludeSubjectAId: question.subjectA.id,
@@ -85,11 +86,15 @@ export const AttributesPage = () => {
   const [voteFeedback, setVoteFeedback] = useState<VoteFeedback>(null);
   const [collectionIds, setCollectionIds] = useState<number[]>([]);
   const [collectionMatchCount, setCollectionMatchCount] = useState(0);
+  const [collectionMatchKnown, setCollectionMatchKnown] = useState(false);
+  const [voteScope, setVoteScope] = useState<AttributeVoteScope>('all');
+  const [scopeLoading, setScopeLoading] = useState(false);
   const [collectionMessage, setCollectionMessage] = useState('');
   const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
   const collectionIdsRef = useRef<number[]>([]);
-  const collectionCatalogRef = useRef<AttributeCatalogPayload | undefined>(undefined);
+  const collectionDirectoryRef = useRef<Awaited<ReturnType<typeof api.attributeVoteSubjectDirectory>> | undefined>(undefined);
+  const voteScopeRef = useRef<AttributeVoteScope>('all');
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
@@ -139,41 +144,55 @@ export const AttributesPage = () => {
     return pending;
   }, []);
 
+  const loadCollectionDirectory = useCallback(async () => {
+    if (collectionDirectoryRef.current) return collectionDirectoryRef.current;
+    const directory = await api.attributeVoteSubjectDirectory();
+    collectionDirectoryRef.current = directory;
+    return directory;
+  }, []);
+
   const refreshCollectionScope = useCallback(async () => {
     const ids = await localDb.getAttributeCollectionIds();
     collectionIdsRef.current = ids;
     setCollectionIds(ids);
+    setCollectionMatchKnown(false);
     if (!ids.length) {
-      collectionCatalogRef.current = undefined;
+      collectionDirectoryRef.current = undefined;
       setCollectionMatchCount(0);
       return;
     }
-    const catalog = collectionCatalogRef.current ?? await api.attributeTable();
-    collectionCatalogRef.current = catalog;
-    setCollectionMatchCount(matchCollectionSubjects(catalog, ids).matchedBggIds.length);
-  }, []);
+    const directory = await loadCollectionDirectory();
+    setCollectionMatchCount(matchCollectionDirectorySubjects(directory, ids).matchedBggIds.length);
+    setCollectionMatchKnown(true);
+  }, [loadCollectionDirectory]);
 
   const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
+    if (voteScopeRef.current !== 'collection') return api.attributeQuestion(sessionId, questionOptions(currentQuestion, mode));
     const ids = collectionIdsRef.current;
-    if (!ids.length) return api.attributeQuestion(sessionId, questionOptions(currentQuestion, mode));
-    const catalog = collectionCatalogRef.current ?? await api.attributeTable();
-    collectionCatalogRef.current = catalog;
-    const { subjectIds } = matchCollectionSubjects(catalog, ids);
-    const selection = chooseScopedAttributeQuestion(catalog, subjectIds, questionOptions(currentQuestion, mode));
+    if (!ids.length) {
+      return {
+        question: null,
+        activities: [],
+        extremeExamples: { lowest: [], highest: [] },
+      } satisfies AttributeQuestionPayload;
+    }
+    const directory = await loadCollectionDirectory();
+    const options = questionOptions(currentQuestion, mode);
+    const { subjectIds } = matchCollectionDirectorySubjects(directory, ids);
+    const selection = chooseScopedAttributePair(directory, subjectIds, options);
     if (!selection) {
       return {
         question: null,
         activities: [],
         extremeExamples: { lowest: [], highest: [] },
-        scoreModelVersion: catalog.scoreModelVersion,
       } satisfies AttributeQuestionPayload;
     }
     return api.attributeQuestion(sessionId, {
       fixedSubjectAId: selection.subjectAId,
       fixedSubjectBId: selection.subjectBId,
-      fixedAttributeId: selection.attributeId,
+      ...('fixedAttributeId' in options && options.fixedAttributeId ? { fixedAttributeId: options.fixedAttributeId } : {}),
     });
-  }, [sessionId]);
+  }, [loadCollectionDirectory, sessionId]);
 
   const loadQuestion = useCallback(async (mode: 'pair' | 'a' | 'b' = 'pair') => {
     setQuestionLoading(true);
@@ -187,6 +206,36 @@ export const AttributesPage = () => {
       setQuestionLoading(false);
     }
   }, [animateQuestionChange, question, requestQuestion]);
+
+  const changeVoteScope = async (nextScope: AttributeVoteScope) => {
+    if (nextScope === voteScopeRef.current || scopeLoading) return;
+    if (nextScope === 'collection' && !collectionIdsRef.current.length) {
+      setCollectionMessage('請先匯入收藏 CSV，才能使用我的收藏。');
+      return;
+    }
+    const previousScope = voteScopeRef.current;
+    voteScopeRef.current = nextScope;
+    setVoteScope(nextScope);
+    setScopeLoading(true);
+    setQuestionLoading(true);
+    setCollectionMessage('');
+    try {
+      if (nextScope === 'collection') await refreshCollectionScope();
+      await localDb.setAttributeVoteScope(nextScope);
+      const nextPayload = await requestQuestion(undefined, 'pair');
+      setOffline(false);
+      setError(false);
+      await animateQuestionChange(nextPayload, 'pair');
+    } catch {
+      voteScopeRef.current = previousScope;
+      setVoteScope(previousScope);
+      await localDb.setAttributeVoteScope(previousScope).catch(() => undefined);
+      setCollectionMessage('目前無法切換投票範圍，請稍後再試。');
+    } finally {
+      setScopeLoading(false);
+      setQuestionLoading(false);
+    }
+  };
 
   const syncPendingResponses = useCallback(async () => {
     if (syncingRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
@@ -226,8 +275,19 @@ export const AttributesPage = () => {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const pending = await refreshPendingCount();
-      await refreshCollectionScope().catch(() => undefined);
+      const [pending, storedScope, importedIds] = await Promise.all([
+        refreshPendingCount(),
+        localDb.getAttributeVoteScope().catch(() => 'all' as AttributeVoteScope),
+        localDb.getAttributeCollectionIds().catch(() => [] as number[]),
+      ]);
+      const effectiveScope = storedScope === 'collection' && importedIds.length ? storedScope : 'all';
+      voteScopeRef.current = effectiveScope;
+      collectionIdsRef.current = importedIds;
+      if (active) {
+        setVoteScope(effectiveScope);
+        setCollectionIds(importedIds);
+        setCollectionMatchKnown(false);
+      }
       const cached = await localDb.getLatestAttributeQuestion().catch(() => undefined);
       if (cached && active) {
         applyQuestionPayload(cached.data);
@@ -250,7 +310,7 @@ export const AttributesPage = () => {
     return () => { active = false; };
   // This is intentionally a mount/load effect. The pending sync callback is
   // invoked after the first network result and on the browser online event.
-  }, [applyQuestionPayload, refreshCollectionScope, refreshPendingCount, requestQuestion, sessionId]);
+  }, [applyQuestionPayload, refreshPendingCount, requestQuestion, sessionId]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -362,9 +422,17 @@ export const AttributesPage = () => {
     try {
       const parsed = parseGeekGroupCollectionCsv(await file.text());
       await localDb.replaceAttributeCollectionIds(parsed.bggIds);
-      await refreshCollectionScope();
+      collectionIdsRef.current = parsed.bggIds;
+      setCollectionIds(parsed.bggIds);
+      setCollectionMatchKnown(false);
+      collectionDirectoryRef.current = undefined;
+      const directory = await loadCollectionDirectory();
+      const match = matchCollectionDirectorySubjects(directory, parsed.bggIds);
+      setCollectionMatchCount(match.matchedBggIds.length);
+      setCollectionMatchKnown(true);
+      setCollectionMessage(`已匯入 ${parsed.bggIds.length} 款，找到 ${match.matchedBggIds.length} 款可投票遊戲。`);
+      if (voteScopeRef.current !== 'collection') return;
       const next = await requestQuestion(question, 'pair');
-      setCollectionMessage(`已匯入 ${parsed.bggIds.length} 款，找到 ${matchCollectionSubjects(collectionCatalogRef.current!, parsed.bggIds).matchedBggIds.length} 款可投票遊戲。`);
       if (next.question) {
         setOffline(false);
         await animateQuestionChange(next, 'pair');
@@ -391,10 +459,20 @@ export const AttributesPage = () => {
     <input ref={collectionInputRef} type="file" accept=".csv,text/csv" onChange={(event) => void handleCollectionImport(event)} disabled={collectionImporting} />
   </label>;
 
+  const collectionScopeLabel = !collectionIds.length
+    ? '我的收藏'
+    : collectionMatchKnown ? `我的收藏 ${collectionMatchCount}/${collectionIds.length}` : `我的收藏 (${collectionIds.length})`;
+  const voteScopeControl = <div className="attributes-vote-scope" role="group" aria-label="投票範圍">
+    <span className="attributes-vote-scope-label">投票範圍</span>
+    <button type="button" className={voteScope === 'all' ? 'is-active' : undefined} aria-pressed={voteScope === 'all'} onClick={() => void changeVoteScope('all')} disabled={scopeLoading || voteScope === 'all'}>全部遊戲</button>
+    <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined} aria-pressed={voteScope === 'collection'} onClick={() => void changeVoteScope('collection')} disabled={scopeLoading || voteScope === 'collection' || !collectionIds.length} title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '請先匯入收藏 CSV'}>{scopeLoading ? '切換中…' : collectionScopeLabel}</button>
+  </div>;
+
   if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
   if (error || !payload || !question) return <section className="attribute-vote-page attributes-no-question">
     <header className="attribute-vote-header"><h1>屬性投票</h1><div className="attributes-vote-actions">{collectionImportControl}<Link className="attributes-table-link" to="/attributes/table">屬性總表</Link></div></header>
-    <p>{collectionIds.length ? `本機收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。` : '目前無法取得題目。'}</p>
+    {voteScopeControl}
+    <p>{voteScope === 'collection' && collectionIds.length ? `我的收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。` : '目前無法取得題目。'}</p>
     {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
   </section>;
@@ -422,10 +500,10 @@ export const AttributesPage = () => {
       <h1>屬性投票</h1>
       <div className="attributes-vote-actions">
         {collectionImportControl}
-        {collectionIds.length > 0 && <span className="attributes-collection-count">本機 {collectionMatchCount}/{collectionIds.length}</span>}
         <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
       </div>
     </header>
+    {voteScopeControl}
     {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <div className="attributes-inline-activity" aria-label="最近投票記錄">
       {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
