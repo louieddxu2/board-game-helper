@@ -115,6 +115,7 @@ describe('local attribute collection question selection', () => {
     }];
 
     expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 5, 100)).toEqual(['subject-b', 'subject-c']);
+    expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 5, 100_000)).toEqual(['subject-b', 'subject-c']);
     expect(availableAttributeSubjectIds(catalog(), ['subject-a', 'subject-b', 'subject-c'], deferred, 5, 100)).toEqual(['subject-b', 'subject-c']);
     expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 20, 100)).toEqual(['subject-a', 'subject-b', 'subject-c']);
   });

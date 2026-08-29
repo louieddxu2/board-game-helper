@@ -300,19 +300,17 @@ export const localDb = {
     return next;
   },
   getDeferredAttributeSubjects: async () => (await getDatabase()).getAll('attributeDeferredSubjects'),
-  deferAttributeSubject: async (subjectId: string, bggIds: number[], questionNumber: number, timestamp = Date.now()) => {
+  deferAttributeSubject: async (subjectId: string, bggIds: number[], questionNumber: number, questionDelay: number, timestamp = Date.now()) => {
     const db = await getDatabase();
     const current = await db.get('attributeDeferredSubjects', subjectId);
     const skipCount = (current?.skipCount ?? 0) + 1;
-    const questionDelay = skipCount === 1 ? 20 : skipCount === 2 ? 80 : 300;
-    const timeDelay = skipCount === 1 ? 24 * 60 * 60 * 1000 : skipCount === 2 ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
     const record: DeferredAttributeSubject = {
       subjectId,
       bggIds: [...new Set([...(current?.bggIds ?? []), ...bggIds].filter((id) => Number.isSafeInteger(id) && id > 0))],
       skipCount,
       skippedAt: timestamp,
-      eligibleAfterQuestion: questionNumber + questionDelay,
-      eligibleAfterAt: timestamp + timeDelay,
+      eligibleAfterQuestion: questionNumber + Math.max(1, Math.floor(questionDelay)),
+      eligibleAfterAt: Number.MAX_SAFE_INTEGER,
     };
     await db.put('attributeDeferredSubjects', record);
     return record;

@@ -136,7 +136,7 @@ export const availableAttributeSubjectIds = (
   scopedSubjectIds: string[] | undefined,
   deferred: DeferredAttributeSubjectPreference[],
   questionNumber: number,
-  timestamp = Date.now(),
+  _timestamp = Date.now(),
 ) => {
   const scoped = scopedSubjectIds ? new Set(scopedSubjectIds) : undefined;
   const candidates = catalog.subjects.filter((subject) => !scoped || scoped.has(subject.id));
@@ -150,7 +150,7 @@ export const availableAttributeSubjectIds = (
       ? preference.subjectId
       : preference.bggIds.map((bggId) => byBggId.get(bggId)).find(Boolean);
     if (!currentSubjectId) return [];
-    const eligible = questionNumber >= preference.eligibleAfterQuestion || timestamp >= preference.eligibleAfterAt;
+    const eligible = questionNumber >= preference.eligibleAfterQuestion;
     return eligible ? [] : [{ subjectId: currentSubjectId, preference }];
   });
   const blockedIds = new Set(blocked.map((entry) => entry.subjectId));

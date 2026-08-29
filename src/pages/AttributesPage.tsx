@@ -217,9 +217,10 @@ export const AttributesPage = () => {
       const catalog = votingCatalogRef.current ?? await loadVotingCatalog();
       const questionNumber = await localDb.getAttributeQuestionNumber();
       const subjects = mode === 'a' ? [question.subjectA] : mode === 'b' ? [question.subjectB] : [question.subjectA, question.subjectB];
+      const questionDelay = mode === 'pair' ? 20 : 100;
       await Promise.all(subjects.map((subject) => {
         const catalogSubject = catalog.subjects.find((candidate) => candidate.id === subject.id);
-        return localDb.deferAttributeSubject(subject.id, catalogSubject ? attributeSubjectBggIds(catalogSubject) : [], questionNumber);
+        return localDb.deferAttributeSubject(subject.id, catalogSubject ? attributeSubjectBggIds(catalogSubject) : [], questionNumber, questionDelay);
       }));
     } catch {
       // A storage failure must not trap the user on the current question.

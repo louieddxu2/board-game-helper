@@ -49,7 +49,7 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'getDeferredAttributeSubjects').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeQuestionNumber').mockResolvedValue(0);
     vi.spyOn(localDb, 'advanceAttributeQuestionNumber').mockResolvedValue(1);
-    vi.spyOn(localDb, 'deferAttributeSubject').mockResolvedValue({ subjectId: subjectA.id, bggIds: [], skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: 2 });
+    vi.spyOn(localDb, 'deferAttributeSubject').mockResolvedValue({ subjectId: subjectA.id, bggIds: [], skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: Number.MAX_SAFE_INTEGER });
     vi.spyOn(localDb, 'clearDeferredAttributeSubject').mockResolvedValue(undefined);
   });
 
@@ -229,5 +229,17 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(saveSpy).not.toHaveBeenCalled();
     expect(localDb.deferAttributeSubject).toHaveBeenCalledTimes(2);
+    expect(localDb.deferAttributeSubject).toHaveBeenCalledWith(expect.any(String), expect.any(Array), expect.any(Number), 20);
+  });
+
+  test('defers only the replaced side for one hundred questions', async () => {
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
+
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(localDb.deferAttributeSubject).toHaveBeenCalledTimes(1);
+    expect(localDb.deferAttributeSubject).toHaveBeenCalledWith(subjectA.id, [123], expect.any(Number), 100);
   });
 });
