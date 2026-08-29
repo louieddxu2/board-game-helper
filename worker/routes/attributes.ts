@@ -4,7 +4,6 @@ import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
 import {
   queryAttributeQuestionPayload,
-  queryAttributesPayload,
   saveAttributeResponse,
 } from '../data/attributes';
 import {
@@ -60,19 +59,11 @@ const setD1MetricsHeader = (c: any, db: ReturnType<typeof getDatabase>) => {
   c.header('X-D1-Rows-Written', String(metrics.rowsWritten));
 };
 
-attributesRoutes.get('/api/attributes', async (c) => {
+attributesRoutes.get('/api/attributes', (c) => {
+  // This was the pre-snapshot table endpoint. Keep the path reserved so old
+  // bookmarks fail explicitly without reviving its unbounded source query.
   c.header('Cache-Control', 'no-store');
-  const limit = Number(c.req.query('limit') ?? 50);
-  const scope = c.req.query('scope');
-  const db = getDatabase(c);
-  const payload = await queryAttributesPayload(db, {
-    subjectCursor: c.req.query('subjectCursor') || undefined,
-    candidateCursor: c.req.query('candidateCursor') || undefined,
-    limit: Number.isFinite(limit) ? limit : undefined,
-    scope: scope === 'subjects' || scope === 'candidates' ? scope : undefined,
-  });
-  setD1MetricsHeader(c, db);
-  return c.json(payload);
+  return c.json({ error: 'attribute_endpoint_disabled' }, 410);
 });
 
 attributesRoutes.get('/api/attributes/table', async (c) => {

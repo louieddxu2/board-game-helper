@@ -2,6 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { attributesRoutes, attributeResponseSchema } from './routes/attributes';
 
 describe('attribute route', () => {
+  test('disables the legacy full-table endpoint without querying D1', async () => {
+    const response = await attributesRoutes.request('https://rules.example/api/attributes');
+
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ error: 'attribute_endpoint_disabled' });
+  });
+
   test('does not expose rating or comparison writes', async () => {
     const ratingResponse = await attributesRoutes.request('https://rules.example/api/attributes/ratings', {
       method: 'POST',

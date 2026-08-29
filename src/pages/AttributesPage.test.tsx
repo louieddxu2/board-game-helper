@@ -3,20 +3,13 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
-import type { AttributeActivity, AttributeQuestion, AttributesPayload } from '../shared/types';
+import type { AttributeActivity, AttributeQuestion } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
 const subjectB = { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙', gameSlug: 'game-b' };
 const subjectC = { id: 'subject-c', slug: 'game-c', kind: 'game' as const, displayName: '遊戲丙', gameSlug: 'game-c' };
 const subjectD = { id: 'subject-d', slug: 'game-d', kind: 'game' as const, displayName: '遊戲丁', gameSlug: 'game-d' };
 const attribute = { id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 };
-const payload: AttributesPayload = {
-  attributes: [attribute],
-  subjects: [subjectA, subjectB],
-  values: [],
-  candidates: [{ id: 'candidate-1', displayName: '尚未對應遊戲', values: [8], matchStatus: 'pending', sourceRowNumber: 3 }],
-  activities: [],
-};
 const question: AttributeQuestion = { subjectA, subjectB, attribute };
 const extremeExamples = {
   lowest: [{ subject: subjectA, score: 0 }, { subject: subjectB, score: 2 }, { subject: subjectC, score: 3 }],
@@ -35,7 +28,6 @@ describe('AttributesPage question flow', () => {
   });
 
   test('starts with a system-selected question without game selectors or the full table', async () => {
-    vi.spyOn(api, 'attributes').mockResolvedValue(payload);
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: recentActivities, extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -101,11 +93,9 @@ describe('AttributesPage question flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消遊戲甲評分' }));
     expect(screen.queryByText('遊戲甲 · 8')).not.toBeInTheDocument();
     expect(screen.queryByText(/依照分數，建議/)).not.toBeInTheDocument();
-    expect(api.attributes).not.toHaveBeenCalled();
   });
 
   test('refreshes only the next question and activity feed after submitting', async () => {
-    vi.spyOn(api, 'attributes').mockResolvedValue(payload);
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
@@ -118,7 +108,6 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
-    expect(api.attributes).not.toHaveBeenCalled();
   });
 
   test('reuses the same response id when a network failure is retried', async () => {
