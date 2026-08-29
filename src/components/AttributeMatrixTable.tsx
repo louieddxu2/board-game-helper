@@ -12,6 +12,8 @@ interface AttributeTableRow {
   details: Array<string | undefined>;
 }
 
+type SortDirection = 'asc' | 'desc';
+
 const formatScore = (value: number | undefined) => value == null ? '—' : value.toFixed(1);
 
 const scoreClass = (value: number | undefined) => {
@@ -31,6 +33,7 @@ const valueDetails = (value: AttributesPayload['values'][number] | undefined) =>
 export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }) => {
   const [tableQuery, setTableQuery] = useState('');
   const [tableFilter, setTableFilter] = useState<TableFilter>('all');
+  const [sort, setSort] = useState<{ attributeId: string; direction: SortDirection }>();
   const valueMap = useMemo(() => new Map(payload.values.map((value) => [`${value.subjectId}:${value.attributeId}`, value])), [payload.values]);
   const tableRows = useMemo<AttributeTableRow[]>(() => {
     const processed: AttributeTableRow[] = payload.subjects.map((subject) => {
@@ -64,13 +67,43 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
     });
   }, [tableFilter, tableQuery, tableRows]);
 
-  return <section className="attributes-table-card" aria-labelledby="attributes-table-heading">
-    <div className="attributes-section-heading"><div><p className="eyebrow">完整資料</p><h2 id="attributes-table-heading">屬性總表</h2></div><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="輸入名稱" /></label></div>
+  const sortedRows = useMemo(() => {
+    if (!sort) return visibleRows;
+    const attributeIndex = payload.attributes.findIndex((attribute) => attribute.id === sort.attributeId);
+    if (attributeIndex < 0) return visibleRows;
+    return visibleRows
+      .map((row, index) => ({ row, index }))
+      .sort((left, right) => {
+        const leftValue = left.row.values[attributeIndex];
+        const rightValue = right.row.values[attributeIndex];
+        if (leftValue == null && rightValue == null) return left.index - right.index;
+        if (leftValue == null) return 1;
+        if (rightValue == null) return -1;
+        const difference = sort.direction === 'desc' ? rightValue - leftValue : leftValue - rightValue;
+        return difference || left.index - right.index;
+      })
+      .map(({ row }) => row);
+  }, [payload.attributes, sort, visibleRows]);
+
+  const toggleSort = (attributeId: string) => {
+    setSort((current) => {
+      if (current?.attributeId !== attributeId) return { attributeId, direction: 'desc' };
+      if (current.direction === 'desc') return { attributeId, direction: 'asc' };
+      return undefined;
+    });
+  };
+
+  return <section className="attributes-table-card" aria-label="完整屬性資料表">
+    <div className="attributes-section-heading"><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="輸入名稱" /></label></div>
     <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => setTableFilter(filter)}>{label}</button>)}</div><span>顯示 {visibleRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
     <div className="attributes-table-scroll">
       <table className="attributes-matrix">
-        <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => <th scope="col" key={attribute.id} title={attribute.fullDescription}>{attribute.name}</th>)}</tr></thead>
-        <tbody>{visibleRows.map((row) => <tr key={row.id} className={row.kind === 'pending' ? 'attributes-matrix-pending' : undefined}><th scope="row" className="attributes-matrix-subject"><span>{row.displayName}</span><small>{row.statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'}>{formatScore(value)}</td>)}</tr>)}</tbody>
+        <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => {
+          const isSorted = sort?.attributeId === attribute.id;
+          const direction = isSorted ? sort.direction : undefined;
+          return <th scope="col" key={attribute.id} title={attribute.fullDescription} aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : 'none'}><button type="button" className={`attributes-matrix-sort ${isSorted ? 'is-sorted' : ''}`} onClick={() => toggleSort(attribute.id)} aria-label={`${attribute.name}排序：${direction === 'desc' ? '由大到小' : direction === 'asc' ? '由小到大' : '正常'}`}><span>{attribute.name}</span><span className="attributes-matrix-sort-indicator" aria-hidden="true">{direction === 'desc' ? '↓' : direction === 'asc' ? '↑' : '↕'}</span></button></th>;
+        })}</tr></thead>
+        <tbody>{sortedRows.map((row) => <tr key={row.id} className={row.kind === 'pending' ? 'attributes-matrix-pending' : undefined}><th scope="row" className="attributes-matrix-subject"><span>{row.displayName}</span><small>{row.statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'}>{formatScore(value)}</td>)}</tr>)}</tbody>
       </table>
     </div>
   </section>;

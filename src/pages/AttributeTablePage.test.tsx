@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributeTablePage } from './AttributeTablePage';
@@ -30,8 +30,37 @@ describe('AttributeTablePage', () => {
 
     expect(await screen.findByRole('heading', { name: '屬性總表', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回投票' })).toHaveAttribute('href', '/attributes');
-    expect(screen.getByRole('heading', { name: '屬性總表', level: 2 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '屬性總表', level: 2 })).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox')).toBeInTheDocument();
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
     expect(screen.getByTitle(/目前 7.3/)).toBeInTheDocument();
+  });
+
+  test('cycles an attribute column from descending to ascending and back to normal', async () => {
+    const sortablePayload: AttributeCatalogPayload = {
+      ...payload,
+      subjects: [
+        ...payload.subjects,
+        { id: 'subject-b', slug: 'game-b', kind: 'game', displayName: '遊戲乙' },
+      ],
+      values: [
+        ...payload.values,
+        { subjectId: 'subject-b', attributeId: 'attribute-luck', score: 9.5, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+      ],
+    };
+    vi.spyOn(api, 'attributeTable').mockResolvedValue(sortablePayload);
+
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+
+    const rows = () => [...document.querySelectorAll('.attributes-matrix tbody tr')].map((row) => row.querySelector('th')?.textContent?.trim());
+    const normal = await screen.findByRole('button', { name: '運氣成分排序：正常' });
+    expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
+
+    fireEvent.click(normal);
+    expect(rows()).toEqual(['遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲甲已對應遊戲']);
+    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由大到小' }));
+    expect(rows()).toEqual(['遊戲甲已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲乙已對應遊戲']);
+    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由小到大' }));
+    expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
   });
 });
