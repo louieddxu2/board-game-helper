@@ -23,7 +23,12 @@ const sharedAttributeCatalog: AttributeCatalogPayload = {
     { ...subjectC, bggIds: [789] },
     { ...subjectD, bggIds: [101112] },
   ],
-  values: [],
+  values: [
+    { subjectId: subjectA.id, attributeId: attribute.id, score: 0, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+    { subjectId: subjectB.id, attributeId: attribute.id, score: 2, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+    { subjectId: subjectC.id, attributeId: attribute.id, score: 8, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+    { subjectId: subjectD.id, attributeId: attribute.id, score: 10, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+  ],
   candidates: [],
   activities: [],
   scoreModelVersion: 'glicko-rd-v1',
@@ -85,7 +90,7 @@ describe('AttributesPage question flow', () => {
     expect(document.querySelector('.attributes-scoreline-marker.is-low.is-lower')).toHaveTextContent('遊戲甲');
     expect(document.querySelector('.attributes-scoreline-marker.is-low.is-upper')).toHaveTextContent('遊戲乙');
     expect(document.querySelector('.attributes-scoreline-marker.is-high.is-lower')).toHaveTextContent('遊戲丁');
-    expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲甲');
+    expect(document.querySelector('.attributes-scoreline-marker.is-high.is-upper')).toHaveTextContent('遊戲丙');
     expect(screen.getByLabelText('目前資料中的極端分數範例')).toBeInTheDocument();
     expect(screen.getByLabelText('目前資料中的極端分數範例').compareDocumentPosition(screen.getByRole('heading', { name: /哪款遊戲的/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('heading', { name: /哪款遊戲的/ }).closest('.attributes-question-center')).toBeInTheDocument();
@@ -118,6 +123,7 @@ describe('AttributesPage question flow', () => {
       fixedSubjectAId: expect.any(String),
       fixedSubjectBId: expect.any(String),
       fixedAttributeId: attribute.id,
+      includeExtremeExamples: false,
     }));
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });

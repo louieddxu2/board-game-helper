@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { AttributeCatalogPayload } from '../shared/types';
-import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
+import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
 
 describe('GeekGroup collection import', () => {
   test('parses quoted commas and keeps unique Game IDs only', () => {
@@ -131,5 +131,24 @@ describe('local attribute collection question selection', () => {
     }];
 
     expect(availableAttributeSubjectIds(catalog(), ['subject-a', 'subject-b'], deferred, 5, 100)).toEqual(['subject-b', 'subject-a']);
+  });
+
+  test('selects extreme examples from the imported collection and fills missing positions globally', () => {
+    const withExamples = catalog();
+    withExamples.subjects.push(
+      { id: 'subject-d', slug: 'd', kind: 'game', displayName: '遊戲丁', components: [{ order: 0, type: 'base', label: '遊戲丁', bggId: 101 }] },
+      { id: 'subject-e', slug: 'e', kind: 'game', displayName: '遊戲戊', components: [{ order: 0, type: 'base', label: '遊戲戊', bggId: 102 }] },
+    );
+    withExamples.values.push(
+      { subjectId: 'subject-a', attributeId: 'attribute-luck', score: 1, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+      { subjectId: 'subject-b', attributeId: 'attribute-luck', score: 2, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+      { subjectId: 'subject-d', attributeId: 'attribute-luck', score: 8, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+      { subjectId: 'subject-e', attributeId: 'attribute-luck', score: 10, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+    );
+
+    const examples = chooseScopedExtremeExamples(withExamples, 'attribute-luck', ['subject-a', 'subject-d'], () => 0);
+
+    expect(examples.lowest.map((example) => example.subject.id)).toEqual(['subject-a', 'subject-b']);
+    expect(examples.highest.map((example) => example.subject.id)).toEqual(['subject-d', 'subject-e']);
   });
 });

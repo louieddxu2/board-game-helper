@@ -278,6 +278,7 @@ export interface AttributeQuestionOptions {
   fixedSubjectAId?: string;
   fixedSubjectBId?: string;
   fixedAttributeId?: string;
+  includeExtremeExamples?: boolean;
 }
 
 export interface AttributeResponseInput {
@@ -987,7 +988,7 @@ export const queryAttributeQuestionPayload = async (
     queryAttributeQuestion(db, sessionId, options),
     queryRecentActivities(db),
   ]);
-  const extremeExamples = question
+  const extremeExamples = options.includeExtremeExamples !== false && question
     ? await queryAttributeExtremeExamples(db, question.attribute.id)
     : { lowest: [], highest: [] } satisfies AttributeExtremeExamples;
   return { question, activities, extremeExamples, scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION };

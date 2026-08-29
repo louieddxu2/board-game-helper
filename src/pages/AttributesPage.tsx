@@ -8,7 +8,7 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
-import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
+import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
@@ -206,9 +206,13 @@ export const AttributesPage = () => {
       fixedSubjectAId: selection.subjectAId,
       fixedSubjectBId: selection.subjectBId,
       fixedAttributeId: selection.attributeId,
+      includeExtremeExamples: false,
     });
     await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
-    return next;
+    return {
+      ...next,
+      extremeExamples: chooseScopedExtremeExamples(catalog, selection.attributeId, scopedSubjectIds),
+    };
   }, [loadVotingCatalog, sessionId]);
 
   const deferCurrentAndLoad = async (mode: 'pair' | 'a' | 'b') => {

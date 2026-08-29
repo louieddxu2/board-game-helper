@@ -30,6 +30,7 @@ const questionQuerySchema = z.object({
   fixedSubjectAId: z.string().trim().max(200).optional(),
   fixedSubjectBId: z.string().trim().max(200).optional(),
   fixedAttributeId: z.string().trim().max(200).optional(),
+  includeExtremeExamples: z.boolean().optional(),
 });
 
 export const attributeResponseSchema = z.object({
@@ -120,6 +121,7 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
     fixedSubjectAId: c.req.query('fixedA') || undefined,
     fixedSubjectBId: c.req.query('fixedB') || undefined,
     fixedAttributeId: c.req.query('fixedAttribute') || undefined,
+    includeExtremeExamples: c.req.query('examples') !== '0',
   });
   if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
   const db = getDatabase(c);

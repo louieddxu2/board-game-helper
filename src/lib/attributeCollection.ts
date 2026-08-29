@@ -1,4 +1,4 @@
-import type { AttributeCatalogPayload, AttributeQuestion, AttributeSubject } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeExtremeExamples, AttributeQuestion, AttributeScoreExample, AttributeSubject } from '../shared/types';
 
 export const MAX_ATTRIBUTE_COLLECTION_CSV_BYTES = 5 * 1024 * 1024;
 
@@ -123,6 +123,53 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
     });
   const subjectIds = [...new Set(bggIds.flatMap((id) => [...(byBggId.get(id) ?? [])]))];
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };
+};
+
+const randomSample = <T>(items: T[], limit: number, random: () => number): T[] => {
+  const pool = [...items];
+  const selected: T[] = [];
+  while (pool.length && selected.length < limit) {
+    const index = Math.min(pool.length - 1, Math.floor(Math.max(0, Math.min(1 - Number.EPSILON, random())) * pool.length));
+    selected.push(pool.splice(index, 1)[0]);
+  }
+  return selected;
+};
+
+/**
+ * Selects the 0-2 and 8-10 reference games from the attribute catalog that
+ * is already cached in IndexedDB. A collection scope is preferred when it
+ * has enough examples; missing positions fall back to the complete catalog.
+ */
+export const chooseScopedExtremeExamples = (
+  catalog: AttributeCatalogPayload,
+  attributeId: string,
+  scopedSubjectIds?: string[],
+  random: () => number = Math.random,
+): AttributeExtremeExamples => {
+  const subjects = new Map(catalog.subjects.map((subject) => [subject.id, subject]));
+  const scoped = scopedSubjectIds ? new Set(scopedSubjectIds) : undefined;
+  const candidates = catalog.values
+    .filter((value) => value.attributeId === attributeId && (value.evidenceCount ?? 0) > 0)
+    .flatMap((value): AttributeScoreExample[] => {
+      const subject = subjects.get(value.subjectId);
+      return subject ? [{ subject, score: Number(value.score.toFixed(2)) }] : [];
+    });
+  const selectBand = (predicate: (score: number) => boolean) => {
+    const eligible = candidates.filter((example) => predicate(example.score));
+    const preferred = scoped ? eligible.filter((example) => scoped.has(example.subject.id)) : eligible;
+    const selected = randomSample(preferred, 2, random);
+    if (selected.length === 2 || !scoped) return selected;
+    const selectedIds = new Set(selected.map((example) => example.subject.id));
+    return [...selected, ...randomSample(
+      eligible.filter((example) => !selectedIds.has(example.subject.id)),
+      2 - selected.length,
+      random,
+    )];
+  };
+  return {
+    lowest: selectBand((score) => score >= 0 && score <= 2),
+    highest: selectBand((score) => score >= 8 && score <= 10),
+  };
 };
 
 /**
