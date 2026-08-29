@@ -4,7 +4,6 @@ import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
 import {
   queryAttributeQuestionPayload,
-  queryAttributeVoteSubjectDirectory,
   saveAttributeResponse,
 } from '../data/attributes';
 import {
@@ -67,17 +66,12 @@ attributesRoutes.get('/api/attributes', (c) => {
   return c.json({ error: 'attribute_endpoint_disabled' }, 410);
 });
 
-attributesRoutes.get('/api/attributes/vote-subjects', async (c) => {
-  const db = getDatabase(c);
-  try {
-    c.header('Cache-Control', 'no-store');
-    const payload = await queryAttributeVoteSubjectDirectory(db);
-    setD1MetricsHeader(c, db);
-    return c.json(payload);
-  } catch (error) {
-    setD1MetricsHeader(c, db);
-    return respondWithAttributeError(c, error);
-  }
+attributesRoutes.get('/api/attributes/vote-subjects', (c) => {
+  // Collection matching now uses the versioned attribute catalog already
+  // cached in the browser. Keep the old URL reserved without touching D1 so
+  // stale clients cannot revive the former unbounded directory query.
+  c.header('Cache-Control', 'no-store');
+  return c.json({ error: 'attribute_vote_subject_directory_disabled' }, 410);
 });
 
 attributesRoutes.get('/api/attributes/table', async (c) => {

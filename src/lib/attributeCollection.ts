@@ -1,4 +1,4 @@
-import type { AttributeCatalogPayload, AttributeQuestion, AttributeSubject, AttributeVoteSubjectDirectoryPayload } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeQuestion, AttributeSubject } from '../shared/types';
 
 export const MAX_ATTRIBUTE_COLLECTION_CSV_BYTES = 5 * 1024 * 1024;
 
@@ -115,17 +115,6 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };
 };
 
-export const matchCollectionDirectorySubjects = (directory: AttributeVoteSubjectDirectoryPayload, bggIds: number[]) => {
-  const byBggId = new Map<number, string>();
-  directory.subjects.forEach((subject) => {
-    subject.bggIds.forEach((bggId) => {
-      if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
-    });
-  });
-  const subjectIds = [...new Set(bggIds.map((id) => byBggId.get(id)).filter((id): id is string => Boolean(id)))];
-  return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };
-};
-
 const weightedChoice = <T>(items: Array<{ item: T; weight: number }>, randomValue: number) => {
   const total = items.reduce((sum, item) => sum + Math.max(Number.EPSILON, item.weight), 0);
   let cursor = Math.min(1 - Number.EPSILON, Math.max(0, randomValue)) * total;
@@ -143,8 +132,9 @@ const pairIsExcluded = (left: string, right: string, attributeId: string, option
 
 /**
  * Selects a question entirely from the weekly attribute catalog already in
- * IndexedDB. The server is called only afterwards with the two selected IDs,
- * so an imported list never becomes a large D1 query parameter.
+ * IndexedDB. The server is called only afterwards with the selected subject
+ * and attribute IDs, so an imported list never becomes a large D1 query
+ * parameter.
  */
 export const chooseScopedAttributeQuestion = (
   catalog: AttributeCatalogPayload,
@@ -206,47 +196,4 @@ export const chooseScopedAttributeQuestion = (
   return options.fixedSubjectBId
     ? { subjectAId: chosen, subjectBId: seedId, attributeId }
     : { subjectAId: seedId, subjectBId: chosen, attributeId };
-};
-
-const scopedPairIsExcluded = (left: string, right: string, options: ScopedAttributeQuestionOptions) =>
-  (left === options.excludeSubjectAId && right === options.excludeSubjectBId)
-  || (left === options.excludeSubjectBId && right === options.excludeSubjectAId);
-
-/** Selects only a pair from the compact directory; scores remain server-side. */
-export const chooseScopedAttributePair = (
-  directory: AttributeVoteSubjectDirectoryPayload,
-  subjectIds: string[],
-  options: ScopedAttributeQuestionOptions = {},
-  randomValue = Math.random(),
-): { subjectAId: string; subjectBId: string } | null => {
-  const available = directory.subjects
-    .filter((subject) => subjectIds.includes(subject.id))
-    .map((subject) => subject.id);
-  if (available.length < 2) return null;
-
-  const isAvailable = (id: string | undefined): id is string => Boolean(id && available.includes(id));
-  const fixedA = isAvailable(options.fixedSubjectAId) ? options.fixedSubjectAId : undefined;
-  const fixedB = isAvailable(options.fixedSubjectBId) ? options.fixedSubjectBId : undefined;
-  if (fixedA && fixedB) {
-    if (fixedA === fixedB) return null;
-    return { subjectAId: fixedA, subjectBId: fixedB };
-  }
-
-  if (fixedA || fixedB) {
-    const fixed = fixedA ?? fixedB!;
-    const eligibleCandidates = available.filter((id) => id !== fixed && !scopedPairIsExcluded(fixed, id, options));
-    const candidates = eligibleCandidates.length ? eligibleCandidates : available.filter((id) => id !== fixed);
-    if (!candidates.length) return null;
-    const chosen = candidates[Math.min(candidates.length - 1, Math.floor(Math.max(0, Math.min(1 - Number.EPSILON, randomValue)) * candidates.length))];
-    return fixedA ? { subjectAId: fixed, subjectBId: chosen } : { subjectAId: chosen, subjectBId: fixed };
-  }
-
-  const pairs: Array<{ subjectAId: string; subjectBId: string }> = [];
-  for (let left = 0; left < available.length; left += 1) {
-    for (let right = left + 1; right < available.length; right += 1) {
-      if (!scopedPairIsExcluded(available[left], available[right], options)) pairs.push({ subjectAId: available[left], subjectBId: available[right] });
-    }
-  }
-  const selectablePairs = pairs.length ? pairs : available.slice(0, -1).flatMap((subjectAId, left) => available.slice(left + 1).map((subjectBId) => ({ subjectAId, subjectBId })));
-  return selectablePairs[Math.min(selectablePairs.length - 1, Math.floor(Math.max(0, Math.min(1 - Number.EPSILON, randomValue)) * selectablePairs.length))];
 };

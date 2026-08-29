@@ -9,6 +9,13 @@ describe('attribute route', () => {
     expect(await response.json()).toEqual({ error: 'attribute_endpoint_disabled' });
   });
 
+  test('disables the former unbounded vote-subject directory without querying D1', async () => {
+    const response = await attributesRoutes.request('https://rules.example/api/attributes/vote-subjects');
+
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ error: 'attribute_vote_subject_directory_disabled' });
+  });
+
   test('does not expose rating or comparison writes', async () => {
     const ratingResponse = await attributesRoutes.request('https://rules.example/api/attributes/ratings', {
       method: 'POST',

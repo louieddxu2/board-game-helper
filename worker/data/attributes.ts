@@ -10,7 +10,6 @@ import type {
   AttributeSubject,
   AttributeSubjectComponent,
   AttributeScoreExample,
-  AttributeVoteSubjectDirectoryPayload,
   AttributesPayload,
 } from '../../src/shared/types';
 import { createId } from '../utils';
@@ -568,15 +567,6 @@ export const queryAttributeSubjects = async (db: Database, subjectIds?: string[]
  * It deliberately excludes scores, activities, and components so the voting
  * page never downloads the full attribute table just to resolve BGG IDs.
  */
-export const queryAttributeVoteSubjectDirectory = async (db: Database): Promise<AttributeVoteSubjectDirectoryPayload> => ({
-  subjects: (await querySubjectRows(db)).map((row) => ({
-    id: row.id,
-    kind: row.kind,
-    ...(row.game_id ? { gameId: row.game_id } : {}),
-    bggIds: parseBggIds(row.bgg_ids_json),
-  })),
-});
-
 const queryQuestionSubjects = async (db: Database, subjectIds: string[]): Promise<AttributeSubject[]> => {
   if (!subjectIds.length) return [];
   // A question only needs the two display records.  BGG ID aggregation and

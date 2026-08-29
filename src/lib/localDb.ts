@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeVoteSubjectDirectoryPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyAttributeCatalogChanges } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
@@ -13,7 +13,6 @@ export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v5';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
 const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v1';
-const ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_KEY = 'attributes:vote-subjects:v1';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
@@ -397,9 +396,6 @@ export const localDb = {
     if (cached) attributeTableMemoryCache = cached;
     return cached;
   },
-  getFreshAttributeVoteSubjectDirectory: async (maxAge: number) => getFreshCache<AttributeVoteSubjectDirectoryPayload>(ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_KEY, maxAge),
-  getLatestAttributeVoteSubjectDirectory: async () => (await getDatabase()).get('cache', ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_KEY) as Promise<CacheRecord<AttributeVoteSubjectDirectoryPayload> | undefined>,
-  cacheAttributeVoteSubjectDirectory: async (data: AttributeVoteSubjectDirectoryPayload) => (await getDatabase()).put('cache', { key: ATTRIBUTE_VOTE_SUBJECT_DIRECTORY_KEY, data, cachedAt: Date.now() }),
   cacheAttributeCatalogChanges: async (data: AttributeCatalogChangesPayload) => {
     const db = await getDatabase();
     const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;

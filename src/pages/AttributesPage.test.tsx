@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import type { AttributeActivity, AttributeQuestion } from '../shared/types';
+import type { AttributeActivity, AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
 const subjectB = { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙', gameSlug: 'game-b' };
@@ -12,6 +12,20 @@ const subjectC = { id: 'subject-c', slug: 'game-c', kind: 'game' as const, displ
 const subjectD = { id: 'subject-d', slug: 'game-d', kind: 'game' as const, displayName: '遊戲丁', gameSlug: 'game-d' };
 const attribute = { id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 };
 const question: AttributeQuestion = { subjectA, subjectB, attribute };
+const sharedAttributeCatalog: AttributeCatalogPayload = {
+  generation: 1,
+  throughVersion: 1,
+  generatedAt: 1,
+  attributes: [attribute],
+  subjects: [
+    { ...subjectA, bggIds: [123] },
+    { ...subjectB, bggIds: [456] },
+  ],
+  values: [],
+  candidates: [],
+  activities: [],
+  scoreModelVersion: 'glicko-rd-v1',
+};
 const extremeExamples = {
   lowest: [{ subject: subjectA, score: 0 }, { subject: subjectB, score: 2 }, { subject: subjectC, score: 3 }],
   highest: [{ subject: subjectD, score: 10 }, { subject: subjectA, score: 8 }, { subject: subjectB, score: 7 }],
@@ -122,31 +136,26 @@ describe('AttributesPage question flow', () => {
     expect(questionSpy).not.toHaveBeenCalled();
   });
 
-  test('switches to an imported collection through the compact directory', async () => {
+  test('switches to an imported collection through the shared attribute catalog cache', async () => {
     vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([123, 456]);
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'setAttributeVoteScope').mockResolvedValue('attributes:vote-scope:v1');
-    const tableSpy = vi.spyOn(api, 'attributeTable');
-    const directorySpy = vi.spyOn(api, 'attributeVoteSubjectDirectory').mockResolvedValue({
-      subjects: [
-        { id: subjectA.id, kind: 'game', bggIds: [123] },
-        { id: subjectB.id, kind: 'game', bggIds: [456] },
-      ],
-    });
+    const tableSpy = vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '我的收藏 (2)' }));
-    await waitFor(() => expect(directorySpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(tableSpy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByRole('button', { name: '全部遊戲' })).not.toBeDisabled());
-    expect(tableSpy).not.toHaveBeenCalled();
     expect(questionSpy).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({
       fixedSubjectAId: subjectA.id,
       fixedSubjectBId: subjectB.id,
+      fixedAttributeId: attribute.id,
     }));
   });
 

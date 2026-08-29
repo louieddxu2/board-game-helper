@@ -8,7 +8,7 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
-import { chooseScopedAttributePair, matchCollectionDirectorySubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
+import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
@@ -97,7 +97,7 @@ export const AttributesPage = () => {
   const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
   const collectionIdsRef = useRef<number[]>([]);
-  const collectionDirectoryRef = useRef<Awaited<ReturnType<typeof api.attributeVoteSubjectDirectory>> | undefined>(undefined);
+  const collectionCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
   const voteScopeRef = useRef<AttributeVoteScope>('all');
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
@@ -148,11 +148,18 @@ export const AttributesPage = () => {
     return pending;
   }, []);
 
-  const loadCollectionDirectory = useCallback(async () => {
-    if (collectionDirectoryRef.current) return collectionDirectoryRef.current;
-    const directory = await api.attributeVoteSubjectDirectory();
-    collectionDirectoryRef.current = directory;
-    return directory;
+  const loadCollectionCatalog = useCallback(async () => {
+    if (collectionCatalogRef.current) return collectionCatalogRef.current;
+    const catalog = await api.attributeTable((updated) => {
+      collectionCatalogRef.current = updated;
+      const ids = collectionIdsRef.current;
+      if (ids.length) {
+        setCollectionMatchCount(matchCollectionSubjects(updated, ids).matchedBggIds.length);
+        setCollectionMatchKnown(true);
+      }
+    });
+    collectionCatalogRef.current = catalog;
+    return catalog;
   }, []);
 
   const refreshCollectionScope = useCallback(async () => {
@@ -161,14 +168,14 @@ export const AttributesPage = () => {
     setCollectionIds(ids);
     setCollectionMatchKnown(false);
     if (!ids.length) {
-      collectionDirectoryRef.current = undefined;
+      collectionCatalogRef.current = undefined;
       setCollectionMatchCount(0);
       return;
     }
-    const directory = await loadCollectionDirectory();
-    setCollectionMatchCount(matchCollectionDirectorySubjects(directory, ids).matchedBggIds.length);
+    const catalog = await loadCollectionCatalog();
+    setCollectionMatchCount(matchCollectionSubjects(catalog, ids).matchedBggIds.length);
     setCollectionMatchKnown(true);
-  }, [loadCollectionDirectory]);
+  }, [loadCollectionCatalog]);
 
   const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
     if (voteScopeRef.current !== 'collection') return api.attributeQuestion(sessionId, questionOptions(currentQuestion, mode));
@@ -180,10 +187,10 @@ export const AttributesPage = () => {
         extremeExamples: { lowest: [], highest: [] },
       } satisfies AttributeQuestionPayload;
     }
-    const directory = await loadCollectionDirectory();
+    const catalog = await loadCollectionCatalog();
     const options = questionOptions(currentQuestion, mode);
-    const { subjectIds } = matchCollectionDirectorySubjects(directory, ids);
-    const selection = chooseScopedAttributePair(directory, subjectIds, options);
+    const { subjectIds } = matchCollectionSubjects(catalog, ids);
+    const selection = chooseScopedAttributeQuestion(catalog, subjectIds, options);
     if (!selection) {
       return {
         question: null,
@@ -194,9 +201,9 @@ export const AttributesPage = () => {
     return api.attributeQuestion(sessionId, {
       fixedSubjectAId: selection.subjectAId,
       fixedSubjectBId: selection.subjectBId,
-      ...('fixedAttributeId' in options && options.fixedAttributeId ? { fixedAttributeId: options.fixedAttributeId } : {}),
+      fixedAttributeId: selection.attributeId,
     });
-  }, [loadCollectionDirectory, sessionId]);
+  }, [loadCollectionCatalog, sessionId]);
 
   const loadQuestion = useCallback(async (mode: 'pair' | 'a' | 'b' = 'pair') => {
     setQuestionLoading(true);
@@ -459,9 +466,9 @@ export const AttributesPage = () => {
       collectionIdsRef.current = parsed.bggIds;
       setCollectionIds(parsed.bggIds);
       setCollectionMatchKnown(false);
-      collectionDirectoryRef.current = undefined;
-      const directory = await loadCollectionDirectory();
-      const match = matchCollectionDirectorySubjects(directory, parsed.bggIds);
+      collectionCatalogRef.current = undefined;
+      const catalog = await loadCollectionCatalog();
+      const match = matchCollectionSubjects(catalog, parsed.bggIds);
       setCollectionMatchCount(match.matchedBggIds.length);
       setCollectionMatchKnown(true);
       setCollectionMessage(`已匯入 ${parsed.bggIds.length} 款，找到 ${match.matchedBggIds.length} 款可投票遊戲。`);
