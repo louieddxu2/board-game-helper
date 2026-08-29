@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
@@ -20,6 +20,8 @@ const sharedAttributeCatalog: AttributeCatalogPayload = {
   subjects: [
     { ...subjectA, bggIds: [123] },
     { ...subjectB, bggIds: [456] },
+    { ...subjectC, bggIds: [789] },
+    { ...subjectD, bggIds: [101112] },
   ],
   values: [],
   candidates: [],
@@ -37,12 +39,26 @@ const recentActivities: AttributeActivity[] = [
 ];
 
 describe('AttributesPage question flow', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
+    vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
+    vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
+    vi.spyOn(localDb, 'getDeferredAttributeSubjects').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getAttributeQuestionNumber').mockResolvedValue(0);
+    vi.spyOn(localDb, 'advanceAttributeQuestionNumber').mockResolvedValue(1);
+    vi.spyOn(localDb, 'deferAttributeSubject').mockResolvedValue({ subjectId: subjectA.id, bggIds: [], skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: 2 });
+    vi.spyOn(localDb, 'clearDeferredAttributeSubject').mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
   });
 
-  test('starts with a system-selected question without game selectors or the full table', async () => {
+  test('starts with a locally selected question without game selectors or rendering the full table', async () => {
     const tableSpy = vi.spyOn(api, 'attributeTable');
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: recentActivities, extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
 
@@ -96,7 +112,12 @@ describe('AttributesPage question flow', () => {
     expect(screen.getByRole('group', { name: '投票範圍' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '全部遊戲' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '我的收藏' })).toBeDisabled();
-    expect(tableSpy).not.toHaveBeenCalled();
+    expect(tableSpy).toHaveBeenCalledTimes(1);
+    expect(api.attributeQuestion).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      fixedSubjectAId: expect.any(String),
+      fixedSubjectBId: expect.any(String),
+      fixedAttributeId: attribute.id,
+    }));
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
@@ -190,7 +211,7 @@ describe('AttributesPage question flow', () => {
     expect(saveSpy.mock.calls[0][0].responseId).toBe(saveSpy.mock.calls[1][0].responseId);
   });
 
-  test('treats similar as an answer and unknown as a write-free skip', async () => {
+  test('treats similar as an answer and unknown as a D1-write-free local cooldown', async () => {
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     const saveSpy = vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
@@ -207,5 +228,6 @@ describe('AttributesPage question flow', () => {
 
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(saveSpy).not.toHaveBeenCalled();
+    expect(localDb.deferAttributeSubject).toHaveBeenCalledTimes(2);
   });
 });

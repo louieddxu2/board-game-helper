@@ -24,6 +24,15 @@ export interface ScopedAttributeQuestionSelection {
   attributeId: string;
 }
 
+export interface DeferredAttributeSubjectPreference {
+  subjectId: string;
+  bggIds: number[];
+  skipCount: number;
+  skippedAt: number;
+  eligibleAfterQuestion: number;
+  eligibleAfterAt: number;
+}
+
 const normalizeHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 
 /** Small RFC-4180-compatible parser for the collection export we support. */
@@ -94,7 +103,7 @@ export const parseGeekGroupCollectionCsv = (text: string): ParsedCsvCollection =
   };
 };
 
-const baseBggIds = (subject: AttributeSubject) => {
+export const attributeSubjectBggIds = (subject: AttributeSubject) => {
   const ids = new Set(subject.bggIds ?? []);
   const base = subject.components?.find((component) => component.type === 'base' && component.bggId != null);
   if (base?.bggId != null) ids.add(base.bggId);
@@ -103,16 +112,57 @@ const baseBggIds = (subject: AttributeSubject) => {
 };
 
 export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds: number[]) => {
-  const byBggId = new Map<number, string>();
+  const byBggId = new Map<number, Set<string>>();
   catalog.subjects
-    .filter((subject) => subject.kind === 'game')
     .forEach((subject) => {
-      baseBggIds(subject).forEach((bggId) => {
-        if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
+      attributeSubjectBggIds(subject).forEach((bggId) => {
+        const subjectIds = byBggId.get(bggId) ?? new Set<string>();
+        subjectIds.add(subject.id);
+        byBggId.set(bggId, subjectIds);
       });
     });
-  const subjectIds = [...new Set(bggIds.map((id) => byBggId.get(id)).filter((id): id is string => Boolean(id)))];
+  const subjectIds = [...new Set(bggIds.flatMap((id) => [...(byBggId.get(id) ?? [])]))];
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };
+};
+
+/**
+ * Applies local cooldowns to either the complete voting catalog or a
+ * collection intersection. If fewer than two subjects remain, the subjects
+ * closest to becoming eligible are released locally; callers never need a
+ * server-side redraw loop.
+ */
+export const availableAttributeSubjectIds = (
+  catalog: AttributeCatalogPayload,
+  scopedSubjectIds: string[] | undefined,
+  deferred: DeferredAttributeSubjectPreference[],
+  questionNumber: number,
+  timestamp = Date.now(),
+) => {
+  const scoped = scopedSubjectIds ? new Set(scopedSubjectIds) : undefined;
+  const candidates = catalog.subjects.filter((subject) => !scoped || scoped.has(subject.id));
+  const candidateIds = new Set(candidates.map((subject) => subject.id));
+  const byBggId = new Map<number, string>();
+  candidates.forEach((subject) => attributeSubjectBggIds(subject).forEach((bggId) => {
+    if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
+  }));
+  const blocked = deferred.flatMap((preference) => {
+    const currentSubjectId = candidateIds.has(preference.subjectId)
+      ? preference.subjectId
+      : preference.bggIds.map((bggId) => byBggId.get(bggId)).find(Boolean);
+    if (!currentSubjectId) return [];
+    const eligible = questionNumber >= preference.eligibleAfterQuestion || timestamp >= preference.eligibleAfterAt;
+    return eligible ? [] : [{ subjectId: currentSubjectId, preference }];
+  });
+  const blockedIds = new Set(blocked.map((entry) => entry.subjectId));
+  const available = candidates.map((subject) => subject.id).filter((subjectId) => !blockedIds.has(subjectId));
+  if (available.length >= 2) return available;
+  blocked
+    .sort((left, right) => left.preference.eligibleAfterQuestion - right.preference.eligibleAfterQuestion
+      || left.preference.eligibleAfterAt - right.preference.eligibleAfterAt)
+    .forEach(({ subjectId }) => {
+      if (available.length < 2 && !available.includes(subjectId)) available.push(subjectId);
+    });
+  return available;
 };
 
 const weightedChoice = <T>(items: Array<{ item: T; weight: number }>, randomValue: number) => {
@@ -142,7 +192,8 @@ export const chooseScopedAttributeQuestion = (
   options: ScopedAttributeQuestionOptions = {},
   randomValue = Math.random(),
 ): ScopedAttributeQuestionSelection | null => {
-  const availableSubjects = catalog.subjects.filter((subject) => subject.kind === 'game' && subjectIds.includes(subject.id));
+  const allowedSubjectIds = new Set(subjectIds);
+  const availableSubjects = catalog.subjects.filter((subject) => allowedSubjectIds.has(subject.id));
   if (availableSubjects.length < 2 || !catalog.attributes.length) return null;
   const valueMap = new Map(catalog.values.map((value) => [`${value.subjectId}\u0000${value.attributeId}`, value]));
   const state = (subjectId: string, attributeId: string) => {

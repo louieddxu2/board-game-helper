@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { AttributeCatalogPayload } from '../shared/types';
-import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
+import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
 
 describe('GeekGroup collection import', () => {
   test('parses quoted commas and keeps unique Game IDs only', () => {
@@ -69,6 +69,19 @@ describe('local attribute collection question selection', () => {
     });
   });
 
+  test('keeps every votable configuration attached to a collected BGG game', () => {
+    const withConfiguration = catalog();
+    withConfiguration.subjects.push({
+      id: 'subject-a-expansion',
+      slug: 'a-expansion',
+      kind: 'configuration',
+      displayName: '遊戲甲＋擴充',
+      components: [{ order: 0, type: 'base', label: '遊戲甲', bggId: 123 }],
+    });
+
+    expect(matchCollectionSubjects(withConfiguration, [123]).subjectIds).toEqual(['subject-a', 'subject-a-expansion']);
+  });
+
   test('selects a pair without adding IDs to a server query', () => {
     expect(chooseScopedAttributeQuestion(catalog(), ['subject-a', 'subject-b'], {}, 0)).toEqual({
       subjectAId: 'subject-a',
@@ -89,5 +102,33 @@ describe('local attribute collection question selection', () => {
       subjectBId: 'subject-b',
       attributeId: 'attribute-luck',
     });
+  });
+
+  test('applies the same local cooldown to the complete and collection scopes', () => {
+    const deferred = [{
+      subjectId: 'subject-a',
+      bggIds: [123],
+      skipCount: 1,
+      skippedAt: 1,
+      eligibleAfterQuestion: 20,
+      eligibleAfterAt: 10_000,
+    }];
+
+    expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 5, 100)).toEqual(['subject-b', 'subject-c']);
+    expect(availableAttributeSubjectIds(catalog(), ['subject-a', 'subject-b', 'subject-c'], deferred, 5, 100)).toEqual(['subject-b', 'subject-c']);
+    expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 20, 100)).toEqual(['subject-a', 'subject-b', 'subject-c']);
+  });
+
+  test('releases the nearest cooldown locally when a scope would have fewer than two choices', () => {
+    const deferred = [{
+      subjectId: 'old-subject-id',
+      bggIds: [123],
+      skipCount: 2,
+      skippedAt: 1,
+      eligibleAfterQuestion: 80,
+      eligibleAfterAt: 20_000,
+    }];
+
+    expect(availableAttributeSubjectIds(catalog(), ['subject-a', 'subject-b'], deferred, 5, 100)).toEqual(['subject-b', 'subject-a']);
   });
 });

@@ -114,6 +114,15 @@ export interface CachedRuleRow extends RuleCard {
   cachedAt: number;
 }
 
+export interface DeferredAttributeSubject {
+  subjectId: string;
+  bggIds: number[];
+  skipCount: number;
+  skippedAt: number;
+  eligibleAfterQuestion: number;
+  eligibleAfterAt: number;
+}
+
 export interface DraftRecord {
   id: string;
   game?: { id: string; slug: string; displayName: string; englishName?: string };
@@ -134,6 +143,7 @@ interface RulesDb extends DBSchema {
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
   attributeResponses: { key: string; value: PendingAttributeResponse };
   attributeCollectionIds: { key: number; value: { bggId: number; importedAt: number } };
+  attributeDeferredSubjects: { key: string; value: DeferredAttributeSubject };
 }
 
 export interface PendingAttributeResponse {
@@ -152,7 +162,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 5, {
+  return openDB<RulesDb>('wrong-board-game-rules', 6, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -171,6 +181,7 @@ const getDb = () => {
       }
       if (!db.objectStoreNames.contains('attributeResponses')) db.createObjectStore('attributeResponses', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('attributeCollectionIds')) db.createObjectStore('attributeCollectionIds', { keyPath: 'bggId' });
+      if (!db.objectStoreNames.contains('attributeDeferredSubjects')) db.createObjectStore('attributeDeferredSubjects', { keyPath: 'subjectId' });
       if (oldVersion > 0 && oldVersion < 3) {
         transaction.objectStore('games').clear();
         transaction.objectStore('rules').clear();
@@ -277,6 +288,36 @@ export const localDb = {
     await db.clear('attributeCollectionIds');
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('attribute-collection-change'));
   },
+  getAttributeQuestionNumber: async () => {
+    const cached = await (await getDatabase()).get('cache', 'attributes:question-number:v1') as CacheRecord<number> | undefined;
+    return Number.isSafeInteger(cached?.data) && Number(cached?.data) >= 0 ? Number(cached?.data) : 0;
+  },
+  advanceAttributeQuestionNumber: async () => {
+    const db = await getDatabase();
+    const cached = await db.get('cache', 'attributes:question-number:v1') as CacheRecord<number> | undefined;
+    const next = (Number.isSafeInteger(cached?.data) ? Number(cached?.data) : 0) + 1;
+    await db.put('cache', { key: 'attributes:question-number:v1', data: next, cachedAt: Date.now() });
+    return next;
+  },
+  getDeferredAttributeSubjects: async () => (await getDatabase()).getAll('attributeDeferredSubjects'),
+  deferAttributeSubject: async (subjectId: string, bggIds: number[], questionNumber: number, timestamp = Date.now()) => {
+    const db = await getDatabase();
+    const current = await db.get('attributeDeferredSubjects', subjectId);
+    const skipCount = (current?.skipCount ?? 0) + 1;
+    const questionDelay = skipCount === 1 ? 20 : skipCount === 2 ? 80 : 300;
+    const timeDelay = skipCount === 1 ? 24 * 60 * 60 * 1000 : skipCount === 2 ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+    const record: DeferredAttributeSubject = {
+      subjectId,
+      bggIds: [...new Set([...(current?.bggIds ?? []), ...bggIds].filter((id) => Number.isSafeInteger(id) && id > 0))],
+      skipCount,
+      skippedAt: timestamp,
+      eligibleAfterQuestion: questionNumber + questionDelay,
+      eligibleAfterAt: timestamp + timeDelay,
+    };
+    await db.put('attributeDeferredSubjects', record);
+    return record;
+  },
+  clearDeferredAttributeSubject: async (subjectId: string) => (await getDatabase()).delete('attributeDeferredSubjects', subjectId),
   addPendingAttributeResponse: async (payload: Omit<PendingAttributeResponse, 'id' | 'createdAt'> & { id?: string; createdAt?: number }) => {
     const item: PendingAttributeResponse = { ...payload, id: payload.id ?? payload.responseId, createdAt: payload.createdAt ?? Date.now() };
     return (await getDatabase()).put('attributeResponses', item);

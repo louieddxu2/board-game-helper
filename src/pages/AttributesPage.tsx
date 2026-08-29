@@ -8,7 +8,7 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
-import { chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
+import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
@@ -97,7 +97,7 @@ export const AttributesPage = () => {
   const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
   const collectionIdsRef = useRef<number[]>([]);
-  const collectionCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
+  const votingCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
   const voteScopeRef = useRef<AttributeVoteScope>('all');
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
@@ -148,17 +148,16 @@ export const AttributesPage = () => {
     return pending;
   }, []);
 
-  const loadCollectionCatalog = useCallback(async () => {
-    if (collectionCatalogRef.current) return collectionCatalogRef.current;
+  const loadVotingCatalog = useCallback(async () => {
     const catalog = await api.attributeTable((updated) => {
-      collectionCatalogRef.current = updated;
+      votingCatalogRef.current = updated;
       const ids = collectionIdsRef.current;
       if (ids.length) {
         setCollectionMatchCount(matchCollectionSubjects(updated, ids).matchedBggIds.length);
         setCollectionMatchKnown(true);
       }
     });
-    collectionCatalogRef.current = catalog;
+    votingCatalogRef.current = catalog;
     return catalog;
   }, []);
 
@@ -168,28 +167,33 @@ export const AttributesPage = () => {
     setCollectionIds(ids);
     setCollectionMatchKnown(false);
     if (!ids.length) {
-      collectionCatalogRef.current = undefined;
       setCollectionMatchCount(0);
       return;
     }
-    const catalog = await loadCollectionCatalog();
+    const catalog = await loadVotingCatalog();
     setCollectionMatchCount(matchCollectionSubjects(catalog, ids).matchedBggIds.length);
     setCollectionMatchKnown(true);
-  }, [loadCollectionCatalog]);
+  }, [loadVotingCatalog]);
 
   const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
-    if (voteScopeRef.current !== 'collection') return api.attributeQuestion(sessionId, questionOptions(currentQuestion, mode));
-    const ids = collectionIdsRef.current;
-    if (!ids.length) {
+    const catalog = await loadVotingCatalog();
+    const collectionBggIds = collectionIdsRef.current;
+    if (voteScopeRef.current === 'collection' && !collectionBggIds.length) {
       return {
         question: null,
         activities: [],
         extremeExamples: { lowest: [], highest: [] },
       } satisfies AttributeQuestionPayload;
     }
-    const catalog = await loadCollectionCatalog();
     const options = questionOptions(currentQuestion, mode);
-    const { subjectIds } = matchCollectionSubjects(catalog, ids);
+    const scopedSubjectIds = voteScopeRef.current === 'collection'
+      ? matchCollectionSubjects(catalog, collectionBggIds).subjectIds
+      : undefined;
+    const [deferred, questionNumber] = await Promise.all([
+      localDb.getDeferredAttributeSubjects(),
+      localDb.getAttributeQuestionNumber(),
+    ]);
+    const subjectIds = availableAttributeSubjectIds(catalog, scopedSubjectIds, deferred, questionNumber);
     const selection = chooseScopedAttributeQuestion(catalog, subjectIds, options);
     if (!selection) {
       return {
@@ -198,12 +202,30 @@ export const AttributesPage = () => {
         extremeExamples: { lowest: [], highest: [] },
       } satisfies AttributeQuestionPayload;
     }
-    return api.attributeQuestion(sessionId, {
+    const next = await api.attributeQuestion(sessionId, {
       fixedSubjectAId: selection.subjectAId,
       fixedSubjectBId: selection.subjectBId,
       fixedAttributeId: selection.attributeId,
     });
-  }, [loadCollectionCatalog, sessionId]);
+    await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
+    return next;
+  }, [loadVotingCatalog, sessionId]);
+
+  const deferCurrentAndLoad = async (mode: 'pair' | 'a' | 'b') => {
+    if (!question || questionLoading || submitting || awaitingNext) return;
+    try {
+      const catalog = votingCatalogRef.current ?? await loadVotingCatalog();
+      const questionNumber = await localDb.getAttributeQuestionNumber();
+      const subjects = mode === 'a' ? [question.subjectA] : mode === 'b' ? [question.subjectB] : [question.subjectA, question.subjectB];
+      await Promise.all(subjects.map((subject) => {
+        const catalogSubject = catalog.subjects.find((candidate) => candidate.id === subject.id);
+        return localDb.deferAttributeSubject(subject.id, catalogSubject ? attributeSubjectBggIds(catalogSubject) : [], questionNumber);
+      }));
+    } catch {
+      // A storage failure must not trap the user on the current question.
+    }
+    await loadQuestion(mode);
+  };
 
   const loadQuestion = useCallback(async (mode: 'pair' | 'a' | 'b' = 'pair') => {
     setQuestionLoading(true);
@@ -393,6 +415,10 @@ export const AttributesPage = () => {
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) throw new TypeError('offline');
       await api.saveAttributeResponse(draft);
+      await Promise.all([
+        localDb.clearDeferredAttributeSubject(question.subjectA.id),
+        localDb.clearDeferredAttributeSubject(question.subjectB.id),
+      ]).catch(() => undefined);
     } catch (caught) {
       if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
         setConnectionState('online');
@@ -466,8 +492,7 @@ export const AttributesPage = () => {
       collectionIdsRef.current = parsed.bggIds;
       setCollectionIds(parsed.bggIds);
       setCollectionMatchKnown(false);
-      collectionCatalogRef.current = undefined;
-      const catalog = await loadCollectionCatalog();
+      const catalog = await loadVotingCatalog();
       const match = matchCollectionSubjects(catalog, parsed.bggIds);
       setCollectionMatchCount(match.matchedBggIds.length);
       setCollectionMatchKnown(true);
@@ -588,10 +613,10 @@ export const AttributesPage = () => {
         </div>
 
         <div className="attributes-pair-actions" aria-label="回答與換題">
-          <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void loadQuestion('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
+          <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void deferCurrentAndLoad('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
           <button type="button" className={`attributes-similar ${comparison === 'SIMILAR' ? 'is-selected' : ''} ${!submitting && ratingSuggestion === 'SIMILAR' ? 'is-suggested' : ''}`} aria-pressed={comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
-          <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void loadQuestion('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
-          <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
+          <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void deferCurrentAndLoad('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
+          <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void deferCurrentAndLoad('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
         </div>
         <div className="attributes-rating-zone">
           <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />

@@ -15,7 +15,7 @@ import {
 
 const MAX_ENTRIES_PER_CHUNK = 1000;
 const MAX_CHUNK_BYTES = 1_000_000;
-export const ATTRIBUTE_CATALOG_CHANGE_LIMIT = 80;
+export const ATTRIBUTE_CATALOG_CHANGE_LIMIT = 32;
 const textEncoder = new TextEncoder();
 
 interface SnapshotStateRow {
