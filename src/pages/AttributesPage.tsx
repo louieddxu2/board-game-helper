@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
@@ -10,6 +10,7 @@ import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion'
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
+import { SessionContext } from '../context/SessionContext';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
@@ -74,13 +75,13 @@ const comparisonChoiceText = (question: AttributeQuestion, result: AttributeComp
 
 const OPTIMISTIC_ACTIVITY_LIMIT = 5;
 
-const optimisticComparisonActivity = (question: AttributeQuestion, draft: AttributeResponseDraft): AttributeActivity | null => {
+const optimisticComparisonActivity = (question: AttributeQuestion, draft: AttributeResponseDraft, actorName: string): AttributeActivity | null => {
   if (!draft.comparison) return null;
   return {
     id: `optimistic:${draft.responseId}`,
     responseId: draft.responseId,
     kind: 'comparison',
-    actorName: '你',
+    actorName,
     attributeId: draft.attributeId,
     attributeName: question.attribute.name,
     subjectA: question.subjectA,
@@ -106,6 +107,7 @@ const mergeRecentActivities = (serverActivities: AttributeActivity[], optimistic
 };
 
 export const AttributesPage = () => {
+  const session = useContext(SessionContext);
   const [payload, setPayload] = useState<AttributeQuestionPayload>();
   const [question, setQuestion] = useState<AttributeQuestion>();
   const [optimisticActivities, setOptimisticActivities] = useState<AttributeActivity[]>([]);
@@ -139,6 +141,10 @@ export const AttributesPage = () => {
   const syncingRef = useRef(false);
   const inFlightResponseIdsRef = useRef(new Set<string>());
   const motionTimerRef = useRef<number | undefined>(undefined);
+  const mountedRef = useRef(true);
+  const optimisticActorName = session?.user?.showNickname && session.user.nickname?.trim()
+    ? session.user.nickname.trim()
+    : '匿名玩家';
 
   const clearResponse = () => {
     setComparison(null);
@@ -181,6 +187,7 @@ export const AttributesPage = () => {
   }, [applyQuestionPayload]);
 
   useEffect(() => () => {
+    mountedRef.current = false;
     if (motionTimerRef.current !== undefined) window.clearTimeout(motionTimerRef.current);
   }, []);
 
@@ -350,6 +357,11 @@ export const AttributesPage = () => {
           const next = await requestQuestion(question, 'pair');
           setConnectionState(browserIsOffline() ? 'offline' : 'online');
           applyQuestionPayload(next);
+          // The question response may have raced the response write.  Mark
+          // the cached question stale after applying it so the next page
+          // opening re-reads the server feed instead of preserving an older
+          // activity list indefinitely.
+          void localDb.invalidateAttributeQuestion().catch(() => undefined);
         } catch {
           setConnectionState(connectionStateAfterFailure());
           setResponseError('回答已同步，但目前無法取得下一題，請按「重新取得下一題」。');
@@ -512,7 +524,7 @@ export const AttributesPage = () => {
       ratingB: parsedRatingB,
       sessionId,
     } satisfies Omit<PendingAttributeResponse, 'id' | 'createdAt'>;
-    const optimisticActivity = optimisticComparisonActivity(question, draft);
+    const optimisticActivity = optimisticComparisonActivity(question, draft, optimisticActorName);
     if (optimisticActivity) {
       setOptimisticActivities((current) => [
         optimisticActivity,
@@ -522,7 +534,7 @@ export const AttributesPage = () => {
     // The network write and the next-question request intentionally run in
     // parallel. The response is durably queued in IndexedDB by persistResponse
     // before its background promise is allowed to finish.
-    void persistResponse(draft);
+    const persistencePromise = persistResponse(draft);
     responseIdRef.current = undefined;
     setAwaitingNext(false);
     if (selectedComparison) setVoteFeedback({ state: 'saved', text: `已記錄：${comparisonChoiceText(question, selectedComparison)}` });
@@ -534,6 +546,7 @@ export const AttributesPage = () => {
       setConnectionState(browserIsOffline() ? 'offline' : 'online');
       await animateQuestionChange(nextPayload, 'pair');
     } catch {
+      if (!mountedRef.current) return;
       setConnectionState(connectionStateAfterFailure());
       setVoteFeedback(null);
       setQuestionMotion('idle');
@@ -541,7 +554,12 @@ export const AttributesPage = () => {
       clearResponse();
        setResponseError('回答正在背景儲存，但目前無法取得下一題；請按「重新取得下一題」。');
     } finally {
-      setSubmitting(false);
+      // Persisting the answer and obtaining the next question run in
+      // parallel.  Invalidate only after both have settled, avoiding a race
+      // where a fast POST invalidates the cache and the slower GET then
+      // writes the stale activity list back as fresh.
+      void persistencePromise.then(() => localDb.invalidateAttributeQuestion()).catch(() => undefined);
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 

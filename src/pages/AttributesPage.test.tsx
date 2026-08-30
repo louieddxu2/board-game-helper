@@ -51,6 +51,7 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
+    vi.spyOn(localDb, 'invalidateAttributeQuestion').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getDeferredAttributeSubjects').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeQuestionNumber').mockResolvedValue(0);
     vi.spyOn(localDb, 'advanceAttributeQuestionNumber').mockResolvedValue(1);
@@ -204,7 +205,9 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
-    expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent(/比你.*遊戲甲（6）.*運氣成分.*遊戲乙/);
+    expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent(/比匿名玩家.*遊戲甲（6）.*運氣成分.*遊戲乙/);
+    expect(screen.getByLabelText('最近投票記錄')).not.toHaveTextContent('你 認為');
+    await waitFor(() => expect(localDb.invalidateAttributeQuestion).toHaveBeenCalled());
     expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
     expect(tableSpy).toHaveBeenCalledTimes(1);
   });

@@ -385,6 +385,11 @@ export const localDb = {
   getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),
   cacheAttributeQuestion: async (data: AttributeQuestionPayload, scope: 'all' | 'collection' = 'all') => (await getDatabase()).put('cache', { key: 'attributes:question:v1', data, scope, cachedAt: Date.now() }),
   getLatestAttributeQuestion: async () => (await getDatabase()).get('cache', 'attributes:question:v1') as Promise<AttributeQuestionCacheRecord | undefined>,
+  invalidateAttributeQuestion: async () => {
+    const db = await getDatabase();
+    const cached = await db.get('cache', 'attributes:question:v1') as AttributeQuestionCacheRecord | undefined;
+    if (cached) await db.put('cache', { ...cached, cachedAt: 0 });
+  },
   getAttributeVoteScope: async () => {
     const cached = await (await getDatabase()).get('cache', 'attributes:vote-scope:v1') as CacheRecord<'all' | 'collection'> | undefined;
     return cached?.data === 'collection' ? 'collection' : 'all';
