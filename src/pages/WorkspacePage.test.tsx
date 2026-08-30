@@ -1148,6 +1148,35 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
   });
 
+  it('does not swallow the first drawer item click after reopening by table swipe', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    const drawerRow = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
+
+    fireEvent.touchStart(drawerRow, { touches: [{ identifier: 61, clientX: 320, clientY: 160 }] });
+    fireEvent.touchMove(drawerRow, { touches: [{ identifier: 61, clientX: 190, clientY: 162 }] });
+    fireEvent.touchEnd(drawerRow, { changedTouches: [{ identifier: 61, clientX: 190, clientY: 162 }] });
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
+
+    const viewport = document.querySelector('.workspace-table-viewport')!;
+    const firstColumn = document.querySelector('[data-row-id="row-1"]')!;
+    const dispatchPointer = (element: Element, type: string, x: number, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 62 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(firstColumn, 'pointerdown', 90, 40);
+    dispatchPointer(viewport, 'pointermove', 130, 40);
+    expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
+    dispatchPointer(viewport, 'pointerup', 130, 40);
+
+    await user.click(within(screen.getByRole('complementary', { name: 'Workspace 目錄' })).getByText('測試表格'));
+    expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
+  });
+
   it('marks 返回網站 as an explicit homepage navigation in installed mode', async () => {
     const user = userEvent.setup();
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList));
