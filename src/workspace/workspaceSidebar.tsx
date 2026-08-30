@@ -144,6 +144,10 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
     }, 460);
     dragSession.current = session;
   };
+  const activateNode = (node: WorkspaceNode) => {
+    if (node.type === 'folder') onToggle(node.id);
+    else onOpen(node);
+  };
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const session = dragSession.current;
     if (!session || session.pointerId !== event.pointerId) return;
@@ -165,6 +169,13 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
     if (!session || session.pointerId !== event.pointerId) return;
     if (session.active) {
       onMove(session.node, dragTargetRef.current);
+      event.preventDefault();
+      deferClickSuppressionReset();
+    } else if (event.type === 'pointerup' && event.pointerType !== 'mouse') {
+      // Mobile browsers may suppress the synthetic click after a captured long-press
+      // drag. Complete a fresh touch tap at pointerup so the next item always opens.
+      suppressNextClick.current = session.node.id;
+      activateNode(session.node);
       event.preventDefault();
       deferClickSuppressionReset();
     }

@@ -22,7 +22,7 @@ const dispatchPointer = (element: Element, type: string, pointerId = 41) => {
 describe('workspace directory tree', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('opens another item immediately after a long-press drag ends', () => {
+  it('opens another item immediately after a long-press drag without relying on a synthesized click', () => {
     vi.useFakeTimers();
     const onOpen = vi.fn();
     const onMove = vi.fn();
@@ -38,8 +38,11 @@ describe('workspace directory tree', () => {
       vi.advanceTimersByTime(460);
       dispatchPointer(tree, 'pointermove');
       dispatchPointer(tree, 'pointerup');
-      fireEvent.click(target);
+      dispatchPointer(target, 'pointerdown', 42);
+      dispatchPointer(target, 'pointerup', 42);
       expect(onOpen).toHaveBeenCalledWith(data.nodes[1]);
+      fireEvent.click(target);
+      expect(onOpen).toHaveBeenCalledTimes(1);
     } finally {
       document.elementFromPoint = previousElementFromPoint;
     }
