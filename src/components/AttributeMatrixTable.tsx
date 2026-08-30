@@ -1,5 +1,6 @@
 import { useContext, useMemo, useState } from 'react';
 import { ToastContext } from '../context/ToastContext';
+import { useDragPanScroll } from '../hooks/useDragPanScroll';
 import { rankAttributeSimilarity, type AttributeSimilarityMatch } from '../lib/attributeSimilarity';
 import type { AttributeMatrixValue, AttributesPayload } from '../shared/types';
 
@@ -39,6 +40,7 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
   const [tableFilter, setTableFilter] = useState<TableFilter>('all');
   const [sort, setSort] = useState<{ attributeId: string; direction: SortDirection }>();
   const [similarity, setSimilarity] = useState<{ anchorId: string; matches: AttributeSimilarityMatch[] }>();
+  const tablePan = useDragPanScroll();
   const valueMap = useMemo(() => new Map(payload.values.map((value) => [`${value.subjectId}:${value.attributeId}`, value])), [payload.values]);
   const tableRows = useMemo<AttributeTableRow[]>(() => {
     const processed: AttributeTableRow[] = payload.subjects.map((subject) => {
@@ -132,7 +134,15 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
   return <section className="attributes-table-card" aria-label="完整屬性資料表">
     <div className="attributes-section-heading"><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => { setTableQuery(event.target.value); setSimilarity(undefined); }} placeholder="輸入名稱" /></label></div>
     <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => { setTableFilter(filter); setSimilarity(undefined); }}>{label}</button>)}</div><span>顯示 {sortedRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
-    <div className="attributes-table-scroll">
+    <div
+      className={`attributes-table-scroll ${tablePan.panning ? 'is-panning' : ''}`}
+      onPointerDown={tablePan.onPointerDown}
+      onPointerMove={tablePan.onPointerMove}
+      onPointerUp={tablePan.onPointerUp}
+      onPointerCancel={tablePan.onPointerCancel}
+      onClickCapture={tablePan.onClickCapture}
+      onDragStart={(event) => event.preventDefault()}
+    >
       <table className="attributes-matrix">
         <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => {
           const isSorted = sort?.attributeId === attribute.id;

@@ -104,4 +104,34 @@ describe('AttributeTablePage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('尚無可評斷相近的資料');
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
   });
+
+  test('pans the full table with a mouse drag without activating a table control', async () => {
+    vi.spyOn(api, 'attributeTable').mockResolvedValue(payload);
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+
+    await screen.findByRole('button', { name: '遊戲甲' });
+    const viewport = document.querySelector('.attributes-table-scroll') as HTMLDivElement;
+    Object.defineProperties(viewport, {
+      scrollLeft: { configurable: true, writable: true, value: 120 },
+      scrollTop: { configurable: true, writable: true, value: 80 },
+    });
+
+    const dispatchPointer = (type: string, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperties(event, {
+        pointerId: { value: 7 },
+        pointerType: { value: 'mouse' },
+      });
+      fireEvent(viewport, event);
+    };
+    dispatchPointer('pointerdown', 100, 100);
+    dispatchPointer('pointermove', 60, 60);
+
+    expect(viewport.scrollLeft).toBe(160);
+    expect(viewport.scrollTop).toBe(120);
+    expect(viewport).toHaveClass('is-panning');
+    dispatchPointer('pointerup', 60, 60);
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲' }));
+    expect(screen.queryByText('相近比較基準')).not.toBeInTheDocument();
+  });
 });
