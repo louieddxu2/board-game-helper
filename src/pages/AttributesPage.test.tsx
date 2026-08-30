@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
 import { api } from '../lib/api';
-import { localDb } from '../lib/localDb';
+import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
 
 const subjectA = { id: 'subject-a', slug: 'game-a', kind: 'game' as const, displayName: '遊戲甲', gameSlug: 'game-a' };
@@ -57,6 +57,8 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'updateAttributeCatalogValues').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'deferAttributeSubject').mockResolvedValue({ subjectId: subjectA.id, bggIds: [], skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: Number.MAX_SAFE_INTEGER });
     vi.spyOn(localDb, 'clearDeferredAttributeSubject').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'addPendingAttributeResponse').mockResolvedValue('attribute-response');
+    vi.spyOn(localDb, 'removePendingAttributeResponse').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -206,6 +208,24 @@ describe('AttributesPage question flow', () => {
     expect(tableSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('requests the next question before the cloud response finishes', async () => {
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    let resolveSave: ((value: { ok: true; updatedValues: [] }) => void) | undefined;
+    const saveSpy = vi.spyOn(api, 'saveAttributeResponse').mockImplementation(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { name: /哪款遊戲的/ })).toBeInTheDocument();
+
+    resolveSave?.({ ok: true, updatedValues: [] });
+    await waitFor(() => expect(localDb.removePendingAttributeResponse).toHaveBeenCalledWith(expect.any(String)));
+  });
+
   test('does not wait for local IndexedDB writes before requesting the next question', async () => {
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
@@ -218,18 +238,25 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(api.attributeQuestion).toHaveBeenCalledTimes(2));
   });
 
-  test('reuses the same response id when a network failure is retried', async () => {
+  test('keeps the same response id when a background failure is synced later', async () => {
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     const saveSpy = vi.spyOn(api, 'saveAttributeResponse')
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValue({ ok: true, updatedValues: [] });
+    let pending: PendingAttributeResponse[] = [];
+    vi.mocked(localDb.getPendingAttributeResponses).mockImplementation(async () => pending);
+    vi.mocked(localDb.addPendingAttributeResponse).mockImplementation(async (payload) => {
+      const item = { ...payload, id: payload.id ?? payload.responseId, createdAt: payload.createdAt ?? 1 };
+      pending = [...pending.filter((candidate) => candidate.id !== item.id), item];
+      return item.id;
+    });
+    vi.mocked(localDb.removePendingAttributeResponse).mockImplementation(async (id) => {
+      pending = pending.filter((candidate) => candidate.id !== id);
+    });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('無法送出或暫存回答'));
-    fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
-
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(2));
     expect(saveSpy.mock.calls[0][0].responseId).toBe(saveSpy.mock.calls[1][0].responseId);
   });

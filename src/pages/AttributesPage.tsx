@@ -16,6 +16,7 @@ type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a
 type VoteFeedback = { state: 'saving' | 'saved'; text: string } | null;
 type AttributeVoteScope = 'all' | 'collection';
 type ConnectionState = 'online' | 'offline' | 'server-unavailable';
+type AttributeResponseDraft = Omit<PendingAttributeResponse, 'id' | 'createdAt'>;
 
 const QUESTION_EXIT_MS = 150;
 const QUESTION_ENTER_MS = 260;
@@ -102,6 +103,7 @@ export const AttributesPage = () => {
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
+  const inFlightResponseIdsRef = useRef(new Set<string>());
   const motionTimerRef = useRef<number | undefined>(undefined);
 
   const clearResponse = () => {
@@ -282,7 +284,7 @@ export const AttributesPage = () => {
     syncingRef.current = true;
     setSyncing(true);
     try {
-      const pending = await refreshPendingCount();
+      const pending = (await refreshPendingCount()).filter((item) => !inFlightResponseIdsRef.current.has(item.responseId));
       for (const item of pending) {
         try {
           const saved = await api.saveAttributeResponse(item);
@@ -319,6 +321,56 @@ export const AttributesPage = () => {
       setSyncing(false);
     }
   }, [applyQuestionPayload, question, refreshPendingCount, requestQuestion, sessionId]);
+
+  const persistResponse = useCallback(async (draft: AttributeResponseDraft) => {
+    if (inFlightResponseIdsRef.current.has(draft.responseId)) return;
+    inFlightResponseIdsRef.current.add(draft.responseId);
+    const pendingItem: PendingAttributeResponse = {
+      ...draft,
+      id: draft.responseId,
+      createdAt: Date.now(),
+    };
+    const queuePromise = localDb.addPendingAttributeResponse(pendingItem)
+      .then(() => true)
+      .catch(() => false);
+    const savePromise = typeof navigator !== 'undefined' && !navigator.onLine
+      ? Promise.reject(new TypeError('offline'))
+      : api.saveAttributeResponse(draft);
+
+    try {
+      const [saved, queued] = await Promise.all([savePromise, queuePromise]);
+      if (votingCatalogRef.current) {
+        votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
+      }
+      void localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
+      void Promise.all([
+        localDb.clearDeferredAttributeSubject(draft.subjectAId),
+        localDb.clearDeferredAttributeSubject(draft.subjectBId),
+      ]).catch(() => undefined);
+      if (queued) await localDb.removePendingAttributeResponse(pendingItem.id).catch(() => undefined);
+      await refreshPendingCount();
+      setConnectionState(browserIsOffline() ? 'offline' : 'online');
+    } catch (caught) {
+      const wasQueued = await queuePromise;
+      if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
+        if (wasQueued) await localDb.removePendingAttributeResponse(pendingItem.id).catch(() => undefined);
+        setConnectionState('online');
+        setResponseError('上一筆回答已失效，請重新回答。');
+      } else {
+        const queued = wasQueued || await localDb.addPendingAttributeResponse(pendingItem).then(() => true).catch(() => false);
+        setConnectionState(caught instanceof ApiError && caught.status === 409 ? 'online' : connectionStateAfterFailure());
+        setResponseError(caught instanceof ApiError && caught.status === 409
+          ? '上一筆回答正在處理，會自動重試。'
+          : queued
+            ? (browserIsOffline() ? '目前離線，回答已暫存在本機；恢復連線後會自動同步。' : '回答已在背景暫存，稍後會自動同步。')
+            : '目前無法送出或暫存回答，請確認網路後再試。');
+      }
+      await refreshPendingCount();
+    } finally {
+      inFlightResponseIdsRef.current.delete(draft.responseId);
+      if (typeof navigator === 'undefined' || navigator.onLine) void syncPendingResponses();
+    }
+  }, [refreshPendingCount, syncPendingResponses]);
 
   useEffect(() => {
     let active = true;
@@ -408,7 +460,7 @@ export const AttributesPage = () => {
     setResponseError('');
     const responseId = responseIdRef.current ?? createAttributeResponseId();
     responseIdRef.current = responseId;
-    const draft = {
+    const draft: AttributeResponseDraft = {
       subjectAId: question.subjectA.id,
       subjectBId: question.subjectB.id,
       attributeId: question.attribute.id,
@@ -419,52 +471,10 @@ export const AttributesPage = () => {
       ratingB: parsedRatingB,
       sessionId,
     } satisfies Omit<PendingAttributeResponse, 'id' | 'createdAt'>;
-    try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) throw new TypeError('offline');
-      const saved = await api.saveAttributeResponse(draft);
-      if (votingCatalogRef.current) {
-        votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
-      }
-      // Persisting the local catalog values is not part of the voting critical
-      // path. The in-memory catalog above is already current for the next
-      // local selection; IndexedDB catches up in the background.
-      void localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
-      // Cooldown cleanup is local bookkeeping only. It must not delay the
-      // next-question request, especially while IndexedDB is migrating or
-      // committing another background catalog update.
-      void Promise.all([
-        localDb.clearDeferredAttributeSubject(question.subjectA.id),
-        localDb.clearDeferredAttributeSubject(question.subjectB.id),
-      ]).catch(() => undefined);
-    } catch (caught) {
-      if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500) {
-        setConnectionState('online');
-        setVoteFeedback(null);
-        setQuestionMotion('idle');
-        setResponseError(caught.status === 409 ? '這題剛被回答，請重新作答。' : '這一題已經失效，請重新取得題目。');
-        if (caught.status !== 409) void loadQuestion('pair');
-        setSubmitting(false);
-        return;
-      }
-      try {
-        await localDb.addPendingAttributeResponse(draft);
-        setConnectionState(connectionStateAfterFailure());
-        await refreshPendingCount();
-        setAwaitingNext(true);
-        setVoteFeedback(selectedComparison ? { state: 'saved', text: `已暫存：${comparisonChoiceText(question, selectedComparison)}` } : null);
-        setQuestionMotion('idle');
-        clearResponse();
-        setResponseError(browserIsOffline()
-          ? '目前離線，回答已暫存在本機；恢復連線後會自動同步。'
-          : '目前暫時無法連線到伺服器，回答已暫存在本機；稍後會自動同步。');
-      } catch {
-        setVoteFeedback(null);
-        setQuestionMotion('idle');
-        setResponseError('目前無法送出或暫存回答，請確認網路後再試。');
-      }
-      setSubmitting(false);
-      return;
-    }
+    // The network write and the next-question request intentionally run in
+    // parallel. The response is durably queued in IndexedDB by persistResponse
+    // before its background promise is allowed to finish.
+    void persistResponse(draft);
     responseIdRef.current = undefined;
     setAwaitingNext(false);
     if (selectedComparison) setVoteFeedback({ state: 'saved', text: `已記錄：${comparisonChoiceText(question, selectedComparison)}` });
@@ -481,7 +491,7 @@ export const AttributesPage = () => {
       setQuestionMotion('idle');
       setAwaitingNext(true);
       clearResponse();
-      setResponseError('回答已儲存，但目前無法取得下一題；請按「重新取得下一題」。');
+       setResponseError('回答正在背景儲存，但目前無法取得下一題；請按「重新取得下一題」。');
     } finally {
       setSubmitting(false);
     }
