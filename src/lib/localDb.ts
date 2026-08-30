@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, AttributeQuestionPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeQuestionPayload, AttributeSubject, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyAttributeCatalogChanges } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
@@ -12,7 +12,9 @@ const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_TAGS_CACHE_KEY = 'publicTags:versioned:v5';
 const PUBLIC_GAME_CATALOG_KEY = 'games:list:versioned:v2';
-const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v3';
+const PUBLIC_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v4';
+const LEGACY_ATTRIBUTE_TABLE_KEY = 'attributes:table:versioned:v3';
+const ATTRIBUTE_CATALOG_META_KEY = 'current';
 const LOCAL_GAME_CATALOG_OVERRIDES_KEY = 'games:list:local-overrides:v1';
 const HOME_VIEW_CACHE_KEY = 'home:view:v1';
 const ruleImportanceCacheKey = (userId: string, gameId: string) => `ruleImportance:${userId}:${gameId}`;
@@ -25,6 +27,19 @@ export type CachedRuleUpdate = RuleCard & { gameName?: string; gameSlug?: string
 const searchMemoryCache = new Map<string, CacheRecord<SearchResponse>>();
 let gameCatalogMemoryCache: GameCatalogCacheRecord | undefined;
 let attributeTableMemoryCache: AttributeCatalogCacheRecord | undefined;
+
+interface AttributeCatalogMetaRecord {
+  key: string;
+  generation: number;
+  throughVersion: number;
+  generatedAt: number;
+  cachedAt: number;
+  snapshotFetchedAt: number;
+  scoreModelVersion?: string;
+  activities: AttributeCatalogPayload['activities'];
+}
+
+type AttributeCatalogStoredValue = AttributeMatrixValue & { key: string };
 
 export const applyGameReferenceUpdate = (
   home: HomePayload,
@@ -154,6 +169,11 @@ interface RulesDb extends DBSchema {
   attributeResponses: { key: string; value: PendingAttributeResponse };
   attributeCollectionIds: { key: number; value: { bggId: number; importedAt: number } };
   attributeDeferredSubjects: { key: string; value: DeferredAttributeSubject };
+  attributeCatalogMeta: { key: string; value: AttributeCatalogMetaRecord };
+  attributeCatalogAttributes: { key: string; value: AttributeDefinition };
+  attributeCatalogSubjects: { key: string; value: AttributeSubject };
+  attributeCatalogValues: { key: string; value: AttributeCatalogStoredValue; indexes: { subjectId: string; attributeId: string } };
+  attributeCatalogCandidates: { key: string; value: AttributeImportCandidate };
 }
 
 export interface PendingAttributeResponse {
@@ -172,7 +192,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 6, {
+  return openDB<RulesDb>('wrong-board-game-rules', 7, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -192,6 +212,15 @@ const getDb = () => {
       if (!db.objectStoreNames.contains('attributeResponses')) db.createObjectStore('attributeResponses', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('attributeCollectionIds')) db.createObjectStore('attributeCollectionIds', { keyPath: 'bggId' });
       if (!db.objectStoreNames.contains('attributeDeferredSubjects')) db.createObjectStore('attributeDeferredSubjects', { keyPath: 'subjectId' });
+      if (!db.objectStoreNames.contains('attributeCatalogMeta')) db.createObjectStore('attributeCatalogMeta', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('attributeCatalogAttributes')) db.createObjectStore('attributeCatalogAttributes', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('attributeCatalogSubjects')) db.createObjectStore('attributeCatalogSubjects', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('attributeCatalogValues')) {
+        const values = db.createObjectStore('attributeCatalogValues', { keyPath: 'key' });
+        values.createIndex('subjectId', 'subjectId');
+        values.createIndex('attributeId', 'attributeId');
+      }
+      if (!db.objectStoreNames.contains('attributeCatalogCandidates')) db.createObjectStore('attributeCatalogCandidates', { keyPath: 'id' });
       if (oldVersion > 0 && oldVersion < 3) {
         transaction.objectStore('games').clear();
         transaction.objectStore('rules').clear();
@@ -200,8 +229,79 @@ const getDb = () => {
   });
 };
 
+type RulesDatabase = Exclude<Awaited<ReturnType<typeof getDb>>, null>;
+
 let dbPromise: ReturnType<typeof getDb> | null = null;
 let legacyGameCacheCleanup: Promise<void> | null = null;
+let attributeCatalogMigration: Promise<void> | null = null;
+
+const attributeCatalogValueKey = (value: Pick<AttributeMatrixValue, 'subjectId' | 'attributeId'>) => `${value.subjectId}:${value.attributeId}`;
+
+const attributeCatalogMetaFromPayload = (
+  data: AttributeCatalogPayload,
+  cachedAt: number,
+  snapshotFetchedAt = cachedAt,
+): AttributeCatalogMetaRecord => ({
+  key: ATTRIBUTE_CATALOG_META_KEY,
+  generation: data.generation,
+  throughVersion: data.throughVersion,
+  generatedAt: data.generatedAt,
+  cachedAt,
+  snapshotFetchedAt,
+  scoreModelVersion: data.scoreModelVersion,
+  activities: data.activities ?? [],
+});
+
+const attributeCatalogPayloadFromStores = async (
+  db: RulesDatabase,
+  meta?: AttributeCatalogMetaRecord,
+): Promise<AttributeCatalogPayload | undefined> => {
+  const current = meta ?? await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+  if (!current) return undefined;
+  const [attributes, subjects, values, candidates] = await Promise.all([
+    db.getAll('attributeCatalogAttributes'),
+    db.getAll('attributeCatalogSubjects'),
+    db.getAll('attributeCatalogValues'),
+    db.getAll('attributeCatalogCandidates'),
+  ]);
+  return {
+    generation: current.generation,
+    throughVersion: current.throughVersion,
+    generatedAt: current.generatedAt,
+    attributes,
+    subjects,
+    values: values.map(({ key: _key, ...value }) => value),
+    candidates,
+    activities: current.activities ?? [],
+    scoreModelVersion: current.scoreModelVersion,
+  };
+};
+
+const migrateLegacyAttributeCatalog = async (db: RulesDatabase) => {
+  const existing = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+  if (existing) return;
+  const legacy = await db.get('cache', LEGACY_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
+  if (!legacy?.data) return;
+  const { data } = legacy;
+  const transaction = db.transaction([
+    'attributeCatalogMeta', 'attributeCatalogAttributes', 'attributeCatalogSubjects',
+    'attributeCatalogValues', 'attributeCatalogCandidates', 'cache',
+  ], 'readwrite');
+  await transaction.objectStore('attributeCatalogMeta').put(attributeCatalogMetaFromPayload(
+    data,
+    legacy.cachedAt,
+    legacy.snapshotFetchedAt ?? data.generatedAt,
+  ));
+  await Promise.all([
+    ...data.attributes.map((attribute) => transaction.objectStore('attributeCatalogAttributes').put(attribute)),
+    ...data.subjects.map((subject) => transaction.objectStore('attributeCatalogSubjects').put(subject)),
+    ...data.values.map((value) => transaction.objectStore('attributeCatalogValues').put({ ...value, key: attributeCatalogValueKey(value) })),
+    ...data.candidates.map((candidate) => transaction.objectStore('attributeCatalogCandidates').put(candidate)),
+  ]);
+  await transaction.objectStore('cache').delete(LEGACY_ATTRIBUTE_TABLE_KEY);
+  await transaction.done;
+};
+
 const getDatabase = async () => {
   if (!dbPromise) dbPromise = getDb();
   const db = await dbPromise;
@@ -221,6 +321,13 @@ const getDatabase = async () => {
     })();
   }
   await legacyGameCacheCleanup;
+  if (!attributeCatalogMigration) {
+    attributeCatalogMigration = migrateLegacyAttributeCatalog(db).catch((error) => {
+      attributeCatalogMigration = null;
+      throw error;
+    });
+  }
+  await attributeCatalogMigration;
   return db;
 };
 
@@ -423,60 +530,149 @@ export const localDb = {
   cacheAttributeCatalog: async (data: AttributeCatalogPayload) => {
     const db = await getDatabase();
     const cachedAt = Date.now();
-    const record = {
+    const transaction = db.transaction([
+      'attributeCatalogMeta', 'attributeCatalogAttributes', 'attributeCatalogSubjects',
+      'attributeCatalogValues', 'attributeCatalogCandidates',
+    ], 'readwrite');
+    await Promise.all([
+      transaction.objectStore('attributeCatalogMeta').clear(),
+      transaction.objectStore('attributeCatalogAttributes').clear(),
+      transaction.objectStore('attributeCatalogSubjects').clear(),
+      transaction.objectStore('attributeCatalogValues').clear(),
+      transaction.objectStore('attributeCatalogCandidates').clear(),
+    ]);
+    await transaction.objectStore('attributeCatalogMeta').put(attributeCatalogMetaFromPayload(data, cachedAt));
+    await Promise.all([
+      ...data.attributes.map((attribute) => transaction.objectStore('attributeCatalogAttributes').put(attribute)),
+      ...data.subjects.map((subject) => transaction.objectStore('attributeCatalogSubjects').put(subject)),
+      ...data.values.map((value) => transaction.objectStore('attributeCatalogValues').put({ ...value, key: attributeCatalogValueKey(value) })),
+      ...data.candidates.map((candidate) => transaction.objectStore('attributeCatalogCandidates').put(candidate)),
+    ]);
+    await transaction.done;
+    attributeTableMemoryCache = {
       key: PUBLIC_ATTRIBUTE_TABLE_KEY,
       data,
       cachedAt,
       snapshotFetchedAt: cachedAt,
-    } satisfies AttributeCatalogCacheRecord;
-    attributeTableMemoryCache = record;
-    await db.put('cache', record);
+    };
   },
   getSynchronizedAttributeCatalog: async () => {
     if (attributeTableMemoryCache && Date.now() - attributeTableMemoryCache.cachedAt < CATALOG_SYNC_FRESH_MS) return attributeTableMemoryCache;
-    const cached = await (await getDatabase()).get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
-    if (!cached || Date.now() - cached.cachedAt >= CATALOG_SYNC_FRESH_MS) return undefined;
-    attributeTableMemoryCache = cached;
-    return cached;
+    const db = await getDatabase();
+    const meta = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+    if (!meta || Date.now() - meta.cachedAt >= CATALOG_SYNC_FRESH_MS) return undefined;
+    const data = await attributeCatalogPayloadFromStores(db, meta);
+    if (!data) return undefined;
+    attributeTableMemoryCache = {
+      key: PUBLIC_ATTRIBUTE_TABLE_KEY,
+      data,
+      cachedAt: meta.cachedAt,
+      snapshotFetchedAt: meta.snapshotFetchedAt,
+    };
+    return attributeTableMemoryCache;
   },
   getLatestAttributeCatalog: async () => {
     if (attributeTableMemoryCache) return attributeTableMemoryCache;
-    const cached = await (await getDatabase()).get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
-    if (cached) attributeTableMemoryCache = cached;
-    return cached;
+    const db = await getDatabase();
+    const meta = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+    if (!meta) return undefined;
+    const data = await attributeCatalogPayloadFromStores(db, meta);
+    if (!data) return undefined;
+    attributeTableMemoryCache = {
+      key: PUBLIC_ATTRIBUTE_TABLE_KEY,
+      data,
+      cachedAt: meta.cachedAt,
+      snapshotFetchedAt: meta.snapshotFetchedAt,
+    };
+    return attributeTableMemoryCache;
   },
   cacheAttributeCatalogChanges: async (data: AttributeCatalogChangesPayload) => {
     const db = await getDatabase();
-    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
-    if (!cached) throw new Error('attribute_catalog_cache_missing');
-    const updated = {
-      ...cached,
-      data: applyAttributeCatalogChanges(cached.data, data.changes, data.throughVersion),
-      cachedAt: data.hasMore ? cached.cachedAt : Date.now(),
-      snapshotFetchedAt: cached.snapshotFetchedAt ?? cached.data.generatedAt,
-    } satisfies AttributeCatalogCacheRecord;
-    attributeTableMemoryCache = updated;
-    await db.put('cache', updated);
+    const current = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+    if (!current) throw new Error('attribute_catalog_cache_missing');
+    const nextMeta: AttributeCatalogMetaRecord = {
+      ...current,
+      throughVersion: Math.max(current.throughVersion, data.throughVersion),
+      cachedAt: data.hasMore ? current.cachedAt : Date.now(),
+      activities: [],
+    };
+    const transaction = db.transaction([
+      'attributeCatalogMeta', 'attributeCatalogAttributes', 'attributeCatalogSubjects',
+      'attributeCatalogValues', 'attributeCatalogCandidates',
+    ], 'readwrite');
+    const attributes = transaction.objectStore('attributeCatalogAttributes');
+    const subjects = transaction.objectStore('attributeCatalogSubjects');
+    const values = transaction.objectStore('attributeCatalogValues');
+    const candidates = transaction.objectStore('attributeCatalogCandidates');
+    for (const change of data.changes) {
+      if (change.entryKey.startsWith('attribute:')) {
+        const attributeId = change.entryKey.slice('attribute:'.length);
+        if (change.deleted) {
+          await attributes.delete(attributeId);
+          const attributeValues = await values.index('attributeId').getAll(attributeId);
+          await Promise.all(attributeValues.map((value) => values.delete(value.key)));
+        } else if (change.attribute) {
+          await attributes.put(change.attribute);
+        }
+      } else if (change.entryKey.startsWith('subject:')) {
+        const subjectId = change.entryKey.slice('subject:'.length);
+        if (change.deleted) {
+          await subjects.delete(subjectId);
+          const subjectValues = await values.index('subjectId').getAll(subjectId);
+          await Promise.all(subjectValues.map((value) => values.delete(value.key)));
+        } else if (change.subject) {
+          await subjects.put(change.subject);
+        }
+      } else if (change.entryKey.startsWith('value:')) {
+        if (change.deleted) {
+          const [, subjectId, attributeId] = change.entryKey.match(/^value:([^:]+):(.+)$/) ?? [];
+          if (subjectId && attributeId) await values.delete(attributeCatalogValueKey({ subjectId, attributeId }));
+        } else if (change.value) {
+          await values.put({ ...change.value, key: attributeCatalogValueKey(change.value) });
+          if (change.subject) await subjects.put(change.subject);
+        }
+      } else if (change.entryKey.startsWith('candidate:')) {
+        const candidateId = change.candidate?.id ?? change.entryKey.slice('candidate:'.length);
+        if (change.deleted || !change.candidate || !['pending', 'ambiguous'].includes(change.candidate.matchStatus)) {
+          await candidates.delete(candidateId);
+        } else {
+          await candidates.put(change.candidate);
+        }
+      }
+    }
+    await transaction.objectStore('attributeCatalogMeta').put(nextMeta);
+    await transaction.done;
+    if (attributeTableMemoryCache) {
+      attributeTableMemoryCache = {
+        ...attributeTableMemoryCache,
+        data: applyAttributeCatalogChanges(attributeTableMemoryCache.data, data.changes, data.throughVersion),
+        cachedAt: nextMeta.cachedAt,
+        snapshotFetchedAt: nextMeta.snapshotFetchedAt,
+      };
+    }
   },
   updateAttributeCatalogValues: async (values: AttributeMatrixValue[]) => {
     if (!values.length) return;
     const db = await getDatabase();
-    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
-    if (!cached) return;
-    const updated = {
-      ...cached,
-      data: applyAttributeValueUpdates(cached.data, values),
-    } satisfies AttributeCatalogCacheRecord;
-    attributeTableMemoryCache = updated;
-    await db.put('cache', updated);
+    const current = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+    if (!current) return;
+    const transaction = db.transaction('attributeCatalogValues', 'readwrite');
+    await Promise.all(values.map((value) => transaction.store.put({ ...value, key: attributeCatalogValueKey(value) })));
+    await transaction.done;
+    if (attributeTableMemoryCache) {
+      attributeTableMemoryCache = {
+        ...attributeTableMemoryCache,
+        data: applyAttributeValueUpdates(attributeTableMemoryCache.data, values),
+      };
+    }
   },
   invalidateAttributeCatalogSync: async () => {
     const db = await getDatabase();
-    const cached = attributeTableMemoryCache ?? await db.get('cache', PUBLIC_ATTRIBUTE_TABLE_KEY) as AttributeCatalogCacheRecord | undefined;
-    if (!cached) return;
-    const invalidated = { ...cached, cachedAt: 0 };
-    attributeTableMemoryCache = invalidated;
-    await db.put('cache', invalidated);
+    const current = await db.get('attributeCatalogMeta', ATTRIBUTE_CATALOG_META_KEY);
+    if (!current) return;
+    const invalidated = { ...current, cachedAt: 0 };
+    attributeTableMemoryCache = attributeTableMemoryCache ? { ...attributeTableMemoryCache, cachedAt: 0 } : undefined;
+    await db.put('attributeCatalogMeta', invalidated);
   },
   invalidateGameCatalogSync: async () => {
     const db = await getDatabase();
