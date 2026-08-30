@@ -45,12 +45,12 @@ BoardGameHelper/
 
 目前依照 `C:\architecture-kits\kits\google-drive-single-file-backup` 採用瀏覽器端 Google Identity Services token flow：
 
-1. 使用者只在 workspace 的目錄彈窗中按下「Google Drive 備份」。
+1. 每次重新開啟網頁後，使用者在 workspace 的目錄彈窗中按下「連結 Google Drive」一次；連結成功後，當次工作階段才會執行自動備份。
 2. 前端以獨立的 Google Drive OAuth Web Client ID，向 Google 申請 `drive.file` access token；網站登入使用的 Client ID 不會被替換。
 3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
 4. 前端直接呼叫 Drive v3，建立／更新標記過的資料夾、XLSX 表格檔與 manifest 試算表。
 
-這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動開啟備份功能時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；GIS 可能依使用者既有同意狀態再次快速授權，但不能把它視為本機保存了長期憑證。
+這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動按下連結按鈕時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；每個新工作階段都需要按一次連結按鈕，但 GIS 會沿用既有同意紀錄，不應每次強制 `prompt=consent`。連結後若 token 在同一工作階段內過期，由 token provider 再向 GIS 取得新 token。
 
 若未來需要無人值守的排程備份、多裝置背景同步，才另行評估 authorization code flow、refresh token 加密保存與 Worker 端 API；那會是不同的安全與資料責任範圍，不屬於目前第一版。
 
@@ -77,7 +77,8 @@ BoardGameHelper/
 
 ```text
 本機編輯 → IndexedDB 儲存 → 標記有未備份變更
-                         ↓ 使用者在 drawer 按下立即備份
+                         ↓ 當次工作階段已由使用者連結 Drive
+                  每張表格每 30 分鐘最多自動備份一次
        更新目錄資料夾 → 更新有變更的表格 XLSX → 更新 manifest 試算表
 ```
 
@@ -106,7 +107,8 @@ ZIP 上傳 → 驗證 manifest 與各表格 → 合併／取代預覽
 
 - 離線時仍可照常編輯本機資料。
 - 沒有網路時，備份按鈕顯示離線狀態，不能假裝已完成。
-- 恢復連線後仍由使用者手動按下備份；目前不偷偷執行背景上傳。
+- 恢復連線後，若當次工作階段仍持有 Drive 授權且有待備份變更，自動備份排程會繼續；重新載入頁面後仍需由使用者按一次連結按鈕。
+- 自動備份只在網頁／PWA 執行中的前景工作階段運作，不把 Service Worker 當成無人值守的上傳程序。
 - 還原屬於高風險動作，不應在背景自動執行。
 - Service Worker 不需要保存 Google token，也不應代替 OAuth 流程。
 
@@ -121,7 +123,7 @@ ZIP 上傳 → 驗證 manifest 與各表格 → 合併／取代預覽
 ## 第一版已決定的範圍
 
 1. 備份資料夾讓使用者在 Drive 中看得到，使用 `drive.file`。
-2. 只提供使用者主動觸發的備份與還原，不做自動背景備份。
+2. Drive 授權與還原由使用者主動觸發；連結成功後可在當次工作階段自動備份，每張表格每 30 分鐘最多一次。
 3. Drive 上維護一個 manifest 與每張表格／資料夾的對應項目，靠 app properties 找回，不每次建立重複檔案。
 4. 不在本機保存 Drive access token；使用者重新整理後，必要時重新走 GIS 授權。
 5. 還原仍先回到既有的「合併／取代」匯入預覽，不直接覆蓋目前 workspace。

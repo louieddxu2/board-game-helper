@@ -160,7 +160,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     setBusy('connecting'); setError(''); setMessage('');
     try {
       const { auth, backup: service, legacyBackup } = await ensureBackup();
-      await auth.signIn({ prompt: 'consent' });
+      await auth.signIn();
       const file = await service.findRemoteFile() ?? await legacyBackup.findRemoteFile();
       const conflict = !remoteMatchesRecord(file);
       setAuthorized(auth.isAuthorized);

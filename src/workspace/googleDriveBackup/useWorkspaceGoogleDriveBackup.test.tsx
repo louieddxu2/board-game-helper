@@ -80,17 +80,24 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(mocks.backup).toHaveBeenCalledTimes(1);
   });
 
-  it('never starts background authorization after a page reload', async () => {
+  it('waits for one explicit reconnect after a page reload, then resumes automatic backup', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     window.localStorage.setItem(recordKey, JSON.stringify({
       fileId: 'manifest-old', fileName: 'manifest.xlsx', lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1,
       sourceUpdatedAt: now.getTime() - 10_000, remoteModifiedTime: '2026-08-21T09:00:00.000Z', tableCount: 2, folderCount: 0,
     }));
-    renderBackup();
+    mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-old', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:00:00.000Z' });
+    const { result } = renderBackup();
 
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(mocks.signIn).not.toHaveBeenCalled();
     expect(mocks.findRemoteFile).not.toHaveBeenCalled();
     expect(mocks.backup).not.toHaveBeenCalled();
+
+    await act(async () => { await result.current.connect(); });
+    expect(mocks.signIn).toHaveBeenCalledWith();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
   });
 
   it('detects an existing remote snapshot on connect and blocks automatic overwrite', async () => {
