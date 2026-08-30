@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { ApiError } from '../lib/api';
 
 declare global {
   interface Window {
@@ -12,6 +13,15 @@ declare global {
     } } };
   }
 }
+
+export const googleLoginErrorMessage = (caught: unknown) => {
+  if (!(caught instanceof ApiError)) return 'Google 登入失敗，請再試一次。';
+  if (caught.code === 'google_identity_conflict') return '這個 Google 信箱已連結到另一個 Google 身分，請聯絡網站管理者處理。';
+  if (caught.code === 'invalid_google_identity') return 'Google 沒有回傳可驗證的信箱身分，請改用已驗證信箱的帳戶。';
+  if (caught.code === 'google_auth_not_configured') return '網站的 Google 登入目前尚未正確設定。';
+  if (caught.code === 'forbidden_origin') return '目前網址未獲准使用 Google 登入。';
+  return 'Google 登入服務暫時發生錯誤，請稍後再試。';
+};
 
 export const LoginPage = () => {
   const { user, googleClientId, localDevLogin, devLogin, googleLogin } = useSession();
@@ -30,7 +40,7 @@ export const LoginPage = () => {
           use_fedcm_for_prompt: false,
           auto_select: false,
           callback: (response) => {
-            void googleLogin(response.credential).then(() => navigate('/account')).catch(() => setError('Google 登入失敗，請再試一次。'));
+            void googleLogin(response.credential).then(() => navigate('/account')).catch((caught) => setError(googleLoginErrorMessage(caught)));
           },
         });
         google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });

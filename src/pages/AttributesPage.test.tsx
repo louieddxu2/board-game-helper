@@ -188,6 +188,7 @@ describe('AttributesPage question flow', () => {
   });
 
   test('refreshes only the next question and activity feed after submitting', async () => {
+    const tableSpy = vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     const updatedValue = { subjectId: subjectA.id, attributeId: attribute.id, score: 6, ratingDeviation: 2.5, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, modelVersion: 'glicko-rd-v1' };
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [updatedValue] });
@@ -202,6 +203,18 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
     expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
+    expect(tableSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not wait for the large IndexedDB catalog write before requesting the next question', async () => {
+    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+    vi.mocked(localDb.updateAttributeCatalogValues).mockImplementation(() => new Promise(() => undefined));
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
+
+    await waitFor(() => expect(api.attributeQuestion).toHaveBeenCalledTimes(2));
   });
 
   test('reuses the same response id when a network failure is retried', async () => {

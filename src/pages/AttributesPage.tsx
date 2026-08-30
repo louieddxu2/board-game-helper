@@ -9,7 +9,7 @@ import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attr
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
-import { localDb, type PendingAttributeResponse } from '../lib/localDb';
+import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
@@ -149,6 +149,7 @@ export const AttributesPage = () => {
   }, []);
 
   const loadVotingCatalog = useCallback(async () => {
+    if (votingCatalogRef.current) return votingCatalogRef.current;
     const catalog = await api.attributeTable((updated) => {
       votingCatalogRef.current = updated;
       const ids = collectionIdsRef.current;
@@ -421,7 +422,13 @@ export const AttributesPage = () => {
     try {
       if (typeof navigator !== 'undefined' && !navigator.onLine) throw new TypeError('offline');
       const saved = await api.saveAttributeResponse(draft);
-      await localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
+      if (votingCatalogRef.current) {
+        votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
+      }
+      // Persisting the denormalized ~1.7 MB catalog is not part of the voting
+      // critical path. The in-memory catalog above is already current for the
+      // next local selection; IndexedDB catches up in the background.
+      void localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
       await Promise.all([
         localDb.clearDeferredAttributeSubject(question.subjectA.id),
         localDb.clearDeferredAttributeSubject(question.subjectB.id),
