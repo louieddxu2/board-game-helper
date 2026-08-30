@@ -72,9 +72,43 @@ const comparisonChoiceText = (question: AttributeQuestion, result: AttributeComp
   return '兩款差不多';
 };
 
+const OPTIMISTIC_ACTIVITY_LIMIT = 5;
+
+const optimisticComparisonActivity = (question: AttributeQuestion, draft: AttributeResponseDraft): AttributeActivity | null => {
+  if (!draft.comparison) return null;
+  return {
+    id: `optimistic:${draft.responseId}`,
+    responseId: draft.responseId,
+    kind: 'comparison',
+    actorName: '你',
+    attributeId: draft.attributeId,
+    attributeName: question.attribute.name,
+    subjectA: question.subjectA,
+    subjectB: question.subjectB,
+    ratingA: draft.ratingA ?? undefined,
+    ratingB: draft.ratingB ?? undefined,
+    result: draft.comparison,
+    createdAt: Date.now(),
+  };
+};
+
+const mergeRecentActivities = (serverActivities: AttributeActivity[], optimisticActivities: AttributeActivity[]) => {
+  const seen = new Set<string>();
+  return [...optimisticActivities, ...serverActivities]
+    .filter((activity) => activity.kind === 'comparison')
+    .filter((activity) => {
+      const key = activity.responseId ? `response:${activity.responseId}` : `activity:${activity.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, OPTIMISTIC_ACTIVITY_LIMIT);
+};
+
 export const AttributesPage = () => {
   const [payload, setPayload] = useState<AttributeQuestionPayload>();
   const [question, setQuestion] = useState<AttributeQuestion>();
+  const [optimisticActivities, setOptimisticActivities] = useState<AttributeActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [questionLoading, setQuestionLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +150,12 @@ export const AttributesPage = () => {
   const applyQuestionPayload = useCallback((nextPayload: AttributeQuestionPayload, scope: AttributeVoteScope = voteScopeRef.current) => {
     setPayload(nextPayload);
     setQuestion(nextPayload.question ?? undefined);
+    const confirmedResponseIds = new Set(nextPayload.activities.map((activity) => activity.responseId).filter((id): id is string => Boolean(id)));
+    if (confirmedResponseIds.size) {
+      setOptimisticActivities((current) => current
+        .filter((activity) => !activity.responseId || !confirmedResponseIds.has(activity.responseId))
+        .slice(0, OPTIMISTIC_ACTIVITY_LIMIT));
+    }
     responseIdRef.current = undefined;
     setAwaitingNext(false);
     clearResponse();
@@ -354,6 +394,7 @@ export const AttributesPage = () => {
       const wasQueued = await queuePromise;
       if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
         if (wasQueued) await localDb.removePendingAttributeResponse(pendingItem.id).catch(() => undefined);
+        setOptimisticActivities((current) => current.filter((activity) => activity.responseId !== draft.responseId));
         setConnectionState('online');
         setResponseError('上一筆回答已失效，請重新回答。');
       } else {
@@ -471,6 +512,13 @@ export const AttributesPage = () => {
       ratingB: parsedRatingB,
       sessionId,
     } satisfies Omit<PendingAttributeResponse, 'id' | 'createdAt'>;
+    const optimisticActivity = optimisticComparisonActivity(question, draft);
+    if (optimisticActivity) {
+      setOptimisticActivities((current) => [
+        optimisticActivity,
+        ...current.filter((activity) => activity.responseId !== optimisticActivity.responseId),
+      ].slice(0, OPTIMISTIC_ACTIVITY_LIMIT));
+    }
     // The network write and the next-question request intentionally run in
     // parallel. The response is durably queued in IndexedDB by persistResponse
     // before its background promise is allowed to finish.
@@ -580,7 +628,7 @@ export const AttributesPage = () => {
     .slice(0, 2);
   const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
-  const recentComparisons = payload.activities.filter((activity) => activity.kind === 'comparison').slice(0, 5);
+  const recentComparisons = mergeRecentActivities(payload.activities, optimisticActivities);
   const ratingSuggestion = suggestedComparisonForRatings(ratingA, ratingB);
   const ratingSuggestionText = ratingSuggestion === 'A_HIGHER'
     ? `依照分數，建議點「${question.subjectA.displayName}」`

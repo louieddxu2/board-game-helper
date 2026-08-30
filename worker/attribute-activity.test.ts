@@ -10,10 +10,11 @@ describe('attribute activity feed', () => {
       { id: 'rating-b', kind: 'rating', actorName: '玩家', attributeId: 'luck', attributeName: '運氣成分', subject: subjectB, value: 3, createdAt: 1 },
       { id: 'rating-a', kind: 'rating', actorName: '玩家', attributeId: 'luck', attributeName: '運氣成分', subject: subjectA, value: 8, createdAt: 1 },
       { id: 'comparison', kind: 'comparison', actorName: '玩家', attributeId: 'luck', attributeName: '運氣成分', subjectA, subjectB, result: 'A_HIGHER', createdAt: 1 },
-    ]));
+    ]), 'response-1');
 
     expect(activities).toEqual([expect.objectContaining({
       id: 'comparison',
+      responseId: 'response-1',
       kind: 'comparison',
       ratingA: 8,
       ratingB: 3,
@@ -38,7 +39,7 @@ describe('attribute activity feed', () => {
     };
     const db = { statement: vi.fn().mockReturnValue(statement) };
 
-    await expect(queryRecentActivities(db as never)).resolves.toEqual([expect.objectContaining({ id: 'comparison-1' })]);
+    await expect(queryRecentActivities(db as never)).resolves.toEqual([expect.objectContaining({ id: 'comparison-1', responseId: 'response-1' })]);
     expect(db.statement).toHaveBeenCalledOnce();
     expect(db.statement.mock.calls[0][0]).not.toContain('attribute_subject_display_names');
     expect(db.statement.mock.calls[0][0]).not.toContain('attribute_votable_subjects');

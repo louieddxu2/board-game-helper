@@ -204,6 +204,7 @@ describe('AttributesPage question flow', () => {
     expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
+    expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent(/比你.*遊戲甲（6）.*運氣成分.*遊戲乙/);
     expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
     expect(tableSpy).toHaveBeenCalledTimes(1);
   });

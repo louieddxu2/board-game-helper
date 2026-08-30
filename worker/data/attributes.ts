@@ -756,7 +756,7 @@ export const queryAttributesPayload = async (db: Database, options: AttributeTab
   };
 };
 
-export const parseAttributeActivityFeedEntry = (raw: string): AttributeActivity[] => {
+export const parseAttributeActivityFeedEntry = (raw: string, responseId?: string): AttributeActivity[] => {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -768,6 +768,7 @@ export const parseAttributeActivityFeedEntry = (raw: string): AttributeActivity[
       .map((item) => [item.subject!.id, item.value!]));
     return [{
       ...comparison,
+      ...(responseId || comparison.responseId ? { responseId: responseId ?? comparison.responseId } : {}),
       ratingA: comparison.ratingA ?? ratings.get(comparison.subjectA.id),
       ratingB: comparison.ratingB ?? ratings.get(comparison.subjectB.id),
     }];
@@ -784,7 +785,7 @@ export const queryRecentActivities = async (db: Database): Promise<AttributeActi
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
   const activities = (result.results ?? [])
-    .flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json))
+    .flatMap((row) => parseAttributeActivityFeedEntry(row.payload_json, row.id))
     .slice(0, ATTRIBUTE_ACTIVITY_FEED_LIMIT);
   // activity_json already contains the display snapshot shown to users.  Do
   // not re-hydrate every subject through the derived-name and voting-boundary

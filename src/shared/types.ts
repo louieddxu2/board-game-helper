@@ -208,6 +208,7 @@ export interface AttributeActivitySubject {
 
 export interface AttributeActivity {
   id: string;
+  responseId?: string;
   kind: 'rating' | 'comparison';
   actorName: string;
   attributeId: string;
