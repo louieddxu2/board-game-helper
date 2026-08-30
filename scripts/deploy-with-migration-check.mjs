@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import readline from 'readline';
 import { ensureCloudflareAuth } from './cloudflare-login.mjs';
+import { missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
 
 const run = (command, options = {}) => {
   try {
@@ -32,6 +33,14 @@ const checkPendingMigrations = () => {
   return pending;
 };
 
+const checkRequiredSecrets = () => {
+  const output = run('cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler secret list --format json --config wrangler.production.jsonc');
+  const missing = missingRequiredSecrets(parseSecretList(output));
+  if (missing.length === 0) return;
+  const commands = missing.map((name) => `npx wrangler secret put ${name} --config wrangler.production.jsonc`).join('\n');
+  throw new Error(`正式環境缺少必要 Secret：${missing.join('、')}\n請先執行：\n${commands}`);
+};
+
 const askQuestion = (query) => {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -45,6 +54,9 @@ const askQuestion = (query) => {
 
 const main = async () => {
   await ensureCloudflareAuth();
+  console.log('🔐 正在檢查正式環境必要 Secret...');
+  checkRequiredSecrets();
+  console.log('✅ 正式環境必要 Secret 已設定。');
   console.log('🔍 正在檢查遠端 Cloudflare D1 資料庫的 Migration 狀態...');
   const pending = checkPendingMigrations();
   const isCI = process.env.CI === 'true' || !process.stdin.isTTY;

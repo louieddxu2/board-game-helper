@@ -106,7 +106,6 @@ const WorkspacePage = () => {
   const drawerSwipeClickTargetRef = useRef<Element | null>(null);
   const drawerItemDraggingRef = useRef(false);
   const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
-  const drawerTouchSwipeRef = useRef<{ identifier: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
 
   const openDrawer = useCallback(() => {
     if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
@@ -217,81 +216,11 @@ const WorkspacePage = () => {
     drawerItemDraggingRef.current = active;
     if (!active) return;
     drawerSwipeRef.current = undefined;
-    drawerTouchSwipeRef.current = undefined;
     suppressNextDrawerClickRef.current = false;
     drawerSwipeClickTargetRef.current = null;
     setDrawerDragging(false);
     setDrawerOffset(workspaceDrawerWidth());
   }, []);
-
-  useEffect(() => {
-    const drawer = drawerElementRef.current;
-    if (!drawerOpen || !drawer) return;
-    const findTouch = (touches: TouchList, identifier: number) => Array.from(touches).find((touch) => touch.identifier === identifier);
-    const beginTouchSwipe = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || drawerItemDraggingRef.current) return;
-      const touch = event.touches[0];
-      drawerTouchSwipeRef.current = { identifier: touch.identifier, startX: touch.clientX, startY: touch.clientY, active: false, offset: workspaceDrawerWidth() };
-    };
-    const moveTouchSwipe = (event: TouchEvent) => {
-      if (drawerItemDraggingRef.current) {
-        drawerTouchSwipeRef.current = undefined;
-        event.preventDefault();
-        return;
-      }
-      const gesture = drawerTouchSwipeRef.current;
-      if (!gesture) return;
-      const touch = findTouch(event.touches, gesture.identifier);
-      if (!touch) return;
-      const deltaX = touch.clientX - gesture.startX;
-      const deltaY = touch.clientY - gesture.startY;
-      if (!gesture.active) {
-        if (Math.hypot(deltaX, deltaY) <= 8) return;
-        if (deltaX >= -8 || Math.abs(deltaY) >= Math.abs(deltaX)) {
-          drawerTouchSwipeRef.current = undefined;
-          return;
-        }
-        gesture.active = true;
-        drawerSwipeRef.current = undefined;
-        suppressNextDrawerClickRef.current = true;
-        drawerSwipeClickTargetRef.current = event.target instanceof Element ? event.target : null;
-        setDrawerDragging(true);
-      }
-      gesture.offset = getDrawerCloseSwipeOffset(deltaX, workspaceDrawerWidth());
-      setDrawerOffset(gesture.offset);
-      event.preventDefault();
-    };
-    const endTouchSwipe = (event: TouchEvent) => {
-      const gesture = drawerTouchSwipeRef.current;
-      if (!gesture || !findTouch(event.changedTouches, gesture.identifier)) return;
-      drawerTouchSwipeRef.current = undefined;
-      if (!gesture.active) return;
-      const width = workspaceDrawerWidth();
-      const offset = clampDrawerOffset(gesture.offset, width);
-      setDrawerDragging(false);
-      if (shouldKeepDrawerOpen(offset, width)) setDrawerOffset(width);
-      else closeDrawer();
-      event.preventDefault();
-      if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-      drawerClickResetTimerRef.current = window.setTimeout(() => {
-        suppressNextDrawerClickRef.current = false;
-        drawerSwipeClickTargetRef.current = null;
-        drawerClickResetTimerRef.current = undefined;
-      }, 400);
-    };
-
-    drawer.addEventListener('touchstart', beginTouchSwipe, { capture: true, passive: true });
-    drawer.addEventListener('touchmove', moveTouchSwipe, { capture: true, passive: false });
-    drawer.addEventListener('touchend', endTouchSwipe, { capture: true, passive: false });
-    drawer.addEventListener('touchcancel', endTouchSwipe, { capture: true, passive: false });
-    return () => {
-      drawer.removeEventListener('touchstart', beginTouchSwipe, true);
-      drawer.removeEventListener('touchmove', moveTouchSwipe, true);
-      drawer.removeEventListener('touchend', endTouchSwipe, true);
-      drawer.removeEventListener('touchcancel', endTouchSwipe, true);
-      drawerTouchSwipeRef.current = undefined;
-    };
-  }, [closeDrawer, drawerOpen]);
 
   useEffect(() => {
     if (!drawerOpen) {

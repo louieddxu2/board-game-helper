@@ -1052,14 +1052,13 @@ describe('WorkspacePage', () => {
 
     try {
       dispatchPointer(source, 'pointerdown', 320, 80);
-      fireEvent.touchStart(source, { touches: [{ identifier: 32, clientX: 320, clientY: 80 }] });
       await new Promise((resolve) => window.setTimeout(resolve, 500));
       fireEvent.contextMenu(source);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       const nativeTouchMove = new Event('touchmove', { bubbles: true, cancelable: true });
       Object.defineProperty(nativeTouchMove, 'touches', { value: [{ identifier: 32, clientX: 40, clientY: 82 }] });
       fireEvent(tree, nativeTouchMove);
-      expect(nativeTouchMove.defaultPrevented).toBe(true);
+      expect(nativeTouchMove.defaultPrevented).toBe(false);
       dispatchPointer(tree, 'pointermove', 40, 82);
       dispatchPointer(tree, 'pointerup', 40, 82);
 
@@ -1116,15 +1115,20 @@ describe('WorkspacePage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('closes the drawer from a native touch swipe on a tree row', async () => {
+  it('closes the drawer from a touch pointer swipe on a tree row', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
     const row = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
 
-    fireEvent.touchStart(row, { touches: [{ identifier: 41, clientX: 320, clientY: 160 }] });
-    fireEvent.touchMove(row, { touches: [{ identifier: 41, clientX: 190, clientY: 162 }] });
-    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 41, clientX: 190, clientY: 162 }] });
+    const dispatchPointer = (type: string, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 160 });
+      Object.defineProperties(event, { pointerId: { value: 41 }, pointerType: { value: 'touch' } });
+      fireEvent(row, event);
+    };
+    dispatchPointer('pointerdown', 320);
+    dispatchPointer('pointermove', 40);
+    dispatchPointer('pointerup', 40);
 
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
   });
@@ -1136,9 +1140,14 @@ describe('WorkspacePage', () => {
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     const row = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
 
-    fireEvent.touchStart(row, { touches: [{ identifier: 51, clientX: 320, clientY: 160 }] });
-    fireEvent.touchMove(row, { touches: [{ identifier: 51, clientX: 190, clientY: 162 }] });
-    fireEvent.touchEnd(row, { changedTouches: [{ identifier: 51, clientX: 190, clientY: 162 }] });
+    const dispatchPointer = (type: string, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 160 });
+      Object.defineProperties(event, { pointerId: { value: 51 }, pointerType: { value: 'touch' } });
+      fireEvent(row, event);
+    };
+    dispatchPointer('pointerdown', 320);
+    dispatchPointer('pointermove', 40);
+    dispatchPointer('pointerup', 40);
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: '開啟目錄' }));
@@ -1155,9 +1164,14 @@ describe('WorkspacePage', () => {
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     const drawerRow = screen.getAllByText('測試表格').find((element) => element.classList.contains('workspace-tree-name-text'))!.closest('.workspace-tree-row')!;
 
-    fireEvent.touchStart(drawerRow, { touches: [{ identifier: 61, clientX: 320, clientY: 160 }] });
-    fireEvent.touchMove(drawerRow, { touches: [{ identifier: 61, clientX: 190, clientY: 162 }] });
-    fireEvent.touchEnd(drawerRow, { changedTouches: [{ identifier: 61, clientX: 190, clientY: 162 }] });
+    const dispatchClosePointer = (type: string, x: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 160 });
+      Object.defineProperties(event, { pointerId: { value: 61 }, pointerType: { value: 'touch' } });
+      fireEvent(drawerRow, event);
+    };
+    dispatchClosePointer('pointerdown', 320);
+    dispatchClosePointer('pointermove', 40);
+    dispatchClosePointer('pointerup', 40);
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument());
 
     const viewport = document.querySelector('.workspace-table-viewport')!;
