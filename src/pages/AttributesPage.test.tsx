@@ -206,10 +206,11 @@ describe('AttributesPage question flow', () => {
     expect(tableSpy).toHaveBeenCalledTimes(1);
   });
 
-  test('does not wait for the large IndexedDB catalog write before requesting the next question', async () => {
+  test('does not wait for local IndexedDB writes before requesting the next question', async () => {
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
     vi.mocked(localDb.updateAttributeCatalogValues).mockImplementation(() => new Promise(() => undefined));
+    vi.mocked(localDb.clearDeferredAttributeSubject).mockImplementation(() => new Promise(() => undefined));
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));

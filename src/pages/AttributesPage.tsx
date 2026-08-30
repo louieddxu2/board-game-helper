@@ -425,11 +425,14 @@ export const AttributesPage = () => {
       if (votingCatalogRef.current) {
         votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
       }
-      // Persisting the denormalized ~1.7 MB catalog is not part of the voting
-      // critical path. The in-memory catalog above is already current for the
-      // next local selection; IndexedDB catches up in the background.
+      // Persisting the local catalog values is not part of the voting critical
+      // path. The in-memory catalog above is already current for the next
+      // local selection; IndexedDB catches up in the background.
       void localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
-      await Promise.all([
+      // Cooldown cleanup is local bookkeeping only. It must not delay the
+      // next-question request, especially while IndexedDB is migrating or
+      // committing another background catalog update.
+      void Promise.all([
         localDb.clearDeferredAttributeSubject(question.subjectA.id),
         localDb.clearDeferredAttributeSubject(question.subjectB.id),
       ]).catch(() => undefined);
