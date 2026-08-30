@@ -254,6 +254,25 @@ interface ResponseContextRow {
   actor_name: string;
 }
 
+interface ResponseContextAndStateRow extends ResponseContextRow {
+  state_a_subject_id: string | null;
+  state_a_score: number | null;
+  state_a_rating_deviation: number | null;
+  state_a_direct_sum: number | null;
+  state_a_direct_count: number | null;
+  state_a_comparison_count: number | null;
+  state_a_decisive_comparison_count: number | null;
+  state_a_evidence_count: number | null;
+  state_b_subject_id: string | null;
+  state_b_score: number | null;
+  state_b_rating_deviation: number | null;
+  state_b_direct_sum: number | null;
+  state_b_direct_count: number | null;
+  state_b_comparison_count: number | null;
+  state_b_decisive_comparison_count: number | null;
+  state_b_evidence_count: number | null;
+}
+
 interface SubjectPageOptions {
   cursor?: string;
   limit?: number;
@@ -1014,26 +1033,79 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
-const responseContext = async (db: Database, input: AttributeResponseInput) => {
+const responseContextAndStates = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
     SELECT a.id AS attribute_id, t.name AS attribute_name,
       sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
       sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
-      CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name
+      CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
+      ssa.subject_id AS state_a_subject_id, ssa.score AS state_a_score,
+      ssa.rating_deviation AS state_a_rating_deviation, ssa.direct_sum AS state_a_direct_sum,
+      ssa.direct_count AS state_a_direct_count, ssa.comparison_count AS state_a_comparison_count,
+      ssa.decisive_comparison_count AS state_a_decisive_comparison_count,
+      ssa.evidence_count AS state_a_evidence_count,
+      ssb.subject_id AS state_b_subject_id, ssb.score AS state_b_score,
+      ssb.rating_deviation AS state_b_rating_deviation, ssb.direct_sum AS state_b_direct_sum,
+      ssb.direct_count AS state_b_direct_count, ssb.comparison_count AS state_b_comparison_count,
+      ssb.decisive_comparison_count AS state_b_decisive_comparison_count,
+      ssb.evidence_count AS state_b_evidence_count
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
     JOIN attribute_subjects sa ON sa.id = ?
     JOIN attribute_subjects sb ON sb.id = ?
     LEFT JOIN games ga ON ga.id = sa.game_id
     LEFT JOIN games gb ON gb.id = sb.game_id
+    LEFT JOIN attribute_score_states ssa ON ssa.subject_id = sa.id AND ssa.attribute_id = a.id
+    LEFT JOIN attribute_score_states ssb ON ssb.subject_id = sb.id AND ssb.attribute_id = a.id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
       AND ${votableSubjectCondition('sa', 'ga')}
       AND ${votableSubjectCondition('sb', 'gb')}
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
-  `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
+  `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextAndStateRow>();
   if (!row) throw new Error('attribute_subject_not_found');
-  return row;
+
+  const stateFor = (side: 'a' | 'b'): OnlineAttributeState | null => {
+    const values = side === 'a'
+      ? {
+          subjectId: row.state_a_subject_id,
+          score: row.state_a_score,
+          ratingDeviation: row.state_a_rating_deviation,
+          directSum: row.state_a_direct_sum,
+          directCount: row.state_a_direct_count,
+          comparisonCount: row.state_a_comparison_count,
+          decisiveComparisonCount: row.state_a_decisive_comparison_count,
+          evidenceCount: row.state_a_evidence_count,
+        }
+      : {
+          subjectId: row.state_b_subject_id,
+          score: row.state_b_score,
+          ratingDeviation: row.state_b_rating_deviation,
+          directSum: row.state_b_direct_sum,
+          directCount: row.state_b_direct_count,
+          comparisonCount: row.state_b_comparison_count,
+          decisiveComparisonCount: row.state_b_decisive_comparison_count,
+          evidenceCount: row.state_b_evidence_count,
+        };
+    if (!values.subjectId) return null;
+    return {
+      score: Number(values.score ?? 5),
+      ratingDeviation: Number(values.ratingDeviation ?? ATTRIBUTE_INITIAL_RD),
+      directSum: Number(values.directSum ?? 0),
+      directCount: Number(values.directCount ?? 0),
+      comparisonCount: Number(values.comparisonCount ?? 0),
+      decisiveComparisonCount: Number(values.decisiveComparisonCount ?? 0),
+      evidenceCount: Number(values.evidenceCount ?? 0),
+    };
+  };
+
+  return {
+    context: row,
+    states: new Map([
+      [input.subjectAId, stateFor('a')],
+      [input.subjectBId, stateFor('b')],
+    ].filter((entry): entry is [string, OnlineAttributeState] => entry[1] != null)),
+  };
 };
 
 interface AttributeWriteLock {
@@ -1432,6 +1504,11 @@ const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock)
   `).bind(...lock.names, lock.token).run();
 };
 
+const releaseAttributeWriteLockStatement = (db: Database, lock: AttributeWriteLock): DatabaseStatement => db.statement(`
+  DELETE FROM attribute_vote_lock
+  WHERE lock_name IN (${lock.names.map(() => '?').join(',')}) AND token = ?
+`).bind(...lock.names, lock.token);
+
 const acquireAttributeWriteLock = async (db: Database, input: AttributeResponseInput): Promise<AttributeWriteLock> => {
   const token = createId('attribute-lock');
   const names = attributeWriteLockNames(input);
@@ -1454,24 +1531,12 @@ const acquireAttributeWriteLock = async (db: Database, input: AttributeResponseI
   return { token, names };
 };
 
-const saveAttributeResponseLocked = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
-  const context = await responseContext(db, input);
-  const stateResult = await db.statement(`
-    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
-      comparison_count, decisive_comparison_count, evidence_count
-    FROM attribute_score_states
-    WHERE (subject_id = ? AND attribute_id = ?)
-       OR (subject_id = ? AND attribute_id = ?)
-  `).bind(input.subjectAId, input.attributeId, input.subjectBId, input.attributeId).all<AttributeScoreStateRow>();
-  const stateMap = new Map((stateResult.results ?? []).map((row) => [row.subject_id, {
-    score: Number(row.score),
-    ratingDeviation: Number(row.rating_deviation ?? ATTRIBUTE_INITIAL_RD),
-    directSum: Number(row.direct_sum),
-    directCount: Number(row.direct_count),
-    comparisonCount: Number(row.comparison_count),
-    decisiveComparisonCount: Number(row.decisive_comparison_count),
-    evidenceCount: Number(row.evidence_count),
-  } satisfies OnlineAttributeState]));
+const saveAttributeResponseLocked = async (
+  db: Database,
+  input: AttributeResponseInput,
+  lock: AttributeWriteLock,
+): Promise<SavedAttributeResponse> => {
+  const { context, states: stateMap } = await responseContextAndStates(db, input);
   let stateA = stateMap.get(input.subjectAId) ?? emptyAttributeState();
   let stateB = stateMap.get(input.subjectBId) ?? emptyAttributeState();
   const touchedSubjects = new Set<string>();
@@ -1558,6 +1623,7 @@ const saveAttributeResponseLocked = async (db: Database, input: AttributeRespons
     input.timestamp,
     input.timestamp,
   ));
+  statements.push(releaseAttributeWriteLockStatement(db, lock));
   await db.batch(statements);
 
   const updatedValues: AttributeMatrixValue[] = [];
@@ -1571,19 +1637,17 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
   if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
   if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_response_busy');
 
-  const existingResponse = await db.statement('SELECT response_id FROM attribute_vote_responses WHERE response_id = ? LIMIT 1')
-    .bind(input.responseId)
-    .first<{ response_id: string }>();
-  if (existingResponse) return { updatedValues: [], activities: [] };
-
   const lock = await acquireAttributeWriteLock(db, input);
+  let lockReleasedInCommit = false;
   try {
     const lockedExistingResponse = await db.statement('SELECT response_id FROM attribute_vote_responses WHERE response_id = ? LIMIT 1')
       .bind(input.responseId)
       .first<{ response_id: string }>();
     if (lockedExistingResponse) return { updatedValues: [], activities: [] };
-    return await saveAttributeResponseLocked(db, input);
+    const result = await saveAttributeResponseLocked(db, input, lock);
+    lockReleasedInCommit = true;
+    return result;
   } finally {
-    await releaseAttributeWriteLock(db, lock);
+    if (!lockReleasedInCommit) await releaseAttributeWriteLock(db, lock);
   }
 };

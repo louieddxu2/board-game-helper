@@ -40,10 +40,12 @@ describe('attribute hot-path budgets', () => {
     expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS + ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
   });
 
-  test('a complete response uses bounded reads and three core writes', async () => {
+  test('a complete response combines the state read and commits lock release with the write', async () => {
     const statements: DatabaseStatement[] = [];
+    const sqlCalls: string[] = [];
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
+        sqlCalls.push(sql);
         if (sql.includes('SELECT response_id FROM attribute_vote_responses')) {
           const prepared = statement({ first: vi.fn().mockResolvedValue(null) });
           statements.push(prepared);
@@ -83,7 +85,10 @@ describe('attribute hot-path budgets', () => {
     const batchCalls = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(batchCalls).toHaveLength(2);
     expect(batchCalls[0][0]).toHaveLength(3);
-    expect(batchCalls[1][0]).toHaveLength(3);
+    expect(batchCalls[1][0]).toHaveLength(4);
+    expect(sqlCalls.filter((sql) => sql.includes('SELECT a.id AS attribute_id'))).toHaveLength(1);
+    expect(sqlCalls.some((sql) => sql.includes('LEFT JOIN attribute_score_states ssa'))).toBe(true);
+    expect(sqlCalls.some((sql) => sql.includes('FROM attribute_score_states\n'))).toBe(false);
   });
 
   test('rejects a concurrent response before reading or rewriting score states', async () => {
