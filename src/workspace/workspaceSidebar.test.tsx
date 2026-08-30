@@ -40,8 +40,11 @@ describe('workspace directory tree', () => {
       dispatchPointer(tree, 'pointerup');
       dispatchPointer(target, 'pointerdown', 42);
       dispatchPointer(target, 'pointerup', 42);
-      expect(onOpen).toHaveBeenCalledWith(data.nodes[1]);
+      expect(onOpen).not.toHaveBeenCalled();
       fireEvent.click(target);
+      expect(onOpen).not.toHaveBeenCalled();
+      vi.runOnlyPendingTimers();
+      expect(onOpen).toHaveBeenCalledWith(data.nodes[1]);
       expect(onOpen).toHaveBeenCalledTimes(1);
     } finally {
       document.elementFromPoint = previousElementFromPoint;
