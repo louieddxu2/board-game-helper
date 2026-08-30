@@ -1465,6 +1465,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attributes-matrix thead .attributes-matrix-subject { z-index: 4; background: var(--cream); }
 .attributes-matrix-subject a, .attributes-matrix-subject > span { display: block; color: var(--ink); font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; text-decoration: none; }
 .attributes-matrix-subject a:hover { color: var(--orange); text-decoration: underline; }
+.attributes-matrix-subject-button { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; text-align: left; }
+.attributes-matrix-subject-button:hover, .attributes-matrix-subject-button:focus-visible, .attributes-matrix-subject-button[aria-pressed='true'] { color: var(--orange); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.attributes-matrix-anchor .attributes-matrix-subject { box-shadow: inset 4px 0 0 var(--orange); }
 .attributes-matrix-subject small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 500; }
 .attributes-matrix-value { font-variant-numeric: tabular-nums; }
 .attributes-matrix-value.high { background: rgba(218, 125, 45, .12); color: var(--orange); font-weight: 800; }

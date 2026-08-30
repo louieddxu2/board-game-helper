@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributeTablePage } from './AttributeTablePage';
 import { api } from '../lib/api';
+import { ToastProvider } from '../context/ToastContext';
 import type { AttributeCatalogPayload } from '../shared/types';
 
 const payload: AttributeCatalogPayload = {
@@ -62,5 +63,45 @@ describe('AttributeTablePage', () => {
     expect(rows()).toEqual(['遊戲甲已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲乙已對應遊戲']);
     fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由小到大' }));
     expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
+  });
+
+  test('clears text search and ranks comparable games when a game is selected', async () => {
+    const similarityPayload: AttributeCatalogPayload = {
+      ...payload,
+      subjects: [
+        ...payload.subjects,
+        { id: 'subject-b', slug: 'game-b', kind: 'game', displayName: '遊戲乙' },
+        { id: 'subject-c', slug: 'game-c', kind: 'game', displayName: '遊戲丙' },
+      ],
+      values: [
+        ...payload.values,
+        { subjectId: 'subject-b', attributeId: 'attribute-luck', score: 7.5, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+        { subjectId: 'subject-c', attributeId: 'attribute-luck', score: 1, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
+      ],
+    };
+    vi.spyOn(api, 'attributeTable').mockResolvedValue(similarityPayload);
+
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+    const search = await screen.findByRole('searchbox');
+    fireEvent.change(search, { target: { value: '遊戲甲' } });
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲' }));
+
+    expect(search).toHaveValue('');
+    const rows = [...document.querySelectorAll('.attributes-matrix tbody tr')].map((row) => row.querySelector('th')?.textContent?.trim());
+    expect(rows).toEqual(['遊戲甲相近比較基準', '遊戲乙共同資料 1 項', '遊戲丙共同資料 1 項']);
+  });
+
+  test('rejects similarity mode with a toast when no real overlapping data exists', async () => {
+    const noDataPayload: AttributeCatalogPayload = {
+      ...payload,
+      values: [{ ...payload.values[0], score: 5, ratingDeviation: 3, directCount: 0, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 0 }],
+    };
+    vi.spyOn(api, 'attributeTable').mockResolvedValue(noDataPayload);
+
+    render(<MemoryRouter><ToastProvider><AttributeTablePage /></ToastProvider></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲' }));
+
+    expect(screen.getByRole('status')).toHaveTextContent('尚無可評斷相近的資料');
+    expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
   });
 });
