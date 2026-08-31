@@ -297,6 +297,7 @@ footer a { color: inherit; }
 .workspace-auto-backup-toggle.is-paused { border-color: rgba(165,47,35,.35); background: rgba(165,47,35,.05); }
 .workspace-auto-backup-toggle.is-paused span { color: #a52f23; }
 .workspace-drawer-data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.workspace-drawer-data-actions > button:first-child { grid-column: 1 / -1; }
 .workspace-drawer-data-actions button { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .workspace-drawer-data-actions button:hover { border-color: var(--orange); background: var(--cream); color: var(--orange); }
 .workspace-drawer-footer a { display: flex; align-items: center; gap: 9px; min-height: 42px; color: var(--green); font-size: 14px; text-decoration: none; }
@@ -625,9 +626,6 @@ footer a { color: inherit; }
 .workspace-dialog-button:has(svg) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .workspace-bottom-navigation-dialog { width: min(420px, calc(100vw - 24px)); background: var(--white); }
 .workspace-bottom-navigation-dialog .workspace-dialog-content { gap: 8px; padding: 12px; }
-.workspace-bottom-navigation-add { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--green); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-weight: 800; }
-.workspace-bottom-navigation-add:hover:not(:disabled) { border-color: var(--orange); background: var(--cream); color: var(--orange); }
-.workspace-bottom-navigation-add:disabled { border-color: var(--line); color: var(--muted); cursor: default; opacity: .72; }
 .workspace-bottom-navigation-list { display: grid; min-height: 0; max-height: min(56dvh, 520px); gap: 5px; overflow: auto; }
 .workspace-bottom-navigation-setting-row { display: grid; min-height: 44px; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 4px; padding: 3px 5px 3px 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); transition: border-color 120ms ease, transform 120ms ease; }
 .workspace-bottom-navigation-setting-row.is-dragging { z-index: 1; border-color: var(--orange); box-shadow: 0 5px 14px rgba(23,47,40,.16); }

@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { MAX_BOTTOM_NAVIGATION_TABLES } from './model';
 import { WorkspaceIcon, WorkspaceModal } from './workspaceShared';
 
 export interface WorkspaceBottomNavigationItem {
@@ -38,10 +37,9 @@ export const WorkspaceBottomNavigation = ({ items, activeTableId, onOpen }: {
   </button>)}
 </nav>;
 
-export const WorkspaceBottomNavigationDialog = ({ tables, tableIds, currentTableId, onChange, onClose }: {
+export const WorkspaceBottomNavigationDialog = ({ tables, tableIds, onChange, onClose }: {
   tables: WorkspaceBottomNavigationItem[];
   tableIds: string[];
-  currentTableId?: string;
   onChange(tableIds: string[]): void;
   onClose(): void;
 }) => {
@@ -49,8 +47,6 @@ export const WorkspaceBottomNavigationDialog = ({ tables, tableIds, currentTable
   const dragRef = useRef<{ pointerId: number; sourceId: string; startY: number; active: boolean } | undefined>(undefined);
   const tableById = new Map(tables.map((item) => [item.tableId, item]));
   const pinnedItems = tableIds.flatMap((tableId) => tableById.get(tableId) ?? []);
-  const currentTable = currentTableId ? tableById.get(currentTableId) : undefined;
-  const canAddCurrent = Boolean(currentTable && !tableIds.includes(currentTable.tableId));
 
   const beginDrag = (tableId: string, event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -86,15 +82,6 @@ export const WorkspaceBottomNavigationDialog = ({ tables, tableIds, currentTable
   };
 
   return <WorkspaceModal title="底部導覽列" dialogKind="editor" onClose={onClose} className="workspace-bottom-navigation-dialog">
-    {canAddCurrent && currentTable && <button
-      type="button"
-      className="workspace-bottom-navigation-add"
-      disabled={tableIds.length >= MAX_BOTTOM_NAVIGATION_TABLES}
-      onClick={() => onChange([...tableIds, currentTable.tableId])}
-    >
-      <WorkspaceIcon name="plus" size={18} />
-      <span>{tableIds.length >= MAX_BOTTOM_NAVIGATION_TABLES ? `已達 ${MAX_BOTTOM_NAVIGATION_TABLES} 張上限` : `加入「${currentTable.name}」`}</span>
-    </button>}
     <div className="workspace-bottom-navigation-list" aria-label="已加入導覽的表格">
       {pinnedItems.map((item, index) => <div
         key={item.tableId}

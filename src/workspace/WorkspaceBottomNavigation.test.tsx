@@ -19,17 +19,13 @@ describe('WorkspaceBottomNavigation', () => {
     expect(onOpen).toHaveBeenCalledWith(items[0]);
   });
 
-  it('adds the current table and cancels navigation without deleting it', async () => {
+  it('only manages tables that were already added from the drawer', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(<WorkspaceBottomNavigationDialog tables={items} tableIds={['table-1']} currentTableId="table-2" onChange={onChange} onClose={vi.fn()} />);
+    render(<WorkspaceBottomNavigationDialog tables={items} tableIds={['table-1', 'table-2']} onChange={onChange} onClose={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: '加入「購買清單」' }));
-    expect(onChange).toHaveBeenLastCalledWith(['table-1', 'table-2']);
-
-    rerender(<WorkspaceBottomNavigationDialog tables={items} tableIds={['table-1', 'table-2']} currentTableId="table-2" onChange={onChange} onClose={vi.fn()} />);
-    const removeButtons = screen.getAllByRole('button', { name: '取消導覽' });
-    await user.click(removeButtons[0]);
+    expect(screen.queryByRole('button', { name: /加入/ })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: '取消導覽' })[0]);
     expect(onChange).toHaveBeenLastCalledWith(['table-2']);
     expect(screen.queryByRole('button', { name: /刪除/ })).not.toBeInTheDocument();
   });

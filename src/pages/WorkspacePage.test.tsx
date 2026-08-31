@@ -65,19 +65,16 @@ describe('WorkspacePage', () => {
   it('adds and cancels the current table in the bottom navigation', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
-    await waitFor(() => expect(screen.getByRole('button', { name: '設定' })).toBeEnabled());
-
-    await user.click(screen.getByRole('button', { name: '設定' }));
-    await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
-    await user.click(screen.getByRole('button', { name: '加入「測試表格」' }));
-    fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
+    await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    await user.click(screen.getByRole('button', { name: '開啟測試表格操作' }));
+    await user.click(screen.getByRole('button', { name: '加入底部導覽列' }));
 
     expect(await screen.findByRole('navigation', { name: '常用表格' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '開啟表格 測試表格' })).toHaveAttribute('aria-current', 'page');
     expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: ['table-1'] }));
 
-    await user.click(screen.getByRole('button', { name: '設定' }));
-    await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
+    await user.click(screen.getByRole('button', { name: '開啟目錄' }));
+    await user.click(screen.getByRole('button', { name: '管理底部導覽列' }));
     await user.click(screen.getByRole('button', { name: '取消導覽' }));
     fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
 
@@ -95,11 +92,9 @@ describe('WorkspacePage', () => {
 
     try {
       render(<WorkspacePage />);
-      await waitFor(() => expect(screen.getByRole('button', { name: '設定' })).toBeEnabled());
-      await user.click(screen.getByRole('button', { name: '設定' }));
-      await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
-      await user.click(screen.getByRole('button', { name: '加入「測試表格」' }));
-      fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
+      await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
+      await user.click(screen.getByRole('button', { name: '開啟測試表格操作' }));
+      await user.click(screen.getByRole('button', { name: '加入底部導覽列' }));
       expect(await screen.findByRole('navigation', { name: '常用表格' })).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: '搜尋' }));

@@ -1,11 +1,12 @@
 import { WorkspaceData, WorkspaceNode } from "./types";
 import { WorkspaceIcon, WorkspaceModal } from "./workspaceShared";
 
-export const NodeActionsDialog = ({ node, onClose, onRename, onDelete, onAddFolder, onAddTable, onMove }: { node: WorkspaceNode; onClose(): void; onRename(): void; onDelete(): void; onAddFolder(): void; onAddTable(): void; onMove(): void }) => <WorkspaceModal title={node.name} onClose={onClose} className="workspace-action-dialog" leadingAction={<button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
+export const NodeActionsDialog = ({ node, onClose, onRename, onDelete, onAddFolder, onAddTable, onMove, onToggleBottomNav, isInBottomNav }: { node: WorkspaceNode; onClose(): void; onRename(): void; onDelete(): void; onAddFolder(): void; onAddTable(): void; onMove(): void; onToggleBottomNav?(): void; isInBottomNav?: boolean }) => <WorkspaceModal title={node.name} onClose={onClose} className="workspace-action-dialog" leadingAction={<button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
   <div className="workspace-action-list">
     {node.type === 'folder' && <><button type="button" onClick={onAddTable}><WorkspaceIcon name="table" size={21} />在此新增表格</button><button type="button" onClick={onAddFolder}><WorkspaceIcon name="folder" size={21} />在此新增資料夾</button></>}
     <button type="button" onClick={onRename}><WorkspaceIcon name="edit" size={21} />重新命名</button>
     <button type="button" onClick={onMove}><WorkspaceIcon name="move" size={21} />移動至</button>
+    {node.type === 'table' && onToggleBottomNav && <button type="button" onClick={onToggleBottomNav}><WorkspaceIcon name="bottom-navigation" size={21} />{isInBottomNav ? '從底部導覽列移除' : '加入底部導覽列'}</button>}
   </div>
 </WorkspaceModal>;
 export const MoveNodeDialog = ({ node, data, onClose, onMove }: { node: WorkspaceNode; data: WorkspaceData; onClose(): void; onMove(parentId: string | null): void }) => {
