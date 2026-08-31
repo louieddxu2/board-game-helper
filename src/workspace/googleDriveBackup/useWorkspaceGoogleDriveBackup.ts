@@ -144,12 +144,6 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     return { auth: authRef.current, backup: backupRef.current, legacyBackup: legacyBackupRef.current };
   }, [loadGoogleClientId]);
 
-  const open = useCallback(() => {
-    setDialogOpen(true);
-    setMessage('');
-    setError('');
-  }, []);
-
   const close = useCallback(() => {
     if (busy) return;
     setDialogOpen(false);
@@ -175,6 +169,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
       setError(cause instanceof Error ? cause.message : 'Google Drive 連結失敗');
     } finally { setBusy(null); }
   }, [ensureBackup, remoteMatchesRecord]);
+
+  const open = useCallback(() => {
+    setDialogOpen(true);
+    setMessage('');
+    setError('');
+    if (online && !busy && (!authorized || manuallyDisconnected)) void connect();
+  }, [authorized, busy, connect, manuallyDisconnected, online]);
 
   const backup = useCallback(async ({ automatic = false, force = false, tableIds }: { automatic?: boolean; force?: boolean; tableIds?: string[] } = {}) => {
     if (!data) return false;

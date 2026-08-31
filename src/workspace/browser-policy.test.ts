@@ -109,6 +109,19 @@ describe('workspace browser policies', () => {
     expect(noticeRule).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
   });
 
+  it('keeps the Google Drive action and automatic-backup toggle on one compact drawer row', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const footerRule = styles.match(/\.workspace-drawer-footer\s*\{([^}]*)\}/)?.[1];
+    const driveButtonRule = styles.match(/\.workspace-drive-status-card\s*\{([^}]*)\}/)?.[1];
+    const autoBackupRule = styles.match(/\.workspace-auto-backup-toggle\s*\{([^}]*)\}/)?.[1];
+    const detailRule = styles.match(/\.workspace-drive-status-card span:last-child\s*\{([^}]*)\}/)?.[1];
+
+    expect(footerRule).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
+    expect(driveButtonRule).toMatch(/border:\s*1px solid var\(--green\)/);
+    expect(autoBackupRule).toMatch(/white-space:\s*nowrap/);
+    expect(detailRule).toMatch(/display:\s*none/);
+  });
+
   it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];

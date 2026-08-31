@@ -70,6 +70,15 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it('starts connecting as soon as the drawer entry opens the backup dialog', async () => {
+    const { result } = renderBackup();
+
+    act(() => result.current.open());
+    expect(result.current.dialogOpen).toBe(true);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.signIn).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for the full debounce before the first automatic upload', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     const { result } = renderBackup();
