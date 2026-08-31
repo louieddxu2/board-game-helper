@@ -33,6 +33,13 @@ export interface DeferredAttributeSubjectPreference {
   eligibleAfterAt: number;
 }
 
+/**
+ * Keep the local question pool bounded while retaining enough low-confidence
+ * candidates to make the random draw visible. This is a browser-side limit
+ * only; it does not change the D1 request or response size.
+ */
+export const LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT = 200;
+
 const normalizeHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 
 /** Small RFC-4180-compatible parser for the collection export we support. */
@@ -259,8 +266,8 @@ export const chooseScopedAttributeQuestion = (
       subjectId: subject.id,
       attributeId: candidateAttributeId,
       ...state(subject.id, candidateAttributeId),
-    }))).sort((left, right) => right.ratingDeviation - left.ratingDeviation || left.subjectId.localeCompare(right.subjectId));
-    const pool = ranked.slice(0, Math.min(12, ranked.length));
+    }))).sort((left, right) => right.ratingDeviation - left.ratingDeviation);
+    const pool = ranked.slice(0, Math.min(LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT, ranked.length));
     const seed = pool[Math.floor(randomValue * pool.length)] ?? ranked[0];
     seedId = seed.subjectId;
     attributeId = seed.attributeId;

@@ -90,6 +90,35 @@ describe('local attribute collection question selection', () => {
     });
   });
 
+  test('randomizes across a bounded low-confidence pool without subject ID tie-breaking', () => {
+    const broad = catalog();
+    broad.attributes = Array.from({ length: 25 }, (_, index) => ({
+      id: `attribute-${index}`,
+      key: `attribute-${index}`,
+      name: `屬性${index}`,
+      minValue: 0,
+      maxValue: 10,
+      sortOrder: index,
+    }));
+    broad.values = broad.subjects.flatMap((subject) => broad.attributes.map((attribute) => ({
+      subjectId: subject.id,
+      attributeId: attribute.id,
+      score: 5,
+      ratingDeviation: 3,
+      directCount: 0,
+      comparisonCount: 0,
+      decisiveComparisonCount: 0,
+      evidenceCount: 0,
+      modelVersion: 'glicko-rd-v1',
+    })));
+
+    const first = chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0);
+    const last = chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0.999);
+
+    expect(first?.subjectAId).toBe('subject-a');
+    expect(last?.subjectAId).toBe('subject-c');
+  });
+
   test('replaces only one side while preserving the other side and attribute', () => {
     expect(chooseScopedAttributeQuestion(catalog(), ['subject-a', 'subject-b', 'subject-c'], {
       excludeSubjectAId: 'subject-a',

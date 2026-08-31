@@ -1,7 +1,7 @@
 import { openDB, type DBSchema } from 'idb';
 import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeQuestionPayload, AttributeSubject, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
-import { applyAttributeCatalogChanges } from './attributeCatalog';
+import { applyAttributeCatalogChanges, mergeAttributeSubjectMetadata } from './attributeCatalog';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
@@ -192,7 +192,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 7, {
+  return openDB<RulesDb>('wrong-board-game-rules', 8, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -221,6 +221,16 @@ const getDb = () => {
         values.createIndex('attributeId', 'attributeId');
       }
       if (!db.objectStoreNames.contains('attributeCatalogCandidates')) db.createObjectStore('attributeCatalogCandidates', { keyPath: 'id' });
+      // Version 7 could overwrite complete subjects with compact value-delta
+      // metadata. Clear only the affected local catalog stores so the next
+      // request rebuilds them from the complete server snapshot.
+      if (oldVersion > 0 && oldVersion < 8) {
+        transaction.objectStore('attributeCatalogMeta').clear();
+        transaction.objectStore('attributeCatalogAttributes').clear();
+        transaction.objectStore('attributeCatalogSubjects').clear();
+        transaction.objectStore('attributeCatalogValues').clear();
+        transaction.objectStore('attributeCatalogCandidates').clear();
+      }
       if (oldVersion > 0 && oldVersion < 3) {
         transaction.objectStore('games').clear();
         transaction.objectStore('rules').clear();
@@ -626,7 +636,8 @@ export const localDb = {
           const subjectValues = await values.index('subjectId').getAll(subjectId);
           await Promise.all(subjectValues.map((value) => values.delete(value.key)));
         } else if (change.subject) {
-          await subjects.put(change.subject);
+          const currentSubject = await subjects.get(subjectId);
+          await subjects.put(mergeAttributeSubjectMetadata(currentSubject, change.subject));
         }
       } else if (change.entryKey.startsWith('value:')) {
         if (change.deleted) {
@@ -634,7 +645,10 @@ export const localDb = {
           if (subjectId && attributeId) await values.delete(attributeCatalogValueKey({ subjectId, attributeId }));
         } else if (change.value) {
           await values.put({ ...change.value, key: attributeCatalogValueKey(change.value) });
-          if (change.subject) await subjects.put(change.subject);
+          if (change.subject) {
+            const currentSubject = await subjects.get(change.subject.id);
+            await subjects.put(mergeAttributeSubjectMetadata(currentSubject, change.subject));
+          }
         }
       } else if (change.entryKey.startsWith('candidate:')) {
         const candidateId = change.candidate?.id ?? change.entryKey.slice('candidate:'.length);
