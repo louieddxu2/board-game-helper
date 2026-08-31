@@ -14,6 +14,7 @@ describe('WorkspaceBottomNavigation', () => {
     const onOpen = vi.fn();
     render(<WorkspaceBottomNavigation items={items} activeTableId="table-2" onOpen={onOpen} />);
 
+    expect(screen.getByRole('navigation', { name: '常用表格' }).querySelector('svg')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '開啟表格 購買清單' })).toHaveAttribute('aria-current', 'page');
     await user.click(screen.getByRole('button', { name: '開啟表格 桌遊收藏' }));
     expect(onOpen).toHaveBeenCalledWith(items[0]);

@@ -191,12 +191,12 @@ footer a { color: inherit; }
 .workspace-table-viewport.is-panning { cursor: grabbing; user-select: none; }
 .workspace-table-viewport::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-bottom-navigation { position: relative; z-index: 18; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); flex: 0 0 auto; min-height: 56px; padding: 4px max(4px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--line); background: var(--white); }
-.workspace-bottom-navigation button { position: relative; display: grid; min-width: 0; min-height: 48px; place-items: center; align-content: center; gap: 2px; padding: 3px 5px 2px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; }
+.workspace-bottom-navigation button { position: relative; display: grid; min-width: 0; min-height: 48px; place-items: center; padding: 5px 8px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; }
 .workspace-bottom-navigation button::before { content: ''; position: absolute; top: -4px; left: 50%; width: 28px; height: 3px; border-radius: 0 0 3px 3px; background: transparent; transform: translateX(-50%); }
 .workspace-bottom-navigation button:hover { background: var(--cream); color: var(--green); }
 .workspace-bottom-navigation button.is-active { color: var(--green); font-weight: 800; }
 .workspace-bottom-navigation button.is-active::before { background: var(--orange); }
-.workspace-bottom-navigation button span { display: block; max-width: 100%; overflow: hidden; font-size: 11px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-bottom-navigation button span { display: block; max-width: 100%; overflow: hidden; font-size: 14px; font-weight: 700; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-table { --workspace-grid-line: #c7bfaf; width: max-content; border-collapse: separate; border-spacing: 0; color: var(--ink); table-layout: fixed; font-size: calc(20px * var(--workspace-text-scale, 1)); isolation: isolate; }
 .workspace-table thead { position: relative; z-index: 4; }
 .workspace-table tbody { position: relative; z-index: 1; }

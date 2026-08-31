@@ -32,7 +32,6 @@ export const WorkspaceBottomNavigation = ({ items, activeTableId, onOpen }: {
     title={item.name}
     onClick={() => onOpen(item)}
   >
-    <WorkspaceIcon name="table" size={19} />
     <span>{item.name}</span>
   </button>)}
 </nav>;
