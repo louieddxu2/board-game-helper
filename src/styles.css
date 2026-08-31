@@ -202,7 +202,6 @@ footer a { color: inherit; }
 .workspace-table tbody { position: relative; z-index: 1; }
 .workspace-table.is-bouncing.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bouncing.is-bounce-x tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), var(--workspace-table-header-offset, 0px), 0); }
 .workspace-table.is-bouncing.is-bounce-y tbody th[scope="row"], .workspace-table.is-bouncing.is-bounce-y tbody td { transform: translate3d(0, var(--workspace-bounce-y, 0px), 0); }
-.workspace-table.is-bounce-settling.is-bounce-x thead th:not(.workspace-row-corner), .workspace-table.is-bounce-settling.is-bounce-x tbody td, .workspace-table.is-bounce-settling.is-bounce-y tbody th[scope="row"], .workspace-table.is-bounce-settling.is-bounce-y tbody td { transition: transform 0.2s ease-out; }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; padding: 2px 3px; border-right: 1px solid var(--workspace-grid-line); border-bottom: 1px solid var(--workspace-grid-line); vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 6; cursor: pointer; background: var(--cream); color: var(--green); font-size: inherit; font-weight: 700; }
 .workspace-toolbar-layer .workspace-table { --workspace-table-header-offset: calc(var(--workspace-toolbar-row-height) * var(--workspace-toolbar-row-count)); }
@@ -261,7 +260,7 @@ footer a { color: inherit; }
 .workspace-drawer-search button { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
 .workspace-drawer-search button:hover:not(:disabled) { background: var(--cream); color: var(--orange); }
 .workspace-drawer-search button:disabled { cursor: default; opacity: .35; }
-.workspace-tree { flex: 1; overflow: auto; padding: 10px 9px 18px; }
+.workspace-tree { flex: 1; overflow: auto; padding: 10px 9px 18px; touch-action: pan-y; }
 .workspace-tree-item { display: block; }
 .workspace-tree-row { display: flex; align-items: center; min-height: 48px; padding-left: calc(var(--workspace-depth, 0) * 16px); border-radius: 5px; color: var(--ink); cursor: pointer; user-select: none; }
 .workspace-tree-row.active { background: var(--cream); color: var(--green); }

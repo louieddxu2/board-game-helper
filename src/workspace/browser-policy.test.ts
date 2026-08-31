@@ -33,6 +33,15 @@ describe('workspace browser policies', () => {
     expect(workspacePageRule).toMatch(/(?:^|;)\s*height:\s*100dvh/);
   });
 
+  it('reserves horizontal drawer swipes across the independently scrolling tree', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const drawerRule = styles.match(/\.workspace-drawer\s*\{([^}]*)\}/)?.[1];
+    const treeRule = styles.match(/\.workspace-tree\s*\{([^}]*)\}/)?.[1];
+
+    expect(drawerRule).toMatch(/touch-action:\s*pan-y/);
+    expect(treeRule).toMatch(/touch-action:\s*pan-y/);
+  });
+
   it('keeps both table axes sticky while their headings support reordering', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const columnReorderRule = styles.match(/\.workspace-table:not\(\.is-transposed\) thead th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
@@ -121,6 +130,13 @@ describe('workspace browser policies', () => {
     expect(theadRule).toMatch(/z-index:\s*4/);
     expect(tbodyRule).toMatch(/z-index:\s*1/);
     expect(headerCellRule).toMatch(/z-index:\s*6/);
+  });
+
+  it('drives table rebound from one shared frame clock instead of per-cell transitions', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const bounceTransitionRule = styles.match(/\.workspace-table\.is-bounce-settling[^\n]*\{([^}]*)\}/)?.[1];
+
+    expect(bounceTransitionRule).toBeUndefined();
   });
 
   it('centers value editors independently from table text scaling', () => {

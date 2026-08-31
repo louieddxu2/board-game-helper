@@ -1,8 +1,118 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
-import { accelerateTableFlingVelocity, clampTableMomentumVelocity, getTablePanAxis, MAX_TABLE_MOMENTUM_VELOCITY, TABLE_FLING_ACCELERATION_MULTIPLIER, TABLE_FLING_ACCELERATION_THRESHOLD, useMomentumScroll } from './useMomentumScroll';
+import { accelerateTableFlingVelocity, applyTableBounce, clampTableMomentumVelocity, getTablePanAxis, MAX_TABLE_MOMENTUM_VELOCITY, settleTableBounce, TABLE_FLING_ACCELERATION_MULTIPLIER, TABLE_FLING_ACCELERATION_THRESHOLD, useMomentumScroll } from './useMomentumScroll';
 
 describe('useMomentumScroll', () => {
+  test('settles one shared bounce value frame-by-frame and lets a new drag cancel the settlement', () => {
+    const table = document.createElement('table');
+    const pendingFrames = new Map<number, FrameRequestCallback>();
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let nextFrameId = 0;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (callback: FrameRequestCallback) => {
+        const id = ++nextFrameId;
+        pendingFrames.set(id, callback);
+        return id;
+      },
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (id: number) => { pendingFrames.delete(id); },
+    });
+    const runFrame = (timestamp: number) => {
+      const next = pendingFrames.entries().next();
+      expect(next.done).toBe(false);
+      const [id, callback] = next.value as [number, FrameRequestCallback];
+      pendingFrames.delete(id);
+      callback(timestamp);
+    };
+
+    try {
+      applyTableBounce(table, 30, 0);
+      settleTableBounce(table);
+
+      expect(table.style.getPropertyValue('--workspace-bounce-x')).toBe('30.0px');
+      runFrame(0);
+      runFrame(100);
+      expect(Number.parseFloat(table.style.getPropertyValue('--workspace-bounce-x'))).toBeGreaterThan(0);
+      expect(Number.parseFloat(table.style.getPropertyValue('--workspace-bounce-x'))).toBeLessThan(30);
+
+      applyTableBounce(table, 18, 0);
+      expect(pendingFrames.size).toBe(0);
+      expect(table.classList.contains('is-bounce-settling')).toBe(false);
+      expect(table.style.getPropertyValue('--workspace-bounce-x')).toBe('18.0px');
+    } finally {
+      pendingFrames.clear();
+      Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: previousRequestAnimationFrame });
+      Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: previousCancelAnimationFrame });
+    }
+  });
+
+  test('does not let boundary momentum clear an active pointer rebound on its first frame', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    viewport.append(table);
+    Object.defineProperties(viewport, {
+      scrollWidth: { configurable: true, value: 2000 }, clientWidth: { configurable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 2000 }, clientHeight: { configurable: true, value: 500 },
+      scrollLeft: { configurable: true, writable: true, value: 0 }, scrollTop: { configurable: true, writable: true, value: 200 },
+    });
+    const pendingFrames = new Map<number, FrameRequestCallback>();
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    const previousCancelAnimationFrame = window.cancelAnimationFrame;
+    let nextFrameId = 0;
+    vi.useFakeTimers();
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (callback: FrameRequestCallback) => {
+        const id = ++nextFrameId;
+        pendingFrames.set(id, callback);
+        return id;
+      },
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: (id: number) => { pendingFrames.delete(id); },
+    });
+    const runNextFrame = (timestamp: number) => {
+      const next = pendingFrames.entries().next();
+      expect(next.done).toBe(false);
+      const [id, callback] = next.value as [number, FrameRequestCallback];
+      pendingFrames.delete(id);
+      callback(timestamp);
+    };
+
+    try {
+      applyTableBounce(table, 30, 0);
+      settleTableBounce(table);
+      const now = Date.now();
+      vi.setSystemTime(now);
+      result.current.trackMove(0, 0);
+      vi.setSystemTime(now + 40);
+      result.current.trackMove(40, 0);
+      result.current.release(viewport, 'x');
+
+      runNextFrame(0); // shared rebound clock
+      runNextFrame(0); // momentum reaches the already-active left boundary
+
+      expect(table.classList.contains('is-bounce-settling')).toBe(true);
+      expect(table.style.getPropertyValue('--workspace-bounce-x')).toBe('30.0px');
+    } finally {
+      result.current.stop();
+      pendingFrames.clear();
+      vi.useRealTimers();
+      Object.defineProperty(window, 'requestAnimationFrame', { configurable: true, writable: true, value: previousRequestAnimationFrame });
+      Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, writable: true, value: previousCancelAnimationFrame });
+    }
+  });
+
   test('locks clear horizontal and vertical gestures while preserving near-diagonal movement', () => {
     expect(getTablePanAxis(100, 20)).toBe('x');
     expect(getTablePanAxis(20, -100)).toBe('y');
