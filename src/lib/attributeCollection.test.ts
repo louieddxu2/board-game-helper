@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { AttributeCatalogPayload } from '../shared/types';
 import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
+import { attributeDirectRatingKey } from './attributeDirectRatings';
 
 describe('GeekGroup collection import', () => {
   test('parses quoted commas and keeps unique Game IDs only', () => {
@@ -117,6 +118,44 @@ describe('local attribute collection question selection', () => {
 
     expect(first?.subjectAId).toBe('subject-a');
     expect(last?.subjectAId).toBe('subject-c');
+  });
+
+  test('removes directly rated items before building the seed pool', () => {
+    const excludedDirectRatingKeys = new Set([
+      attributeDirectRatingKey('subject-a', 'attribute-luck'),
+    ]);
+
+    const selection = chooseScopedAttributeQuestion(
+      catalog(),
+      ['subject-a', 'subject-b', 'subject-c'],
+      { excludedDirectRatingKeys },
+      0,
+    );
+
+    expect(selection).toEqual({
+      subjectAId: 'subject-c',
+      subjectBId: 'subject-b',
+      attributeId: 'attribute-luck',
+    });
+  });
+
+  test('removes directly rated items before weighting the opponent pool', () => {
+    const excludedDirectRatingKeys = new Set([
+      attributeDirectRatingKey('subject-b', 'attribute-luck'),
+    ]);
+
+    const selection = chooseScopedAttributeQuestion(
+      catalog(),
+      ['subject-a', 'subject-b', 'subject-c'],
+      { fixedSubjectAId: 'subject-a', fixedAttributeId: 'attribute-luck', excludedDirectRatingKeys },
+      0,
+    );
+
+    expect(selection).toEqual({
+      subjectAId: 'subject-a',
+      subjectBId: 'subject-c',
+      attributeId: 'attribute-luck',
+    });
   });
 
   test('replaces only one side while preserving the other side and attribute', () => {

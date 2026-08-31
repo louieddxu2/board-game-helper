@@ -8,6 +8,7 @@ import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
+import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from '../lib/attributeDirectRatings';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
 import { SessionContext } from '../context/SessionContext';
@@ -135,6 +136,7 @@ export const AttributesPage = () => {
   const [sessionId] = useState(getAttributeSessionId);
   const collectionIdsRef = useRef<number[]>([]);
   const votingCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
+  const directRatingKeysRef = useRef(new Set<string>());
   const voteScopeRef = useRef<AttributeVoteScope>('all');
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
@@ -235,7 +237,10 @@ export const AttributesPage = () => {
         extremeExamples: { lowest: [], highest: [] },
       } satisfies AttributeQuestionPayload;
     }
-    const options = questionOptions(currentQuestion, mode);
+    const options = {
+      ...questionOptions(currentQuestion, mode),
+      excludedDirectRatingKeys: directRatingKeysRef.current,
+    };
     const scopedSubjectIds = voteScopeRef.current === 'collection'
       ? matchCollectionSubjects(catalog, collectionBggIds).subjectIds
       : undefined;
@@ -335,12 +340,14 @@ export const AttributesPage = () => {
       for (const item of pending) {
         try {
           const saved = await api.saveAttributeResponse(item);
+          await localDb.recordAttributeDirectRatings(sessionId, item, item.createdAt).catch(() => undefined);
           await localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
           await localDb.removePendingAttributeResponse(item.id);
           setConnectionState(browserIsOffline() ? 'offline' : 'online');
         } catch (caught) {
           if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
             await localDb.removePendingAttributeResponse(item.id);
+            attributeDirectRatingKeysFromResponse(item).forEach((key) => directRatingKeysRef.current.delete(key));
             setResponseError('有一筆離線回答已失效，請重新回答目前題目。');
             setConnectionState('online');
           } else if (caught instanceof ApiError && caught.status === 409) {
@@ -382,6 +389,8 @@ export const AttributesPage = () => {
       id: draft.responseId,
       createdAt: Date.now(),
     };
+    const directRatingKeys = attributeDirectRatingKeysFromResponse(pendingItem);
+    directRatingKeys.forEach((key) => directRatingKeysRef.current.add(key));
     const queuePromise = localDb.addPendingAttributeResponse(pendingItem)
       .then(() => true)
       .catch(() => false);
@@ -391,6 +400,7 @@ export const AttributesPage = () => {
 
     try {
       const [saved, queued] = await Promise.all([savePromise, queuePromise]);
+      await localDb.recordAttributeDirectRatings(sessionId, pendingItem, pendingItem.createdAt).catch(() => undefined);
       if (votingCatalogRef.current) {
         votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
       }
@@ -406,6 +416,7 @@ export const AttributesPage = () => {
       const wasQueued = await queuePromise;
       if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
         if (wasQueued) await localDb.removePendingAttributeResponse(pendingItem.id).catch(() => undefined);
+        directRatingKeys.forEach((key) => directRatingKeysRef.current.delete(key));
         setOptimisticActivities((current) => current.filter((activity) => activity.responseId !== draft.responseId));
         setConnectionState('online');
         setResponseError('上一筆回答已失效，請重新回答。');
@@ -423,15 +434,20 @@ export const AttributesPage = () => {
       inFlightResponseIdsRef.current.delete(draft.responseId);
       if (typeof navigator === 'undefined' || navigator.onLine) void syncPendingResponses();
     }
-  }, [refreshPendingCount, syncPendingResponses]);
+  }, [refreshPendingCount, sessionId, syncPendingResponses]);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [pending, storedScope, importedIds] = await Promise.all([
+      const [pending, storedScope, importedIds, storedDirectRatingKeys] = await Promise.all([
         refreshPendingCount(),
         localDb.getAttributeVoteScope().catch(() => 'all' as AttributeVoteScope),
         localDb.getAttributeCollectionIds().catch(() => [] as number[]),
+        localDb.getAttributeDirectRatingKeys(sessionId).catch(() => [] as string[]),
+      ]);
+      directRatingKeysRef.current = new Set([
+        ...storedDirectRatingKeys,
+        ...pending.filter((item) => item.sessionId === sessionId).flatMap(attributeDirectRatingKeysFromResponse),
       ]);
       const effectiveScope = storedScope === 'collection' && importedIds.length ? storedScope : 'all';
       voteScopeRef.current = effectiveScope;
@@ -442,7 +458,13 @@ export const AttributesPage = () => {
         setCollectionMatchKnown(false);
       }
       const cached = await localDb.getLatestAttributeQuestion().catch(() => undefined);
+      const cachedQuestion = cached?.data.question;
+      const cachedHasDirectRating = Boolean(cachedQuestion && (
+        directRatingKeysRef.current.has(attributeDirectRatingKey(cachedQuestion.subjectA.id, cachedQuestion.attribute.id))
+        || directRatingKeysRef.current.has(attributeDirectRatingKey(cachedQuestion.subjectB.id, cachedQuestion.attribute.id))
+      ));
       const cachedMatchesScope = cached?.data.question
+        && !cachedHasDirectRating
         && (cached.scope ? cached.scope === effectiveScope : effectiveScope === 'all');
       if (cachedMatchesScope && active) {
         applyQuestionPayload(cached.data);
@@ -466,8 +488,8 @@ export const AttributesPage = () => {
         applyQuestionPayload(nextPayload);
       } catch {
         if (active) setConnectionState(connectionStateAfterFailure());
-        if (active && !cached?.data.question) setError(true);
-        if (active && cached?.data.question) {
+        if (active && !cachedMatchesScope) setError(true);
+        if (active && cachedMatchesScope) {
           setResponseError(browserIsOffline()
             ? '目前離線，顯示上次取得的題目；恢復連線後會自動同步。'
             : '目前暫時無法連線到伺服器，先顯示上次取得的題目。');

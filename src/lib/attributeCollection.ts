@@ -1,4 +1,5 @@
 import type { AttributeCatalogPayload, AttributeExtremeExamples, AttributeQuestion, AttributeScoreExample, AttributeSubject } from '../shared/types';
+import { attributeDirectRatingKey } from './attributeDirectRatings';
 
 export const MAX_ATTRIBUTE_COLLECTION_CSV_BYTES = 5 * 1024 * 1024;
 
@@ -16,6 +17,7 @@ export interface ScopedAttributeQuestionOptions {
   fixedSubjectAId?: string;
   fixedSubjectBId?: string;
   fixedAttributeId?: string;
+  excludedDirectRatingKeys?: ReadonlySet<string>;
 }
 
 export interface ScopedAttributeQuestionSelection {
@@ -234,6 +236,9 @@ const pairIsExcluded = (left: string, right: string, attributeId: string, option
   && ((left === options.excludeSubjectAId && right === options.excludeSubjectBId)
     || (left === options.excludeSubjectBId && right === options.excludeSubjectAId));
 
+const isDirectlyRated = (subjectId: string, attributeId: string, options: ScopedAttributeQuestionOptions) =>
+  options.excludedDirectRatingKeys?.has(attributeDirectRatingKey(subjectId, attributeId)) ?? false;
+
 /**
  * Selects a question entirely from the weekly attribute catalog already in
  * IndexedDB. The server is called only afterwards with the selected subject
@@ -266,7 +271,10 @@ export const chooseScopedAttributeQuestion = (
       subjectId: subject.id,
       attributeId: candidateAttributeId,
       ...state(subject.id, candidateAttributeId),
-    }))).sort((left, right) => right.ratingDeviation - left.ratingDeviation);
+    })))
+      .filter((candidate) => !isDirectlyRated(candidate.subjectId, candidate.attributeId, options))
+      .sort((left, right) => right.ratingDeviation - left.ratingDeviation);
+    if (!ranked.length) return null;
     const pool = ranked.slice(0, Math.min(LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT, ranked.length));
     const seed = pool[Math.floor(randomValue * pool.length)] ?? ranked[0];
     seedId = seed.subjectId;
@@ -283,7 +291,7 @@ export const chooseScopedAttributeQuestion = (
   const excluded = new Set([seedId, options.excludeSubjectAId, options.excludeSubjectBId].filter((id): id is string => Boolean(id)));
   const seedState = state(seedId, attributeId);
   const candidates = availableSubjects
-    .filter((subject) => !excluded.has(subject.id))
+    .filter((subject) => !excluded.has(subject.id) && !isDirectlyRated(subject.id, attributeId!, options))
     .map((subject) => {
       const candidateState = state(subject.id, attributeId);
       const distance = Math.abs(seedState.score - candidateState.score);

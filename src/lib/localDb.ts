@@ -2,6 +2,13 @@ import { openDB, type DBSchema } from 'idb';
 import type { AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeQuestionPayload, AttributeSubject, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameVariantSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, SubmissionInput, GameSummary, RuleSearchResult, RuleCard, FlowStage, RuleCategory, TagSelection, TagSummary } from '../shared/types';
 import { applyGameCatalogChanges, mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
 import { applyAttributeCatalogChanges, mergeAttributeSubjectMetadata } from './attributeCatalog';
+import {
+  attributeDirectRatingKey,
+  attributeDirectRatingRecordsFromResponse,
+  newestAttributeDirectRatingRecords,
+  type AttributeDirectRatingInput,
+  type AttributeDirectRatingRecord,
+} from './attributeDirectRatings';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
@@ -167,6 +174,7 @@ interface RulesDb extends DBSchema {
   games: { key: string; value: CachedGameRow; indexes: { slug: string } };
   rules: { key: string; value: CachedRuleRow; indexes: { gameId: string } };
   attributeResponses: { key: string; value: PendingAttributeResponse };
+  attributeDirectRatings: { key: string; value: AttributeDirectRatingRecord; indexes: { ownerId: string; ratedAt: number } };
   attributeCollectionIds: { key: number; value: { bggId: number; importedAt: number } };
   attributeDeferredSubjects: { key: string; value: DeferredAttributeSubject };
   attributeCatalogMeta: { key: string; value: AttributeCatalogMetaRecord };
@@ -192,7 +200,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 8, {
+  return openDB<RulesDb>('wrong-board-game-rules', 9, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -210,6 +218,11 @@ const getDb = () => {
         rules.createIndex('gameId', 'gameId');
       }
       if (!db.objectStoreNames.contains('attributeResponses')) db.createObjectStore('attributeResponses', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('attributeDirectRatings')) {
+        const directRatings = db.createObjectStore('attributeDirectRatings', { keyPath: 'key' });
+        directRatings.createIndex('ownerId', 'ownerId');
+        directRatings.createIndex('ratedAt', 'ratedAt');
+      }
       if (!db.objectStoreNames.contains('attributeCollectionIds')) db.createObjectStore('attributeCollectionIds', { keyPath: 'bggId' });
       if (!db.objectStoreNames.contains('attributeDeferredSubjects')) db.createObjectStore('attributeDeferredSubjects', { keyPath: 'subjectId' });
       if (!db.objectStoreNames.contains('attributeCatalogMeta')) db.createObjectStore('attributeCatalogMeta', { keyPath: 'key' });
@@ -454,6 +467,24 @@ export const localDb = {
   },
   getPendingAttributeResponses: async () => (await getDatabase()).getAll('attributeResponses'),
   removePendingAttributeResponse: async (id: string) => (await getDatabase()).delete('attributeResponses', id),
+  getAttributeDirectRatingKeys: async (ownerId: string) => {
+    const records = await (await getDatabase()).getAllFromIndex('attributeDirectRatings', 'ownerId', ownerId);
+    return newestAttributeDirectRatingRecords(records).map((record) => attributeDirectRatingKey(record.subjectId, record.attributeId));
+  },
+  recordAttributeDirectRatings: async (ownerId: string, input: AttributeDirectRatingInput, ratedAt = Date.now()) => {
+    const records = attributeDirectRatingRecordsFromResponse(ownerId, input, ratedAt);
+    if (!records.length) return [];
+    const db = await getDatabase();
+    const transaction = db.transaction('attributeDirectRatings', 'readwrite');
+    await Promise.all(records.map((record) => transaction.store.put(record)));
+    const owned = await transaction.store.index('ownerId').getAll(ownerId);
+    const retainedKeys = new Set(newestAttributeDirectRatingRecords(owned).map((record) => record.key));
+    await Promise.all(owned
+      .filter((record) => !retainedKeys.has(record.key))
+      .map((record) => transaction.store.delete(record.key)));
+    await transaction.done;
+    return records.map((record) => attributeDirectRatingKey(record.subjectId, record.attributeId));
+  },
   cacheSearch: async (key: string, data: SearchResponse) => {
     const record = { key: `search:${key}`, data, cachedAt: Date.now() } satisfies CacheRecord<SearchResponse>;
     if (searchMemoryCache.size >= 100 && !searchMemoryCache.has(key)) {

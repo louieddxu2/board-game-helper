@@ -60,6 +60,8 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'clearDeferredAttributeSubject').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'addPendingAttributeResponse').mockResolvedValue('attribute-response');
     vi.spyOn(localDb, 'removePendingAttributeResponse').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getAttributeDirectRatingKeys').mockResolvedValue([]);
+    vi.spyOn(localDb, 'recordAttributeDirectRatings').mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -210,6 +212,29 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(localDb.invalidateAttributeQuestion).toHaveBeenCalled());
     expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
     expect(tableSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('excludes a newly entered direct rating from both sides of the next local selection', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
+
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    expect(questionSpy).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({
+      fixedSubjectAId: subjectB.id,
+      fixedSubjectBId: subjectC.id,
+      fixedAttributeId: attribute.id,
+    }));
+    await waitFor(() => expect(localDb.recordAttributeDirectRatings).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ subjectAId: subjectA.id, ratingA: 6 }),
+      expect.any(Number),
+    ));
   });
 
   test('requests the next question before the cloud response finishes', async () => {
