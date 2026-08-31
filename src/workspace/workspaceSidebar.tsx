@@ -176,11 +176,12 @@ export const Tree = ({ data, expanded, onToggle, onOpen, onContext, onMove, onDr
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const session = dragSession.current;
     if (!session || session.pointerId !== event.pointerId) return;
+    const stayedWithinTapDistance = Math.hypot(event.clientX - session.startX, event.clientY - session.startY) <= 8;
     if (session.active) {
       onMove(session.node, dragTargetRef.current);
       event.preventDefault();
       deferClickSuppressionReset();
-    } else if (event.type === 'pointerup' && event.pointerType !== 'mouse') {
+    } else if (event.type === 'pointerup' && event.pointerType !== 'mouse' && stayedWithinTapDistance) {
       // Mobile browsers may suppress the synthetic click after a captured long-press
       // drag. Keep the drawer mounted through the compatibility click, then activate.
       suppressNextClick.current = session.node.id;
