@@ -1,6 +1,7 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
+export const MAX_BOTTOM_NAVIGATION_TABLES = 5;
 
 export const makeId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -9,7 +10,7 @@ export const makeId = (prefix: string) => {
   return `${prefix}-${random}`;
 };
 
-export const emptyWorkspace = (): WorkspaceData => ({ version: 1, nodes: [], tables: [], activeNodeId: null });
+export const emptyWorkspace = (): WorkspaceData => ({ version: 1, nodes: [], tables: [], activeNodeId: null, bottomNavigationTableIds: [] });
 
 export const createColumn = (name: string, inputType: WorkspaceInputType = 'text'): WorkspaceColumn => ({
   id: makeId('column'), name: name.trim(), inputType, options: [], alignment: 'left', overflowMode: inputType === 'link' ? 'ellipsis' : 'wrap',
@@ -194,26 +195,33 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
   return value ?? null;
 };
 
-export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => ({
-  ...data,
-  tables: data.tables.map((table) => {
-    const rowHeader = getRowHeaderColumn(table);
-    const columns = table.columns.map((column) => normalizeColumn(column));
-    return {
-      ...table,
-      rowHeaderName: rowHeader.name,
-      rowHeader,
-      textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
-      transposed: Boolean(table.transposed),
-      columns,
-      rows: table.rows.map((row, index) => ({
-        ...row,
-        name: normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`,
-        values: Object.fromEntries(columns.map((column) => [column.id, normalizeCellValue(row.values[column.id] ?? null, column.inputType)])),
-      })),
-    };
-  }),
-});
+export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => {
+  const tableIds = new Set(data.tables.map((table) => table.id));
+  const bottomNavigationTableIds = [...new Set(Array.isArray(data.bottomNavigationTableIds) ? data.bottomNavigationTableIds : [])]
+    .filter((tableId): tableId is string => typeof tableId === 'string' && tableIds.has(tableId))
+    .slice(0, MAX_BOTTOM_NAVIGATION_TABLES);
+  return {
+    ...data,
+    bottomNavigationTableIds,
+    tables: data.tables.map((table) => {
+      const rowHeader = getRowHeaderColumn(table);
+      const columns = table.columns.map((column) => normalizeColumn(column));
+      return {
+        ...table,
+        rowHeaderName: rowHeader.name,
+        rowHeader,
+        textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
+        transposed: Boolean(table.transposed),
+        columns,
+        rows: table.rows.map((row, index) => ({
+          ...row,
+          name: normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`,
+          values: Object.fromEntries(columns.map((column) => [column.id, normalizeCellValue(row.values[column.id] ?? null, column.inputType)])),
+        })),
+      };
+    }),
+  };
+};
 
 export const createNode = (type: WorkspaceNode['type'], name: string, parentId: string | null, order: number, tableId?: string): WorkspaceNode => ({
   id: makeId(type), type, name: name.trim() || (type === 'folder' ? '未命名資料夾' : '未命名表格'), parentId, order, ...(tableId ? { tableId } : {}),
@@ -278,7 +286,12 @@ export const removeNodeAndDescendants = (data: WorkspaceData, nodeId: string): W
     }
   }
   const tableIds = new Set(data.nodes.filter((node) => removedIds.has(node.id) && node.tableId).map((node) => node.tableId));
-  const remaining = { ...data, nodes: data.nodes.filter((node) => !removedIds.has(node.id)), tables: data.tables.filter((table) => !tableIds.has(table.id)) };
+  const remaining = {
+    ...data,
+    nodes: data.nodes.filter((node) => !removedIds.has(node.id)),
+    tables: data.tables.filter((table) => !tableIds.has(table.id)),
+    bottomNavigationTableIds: (data.bottomNavigationTableIds ?? []).filter((tableId) => !tableIds.has(tableId)),
+  };
   return { ...remaining, activeNodeId: resolveActiveTableNodeId(remaining) };
 };
 

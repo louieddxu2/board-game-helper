@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { NameDialogState } from './workspaceShared';
@@ -248,7 +248,12 @@ export function useWorkspaceActions({
       ? { ...workspaceImport, activeNodeId: resolveActiveTableNodeId(workspaceImport) }
       : (() => {
         const copy = cloneImportedWorkspace(workspaceImport);
-        const merged = { ...data, nodes: [...data.nodes, ...copy.nodes], tables: [...data.tables, ...copy.tables] };
+        const merged = {
+          ...data,
+          nodes: [...data.nodes, ...copy.nodes],
+          tables: [...data.tables, ...copy.tables],
+          bottomNavigationTableIds: [...new Set([...(data.bottomNavigationTableIds ?? []), ...(copy.bottomNavigationTableIds ?? [])])].slice(0, MAX_BOTTOM_NAVIGATION_TABLES),
+        };
         return { ...merged, activeNodeId: resolveActiveTableNodeId(merged, copy.nodes.find((node) => node.type === 'table')?.id) };
       })();
     commit(next, undefined, { clearAllHistory: true });

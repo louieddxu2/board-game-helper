@@ -21,4 +21,13 @@ describe('workspace independent table storage', () => {
     expect(plan.deletes).toEqual([removed.id]);
     expect(plan.meta).not.toHaveProperty('tables');
   });
+
+  it('stores bottom navigation order in workspace metadata without rewriting tables', () => {
+    const table = createTable('常用表格');
+    const signatures = new Map([[table.id, tableStorageSignature(table)]]);
+    const plan = createWorkspaceStoragePlan({ ...emptyWorkspace(), tables: [table], bottomNavigationTableIds: [table.id] }, signatures, [table.id]);
+
+    expect(plan.upserts).toEqual([]);
+    expect(plan.meta.bottomNavigationTableIds).toEqual([table.id]);
+  });
 });

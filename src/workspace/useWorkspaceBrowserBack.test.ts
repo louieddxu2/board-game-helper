@@ -1,10 +1,35 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isWorkspaceVirtualKeyboardOpen, useWorkspaceBrowserBack } from './useWorkspaceBrowserBack';
+import { isWorkspaceVirtualKeyboardOpen, useWorkspaceBrowserBack, useWorkspaceVirtualKeyboardOpen } from './useWorkspaceBrowserBack';
 
 afterEach(() => cleanup());
 
 describe('useWorkspaceBrowserBack', () => {
+  it('reports a virtual keyboard only while an editable control owns the shrunken viewport', () => {
+    const previousVisualViewport = window.visualViewport;
+    const previousInnerHeight = window.innerHeight;
+    const visualViewport = Object.assign(new EventTarget(), { height: 800 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const input = document.createElement('input');
+    document.body.append(input);
+    const { result, unmount } = renderHook(() => useWorkspaceVirtualKeyboardOpen());
+
+    act(() => input.focus());
+    visualViewport.height = 300;
+    act(() => visualViewport.dispatchEvent(new Event('resize')));
+    expect(result.current).toBe(true);
+
+    visualViewport.height = 800;
+    act(() => visualViewport.dispatchEvent(new Event('resize')));
+    expect(result.current).toBe(false);
+
+    unmount();
+    input.remove();
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: previousInnerHeight });
+  });
+
   it('dismisses the active transient layer without navigating the route', () => {
     const onBack = vi.fn();
     const pushState = vi.spyOn(window.history, 'pushState').mockImplementation(() => undefined);

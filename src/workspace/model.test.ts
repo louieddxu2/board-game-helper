@@ -48,6 +48,21 @@ describe('workspace model', () => {
     });
   });
 
+  it('keeps only unique existing tables in bottom navigation and removes deleted references', () => {
+    const first = createTable('第一張');
+    const second = createTable('第二張');
+    const normalized = normalizeWorkspace({
+      ...emptyWorkspace(),
+      tables: [first, second],
+      bottomNavigationTableIds: [first.id, 'missing', first.id, second.id],
+    });
+    expect(normalized.bottomNavigationTableIds).toEqual([first.id, second.id]);
+
+    const node = { id: 'node-1', type: 'table' as const, name: first.name, parentId: null, order: 0, tableId: first.id };
+    const removed = removeNodeAndDescendants({ ...normalized, nodes: [node] }, node.id);
+    expect(removed.bottomNavigationTableIds).toEqual([second.id]);
+  });
+
   it('parses and formats multi-select values seamlessly', () => {
     expect(parseMultiSelectValues('蘋果, 香蕉, 橘子')).toEqual(['蘋果', '香蕉', '橘子']);
     expect(parseMultiSelectValues('蘋果、香蕉、橘子')).toEqual(['蘋果', '香蕉', '橘子']);

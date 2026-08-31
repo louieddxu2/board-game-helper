@@ -338,6 +338,7 @@ describe('workspace spreadsheet format', () => {
     const folder = createNode('folder', '桌遊', null, 0);
     source.nodes[0].parentId = folder.id;
     source.nodes.push(folder);
+    source.bottomNavigationTableIds = [source.tables[0].id];
     const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source));
     const workbook = await readStoredWorkbook(exportWorkspaceXlsx(source));
     expect(workbook.sheetNames).toEqual(['__workspace', '收藏清單', '收藏清單__設定']);
@@ -345,10 +346,12 @@ describe('workspace spreadsheet format', () => {
     expect(imported.source).toBe('workspace');
     expect(imported.data?.nodes).toHaveLength(2);
     expect(imported.data?.tables[0].name).toBe('收藏清單');
+    expect(imported.data?.bottomNavigationTableIds).toEqual([source.tables[0].id]);
     const copy = cloneImportedWorkspace(imported.data!);
     expect(copy.nodes.every((node) => node.id !== imported.data?.nodes.find((original) => original.name === node.name)?.id)).toBe(true);
     expect(copy.nodes.find((node) => node.type === 'table')?.tableId).toBe(copy.tables[0].id);
     expect(copy.nodes.find((node) => node.type === 'table')?.parentId).toBe(copy.nodes.find((node) => node.type === 'folder')?.id);
+    expect(copy.bottomNavigationTableIds).toEqual([copy.tables[0].id]);
   });
 
   it('exports and imports the whole workspace as a folder-shaped ZIP archive', async () => {
@@ -356,6 +359,7 @@ describe('workspace spreadsheet format', () => {
     const folder = createNode('folder', '桌遊', null, 0);
     source.nodes[0].parentId = folder.id;
     source.nodes.push(folder);
+    source.bottomNavigationTableIds = [source.tables[0].id];
 
     const archive = await exportWorkspaceArchive(source);
     expect(archive.type).toBe('application/zip');
@@ -369,5 +373,6 @@ describe('workspace spreadsheet format', () => {
     expect(importedData?.tables[0].name).toBe(source.tables[0].name);
     expect(importedData?.tables[0].columns[1].inputType).toBe('select');
     expect(importedData?.tables[0].rows[0].values[importedData?.tables[0].columns[2].id]).toBe(2);
+    expect(importedData?.bottomNavigationTableIds).toEqual([source.tables[0].id]);
   });
 });

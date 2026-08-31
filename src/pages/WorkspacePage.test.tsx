@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
@@ -61,6 +61,61 @@ describe('WorkspacePage', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 450));
     dispatchPointer('pointerup');
   };
+
+  it('adds and cancels the current table in the bottom navigation', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '設定' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
+    await user.click(screen.getByRole('button', { name: '加入「測試表格」' }));
+    fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
+
+    expect(await screen.findByRole('navigation', { name: '常用表格' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '開啟表格 測試表格' })).toHaveAttribute('aria-current', 'page');
+    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: ['table-1'] }));
+
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
+    await user.click(screen.getByRole('button', { name: '取消導覽' }));
+    fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
+
+    expect(screen.queryByRole('navigation', { name: '常用表格' })).not.toBeInTheDocument();
+    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: [] }));
+  });
+
+  it('releases the bottom navigation height while the virtual keyboard is open', async () => {
+    const previousVisualViewport = window.visualViewport;
+    const previousInnerHeight = window.innerHeight;
+    const visualViewport = Object.assign(new EventTarget(), { offsetTop: 0, offsetLeft: 0, width: 390, height: 800 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const user = userEvent.setup();
+
+    try {
+      render(<WorkspacePage />);
+      await waitFor(() => expect(screen.getByRole('button', { name: '設定' })).toBeEnabled());
+      await user.click(screen.getByRole('button', { name: '設定' }));
+      await user.click(screen.getByRole('button', { name: '底部導覽列設定' }));
+      await user.click(screen.getByRole('button', { name: '加入「測試表格」' }));
+      fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
+      expect(await screen.findByRole('navigation', { name: '常用表格' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '搜尋' }));
+      expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toHaveFocus();
+      visualViewport.height = 360;
+      act(() => visualViewport.dispatchEvent(new Event('resize')));
+      await waitFor(() => expect(screen.queryByRole('navigation', { name: '常用表格' })).not.toBeInTheDocument());
+
+      visualViewport.height = 800;
+      act(() => visualViewport.dispatchEvent(new Event('resize')));
+      await waitFor(() => expect(screen.getByRole('navigation', { name: '常用表格' })).toBeInTheDocument());
+    } finally {
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: previousInnerHeight });
+    }
+  });
 
   it('selects same-property cells by long press and commits one shared value', async () => {
     const user = userEvent.setup();

@@ -7,6 +7,7 @@ type WorkspaceMetadata = {
   version: WorkspaceData['version'];
   nodes: WorkspaceNode[];
   activeNodeId: string | null;
+  bottomNavigationTableIds?: string[];
 };
 
 interface WorkspaceDb extends DBSchema {
@@ -41,7 +42,7 @@ export const createWorkspaceStoragePlan = (data: WorkspaceData, signatures: Read
   const nextSignatures = new Map(data.tables.map((table) => [table.id, tableStorageSignature(table)]));
   const currentIds = new Set(nextSignatures.keys());
   return {
-    meta: { version: data.version, nodes: data.nodes, activeNodeId: data.activeNodeId } satisfies WorkspaceMetadata,
+    meta: { version: data.version, nodes: data.nodes, activeNodeId: data.activeNodeId, bottomNavigationTableIds: data.bottomNavigationTableIds ?? [] } satisfies WorkspaceMetadata,
     upserts: data.tables.filter((table) => signatures.get(table.id) !== nextSignatures.get(table.id)),
     deletes: storedIds.filter((id) => !currentIds.has(id)),
     signatures: nextSignatures,

@@ -9,7 +9,7 @@ import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, H
 import { Tree } from "../workspace/workspaceSidebar";
 import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, shouldKeepDrawerOpen, shouldOpenDrawer, useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
-import { useWorkspaceBrowserBack } from "../workspace/useWorkspaceBrowserBack";
+import { useWorkspaceBrowserBack, useWorkspaceVirtualKeyboardOpen } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
 import { applyWorkspaceMultiSelectBatch, type WorkspaceBulkSelection } from '../workspace/bulkEdit';
 import { WorkspaceBulkEditToolbar, WorkspaceBulkMultiSelectDialog, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
@@ -19,6 +19,7 @@ import { api } from '../lib/api';
 import { savePwaLastRoute } from '../lib/pwaNavigation';
 import { GoogleDriveBackupDialog } from '../workspace/googleDriveBackup/GoogleDriveBackupDialog';
 import { useWorkspaceGoogleDriveBackup } from '../workspace/googleDriveBackup/useWorkspaceGoogleDriveBackup';
+import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const workspaceLineLimitStyle = (column: WorkspaceColumn) => ({ '--workspace-line-limit': column.lineLimit ? String(column.lineLimit) : undefined } as React.CSSProperties);
@@ -74,6 +75,7 @@ const WorkspacePage = () => {
   const [historyByTable, setHistoryByTable] = useState<Map<string, WorkspaceTableHistory>>(new Map());
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
+  const [bottomNavigationDraft, setBottomNavigationDraft] = useState<string[]>();
   const [hiddenFieldsEditor, setHiddenFieldsEditor] = useState<{ rowId: string; title: string }>();
   const [tableCreateParentId, setTableCreateParentId] = useState<string | null | undefined>(undefined);
   const [nameDialog, setNameDialog] = useState<NameDialogState>();
@@ -90,6 +92,7 @@ const WorkspacePage = () => {
   const [lastSavedAt, setLastSavedAt] = useState<number>();
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
   const [googleDriveClientId, setGoogleDriveClientId] = useState<string | null | undefined>(undefined);
+  const virtualKeyboardOpen = useWorkspaceVirtualKeyboardOpen();
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const filterbarRef = useRef<HTMLDivElement>(null);
@@ -280,7 +283,7 @@ const WorkspacePage = () => {
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
     const previous = dataRef.current;
     const mutation = explicitMutation ?? (previous ? inferWorkspaceTableMutation(previous, next) : undefined);
-    const meaningfulChange = !previous || JSON.stringify({ nodes: previous.nodes, tables: previous.tables }) !== JSON.stringify({ nodes: next.nodes, tables: next.tables });
+    const meaningfulChange = !previous || JSON.stringify({ nodes: previous.nodes, tables: previous.tables, bottomNavigationTableIds: previous.bottomNavigationTableIds ?? [] }) !== JSON.stringify({ nodes: next.nodes, tables: next.tables, bottomNavigationTableIds: next.bottomNavigationTableIds ?? [] });
     const committed = meaningfulChange ? { ...next, updatedAt: Date.now() } : next;
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
     setData(committed);
@@ -325,6 +328,13 @@ const WorkspacePage = () => {
 
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
+  const navigationTables = useMemo<WorkspaceBottomNavigationItem[]>(() => data?.nodes.flatMap((node) => {
+    if (node.type !== 'table' || !node.tableId) return [];
+    const navigationTable = data.tables.find((item) => item.id === node.tableId);
+    return navigationTable ? [{ tableId: navigationTable.id, nodeId: node.id, name: navigationTable.name }] : [];
+  }) ?? [], [data]);
+  const navigationTableById = useMemo(() => new Map(navigationTables.map((item) => [item.tableId, item])), [navigationTables]);
+  const bottomNavigationItems = useMemo(() => (data?.bottomNavigationTableIds ?? []).flatMap((tableId) => navigationTableById.get(tableId) ?? []), [data?.bottomNavigationTableIds, navigationTableById]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table]);
   const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table]);
 
@@ -732,6 +742,17 @@ const WorkspacePage = () => {
   const activeCellRowId = activeCell?.rowId;
   const activeCellColumnId = activeCell?.columnId;
 
+  const closeBottomNavigationDialog = useCallback(() => {
+    if (!data || bottomNavigationDraft === undefined) return;
+    const validTableIds = new Set(data.tables.map((item) => item.id));
+    const nextIds = [...new Set(bottomNavigationDraft)].filter((tableId) => validTableIds.has(tableId));
+    if (JSON.stringify(nextIds) !== JSON.stringify(data.bottomNavigationTableIds ?? [])) {
+      commit({ ...data, bottomNavigationTableIds: nextIds });
+      setNotice('底部導覽列已更新');
+    }
+    setBottomNavigationDraft(undefined);
+  }, [bottomNavigationDraft, commit, data]);
+
   const browserBackLayer = driveBackup.dialogOpen
     ? 'google-drive'
     : confirmDialog
@@ -762,6 +783,8 @@ const WorkspacePage = () => {
                               ? 'table-create'
                               : nameDialog
                                 ? 'name-editor'
+                                : bottomNavigationDraft !== undefined
+                                  ? 'bottom-navigation'
                                 : columnVisibilityOpen
                                   ? 'column-visibility'
                                   : tableActionsOpen
@@ -793,6 +816,7 @@ const WorkspacePage = () => {
       case 'node-menu': setNodeMenu(undefined); break;
       case 'table-create': setTableCreateParentId(undefined); break;
       case 'name-editor': setNameDialog(undefined); break;
+      case 'bottom-navigation': closeBottomNavigationDialog(); break;
       case 'column-visibility': setColumnVisibilityOpen(false); break;
       case 'table-actions': setTableActionsOpen(false); break;
       case 'drawer': closeDrawer(); break;
@@ -801,7 +825,7 @@ const WorkspacePage = () => {
       case 'search': clearSearchAndFilters(); break;
       default: break;
     }
-  }, [browserBackLayer, clearSearchAndFilters, closeBulkSelection, closeDrawer, driveBackup]);
+  }, [browserBackLayer, clearSearchAndFilters, closeBottomNavigationDialog, closeBulkSelection, closeDrawer, driveBackup]);
 
   useWorkspaceBrowserBack({ active: Boolean(browserBackLayer), onBack: dismissBrowserLayer });
 
@@ -887,6 +911,16 @@ const WorkspacePage = () => {
       window.removeEventListener('resize', schedule);
     };
   }, [activeCellKey, keepActiveCellVisible]);
+
+  useEffect(() => {
+    if (!activeCellKey) return;
+    const frame = window.requestAnimationFrame(keepActiveCellVisible);
+    const timer = window.setTimeout(keepActiveCellVisible, 160);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeCellKey, keepActiveCellVisible, virtualKeyboardOpen]);
 
   const workspacePageStyle = activeCellKey && visualViewportHeight ? {
     height: `${visualViewportHeight}px`,
@@ -1023,7 +1057,7 @@ const WorkspacePage = () => {
     </div>}
     {tableActionsOpen && table && <div className="workspace-editbar workspace-table-toolsbar" aria-label="表格工具列">
       <div className="workspace-editbar-group"><button type="button" className="workspace-editbar-button" aria-label="匯出此表" onClick={exportCurrent}><WorkspaceIcon name="download" size={22} /></button></div>
-      <div className="workspace-editbar-group"><button type="button" className="workspace-editbar-button" aria-label="欄位顯示設定" onClick={() => setColumnVisibilityOpen(true)}><WorkspaceIcon name="visibility" size={23} /></button></div>
+      <div className="workspace-editbar-group"><button type="button" className={`workspace-editbar-button ${(data.bottomNavigationTableIds ?? []).includes(table.id) ? 'is-active' : ''}`} aria-label="底部導覽列設定" onClick={() => { setBottomNavigationDraft([...(data.bottomNavigationTableIds ?? [])]); setTableActionsOpen(false); }}><WorkspaceIcon name="bottom-navigation" size={23} /></button><button type="button" className="workspace-editbar-button" aria-label="欄位顯示設定" onClick={() => setColumnVisibilityOpen(true)}><WorkspaceIcon name="visibility" size={23} /></button></div>
     </div>}
     <div className={`workspace-body ${drawerOpen ? 'drawer-is-open' : ''}`}>
       <main className="workspace-main">
@@ -1031,12 +1065,22 @@ const WorkspacePage = () => {
       </main>
     </div>
     </div>
+    {!virtualKeyboardOpen && bottomNavigationItems.length > 0 && <WorkspaceBottomNavigation items={bottomNavigationItems} activeTableId={table?.id} onOpen={(item) => {
+      const node = data.nodes.find((candidate) => candidate.id === item.nodeId);
+      if (!node || node.id === data.activeNodeId) return;
+      closeBulkSelection();
+      setSearchOpen(false);
+      setEditBarOpen(false);
+      setTableActionsOpen(false);
+      openNode(node);
+    }} />}
     {drawerOpen && <><button type="button" className="workspace-drawer-backdrop" aria-label="關閉目錄" onClick={closeDrawer} style={{ opacity: Math.min(1, drawerOffset / Math.max(1, workspaceDrawerWidth())) }} /><aside ref={drawerElementRef} className={`workspace-drawer${drawerDragging ? ' is-dragging' : ''}`} aria-label="Workspace 目錄" style={{ '--workspace-drawer-offset': `${drawerOffset}px` } as React.CSSProperties} onPointerDownCapture={beginDrawerSwipe} onPointerMoveCapture={moveDrawerSwipe} onPointerUpCapture={endDrawerSwipe} onPointerCancelCapture={endDrawerSwipe} onClickCapture={suppressDrawerSwipeClick}><header className="workspace-drawer-heading"><strong>目錄</strong><div><button type="button" className="workspace-drawer-create" onClick={() => addFolder(null)} aria-label="新增資料夾"><WorkspaceIcon name="folder-plus" size={21} /><span>資料夾</span></button><button type="button" className="workspace-drawer-create" onClick={() => setTableCreateParentId(null)} aria-label="新增表格"><WorkspaceIcon name="table-plus" size={21} /><span>表格</span></button><button type="button" onClick={closeDrawer} aria-label="關閉目錄"><WorkspaceIcon name="close" size={22} /></button></div></header><label className="workspace-drawer-search"><WorkspaceIcon name="search" size={18} /><span className="sr-only">搜尋表格與資料夾</span><input type="search" aria-label="搜尋表格與資料夾" placeholder="搜尋表格或資料夾" value={drawerQuery} onChange={(event) => setDrawerQuery(event.target.value)} /><button type="button" onClick={() => setDrawerQuery('')} aria-label="清除目錄搜尋" disabled={!drawerQuery}><WorkspaceIcon name="close" size={16} /></button></label><Tree data={data} expanded={expanded} filterQuery={drawerQuery} onToggle={(id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onOpen={openNode} onContext={setNodeMenu} onMove={relocateNode} onDragStateChange={handleDrawerItemDragStateChange} /><footer className="workspace-drawer-footer"><div className={`workspace-storage-status ${saveState === 'error' ? 'is-error' : ''}`} role="status"><span>{saveState === 'saving' ? '正在儲存於此裝置…' : saveState === 'error' ? '本機儲存失敗' : `已儲存於此裝置${lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}</span><span className={backupNeedsAttention ? 'needs-attention' : ''}>{lastExportAt ? `上次匯出：${new Date(lastExportAt).toLocaleDateString('zh-TW')}` : '尚未匯出資料'}</span></div><button type="button" className={`workspace-storage-status workspace-drive-status-card workspace-drive-storage-status ${driveBackup.status === 'dirty' || driveBackup.status === 'never' || driveBackup.status === 'disconnected' ? 'needs-attention' : ''}`} aria-label="開啟 Google Drive 備份" aria-haspopup="dialog" onClick={() => { setDrawerOpen(false); driveBackup.open(); }}><span>{driveBackup.status === 'offline' ? 'Google Drive · 目前離線' : driveBackup.status === 'disconnected' ? 'Google Drive · 已主動斷線' : driveBackup.status === 'dirty' ? 'Google Drive · 有未備份變更' : driveBackup.status === 'saved' ? 'Google Drive · 已完成備份' : 'Google Drive · 尚未備份'}</span><span>{driveBackup.status === 'disconnected' ? '自動備份已暫停，請重新連結' : !driveBackup.authorized ? (driveBackup.record.lastBackupAt ? '曾經備份過 · 尚未連結此工作階段' : '點按連結 Google Drive') : driveBackup.record.lastBackupAt ? `上次備份：${new Date(driveBackup.record.lastBackupAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })} · ${driveBackup.record.folderCount} 個資料夾 · ${driveBackup.record.tableCount} 張表格` : '尚未建立雲端備份 · 點按查看'}</span></button><label className={`workspace-auto-backup-toggle${driveBackup.status === 'disconnected' ? ' is-paused' : ''}`}><input type="checkbox" aria-label="自動備份" checked={driveBackup.autoBackupEnabled} onChange={(event) => driveBackup.setAutoBackupEnabled(event.target.checked)} /><span>自動備份</span><small>{driveBackup.status === 'disconnected' ? '已暫停，重新連結後恢復' : driveBackup.autoBackupEnabled ? '每 30 分鐘最多一次' : '僅在手動備份時上傳'}</small></label><div className="workspace-drawer-data-actions"><button type="button" onClick={() => void exportAll()}><WorkspaceIcon name="download" size={19} />匯出全部資料</button><button type="button" onClick={() => chooseImport('workspace')}><WorkspaceIcon name="upload" size={19} />匯入整個資料庫</button></div><a href="/" onClick={() => savePwaLastRoute({ pathname: '/' })}><WorkspaceIcon name="home" size={19} />返回網站</a></footer></aside></>}
     <input ref={importTableInputRef} id="workspace-import-table" className="sr-only" tabIndex={-1} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'table'); event.currentTarget.value = ''; }} />
     <input ref={importWorkspaceInputRef} id="workspace-import-workspace" className="sr-only" tabIndex={-1} type="file" accept=".zip,application/zip,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readImport(file, 'workspace'); event.currentTarget.value = ''; }} />
     {nodeMenu && <NodeActionsDialog node={nodeMenu} onClose={() => setNodeMenu(undefined)} onRename={() => { setNodeMenu(undefined); renameNode(nodeMenu); }} onDelete={() => askDeleteNode(nodeMenu)} onAddFolder={() => { setNodeMenu(undefined); addFolder(nodeMenu.id); }} onAddTable={() => { setNodeMenu(undefined); setTableCreateParentId(nodeMenu.id); }} onMove={() => { setMovingNode(nodeMenu); setNodeMenu(undefined); }} />}
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
      {columnVisibilityOpen && table && <ColumnVisibilityDialog columns={table.columns} onClose={() => setColumnVisibilityOpen(false)} onToggle={toggleColumnVisibility} />}
+    {bottomNavigationDraft !== undefined && <WorkspaceBottomNavigationDialog tables={navigationTables} tableIds={bottomNavigationDraft} currentTableId={table?.id} onChange={setBottomNavigationDraft} onClose={closeBottomNavigationDialog} />}
     {filterTarget && <HeaderFilterDialog label={filterTarget.label} inputType={activeFilterInputType} options={activeFilterOptions} numericValues={activeNumericValues} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} onQuery={setActiveFilterQuery} onRange={setActiveFilterRange} onAggregate={setActiveFilterAggregate} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}

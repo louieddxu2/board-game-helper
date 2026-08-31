@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const workspaceUiHistoryKey = '__boardGameHelperWorkspaceUi';
 
@@ -13,6 +13,71 @@ export const isWorkspaceVirtualKeyboardOpen = () => {
   // conservative threshold to avoid swallowing a real browser-back action.
   const threshold = Math.max(120, layoutHeight * 0.25);
   return viewportHeight < layoutHeight - threshold;
+};
+
+const isKeyboardEditable = (element: Element | null): element is HTMLElement => {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element instanceof HTMLTextAreaElement || element.isContentEditable) return true;
+  if (!(element instanceof HTMLInputElement)) return false;
+  return !['button', 'checkbox', 'color', 'file', 'hidden', 'radio', 'range', 'reset', 'submit'].includes(element.type);
+};
+
+/** Tracks a real on-screen keyboard without hiding navigation for a hardware-keyboard focus. */
+export const useWorkspaceVirtualKeyboardOpen = () => {
+  const [open, setOpen] = useState(false);
+  const baselineHeightRef = useRef(0);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const viewportHeight = () => viewport?.height ?? window.innerHeight;
+    baselineHeightRef.current = Math.max(window.innerHeight, viewportHeight());
+
+    let settleTimer: number | undefined;
+    const update = () => {
+      const focused = isKeyboardEditable(document.activeElement);
+      const height = viewportHeight();
+      if (!focused) {
+        baselineHeightRef.current = Math.max(height, window.innerHeight);
+        setOpen(false);
+        return;
+      }
+      const baseline = Math.max(baselineHeightRef.current, height);
+      const threshold = Math.max(120, baseline * 0.25);
+      setOpen(isWorkspaceVirtualKeyboardOpen() || baseline - height > threshold);
+    };
+    const schedule = () => {
+      update();
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(update, 120);
+    };
+    const captureFocusBaseline = () => {
+      baselineHeightRef.current = Math.max(baselineHeightRef.current, viewportHeight(), window.innerHeight);
+      schedule();
+    };
+    const resetOrientationBaseline = () => {
+      baselineHeightRef.current = viewportHeight();
+      schedule();
+    };
+
+    document.addEventListener('focusin', captureFocusBaseline);
+    document.addEventListener('focusout', schedule);
+    viewport?.addEventListener('resize', schedule);
+    viewport?.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', resetOrientationBaseline);
+    update();
+    return () => {
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      document.removeEventListener('focusin', captureFocusBaseline);
+      document.removeEventListener('focusout', schedule);
+      viewport?.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('orientationchange', resetOrientationBaseline);
+    };
+  }, []);
+
+  return open;
 };
 
 interface UseWorkspaceBrowserBackOptions {

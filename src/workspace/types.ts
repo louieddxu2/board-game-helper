@@ -67,6 +67,8 @@ export interface WorkspaceData {
   nodes: WorkspaceNode[];
   tables: WorkspaceTable[];
   activeNodeId: string | null;
+  /** Ordered table ids shown in the Workspace bottom navigation. */
+  bottomNavigationTableIds?: string[];
 }
 
 export const WORKSPACE_FORMAT = 'board-game-helper-workspace';

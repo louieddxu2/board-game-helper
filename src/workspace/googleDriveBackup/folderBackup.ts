@@ -328,7 +328,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
         if (!imported.table) throw new Error(`雲端表格格式錯誤：${ref.name}`);
         tables.push(imported.table);
       }
-      return normalizeWorkspace({ version: 1, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId });
+      return normalizeWorkspace({ version: 1, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds });
     },
   };
 };

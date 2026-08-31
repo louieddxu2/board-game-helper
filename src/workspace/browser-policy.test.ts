@@ -254,4 +254,17 @@ describe('workspace browser policies', () => {
     expect(standaloneRule).toMatch(/overscroll-behavior:\s*none/);
     expect(workspacePageRule).toMatch(/overscroll-behavior:\s*none/);
   });
+
+  it('keeps bottom navigation in the Workspace layout, inside the iOS safe area, and removes it for a virtual keyboard', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
+    const navigationRule = styles.match(/\.workspace-bottom-navigation\s*\{([^}]*)\}/)?.[1];
+    const pageSource = readFileSync('src/pages/WorkspacePage.tsx', 'utf8');
+
+    expect(workspacePageRule).toMatch(/height:\s*100dvh/);
+    expect(navigationRule).toMatch(/flex:\s*0 0 auto/);
+    expect(navigationRule).toMatch(/env\(safe-area-inset-bottom/);
+    expect(navigationRule).not.toMatch(/position:\s*fixed/);
+    expect(pageSource).toMatch(/!virtualKeyboardOpen && bottomNavigationItems\.length > 0/);
+  });
 });
