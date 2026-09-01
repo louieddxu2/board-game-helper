@@ -68,6 +68,10 @@ const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' |
   return base;
 };
 
+const attributeQuestionKey = (value: AttributeQuestion | undefined) => value
+  ? `${value.attribute.id}:${value.subjectA.id}:${value.subjectB.id}`
+  : '';
+
 const comparisonChoiceText = (question: AttributeQuestion, result: AttributeComparisonResult) => {
   if (result === 'A_HIGHER') return `${question.subjectA.displayName}較高`;
   if (result === 'B_HIGHER') return `${question.subjectB.displayName}較高`;
@@ -122,6 +126,7 @@ export const AttributesPage = () => {
   const [awaitingNext, setAwaitingNext] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [comparison, setComparison] = useState<AttributeComparisonResult | null>(null);
+  const [comparisonQuestionKey, setComparisonQuestionKey] = useState('');
   const [ratingA, setRatingA] = useState('');
   const [ratingB, setRatingB] = useState('');
   const [questionMotion, setQuestionMotion] = useState<QuestionMotion>('idle');
@@ -150,6 +155,7 @@ export const AttributesPage = () => {
 
   const clearResponse = () => {
     setComparison(null);
+    setComparisonQuestionKey('');
     setRatingA('');
     setRatingB('');
     setResponseError('');
@@ -588,6 +594,7 @@ export const AttributesPage = () => {
   const chooseComparison = (result: AttributeComparisonResult) => {
     setComparison(result);
     if (question) {
+      setComparisonQuestionKey(attributeQuestionKey(question));
       setVoteFeedback({ state: 'saving', text: `記錄中：${comparisonChoiceText(question, result)}` });
       setQuestionMotion('answering');
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(12);
@@ -669,6 +676,7 @@ export const AttributesPage = () => {
   const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
   const recentComparisons = mergeRecentActivities(payload.activities, optimisticActivities);
+  const comparisonSelectedForCurrentQuestion = comparisonQuestionKey === attributeQuestionKey(question);
   const ratingSuggestion = suggestedComparisonForRatings(ratingA, ratingB);
   const ratingSuggestionText = ratingSuggestion === 'A_HIGHER'
     ? `依照分數，建議點「${question.subjectA.displayName}」`
@@ -719,17 +727,17 @@ export const AttributesPage = () => {
         </div>
         <div className="attributes-question-pair">
           <div className="attributes-question-side">
-            <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+            <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparisonSelectedForCurrentQuestion && comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
           </div>
           <div className="attributes-question-side">
-            <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+            <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparisonSelectedForCurrentQuestion && comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
           </div>
           {voteFeedback && <p className={`attributes-vote-feedback is-${voteFeedback.state}`} role="status" aria-live="polite"><span aria-hidden="true">{voteFeedback.state === 'saved' ? '✓' : '…'}</span>{voteFeedback.text}</p>}
         </div>
 
         <div className="attributes-pair-actions" aria-label="回答與換題">
           <button type="button" className="attributes-change-one is-left" aria-label={`換掉${question.subjectA.displayName}`} onClick={() => void deferCurrentAndLoad('a')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">↻</span> 換一個</button>
-          <button type="button" className={`attributes-similar ${comparison === 'SIMILAR' ? 'is-selected' : ''} ${!submitting && ratingSuggestion === 'SIMILAR' ? 'is-suggested' : ''}`} aria-pressed={comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
+          <button type="button" className={`attributes-similar ${comparisonSelectedForCurrentQuestion && comparison === 'SIMILAR' ? 'is-selected' : ''} ${!submitting && ratingSuggestion === 'SIMILAR' ? 'is-suggested' : ''}`} aria-pressed={comparisonSelectedForCurrentQuestion && comparison === 'SIMILAR'} onClick={() => chooseComparison('SIMILAR')} disabled={questionLoading || submitting || awaitingNext}><span aria-hidden="true">≈</span> 差不多</button>
           <button type="button" className="attributes-change-one is-right" aria-label={`換掉${question.subjectB.displayName}`} onClick={() => void deferCurrentAndLoad('b')} disabled={questionLoading || submitting || awaitingNext}>換一個 <span aria-hidden="true">↻</span></button>
           <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void deferCurrentAndLoad('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
         </div>

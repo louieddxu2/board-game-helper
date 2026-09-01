@@ -214,6 +214,24 @@ describe('AttributesPage question flow', () => {
     expect(tableSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('does not carry a comparison highlight when the next question reuses a game', async () => {
+    const nextQuestion: AttributeQuestion = { ...question, subjectB: subjectC };
+    const questionSpy = vi.spyOn(api, 'attributeQuestion')
+      .mockResolvedValueOnce({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' })
+      .mockResolvedValue({ question: nextQuestion, activities: [], questionToken: 'next-question-token-that-is-long-enough' });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    const leftCard = await screen.findByRole('button', { name: '遊戲甲較高' });
+    fireEvent.click(leftCard);
+    expect(leftCard).toHaveClass('is-selected');
+
+    await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: '遊戲甲較高' })).not.toHaveClass('is-selected'));
+    expect(screen.getByRole('button', { name: '遊戲丙較高' })).toBeInTheDocument();
+  });
+
   test('excludes a newly entered direct rating from both sides of the next local selection', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
