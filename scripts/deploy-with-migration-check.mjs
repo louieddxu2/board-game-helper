@@ -1,7 +1,10 @@
 import { execSync } from 'child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import readline from 'readline';
 import { ensureCloudflareAuth } from './cloudflare-login.mjs';
-import { missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
+import { detectAuthSensitiveReleaseChanges, missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
+
+const DEPLOY_STATE_PATH = '.wrangler/last-successful-deploy-sha';
 
 const run = (command, options = {}) => {
   try {
@@ -41,6 +44,40 @@ const checkRequiredSecrets = () => {
   throw new Error(`正式環境缺少必要 Secret：${missing.join('、')}\n請先執行：\n${commands}`);
 };
 
+const currentGitSha = () => run('git rev-parse HEAD').trim();
+
+const releaseComparisonBase = (currentSha) => {
+  try {
+    const recorded = readFileSync(DEPLOY_STATE_PATH, 'utf8').trim();
+    if (/^[0-9a-f]{40}$/u.test(recorded)) {
+      run(`git merge-base --is-ancestor ${recorded} ${currentSha}`);
+      return recorded;
+    }
+  } catch { /* First guarded release or recorded commit is unavailable. */ }
+  return run('git rev-parse HEAD^').trim();
+};
+
+const checkAuthSensitiveReleaseChanges = () => {
+  const currentSha = currentGitSha();
+  const baseSha = releaseComparisonBase(currentSha);
+  const changedFiles = run(`git diff --name-only ${baseSha}`).split(/\r?\n/u).filter(Boolean);
+  const diff = run(`git diff --unified=0 ${baseSha}`, { maxBuffer: 8 * 1024 * 1024 });
+  const report = detectAuthSensitiveReleaseChanges({ changedFiles, diff });
+  if (report.warnings.length === 0) {
+    console.log('✅ 本次差異未碰觸 Google 登入與正式驗證設定。');
+  } else {
+    console.log('\n⚠️ 本次發布包含可能影響 Google 登入的修改：');
+    report.warnings.forEach((warning) => console.log(`   - ${warning}`));
+    console.log('   發布流程將繼續檢查必要 Secret 與 migration；請確認新增綁定也已登記於 REQUIRED_PRODUCTION_SECRETS。\n');
+  }
+  return currentSha;
+};
+
+const recordSuccessfulDeploy = (sha) => {
+  mkdirSync('.wrangler', { recursive: true });
+  writeFileSync(DEPLOY_STATE_PATH, `${sha}\n`, 'utf8');
+};
+
 const askQuestion = (query) => {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -54,6 +91,8 @@ const askQuestion = (query) => {
 
 const main = async () => {
   await ensureCloudflareAuth();
+  console.log('🛡️ 正在檢查本次差異是否影響 Google 登入...');
+  const deployingSha = checkAuthSensitiveReleaseChanges();
   console.log('🔐 正在檢查正式環境必要 Secret...');
   checkRequiredSecrets();
   console.log('✅ 正式環境必要 Secret 已設定。');
@@ -86,6 +125,7 @@ const main = async () => {
 
   console.log('\n📦 正在執行專案檢查、構建與 Worker 部署...');
   execSync('npm run deploy:code', { stdio: 'inherit' });
+  recordSuccessfulDeploy(deployingSha);
   console.log('\n🎉 部署流程完全結束！');
 };
 

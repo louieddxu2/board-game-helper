@@ -9,3 +9,11 @@ export declare const missingRequiredSecrets: (
   required?: readonly string[],
 ) => string[];
 export declare const parseSecretList: (output: string) => CloudflareSecretMetadata[];
+export interface AuthSensitiveReleaseChanges {
+  environmentBindings: string[];
+  warnings: string[];
+}
+export declare const detectAuthSensitiveReleaseChanges: (input?: {
+  changedFiles?: string[];
+  diff?: string;
+}) => AuthSensitiveReleaseChanges;

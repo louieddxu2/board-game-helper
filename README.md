@@ -46,7 +46,7 @@ npm run import:legacy -- --apply --remote --confirm-remote
 npm run deploy
 ```
 
-`npm run deploy` 會在檢查遠端 Migration 前自動確認 Cloudflare 登入狀態與必要 Secret，因此平常發布不需要手動再次授權。若 Secret 遺失，部署會在更新 Worker 前中止並列出設定指令；Secret 值只保存在 Cloudflare，不要寫入版本庫。若登入狀態失效，直接重新執行同一個 `npm run deploy` 即可；腳本會產生新網址、開啟預設瀏覽器，登入完成後繼續原流程。若使用 CI，請改用 `CLOUDFLARE_API_TOKEN`，不會嘗試開啟瀏覽器。
+`npm run deploy` 會在檢查遠端 Migration 前自動確認 Cloudflare 登入狀態與必要 Secret，並比較上次成功發布後的 Git 差異；若修改碰到 Google 登入、帳號／Session、正式環境綁定、Client ID／來源、CSP 或相關 migration，終端會列出醒目提醒。若 Secret 遺失，部署會在更新 Worker 前中止並列出設定指令；只有部署成功才會更新本機差異基準。Secret 值只保存在 Cloudflare，不要寫入版本庫。若登入狀態失效，直接重新執行同一個 `npm run deploy` 即可；腳本會產生新網址、開啟預設瀏覽器，登入完成後繼續原流程。若使用 CI，請改用 `CLOUDFLARE_API_TOKEN`，不會嘗試開啟瀏覽器。
 
 首次部署取得 `workers.dev` 或自訂網域後，把 `APP_ORIGIN` 改成正式來源並重新部署。接著在 Google Cloud 建立 Web Client ID，將正式來源加入 Authorized JavaScript origins，最後把 Client ID 設為 Worker 的 `GOOGLE_CLIENT_ID` 變數。
 
