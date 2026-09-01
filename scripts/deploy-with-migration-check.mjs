@@ -90,6 +90,9 @@ const askQuestion = (query) => {
 };
 
 const main = async () => {
+  console.log('🧪 正在執行不可略過的發布測試（登入、建立／編輯規則、完整 D1 migration 與瀏覽器流程）...');
+  execSync('npm run test:release', { stdio: 'inherit' });
+  console.log('✅ 發布測試全部通過。');
   await ensureCloudflareAuth();
   console.log('🛡️ 正在檢查本次差異是否影響 Google 登入...');
   const deployingSha = checkAuthSensitiveReleaseChanges();
@@ -125,6 +128,8 @@ const main = async () => {
 
   console.log('\n📦 正在執行專案檢查、構建與 Worker 部署...');
   execSync('npm run deploy:code', { stdio: 'inherit' });
+  console.log('\n🔎 正在驗證正式站健康狀態、Session 設定、Google Client ID 與 CSP...');
+  execSync('npm run smoke:production', { stdio: 'inherit' });
   recordSuccessfulDeploy(deployingSha);
   console.log('\n🎉 部署流程完全結束！');
 };

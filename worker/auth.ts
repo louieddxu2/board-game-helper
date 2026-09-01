@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { SessionUser, UserRole } from '../src/shared/types';
@@ -35,7 +35,7 @@ export const isPublicReadRequest = (method: string, requestUrl: string): boolean
     || isPublicGameDetail;
 };
 
-const googleAudiences = (env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>): string[] => Array.from(new Set([
+export const googleAudiences = (env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>): string[] => Array.from(new Set([
   env.GOOGLE_CLIENT_ID,
   ...(env.GOOGLE_CLIENT_IDS ?? '').split(','),
 ].map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
@@ -209,10 +209,14 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   return userId;
 };
 
-const authenticateGoogleCredential = async (c: AppContext, credential: string): Promise<{ userId: string; user: SessionUser }> => {
-  const audiences = googleAudiences(c.env);
+export const verifyGoogleIdentity = async (
+  credential: string,
+  env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>,
+  verificationKey: JWTVerifyGetKey = GOOGLE_JWKS,
+): Promise<{ sub: string; email: string; emailVerified: true; name?: string; picture?: string }> => {
+  const audiences = googleAudiences(env);
   if (!audiences.length) throw new Error('google_auth_not_configured');
-  const verified = await jwtVerify(credential, GOOGLE_JWKS, {
+  const verified = await jwtVerify(credential, verificationKey, {
     issuer: ['https://accounts.google.com', 'accounts.google.com'],
     audience: audiences,
   });
@@ -220,13 +224,18 @@ const authenticateGoogleCredential = async (c: AppContext, credential: string): 
   if (!payload.sub || typeof payload.email !== 'string' || payload.email_verified !== true) {
     throw new Error('invalid_google_identity');
   }
-  const userId = await upsertGoogleUser(c, {
+  return {
     sub: payload.sub,
     email: payload.email,
     emailVerified: true,
     name: typeof payload.name === 'string' ? payload.name : undefined,
     picture: typeof payload.picture === 'string' ? payload.picture : undefined,
-  });
+  };
+};
+
+const authenticateGoogleCredential = async (c: AppContext, credential: string): Promise<{ userId: string; user: SessionUser }> => {
+  const profile = await verifyGoogleIdentity(credential, c.env);
+  const userId = await upsertGoogleUser(c, profile);
   const user = await userById(getDatabase(c), userId);
   if (!user) throw new Error('session_creation_failed');
   return { userId, user };

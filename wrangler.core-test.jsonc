@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "board-game-helper-core-test",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "board-game-helper-core-test",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "PUBLIC_RATE_LIMITER",
+      "namespace_id": "3001",
+      "simple": { "limit": 1000, "period": 60 }
+    },
+    {
+      "name": "WRITE_RATE_LIMITER",
+      "namespace_id": "3002",
+      "simple": { "limit": 1000, "period": 60 }
+    }
+  ],
+  "vars": {
+    "APP_ORIGIN": "http://127.0.0.1:4173",
+    "TRUSTED_APP_ORIGINS": "http://localhost:4173",
+    "GOOGLE_CLIENT_ID": "core-flow-test.apps.googleusercontent.com",
+    "GOOGLE_DRIVE_CLIENT_ID": "core-drive-test.apps.googleusercontent.com",
+    "BOOTSTRAP_ADMIN_EMAIL": "core-flow@example.com",
+    "EMAIL_HASH_SECRET": "core-flow-test-email-hmac-secret-at-least-32-characters",
+    "ATTRIBUTE_QUESTION_SECRET": "core-flow-test-attribute-secret-at-least-32-characters"
+  }
+}

@@ -23,6 +23,18 @@ npm run typecheck
 npm run build
 ```
 
+登入及建立／編輯規則是發布不可破壞的核心流程。`npm run test:release` 會依序執行完整 Vitest、型別檢查、正式 build，接著建立隔離的本機 D1、從零套用全部 migration，並用獨立瀏覽器實際完成「登入 → Session Cookie → 建立新遊戲與規則 → 從 API 讀回 → 編輯規則 → 再次讀回 → 登出」。失敗時會在 `test-results/` 與 `playwright-report/` 保留 trace 與畫面；這套測試不會存取正式 D1。
+
+```powershell
+npm run test:core
+npm run test:core:e2e
+npm run test:release
+```
+
+Windows 會使用已安裝的 Google Chrome 建立乾淨、獨立的測試瀏覽器狀態；不會使用個人 Chrome profile。其他執行環境需先執行 `npx playwright install chromium`。正式發布完成後，流程還會執行 `npm run smoke:production`，確認健康 API、Session API、Google Client ID、本機登入開關及 Google Identity Services CSP。完整 Google 帳號選擇頁可能受驗證碼及第三方服務影響，因此自動測試以簽章 JWT 合約測試驗證 Google 身分規則，再由本機完整流程驗證相同的使用者、Session、Cookie 與 D1 寫入路徑。
+
+GitHub 對 `master` 的 push 與所有 Pull Request 也會執行相同的 `test:release`；這是獨立於本機發布腳本的第二道阻擋，不能取代正式站發布後的 smoke test。
+
 ## 正式發布
 
 正式環境使用獨立的 `wrangler.production.jsonc`，不會覆用本機 D1。
@@ -46,7 +58,7 @@ npm run import:legacy -- --apply --remote --confirm-remote
 npm run deploy
 ```
 
-`npm run deploy` 會在檢查遠端 Migration 前自動確認 Cloudflare 登入狀態與必要 Secret，並比較上次成功發布後的 Git 差異；若修改碰到 Google 登入、帳號／Session、正式環境綁定、Client ID／來源、CSP 或相關 migration，終端會列出醒目提醒。若 Secret 遺失，部署會在更新 Worker 前中止並列出設定指令；只有部署成功才會更新本機差異基準。Secret 值只保存在 Cloudflare，不要寫入版本庫。若登入狀態失效，直接重新執行同一個 `npm run deploy` 即可；腳本會產生新網址、開啟預設瀏覽器，登入完成後繼續原流程。若使用 CI，請改用 `CLOUDFLARE_API_TOKEN`，不會嘗試開啟瀏覽器。
+`npm run deploy` 會先執行不可略過的 `test:release`；通過後才檢查 Cloudflare 登入、遠端 Migration 與必要 Secret，並比較上次成功發布後的 Git 差異。若修改碰到 Google 登入、帳號／Session、正式環境綁定、Client ID／來源、CSP 或相關 migration，終端會列出醒目提醒。若 Secret 遺失，部署會在更新 Worker 前中止並列出設定指令。Worker 更新後還必須通過正式站 smoke test，只有全部成功才會記錄本次成功發布。Secret 值只保存在 Cloudflare，不要寫入版本庫。若登入狀態失效，直接重新執行同一個 `npm run deploy` 即可；腳本會產生新網址、開啟預設瀏覽器，登入完成後繼續原流程。若使用 CI，請改用 `CLOUDFLARE_API_TOKEN`，不會嘗試開啟瀏覽器。
 
 首次部署取得 `workers.dev` 或自訂網域後，把 `APP_ORIGIN` 改成正式來源並重新部署。接著在 Google Cloud 建立 Web Client ID，將正式來源加入 Authorized JavaScript origins，最後把 Client ID 設為 Worker 的 `GOOGLE_CLIENT_ID` 變數。
 
