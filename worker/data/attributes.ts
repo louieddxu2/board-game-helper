@@ -172,12 +172,31 @@ const votableSubjectCondition = (subjectAlias: string, gameAlias: string) => `(
 )`;
 
 /**
- * Configuration English names are derived from only that subject's
- * components.  Unlike attribute_subject_secondary_names, these correlated
- * lookups do not aggregate every subject in the database for each question.
+ * Voting secondary labels are derived from the shared game data.  An English
+ * primary name uses its first Chinese alias; an official Chinese primary name
+ * uses the English name.  Unlike attribute_subject_secondary_names, these
+ * correlated lookups do not aggregate every subject in the database for each
+ * question.
  */
+const gameSecondaryNameExpression = (gameAlias: string) => {
+  const firstChineseAlias = `(SELECT alias
+    FROM game_aliases
+    WHERE game_id = ${gameAlias}.id
+      AND alias GLOB '*[一-龥]*'
+    ORDER BY alias, id
+    LIMIT 1)`;
+  return `(CASE
+    WHEN ${gameAlias}.display_name NOT GLOB '*[一-龥]*'
+      THEN COALESCE(${firstChineseAlias}, NULLIF(${gameAlias}.english_name, ${gameAlias}.display_name))
+    ELSE NULLIF(${gameAlias}.english_name, ${gameAlias}.display_name)
+  END)`;
+};
+
 const subjectSecondaryNameExpression = (subjectAlias: string, gameAlias: string) => {
-  const baseName = `(SELECT COALESCE(base_game.english_name, base_component.english_name)
+  const baseName = `(SELECT COALESCE(
+      ${gameSecondaryNameExpression('base_game')},
+      NULLIF(base_component.english_name, '')
+    )
     FROM attribute_subject_components base_component
     LEFT JOIN games base_game ON base_game.id = base_component.game_id
     WHERE base_component.subject_id = ${subjectAlias}.id
@@ -198,7 +217,7 @@ const subjectSecondaryNameExpression = (subjectAlias: string, gameAlias: string)
       WHEN ${expansionName} IS NULL THEN ${baseName}
       ELSE ${baseName} || ' + ' || ${expansionName}
     END
-    ELSE ${gameAlias}.english_name END)`;
+    ELSE ${gameSecondaryNameExpression(gameAlias)} END)`;
 };
 
 interface AttributeMergeHistoryRow {
