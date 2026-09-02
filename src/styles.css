@@ -57,9 +57,8 @@ button, .interactive-card, .workspace-table-cell { -webkit-touch-callout: none; 
 
 html[data-standalone='true'],
 html[data-standalone='true'] body {
-  overscroll-behavior: none;
   overscroll-behavior-x: none;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
 }
 
 html[data-standalone='true'] .site-header,
