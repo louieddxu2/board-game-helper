@@ -46,6 +46,9 @@ test('登入、建立規則、編輯規則與登出皆實際持久化', async ({
   expect(created.ok()).toBeTruthy();
   expect((await created.json()).rule.statement).toBe(originalRule);
 
+  // A full navigation recreates SessionContext. Wait for its authenticated UI
+  // before asserting edit permissions so slower CI browsers cannot race it.
+  await expect(page.getByRole('link', { name: '帳號', exact: true })).toBeVisible();
   const editButton = page.getByRole('button', { name: '編輯', exact: true });
   if (!await editButton.isVisible()) {
     await page.getByRole('button', { name: originalRule, exact: true }).click();
