@@ -28,7 +28,7 @@
     "deploy": "node scripts/deploy-with-migration-check.mjs"
   },
   "dependencies": {
-    "hono": "^4.9.2",
+    "hono": "^4.12.34",
     "idb": "^8.0.3",
     "jose": "^6.1.0",
     "react": "^19.1.1",
