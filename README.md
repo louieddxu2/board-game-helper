@@ -4,6 +4,8 @@
 
 公開可閱讀、由指定編輯者維護的桌遊規則踩雷資料庫。前端是可安裝的 React PWA，API 使用 Cloudflare Worker，正式資料存於 D1。
 
+開源方向與程式碼／內容資料邊界見 [開源方向與範圍](docs/open-source-direction.md)。本專案開源的是實作與技術文件；正式服務的 D1 內容資料不隨程式碼授權。
+
 ## 本機開發
 
 ```powershell
