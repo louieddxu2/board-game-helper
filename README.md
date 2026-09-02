@@ -2,9 +2,13 @@
 
 > 這次玩對，或是下次玩對。
 
+[![Core release gate](https://github.com/louieddxu2/board-game-helper/actions/workflows/core-release-gate.yml/badge.svg)](https://github.com/louieddxu2/board-game-helper/actions/workflows/core-release-gate.yml)
+
 公開可閱讀、由指定編輯者維護的桌遊規則踩雷資料庫。前端是可安裝的 React PWA，API 使用 Cloudflare Worker，正式資料存於 D1。
 
-開源方向與程式碼／內容資料邊界見 [開源方向與範圍](docs/open-source-direction.md)。本專案開源的是實作與技術文件；正式服務的 D1 內容資料不隨程式碼授權。
+開源方向與程式碼／內容資料邊界見 [開源使用說明](docs/open-source-direction.md)。本專案開源的是實作與技術文件；正式服務的 D1 內容資料不隨程式碼授權。
+
+開源協作請先閱讀 [貢獻指南](CONTRIBUTING.md)、[內容資料與授權邊界](CONTENT-DATA-NOTICE.md) 及 [安全漏洞回報](SECURITY.md)。
 
 ## 本機開發
 

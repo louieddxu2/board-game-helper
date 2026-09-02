@@ -1,0 +1,43 @@
+name: Bug report
+description: 回報可以重現的程式問題
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        請不要在 issue 中貼上 token、帳號資料、production D1 內容或私人匯入檔。
+  - type: input
+    id: summary
+    attributes:
+      label: 問題摘要
+      description: 請用一句話描述實際發生的問題。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 請列出可以重現問題的最小步驟。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期與實際結果
+      description: 請分別說明預期結果和實際結果。
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 環境
+      description: 例如瀏覽器、作業系統、commit 或本機／正式環境。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相關輸出
+      description: 可貼上已移除敏感資料的錯誤訊息、測試輸出或畫面描述。

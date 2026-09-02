@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 開源方向與資料邊界
+    url: https://github.com/louieddxu2/board-game-helper/blob/master/docs/open-source-direction.md
+    about: 提交前請先確認本專案的功能方向，以及正式 D1 內容不在開源範圍。
+  - name: 安全漏洞回報
+    url: https://github.com/louieddxu2/board-game-helper/security/advisories/new
+    about: 請使用私下管道回報安全漏洞，不要開公開 issue。
