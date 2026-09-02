@@ -1,152 +1,170 @@
-# 開源方向與範圍
+# 給研究者、取用者與自架者的開源說明
 
-## 這份文件的目的
+## 先判斷你要做什麼
 
-本文件說明本專案如果對外開源時，預計採用的範圍、定位與資料邊界。它是給維護者、研究者、貢獻者及透過 AI 閱讀專案的人看的方向說明，不代表本專案要被改造成通用框架。
+這個 repository 是「玩錯的桌遊規則」的完整應用程式原始碼。它不是一個已經整理好的通用框架，也不包含正式站的 D1 dump；不過部分 migration 同時包含 schema 和初始化資料列，這些資料列的處理方式見下方「SQL 檔不等於全部都是可自由使用的程式碼」。
 
-本專案的核心原則是：
+請依你的目的閱讀：
 
-> 開源實作與思路，不開源正式服務累積的內容資料。
+| 你的目的 | 先讀哪裡 | 接著讀哪裡 | 你可以期待的結果 |
+| --- | --- | --- | --- |
+| 了解整體架構 | [README](../README.md)、`src/App.tsx` | `src/shared`、`worker/index.ts` | 知道前端路由、API、D1、IndexedDB 如何連接 |
+| 只取用動態表格 | `src/workspace/types.ts` | `model.ts` → `db.ts` → `spreadsheet.ts` → `WorkspacePage.tsx` | 抽取本機 typed table、匯入匯出或歷史紀錄設計 |
+| 研究成對比較評分 | `src/shared/types.ts` 的 attribute 型別 | `src/lib/attribute*` → `src/pages/AttributesPage.tsx` → `worker/data/attributes.ts` | 了解題目選擇、離線回答、聚合評分與目錄同步 |
+| 研究規則知識庫 | `src/shared/types.ts` 的 game／rule 型別 | `worker/routes/games.ts`、`rules.ts`、`submissions.ts`、`review.ts` | 了解投稿、來源、版本、審核與衝突處理 |
+| 自架一個自己的網站 | [本機開發](../README.md#本機開發) | `wrangler.jsonc`、`.dev.vars.example`、`migrations/` | 用自己的 Cloudflare 資源和自己的內容啟動 |
+| 研究跨站 API | [OpenAPI v1](./openapi.yaml) | [計分板整合路線](./scorepad-integration.md) | 了解公開讀取、Bearer session 與寫入權限 |
+| 只想看目前正式資料 | 不要從 repository 複製 | 依正式網站的正常使用方式瀏覽 | 網站存取不代表取得資料集授權 |
 
-「玩錯的桌遊規則」仍然是一個以桌遊需求為出發點的完整應用。其他領域若想取用其中一部分，可以自行閱讀、抽取與改寫；本專案不承諾為未知領域維護額外的抽象層或產品功能。
+如果你是透過 AI 研究，請在提示中說明你的目的，例如：「只分析 Workspace 的 IndexedDB 和 XLSX 匯出，不要分析或重現 migration 內的遊戲資料」。這樣可以避免 AI 把桌遊內容誤當成可重用的範例資料。
 
-## 開源定位
+## 所有讀者都要先知道的三件事
 
-本專案適合被理解為三種東西的集合：
+### 這是桌遊產品，不是通用平台
 
-1. 一個由桌遊規則勘誤需求發展出的實際網站。
-2. 一套可研究的離線優先 PWA、Cloudflare Worker／D1 與審核工作流實作。
-3. 三個具有跨領域參考價值、但不保證可直接套用的功能方向。
+產品名稱、頁面文案、規則欄位、BGG／GeekGroup 匯入及部分資料庫內容都以桌遊為前提。你可以把其中的實作當成參考，卻不應假設：
 
-使用者不需要整套採用本專案。可以只研究 Workspace 的本機資料層、只取用成對比較的評分演算法、只參考規則投稿與衝突審核流程，或把它當成一個完整的桌遊網站範例。
+- 所有欄位已適合其他領域。
+- 所有名稱已經抽象化。
+- fork 後可以直接連到原本的正式 API 或資料庫。
+- 維護者會替你的領域增加設定、模板或 adapter。
 
-## 三個核心功能
+「可跨領域參考」表示你可以自行取用有價值的實作，不表示本專案會替其他領域提供產品支援。
 
-### 1. 規則勘誤與可追溯知識庫
+### 開源的是實作，不是正式資料
 
-現有網站收集「實際遊玩時容易玩錯的規則」，而不是試圖取代完整規則書。主要流程包括：
+可研究和再利用的範圍包括前端、Worker、測試、共用型別、演算法、資料庫結構、migration 機制、部署腳本、API 規格及技術文件。
 
-- 遊戲名稱、別名與版本／變體辨識。
-- 規則陳述、常見錯誤情況、流程階段、玩家人數及來源連結。
-- 標籤、公開顯示與搜尋。
-- 使用者投稿、編輯權限、人工審核、軟刪除與修訂紀錄。
-- 匯出、AI／人工校稿提案、基準版本比對及衝突處理。
-- 唯讀公開 API 與前端閱讀快取。
+不在開源範圍的是正式 D1 中保存的內容，包括遊戲與別名、規則、標籤、屬性定義、評分、投票、投稿、審核、使用者、Session、收藏、瀏覽統計、備份及其他營運紀錄。作者文案、投稿者內容及第三方來源也不會因為出現在網站或 SQL 中就自動取得開源授權。
 
-跨領域可參考的不是「桌遊規則」這個名詞，而是「一個社群如何維護容易出錯、需要來源與人工確認的知識項目」。可能的研究方向包括軟體版本陷阱、設備操作注意事項、運動規則或嗜好流程；這些只是使用者自行延伸的例子，不是本專案的承諾支援範圍。
+正式網站或公開 API 讓你讀到資料，是使用服務的必要功能，不等於允許整批下載、重製、再散布、建立衍生資料集或訓練另一個內容庫。
 
-### 2. 成對比較與屬性評分
+### SQL 檔不等於全部都是可自由使用的程式碼
 
-屬性系統讓使用者對兩個 subject 進行成對比較，也可以留下直接分數，系統再累積群體結果、信心度及近期活動。相關流程包含：
+部分 migration 同時放了 schema 和實際 `INSERT` 資料。閱讀時請將兩者分開：
 
-- subject × attribute 的資料模型。
-- 成對比較與直接評分的混合輸入。
-- 題目選擇、重複回答避免、低信心項目優先及極端範例。
-- 離線回答佇列、重新連線後同步與衝突處理。
-- 版本化目錄、增量更新與本機快取。
-- 依收藏範圍限制題目，以及屬性總表檢視。
+- `CREATE TABLE`、欄位限制、index、trigger、view 及 migration 邏輯，是程式／schema 層。
+- 實際的遊戲、屬性、翻譯、評分、來源識別及其他資料列，是內容資料層。
+- 不要把 production D1 dump、正式備份或完整公開資料快照提交到自己的 fork。
+- 自架時請使用自己建立的資料，或使用有清楚授權的 demo data。
 
-這一層可被研究成產品比較、內容分類、使用者研究或偏好探索的基礎，但目前的屬性定義、外部識別碼、匯入格式與文案仍以桌遊為前提。
+正式發布時，repository 根目錄的 `LICENSE`、資料邊界聲明及各資料來源的個別條款共同決定可用範圍。只有 repository 可見，並不代表已經取得開源授權。
 
-### 3. 離線優先動態表格 Workspace
+## 如果你只想取用其中一部分
 
-Workspace 是一個不依賴伺服器即可使用的動態表格。它提供：
+### A. 取用 Workspace
 
-- 資料夾與多張表格。
-- 文字、數字、固定／動態選單、連結、日期時間及多選欄位。
-- 欄位顯示、排序、篩選、轉置檢視、批次編輯與手勢操作。
-- IndexedDB 本機儲存與逐表歷史紀錄。
-- 貼上矩陣、XLSX 單表／整個 Workspace 匯入與匯出。
-- 使用者主動連結 Google Drive 後的備份與還原。
-- 沒有網路時仍可編輯，恢復連線後再進行備份。
+適合想要離線表格、資料夾、欄位型態、批次編輯或 XLSX 往返的人。
 
-這是三個功能中最容易被獨立研究的部分，但它仍以本專案的 PWA 與資料格式為背景。想改造成另一個產品的人，應自行決定同步、權限、多人協作及資料責任，而不能假設目前的本機優先設計已經涵蓋那些需求。
+建議閱讀順序：
 
-## 授權邊界
+1. `src/workspace/types.ts`：先看資料結構。核心物件是 `WorkspaceData`、`WorkspaceTable`、`WorkspaceColumn` 和 `WorkspaceRow`。
+2. `src/workspace/model.ts`：看值的正規化、欄位型態、顯示、篩選及動態選單。
+3. `src/workspace/db.ts`：看 IndexedDB schema、逐表儲存、寫入佇列與歷史紀錄。
+4. `src/workspace/spreadsheet.ts`：看 plain table、含設定的單表及整個 Workspace 的 XLSX 匯入／匯出。
+5. `src/pages/WorkspacePage.tsx`：最後才看頁面如何組合操作、手勢、對話框、篩選和備份。
 
-### 預計開源的部分
+目前 Workspace 是本機資料優先。Google Drive 只是使用者主動連結後的備份／還原位置，不是即時資料庫，也沒有多人合併。若你的產品需要跨裝置同步、權限、即時協作或衝突合併，這些都要自行設計。
 
-開源版本的範圍原則上包括：
+### B. 取用屬性比較
 
-- 前端、Worker、共用型別、狀態管理、儲存層與演算法。
-- 測試、測試工具、部署腳本與本機開發設定範例。
-- 資料庫 schema、索引、trigger、migration 機制及 API 契約。
-- Workspace 的資料格式、匯入／匯出格式與 Google Drive 備份流程實作。
-- 架構、設計決策、維運及整合文件。
+適合想研究「讓使用者回答少量成對問題，再累積群體排序」的人。
 
-開源授權應由 repository 根目錄的 `LICENSE` 明確指定。若採取「允許研究、抽取及再利用」的方向，Apache-2.0 是預設候選；若日後希望要求網路服務的修改版也公開，再另行評估 AGPL-3.0。未正式加入授權檔前，不能把 repository 僅因為可見就當成已取得開源授權。
+建議閱讀順序：
 
-### 不在開源範圍的部分
+1. `src/shared/types.ts`：確認 `AttributeSubject`、`AttributeDefinition`、`AttributeQuestion`、`AttributeMatrixValue`。
+2. `src/lib/attributeQuestion.ts`、`attributeSession.ts`、`attributeRatingSuggestion.ts`：看題目文字、session、直接評分與下一題建議。
+3. `src/lib/attributeCollection.ts`：看收藏範圍與外部 ID 的本機交集。
+4. `src/pages/AttributesPage.tsx`：看回答、離線佇列、同步、錯誤與畫面狀態。
+5. `worker/data/attributes.ts`、`worker/routes/attributes.ts`：看伺服器端題目、回答、活動與評分資料流。
+6. `migrations/0040_attribute_subjects.sql` 及後續 attribute migrations：只在需要了解 D1 結構或版本化目錄時閱讀。
 
-正式服務的 D1 內容資料不隨程式碼授權。這包括但不限於：
+這個系統提供的是群體回應的聚合結果，不是客觀真理，也不代表目前桌遊屬性定義適合你的領域。若換成商品、課程或媒體，應重新定義 subject、attribute、評分尺度、來源及偏差處理。
 
-- 正式遊戲目錄、名稱、別名、版本與外部識別資料。
-- 正式規則、玩錯情況、來源註記、標籤與審核結果。
-- 屬性定義、屬性翻譯、初始評分、直接評分與成對比較結果。
-- 使用者、Session、投稿、投票、活動紀錄、收藏、瀏覽統計與管理紀錄。
-- 正式 D1 的匯出檔、備份檔、快照、Cloudflare 資源識別資料及其他營運資料。
-- 作者文案、投稿者提供的內容及第三方來源資料，除非另有個別書面授權。
+### C. 取用規則知識庫流程
 
-網站或 API 顯示資料，是為了提供服務而給予的存取機會，不等於授予整批重製、重新散布、建立資料集或建立衍生資料庫的權利。正式資料若要另行發布，必須有獨立的資料授權與來源確認，不能直接套用程式碼的開源授權。
+適合想研究有來源、可審核、可追蹤修訂的知識項目。
 
-## Schema 與資料列的區分
+建議閱讀順序：
 
-本專案目前有些 SQL migration 同時包含結構定義和實際 `INSERT` 資料。開源時應按照下列原則理解：
+1. `src/shared/types.ts`：先看 `GameSummary`、`GameDetail`、`RuleCard`、`RuleRevision`、`SubmissionInput` 和 `ReviewProposal`。
+2. `src/lib/api.ts`：看前端呼叫哪些 API，以及公開讀取與登入後寫入的分界。
+3. `worker/routes/games.ts`、`rules.ts`、`submissions.ts`：看遊戲、規則與投稿流程。
+4. `worker/routes/review.ts`、`worker/review.ts`：看提案、基準版本、衝突及人工決定。
+5. [校稿工作流](./review-workflow.md)：看匯出給人工／AI 校稿後，如何只建立提案而不直接覆蓋正式內容。
+6. `migrations/0001_initial.sql` 及其後的 rule／tag／review migrations：需要改 schema 時再看。
 
-- `CREATE TABLE`、欄位約束、index、trigger、view 及 migration 邏輯屬於可研究的程式／schema 層。
-- 實際遊戲、屬性、評分、翻譯、來源識別與其他資料列屬於內容資料層，不因放在 SQL 檔而自動取得開源授權。
-- Production D1 dump 永遠不應放入 repository、release artifact 或公開備份。
-- 若開源發行版需要可立即啟動，應使用另行製作、來源清楚的 demo seed；不可把正式 D1 匯出檔當成 demo data。
+現有規則庫收集的是「容易玩錯的規則與錯誤情況」，不是完整規則書。若你把這套流程用於 SOP、設備操作或其他知識，必須重新確認內容責任、來源權利、審核者資格及高風險錯誤的處理方式。
 
-這個區分是發布時的必要文件與審核邊界。它不要求現在為了開源而改寫 runtime 或資料模型，但正式公開前必須能讓使用者看懂哪些檔案／區塊是 schema，哪些是保留權利的資料。
+## 如果你想自架
 
-## 目前不追求的事情
+自架者不是在複製正式站，而是在用相同程式建立一個由自己負責的服務。你需要自己準備：
 
-本專案開源後不以以下事項作為必要目標：
+- Cloudflare Worker、D1 和 migration 執行環境。
+- 自己的 `APP_ORIGIN`、Google OAuth client、session secrets 及管理員設定。
+- 自己擁有或取得授權的遊戲、規則、屬性和其他資料。
+- 自己的資料備份、隱私政策、帳號刪除、漏洞回報及內容審核責任。
 
-- 把所有桌遊名詞改成泛用名詞。
-- 將三個功能拆成三個套件或三個 repository。
-- 為每一種非桌遊領域建立設定檔、模板或官方 adapter。
-- 提供多人即時 Workspace、跨裝置自動合併或無人值守雲端同步。
-- 保證任何 fork 都能直接連上原本的正式資料或正式 API。
-- 接受所有希望擴大產品用途的功能提案。
+本機開發可依 [README 的本機開發流程](../README.md#本機開發) 初始化。請不要填入正式站的 D1 ID、secret、Google Drive token 或正式備份。自架版本可以使用相同 schema，但不會因此取得正式資料。
 
-如果未來出現第二個真實使用情境，再依重複需求抽出中性的模組；在此之前，保留桌遊語境可以降低複雜度，也能讓專案維持清楚的產品身份。
+Google 登入只處理身分驗證；Workspace 的 Google Drive 備份是另外的 OAuth 授權。不要把正式服務的 token、Cookie 或 D1 內容放進 issue、PR、測試 fixture 或 AI 提示。
 
-## 研究與取用建議
+## 如果你想貢獻
 
-透過 AI 或自行閱讀時，可以依下列順序理解：
+貢獻的最小單位可以是文件、測試、bug 修正、可及性、效能、翻譯或開發工具改善。提交前請先確認修改屬於目前產品，而不是只為了讓名稱看起來更通用。
 
-1. 先看 [README](../README.md) 了解產品、驗證與部署邊界。
-2. 想研究規則知識庫時，從 `src/shared`、`src/lib`、`worker`、`migrations/0001_initial.sql` 及 `docs/review-workflow.md` 開始。
-3. 想研究屬性比較時，從 `src/lib/attribute*`、`src/pages/AttributesPage.tsx`、attribute migrations 及 `docs/d1-read-budgets.md` 開始。
-4. 想研究動態表格時，從 `src/workspace/types.ts`、`src/workspace/model.ts`、`src/workspace/db.ts`、`src/workspace/spreadsheet.ts`、`src/pages/WorkspacePage.tsx` 開始。
-5. 想研究跨站整合時，再閱讀 [OpenAPI](./openapi.yaml)、[計分板整合路線](./scorepad-integration.md) 及 Google Drive 備份文件。
+涉及下列內容時，請先在 issue 說明資料與安全影響：
 
-研究者應把正式服務的資料視為不可隨 repository 複製的外部依賴；本機應使用 demo data、自己建立的資料或明確取得授權的資料。
+- migration 或正式 D1。
+- 使用者、Session、投稿、投票及內容匯出。
+- OAuth、Cloudflare 權限、備份或跨站 API。
+- 外部資料來源、遊戲名稱、翻譯、作者文案或其他權利問題。
 
-## 維護與貢獻方向
+不要提交 production D1 dump、私人匯入檔、Google Drive 備份、token、帳號資料或未確認授權的內容。測試請使用虛構資料或明確可公開的 fixture。
 
-本專案仍由原作者主導產品方向。可考慮接受的貢獻包括：
+維護者會維持桌遊產品的核心方向；「別的領域也可能用得到」本身不是要求新增抽象層、設定項或 adapter 的理由。
 
-- bug 修正、測試、效能、可及性與安全性改善。
-- 文件、翻譯、開發環境與 self-hosting 說明。
-- 不改變現有資料責任邊界的匯入／匯出改善。
-- 以實際需求為基礎、且能說明桌遊用途的功能改善。
+## 如果你只想用 AI 讀懂專案
 
-提案若只是為了讓專案看起來更通用，不足以成為抽象化的理由。任何涉及資料重製、來源、個人資料、正式 D1、OAuth、Cloudflare 權限或資料庫 migration 的修改，都需要先確認其安全與授權影響。
+請把問題限定在一個功能和一個結果。例如：
 
-## 發布前檢查清單
+```text
+請只研究 C:\\code\\BoardGameHelper\\src\\workspace。
+我要理解 IndexedDB 儲存、XLSX 匯入匯出和 undo/redo 的資料流。
+請依 types.ts → model.ts → db.ts → spreadsheet.ts → WorkspacePage.tsx 的順序說明，
+不要重現 migrations 中的正式遊戲資料，也不要假設 Google Drive 是即時同步服務。
+```
 
-正式對外發布前，至少應確認：
+建議一次只問一個問題：
 
-- 已加入明確的程式碼 `LICENSE`。
-- 已加入本文件或等價的資料邊界聲明。
-- 沒有把 production D1、私人匯入檔、Google Drive 備份或 secrets 放入 release。
-- 已掃描完整 Git 歷史，而不是只檢查目前工作樹。
-- migration 中的實際資料列已有清楚的保留權利標示，或已替換為可公開的 demo data。
-- README 能讓陌生使用者在不接觸正式資料的情況下啟動本機版本。
-- 已提供貢獻、漏洞回報與行為準則文件，並說明維護者不承諾把專案通用化。
-- 公開 API、外部資料來源、Google OAuth 與 Cloudflare 設定的責任範圍已被分開說明。
+- 「哪幾個檔案組成這個功能？」
+- 「哪些型別是領域專屬，哪些可以直接抽取？」
+- 「這段程式依賴哪些 D1 schema？」
+- 「若移除正式資料，最小可運作 demo 需要哪些 fixture？」
+- 「這個流程有哪些離線、權限或資料責任假設？」
 
-這份清單的目標不是把發布變成大型工程，而是確保「程式碼開源、內容資料保留」這個核心承諾在 repository、文件和實際發行物中一致。
+不要要求 AI 把所有桌遊內容整理成另一份資料集，也不要把正式資料列當成可以直接搬到新產品的 seed。
+
+## 授權與發布時要確認的事項
+
+程式碼、schema、測試和技術文件需要在 repository 根目錄有明確的 `LICENSE`；本文件本身不取代法律授權。若目標是讓人自由抽取和套用部分實作，Apache-2.0 是適合評估的候選；若希望網路服務的修改版也必須提供源碼，則需另行評估 AGPL-3.0。
+
+資料內容必須另行處理：
+
+- 正式 D1 不放入 release artifact。
+- 正式資料的 dump、備份和完整 snapshot 不放入 repository。
+- 混合 schema 與 `INSERT` 的 migration 必須在發布文件中標示資料區塊的權利狀態。
+- 投稿內容要有投稿者授權與撤回／刪除處理規則。
+- BGG、GeekGroup、Google Drive 或其他第三方資料要遵守各自的來源和使用條款。
+
+在上述事項完成前，repository 可以作為研究材料，但不應對外宣稱「所有檔案都已取得相同的開源授權」。
+
+## 一句話版本
+
+如果你是研究者：挑你需要的模組，照閱讀順序理解它。
+
+如果你是自架者：用自己的 Cloudflare 資源和自己的內容建立服務。
+
+如果你是貢獻者：改善實作品質，不必替本專案發明一個通用平台。
+
+如果你是資料使用者：正式 D1 的內容不是 repository 的開源附贈品。
