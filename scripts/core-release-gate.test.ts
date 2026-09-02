@@ -27,4 +27,13 @@ describe('core release gate wiring', () => {
     expect(packageJson.scripts['test:core:e2e']).toContain('npm run build');
     expect(packageJson.scripts['test:core:e2e']).toContain('playwright test');
   });
+
+  test('pins date-sensitive release checks to the product timezone', () => {
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    const workflow = readFileSync('.github/workflows/core-release-gate.yml', 'utf8');
+
+    expect(packageJson.scripts.test).toContain('cross-env TZ=Asia/Taipei vitest run');
+    expect(packageJson.scripts['test:core']).toContain('cross-env TZ=Asia/Taipei vitest run');
+    expect(workflow).toMatch(/env:\s*\r?\n\s+TZ:\s*Asia\/Taipei/);
+  });
 });
