@@ -284,6 +284,14 @@ describe('workspace browser policies', () => {
     expect(workspacePageRule).toMatch(/overscroll-behavior:\s*none/);
   });
 
+  it('uses only the real top safe area for standalone app bars', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const standaloneAppbarRule = styles.match(/html\[data-standalone='true'\] \.site-header,\s*html\[data-standalone='true'\] \.workspace-appbar\s*\{([^}]*)\}/)?.[1];
+
+    expect(standaloneAppbarRule).toMatch(/padding-top:\s*env\(safe-area-inset-top,\s*0px\)/);
+    expect(standaloneAppbarRule).not.toMatch(/max\(44px/);
+  });
+
   it('keeps bottom navigation in the Workspace layout, inside the iOS safe area, and removes it for a virtual keyboard', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
