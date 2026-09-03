@@ -28,16 +28,16 @@
     "deploy": "node scripts/deploy-with-migration-check.mjs"
   },
   "dependencies": {
-    "hono": "^4.9.2",
+    "hono": "^4.13.5",
     "idb": "^8.0.3",
     "jose": "^6.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.8.0",
+    "react-router-dom": "^7.18.3",
     "zod": "^4.0.17"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.12.3",
+    "@cloudflare/vite-plugin": "^1.54.3",
     "@cloudflare/workers-types": "latest",
     "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.6.4",
@@ -55,6 +55,6 @@
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
     "vitest": "^3.2.4",
-    "wrangler": "^4.113.0"
+    "wrangler": "^4.128.0"
   }
 }
