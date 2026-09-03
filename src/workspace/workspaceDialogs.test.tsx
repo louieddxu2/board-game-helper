@@ -51,6 +51,21 @@ describe('workspace numeric input modes', () => {
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(onSave).toHaveBeenCalledWith('7');
   });
+
+  it('selects the initial numeric value before the user can type', () => {
+    const previousRequestAnimationFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = vi.fn();
+
+    try {
+      const column = { ...createColumn('數量', 'number'), numberInputMode: 'input' as const };
+      render(<CellInputDialog column={column} value={2} onSave={vi.fn()} />);
+
+      expect(screen.getByRole('spinbutton', { name: '數量輸入' })).toHaveFocus();
+      expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+    } finally {
+      window.requestAnimationFrame = previousRequestAnimationFrame;
+    }
+  });
 });
 
 describe('workspace selection option dragging', () => {
