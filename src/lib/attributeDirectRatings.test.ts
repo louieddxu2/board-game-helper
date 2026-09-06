@@ -8,13 +8,13 @@ import {
 } from './attributeDirectRatings';
 
 describe('local direct attribute rating history', () => {
-  test('records explicit zero ratings but ignores comparison-only subjects', () => {
+  test.each([0, 10])('records explicit %i ratings but ignores comparison-only subjects', (rating) => {
     const response = {
       subjectAId: 'subject-a',
       subjectBId: 'subject-b',
       attributeId: 'attribute-luck',
       responseId: 'response-1',
-      ratingA: 0,
+      ratingA: rating,
       ratingB: null,
     };
 
@@ -24,7 +24,7 @@ describe('local direct attribute rating history', () => {
     expect(attributeDirectRatingRecordsFromResponse('session-1', response, 10)).toMatchObject([{
       subjectId: 'subject-a',
       attributeId: 'attribute-luck',
-      value: 0,
+      value: rating,
       ratedAt: 10,
     }]);
   });

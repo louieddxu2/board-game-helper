@@ -232,14 +232,18 @@ describe('AttributesPage question flow', () => {
     expect(screen.getByRole('button', { name: '遊戲丙較高' })).toBeInTheDocument();
   });
 
-  test('excludes a newly entered direct rating from both sides of the next local selection', async () => {
+  test.each([
+    { key: 'Home', rating: 0 },
+    { key: 'End', rating: 10 },
+    { key: 'ArrowRight', rating: 6 },
+  ])('excludes a newly entered $rating rating from both sides of the next local selection', async ({ key, rating }) => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
-    fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key: 'ArrowRight' });
+    fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key });
     fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
 
     await waitFor(() => expect(questionSpy).toHaveBeenCalledTimes(2));
@@ -250,7 +254,7 @@ describe('AttributesPage question flow', () => {
     }));
     await waitFor(() => expect(localDb.recordAttributeDirectRatings).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ subjectAId: subjectA.id, ratingA: 6 }),
+      expect.objectContaining({ subjectAId: subjectA.id, ratingA: rating }),
       expect.any(Number),
     ));
   });

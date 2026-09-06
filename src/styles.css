@@ -1957,15 +1957,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   border-color: currentColor;
 }
 
-.attribute-vote-page .attribute-game-card.is-left:hover,
-.attribute-vote-page .attribute-game-card.is-left:focus-visible,
+/* Hover/focus can survive a question change; only an answer gets the selected fill. */
 .attribute-vote-page .attribute-game-card.is-left.is-selected {
   border-color: var(--attribute-left);
   background: var(--attribute-left-soft);
 }
 
-.attribute-vote-page .attribute-game-card.is-right:hover,
-.attribute-vote-page .attribute-game-card.is-right:focus-visible,
 .attribute-vote-page .attribute-game-card.is-right.is-selected {
   border-color: var(--attribute-right);
   background: var(--attribute-right-soft);
