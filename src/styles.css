@@ -1952,9 +1952,15 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   border-bottom-color: var(--attribute-right);
 }
 
-.attribute-vote-page .attribute-game-card:hover,
 .attribute-vote-page .attribute-game-card:focus-visible {
   border-color: currentColor;
+}
+
+/* Touch browsers retain :hover after a tap, including when a game is reused. */
+@media (hover: hover) and (pointer: fine) {
+  .attribute-vote-page .attribute-game-card:hover {
+    border-color: currentColor;
+  }
 }
 
 /* Hover/focus can survive a question change; only an answer gets the selected fill. */
@@ -2073,11 +2079,18 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
   color: var(--attribute-ink);
 }
 
-.attribute-vote-page .attributes-similar:hover,
 .attribute-vote-page .attributes-similar.is-selected {
   border-color: var(--attribute-ink);
   background: var(--attribute-ink);
   color: #fff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .attribute-vote-page .attributes-similar:hover {
+    border-color: var(--attribute-ink);
+    background: var(--attribute-ink);
+    color: #fff;
+  }
 }
 
 .attribute-vote-page .attributes-similar.is-suggested:not(.is-selected) {
