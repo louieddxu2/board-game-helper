@@ -816,6 +816,9 @@ export const queryRecentActivities = async (db: Database): Promise<AttributeActi
   const result = await db.statement(`
     SELECT response_id AS id, activity_json AS payload_json
     FROM attribute_vote_responses
+    JOIN attributes active_attribute
+      ON active_attribute.id = attribute_vote_responses.attribute_id
+      AND active_attribute.is_active = 1
     ORDER BY created_at DESC, response_id DESC
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
@@ -1367,6 +1370,8 @@ const queryAttributeMergeHistoryBatch = async (
         CASE WHEN e.kind = 'comparison' THEN e.result ELSE NULL END AS comparison,
         e.created_at
       FROM attribute_vote_events e
+      JOIN attributes active_attribute
+        ON active_attribute.id = e.attribute_id AND active_attribute.is_active = 1
       WHERE e.created_at <= ?
         AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
           WHERE b.target_attribute_id = e.attribute_id AND e.created_at <= b.cutoff_created_at)
@@ -1398,6 +1403,8 @@ const queryAttributeMergeHistoryBatch = async (
         r.comparison,
         r.created_at
       FROM attribute_vote_responses r
+      JOIN attributes active_attribute
+        ON active_attribute.id = r.attribute_id AND active_attribute.is_active = 1
       WHERE r.attribute_id IS NOT NULL AND r.created_at <= ?
         AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
           WHERE b.target_attribute_id = r.attribute_id AND r.created_at <= b.cutoff_created_at)
