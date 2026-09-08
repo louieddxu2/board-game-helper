@@ -185,6 +185,8 @@ interface RulesDb extends DBSchema {
 }
 
 export interface PendingAttributeResponse {
+  /** Queued ratings and comparison are in this question's display direction. */
+  highPole?: 'low' | 'high';
   id: string;
   subjectAId: string;
   subjectBId: string;

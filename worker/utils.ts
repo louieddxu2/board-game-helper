@@ -58,6 +58,7 @@ const hmacHex = async (value: string, secret: string | undefined, usage: 'sign' 
 };
 
 export interface AttributeQuestionTokenPayload {
+  highPole?: 'low' | 'high';
   sessionId: string;
   attributeId: string;
   subjectAId: string;
@@ -84,7 +85,8 @@ export const verifyAttributeQuestionToken = async (
   try {
     const parsed = JSON.parse(decoded) as Partial<AttributeQuestionTokenPayload> & { v?: number };
     if (parsed.v !== 1 || parsed.sessionId !== expected.sessionId || parsed.attributeId !== expected.attributeId
-      || parsed.subjectAId !== expected.subjectAId || parsed.subjectBId !== expected.subjectBId) return false;
+        || parsed.subjectAId !== expected.subjectAId || parsed.subjectBId !== expected.subjectBId
+        || (parsed.highPole ?? 'high') !== (expected.highPole ?? 'high')) return false;
     const signature = Uint8Array.from(signatureHex.match(/.{2}/gu) ?? [], (pair) => Number.parseInt(pair, 16));
     const key = await hmacHex(body, secret, 'verify');
     return crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(body));

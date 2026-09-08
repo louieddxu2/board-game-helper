@@ -7,6 +7,7 @@ import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
+import { canonicalAttributeAnswer } from '../shared/attributeScale';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from '../lib/attributeDirectRatings';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
@@ -69,7 +70,7 @@ const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' |
 };
 
 const attributeQuestionKey = (value: AttributeQuestion | undefined) => value
-  ? `${value.attribute.id}:${value.subjectA.id}:${value.subjectB.id}`
+  ? `${value.attribute.id}:${value.subjectA.id}:${value.subjectB.id}:${value.highPole ?? 'high'}`
   : '';
 
 const comparisonChoiceText = (question: AttributeQuestion, result: AttributeComparisonResult) => {
@@ -82,6 +83,7 @@ const OPTIMISTIC_ACTIVITY_LIMIT = 5;
 
 const optimisticComparisonActivity = (question: AttributeQuestion, draft: AttributeResponseDraft, actorName: string): AttributeActivity | null => {
   if (!draft.comparison) return null;
+  const canonical = canonicalAttributeAnswer(draft);
   return {
     id: `optimistic:${draft.responseId}`,
     responseId: draft.responseId,
@@ -91,9 +93,9 @@ const optimisticComparisonActivity = (question: AttributeQuestion, draft: Attrib
     attributeName: question.attribute.name,
     subjectA: question.subjectA,
     subjectB: question.subjectB,
-    ratingA: draft.ratingA ?? undefined,
-    ratingB: draft.ratingB ?? undefined,
-    result: draft.comparison,
+    ratingA: canonical.ratingA ?? undefined,
+    ratingB: canonical.ratingB ?? undefined,
+    result: canonical.comparison ?? undefined,
     createdAt: Date.now(),
   };
 };
@@ -542,6 +544,7 @@ export const AttributesPage = () => {
     const responseId = responseIdRef.current ?? createAttributeResponseId();
     responseIdRef.current = responseId;
     const draft: AttributeResponseDraft = {
+      highPole: question.highPole,
       subjectAId: question.subjectA.id,
       subjectBId: question.subjectB.id,
       attributeId: question.attribute.id,

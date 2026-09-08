@@ -25,6 +25,12 @@ describe('worker utilities', () => {
     await expect(verifyAttributeQuestionToken(token, payload, secret)).resolves.toBe(true);
     await expect(verifyAttributeQuestionToken(token, { ...payload, subjectBId: 'other' }, secret)).resolves.toBe(false);
     await expect(verifyAttributeQuestionToken(`${token}x`, payload, secret)).resolves.toBe(false);
+    await expect(verifyAttributeQuestionToken(token, { ...payload, highPole: 'high' }, secret)).resolves.toBe(true);
+    await expect(verifyAttributeQuestionToken(token, { ...payload, highPole: 'low' }, secret)).resolves.toBe(false);
+    const reversed = { ...payload, highPole: 'low' as const };
+    const reversedToken = await signAttributeQuestionToken(reversed, secret);
+    await expect(verifyAttributeQuestionToken(reversedToken, reversed, secret)).resolves.toBe(true);
+    await expect(verifyAttributeQuestionToken(reversedToken, payload, secret)).resolves.toBe(false);
   });
 
   test('creates readable slugs and trims optional fields', () => {

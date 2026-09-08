@@ -1,4 +1,4 @@
-import { parseAttributeScale } from '../../src/shared/attributeScale';
+import { canonicalAttributeAnswer, parseAttributeScale } from '../../src/shared/attributeScale';
 import type {
   AttributeActivity,
   AttributeComparisonResult,
@@ -263,6 +263,7 @@ interface AttributeExtremeExampleRow {
 }
 
 interface ResponseContextRow {
+  scale_type?: string;
   attribute_id: string;
   attribute_name: string;
   subject_a_id: string;
@@ -323,6 +324,7 @@ export interface AttributeQuestionOptions {
 }
 
 export interface AttributeResponseInput {
+  highPole?: 'low' | 'high';
   subjectAId: string;
   subjectBId: string;
   attributeId: string;
@@ -1059,7 +1061,7 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
 
 const responseContextAndStates = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
-    SELECT a.id AS attribute_id, t.name AS attribute_name,
+    SELECT a.id AS attribute_id, t.name AS attribute_name, a.scale_type,
       sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
       sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
       CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
@@ -1561,6 +1563,8 @@ const saveAttributeResponseLocked = async (
   lock: AttributeWriteLock,
 ): Promise<SavedAttributeResponse> => {
   const { context, states: stateMap } = await responseContextAndStates(db, input);
+  if (input.highPole === 'low' && context.scale_type !== 'bipolar') throw new Error('attribute_question_invalid');
+  input = canonicalAttributeAnswer(input);
   let stateA = stateMap.get(input.subjectAId) ?? emptyAttributeState();
   let stateB = stateMap.get(input.subjectBId) ?? emptyAttributeState();
   const touchedSubjects = new Set<string>();
@@ -1631,8 +1635,8 @@ const saveAttributeResponseLocked = async (
   statements.push(db.statement(`
     INSERT INTO attribute_vote_responses
       (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b,
-       comparison, activity_json, actor_id, session_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       comparison, activity_json, actor_id, session_id, created_at, updated_at, question_high_pole)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     input.responseId,
     input.attributeId,
@@ -1646,6 +1650,7 @@ const saveAttributeResponseLocked = async (
     input.sessionId,
     input.timestamp,
     input.timestamp,
+    input.highPole ?? 'high',
   ));
   statements.push(releaseAttributeWriteLockStatement(db, lock));
   await db.batch(statements);

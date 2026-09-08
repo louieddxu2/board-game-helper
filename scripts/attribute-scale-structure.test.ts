@@ -7,6 +7,17 @@ import { applyAttributeCatalogChanges } from '../src/lib/attributeCatalog';
 import { parseAttributeScale } from '../src/shared/attributeScale';
 
 describe('bipolar attribute storage compatibility', () => {
+  test('response direction migration preserves old answers and permits reconstructing reversed answers', () => {
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec("CREATE TABLE attribute_vote_responses(response_id TEXT PRIMARY KEY, rating_a REAL); INSERT INTO attribute_vote_responses VALUES('old', 8);");
+      db.exec(readFileSync('migrations/0084_attribute_response_direction.sql', 'utf8'));
+      expect(db.prepare('SELECT * FROM attribute_vote_responses').get()).toMatchObject({ rating_a: 8, question_high_pole: 'high' });
+      db.exec("INSERT INTO attribute_vote_responses VALUES('new', 8, 'low')");
+      expect(db.prepare("SELECT rating_a, question_high_pole FROM attribute_vote_responses WHERE response_id = 'new'").get()).toMatchObject({ rating_a: 8, question_high_pole: 'low' });
+      expect(() => db.exec("INSERT INTO attribute_vote_responses VALUES('invalid', 8, 'other')")).toThrow();
+    } finally { db.close(); }
+  });
   test('keeps legacy definitions valid and rejects incomplete bipolar metadata', () => {
     expect(parseAttributeScale(undefined, undefined)).toEqual({});
     expect(parseAttributeScale('unipolar', null)).toEqual({});

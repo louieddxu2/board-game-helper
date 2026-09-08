@@ -34,6 +34,7 @@ const questionQuerySchema = z.object({
 });
 
 export const attributeResponseSchema = z.object({
+  highPole: z.enum(['low', 'high']).optional(),
   subjectAId: z.string().trim().min(1).max(200),
   subjectBId: z.string().trim().min(1).max(200),
   attributeId: z.string().trim().min(1).max(200),
@@ -131,6 +132,7 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
     setD1MetricsHeader(c, db);
     if (!payload.question) return c.json(payload);
     const questionToken = await signAttributeQuestionToken({
+      highPole: payload.question.highPole,
       sessionId: parsed.data.sessionId,
       attributeId: payload.question.attribute.id,
       subjectAId: payload.question.subjectA.id,
@@ -149,6 +151,7 @@ attributesRoutes.post('/api/attributes/responses', async (c) => {
   const db = getDatabase(c);
   try {
     const validQuestion = await verifyAttributeQuestionToken(parsed.data.questionToken, {
+      highPole: parsed.data.highPole,
       sessionId: parsed.data.sessionId,
       attributeId: parsed.data.attributeId,
       subjectAId: parsed.data.subjectAId,

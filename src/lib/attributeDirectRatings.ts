@@ -1,6 +1,9 @@
+import { orientAttributeScore } from '../shared/attributeScale';
+
 export const ATTRIBUTE_DIRECT_RATING_HISTORY_LIMIT = 1000;
 
 export interface AttributeDirectRatingInput {
+  highPole?: 'low' | 'high';
   subjectAId: string;
   subjectBId: string;
   attributeId: string;
@@ -40,7 +43,7 @@ export const attributeDirectRatingRecordsFromResponse = (
     ownerId,
     subjectId: input.subjectAId,
     attributeId: input.attributeId,
-    value: input.ratingA,
+    value: orientAttributeScore(input.ratingA, input.highPole),
     responseId: input.responseId,
     ratedAt,
   }]),
@@ -49,7 +52,7 @@ export const attributeDirectRatingRecordsFromResponse = (
     ownerId,
     subjectId: input.subjectBId,
     attributeId: input.attributeId,
-    value: input.ratingB,
+    value: orientAttributeScore(input.ratingB, input.highPole),
     responseId: input.responseId,
     ratedAt,
   }]),

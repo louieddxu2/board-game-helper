@@ -40,20 +40,22 @@ describe('attribute hot-path budgets', () => {
     expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS + ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
   });
 
-  test('a complete response combines the state read and commits lock release with the write', async () => {
+  test.each([undefined, 'high', 'low'] as const)('a %s response saves canonical answers with the same bounded transaction', async (highPole) => {
+    let alreadySaved = false;
     const statements: DatabaseStatement[] = [];
     const sqlCalls: string[] = [];
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
         sqlCalls.push(sql);
         if (sql.includes('SELECT response_id FROM attribute_vote_responses')) {
-          const prepared = statement({ first: vi.fn().mockResolvedValue(null) });
+          const prepared = statement({ first: vi.fn().mockResolvedValue(alreadySaved ? { response_id: 'response-budget-1' } : null) });
           statements.push(prepared);
           return prepared;
         }
         if (sql.includes('SELECT a.id AS attribute_id')) {
           const prepared = statement({ first: vi.fn().mockResolvedValue({
             attribute_id: 'attribute-luck', attribute_name: '運氣',
+            scale_type: 'bipolar',
             subject_a_id: 'subject-a', subject_a_name: '遊戲甲', subject_a_slug: 'game-a', subject_a_game_slug: 'game-a',
             subject_b_id: 'subject-b', subject_b_name: '遊戲乙', subject_b_slug: 'game-b', subject_b_game_slug: 'game-b',
             actor_name: '匿名玩家',
@@ -76,10 +78,12 @@ describe('attribute hot-path budgets', () => {
       batch: vi.fn().mockResolvedValue([]),
     } as unknown as Database;
 
-    await saveAttributeResponse(db, {
+    const result = await saveAttributeResponse(db, {
       subjectAId: 'subject-a', subjectBId: 'subject-b', attributeId: 'attribute-luck',
       responseId: 'response-budget-1', sessionId: 'session-budget-1', actorId: null,
-      comparison: 'A_HIGHER', ratingA: 8, ratingB: 5, timestamp: 123,
+      highPole,
+      comparison: highPole === 'low' ? 'B_HIGHER' : 'A_HIGHER',
+      ratingA: highPole === 'low' ? 2 : 8, ratingB: 5, timestamp: 123,
     });
 
     const batchCalls = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls;
@@ -89,6 +93,19 @@ describe('attribute hot-path budgets', () => {
     expect(sqlCalls.filter((sql) => sql.includes('SELECT a.id AS attribute_id'))).toHaveLength(1);
     expect(sqlCalls.some((sql) => sql.includes('LEFT JOIN attribute_score_states ssa'))).toBe(true);
     expect(sqlCalls.some((sql) => sql.includes('FROM attribute_score_states\n'))).toBe(false);
+    expect(result.updatedValues.find((value) => value.subjectId === 'subject-a')?.directAverage).toBe(8);
+    const responseStatement = statements[sqlCalls.findIndex((sql) => sql.includes('INSERT INTO attribute_vote_responses'))];
+    expect(responseStatement.bind).toHaveBeenCalledWith(
+      'response-budget-1', 'attribute-luck', 'subject-a', 'subject-b', 8, 5, 'A_HIGHER',
+      expect.any(String), null, 'session-budget-1', 123, 123, highPole ?? 'high',
+    );
+    alreadySaved = true;
+    expect(await saveAttributeResponse(db, {
+      subjectAId: 'subject-a', subjectBId: 'subject-b', attributeId: 'attribute-luck',
+      responseId: 'response-budget-1', sessionId: 'session-budget-1', actorId: null,
+      highPole, ratingA: highPole === 'low' ? 2 : 8, timestamp: 124,
+    })).toEqual({ updatedValues: [], activities: [] });
+    expect(sqlCalls.filter((sql) => sql.includes('INSERT INTO attribute_vote_responses'))).toHaveLength(1);
   });
 
   test('rejects a concurrent response before reading or rewriting score states', async () => {

@@ -1,4 +1,29 @@
 import { z } from 'zod';
+import type { AttributeComparisonResult, AttributePole } from './types';
+
+/** Symmetric: converts either displayed to canonical or canonical to displayed. */
+export const orientAttributeScore = (score: number, highPole: AttributePole = 'high') =>
+  highPole === 'low' ? 10 - score : score;
+
+export const orientAttributeComparison = (
+  result: AttributeComparisonResult | null | undefined,
+  highPole: AttributePole = 'high',
+) => highPole === 'low' && result != null && result !== 'SIMILAR'
+  ? result === 'A_HIGHER' ? 'B_HIGHER' as const : 'A_HIGHER' as const
+  : result;
+
+/** Answers arrive in display coordinates. Call once before scoring or caching. */
+export const canonicalAttributeAnswer = <T extends {
+  highPole?: AttributePole;
+  ratingA?: number | null;
+  ratingB?: number | null;
+  comparison?: AttributeComparisonResult | null;
+}>(input: T) => ({
+  ...input,
+  ratingA: input.ratingA == null ? input.ratingA : orientAttributeScore(input.ratingA, input.highPole),
+  ratingB: input.ratingB == null ? input.ratingB : orientAttributeScore(input.ratingB, input.highPole),
+  comparison: orientAttributeComparison(input.comparison, input.highPole),
+});
 
 const endpoint = z.object({
   label: z.string().trim().min(1),

@@ -8,6 +8,12 @@ import {
 } from './attributeDirectRatings';
 
 describe('local direct attribute rating history', () => {
+  test('stores reverse-question ratings in canonical coordinates without altering the queued answer', () => {
+    const response = { subjectAId: 'a', subjectBId: 'b', attributeId: 'victory', responseId: 'response-1', highPole: 'low' as const, ratingA: 2, ratingB: 10 };
+    expect(attributeDirectRatingRecordsFromResponse('session', response).map((row) => row.value)).toEqual([8, 0]);
+    expect(response.ratingA).toBe(2);
+    expect(attributeDirectRatingRecordsFromResponse('session', response).map((row) => row.value)).toEqual([8, 0]);
+  });
   test.each([0, 10])('records explicit %i ratings but ignores comparison-only subjects', (rating) => {
     const response = {
       subjectAId: 'subject-a',

@@ -446,7 +446,7 @@ export const api = {
     if (options.includeExtremeExamples === false) params.set('examples', '0');
     return uncachedRead<AttributeQuestionPayload>(`/api/attributes/question?${params.toString()}`, 'attribute questions are session-specific and must be current');
   },
-  saveAttributeResponse: (input: { subjectAId: string; subjectBId: string; attributeId: string; questionToken: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
+  saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
     method: 'POST', body: JSON.stringify(input),
   }),
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),

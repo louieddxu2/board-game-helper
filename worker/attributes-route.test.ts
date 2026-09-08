@@ -39,5 +39,8 @@ describe('attribute route', () => {
     expect(attributeResponseSchema.safeParse(base).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123' }).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', comparison: 'SIMILAR' }).success).toBe(true);
+    const reverse = { ...base, responseId: 'response-123', ratingA: 0, highPole: 'low' };
+    expect(attributeResponseSchema.parse(reverse)).toMatchObject({ highPole: 'low', ratingA: 0 });
+    expect(attributeResponseSchema.safeParse({ ...reverse, highPole: 'other' }).success).toBe(false);
   });
 });
