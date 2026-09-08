@@ -32,7 +32,12 @@ export const applyAttributeCatalogChanges = (
   changes.forEach((change) => {
     if (change.entryKey.startsWith('attribute:')) {
       const attributeId = change.entryKey.slice('attribute:'.length);
-      if (change.deleted) attributes.delete(attributeId);
+      if (change.deleted) {
+        attributes.delete(attributeId);
+        for (const [key, value] of values) {
+          if (value.attributeId === attributeId) values.delete(key);
+        }
+      }
       else if (change.attribute) attributes.set(change.attribute.id, change.attribute);
     }
     if (change.entryKey.startsWith('subject:')) {
@@ -47,8 +52,7 @@ export const applyAttributeCatalogChanges = (
     }
     if (change.entryKey.startsWith('value:')) {
       if (change.deleted) {
-        const [subjectId, attributeId] = change.entryKey.slice('value:'.length).split(':');
-        if (subjectId && attributeId) values.delete(`${subjectId}:${attributeId}`);
+        values.delete(change.entryKey.slice('value:'.length));
       } else if (change.value) {
         values.set(valueKey(change.value), change.value);
         if (change.subject) subjects.set(change.subject.id, mergeAttributeSubjectMetadata(subjects.get(change.subject.id), change.subject));
@@ -68,7 +72,7 @@ export const applyAttributeCatalogChanges = (
     generatedAt: cached.generatedAt,
     attributes: sortAttributes(attributes.values()),
     subjects: sortSubjects(subjects.values()),
-    values: [...values.values()],
+    values: [...values.values()].filter((value) => attributes.has(value.attributeId)),
     candidates: sortCandidates(candidates.values()),
     activities: [],
   };

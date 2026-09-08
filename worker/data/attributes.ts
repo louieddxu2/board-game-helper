@@ -1514,7 +1514,13 @@ const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number
     mappedRows.forEach((row) => {
       if (row.subject_a_id && row.rating_a != null) {
         const a = getState(row.subject_a_id, row.attribute_id);
-        states.set(a.key, applyDirectRating(a.state, Number(row.rating_a)).next);
+        const next = applyDirectRating(a.state, Number(row.rating_a)).next;
+        // 0088 assigned conservative RD=3 to converted data. Preserve it when
+        // replaying the durable conversion event, including subject merges.
+        if (row.stream_id.startsWith('event:win-conversion-v1:') && a.state.evidenceCount === 0) {
+          next.ratingDeviation = 3;
+        }
+        states.set(a.key, next);
         touched.add(a.key);
       }
       if (row.subject_b_id && row.rating_b != null) {

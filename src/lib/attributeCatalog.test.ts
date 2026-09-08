@@ -15,6 +15,13 @@ const base: AttributeCatalogPayload = {
 };
 
 describe('attribute table catalog delta application', () => {
+  test('deletes colon-containing keys and purges retired attribute values', () => {
+    const value = { ...base.values[0], subjectId: 'attribute_subject_game:example' };
+    const cached = { ...base, values: [value] };
+    expect(applyAttributeCatalogChanges(cached, [{ entryKey: `value:${value.subjectId}:${value.attributeId}`, catalogVersion: 11, deleted: true }]).values).toEqual([]);
+    expect(applyAttributeCatalogChanges(cached, [{ entryKey: `attribute:${value.attributeId}`, catalogVersion: 11, deleted: true }]).values).toEqual([]);
+    expect(applyAttributeCatalogChanges({ ...cached, attributes: [] }, []).values).toEqual([]);
+  });
   test('updates score and subject metadata without rebuilding the complete matrix', () => {
     const updated = applyAttributeCatalogChanges(base, [
       { entryKey: 'attribute:attribute-luck', catalogVersion: 10, deleted: false, attribute: { ...base.attributes[0], name: '新的運氣' } },

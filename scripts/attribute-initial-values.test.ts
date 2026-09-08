@@ -40,6 +40,43 @@ const setup = () => {
   return { sqlite, gateway };
 };
 
+test('converted win data survives a complete rebuild', async () => {
+  const { sqlite, gateway } = setup();
+  try {
+    const read = () => sqlite.prepare("SELECT score,rating_deviation,direct_sum,direct_count,evidence_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get();
+    const before = read();
+    const timestamp = Date.now() + 1000;
+    sqlite.prepare(`INSERT INTO attribute_merge_rebuild_jobs
+      (id,source_game_id,target_game_id,source_subject_id,target_subject_id,status,reset_completed,cursor_created_at,cursor_stream_id,cutoff_created_at,created_at,updated_at)
+      SELECT 'conversion-test',a.game_id,b.game_id,a.id,b.id,'pending',0,-1,'',?,?,?
+      FROM attribute_subjects a JOIN attribute_subjects b ON a.id < b.id
+      WHERE a.game_id IS NOT NULL AND b.game_id IS NOT NULL
+        AND a.id <> 'attribute_subject_game:game_attribute_import_the_mind'
+        AND b.id <> 'attribute_subject_game:game_attribute_import_the_mind' LIMIT 1`).run(timestamp,timestamp,timestamp);
+    for (let i=0;i<100;i++) {
+      await processAttributeMergeRebuildJobs(gateway,timestamp+1,1000);
+      if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
+    }
+    expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()).toMatchObject({status:'completed'});
+    expect(read()).toEqual(before);
+    expect(read()).toMatchObject({score:9,evidence_count:1,rating_deviation:3});
+    const opponent = sqlite.prepare("SELECT id FROM attribute_subjects WHERE game_id IS NOT NULL AND id <> 'attribute_subject_game:game_attribute_import_the_mind' LIMIT 1").get() as { id: string };
+    await saveAttributeResponse(gateway, {
+      subjectAId: 'attribute_subject_game:game_attribute_import_the_mind', subjectBId: opponent.id,
+      attributeId: 'attribute_win_method', responseId: 'conversion-new-vote', sessionId: 'conversion-test-session',
+      actorId: null, ratingA: 7, timestamp: timestamp + 2,
+    });
+    const afterVote = read();
+    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status='pending',reset_completed=0,cursor_created_at=-1,cursor_stream_id='',cutoff_created_at=? WHERE id='conversion-test'").run(timestamp+3);
+    for (let i=0;i<100;i++) {
+      await processAttributeMergeRebuildJobs(gateway,timestamp+4,1000);
+      if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
+    }
+    expect(read()).toEqual(afterVote);
+    expect(read()).toMatchObject({direct_count:2,evidence_count:2});
+  } finally { sqlite.close(); }
+});
+
 test('baseline storage survives online votes and actual background rebuild without creating synthetic votes', async () => {
   const { sqlite, gateway } = setup();
   try {
