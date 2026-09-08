@@ -20,7 +20,19 @@ describe('attribute table catalog delta application', () => {
     const cached = { ...base, values: [value] };
     expect(applyAttributeCatalogChanges(cached, [{ entryKey: `value:${value.subjectId}:${value.attributeId}`, catalogVersion: 11, deleted: true }]).values).toEqual([]);
     expect(applyAttributeCatalogChanges(cached, [{ entryKey: `attribute:${value.attributeId}`, catalogVersion: 11, deleted: true }]).values).toEqual([]);
-    expect(applyAttributeCatalogChanges({ ...cached, attributes: [] }, []).values).toEqual([]);
+  });
+  test('retains values when their new attribute definition arrives in a later delta', () => {
+    const value = { ...base.values[0], attributeId: 'attribute-new' };
+    const firstPage = applyAttributeCatalogChanges(base, [{
+      entryKey: `value:${value.subjectId}:${value.attributeId}`, catalogVersion: 11, deleted: false, value,
+    }]);
+    expect(firstPage.values).toContainEqual(value);
+    const secondPage = applyAttributeCatalogChanges(firstPage, [{
+      entryKey: 'attribute:attribute-new', catalogVersion: 12, deleted: false,
+      attribute: { ...base.attributes[0], id: 'attribute-new' },
+    }]);
+    expect(secondPage.values).toContainEqual(value);
+    expect(secondPage.attributes.some((attribute) => attribute.id === value.attributeId)).toBe(true);
   });
   test('updates score and subject metadata without rebuilding the complete matrix', () => {
     const updated = applyAttributeCatalogChanges(base, [

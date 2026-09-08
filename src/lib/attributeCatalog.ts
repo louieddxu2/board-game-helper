@@ -72,7 +72,7 @@ export const applyAttributeCatalogChanges = (
     generatedAt: cached.generatedAt,
     attributes: sortAttributes(attributes.values()),
     subjects: sortSubjects(subjects.values()),
-    values: [...values.values()].filter((value) => attributes.has(value.attributeId)),
+    values: [...values.values()],
     candidates: sortCandidates(candidates.values()),
     activities: [],
   };
