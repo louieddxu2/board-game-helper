@@ -1,3 +1,4 @@
+import { parseAttributeScale } from '../../src/shared/attributeScale';
 import type {
   AttributeCatalogChange,
   AttributeCatalogChangesPayload,
@@ -115,6 +116,7 @@ const parseAttribute = (value: unknown): AttributeDefinition | undefined => {
     id: row.id,
     key: row.key,
     name: row.name,
+    ...parseAttributeScale(row.scaleType, row.endpoints),
     ...(typeof row.shortDescription === 'string' ? { shortDescription: row.shortDescription } : {}),
     ...(typeof row.fullDescription === 'string' ? { fullDescription: row.fullDescription } : {}),
     minValue: row.minValue,

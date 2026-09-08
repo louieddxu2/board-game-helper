@@ -1,3 +1,4 @@
+import { parseAttributeScale } from '../../src/shared/attributeScale';
 import type {
   AttributeActivity,
   AttributeComparisonResult,
@@ -50,6 +51,8 @@ export const ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS = 60_000;
 export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 99;
 
 interface AttributeRow {
+  scale_type?: string;
+  endpoints_json?: string | null;
   id: string;
   key: string;
   name: string;
@@ -351,6 +354,7 @@ export interface AttributeMergeRebuildJobPlan {
 }
 
 const toAttribute = (row: AttributeRow): AttributeDefinition => ({
+  ...parseAttributeScale(row.scale_type, row.endpoints_json ? JSON.parse(row.endpoints_json) : undefined),
   id: row.id,
   key: row.key,
   name: row.name,
@@ -404,7 +408,7 @@ const decodeCursor = (cursor: string | undefined): string[] | undefined => {
 
 const queryAttributeDefinitions = async (db: Database): Promise<AttributeDefinition[]> => {
   const result = await db.statement(`
-    SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+    SELECT a.id, a.key, t.name, t.short_description, t.full_description, a.scale_type, t.endpoints_json,
       a.min_value, a.max_value, a.sort_order
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -417,7 +421,7 @@ const queryAttributeDefinitions = async (db: Database): Promise<AttributeDefinit
 const querySingleAttribute = async (db: Database, attributeId?: string): Promise<AttributeDefinition | null> => {
   if (attributeId) {
     const result = await db.statement(`
-      SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+      SELECT a.id, a.key, t.name, t.short_description, t.full_description, a.scale_type, t.endpoints_json,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -429,7 +433,7 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
   const pivot = randomKey();
   const [after, before] = await Promise.all([
     db.statement(`
-      SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+      SELECT a.id, a.key, t.name, t.short_description, t.full_description, a.scale_type, t.endpoints_json,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
@@ -438,7 +442,7 @@ const querySingleAttribute = async (db: Database, attributeId?: string): Promise
       LIMIT 1
     `).bind(pivot).first<AttributeRow>(),
     db.statement(`
-      SELECT a.id, a.key, t.name, t.short_description, t.full_description,
+      SELECT a.id, a.key, t.name, t.short_description, t.full_description, a.scale_type, t.endpoints_json,
         a.min_value, a.max_value, a.sort_order
       FROM attributes a
       JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'

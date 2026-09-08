@@ -143,12 +143,24 @@ export interface GameCatalogPayload {
 export const ATTRIBUTE_COMPARISON_RESULTS = ['A_HIGHER', 'SIMILAR', 'B_HIGHER'] as const;
 export type AttributeComparisonResult = (typeof ATTRIBUTE_COMPARISON_RESULTS)[number];
 
+export type AttributePole = 'low' | 'high';
+
+export interface AttributeEndpoint {
+  label: string;
+  question: string;
+  shortDescription?: string;
+  fullDescription?: string;
+}
+
 export interface AttributeDefinition {
   id: string;
   key: string;
   name: string;
   shortDescription?: string;
   fullDescription?: string;
+  /** Missing on legacy catalogs means unipolar. */
+  scaleType?: 'unipolar' | 'bipolar';
+  endpoints?: { low: AttributeEndpoint; high: AttributeEndpoint };
   minValue: number;
   maxValue: number;
   sortOrder: number;
@@ -224,6 +236,8 @@ export interface AttributeActivity {
 }
 
 export interface AttributeQuestion {
+  /** Pole presented as 10 in this question. Missing means canonical high. */
+  highPole?: AttributePole;
   subjectA: AttributeSubject;
   subjectB: AttributeSubject;
   attribute: AttributeDefinition;
