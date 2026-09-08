@@ -30,9 +30,10 @@ const valueDetails = (value: AttributesPayload['values'][number] | undefined) =>
   if (!value) return '尚無資料';
   const direct = value.directCount > 0 ? `直接 ${value.directCount} 筆` : '無直接分數';
   const comparison = value.comparisonCount > 0 ? `比較 ${value.comparisonCount} 次` : '無比較資料';
-  const evidence = value.evidenceCount == null ? '' : `；有效資料 ${value.evidenceCount} 筆`;
+  const evidence = value.evidenceCount == null ? '' : `；${value.initialValue ? '新投票' : '有效資料'} ${value.evidenceCount} 筆`;
+  const baseline = value.initialValue ? '；含換算初始值（不是新增投票）' : '';
   const rd = value.ratingDeviation == null ? '' : `；RD=${value.ratingDeviation.toFixed(2)}`;
-  return `目前 ${value.score.toFixed(1)}；${direct}；${comparison}${evidence}${rd}`;
+  return `目前 ${value.score.toFixed(1)}；${direct}；${comparison}${evidence}${baseline}${rd}`;
 };
 
 export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }) => {
@@ -159,7 +160,7 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
           const match = similarityMap.get(row.id);
           const isAnchor = similarity?.anchorId === row.id;
           const statusLabel = isAnchor ? '相近比較基準' : match ? `共同資料 ${match.sharedAttributeCount} 項` : row.statusLabel;
-          return <tr key={row.id} className={`${row.kind === 'pending' ? 'attributes-matrix-pending ' : ''}${isAnchor ? 'attributes-matrix-anchor' : ''}`.trim() || undefined}><th scope="row" className="attributes-matrix-subject">{row.kind === 'processed' ? <button type="button" className="attributes-matrix-subject-button" aria-pressed={isAnchor} onClick={() => selectSimilarityAnchor(row)}>{row.displayName}</button> : <span>{row.displayName}</span>}<small>{statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'} aria-label={attributeDisplayEndpoints(payload.attributes[index]) ? `${formatScore(value)}；0＝${payload.attributes[index].endpoints!.low.label}，10＝${payload.attributes[index].endpoints!.high.label}；${row.details[index]}` : undefined}>{formatScore(value)}</td>)}</tr>;
+          return <tr key={row.id} className={`${row.kind === 'pending' ? 'attributes-matrix-pending ' : ''}${isAnchor ? 'attributes-matrix-anchor' : ''}`.trim() || undefined}><th scope="row" className="attributes-matrix-subject">{row.kind === 'processed' ? <button type="button" className="attributes-matrix-subject-button" aria-pressed={isAnchor} onClick={() => selectSimilarityAnchor(row)}>{row.displayName}</button> : <span>{row.displayName}</span>}<small>{statusLabel}</small></th>{row.values.map((value, index) => { const state = row.states[index]; const bipolar = attributeDisplayEndpoints(payload.attributes[index]); return <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'} aria-label={value != null && bipolar ? `${formatScore(value)}${state?.initialValue ? `；含換算初始值，新投票 ${state.evidenceCount ?? 0} 筆` : ''}；0＝${bipolar.low.label}，10＝${bipolar.high.label}` : undefined}>{formatScore(value)}</td>; })}</tr>;
         })}</tbody>
       </table>
     </div>

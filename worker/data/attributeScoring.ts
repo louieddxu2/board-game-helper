@@ -228,6 +228,7 @@ const scoreFromState = (subjectId: string, attributeId: string, state: OnlineAtt
   comparisonCount: state.comparisonCount,
   decisiveComparisonCount: state.decisiveComparisonCount,
   evidenceCount: state.evidenceCount,
+  ...(state.initialScore == null ? {} : { initialValue: true }),
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 

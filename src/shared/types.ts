@@ -313,6 +313,8 @@ export interface AttributeMatrixValue {
   evidenceCount?: number;
   ratingDeviation?: number;
   comparisonScore?: number;
+  /** The score includes a retained merge baseline; counts remain real votes only. */
+  initialValue?: boolean;
   modelVersion: string;
 }
 

@@ -60,6 +60,8 @@ test('baseline storage survives online votes and actual background rebuild witho
     const expected = applyDirectRating(initialAttributeState(9), 2).next;
     const readState = () => sqlite.prepare("SELECT score, evidence_count, direct_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:fixture-a' AND attribute_id='fixture-win'").get();
     expect(readState()).toMatchObject({ score: expected.score, evidence_count: 1, direct_count: 1 });
+    const catalogValue = sqlite.prepare("SELECT entry_json FROM attribute_catalog_entries WHERE entry_key='value:attribute_subject_game:fixture-a:fixture-win'").get() as { entry_json: string };
+    expect(JSON.parse(catalogValue.entry_json)).toMatchObject({ initialValue: true, evidenceCount: 1 });
     await saveAttributeResponse(gateway, input);
     expect(readState()).toMatchObject({ evidence_count: 1 });
     await expect(prepareAttributeMergeRebuildJob(gateway, 'fixture-a', 'fixture-b', 102)).rejects.toThrow('attribute_merge_initial_value_requires_mapping');
@@ -78,5 +80,19 @@ test('baseline storage survives online votes and actual background rebuild witho
     expect(sqlite.prepare("SELECT count(*) AS n FROM attribute_vote_responses WHERE attribute_id='fixture-win'").get()).toMatchObject({ n: 2 });
     expect(() => sqlite.exec("DELETE FROM attribute_subjects WHERE id='attribute_subject_game:fixture-a'")).toThrow();
     expect(() => sqlite.exec("INSERT INTO attribute_initial_values VALUES('fixture-batch','fixture-win','attribute_subject_game:fixture-b',11,'{}',NULL,NULL)")).toThrow();
+
+    sqlite.exec(`INSERT INTO attribute_response_attribute_maps
+      (source_attribute_id, target_attribute_id, invert_score, mapping_version, activated_at)
+      VALUES('attribute_score_race','fixture-win',1,'fixture-map-v1',200)`);
+    await saveAttributeResponse(gateway, {
+      subjectAId: 'attribute_subject_game:fixture-a', subjectBId: 'attribute_subject_game:fixture-b',
+      attributeId: 'attribute_score_race', responseId: 'mapped-response', sessionId: 'fixture-session-2', actorId: null,
+      ratingA: 8, comparison: 'A_HIGHER', timestamp: 201,
+    });
+    const mapped = sqlite.prepare("SELECT attribute_id, rating_a, comparison FROM attribute_vote_responses WHERE response_id='mapped-response'").get();
+    expect(mapped).toMatchObject({ attribute_id: 'fixture-win', rating_a: 2, comparison: 'B_HIGHER' });
+    expect(sqlite.prepare("SELECT source_attribute_id, target_attribute_id, invert_score, mapping_version FROM attribute_response_mapping_receipts WHERE response_id='mapped-response'").get()).toMatchObject({
+      source_attribute_id: 'attribute_score_race', target_attribute_id: 'fixture-win', invert_score: 1, mapping_version: 'fixture-map-v1',
+    });
   } finally { sqlite.close(); }
 });

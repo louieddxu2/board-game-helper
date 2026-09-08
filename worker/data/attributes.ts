@@ -1,4 +1,4 @@
-import { canonicalAttributeAnswer, parseAttributeScale } from '../../src/shared/attributeScale';
+import { canonicalAttributeAnswer, orientAttributeComparison, parseAttributeScale } from '../../src/shared/attributeScale';
 import type {
   AttributeActivity,
   AttributeComparisonResult,
@@ -523,7 +523,8 @@ const queryAttributeExtremeExamples = async (
       JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
       LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
       WHERE s.attribute_id = ?
-        AND s.evidence_count > 0
+        AND (s.evidence_count > 0 OR EXISTS (SELECT 1 FROM attribute_initial_values iv
+          WHERE iv.subject_id = s.subject_id AND iv.attribute_id = s.attribute_id))
         AND ${scoreFilter}
         AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
       ORDER BY s.score ${order}, s.random_key ${order}, s.subject_id ${order}
@@ -646,16 +647,19 @@ const toMatrixValue = (row: AttributeScoreStateRow): AttributeMatrixValue => ({
   comparisonCount: Number(row.comparison_count),
   decisiveComparisonCount: Number(row.decisive_comparison_count),
   evidenceCount: Number(row.evidence_count),
+  ...(row.initial_score != null ? { initialValue: true } : {}),
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
 const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promise<AttributeMatrixValue[]> => {
   if (subjectIds && !subjectIds.length) return [];
-  const filter = subjectIds?.length ? `WHERE subject_id IN (${subjectIds.map(() => '?').join(',')})` : '';
+  const filter = subjectIds?.length ? `WHERE state.subject_id IN (${subjectIds.map(() => '?').join(',')})` : '';
   const result = await db.statement(`
-    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
-      comparison_count, decisive_comparison_count, evidence_count
-    FROM attribute_score_states
+    SELECT state.subject_id, state.attribute_id, state.score, state.rating_deviation, state.direct_sum, state.direct_count,
+      state.comparison_count, state.decisive_comparison_count, state.evidence_count,
+      iv.score AS initial_score
+    FROM attribute_score_states state
+    LEFT JOIN attribute_initial_values iv ON iv.subject_id = state.subject_id AND iv.attribute_id = state.attribute_id
     ${filter}
   `).bind(...(subjectIds ?? [])).all<AttributeScoreStateRow>();
   return (result.results ?? []).map(toMatrixValue);
@@ -664,8 +668,9 @@ const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promis
 const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
   const result = await db.statement(`
     SELECT state.subject_id, state.attribute_id, state.score, state.rating_deviation, state.direct_sum, state.direct_count,
-      comparison_count, decisive_comparison_count, evidence_count
+      comparison_count, decisive_comparison_count, evidence_count, iv.score AS initial_score
     FROM attribute_score_states state
+    LEFT JOIN attribute_initial_values iv ON iv.subject_id = state.subject_id AND iv.attribute_id = state.attribute_id
     JOIN attribute_subjects subject ON subject.id = state.subject_id
     LEFT JOIN games game ON game.id = subject.game_id
     WHERE ${votableSubjectCondition('subject', 'game')}
@@ -1061,6 +1066,7 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
   comparisonCount: state.comparisonCount,
   decisiveComparisonCount: state.decisiveComparisonCount,
   evidenceCount: state.evidenceCount,
+  ...(state.initialScore == null ? {} : { initialValue: true }),
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
@@ -1149,6 +1155,36 @@ interface AttributeWriteLock {
   token: string;
   names: string[];
 }
+
+interface AttributeResponseAttributeMap {
+  source_attribute_id: string;
+  target_attribute_id: string;
+  invert_score: number;
+  mapping_version: string;
+}
+
+const resolveAttributeResponseMapping = async (db: Database, input: AttributeResponseInput) => {
+  const mapping = await db.statement(`
+    SELECT source_attribute_id, target_attribute_id, invert_score, mapping_version
+    FROM attribute_response_attribute_maps
+    WHERE source_attribute_id = ?
+  `).bind(input.attributeId).first<AttributeResponseAttributeMap>();
+  if (!mapping) return { input, mapping: null as AttributeResponseAttributeMap | null };
+  const canonical = canonicalAttributeAnswer(input);
+  const flip = (value: number | null | undefined) => value == null ? value : 10 - value;
+  return {
+    mapping,
+    input: {
+      ...input,
+      attributeId: mapping.target_attribute_id,
+      highPole: 'high' as const,
+      ratingA: mapping.invert_score ? flip(canonical.ratingA) : canonical.ratingA,
+      ratingB: mapping.invert_score ? flip(canonical.ratingB) : canonical.ratingB,
+      comparison: mapping.invert_score && canonical.comparison != null
+        ? orientAttributeComparison(canonical.comparison, 'low') : canonical.comparison,
+    },
+  };
+};
 
 const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
   const subjectIds = new Set<string>();
@@ -1600,6 +1636,7 @@ const saveAttributeResponseLocked = async (
   db: Database,
   input: AttributeResponseInput,
   lock: AttributeWriteLock,
+  sourceMapping: AttributeResponseAttributeMap | null = null,
 ): Promise<SavedAttributeResponse> => {
   const { context, states: stateMap } = await responseContextAndStates(db, input);
   if (input.highPole === 'low' && context.scale_type !== 'bipolar') throw new Error('attribute_question_invalid');
@@ -1693,6 +1730,14 @@ const saveAttributeResponseLocked = async (
     input.timestamp,
     input.highPole ?? 'high',
   ));
+  if (sourceMapping) {
+    statements.push(db.statement(`
+      INSERT INTO attribute_response_mapping_receipts
+        (response_id, source_attribute_id, target_attribute_id, invert_score, mapping_version, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(input.responseId, sourceMapping.source_attribute_id, sourceMapping.target_attribute_id,
+      sourceMapping.invert_score, sourceMapping.mapping_version, input.timestamp));
+  }
   statements.push(releaseAttributeWriteLockStatement(db, lock));
   await db.batch(statements);
 
@@ -1705,6 +1750,8 @@ const saveAttributeResponseLocked = async (
 export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
   if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
   if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
+  const resolved = await resolveAttributeResponseMapping(db, input);
+  input = resolved.input;
   if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_response_busy');
 
   const lock = await acquireAttributeWriteLock(db, input);
@@ -1714,7 +1761,7 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
       .bind(input.responseId)
       .first<{ response_id: string }>();
     if (lockedExistingResponse) return { updatedValues: [], activities: [] };
-    const result = await saveAttributeResponseLocked(db, input, lock);
+    const result = await saveAttributeResponseLocked(db, input, lock, resolved.mapping);
     lockReleasedInCommit = true;
     return result;
   } finally {
