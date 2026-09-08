@@ -11,6 +11,7 @@ export interface ParsedCsvCollection {
 }
 
 export interface ScopedAttributeQuestionOptions {
+  highPole?: 'low' | 'high';
   excludeSubjectAId?: string;
   excludeSubjectBId?: string;
   excludeAttributeId?: string;

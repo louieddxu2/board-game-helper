@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import type { AttributeSubject } from '../shared/types';
 
 interface AttributeGameCardProps {
+  highLabel?: string;
   subject: AttributeSubject;
   side: 'left' | 'right';
   disabled?: boolean;
@@ -10,7 +11,7 @@ interface AttributeGameCardProps {
   onChoose: () => void;
 }
 
-export const AttributeGameCard = ({ subject, side, disabled = false, selected = false, suggested = false, onChoose }: AttributeGameCardProps) => {
+export const AttributeGameCard = ({ highLabel, subject, side, disabled = false, selected = false, suggested = false, onChoose }: AttributeGameCardProps) => {
   const [imageFailed, setImageFailed] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const secondaryLine = [subject.secondaryName, subject.year ? `(${subject.year})` : undefined].filter(Boolean).join(' ');
@@ -40,7 +41,7 @@ export const AttributeGameCard = ({ subject, side, disabled = false, selected = 
   return <button
     type="button"
     className={`attribute-game-card is-${side} ${selected ? 'is-selected' : ''} ${suggested ? 'is-suggested' : ''}`}
-    aria-label={`${subject.displayName}較高`}
+    aria-label={highLabel ? `${subject.displayName}更偏${highLabel}` : `${subject.displayName}較高`}
     aria-pressed={selected}
     onClick={onChoose}
     disabled={disabled}
@@ -51,6 +52,7 @@ export const AttributeGameCard = ({ subject, side, disabled = false, selected = 
     <span className="attribute-game-card-copy">
       <h3 ref={headingRef}>{subject.displayName}</h3>
       {secondaryLine && <p>{secondaryLine}</p>}
+      {highLabel && <span className="attribute-game-choice">這款更偏{highLabel}</span>}
     </span>
   </button>;
 };

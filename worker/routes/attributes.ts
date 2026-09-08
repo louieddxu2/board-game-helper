@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
+import { chooseAttributeHighPole } from '../../src/shared/attributeScale';
 import { getDatabase } from '../data/database';
 import {
   queryAttributeQuestionPayload,
@@ -23,6 +24,7 @@ const attributesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables 
 const sessionIdSchema = z.string().trim().min(8).max(120).regex(/^[A-Za-z0-9:_-]+$/);
 
 const questionQuerySchema = z.object({
+  highPole: z.enum(['low', 'high']).optional(),
   sessionId: sessionIdSchema,
   excludeSubjectAId: z.string().trim().max(200).optional(),
   excludeSubjectBId: z.string().trim().max(200).optional(),
@@ -115,6 +117,7 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
 
 attributesRoutes.get('/api/attributes/question', async (c) => {
   const parsed = questionQuerySchema.safeParse({
+    highPole: c.req.query('highPole') || undefined,
     sessionId: c.req.query('session'),
     excludeSubjectAId: c.req.query('excludeA') || undefined,
     excludeSubjectBId: c.req.query('excludeB') || undefined,
@@ -131,6 +134,11 @@ attributesRoutes.get('/api/attributes/question', async (c) => {
     const payload = await queryAttributeQuestionPayload(db, parsed.data.sessionId, parsed.data);
     setD1MetricsHeader(c, db);
     if (!payload.question) return c.json(payload);
+    const retainDirection = parsed.data.fixedAttributeId && (parsed.data.fixedSubjectAId || parsed.data.fixedSubjectBId)
+      ? parsed.data.highPole : undefined;
+    if (payload.question.attribute.scaleType === 'bipolar') {
+      payload.question.highPole = chooseAttributeHighPole(payload.question.attribute, retainDirection);
+    }
     const questionToken = await signAttributeQuestionToken({
       highPole: payload.question.highPole,
       sessionId: parsed.data.sessionId,

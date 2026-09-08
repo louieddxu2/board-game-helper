@@ -7,7 +7,7 @@ import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
-import { canonicalAttributeAnswer } from '../shared/attributeScale';
+import { attributeDisplayEndpoints, canonicalAttributeAnswer, orientAttributeScore } from '../shared/attributeScale';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from '../lib/attributeDirectRatings';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
@@ -64,8 +64,9 @@ const questionOptions = (question: AttributeQuestion | undefined, mode: 'pair' |
     excludeSubjectBId: question.subjectB.id,
     excludeAttributeId: question.attribute.id,
   };
-  if (mode === 'a') return { ...base, fixedSubjectBId: question.subjectB.id, fixedAttributeId: question.attribute.id };
-  if (mode === 'b') return { ...base, fixedSubjectAId: question.subjectA.id, fixedAttributeId: question.attribute.id };
+  const highPole = question.attribute.scaleType === 'bipolar' ? question.highPole ?? 'high' : undefined;
+  if (mode === 'a') return { ...base, fixedSubjectBId: question.subjectB.id, fixedAttributeId: question.attribute.id, highPole };
+  if (mode === 'b') return { ...base, fixedSubjectAId: question.subjectA.id, fixedAttributeId: question.attribute.id, highPole };
   return base;
 };
 
@@ -74,8 +75,10 @@ const attributeQuestionKey = (value: AttributeQuestion | undefined) => value
   : '';
 
 const comparisonChoiceText = (question: AttributeQuestion, result: AttributeComparisonResult) => {
-  if (result === 'A_HIGHER') return `${question.subjectA.displayName}較高`;
-  if (result === 'B_HIGHER') return `${question.subjectB.displayName}較高`;
+  const endpoints = attributeDisplayEndpoints(question.attribute, question.highPole);
+  const ending = endpoints ? `更偏${endpoints.high.label}` : '較高';
+  if (result === 'A_HIGHER') return `${question.subjectA.displayName}${ending}`;
+  if (result === 'B_HIGHER') return `${question.subjectB.displayName}${ending}`;
   return '兩款差不多';
 };
 
@@ -179,10 +182,12 @@ export const AttributesPage = () => {
   }, []);
 
   const animateQuestionChange = useCallback(async (nextPayload: AttributeQuestionPayload, mode: 'pair' | 'a' | 'b' = 'pair') => {
+    if (!mountedRef.current) return;
     if (motionTimerRef.current !== undefined) window.clearTimeout(motionTimerRef.current);
     const noMotion = reducedMotion();
     setQuestionMotion(mode === 'pair' ? 'leaving' : mode === 'a' ? 'leaving-a' : 'leaving-b');
     if (!noMotion) await wait(QUESTION_EXIT_MS);
+    if (!mountedRef.current) return;
     applyQuestionPayload(nextPayload);
     setVoteFeedback(null);
     setQuestionMotion(mode === 'pair' ? 'entering' : mode === 'a' ? 'entering-a' : 'entering-b');
@@ -196,9 +201,12 @@ export const AttributesPage = () => {
     }, QUESTION_ENTER_MS);
   }, [applyQuestionPayload]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (motionTimerRef.current !== undefined) window.clearTimeout(motionTimerRef.current);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (motionTimerRef.current !== undefined) window.clearTimeout(motionTimerRef.current);
+    };
   }, []);
 
   const refreshPendingCount = useCallback(async () => {
@@ -269,6 +277,7 @@ export const AttributesPage = () => {
       fixedSubjectAId: selection.subjectAId,
       fixedSubjectBId: selection.subjectBId,
       fixedAttributeId: selection.attributeId,
+      highPole: options.highPole,
       includeExtremeExamples: false,
     });
     await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
@@ -668,15 +677,20 @@ export const AttributesPage = () => {
     <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
   </section>;
 
-  const lowestExamples = [...(payload.extremeExamples?.lowest ?? [])]
+  const endpoints = attributeDisplayEndpoints(question.attribute, question.highPole);
+  const displayedExamples = [...(payload.extremeExamples?.lowest ?? []), ...(payload.extremeExamples?.highest ?? [])]
+    .map((example) => ({ ...example, score: orientAttributeScore(example.score, question.highPole) }));
+  const lowestExamples = [...displayedExamples]
     .filter((example) => example.score <= 2)
     .sort((left, right) => left.score - right.score)
     .slice(0, 2);
-  const highestExamples = [...(payload.extremeExamples?.highest ?? [])]
+  const highestExamples = [...displayedExamples]
     .filter((example) => example.score >= 8)
     .sort((left, right) => right.score - left.score)
     .slice(0, 2);
-  const attributeDescription = question.attribute.shortDescription ?? question.attribute.fullDescription;
+  const attributeDescription = endpoints
+    ? endpoints.high.shortDescription ?? endpoints.high.fullDescription
+    : question.attribute.shortDescription ?? question.attribute.fullDescription;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
   const recentComparisons = mergeRecentActivities(payload.activities, optimisticActivities);
   const comparisonSelectedForCurrentQuestion = comparisonQuestionKey === attributeQuestionKey(question);
@@ -719,21 +733,22 @@ export const AttributesPage = () => {
     <section className={`attributes-question-card is-${questionMotion}`} aria-labelledby="attributes-question-heading" aria-busy={questionLoading || submitting}>
       <div className="attributes-question-center">
         {(lowestExamples.length || highestExamples.length) ? <div className="attributes-question-examples">
+          {endpoints && <div className="attribute-pole-labels"><span>0 · {endpoints.low.label}</span><strong>10 · {endpoints.high.label}</strong></div>}
           <AttributeScoreAxis ariaLabel="目前資料中的極端分數範例" className="attributes-scoreline-track">
             {lowestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="low" row={index === 0 ? 'lower' : 'upper'} key={`low:${example.subject.id}`} />)}
             {highestExamples.map((example, index) => <ExtremeScoreMarker example={example} direction="high" row={index === 0 ? 'lower' : 'upper'} key={`high:${example.subject.id}`} />)}
           </AttributeScoreAxis>
         </div> : null}
         <div className="attributes-question-attribute">
-          <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
+          <h2 id="attributes-question-heading" aria-live="polite">{endpoints ? endpoints.high.question : <>哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</>}</h2>
           {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         </div>
         <div className="attributes-question-pair">
           <div className="attributes-question-side">
-            <AttributeGameCard key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparisonSelectedForCurrentQuestion && comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+            <AttributeGameCard highLabel={endpoints?.high.label} key={question.subjectA.id} subject={question.subjectA} side="left" selected={comparisonSelectedForCurrentQuestion && comparison === 'A_HIGHER'} suggested={!submitting && ratingSuggestion === 'A_HIGHER'} onChoose={() => chooseComparison('A_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
           </div>
           <div className="attributes-question-side">
-            <AttributeGameCard key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparisonSelectedForCurrentQuestion && comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
+            <AttributeGameCard highLabel={endpoints?.high.label} key={question.subjectB.id} subject={question.subjectB} side="right" selected={comparisonSelectedForCurrentQuestion && comparison === 'B_HIGHER'} suggested={!submitting && ratingSuggestion === 'B_HIGHER'} onChoose={() => chooseComparison('B_HIGHER')} disabled={questionLoading || submitting || awaitingNext} />
           </div>
           {voteFeedback && <p className={`attributes-vote-feedback is-${voteFeedback.state}`} role="status" aria-live="polite"><span aria-hidden="true">{voteFeedback.state === 'saved' ? '✓' : '…'}</span>{voteFeedback.text}</p>}
         </div>
@@ -745,7 +760,7 @@ export const AttributesPage = () => {
           <button type="button" className="attributes-unknown" aria-label="不知道，換一組" onClick={() => void deferCurrentAndLoad('pair')} disabled={questionLoading || submitting || awaitingNext}>不知道</button>
         </div>
         <div className="attributes-rating-zone">
-          <AttributeRatingTrack leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
+          <AttributeRatingTrack lowLabel={endpoints?.low.label} highLabel={endpoints?.high.label} leftSubject={question.subjectA} rightSubject={question.subjectB} leftValue={ratingA} rightValue={ratingB} onLeftChange={setRatingA} onRightChange={setRatingB} onLeftClear={() => setRatingA('')} onRightClear={() => setRatingB('')} disabled={questionLoading || submitting || awaitingNext} />
           {ratingSuggestionText && !submitting && <p className="attributes-rating-suggestion" role="status"><span aria-hidden="true">↑</span> {ratingSuggestionText}</p>}
           {responseError && <p className="attributes-response-error" role="alert">{responseError} {awaitingNext && <button type="button" onClick={() => void loadQuestion('pair')} disabled={questionLoading || submitting}>重新取得下一題</button>}</p>}
         </div>

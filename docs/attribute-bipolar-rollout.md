@@ -1,10 +1,10 @@
 # 雙極屬性：資料結構與方向轉換
 
-目前完成第一步結構相容及第二步方向轉換，尚未新增或啟用合併屬性、換算分數、翻轉投票 UI。
+目前完成第一步結構相容、第二步方向轉換及第三步投票 UI。尚未新增或啟用合併屬性、換算既有分數。
 
 - `attributes.scale_type`：`unipolar`（預設）或 `bipolar`。
 - `attribute_translations.endpoints_json`：兩端各有 `label`、`question`，以及可選的 `shortDescription`、`fullDescription`；以 `low`、`high` 指向資料的固定方向。
-- `AttributeQuestion.highPole`：本題顯示為 10 的概念端；省略等同固定方向的 `high`。目前出題仍保持原方向，待 UI 完成後才啟用隨機選端。
+- `AttributeQuestion.highPole`：本題顯示為 10 的概念端；省略等同固定方向的 `high`。雙端新題由伺服器各以 50% 機率選端，單端維持舊行為。
 - 舊快照沒有新增欄位時繼續視為單端。雙端資料若缺少名稱或題目，讀取時拒絕，避免呈現方向不完整的問題。
 - 定義查詢、週快照、增量與本機目錄合併保留雙端文字；無須調整 IndexedDB object store。
 
@@ -19,6 +19,14 @@
 - 本機個人評分紀錄及樂觀活動使用固定方向；佇列原始物件不變，重送沿用 responseId，既有去重機制避免再次計分。
 - 舊簽章缺少方向等同 high；不能被改成 low。單端屬性拒絕 low 回答。
 
-下一步完成投票 UI 及隨機選端，再完成瀏覽 UI，最後套用已確認的五款校正和平均換算。UI 完成前不啟用雙端抽題。
+## 第三步：投票 UI
+
+- 題目與說明使用本題高分端的 `question`、`shortDescription ?? fullDescription`，不改寫既有原文。
+- 範例與直接評分軸皆標示本題 0／10 對應的概念；反向題的範例使用 `10 - score`，不改動快取。
+- 遊戲卡片及投票回饋顯示「更偏哪一端」，鍵盤與拖曳評分同樣以本題方向操作。
+- 新組合重新選端；只換一款遊戲時將原 highPole 傳回伺服器並簽章。React 重繪、快取讀取及離線重送不重新抽方向。
+- 驗證：雙方向頁面測試、出題路由與簽章測試；`npm run build` 後執行 `node scripts/verify-bipolar-ui.mjs` 可用隔離 API fixtures 重現 1280px／390px 畫面及送出。截圖寫入 `outputs/bipolar-ui/`，不含正式遊戲評分。
+
+下一步完成瀏覽 UI（總表、遊戲頁及近期活動使用固定方向的雙端語意），最後套用已確認的五款校正和平均換算。完成瀏覽與資料預覽前，不建立或啟用正式合併屬性。
 
 部署需先套用 migration 0083、0084 再啟用讀取新欄位的程式；本步不執行正式環境 migration 或部署。

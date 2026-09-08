@@ -1,5 +1,21 @@
 import { z } from 'zod';
-import type { AttributeComparisonResult, AttributePole } from './types';
+import type { AttributeComparisonResult, AttributeDefinition, AttributePole } from './types';
+
+export const chooseAttributeHighPole = (
+  attribute: AttributeDefinition,
+  retained?: AttributePole,
+  random = Math.random,
+): AttributePole => attribute.scaleType === 'bipolar'
+  ? retained ?? (random() < 0.5 ? 'low' : 'high')
+  : 'high';
+
+export const attributeDisplayEndpoints = (attribute: AttributeDefinition, highPole: AttributePole = 'high') => {
+  if (attribute.scaleType !== 'bipolar' || !attribute.endpoints) return undefined;
+  return {
+    low: attribute.endpoints[highPole === 'low' ? 'high' : 'low'],
+    high: attribute.endpoints[highPole],
+  };
+};
 
 /** Symmetric: converts either displayed to canonical or canonical to displayed. */
 export const orientAttributeScore = (score: number, highPole: AttributePole = 'high') =>

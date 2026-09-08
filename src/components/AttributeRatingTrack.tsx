@@ -5,6 +5,8 @@ import { AttributeScoreAxis } from './AttributeScoreAxis';
 import { useClampedAxisMarker } from './useClampedAxisMarker';
 
 interface AttributeRatingTrackProps {
+  lowLabel?: string;
+  highLabel?: string;
   leftSubject: AttributeSubject;
   rightSubject: AttributeSubject;
   leftValue: string;
@@ -20,7 +22,7 @@ type RatingSide = 'left' | 'right';
 
 const scoreOf = (value: string) => value === '' ? 5 : Number(value);
 
-export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rightValue, disabled = false, onLeftChange, onRightChange, onLeftClear, onRightClear }: AttributeRatingTrackProps) => {
+export const AttributeRatingTrack = ({ lowLabel, highLabel, leftSubject, rightSubject, leftValue, rightValue, disabled = false, onLeftChange, onRightChange, onLeftClear, onRightClear }: AttributeRatingTrackProps) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const leftMarkerRef = useClampedAxisMarker<HTMLDivElement>(scoreOf(leftValue), `${leftSubject.id}:${leftSubject.displayName}:${leftValue}`);
   const rightMarkerRef = useClampedAxisMarker<HTMLDivElement>(scoreOf(rightValue), `${rightSubject.id}:${rightSubject.displayName}:${rightValue}`);
@@ -48,6 +50,7 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
   };
 
   const handleKeyDown = (side: RatingSide, value: string) => (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const current = scoreOf(value);
     const next = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? current - 1
       : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? current + 1
@@ -73,7 +76,8 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
       aria-valuemin={0}
       aria-valuemax={10}
       aria-valuenow={score}
-      aria-valuetext={value === '' ? '未設定，目前位置 5 分' : `${value} 分`}
+      aria-valuetext={`${value === '' ? '未設定，目前位置 5 分' : `${value} 分`}${lowLabel && highLabel ? `；0 為${lowLabel}，10 為${highLabel}` : ''}`}
+      aria-disabled={disabled}
       onKeyDown={handleKeyDown(side, value)}
       onPointerDown={handlePointerDown(side)}
       onPointerMove={handlePointerMove(side)}
@@ -86,6 +90,7 @@ export const AttributeRatingTrack = ({ leftSubject, rightSubject, leftValue, rig
   };
 
   return <div className="attribute-rating-track">
+    {lowLabel && highLabel && <div className="attribute-pole-labels" aria-label="本題評分方向"><span>0 · {lowLabel}</span><strong>10 · {highLabel}</strong></div>}
     <AttributeScoreAxis ariaLabel="兩款遊戲評分數線" stageRef={trackRef}>
       {renderMarker('left', leftSubject, leftValue, onLeftClear)}
       {renderMarker('right', rightSubject, rightValue, onRightClear)}

@@ -69,6 +69,62 @@ describe('AttributesPage question flow', () => {
     vi.restoreAllMocks();
   });
 
+  test.each(['low', 'high'] as const)('bipolar %s direction aligns question, explanation, examples, direct scores and submission', async (highPole) => {
+    const bipolar = { ...attribute, scaleType: 'bipolar' as const, endpoints: {
+      low: { label: '得分取勝', question: '哪款遊戲更偏得分取勝？', fullDescription: '得分端原文' },
+      high: { label: '條件取勝', question: '哪款遊戲更偏條件取勝？', fullDescription: '條件端原文' },
+    } };
+    vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
+    const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question: { ...question, attribute: bipolar, highPole }, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    const high = bipolar.endpoints[highPole];
+    const low = bipolar.endpoints[highPole === 'low' ? 'high' : 'low'];
+    expect(await screen.findByRole('heading', { name: high.question })).toBeInTheDocument();
+    expect(screen.getByText(high.fullDescription)).toBeInTheDocument();
+    expect(screen.queryByText(low.fullDescription)).not.toBeInTheDocument();
+    expect(screen.getAllByText(`0 · ${low.label}`)).toHaveLength(2);
+    expect(screen.getAllByText(`10 · ${high.label}`)).toHaveLength(2);
+    expect(screen.getByTitle(`${highPole === 'low' ? 10 : 0} 分：遊戲甲`)).toBeInTheDocument();
+    expect(screen.getByTitle(`${highPole === 'low' ? 0 : 10} 分：遊戲丁`)).toBeInTheDocument();
+    const slider = screen.getByRole('slider', { name: '評分：遊戲甲' });
+    fireEvent.keyDown(slider, { key: 'End' });
+    expect(slider).toHaveAttribute('aria-valuenow', '10');
+    expect(slider.getAttribute('aria-valuetext')).toContain(`10 為${high.label}`);
+    fireEvent.click(screen.getByRole('button', { name: `遊戲甲更偏${high.label}` }));
+    await waitFor(() => expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ highPole, ratingA: 10, comparison: 'A_HIGHER' })));
+    expect(localDb.addPendingAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ highPole, ratingA: 10 }));
+    expect(questionSpy.mock.calls[0][1]?.highPole).toBeUndefined();
+    expect(sharedAttributeCatalog.values[0].score).toBe(0);
+  });
+
+  test('leaving during the exit animation does not accept or cache another question', async () => {
+    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    const view = render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
+    await waitFor(() => expect(view.container.querySelector('.is-leaving-a')).toBeInTheDocument());
+    const cachedCount = vi.mocked(localDb.cacheAttributeQuestion).mock.calls.length;
+    view.unmount();
+    await new Promise((done) => setTimeout(done, 200));
+    expect(localDb.cacheAttributeQuestion).toHaveBeenCalledTimes(cachedCount);
+  });
+
+  test('replacing one game retains the bipolar direction, replacing a pair requests a fresh direction', async () => {
+    const bipolar = { ...attribute, scaleType: 'bipolar' as const, endpoints: {
+      low: { label: '得分取勝', question: '得分？' }, high: { label: '條件取勝', question: '條件？' },
+    } };
+    vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
+    const spy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question: { ...question, attribute: bipolar, highPole: 'low' }, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    expect(spy.mock.calls[1][1]).toEqual(expect.objectContaining({ highPole: 'low', fixedSubjectBId: subjectB.id, fixedAttributeId: attribute.id }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '不知道，換一組' }));
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+    expect(spy.mock.calls[2][1]?.highPole).toBeUndefined();
+  });
+
   test('starts with a locally selected question without game selectors or rendering the full table', async () => {
     const tableSpy = vi.spyOn(api, 'attributeTable');
     vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: recentActivities, extremeExamples, questionToken: 'question-token-that-is-long-enough-for-tests' });
