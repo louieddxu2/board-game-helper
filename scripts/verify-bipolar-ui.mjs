@@ -29,8 +29,8 @@ try {
     return line.match(/, NULL, '([^']*)'/)[1];
   };
   const attribute = { id: 'fixture-win', key: 'win', name: '取勝方式', minValue: 0, maxValue: 10, sortOrder: 0, scaleType: 'bipolar', endpoints: {
-    low: { label: '得分取勝', question: '哪款遊戲更偏得分取勝？', fullDescription: description('attribute_score_race') },
-    high: { label: '條件取勝', question: '哪款遊戲更偏條件取勝？', fullDescription: description('attribute_end_condition') },
+    low: { label: '得分取勝', question: '哪款遊戲比較偏向得分取勝？', fullDescription: description('attribute_score_race') },
+    high: { label: '條件取勝', question: '哪款遊戲比較偏向條件取勝？', fullDescription: description('attribute_end_condition') },
   } };
   const subjects = ['測試遊戲甲', '測試遊戲乙', '測試遊戲丙', '測試遊戲丁'].map((displayName, i) => ({ id: `fixture-${i}`, slug: `fixture-${i}`, kind: 'game', displayName, bggIds: [] }));
   for (const width of [1280, 390]) for (const highPole of ['low', 'high']) {

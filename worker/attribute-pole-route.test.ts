@@ -28,3 +28,19 @@ test.each([
   expect(await verifyAttributeQuestionToken(payload.questionToken, { ...identity, highPole: expected }, secret)).toBe(true);
   expect(await verifyAttributeQuestionToken(payload.questionToken, { ...identity, highPole: expected === 'low' ? 'high' : 'low' }, secret)).toBe(false);
 });
+
+test('does not attach a random pole to a unipolar attribute', async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.1);
+  const attribute = { id: 'score', key: 'score', name: '分數', minValue: 0, maxValue: 10, sortOrder: 0 } as const;
+  const subject = { id: 'a', slug: 'a', kind: 'game' as const, displayName: 'A' };
+  vi.mocked(queryAttributeQuestionPayload).mockResolvedValue({
+    question: { attribute, subjectA: subject, subjectB: { ...subject, id: 'b' } },
+    activities: [],
+  });
+  const response = await attributesRoutes.request('https://example.test/api/attributes/question?session=session-123&fixedAttribute=score&fixedA=a&fixedB=b', {}, {
+    ATTRIBUTE_QUESTION_SECRET: 'isolated-test-secret-not-for-production-123456',
+  });
+  expect(response.status).toBe(200);
+  const payload = await response.json() as { question: { highPole?: string } };
+  expect(payload.question.highPole).toBeUndefined();
+});
