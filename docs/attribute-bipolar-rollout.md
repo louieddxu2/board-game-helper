@@ -1,6 +1,6 @@
 # 雙極屬性：資料結構與方向轉換
 
-目前完成第一步結構相容、第二步方向轉換、第三步投票 UI 及第四步現有瀏覽介面。尚未新增或啟用合併屬性、換算既有分數。
+目前完成結構相容、方向轉換、投票 UI、現有瀏覽介面，以及第五步唯讀換算預覽。尚未新增或啟用合併屬性、修改既有分數。
 
 - `attributes.scale_type`：`unipolar`（預設）或 `bipolar`。
 - `attribute_translations.endpoints_json`：兩端各有 `label`、`question`，以及可選的 `shortDescription`、`fullDescription`；以 `low`、`high` 指向資料的固定方向。
@@ -35,6 +35,17 @@
 - 檢視後確認目前 GamePage 沒有屬性區塊，因此本步不新增額外遊戲頁區塊。
 - 隔離瀏覽器驗證擴充至投票後近期活動、進入總表、展開原文及固定方向排序。
 
-下一步預覽已確認的五款校正和平均換算。資料預覽完成前，不建立或啟用正式合併屬性。
+## 第五步：唯讀換算預覽
+
+- [2026-09-08 完整報告](attribute-win-merge-preview-2026-09-08.md) 與 [可回溯來源狀態](attribute-win-merge-preview-2026-09-08.json) 已產生。資料取自公開快照並套用增量至版本 8109。
+- 重跑：`npx tsx scripts/preview-win-merge.ts https://board-game-helper.louieddxu2.workers.dev`；也接受本機 AttributeCatalogPayload JSON。只輸出 JSON（含 Markdown），不寫入資料庫或檔案。
+- `scripts/bipolar-merge-preview.ts` 提供純換算與報告產生函式。零證據的初始 5 分視為未知；缺一端用另一端，缺兩端保持未知。
+- 五款校正透過精確 subject ID 套入預覽，缺任何目標就中止；快餐的兩個來源值不校正。保留每個來源的證據數、RD 與模型版本，不合計成新證據。
+- 230 個遊戲／配置中 108 個可換算、122 個未知；五款校正只改預覽輸入，不覆寫舊投票或合成分數。未對應候選分開列出。
+- 測試可從保留的來源狀態重建報告，核對公式、指定校正、原文與全部結果。
+
+下一步設計並驗證正式啟用的初始狀態、來源保留與回復方式，再套用合併屬性；本次不建立或啟用正式合併屬性。
+
+已整理[啟用設計與必要驗收](attribute-win-activation-plan.md)：首次零票覆蓋、背景重建與離線舊題相容性都需先處理，不能只新增分數再停用兩個舊欄位。
 
 部署需先套用 migration 0083、0084 再啟用讀取新欄位的程式；本步不執行正式環境 migration 或部署。
