@@ -56,6 +56,7 @@ describe('attribute hot-path budgets', () => {
           const prepared = statement({ first: vi.fn().mockResolvedValue({
             attribute_id: 'attribute-luck', attribute_name: '運氣',
             scale_type: 'bipolar',
+            endpoints_json: JSON.stringify({ low: { label: '得分取勝', question: '得分？' }, high: { label: '條件取勝', question: '條件？' } }),
             subject_a_id: 'subject-a', subject_a_name: '遊戲甲', subject_a_slug: 'game-a', subject_a_game_slug: 'game-a',
             subject_b_id: 'subject-b', subject_b_name: '遊戲乙', subject_b_slug: 'game-b', subject_b_game_slug: 'game-b',
             actor_name: '匿名玩家',
@@ -94,6 +95,9 @@ describe('attribute hot-path budgets', () => {
     expect(sqlCalls.some((sql) => sql.includes('LEFT JOIN attribute_score_states ssa'))).toBe(true);
     expect(sqlCalls.some((sql) => sql.includes('FROM attribute_score_states\n'))).toBe(false);
     expect(result.updatedValues.find((value) => value.subjectId === 'subject-a')?.directAverage).toBe(8);
+    expect(result.activities.find((activity) => activity.kind === 'comparison')).toEqual(expect.objectContaining({
+      attributePoles: { low: '得分取勝', high: '條件取勝' }, result: 'A_HIGHER',
+    }));
     const responseStatement = statements[sqlCalls.findIndex((sql) => sql.includes('INSERT INTO attribute_vote_responses'))];
     expect(responseStatement.bind).toHaveBeenCalledWith(
       'response-budget-1', 'attribute-luck', 'subject-a', 'subject-b', 8, 5, 'A_HIGHER',

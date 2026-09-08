@@ -94,6 +94,8 @@ describe('AttributesPage question flow', () => {
     fireEvent.click(screen.getByRole('button', { name: `遊戲甲更偏${high.label}` }));
     await waitFor(() => expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ highPole, ratingA: 10, comparison: 'A_HIGHER' })));
     expect(localDb.addPendingAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ highPole, ratingA: 10 }));
+    await waitFor(() => expect(document.querySelector('.attributes-inline-activity')?.textContent).toContain(highPole === 'low'
+      ? '遊戲乙 比 遊戲甲（0） 更偏「條件取勝」' : '遊戲甲（10） 比 遊戲乙 更偏「條件取勝」'));
     expect(questionSpy.mock.calls[0][1]?.highPole).toBeUndefined();
     expect(sharedAttributeCatalog.values[0].score).toBe(0);
   });
@@ -107,6 +109,18 @@ describe('AttributesPage question flow', () => {
     view.unmount();
     await new Promise((done) => setTimeout(done, 200));
     expect(localDb.cacheAttributeQuestion).toHaveBeenCalledTimes(cachedCount);
+  });
+
+  test.each(['A_HIGHER', 'B_HIGHER', 'SIMILAR'] as const)('stored bipolar activity %s uses canonical labels and ratings', async (result) => {
+    const activity: AttributeActivity = { id: 'stored-bipolar', kind: 'comparison', actorName: '玩家', attributeId: 'win', attributeName: '取勝方式',
+      attributePoles: { low: '得分取勝', high: '條件取勝' }, subjectA, subjectB, ratingA: 8, ratingB: 2, result, createdAt: 1 };
+    vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question, activities: [activity], questionToken: 'question-token-that-is-long-enough-for-tests' });
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    await screen.findByRole('heading', { name: '屬性投票' });
+    const text = document.querySelector('.attributes-inline-activity')?.textContent;
+    expect(text).toContain('0＝得分取勝，10＝條件取勝');
+    expect(text).toContain(result === 'A_HIGHER' ? '遊戲甲（8） 比 遊戲乙（2） 更偏「條件取勝」'
+      : result === 'B_HIGHER' ? '遊戲乙（2） 比 遊戲甲（8） 更偏「條件取勝」' : '遊戲甲（8） 與 遊戲乙（2） 的「取勝方式」差不多');
   });
 
   test('replacing one game retains the bipolar direction, replacing a pair requests a fresh direction', async () => {

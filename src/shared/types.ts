@@ -225,6 +225,7 @@ export interface AttributeActivity {
   actorName: string;
   attributeId: string;
   attributeName: string;
+  attributePoles?: { low: string; high: string };
   subject?: AttributeActivitySubject;
   subjectA?: AttributeActivitySubject;
   subjectB?: AttributeActivitySubject;

@@ -1485,12 +1485,16 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attributes-table-description { margin: -8px 0 14px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .attributes-table-meta { margin: -8px 0 14px; color: var(--muted); font-size: 12px; }
 .attributes-table-scroll { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
-.attributes-matrix { min-width: 1620px; border-spacing: 0; border-collapse: separate; color: var(--ink); font-size: 12px; }
+.attributes-matrix { min-width: 100%; width: max-content; border-spacing: 0; border-collapse: separate; color: var(--ink); font-size: 12px; }
 .attributes-matrix th, .attributes-matrix td { min-width: 62px; padding: 9px 7px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
 .attributes-matrix thead th { position: sticky; top: 0; z-index: 2; background: var(--cream); color: var(--muted); font-size: 11px; line-height: 1.25; white-space: normal; }
 .attributes-matrix-sort { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 100%; min-height: 34px; padding: 3px 2px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: 800; line-height: 1.25; }
 .attributes-matrix-sort:hover, .attributes-matrix-sort:focus-visible, .attributes-matrix-sort.is-sorted { color: var(--orange); }
 .attributes-matrix-sort-indicator { color: var(--orange); font-size: 13px; font-weight: 900; }
+.attributes-matrix-poles { display: grid; gap: 4px; width: clamp(120px, 40vw, 240px); font-weight: 400; text-align: left; }
+.attributes-matrix-poles details { max-width: 240px; }
+.attributes-matrix-poles summary { cursor: pointer; text-decoration: underline; }
+.attributes-matrix-poles p { margin: 4px 0 10px; font-size: 12px; line-height: 1.5; white-space: normal; }
 .attributes-matrix tbody tr:last-child th, .attributes-matrix tbody tr:last-child td { border-bottom: 0; }
 .attributes-matrix th:last-child, .attributes-matrix td:last-child { border-right: 0; }
 .attributes-matrix .attributes-matrix-subject { position: sticky; left: 0; z-index: 3; width: 178px; min-width: 178px; max-width: 178px; background: var(--white); text-align: left; white-space: normal; }

@@ -5,6 +5,13 @@ const subjectA = { id: 'subject-a', displayName: '遊戲甲' };
 const subjectB = { id: 'subject-b', displayName: '遊戲乙' };
 
 describe('attribute activity feed', () => {
+  test('preserves canonical endpoint metadata when reading a stored feed entry', () => {
+    const attributePoles = { low: '得分取勝', high: '條件取勝' };
+    const entries = parseAttributeActivityFeedEntry(JSON.stringify([
+      { id: 'comparison', kind: 'comparison', actorName: '玩家', attributeId: 'win', attributeName: '取勝方式', attributePoles, subjectA, subjectB, result: 'B_HIGHER', createdAt: 1 },
+    ]));
+    expect(entries[0]).toEqual(expect.objectContaining({ attributePoles, result: 'B_HIGHER' }));
+  });
   test('collapses one response into its comparison and attaches direct ratings by subject', () => {
     const activities = parseAttributeActivityFeedEntry(JSON.stringify([
       { id: 'rating-b', kind: 'rating', actorName: '玩家', attributeId: 'luck', attributeName: '運氣成分', subject: subjectB, value: 3, createdAt: 1 },

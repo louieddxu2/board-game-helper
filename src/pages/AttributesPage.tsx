@@ -36,6 +36,16 @@ const activitySubject = (subject: { displayName: string }, rating?: number) => <
 
 const activityText = (activity: AttributeActivity) => {
   if (activity.subjectA && activity.subjectB && activity.result) {
+    if (activity.attributePoles) {
+      const { low, high } = activity.attributePoles;
+      const scale = `（0＝${low}，10＝${high}）`;
+      if (activity.result === 'SIMILAR') return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 與 {activitySubject(activity.subjectB, activity.ratingB)} 的「{activity.attributeName}」差不多{scale}</>;
+      const higher = activity.result === 'A_HIGHER' ? activity.subjectA : activity.subjectB;
+      const lower = activity.result === 'A_HIGHER' ? activity.subjectB : activity.subjectA;
+      const higherRating = activity.result === 'A_HIGHER' ? activity.ratingA : activity.ratingB;
+      const lowerRating = activity.result === 'A_HIGHER' ? activity.ratingB : activity.ratingA;
+      return <>{activity.actorName} 認為 {activitySubject(higher, higherRating)} 比 {activitySubject(lower, lowerRating)} 更偏「{high}」{scale}</>;
+    }
     const attributeKey = activity.attributeId.replace(/^attribute[-_]/, '');
     const wording = attributeComparisonWording(attributeKey);
     if (activity.result === 'A_HIGHER') return <>{activity.actorName} 認為 {activitySubject(activity.subjectA, activity.ratingA)} 的「{activity.attributeName}」比 {activitySubject(activity.subjectB, activity.ratingB)} {wording.higher}</>;
@@ -94,6 +104,8 @@ const optimisticComparisonActivity = (question: AttributeQuestion, draft: Attrib
     actorName,
     attributeId: draft.attributeId,
     attributeName: question.attribute.name,
+    attributePoles: question.attribute.scaleType === 'bipolar' && question.attribute.endpoints
+      ? { low: question.attribute.endpoints.low.label, high: question.attribute.endpoints.high.label } : undefined,
     subjectA: question.subjectA,
     subjectB: question.subjectB,
     ratingA: canonical.ratingA ?? undefined,

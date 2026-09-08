@@ -2,6 +2,7 @@ import { useContext, useMemo, useState } from 'react';
 import { ToastContext } from '../context/ToastContext';
 import { useDragPanScroll } from '../hooks/useDragPanScroll';
 import { rankAttributeSimilarity, type AttributeSimilarityMatch } from '../lib/attributeSimilarity';
+import { attributeDisplayEndpoints } from '../shared/attributeScale';
 import type { AttributeMatrixValue, AttributesPayload } from '../shared/types';
 
 type TableFilter = 'all' | 'processed' | 'pending';
@@ -147,13 +148,18 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
         <thead><tr><th scope="col" className="attributes-matrix-subject">遊戲／來源項目</th>{payload.attributes.map((attribute) => {
           const isSorted = sort?.attributeId === attribute.id;
           const direction = isSorted ? sort.direction : undefined;
-          return <th scope="col" key={attribute.id} title={attribute.fullDescription} aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : 'none'}><button type="button" className={`attributes-matrix-sort ${isSorted ? 'is-sorted' : ''}`} onClick={() => toggleSort(attribute.id)} aria-label={`${attribute.name}排序：${direction === 'desc' ? '由大到小' : direction === 'asc' ? '由小到大' : '正常'}`}><span>{attribute.name}</span><span className="attributes-matrix-sort-indicator" aria-hidden="true">{direction === 'desc' ? '↓' : direction === 'asc' ? '↑' : '↕'}</span></button></th>;
+          const poles = attributeDisplayEndpoints(attribute);
+          const sortLabel = poles && direction ? `偏${poles[direction === 'desc' ? 'high' : 'low'].label}優先` : direction === 'desc' ? '由大到小' : direction === 'asc' ? '由小到大' : '正常';
+          return <th scope="col" key={attribute.id} title={poles ? undefined : attribute.fullDescription} aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : 'none'}>
+            <button type="button" className={`attributes-matrix-sort ${isSorted ? 'is-sorted' : ''}`} onClick={() => toggleSort(attribute.id)} aria-label={`${attribute.name}排序：${sortLabel}`}><span>{attribute.name}</span><span className="attributes-matrix-sort-indicator" aria-hidden="true">{direction === 'desc' ? '↓' : direction === 'asc' ? '↑' : '↕'}</span></button>
+            {poles && <div className="attributes-matrix-poles"><span>0＝{poles.low.label}</span><span>10＝{poles.high.label}</span>{direction && <span>{sortLabel}</span>}<details><summary>兩端說明</summary>{(['low', 'high'] as const).map((pole) => <div key={pole}><strong>{poles[pole].label}</strong><p>{poles[pole].fullDescription ?? poles[pole].shortDescription ?? '尚無說明'}</p></div>)}</details></div>}
+          </th>;
         })}</tr></thead>
         <tbody>{sortedRows.map((row) => {
           const match = similarityMap.get(row.id);
           const isAnchor = similarity?.anchorId === row.id;
           const statusLabel = isAnchor ? '相近比較基準' : match ? `共同資料 ${match.sharedAttributeCount} 項` : row.statusLabel;
-          return <tr key={row.id} className={`${row.kind === 'pending' ? 'attributes-matrix-pending ' : ''}${isAnchor ? 'attributes-matrix-anchor' : ''}`.trim() || undefined}><th scope="row" className="attributes-matrix-subject">{row.kind === 'processed' ? <button type="button" className="attributes-matrix-subject-button" aria-pressed={isAnchor} onClick={() => selectSimilarityAnchor(row)}>{row.displayName}</button> : <span>{row.displayName}</span>}<small>{statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'}>{formatScore(value)}</td>)}</tr>;
+          return <tr key={row.id} className={`${row.kind === 'pending' ? 'attributes-matrix-pending ' : ''}${isAnchor ? 'attributes-matrix-anchor' : ''}`.trim() || undefined}><th scope="row" className="attributes-matrix-subject">{row.kind === 'processed' ? <button type="button" className="attributes-matrix-subject-button" aria-pressed={isAnchor} onClick={() => selectSimilarityAnchor(row)}>{row.displayName}</button> : <span>{row.displayName}</span>}<small>{statusLabel}</small></th>{row.values.map((value, index) => <td key={payload.attributes[index]?.id ?? index} className={`attributes-matrix-value ${scoreClass(value)}`} title={row.details[index] ?? '尚無資料'} aria-label={attributeDisplayEndpoints(payload.attributes[index]) ? `${formatScore(value)}；0＝${payload.attributes[index].endpoints!.low.label}，10＝${payload.attributes[index].endpoints!.high.label}；${row.details[index]}` : undefined}>{formatScore(value)}</td>)}</tr>;
         })}</tbody>
       </table>
     </div>

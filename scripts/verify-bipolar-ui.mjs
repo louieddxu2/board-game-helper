@@ -68,8 +68,20 @@ try {
     assert.equal(submitted.highPole, highPole);
     assert.equal(submitted.ratingA, 10);
     assert.equal(submitted.comparison, 'A_HIGHER');
+    await page.getByText(/更偏「條件取勝」/).waitFor();
+    assert.ok((await page.locator('.attributes-inline-activity').textContent()).includes('0＝得分取勝，10＝條件取勝'));
+    await page.getByRole('link', { name: '屬性總表' }).click();
+    await page.getByRole('button', { name: '取勝方式排序：正常' }).waitFor();
+    await page.getByText('兩端說明', { exact: true }).click();
+    assert.ok(await page.getByText(attribute.endpoints.low.fullDescription, { exact: true }).isVisible());
+    assert.ok(await page.getByText(attribute.endpoints.high.fullDescription, { exact: true }).isVisible());
+    await page.getByRole('button', { name: '取勝方式排序：正常' }).click();
+    await page.getByRole('button', { name: '取勝方式排序：偏條件取勝優先' }).waitFor();
+    assert.ok((await page.locator('.attributes-matrix tbody tr').first().textContent()).includes('測試遊戲丁'));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Table page overflow');
+    await page.screenshot({ path: `outputs/bipolar-ui/table-${width}-${highPole}.png`, fullPage: true });
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width}px / ${highPole}: render, labels, keyboard, submission, no overflow or console errors`);
+    console.log(`PASS ${width}px / ${highPole}: vote, canonical activity, table descriptions and sorting, no overflow or console errors`);
     await context.close();
   }
 } finally {

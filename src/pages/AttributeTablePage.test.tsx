@@ -19,6 +19,26 @@ const payload: AttributeCatalogPayload = {
 };
 
 describe('AttributeTablePage', () => {
+  test('shows fixed bipolar endpoints, original descriptions and endpoint-aware sort order without changing scores', async () => {
+    const bipolar = { ...payload.attributes[0], name: '取勝方式', scaleType: 'bipolar' as const, endpoints: {
+      low: { label: '得分取勝', question: '得分？', fullDescription: '得分端完整原文' },
+      high: { label: '條件取勝', question: '條件？', fullDescription: '條件端完整原文' },
+    } };
+    vi.spyOn(api, 'attributeTable').mockResolvedValue({ ...payload, attributes: [bipolar] });
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+    const sort = await screen.findByRole('button', { name: '取勝方式排序：正常' });
+    expect(screen.getByText('0＝得分取勝')).toBeInTheDocument();
+    expect(screen.getByText('10＝條件取勝')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('兩端說明'));
+    expect(screen.getByText('得分端完整原文')).toBeVisible();
+    expect(screen.getByText('條件端完整原文')).toBeVisible();
+    expect(screen.getByRole('cell', { name: /7.3；0＝得分取勝，10＝條件取勝/ })).toBeInTheDocument();
+    fireEvent.click(sort);
+    expect(screen.getByRole('button', { name: '取勝方式排序：偏條件取勝優先' })).toBeInTheDocument();
+    fireEvent.click(sort);
+    expect(screen.getByRole('button', { name: '取勝方式排序：偏得分取勝優先' })).toBeInTheDocument();
+    expect(payload.values[0].score).toBe(7.25);
+  });
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();

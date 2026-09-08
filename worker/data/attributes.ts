@@ -263,6 +263,7 @@ interface AttributeExtremeExampleRow {
 }
 
 interface ResponseContextRow {
+  endpoints_json?: string | null;
   scale_type?: string;
   attribute_id: string;
   attribute_name: string;
@@ -1061,7 +1062,7 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
 
 const responseContextAndStates = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
-    SELECT a.id AS attribute_id, t.name AS attribute_name, a.scale_type,
+    SELECT a.id AS attribute_id, t.name AS attribute_name, a.scale_type, t.endpoints_json,
       sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
       sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
       CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
@@ -1589,13 +1590,15 @@ const saveAttributeResponseLocked = async (
 
   const statements = [];
   const activities: AttributeActivity[] = [];
+  const activityEndpoints = parseAttributeScale(context.scale_type, context.endpoints_json ? JSON.parse(context.endpoints_json) : undefined).endpoints;
+  const attributePoles = activityEndpoints ? { low: activityEndpoints.low.label, high: activityEndpoints.high.label } : undefined;
   const addActivity = (kind: 'rating' | 'comparison', subjectAId: string, subjectBId: string | null, value: number | null, result: AttributeComparisonResult | null) => {
     const id = createId('attribute-vote');
     if (kind === 'rating') {
       const subject = subjectAId === context.subject_a_id
         ? toResponseActivitySubject(context.subject_a_id, context.subject_a_name, context.subject_a_slug, context.subject_a_game_slug)
         : toResponseActivitySubject(context.subject_b_id, context.subject_b_name, context.subject_b_slug, context.subject_b_game_slug);
-      activities.push({ id, kind, actorName: context.actor_name, attributeId: input.attributeId, attributeName: context.attribute_name, subject, value: value ?? undefined, createdAt: input.timestamp });
+      activities.push({ id, kind, actorName: context.actor_name, attributeId: input.attributeId, attributeName: context.attribute_name, attributePoles, subject, value: value ?? undefined, createdAt: input.timestamp });
     } else {
       const subjectA = subjectAId === context.subject_a_id
         ? toResponseActivitySubject(context.subject_a_id, context.subject_a_name, context.subject_a_slug, context.subject_a_game_slug)
@@ -1603,7 +1606,7 @@ const saveAttributeResponseLocked = async (
       const subjectB = subjectBId === context.subject_b_id
         ? toResponseActivitySubject(context.subject_b_id, context.subject_b_name, context.subject_b_slug, context.subject_b_game_slug)
         : toResponseActivitySubject(context.subject_a_id, context.subject_a_name, context.subject_a_slug, context.subject_a_game_slug);
-      activities.push({ id, kind, actorName: context.actor_name, attributeId: input.attributeId, attributeName: context.attribute_name, subjectA, subjectB, result: result ?? undefined, createdAt: input.timestamp });
+      activities.push({ id, kind, actorName: context.actor_name, attributeId: input.attributeId, attributeName: context.attribute_name, attributePoles, subjectA, subjectB, result: result ?? undefined, createdAt: input.timestamp });
     }
   };
 
