@@ -7,10 +7,13 @@ import { queryAttributeInitialValues } from '../worker/data/attributeInitialValu
 import { applyDirectRating, initialAttributeState } from '../worker/data/attributeScoring';
 import { saveAttributeResponse, processAttributeMergeRebuildJobs, prepareAttributeMergeRebuildJob } from '../worker/data/attributes';
 
-const setup = () => {
+const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void) => {
   const sqlite = new DatabaseSync(':memory:');
   for (const name of readdirSync('migrations').filter((file) => file.endsWith('.sql')).sort()) {
-    try { sqlite.exec(readFileSync(`migrations/${name}`, 'utf8')); }
+    try {
+      if (name === '0090_convert_win_vote_history.sql') beforeHistoryConversion?.(sqlite);
+      sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
+    }
     catch (error) { sqlite.close(); throw new Error(`Migration ${name}: ${String(error)}`); }
   }
   sqlite.exec('PRAGMA foreign_keys = ON');
@@ -41,8 +44,34 @@ const setup = () => {
 };
 
 test('converted win data survives a complete rebuild', async () => {
-  const { sqlite, gateway } = setup();
+  const { sqlite, gateway } = setup((db) => {
+    const subject = 'attribute_subject_game:game_attribute_import_the_mind';
+    const activities = JSON.stringify([
+      { id: 'history-rating', kind: 'rating', attributeId: 'attribute_score_race', attributeName: '得分取勝', subject: { id: subject }, value: 8 },
+      { id: 'history-comparison', kind: 'comparison', attributeId: 'attribute_score_race', attributeName: '得分取勝', result: 'A_HIGHER', ratingA: 8, ratingB: 3 },
+    ]);
+    db.prepare(`INSERT INTO attribute_vote_responses
+      (response_id,attribute_id,subject_a_id,rating_a,rating_b,comparison,activity_json,session_id,created_at,updated_at)
+      VALUES('history-score','attribute_score_race',?,8,3,'A_HIGHER',?,'test',1,1)`).run(subject, activities);
+    db.prepare(`INSERT INTO attribute_vote_events
+      (id,response_id,event_key,kind,attribute_id,subject_a_id,value,session_id,created_at,updated_at)
+      VALUES('history-event','history-score','rating','rating','attribute_score_race',?,8,'test',1,1)`).run(subject);
+    db.prepare(`INSERT INTO attribute_vote_responses
+      (response_id,attribute_id,subject_a_id,rating_a,comparison,activity_json,session_id,created_at,updated_at)
+      VALUES('history-condition','attribute_end_condition',?,7,'B_HIGHER','[]','test',2,2)`).run(subject);
+  });
   try {
+    const history = sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-score'").get()!;
+    expect(history).toMatchObject({attribute_id:'attribute_win_method',rating_a:2,rating_b:7,comparison:'B_HIGHER',question_high_pole:'low',created_at:1});
+    expect(JSON.parse(String(history.activity_json))[0]).toMatchObject({attributeId:'attribute_win_method',attributeName:'取勝方式',value:2,attributePoles:{low:'得分取勝',high:'條件取勝'}});
+    expect(JSON.parse(String(history.activity_json))[1]).toMatchObject({result:'B_HIGHER',ratingA:2,ratingB:7});
+    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-condition'").get()).toMatchObject({attribute_id:'attribute_win_method',rating_a:7,rating_b:null,comparison:'B_HIGHER',question_high_pole:'high'});
+    expect(sqlite.prepare("SELECT * FROM attribute_vote_events WHERE id='history-event'").get()).toMatchObject({attribute_id:'attribute_win_method',value:2});
+    expect(sqlite.prepare("SELECT COUNT(*) n FROM attribute_vote_events WHERE session_id='win-conversion-v1'").get()).toMatchObject({n:0});
+    const unrelatedBefore = sqlite.prepare("SELECT * FROM attribute_score_states WHERE attribute_id <> 'attribute_win_method' ORDER BY subject_id,attribute_id").all();
+    await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
+    expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").get()).toMatchObject({status:'completed'});
+    expect(sqlite.prepare("SELECT * FROM attribute_score_states WHERE attribute_id <> 'attribute_win_method' ORDER BY subject_id,attribute_id").all()).toEqual(unrelatedBefore);
     const read = () => sqlite.prepare("SELECT score,rating_deviation,direct_sum,direct_count,evidence_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get();
     const before = read();
     const timestamp = Date.now() + 1000;
@@ -59,7 +88,7 @@ test('converted win data survives a complete rebuild', async () => {
     }
     expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()).toMatchObject({status:'completed'});
     expect(read()).toEqual(before);
-    expect(read()).toMatchObject({score:9,evidence_count:1,rating_deviation:3});
+    expect(Number(before?.evidence_count)).toBeGreaterThan(1);
     const opponent = sqlite.prepare("SELECT id FROM attribute_subjects WHERE game_id IS NOT NULL AND id <> 'attribute_subject_game:game_attribute_import_the_mind' LIMIT 1").get() as { id: string };
     await saveAttributeResponse(gateway, {
       subjectAId: 'attribute_subject_game:game_attribute_import_the_mind', subjectBId: opponent.id,
@@ -73,13 +102,15 @@ test('converted win data survives a complete rebuild', async () => {
       if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
     }
     expect(read()).toEqual(afterVote);
-    expect(read()).toMatchObject({direct_count:2,evidence_count:2});
+    expect(Number(read()?.direct_count)).toBe(Number(before?.direct_count)+1);
+    expect(Number(read()?.evidence_count)).toBe(Number(before?.evidence_count)+1);
   } finally { sqlite.close(); }
 });
 
 test('baseline storage survives online votes and actual background rebuild without creating synthetic votes', async () => {
   const { sqlite, gateway } = setup();
   try {
+    await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
     expect(await queryAttributeInitialValues(gateway, 'attribute_score_race')).toEqual([]);
     expect(sqlite.prepare('SELECT count(*) AS n FROM attribute_initial_value_batches').get()).toMatchObject({ n: 0 });
     sqlite.exec(`

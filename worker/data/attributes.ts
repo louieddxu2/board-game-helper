@@ -237,6 +237,7 @@ interface AttributeMergeHistoryRow {
 }
 
 interface AttributeMergeRebuildJobRow {
+  attribute_id: string | null;
   id: string;
   source_game_id: string;
   target_game_id: string;
@@ -1315,8 +1316,8 @@ const initializeAttributeMergeRebuild = async (
     throw new Error('attribute_merge_initial_value_requires_mapping');
   }
   await db.batch([
-    db.statement('DELETE FROM attribute_pair_stats'),
-    db.statement('DELETE FROM attribute_score_states'),
+    db.statement('DELETE FROM attribute_pair_stats WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
+    db.statement('DELETE FROM attribute_score_states WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
     db.statement(`
       INSERT OR IGNORE INTO attribute_score_states
         (subject_id, attribute_id, score, direct_sum, direct_count, comparison_count,
@@ -1327,9 +1328,9 @@ const initializeAttributeMergeRebuild = async (
       FROM attribute_subjects s
       CROSS JOIN attributes a
       LEFT JOIN games g ON g.id = s.game_id
-      WHERE a.is_active = 1
+      WHERE a.is_active = 1 AND (? IS NULL OR a.id = ?)
         AND ${votableSubjectCondition('s', 'g')}
-    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
+    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp, job.attribute_id, job.attribute_id),
     db.statement(`
       INSERT INTO attribute_score_states
         (subject_id, attribute_id, score, direct_sum, direct_count, comparison_count,
@@ -1341,9 +1342,9 @@ const initializeAttributeMergeRebuild = async (
       JOIN attributes a ON a.id = v.attribute_id
       JOIN attribute_subjects s ON s.id = v.subject_id
       LEFT JOIN games g ON g.id = s.game_id
-      WHERE a.is_active = 1 AND ${votableSubjectCondition('s', 'g')}
+      WHERE a.is_active = 1 AND (? IS NULL OR a.id = ?) AND ${votableSubjectCondition('s', 'g')}
       ON CONFLICT(subject_id, attribute_id) DO UPDATE SET score = excluded.score
-    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
+    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp, job.attribute_id, job.attribute_id),
     db.statement(`
       UPDATE attribute_merge_rebuild_jobs
       SET status = 'running', reset_completed = 1, updated_at = ?
@@ -1372,7 +1373,7 @@ const queryAttributeMergeHistoryBatch = async (
       FROM attribute_vote_events e
       JOIN attributes active_attribute
         ON active_attribute.id = e.attribute_id AND active_attribute.is_active = 1
-      WHERE e.created_at <= ?
+      WHERE (? IS NULL OR e.attribute_id = ?) AND e.created_at <= ?
         AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
           WHERE b.target_attribute_id = e.attribute_id AND e.created_at <= b.cutoff_created_at)
         AND (e.created_at > ? OR (e.created_at = ? AND
@@ -1387,7 +1388,7 @@ const queryAttributeMergeHistoryBatch = async (
       ORDER BY e.created_at, stream_id
       LIMIT ${ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE}
     `).bind(
-      job.cutoff_created_at,
+      job.attribute_id, job.attribute_id, job.cutoff_created_at,
       job.cursor_created_at,
       job.cursor_created_at,
       job.cursor_stream_id,
@@ -1405,7 +1406,7 @@ const queryAttributeMergeHistoryBatch = async (
       FROM attribute_vote_responses r
       JOIN attributes active_attribute
         ON active_attribute.id = r.attribute_id AND active_attribute.is_active = 1
-      WHERE r.attribute_id IS NOT NULL AND r.created_at <= ?
+      WHERE (? IS NULL OR r.attribute_id = ?) AND r.attribute_id IS NOT NULL AND r.created_at <= ?
         AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
           WHERE b.target_attribute_id = r.attribute_id AND r.created_at <= b.cutoff_created_at)
         AND (r.created_at > ? OR (r.created_at = ? AND
@@ -1413,7 +1414,7 @@ const queryAttributeMergeHistoryBatch = async (
       ORDER BY r.created_at, stream_id
       LIMIT ${ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE}
     `).bind(
-      job.cutoff_created_at,
+      job.attribute_id, job.attribute_id, job.cutoff_created_at,
       job.cursor_created_at,
       job.cursor_created_at,
       job.cursor_stream_id,
@@ -1458,7 +1459,7 @@ const releaseAttributeMergeJobLock = async (db: Database, lock: { token: string;
 const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number): Promise<boolean> => {
   const job = await db.statement(`
     SELECT id, source_game_id, target_game_id, source_subject_id, target_subject_id,
-      status, reset_completed, cursor_created_at, cursor_stream_id,
+      attribute_id, status, reset_completed, cursor_created_at, cursor_stream_id,
       cutoff_created_at, error_message, created_at, updated_at
     FROM attribute_merge_rebuild_jobs
     WHERE status IN ('pending', 'running')
@@ -1514,13 +1515,7 @@ const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number
     mappedRows.forEach((row) => {
       if (row.subject_a_id && row.rating_a != null) {
         const a = getState(row.subject_a_id, row.attribute_id);
-        const next = applyDirectRating(a.state, Number(row.rating_a)).next;
-        // 0088 assigned conservative RD=3 to converted data. Preserve it when
-        // replaying the durable conversion event, including subject merges.
-        if (row.stream_id.startsWith('event:win-conversion-v1:') && a.state.evidenceCount === 0) {
-          next.ratingDeviation = 3;
-        }
-        states.set(a.key, next);
+        states.set(a.key, applyDirectRating(a.state, Number(row.rating_a)).next);
         touched.add(a.key);
       }
       if (row.subject_b_id && row.rating_b != null) {
