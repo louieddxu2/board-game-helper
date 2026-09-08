@@ -6,6 +6,7 @@ import {
   applyComparison,
   applyDirectRating,
   emptyAttributeState,
+  initialAttributeState,
   replayAttributeEvents,
   replayAttributeResponses,
   calculateAttributeScores,
@@ -19,6 +20,42 @@ const scoreFor = (scores: ReturnType<typeof calculateAttributeScores>, subjectId
 };
 
 describe('glicko-rd-v1', () => {
+  test.each([0, 5, 9, 10])('initial value %s has zero votes and survives the first direct rating', (score) => {
+    const initial = initialAttributeState(score);
+    expect(initial).toMatchObject({ score, initialScore: score, evidenceCount: 0, directCount: 0, comparisonCount: 0, ratingDeviation: 3 });
+    const rating = score < 5 ? 8 : 2;
+    const next = applyDirectRating(initial, rating).next;
+    expect(next.score).toBeGreaterThan(Math.min(score, rating));
+    expect(next.score).toBeLessThan(Math.max(score, rating));
+    expect(next).toMatchObject({ initialScore: score, directSum: rating, directCount: 1, evidenceCount: 1 });
+    expect(initial.evidenceCount).toBe(0);
+  });
+
+  test('comparison against an initial value counts only the new comparison', () => {
+    const result = applyComparison(initialAttributeState(8), initialAttributeState(2), 'SIMILAR');
+    expect(result.a.next.score).toBeLessThan(8);
+    expect(result.b.next.score).toBeGreaterThan(2);
+    expect(result.a.next).toMatchObject({ directCount: 0, comparisonCount: 1, decisiveComparisonCount: 0, evidenceCount: 1, initialScore: 8 });
+  });
+
+  test('rebuild starts at retained baselines, excludes absorbed history and deduplicates responses', () => {
+    const prior = [{ subjectId: 'a', attributeId: 'win', score: 9, cutoffCreatedAt: 100 }];
+    const response = { responseId: 'new', createdAt: 101, attributeId: 'win', subjectAId: 'a', subjectBId: null, ratingA: 2, ratingB: null, comparison: null };
+    const old = { ...response, responseId: 'old', createdAt: 100, ratingA: 0 };
+    const replay = replayAttributeResponses([response, old, response], undefined, prior);
+    expect(replay.get('a\u0000win')).toEqual(applyDirectRating(initialAttributeState(9), 2).next);
+    expect(replayAttributeResponses([], undefined, prior).get('a\u0000win')?.score).toBe(9);
+    expect(() => replayAttributeResponses([response, { ...response, ratingA: 3 }], undefined, prior)).toThrow('attribute_response_replay_conflict');
+  });
+
+  test('subject mapping retains a single baseline and rejects ambiguous merged baselines', () => {
+    const initial = { subjectId: 'source', attributeId: 'win', score: 9, cutoffCreatedAt: 100 };
+    const mapper = (id: string) => id === 'source' ? 'target' : id;
+    expect(replayAttributeResponses([], mapper, [initial]).get('target\u0000win')?.score).toBe(9);
+    expect(() => replayAttributeResponses([], mapper, [initial, { ...initial, subjectId: 'target', score: 2 }])).toThrow('attribute_initial_value_conflict');
+    expect(() => initialAttributeState(NaN)).toThrow('invalid_attribute_initial_score');
+    expect(() => replayAttributeResponses([], undefined, [{ ...initial, cutoffCreatedAt: -1 }])).toThrow('invalid_attribute_initial_cutoff');
+  });
   test('initializes the first direct score at the submitted absolute value', () => {
     const result = applyDirectRating(emptyAttributeState(), 8);
 

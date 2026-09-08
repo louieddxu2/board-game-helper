@@ -21,6 +21,7 @@ import {
   applyComparison,
   applyDirectRating,
   emptyAttributeState,
+  initialAttributeState,
   type OnlineAttributeState,
 } from './attributeScoring';
 import {
@@ -85,6 +86,7 @@ interface ComponentRow {
 }
 
 interface AttributeScoreStateRow {
+  initial_score?: number | null;
   subject_id: string;
   attribute_id: string;
   score: number;
@@ -279,6 +281,8 @@ interface ResponseContextRow {
 }
 
 interface ResponseContextAndStateRow extends ResponseContextRow {
+  state_a_initial_score?: number | null;
+  state_b_initial_score?: number | null;
   state_a_subject_id: string | null;
   state_a_score: number | null;
   state_a_rating_deviation: number | null;
@@ -1063,6 +1067,7 @@ const stateToMatrixValue = (subjectId: string, attributeId: string, state: Onlin
 const responseContextAndStates = async (db: Database, input: AttributeResponseInput) => {
   const row = await db.statement(`
     SELECT a.id AS attribute_id, t.name AS attribute_name, a.scale_type, t.endpoints_json,
+      iva.score AS state_a_initial_score, ivb.score AS state_b_initial_score,
       sa.id AS subject_a_id, sa.display_name AS subject_a_name, sa.slug AS subject_a_slug, ga.slug AS subject_a_game_slug,
       sb.id AS subject_b_id, sb.display_name AS subject_b_name, sb.slug AS subject_b_slug, gb.slug AS subject_b_game_slug,
       CASE WHEN u.show_nickname = 1 AND u.nickname IS NOT NULL THEN u.nickname ELSE '匿名玩家' END AS actor_name,
@@ -1084,6 +1089,8 @@ const responseContextAndStates = async (db: Database, input: AttributeResponseIn
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN attribute_score_states ssa ON ssa.subject_id = sa.id AND ssa.attribute_id = a.id
     LEFT JOIN attribute_score_states ssb ON ssb.subject_id = sb.id AND ssb.attribute_id = a.id
+    LEFT JOIN attribute_initial_values iva ON iva.subject_id = sa.id AND iva.attribute_id = a.id
+    LEFT JOIN attribute_initial_values ivb ON ivb.subject_id = sb.id AND ivb.attribute_id = a.id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
       AND ${votableSubjectCondition('sa', 'ga')}
@@ -1093,6 +1100,7 @@ const responseContextAndStates = async (db: Database, input: AttributeResponseIn
   if (!row) throw new Error('attribute_subject_not_found');
 
   const stateFor = (side: 'a' | 'b'): OnlineAttributeState | null => {
+    const initialScore = side === 'a' ? row.state_a_initial_score : row.state_b_initial_score;
     const values = side === 'a'
       ? {
           subjectId: row.state_a_subject_id,
@@ -1114,8 +1122,10 @@ const responseContextAndStates = async (db: Database, input: AttributeResponseIn
           decisiveComparisonCount: row.state_b_decisive_comparison_count,
           evidenceCount: row.state_b_evidence_count,
         };
+    if (initialScore != null && (!values.subjectId || Number(values.evidenceCount ?? 0) === 0)) return initialAttributeState(Number(initialScore));
     if (!values.subjectId) return null;
     return {
+      ...(initialScore == null ? {} : { initialScore: Number(initialScore) }),
       score: Number(values.score ?? 5),
       ratingDeviation: Number(values.ratingDeviation ?? ATTRIBUTE_INITIAL_RD),
       directSum: Number(values.directSum ?? 0),
@@ -1231,6 +1241,9 @@ export const prepareAttributeMergeRebuildJob = async (
   ]);
   if (activeJob) throw new Error('attribute_merge_busy');
   if (!sourceSubjectId || !targetSubjectId) return { id: '', sourceSubjectId, targetSubjectId, statement: null };
+  if (await db.statement('SELECT 1 AS present FROM attribute_initial_values WHERE subject_id = ? LIMIT 1').bind(sourceSubjectId).first()) {
+    throw new Error('attribute_merge_initial_value_requires_mapping');
+  }
   const id = createId('attribute-merge-rebuild');
   return {
     id,
@@ -1258,6 +1271,10 @@ const initializeAttributeMergeRebuild = async (
   job: AttributeMergeRebuildJobRow,
   timestamp: number,
 ) => {
+  // Until baseline ownership remapping is implemented, stop before clearing any states.
+  if (await db.statement('SELECT 1 AS present FROM attribute_initial_values WHERE subject_id = ? LIMIT 1').bind(job.source_subject_id).first()) {
+    throw new Error('attribute_merge_initial_value_requires_mapping');
+  }
   await db.batch([
     db.statement('DELETE FROM attribute_pair_stats'),
     db.statement('DELETE FROM attribute_score_states'),
@@ -1273,6 +1290,20 @@ const initializeAttributeMergeRebuild = async (
       LEFT JOIN games g ON g.id = s.game_id
       WHERE a.is_active = 1
         AND ${votableSubjectCondition('s', 'g')}
+    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
+    db.statement(`
+      INSERT INTO attribute_score_states
+        (subject_id, attribute_id, score, direct_sum, direct_count, comparison_count,
+         decisive_comparison_count, evidence_count, model_version, updated_at,
+         rating_deviation, random_key, question_slot)
+      SELECT v.subject_id, v.attribute_id, v.score, 0, 0, 0, 0, 0, ?, ?, 3,
+        lower(hex(randomblob(16))), (abs(random()) % ${ATTRIBUTE_QUESTION_SLOT_COUNT}) + 1
+      FROM attribute_initial_values v
+      JOIN attributes a ON a.id = v.attribute_id
+      JOIN attribute_subjects s ON s.id = v.subject_id
+      LEFT JOIN games g ON g.id = s.game_id
+      WHERE a.is_active = 1 AND ${votableSubjectCondition('s', 'g')}
+      ON CONFLICT(subject_id, attribute_id) DO UPDATE SET score = excluded.score
     `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp),
     db.statement(`
       UPDATE attribute_merge_rebuild_jobs
@@ -1301,6 +1332,8 @@ const queryAttributeMergeHistoryBatch = async (
         e.created_at
       FROM attribute_vote_events e
       WHERE e.created_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
+          WHERE b.target_attribute_id = e.attribute_id AND e.created_at <= b.cutoff_created_at)
         AND (e.created_at > ? OR (e.created_at = ? AND
           ('event:' || e.response_id || ':' ||
             CASE WHEN e.kind = 'rating' THEN '1:' ELSE '2:' END ||
@@ -1330,6 +1363,8 @@ const queryAttributeMergeHistoryBatch = async (
         r.created_at
       FROM attribute_vote_responses r
       WHERE r.attribute_id IS NOT NULL AND r.created_at <= ?
+        AND NOT EXISTS (SELECT 1 FROM attribute_initial_value_batches b
+          WHERE b.target_attribute_id = r.attribute_id AND r.created_at <= b.cutoff_created_at)
         AND (r.created_at > ? OR (r.created_at = ? AND
           ('response:' || r.response_id) > ?))
       ORDER BY r.created_at, stream_id
@@ -1349,6 +1384,7 @@ const queryAttributeMergeHistoryBatch = async (
 const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
 
 const stateFromAttributeRow = (row: AttributeScoreStateRow): OnlineAttributeState => ({
+  ...(row.initial_score == null ? {} : { initialScore: Number(row.initial_score) }),
   score: Number(row.score),
   ratingDeviation: Number(row.rating_deviation ?? ATTRIBUTE_INITIAL_RD),
   directSum: Number(row.direct_sum),
@@ -1413,6 +1449,8 @@ const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number
     const stateResult = stateKeys.length
       ? await db.statement(`
           SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
+            (SELECT v.score FROM attribute_initial_values v
+              WHERE v.subject_id = attribute_score_states.subject_id AND v.attribute_id = attribute_score_states.attribute_id) AS initial_score,
             comparison_count, decisive_comparison_count, evidence_count
           FROM attribute_score_states
           WHERE ${stateKeys.map(() => '(subject_id = ? AND attribute_id = ?)').join(' OR ')}
