@@ -280,15 +280,15 @@ export const attributeCatalogChangesPayload = (
   };
 };
 
-export const chunkAttributeCatalog = (entries: SnapshotEntry[]): SnapshotEntry[][] => {
+export const chunkAttributeCatalog = (entries: SnapshotEntry[], maxChunkBytes = MAX_CHUNK_BYTES): SnapshotEntry[][] => {
   const chunks: SnapshotEntry[][] = [];
   let current: SnapshotEntry[] = [];
   let currentBytes = 2;
   for (const entry of entries) {
     const entryBytes = textEncoder.encode(JSON.stringify(entry)).byteLength;
-    if (entryBytes + 2 > MAX_CHUNK_BYTES) throw new Error('attribute_catalog_entry_too_large');
+    if (entryBytes + 2 > maxChunkBytes) throw new Error('attribute_catalog_entry_too_large');
     const nextBytes = currentBytes + entryBytes + (current.length ? 1 : 0);
-    if (current.length && (current.length >= MAX_ENTRIES_PER_CHUNK || nextBytes > MAX_CHUNK_BYTES)) {
+    if (current.length && (current.length >= MAX_ENTRIES_PER_CHUNK || nextBytes > maxChunkBytes)) {
       chunks.push(current);
       current = [];
       currentBytes = 2;
@@ -301,7 +301,11 @@ export const chunkAttributeCatalog = (entries: SnapshotEntry[]): SnapshotEntry[]
   return chunks;
 };
 
-export const rebuildAttributeCatalog = async (db: Database, timestamp = Date.now()): Promise<AttributeCatalogPayload> => {
+export const rebuildAttributeCatalog = async (
+  db: Database,
+  timestamp = Date.now(),
+  options: { maxChunkBytes?: number } = {},
+): Promise<AttributeCatalogPayload> => {
   // Read the cursor before the source rows, matching the game catalog's
   // snapshot semantics: votes that happen during the build remain deltas.
   const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
@@ -321,7 +325,7 @@ export const rebuildAttributeCatalog = async (db: Database, timestamp = Date.now
     values: valuesBySubject.get(subject.id) ?? [],
   }));
   source.candidates.forEach((candidate) => entries.push({ kind: 'candidate', candidate }));
-  const chunks = chunkAttributeCatalog(entries);
+  const chunks = chunkAttributeCatalog(entries, options.maxChunkBytes);
   const generation = timestamp;
   const statements = [db.statement('DELETE FROM attribute_catalog_snapshot_chunks WHERE generation = ?').bind(generation)];
   statements.push(...chunks.map((chunk, chunkNumber) => db.statement(`
