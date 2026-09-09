@@ -145,14 +145,18 @@ const needsInitialAttributeCandidateRepair = (record: AttributeCatalogCacheRecor
   record.data.generation === 1 && record.data.candidates.length === 0;
 
 const synchronizeAttributeTable = async (catalog: AttributeCatalogPayload): Promise<AttributeCatalogPayload> => {
-  const afterVersion = catalog.throughVersion;
-  const changes = await transportRequest<AttributeCatalogChangesPayload>(
-    `/api/attributes/table/changes?after=${afterVersion}`,
-    undefined,
-    'cache-miss',
-  );
-  if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('attribute_catalog_sync_stalled');
-  await localDb.cacheAttributeCatalogChanges(changes);
+  let afterVersion = catalog.throughVersion;
+  while (true) {
+    const changes = await transportRequest<AttributeCatalogChangesPayload>(
+      `/api/attributes/table/changes?after=${afterVersion}`,
+      undefined,
+      'cache-miss',
+    );
+    if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('attribute_catalog_sync_stalled');
+    await localDb.cacheAttributeCatalogChanges(changes);
+    afterVersion = changes.throughVersion;
+    if (!changes.hasMore) break;
+  }
   return (await localDb.getLatestAttributeCatalog().catch(() => undefined))?.data ?? catalog;
 };
 

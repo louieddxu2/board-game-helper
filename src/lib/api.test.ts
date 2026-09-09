@@ -425,6 +425,28 @@ describe('api versioned attribute table boundary', () => {
     expect(cacheChanges).toHaveBeenCalledWith(noChanges);
   });
 
+  test('finishes every delta page before returning the synchronized attribute table', async () => {
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined)
+      .mockResolvedValue({ key: 'attributes:table:versioned:v3', data: table, cachedAt: Date.now() });
+    vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
+    const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
+    const pages = [
+      { changes: [], throughVersion: 11, hasMore: true },
+      { changes: [], throughVersion: 12, hasMore: false },
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
+      ok: true, headers: new Headers(),
+      json: async () => path === '/api/attributes/table' ? table : pages.shift(),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.attributeTable();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=11', expect.any(Object));
+    expect(cacheChanges).toHaveBeenCalledTimes(2);
+  });
+
   test('replaces a cached generation-one table that lost flat candidate entries', async () => {
     const legacy = { ...table, generation: 1, candidates: [] };
     const repaired = { ...legacy, candidates: [{ id: 'candidate-1', displayName: '待對應遊戲', values: [8], matchStatus: 'pending' as const, sourceRowNumber: 3 }] };
