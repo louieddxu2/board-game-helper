@@ -13,6 +13,7 @@ export const ATTRIBUTE_QUESTION_ENDINGS: Record<string, string> = {
   thematic_integration: '程度較高',
   score_race: '比重較高',
   end_condition: '比重較高',
+  win_method: '比重較高',
   personal_puzzle: '成分較多',
   shared_puzzle: '成分較多',
   shared_environment: '變動較大',

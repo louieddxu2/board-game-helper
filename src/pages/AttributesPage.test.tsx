@@ -70,9 +70,9 @@ describe('AttributesPage question flow', () => {
   });
 
   test.each(['low', 'high'] as const)('bipolar %s direction aligns question, explanation, examples, direct scores and submission', async (highPole) => {
-    const bipolar = { ...attribute, scaleType: 'bipolar' as const, endpoints: {
-      low: { label: '得分取勝', question: '哪款遊戲更偏得分取勝？', fullDescription: '得分端原文' },
-      high: { label: '條件取勝', question: '哪款遊戲更偏條件取勝？', fullDescription: '條件端原文' },
+    const bipolar = { ...attribute, key: 'win_method', scaleType: 'bipolar' as const, endpoints: {
+      low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？', fullDescription: '得分端原文' },
+      high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: '條件端原文' },
     } };
     vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
     const questionSpy = vi.spyOn(api, 'attributeQuestion').mockResolvedValue({ question: { ...question, attribute: bipolar, highPole }, activities: [], questionToken: 'question-token-that-is-long-enough-for-tests' });
@@ -80,9 +80,13 @@ describe('AttributesPage question flow', () => {
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     const high = bipolar.endpoints[highPole];
     const low = bipolar.endpoints[highPole === 'low' ? 'high' : 'low'];
-    expect(await screen.findByRole('heading', { name: high.question })).toBeInTheDocument();
+    const questionHeading = await screen.findByRole('heading', { level: 2 });
+    expect(questionHeading.textContent?.replace('↑ 範例', '')).toBe(high.question);
+    expect(screen.getByText('↑ 範例')).toBeInTheDocument();
     expect(screen.getByText(high.fullDescription)).toBeInTheDocument();
     expect(screen.queryByText(low.fullDescription)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `遊戲甲更偏${high.label}` })).toHaveTextContent('遊戲甲');
+    expect(screen.queryByText(`這款更偏${high.label}`)).not.toBeInTheDocument();
     expect(screen.getAllByText(`0 · ${low.label}`)).toHaveLength(2);
     expect(screen.getAllByText(`10 · ${high.label}`)).toHaveLength(2);
     expect(screen.getByTitle(`${highPole === 'low' ? 10 : 0} 分：遊戲甲`)).toBeInTheDocument();

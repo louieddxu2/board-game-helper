@@ -50,8 +50,37 @@ test('activates the bipolar win method and publishes converted catalog data', ()
     expect(snapshot.active_generation).toBe(88);
     const attributes = JSON.parse(snapshot.attributes_json) as Array<{ id: string; scaleType?: string; endpoints?: { low?: { label?: string }; high?: { label?: string } } }>;
     const merged = attributes.find((attribute) => attribute.id === 'attribute_win_method');
-    expect(merged).toMatchObject({ scaleType: 'bipolar', endpoints: { low: { label: '得分取勝' }, high: { label: '條件取勝' } } });
+    expect(merged).toMatchObject({ scaleType: 'bipolar', endpoints: {
+      low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？' },
+      high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？' },
+    } });
     expect(attributes.some((attribute) => attribute.id === 'attribute_score_race')).toBe(false);
     expect(snapshot.chunk_count).toBeGreaterThan(0);
+  } finally { sqlite.close(); }
+});
+
+test('repairs endpoint question wording in an already converted catalog', () => {
+  const { sqlite } = setup();
+  try {
+    sqlite.exec(`UPDATE attribute_translations
+      SET endpoints_json = json_set(
+        endpoints_json,
+        '$.low.question', '哪款遊戲比較偏向得分取勝？',
+        '$.high.question', '哪款遊戲比較偏向條件取勝？'
+      )
+      WHERE attribute_id = 'attribute_win_method' AND locale = 'zh-TW'`);
+    sqlite.exec(readFileSync('migrations/0093_restore_win_method_question_wording.sql', 'utf8'));
+
+    const translation = sqlite.prepare("SELECT endpoints_json FROM attribute_translations WHERE attribute_id='attribute_win_method' AND locale='zh-TW'").get() as { endpoints_json: string };
+    expect(JSON.parse(translation.endpoints_json)).toMatchObject({
+      low: { question: '哪款遊戲的「得分取勝」比重較高？' },
+      high: { question: '哪款遊戲的「條件取勝」比重較高？' },
+    });
+    const snapshot = sqlite.prepare('SELECT attributes_json FROM attribute_catalog_snapshot_state WHERE id=1').get() as { attributes_json: string };
+    const merged = (JSON.parse(snapshot.attributes_json) as Array<{ id: string; endpoints?: { low?: { question?: string }; high?: { question?: string } } }>).find((attribute) => attribute.id === 'attribute_win_method');
+    expect(merged).toMatchObject({ endpoints: {
+      low: { question: '哪款遊戲的「得分取勝」比重較高？' },
+      high: { question: '哪款遊戲的「條件取勝」比重較高？' },
+    } });
   } finally { sqlite.close(); }
 });

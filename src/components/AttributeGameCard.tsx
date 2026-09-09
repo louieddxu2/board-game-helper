@@ -52,7 +52,6 @@ export const AttributeGameCard = ({ highLabel, subject, side, disabled = false, 
     <span className="attribute-game-card-copy">
       <h3 ref={headingRef}>{subject.displayName}</h3>
       {secondaryLine && <p>{secondaryLine}</p>}
-      {highLabel && <span className="attribute-game-choice">這款更偏{highLabel}</span>}
     </span>
   </button>;
 };

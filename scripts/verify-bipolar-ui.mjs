@@ -29,8 +29,8 @@ try {
     return line.match(/, NULL, '([^']*)'/)[1];
   };
   const attribute = { id: 'fixture-win', key: 'win', name: '取勝方式', minValue: 0, maxValue: 10, sortOrder: 0, scaleType: 'bipolar', endpoints: {
-    low: { label: '得分取勝', question: '哪款遊戲比較偏向得分取勝？', fullDescription: description('attribute_score_race') },
-    high: { label: '條件取勝', question: '哪款遊戲比較偏向條件取勝？', fullDescription: description('attribute_end_condition') },
+    low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？', fullDescription: description('attribute_score_race') },
+    high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: description('attribute_end_condition') },
   } };
   const subjects = ['測試遊戲甲', '測試遊戲乙', '測試遊戲丙', '測試遊戲丁'].map((displayName, i) => ({ id: `fixture-${i}`, slug: `fixture-${i}`, kind: 'game', displayName, bggIds: [] }));
   for (const width of [1280, 390]) for (const highPole of ['low', 'high']) {
@@ -53,7 +53,9 @@ try {
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/attributes`);
     const high = attribute.endpoints[highPole];
-    await page.getByRole('heading', { name: high.question }).waitFor();
+    const questionHeading = page.locator('#attributes-question-heading');
+    await questionHeading.waitFor();
+    assert.equal((await questionHeading.textContent()).replace('↑ 範例', ''), high.question);
     const slider = page.getByRole('slider', { name: '評分：測試遊戲甲' });
     await slider.press('End');
     assert.equal(await slider.getAttribute('aria-valuenow'), '10');
@@ -65,6 +67,7 @@ try {
       page.waitForResponse('**/api/attributes/responses'),
       page.getByRole('button', { name: `測試遊戲甲更偏${high.label}` }).click(),
     ]);
+    assert.equal((await page.getByRole('button', { name: `測試遊戲甲更偏${high.label}` }).textContent()).trim(), '測試遊戲甲');
     assert.equal(submitted.highPole, highPole);
     assert.equal(submitted.ratingA, 10);
     assert.equal(submitted.comparison, 'A_HIGHER');

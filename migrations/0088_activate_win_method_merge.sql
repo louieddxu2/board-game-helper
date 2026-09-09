@@ -83,12 +83,12 @@ VALUES (
   json_object(
     'low', json_object(
       'label', '得分取勝',
-      'question', '哪款遊戲比較偏向得分取勝？',
+      'question', '哪款遊戲的「得分取勝」比重較高？',
       'fullDescription', '需要在遊戲過程中不斷不斷地增加分數，以至於最後總分最高取勝。'
     ),
     'high', json_object(
       'label', '條件取勝',
-      'question', '哪款遊戲比較偏向條件取勝？',
+      'question', '哪款遊戲的「條件取勝」比重較高？',
       'fullDescription', '遊戲有多容易在一個情況發生時突如其然地結束。玩家有多容易在觀察到特定情況時可以直接體面退出遊戲。'
     )
   )

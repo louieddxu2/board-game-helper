@@ -703,6 +703,7 @@ export const AttributesPage = () => {
   const attributeDescription = endpoints
     ? endpoints.high.shortDescription ?? endpoints.high.fullDescription
     : question.attribute.shortDescription ?? question.attribute.fullDescription;
+  const questionLabel = endpoints?.high.label ?? question.attribute.name;
   const questionEnding = attributeQuestionEnding(question.attribute.key);
   const recentComparisons = mergeRecentActivities(payload.activities, optimisticActivities);
   const comparisonSelectedForCurrentQuestion = comparisonQuestionKey === attributeQuestionKey(question);
@@ -752,7 +753,7 @@ export const AttributesPage = () => {
           </AttributeScoreAxis>
         </div> : null}
         <div className="attributes-question-attribute">
-          <h2 id="attributes-question-heading" aria-live="polite">{endpoints ? endpoints.high.question : <>哪款遊戲的<span className="attributes-question-term"><strong>「{question.attribute.name}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</>}</h2>
+          <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{questionLabel}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
           {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         </div>
         <div className="attributes-question-pair">
