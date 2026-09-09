@@ -111,6 +111,8 @@ test('baseline storage survives online votes and actual background rebuild witho
   const { sqlite, gateway } = setup();
   try {
     await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
+    expect(sqlite.prepare("SELECT score,direct_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get()).toMatchObject({score:9,direct_count:2});
+    expect(sqlite.prepare("SELECT COUNT(*) n FROM attribute_vote_responses WHERE session_id='win-author-correction'").get()).toMatchObject({n:0});
     expect(await queryAttributeInitialValues(gateway, 'attribute_score_race')).toEqual([]);
     expect(sqlite.prepare('SELECT count(*) AS n FROM attribute_initial_value_batches').get()).toMatchObject({ n: 0 });
     sqlite.exec(`
