@@ -18,8 +18,6 @@ export const ATTRIBUTE_CLASSIC_POINTS_PER_SCORE = 40;
 export const ATTRIBUTE_GLICKO_Q = Math.log(10) / 400;
 
 export interface OnlineAttributeState {
-  /** A retained migration baseline, not an additional vote. */
-  initialScore?: number;
   score: number;
   ratingDeviation: number;
   directSum: number;
@@ -134,19 +132,6 @@ export const emptyAttributeState = (): OnlineAttributeState => ({
   evidenceCount: 0,
 });
 
-export interface AttributeInitialValue {
-  subjectId: string;
-  attributeId: string;
-  score: number;
-  /** Only answers strictly after this frozen boundary may update this baseline. */
-  cutoffCreatedAt: number;
-}
-
-export const initialAttributeState = (score: number): OnlineAttributeState => {
-  if (!Number.isFinite(score) || score < ATTRIBUTE_MIN_SCORE || score > ATTRIBUTE_MAX_SCORE) throw new Error('invalid_attribute_initial_score');
-  return { ...emptyAttributeState(), score, initialScore: score };
-};
-
 /** The expected win probability for A against B under Glicko's g(RD) term. */
 export const expectedAttributeScore = (scoreA: number, scoreB: number, ratingDeviationB = ATTRIBUTE_INITIAL_RD) =>
   expectedForRatings(scoreA, scoreB, ratingDeviationB);
@@ -184,7 +169,7 @@ export const applyDirectRating = (state: OnlineAttributeState, value: number): A
   const boundedValue = boundedScore(value);
   const directSum = state.directSum + boundedValue;
   const directCount = state.directCount + 1;
-  if (state.evidenceCount === 0 && state.initialScore == null) {
+  if (state.evidenceCount === 0) {
     const next: OnlineAttributeState = {
       ...state,
       score: boundedValue,
@@ -228,7 +213,6 @@ const scoreFromState = (subjectId: string, attributeId: string, state: OnlineAtt
   comparisonCount: state.comparisonCount,
   decisiveComparisonCount: state.decisiveComparisonCount,
   evidenceCount: state.evidenceCount,
-  ...(state.initialScore == null ? {} : { initialValue: true }),
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
@@ -315,18 +299,8 @@ export const replayAttributeEvents = (events: AttributeVoteReplayEvent[]) => {
 export const replayAttributeResponses = (
   responses: AttributeResponseReplayRecord[],
   subjectMapper: (subjectId: string) => string = (subjectId) => subjectId,
-  initialValues: AttributeInitialValue[] = [],
 ) => {
   const states = new Map<string, OnlineAttributeState>();
-  const cutoffs = new Map<string, number>();
-  for (const initial of initialValues) {
-    const key = `${subjectMapper(initial.subjectId)}\u0000${initial.attributeId}`;
-    // Combining two game baselines requires an explicit policy, not last-row-wins.
-    if (states.has(key)) throw new Error('attribute_initial_value_conflict');
-    if (!Number.isSafeInteger(initial.cutoffCreatedAt) || initial.cutoffCreatedAt < 0) throw new Error('invalid_attribute_initial_cutoff');
-    states.set(key, initialAttributeState(initial.score));
-    cutoffs.set(key, initial.cutoffCreatedAt);
-  }
   const getState = (subjectId: string, attributeId: string) => {
     const key = `${subjectId}\u0000${attributeId}`;
     const state = states.get(key) ?? emptyAttributeState();
@@ -347,10 +321,6 @@ export const replayAttributeResponses = (
       seenResponses.set(response.responseId, identity);
       const subjectAId = response.subjectAId ? subjectMapper(response.subjectAId) : null;
       const subjectBId = response.subjectBId ? subjectMapper(response.subjectBId) : null;
-      const beforeInitial = (subjectId: string | null) => subjectId !== null
-        && response.createdAt <= (cutoffs.get(`${subjectId}\u0000${response.attributeId}`) ?? -1);
-      // A comparison changes both sides: do not replay half of an absorbed response.
-      if (beforeInitial(subjectAId) || beforeInitial(subjectBId)) return;
       if (subjectAId && response.ratingA != null) {
         const a = getState(subjectAId, response.attributeId);
         states.set(a.key, applyDirectRating(a.state, response.ratingA).next);

@@ -40,23 +40,6 @@ describe('AttributeTablePage', () => {
     expect(payload.values[0].score).toBe(7.25);
   });
 
-  test('marks a converted merge baseline separately from new vote evidence', async () => {
-    const bipolar = { ...payload.attributes[0], name: '取勝方式', scaleType: 'bipolar' as const, endpoints: {
-      low: { label: '得分取勝', question: '得分？', fullDescription: '得分端完整原文' },
-      high: { label: '條件取勝', question: '條件？', fullDescription: '條件端完整原文' },
-    } };
-    const baselinePayload = {
-      ...payload,
-      attributes: [bipolar],
-      values: [{ ...payload.values[0], initialValue: true, directCount: 0, comparisonCount: 0, evidenceCount: 0 }],
-    };
-    vi.spyOn(api, 'attributeTable').mockResolvedValue(baselinePayload);
-
-    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
-
-    expect(await screen.findByTitle(/含換算初始值（不是新增投票）/)).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: /含換算初始值，新投票 0 筆/ })).toBeInTheDocument();
-  });
 
   afterEach(() => {
     cleanup();

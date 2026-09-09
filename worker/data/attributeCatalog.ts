@@ -103,7 +103,6 @@ const parseValue = (value: unknown): AttributeMatrixValue | undefined => {
     comparisonCount: row.comparisonCount,
     decisiveComparisonCount: row.decisiveComparisonCount,
     ...(typeof row.evidenceCount === 'number' ? { evidenceCount: row.evidenceCount } : {}),
-    ...(typeof row.initialValue === 'boolean' ? { initialValue: row.initialValue } : {}),
     modelVersion: row.modelVersion,
   };
 };
