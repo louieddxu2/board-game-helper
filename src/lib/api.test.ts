@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { api } from './api';
 import { localDb } from './localDb';
+import { applyAttributeCatalogChanges } from './attributeCatalog';
+import type { AttributeCatalogChangesPayload, AttributeCatalogPayload } from '../shared/types';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -426,14 +428,25 @@ describe('api versioned attribute table boundary', () => {
   });
 
   test('finishes every delta page before returning the synchronized attribute table', async () => {
+    let cached: AttributeCatalogPayload = { ...table, attributes: [
+      { ...table.attributes[0], id: 'score', name: '得分取勝' },
+      { ...table.attributes[0], id: 'condition', name: '條件取勝' },
+    ] };
+    const merged = { ...table.attributes[0], id: 'win', name: '取勝方式' };
     vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined)
-      .mockResolvedValue({ key: 'attributes:table:versioned:v3', data: table, cachedAt: Date.now() });
+      .mockImplementation(async () => ({ key: 'attributes:table:versioned:v3', data: cached, cachedAt: Date.now() }));
     vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
-    const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
-    const pages = [
+    const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockImplementation(async (page) => {
+      cached = applyAttributeCatalogChanges(cached, page.changes, page.throughVersion);
+    });
+    const pages: AttributeCatalogChangesPayload[] = [
       { changes: [], throughVersion: 11, hasMore: true },
-      { changes: [], throughVersion: 12, hasMore: false },
+      { changes: [
+        { entryKey: 'attribute:score', catalogVersion: 12, deleted: true },
+        { entryKey: 'attribute:condition', catalogVersion: 13, deleted: true },
+        { entryKey: 'attribute:win', catalogVersion: 14, deleted: false, attribute: merged },
+      ], throughVersion: 14, hasMore: false },
     ];
     const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
       ok: true, headers: new Headers(),
@@ -441,10 +454,12 @@ describe('api versioned attribute table boundary', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await api.attributeTable();
+    const result = await api.attributeTable();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=11', expect.any(Object));
     expect(cacheChanges).toHaveBeenCalledTimes(2);
+    expect(result.attributes).toEqual([merged]);
+    expect(result.throughVersion).toBe(14);
   });
 
   test('replaces a cached generation-one table that lost flat candidate entries', async () => {
