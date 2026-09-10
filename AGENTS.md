@@ -2,15 +2,18 @@
 
 Use the project-scoped custom agents in `.codex/agents/` for UI changes. Do not let multiple agents edit the working tree concurrently.
 
-1. First write concrete visual acceptance criteria and identify the viewport and interaction states that matter.
-2. If the request is one clear visual adjustment and does not change data, business logic, accessibility behavior, or an API contract, delegate it to `luna_ui` exactly once. The parent agent must not edit concurrently.
-3. If `luna_ui` returns `PASS`, review only its scoped diff and verification evidence. Do not repeat broad tests or add source-text tests. Continue with the normal final commit workflow.
-4. If `luna_ui` returns `FAIL` or `ESCALATE`, delegate the same acceptance criteria, its diagnosis, and its verification evidence to `terra_ui` exactly once. Do not ask Luna to try another workaround.
-5. If `terra_ui` returns `ESCALATE`, or if the request is ambiguous or spans multiple interacting components from the start, delegate to `sol_ui` exactly once.
-6. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision or visual reference. If `sol_ui` fails, stop and report the remaining mismatch; do not start another patch loop.
-7. A UI agent may report success only after rendered browser verification. Tests that inspect CSS source text or regex matches do not prove visual success.
-8. Add tests only after the rendered behavior passes, and only for a stable behavior contract. Keep validation proportional to the files changed.
-9. The parent agent owns the final commit. Subagents must never commit or push.
+1. Trigger this routing automatically whenever the user requests a change to layout, spacing, sizing, alignment, typography, color, visibility, responsive behavior, or other rendered presentation. The user does not need to name an agent.
+2. First write concrete visual acceptance criteria and identify the viewport and interaction states that matter.
+3. If the request is one clear visual adjustment and does not change data, business logic, accessibility behavior, or an API contract, delegate it to `luna_ui` exactly once. The parent agent must not edit concurrently.
+4. After any UI implementation agent returns `PASS`, delegate only the narrow deterministic checks relevant to its changed files to `ui_test_runner`. The implementation agent and parent agent must not rerun those checks.
+5. If `luna_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate the same acceptance criteria and all failure evidence to `terra_ui` exactly once. Do not ask Luna to try another workaround.
+6. If `terra_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate all evidence to `astra_ui` exactly once. Route directly to `astra_ui` when the original request is ambiguous, spans multiple interacting components, or requires substantial product/design judgment.
+7. If `astra_ui` passes rendered verification, use `ui_test_runner` for the narrow deterministic checks. If those checks fail, stop and report the evidence; do not start another implementation loop.
+8. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision or visual reference.
+9. A UI implementation agent may report success only after rendered browser verification. Tests that inspect CSS source text or regex matches do not prove visual success.
+10. `ui_test_runner` may run tests, type-checks, or builds selected by the parent, but it must never edit code, update snapshots, fix failures, commit, or push. Do not send broad test suites to GPT-6 Astra when a lower-tier deterministic runner can execute them.
+11. Add tests only after the rendered behavior passes, and only for a stable behavior contract. Keep validation proportional to the files changed.
+12. The parent agent owns the final scoped diff review and commit. Subagents must never commit or push.
 
 # Project-specific author copy rules
 

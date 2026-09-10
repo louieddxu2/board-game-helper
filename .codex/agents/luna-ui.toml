@@ -1,7 +1,7 @@
 name = "luna_ui"
 description = "First and only Luna attempt for one clear, narrowly scoped visual UI adjustment."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "max"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
