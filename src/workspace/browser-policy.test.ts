@@ -252,23 +252,40 @@ describe('workspace browser policies', () => {
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
 
-    expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
+    expect(valueDialogRule).toMatch(/width:\s*min\(430px,\s*calc\(100vw - 24px\)\)/);
     expect(styles).not.toMatch(/\.workspace-bulk-number-dialog\.is-expanded\s*\{[^}]*width:/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 
-  it('centers stepper numbers and reserves wider controls for three-digit values', () => {
+  it('centers stepper numbers and reserves room for longer values', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const stepRule = styles.match(/\.workspace-number-editor\[data-mode="step"\]\s*\{([^}]*)\}/)?.[1];
     const stepOperationRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const stepInputRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
 
-    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(0, 10ch\) 50px/);
+    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(0, 14ch\) 50px/);
     expect(stepOperationRule).toMatch(/width:\s*48px/);
     expect(stepOperationRule).toMatch(/min-height:\s*46px/);
     expect(stepInputRule).toMatch(/text-align:\s*center/);
+  });
+
+  it('keeps numeric adjustment buttons outside the central input field', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
+    const operatorsRule = styles.match(/\.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
+    const directSubtractRule = styles.match(/\.workspace-number-editor\[data-mode="direct"\] \.workspace-number-operation-subtract\s*\{([^}]*)\}/)?.[1];
+    const directAddRule = styles.match(/\.workspace-number-editor\[data-mode="direct"\] \.workspace-number-operation-add\s*\{([^}]*)\}/)?.[1];
+    const adjustmentSubtractRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-subtract[^\{]*\{([^}]*)\}/)?.[1];
+    const adjustmentAddRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-add[^\{]*\{([^}]*)\}/)?.[1];
+
+    expect(editorRule).toMatch(/grid-template-columns:\s*42px minmax\(0, 12ch\) 42px/);
+    expect(operatorsRule).toMatch(/display:\s*contents/);
+    expect(directSubtractRule).toMatch(/grid-column:\s*1/);
+    expect(directAddRule).toMatch(/grid-column:\s*3/);
+    expect(adjustmentSubtractRule).toMatch(/grid-column:\s*1/);
+    expect(adjustmentAddRule).toMatch(/grid-column:\s*3/);
   });
 
   it('restricts horizontal overscroll navigation while preserving standalone pull-to-refresh', () => {

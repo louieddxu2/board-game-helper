@@ -52,6 +52,20 @@ describe('workspace numeric input modes', () => {
     expect(onSave).toHaveBeenCalledWith('7');
   });
 
+  it('keeps the numeric field width when switching to an adjustment', async () => {
+    const user = userEvent.setup();
+    const column = { ...createColumn('數量', 'number'), numberInputMode: 'adjust' as const };
+    render(<CellInputDialog column={column} value={123456} onSave={vi.fn()} />);
+
+    const input = screen.getByRole('spinbutton', { name: '數量輸入' });
+    const initialStyle = input.getAttribute('style');
+    await user.click(screen.getByRole('button', { name: '增加數值' }));
+
+    expect(screen.getByRole('spinbutton', { name: '數量輸入加法' })).toBe(input);
+    expect(input.getAttribute('style')).toBe(initialStyle);
+    expect(document.querySelector('.workspace-number-editor')).toHaveAttribute('data-mode', 'add');
+  });
+
   it('selects the initial numeric value before the user can type', () => {
     const previousRequestAnimationFrame = window.requestAnimationFrame;
     window.requestAnimationFrame = vi.fn();

@@ -72,7 +72,6 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const baseLabel = inputLabel ?? `${column.name}輸入`;
   const result = calculateNumericAdjustment(originalDraft, draft, mode);
   const fractionDigits = Math.max(2, decimalScale(originalDraft), decimalScale(draft), result ? decimalScale(result) : 0);
-  const inputDecimal = parseDecimal(draft);
 
   const focusInput = (select = false) => {
     window.requestAnimationFrame(() => {
@@ -119,7 +118,7 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
     {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onPointerDown={(event) => event.preventDefault()} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
     <div className="workspace-number-input-shell">
-      <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" style={mode === 'direct' || inputDecimal?.fraction ? undefined : { paddingRight: `calc(${fractionDigits}ch + .6ch)` }} type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+      <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
     </div>
     {adjustmentEnabled && <div className="workspace-number-operators">
       <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('subtract')}>−</button>
