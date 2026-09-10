@@ -68,10 +68,17 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const [mode, setMode] = useState<NumericEditMode>('direct');
   const [draft, setDraft] = useState(initialDraft);
   const [originalDraft, setOriginalDraft] = useState(initialDraft);
+  const [originalInputWidth, setOriginalInputWidth] = useState<number>();
   const inputRef = useRef<HTMLInputElement>(null);
   const baseLabel = inputLabel ?? `${column.name}輸入`;
   const result = calculateNumericAdjustment(originalDraft, draft, mode);
   const fractionDigits = Math.max(2, decimalScale(originalDraft), decimalScale(draft), result ? decimalScale(result) : 0);
+
+  useLayoutEffect(() => {
+    if (mode !== 'direct') return;
+    const width = inputRef.current?.getBoundingClientRect().width;
+    if (width && Math.abs(width - (originalInputWidth ?? 0)) > 0.5) setOriginalInputWidth(width);
+  }, [mode, draft, originalInputWidth]);
 
   const focusInput = (select = false) => {
     window.requestAnimationFrame(() => {
@@ -88,6 +95,8 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const chooseMode = (nextMode: Exclude<NumericEditMode, 'direct'>) => {
     const enteringAdjustment = mode === 'direct';
     if (mode === 'direct') {
+      const width = inputRef.current?.getBoundingClientRect().width;
+      if (width) setOriginalInputWidth(width);
       setOriginalDraft(draft);
       setDraft('0');
     } else if (!draft.trim()) {
@@ -118,7 +127,7 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-editor" data-mode={mode} style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
     {mode !== 'direct' && <button type="button" className="workspace-number-original" aria-label={`編輯原始數值 ${originalDraft || '空白'}`} onPointerDown={(event) => event.preventDefault()} onClick={restoreOriginal}><NumericAlignedValue value={originalDraft} /></button>}
     <div className="workspace-number-input-shell">
-      <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+      <input ref={inputRef} aria-label={mode === 'direct' ? baseLabel : `${baseLabel}${mode === 'add' ? '加法' : '減法'}`} autoFocus className="workspace-value-input" style={{ '--workspace-number-input-min-width': originalInputWidth ? `${originalInputWidth}px` : undefined } as React.CSSProperties} type="number" inputMode="decimal" enterKeyHint="done" step="any" min={mode === 'direct' ? undefined : 0} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
     </div>
     {adjustmentEnabled && <div className="workspace-number-operators">
       <button type="button" className={`workspace-number-operation workspace-number-operation-subtract${mode === 'subtract' ? ' is-selected' : ''}`} aria-label={mode === 'direct' ? '減少數值' : '切換為減法'} aria-pressed={mode === 'subtract'} onPointerDown={(event) => event.preventDefault()} onClick={() => chooseMode('subtract')}>−</button>
@@ -133,9 +142,15 @@ NumericCellEditor.displayName = 'NumericCellEditor';
 const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDialogProps, 'column' | 'value' | 'inputLabel' | 'onSave'>>(({ column, value, inputLabel, onSave }, forwardedRef) => {
   const initialDraft = displayWorkspaceCellValue(value, column.inputType);
   const [draft, setDraft] = useState(initialDraft);
+  const [originalInputWidth, setOriginalInputWidth] = useState<number>();
   const inputRef = useRef<HTMLInputElement>(null);
   const baseLabel = inputLabel ?? `${column.name}輸入`;
   const fractionDigits = Math.max(2, decimalScale(draft));
+  useLayoutEffect(() => {
+    if (originalInputWidth !== undefined) return;
+    const width = inputRef.current?.getBoundingClientRect().width;
+    if (width) setOriginalInputWidth(width);
+  }, [originalInputWidth]);
 
   const step = (delta: 1 | -1) => {
     const current = parseDecimal(draft.trim() || '0') ?? parseDecimal('0')!;
@@ -149,7 +164,7 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
     <div className="workspace-number-editor" data-mode="step" style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
       <button type="button" className="workspace-number-operation workspace-number-operation-subtract" aria-label="減少 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(-1)}>−</button>
       <div className="workspace-number-input-shell">
-        <input ref={inputRef} aria-label={baseLabel} className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+        <input ref={inputRef} aria-label={baseLabel} className="workspace-value-input" style={{ '--workspace-number-input-min-width': originalInputWidth ? `${originalInputWidth}px` : undefined, textAlign: 'center' } as React.CSSProperties} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       </div>
       <button type="button" className="workspace-number-operation workspace-number-operation-add" aria-label="增加 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(1)}>＋</button>
     </div>

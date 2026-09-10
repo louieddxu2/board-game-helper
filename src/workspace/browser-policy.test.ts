@@ -259,7 +259,7 @@ describe('workspace browser policies', () => {
     expect(valueInputRule).toMatch(/width:\s*fit-content/);
     expect(valueInputRule).toMatch(/min-width:\s*0/);
     expect(valueInputRule).toMatch(/field-sizing:\s*content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\)/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
@@ -289,12 +289,12 @@ describe('workspace browser policies', () => {
     const integerValueRule = styles.match(/\.workspace-number-aligned-value\.is-integer\s*\{([^}]*)\}/)?.[1];
 
     expect(editorRule).toMatch(/width:\s*fit-content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\)/);
     expect(editorRule).toMatch(/padding:\s*4px 0 6px/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
-    expect(numberInputRule).toMatch(/width:\s*100%/);
-    expect(numberInputRule).toMatch(/min-width:\s*0/);
+    expect(numberInputRule).toMatch(/width:\s*max-content/);
+    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*0px\)/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
