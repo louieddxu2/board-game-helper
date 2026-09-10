@@ -276,7 +276,24 @@ export const chooseScopedAttributeQuestion = (
       .filter((candidate) => !isDirectlyRated(candidate.subjectId, candidate.attributeId, options))
       .sort((left, right) => right.ratingDeviation - left.ratingDeviation);
     if (!ranked.length) return null;
-    const pool = ranked.slice(0, Math.min(LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT, ranked.length));
+    // Keep the bounded pool useful for every attribute. A single global
+    // rating-deviation sort can otherwise fill all 200 slots with the first
+    // few attributes in catalog order, making later attributes effectively
+    // invisible even though they have valid candidates.
+    const groups = attributeIds
+      .map((candidateAttributeId) => ranked.filter((candidate) => candidate.attributeId === candidateAttributeId))
+      .filter((group) => group.length > 0);
+    const pool: typeof ranked = [];
+    for (let offset = 0; pool.length < Math.min(LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT, ranked.length); offset += 1) {
+      let added = false;
+      for (const group of groups) {
+        const candidate = group[offset];
+        if (!candidate || pool.length >= LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT) continue;
+        pool.push(candidate);
+        added = true;
+      }
+      if (!added) break;
+    }
     const seed = pool[Math.floor(randomValue * pool.length)] ?? ranked[0];
     seedId = seed.subjectId;
     attributeId = seed.attributeId;

@@ -14,6 +14,7 @@ import { applyPublicTagCatalogChanges } from './tagCatalog';
 type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 const CATALOG_SYNC_FRESH_MS = 10 * 60 * 1000;
+const ATTRIBUTE_CATALOG_DB_VERSION = 10;
 export const RULE_IMPORTANCE_CACHE_FRESH_MS = 10 * 60 * 1000;
 const TAG_ENTITY_CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 export const PUBLIC_TAG_CATALOG_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
@@ -202,7 +203,7 @@ export interface PendingAttributeResponse {
 
 const getDb = () => {
   if (typeof indexedDB === 'undefined') return null;
-  return openDB<RulesDb>('wrong-board-game-rules', 9, {
+  return openDB<RulesDb>('wrong-board-game-rules', ATTRIBUTE_CATALOG_DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, transaction) {
       if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('pending')) db.createObjectStore('pending', { keyPath: 'id' });
@@ -240,6 +241,16 @@ const getDb = () => {
       // metadata. Clear only the affected local catalog stores so the next
       // request rebuilds them from the complete server snapshot.
       if (oldVersion > 0 && oldVersion < 8) {
+        transaction.objectStore('attributeCatalogMeta').clear();
+        transaction.objectStore('attributeCatalogAttributes').clear();
+        transaction.objectStore('attributeCatalogSubjects').clear();
+        transaction.objectStore('attributeCatalogValues').clear();
+        transaction.objectStore('attributeCatalogCandidates').clear();
+      }
+      // Version 10 invalidates the catalog cursor after the merged win-method
+      // migration. The old cursor could be ahead of the corresponding entry
+      // changes, so applying deltas could never reconstruct the new snapshot.
+      if (oldVersion > 0 && oldVersion < ATTRIBUTE_CATALOG_DB_VERSION) {
         transaction.objectStore('attributeCatalogMeta').clear();
         transaction.objectStore('attributeCatalogAttributes').clear();
         transaction.objectStore('attributeCatalogSubjects').clear();

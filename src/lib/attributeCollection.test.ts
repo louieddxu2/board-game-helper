@@ -120,6 +120,47 @@ describe('local attribute collection question selection', () => {
     expect(last?.subjectAId).toBe('subject-c');
   });
 
+  test('keeps every attribute represented in the bounded seed pool', () => {
+    const broad = catalog();
+    broad.subjects = Array.from({ length: 20 }, (_, index) => ({
+      id: `subject-${index}`,
+      slug: `subject-${index}`,
+      kind: 'game' as const,
+      displayName: `遊戲${index}`,
+      components: [{ order: 0, type: 'base' as const, label: `遊戲${index}`, bggId: 10_000 + index }],
+    }));
+    broad.attributes = Array.from({ length: 25 }, (_, index) => ({
+      id: `attribute-${index}`,
+      key: `attribute-${index}`,
+      name: `屬性${index}`,
+      minValue: 0,
+      maxValue: 10,
+      sortOrder: index,
+    }));
+    broad.values = broad.subjects.flatMap((subject) => broad.attributes.map((attribute) => ({
+      subjectId: subject.id,
+      attributeId: attribute.id,
+      score: 5,
+      ratingDeviation: 3,
+      directCount: 0,
+      comparisonCount: 0,
+      decisiveComparisonCount: 0,
+      evidenceCount: 0,
+      modelVersion: 'glicko-rd-v1',
+    })));
+
+    const selectedAttributes = new Set(
+      Array.from({ length: 200 }, (_, index) => chooseScopedAttributeQuestion(
+        broad,
+        broad.subjects.map((subject) => subject.id),
+        {},
+        (index + 0.5) / 200,
+      )?.attributeId),
+    );
+
+    expect(selectedAttributes).toEqual(new Set(broad.attributes.map((attribute) => attribute.id)));
+  });
+
   test('removes directly rated items before building the seed pool', () => {
     const excludedDirectRatingKeys = new Set([
       attributeDirectRatingKey('subject-a', 'attribute-luck'),
