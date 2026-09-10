@@ -198,7 +198,10 @@ describe('workspace browser policies', () => {
     expect(selectionListContainerRule).toMatch(/max-height:\s*min\(calc\(75dvh - 80px\)/);
     expect(selectionFooterRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionFooterRule).toMatch(/border-top:/);
-    expect(styles).toMatch(/\.workspace-datetime-dialog\s*\{[^}]*width:\s*min\(340px,\s*calc\(100vw - 28px\)\)/);
+    const datetimeDialogRule = styles.match(/\.workspace-datetime-dialog\s*\{([^}]*)\}/)?.[1];
+    expect(datetimeDialogRule).toMatch(/width:\s*fit-content/);
+    expect(datetimeDialogRule).toMatch(/min-width:\s*min\(340px,\s*calc\(100vw - 28px\)\)/);
+    expect(datetimeDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
@@ -247,7 +250,7 @@ describe('workspace browser policies', () => {
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 
-  it('keeps shared value dialogs stable while sizing numeric dialogs to their content', () => {
+  it('gives value dialogs a floor, content sizing, and a width ceiling', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
@@ -257,10 +260,12 @@ describe('workspace browser policies', () => {
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
 
-    expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
-    expect(valueDialogRule).not.toMatch(/fit-content/);
+    expect(valueDialogRule).toMatch(/width:\s*fit-content/);
+    expect(valueDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
+    expect(valueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(valueInputRule).toMatch(/width:\s*100%/);
     expect(numericDialogRule).toMatch(/width:\s*fit-content/);
+    expect(numericDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
     expect(numericDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(numericContentRule).toMatch(/width:\s*fit-content/);
     expect(numericInputRule).toMatch(/width:\s*fit-content/);
@@ -272,15 +277,19 @@ describe('workspace browser policies', () => {
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 
-  it('only lets the numeric mobile dialog override the shared value width', () => {
+  it('applies the floor-and-ceiling rule to value dialogs on mobile', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 820px)'));
-    const mobileValueDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
+    const mobileValueDialogRule = mobileStyles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const mobileNumericDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
 
-    expect(mobileValueDialogRule).toBeUndefined();
+    expect(mobileValueDialogRule).toBeDefined();
+    expect(mobileValueDialogRule).toMatch(/width:\s*fit-content/);
+    expect(mobileValueDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
+    expect(mobileValueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(mobileNumericDialogRule).toBeDefined();
     expect(mobileNumericDialogRule).toMatch(/width:\s*fit-content/);
+    expect(mobileNumericDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
     expect(mobileNumericDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
   });
 
