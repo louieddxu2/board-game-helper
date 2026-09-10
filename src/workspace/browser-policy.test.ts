@@ -304,13 +304,24 @@ describe('workspace browser policies', () => {
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
     expect(numberInputRule).toMatch(/width:\s*max-content/);
-    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*max-content\)/);
+    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*12ch\)/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
     expect(adjustmentAddRule).toMatch(/grid-row:\s*2/);
     expect(adjustmentOperationRule).toMatch(/width:\s*30px/);
     expect(integerValueRule).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+  });
+
+  it('keeps numeric editors readable without adding an empty control column', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const numberInputRule = styles.match(/\.workspace-number-editor \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+    const plainEditorRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\]\s*\{([^}]*)\}/)?.[1];
+    const plainInputRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\] \.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
+
+    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*12ch\)/);
+    expect(plainEditorRule).toMatch(/grid-template-columns:\s*minmax\(0, max-content\)/);
+    expect(plainInputRule).toMatch(/grid-column:\s*1/);
   });
 
   it('applies compact spacing to every visible workspace number input', () => {
