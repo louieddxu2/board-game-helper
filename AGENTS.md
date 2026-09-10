@@ -1,20 +1,16 @@
-# Global workflow rules for small UI adjustments
+# Automatic model routing for UI work
 
-## Simple UI adjustment workflow
+Use the project-scoped custom agents in `.codex/agents/` for UI changes. Do not let multiple agents edit the working tree concurrently.
 
-When a request is limited to visual layout, spacing, sizing, alignment, responsive behavior, or styling, treat it as a small UI adjustment unless it also changes data, business logic, accessibility behavior, or an API contract.
-
-1. Before editing, write down the smallest concrete acceptance criteria and the relevant states to verify. For example: desktop and mobile, empty and long values, or the affected input modes. Do not begin by adding tests or by changing multiple unrelated layout mechanisms.
-2. Prefer one minimal CSS/layout solution first. Do not introduce DOM measurement, `useLayoutEffect`, extra React state, or cross-component refactors until a browser check shows that CSS alone cannot satisfy the acceptance criteria.
-3. Treat each iteration as a hypothesis, not as progress by itself. Record what the previous attempt was expected to change, what actually failed, and the likely cause before making the next edit. Do not respond to an incorrect result by blindly adding another compensating override.
-4. Verify the final result in the browser at the relevant viewport sizes and interaction states. Source-text regex checks are not a substitute for rendered layout verification. When a check fails, inspect computed styles, the cascade, intrinsic sizing, viewport constraints, and component structure before changing the implementation. If browser verification is unavailable, state that limitation and use the narrowest relevant automated check instead.
-5. Add or change tests only for a stable behavior contract. Do not add a new test for every intermediate CSS hypothesis, and do not assert exact CSS declaration text unless that declaration is itself an intentional policy contract.
-6. Keep verification proportional to the change:
-   - CSS-only: browser check plus the project build when practical; do not run the full test suite, release gate, core E2E suite, or type-check unless the change touches their relevant boundary or the user requests it.
-   - UI TypeScript/TSX: browser check plus focused tests; run type-check when TypeScript code was changed.
-   - Data, worker, API, auth, or release changes: follow the broader project test requirements.
-7. If two consecutive focused attempts do not satisfy the acceptance criteria, stop layering overrides. Re-evaluate the layout model and replace the approach or ask for clarification rather than continuing an unbounded patch-test loop.
-8. Keep iterative corrections as one cohesive working-tree change and commit only after the final behavior has been verified. Before committing, summarize the exact files being committed and exclude unrelated generated or untracked files.
+1. First write concrete visual acceptance criteria and identify the viewport and interaction states that matter.
+2. If the request is one clear visual adjustment and does not change data, business logic, accessibility behavior, or an API contract, delegate it to `luna_ui` exactly once. The parent agent must not edit concurrently.
+3. If `luna_ui` returns `PASS`, review only its scoped diff and verification evidence. Do not repeat broad tests or add source-text tests. Continue with the normal final commit workflow.
+4. If `luna_ui` returns `FAIL` or `ESCALATE`, delegate the same acceptance criteria, its diagnosis, and its verification evidence to `terra_ui` exactly once. Do not ask Luna to try another workaround.
+5. If `terra_ui` returns `ESCALATE`, or if the request is ambiguous or spans multiple interacting components from the start, delegate to `sol_ui` exactly once.
+6. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision or visual reference. If `sol_ui` fails, stop and report the remaining mismatch; do not start another patch loop.
+7. A UI agent may report success only after rendered browser verification. Tests that inspect CSS source text or regex matches do not prove visual success.
+8. Add tests only after the rendered behavior passes, and only for a stable behavior contract. Keep validation proportional to the files changed.
+9. The parent agent owns the final commit. Subagents must never commit or push.
 
 # Project-specific author copy rules
 
