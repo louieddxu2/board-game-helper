@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { AttributeCatalogPayload } from '../shared/types';
-import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
+import { availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE, matchCollectionSubjects, parseGeekGroupCollectionCsv, parseCsvRows } from './attributeCollection';
 import { attributeDirectRatingKey } from './attributeDirectRatings';
 
 describe('GeekGroup collection import', () => {
@@ -91,7 +91,7 @@ describe('local attribute collection question selection', () => {
     });
   });
 
-  test('randomizes across a bounded low-confidence pool without subject ID tie-breaking', () => {
+  test('randomizes the attribute before choosing a low-confidence seed', () => {
     const broad = catalog();
     broad.attributes = Array.from({ length: 25 }, (_, index) => ({
       id: `attribute-${index}`,
@@ -150,15 +150,16 @@ describe('local attribute collection question selection', () => {
     })));
 
     const selectedAttributes = new Set(
-      Array.from({ length: 200 }, (_, index) => chooseScopedAttributeQuestion(
+      Array.from({ length: 250 }, (_, index) => chooseScopedAttributeQuestion(
         broad,
         broad.subjects.map((subject) => subject.id),
         {},
-        (index + 0.5) / 200,
+        (index + 0.5) / 250,
       )?.attributeId),
     );
 
     expect(selectedAttributes).toEqual(new Set(broad.attributes.map((attribute) => attribute.id)));
+    expect(LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE).toBe(10);
   });
 
   test('removes directly rated items before building the seed pool', () => {

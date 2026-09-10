@@ -36,12 +36,8 @@ export interface DeferredAttributeSubjectPreference {
   eligibleAfterAt: number;
 }
 
-/**
- * Keep the local question pool bounded while retaining enough low-confidence
- * candidates to make the random draw visible. This is a browser-side limit
- * only; it does not change the D1 request or response size.
- */
-export const LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT = 200;
+/** Number of low-confidence game candidates retained for each attribute. */
+export const LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE = 10;
 
 const normalizeHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 
@@ -276,25 +272,20 @@ export const chooseScopedAttributeQuestion = (
       .filter((candidate) => !isDirectlyRated(candidate.subjectId, candidate.attributeId, options))
       .sort((left, right) => right.ratingDeviation - left.ratingDeviation);
     if (!ranked.length) return null;
-    // Keep the bounded pool useful for every attribute. A single global
-    // rating-deviation sort can otherwise fill all 200 slots with the first
-    // few attributes in catalog order, making later attributes effectively
-    // invisible even though they have valid candidates.
-    const groups = attributeIds
-      .map((candidateAttributeId) => ranked.filter((candidate) => candidate.attributeId === candidateAttributeId))
-      .filter((group) => group.length > 0);
-    const pool: typeof ranked = [];
-    for (let offset = 0; pool.length < Math.min(LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT, ranked.length); offset += 1) {
-      let added = false;
-      for (const group of groups) {
-        const candidate = group[offset];
-        if (!candidate || pool.length >= LOCAL_ATTRIBUTE_QUESTION_POOL_LIMIT) continue;
-        pool.push(candidate);
-        added = true;
-      }
-      if (!added) break;
-    }
-    const seed = pool[Math.floor(randomValue * pool.length)] ?? ranked[0];
+    // Select the question (attribute) before selecting games. A single global
+    // top-200 pool can fill with the first attributes in catalog order and
+    // make later attributes effectively invisible. Each attribute still uses
+    // the original low-confidence ranking, but retains its own top ten.
+    const groups = new Map(attributeIds.map((candidateAttributeId) => [
+      candidateAttributeId,
+      ranked.filter((candidate) => candidate.attributeId === candidateAttributeId),
+    ]));
+    const eligibleAttributeIds = attributeIds.filter((candidateAttributeId) => (groups.get(candidateAttributeId)?.length ?? 0) > 0);
+    if (!eligibleAttributeIds.length) return null;
+    attributeId = eligibleAttributeIds[Math.floor(randomValue * eligibleAttributeIds.length)];
+    const attributeCandidates = groups.get(attributeId) ?? [];
+    const seedPool = attributeCandidates.slice(0, LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE);
+    const seed = seedPool[Math.floor(randomValue * seedPool.length)] ?? attributeCandidates[0] ?? ranked[0];
     seedId = seed.subjectId;
     attributeId = seed.attributeId;
   }
