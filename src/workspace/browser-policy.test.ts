@@ -294,6 +294,17 @@ describe('workspace browser policies', () => {
     expect(integerValueRule).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
   });
 
+  it('applies compact spacing to every visible workspace number input', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const numberInputRule = styles.match(/\.workspace-dialog input\[type="number"\]\s*\{([^}]*)\}/)?.[1];
+    const numberSpinnerRule = styles.match(/\.workspace-dialog input\[type="number"\]::\-webkit-inner-spin-button, \.workspace-dialog input\[type="number"\]::\-webkit-outer-spin-button\s*\{([^}]*)\}/)?.[1];
+
+    expect(numberInputRule).toMatch(/min-width:\s*0/);
+    expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
+    expect(numberInputRule).toMatch(/appearance:\s*textfield/);
+    expect(numberSpinnerRule).toMatch(/appearance:\s*none/);
+  });
+
   it('restricts horizontal overscroll navigation while preserving standalone pull-to-refresh', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const htmlRule = styles.match(/(?:^|\n)html\s*\{([^}]*)\}/)?.[1];

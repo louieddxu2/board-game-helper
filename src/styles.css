@@ -338,6 +338,8 @@ footer a { color: inherit; }
 .workspace-input-type-options button { min-height: 40px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-weight: 500; }
 .workspace-input-type-options button:hover, .workspace-input-type-options button.selected { border-color: var(--orange); background: var(--cream); color: var(--green); }
 .workspace-dialog textarea, .workspace-dialog input, .workspace-dialog select { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,253,248,.48); color: var(--ink); font: inherit; font-weight: 400; }
+.workspace-dialog input[type="number"] { min-width: 0; padding-inline: 2px; appearance: textfield; -moz-appearance: textfield; }
+.workspace-dialog input[type="number"]::-webkit-inner-spin-button, .workspace-dialog input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }
 .workspace-dialog textarea { min-height: 42px; resize: none; }
 .workspace-dialog textarea:focus, .workspace-dialog input:focus, .workspace-dialog select:focus { border-color: var(--yellow); outline: 2px solid rgba(233,180,76,.28); }
 .workspace-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 20px; }
