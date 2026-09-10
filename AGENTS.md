@@ -1,19 +1,30 @@
-# Automatic model routing for UI work
+# GPT-6 orchestration and automatic model routing
 
-Use the project-scoped custom agents in `.codex/agents/` for UI changes. Do not let multiple agents edit the working tree concurrently.
+GPT-6 Astra is the project coordinator. Use the project-scoped custom agents in `.codex/agents/` for repository retrieval, UI implementation, and deterministic validation. Do not let multiple agents edit the working tree concurrently.
+
+## Parent-agent responsibilities
+
+1. The parent translates the user's request into concrete acceptance criteria, identifies missing decisions, delegates work, integrates returned evidence, reviews the final scoped diff, and owns the commit.
+2. Do not use GPT-6 Astra for broad repository searches, routine file reading, implementation, browser operation, test execution, type-checking, or builds when a custom subagent can do that work.
+3. When code ownership, current behavior, dependencies, or the likely change surface is unclear, delegate a focused read-only investigation to `luna_project_reader`. Give it specific questions rather than asking it to understand the whole repository.
+4. If returned evidence is incomplete or contradictory, state the concern and send one narrower follow-up retrieval to `luna_project_reader`. Do not silently fill an evidence gap by browsing the repository broadly in the parent.
+5. The parent may read the small final diff and directly relevant subagent report needed to integrate the work. It must not edit implementation files itself while an implementation route is available.
+6. Subagents must never commit or push. After successful implementation and validation, the parent stages only the scoped files and creates the local commit required by this project.
+
+## UI routing
 
 1. Trigger this routing automatically whenever the user requests a change to layout, spacing, sizing, alignment, typography, color, visibility, responsive behavior, or other rendered presentation. The user does not need to name an agent.
 2. First write concrete visual acceptance criteria and identify the viewport and interaction states that matter.
-3. If the request is one clear visual adjustment and does not change data, business logic, accessibility behavior, or an API contract, delegate it to `luna_ui` exactly once. The parent agent must not edit concurrently.
-4. After any UI implementation agent returns `PASS`, delegate only the narrow deterministic checks relevant to its changed files to `ui_test_runner`. The implementation agent and parent agent must not rerun those checks.
-5. If `luna_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate the same acceptance criteria and all failure evidence to `terra_ui` exactly once. Do not ask Luna to try another workaround.
-6. If `terra_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate all evidence to `astra_ui` exactly once. Route directly to `astra_ui` when the original request is ambiguous, spans multiple interacting components, or requires substantial product/design judgment.
-7. If `astra_ui` passes rendered verification, use `ui_test_runner` for the narrow deterministic checks. If those checks fail, stop and report the evidence; do not start another implementation loop.
-8. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision or visual reference.
+3. For one clear visual adjustment that does not change data, business logic, accessibility behavior, or an API contract, delegate directly to `luna_ui` exactly once. It may perform the narrow reading needed for its own fix; do not add a separate reader pass unless ownership or cause is unclear.
+4. For an unclear change surface, first use `luna_project_reader`, then pass its evidence and the acceptance criteria to `luna_ui`. For an originally ambiguous request, multiple interacting components, or substantial product/design judgment, ask the user for the missing decision when necessary, then route implementation to `terra_ui`.
+5. After an implementation agent returns `PASS`, delegate only the narrow deterministic checks relevant to its changed files to `ui_test_runner`. The implementation agent and parent must not rerun those checks.
+6. If `luna_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate the same acceptance criteria and all evidence to `terra_ui` exactly once. Do not ask Luna to try another implementation workaround.
+7. If `terra_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, the parent reviews the evidence, raises the unresolved concern, and either requests one focused retrieval from `luna_project_reader` or stops for the user's decision. GPT-6 Astra must not become a third implementation loop.
+8. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision, reproduction input, or visual reference.
 9. A UI implementation agent may report success only after rendered browser verification. Tests that inspect CSS source text or regex matches do not prove visual success.
-10. `ui_test_runner` may run tests, type-checks, or builds selected by the parent, but it must never edit code, update snapshots, fix failures, commit, or push. Do not send broad test suites to GPT-6 Astra when a lower-tier deterministic runner can execute them.
-11. Add tests only after the rendered behavior passes, and only for a stable behavior contract. Keep validation proportional to the files changed.
-12. The parent agent owns the final scoped diff review and commit. Subagents must never commit or push.
+10. `ui_test_runner` may run tests, type-checks, or builds selected by the parent, but it must never edit code, update snapshots, fix failures, commit, or push.
+11. Add tests only after rendered behavior passes, and only for a stable behavior contract. For a reversible, low-impact presentation change, do not add tests that merely mirror implementation details.
+12. Keep validation proportional to the changed files. Once narrow checks pass, do not broaden or repeat them unless new edits, failures, or unresolved evidence justify it.
 
 # Project-specific author copy rules
 
