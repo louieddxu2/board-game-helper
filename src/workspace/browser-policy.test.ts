@@ -259,7 +259,7 @@ describe('workspace browser policies', () => {
     expect(valueInputRule).toMatch(/width:\s*fit-content/);
     expect(valueInputRule).toMatch(/min-width:\s*0/);
     expect(valueInputRule).toMatch(/field-sizing:\s*content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\)/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);

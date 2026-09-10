@@ -440,7 +440,7 @@ footer a { color: inherit; }
 .workspace-value-dialog .workspace-value-textarea { min-height: 46px; max-height: min(42dvh, 280px); overflow: auto; resize: none; white-space: pre-wrap; }
 .workspace-value-dialog .workspace-value-input:focus { border: 0; outline: 0; }
 .workspace-number-editor-shell { display: block; min-width: 0; }
-.workspace-number-editor { --workspace-number-fraction-width: 2ch; --workspace-number-input-min-width: 12ch; display: grid; width: fit-content; max-width: 100%; grid-template-columns: 30px minmax(0, max-content); justify-content: center; align-items: center; min-height: 104px; padding: 4px 0 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.workspace-number-editor { --workspace-number-fraction-width: 2ch; --workspace-number-input-min-width: 12ch; display: grid; width: fit-content; max-width: 100%; grid-template-columns: 30px minmax(0, max-content) 30px; justify-content: center; align-items: center; min-height: 104px; padding: 4px 0 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .workspace-number-input-shell { grid-column: 2; grid-row: 1; min-width: 0; border: 1px solid rgba(22,53,47,.28); border-radius: 8px; background: rgba(255,253,248,.56); box-shadow: inset 0 0 0 1px rgba(255,253,248,.22); }
 .workspace-number-input-shell:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(233,180,76,.22); }
 .workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-column: 2; grid-row: 1; }
