@@ -1,3 +1,21 @@
+# Global workflow rules for small UI adjustments
+
+## Simple UI adjustment workflow
+
+When a request is limited to visual layout, spacing, sizing, alignment, responsive behavior, or styling, treat it as a small UI adjustment unless it also changes data, business logic, accessibility behavior, or an API contract.
+
+1. Before editing, write down the smallest concrete acceptance criteria and the relevant states to verify. For example: desktop and mobile, empty and long values, or the affected input modes. Do not begin by adding tests or by changing multiple unrelated layout mechanisms.
+2. Prefer one minimal CSS/layout solution first. Do not introduce DOM measurement, `useLayoutEffect`, extra React state, or cross-component refactors until a browser check shows that CSS alone cannot satisfy the acceptance criteria.
+3. Treat each iteration as a hypothesis, not as progress by itself. Record what the previous attempt was expected to change, what actually failed, and the likely cause before making the next edit. Do not respond to an incorrect result by blindly adding another compensating override.
+4. Verify the final result in the browser at the relevant viewport sizes and interaction states. Source-text regex checks are not a substitute for rendered layout verification. When a check fails, inspect computed styles, the cascade, intrinsic sizing, viewport constraints, and component structure before changing the implementation. If browser verification is unavailable, state that limitation and use the narrowest relevant automated check instead.
+5. Add or change tests only for a stable behavior contract. Do not add a new test for every intermediate CSS hypothesis, and do not assert exact CSS declaration text unless that declaration is itself an intentional policy contract.
+6. Keep verification proportional to the change:
+   - CSS-only: browser check plus the project build when practical; do not run the full test suite, release gate, core E2E suite, or type-check unless the change touches their relevant boundary or the user requests it.
+   - UI TypeScript/TSX: browser check plus focused tests; run type-check when TypeScript code was changed.
+   - Data, worker, API, auth, or release changes: follow the broader project test requirements.
+7. If two consecutive focused attempts do not satisfy the acceptance criteria, stop layering overrides. Re-evaluate the layout model and replace the approach or ask for clarification rather than continuing an unbounded patch-test loop.
+8. Keep iterative corrections as one cohesive working-tree change and commit only after the final behavior has been verified. Before committing, summarize the exact files being committed and exclude unrelated generated or untracked files.
+
 # Project-specific author copy rules
 
 ## Protected author-owned text
