@@ -64,6 +64,8 @@ describe('workspace numeric input modes', () => {
     expect(screen.getByRole('spinbutton', { name: '數量輸入加法' })).toBe(input);
     expect(input.getAttribute('style')).toBe(initialStyle);
     expect(document.querySelector('.workspace-number-editor')).toHaveAttribute('data-mode', 'add');
+    expect(screen.getByRole('button', { name: '編輯原始數值 123456' }).querySelector('.workspace-number-aligned-value')).toHaveClass('is-integer');
+    expect(screen.getByRole('status', { name: '數量計算結果' })).toHaveTextContent('123456');
   });
 
   it('selects the initial numeric value before the user can type', () => {

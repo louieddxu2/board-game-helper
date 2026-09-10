@@ -51,7 +51,7 @@ const calculateNumericAdjustment = (original: string, delta: string, mode: Numer
 const NumericAlignedValue = ({ value }: { value: string }) => {
   const parts = parseDecimal(value);
   if (!parts) return <span className="workspace-number-aligned-value">{value}</span>;
-  return <span className="workspace-number-aligned-value" aria-label={value}>
+  return <span className={`workspace-number-aligned-value ${parts.fraction ? 'has-fraction' : 'is-integer'}`} aria-label={value}>
     <span className="workspace-number-integer">{parts.sign === -1 ? '-' : ''}{parts.integer}</span>
     <span className="workspace-number-decimal">{parts.fraction ? '.' : ''}</span>
     <span className="workspace-number-fraction">{parts.fraction}</span>
