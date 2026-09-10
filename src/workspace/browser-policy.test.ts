@@ -276,6 +276,7 @@ describe('workspace browser policies', () => {
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const operatorsRule = styles.match(/\.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
     const directOperatorsRule = styles.match(/\.workspace-number-editor\[data-mode="direct"\] \.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
+    const numberInputRule = styles.match(/\.workspace-number-editor \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const adjustmentOperationRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation, \.workspace-number-editor\[data-mode="subtract"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const adjustmentSubtractRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-subtract[^\{]*\{([^}]*)\}/)?.[1];
     const adjustmentAddRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-add[^\{]*\{([^}]*)\}/)?.[1];
@@ -284,6 +285,7 @@ describe('workspace browser policies', () => {
     expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, 12ch\)/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
+    expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
     expect(adjustmentAddRule).toMatch(/grid-row:\s*2/);
