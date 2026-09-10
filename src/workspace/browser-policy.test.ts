@@ -207,6 +207,7 @@ describe('workspace browser policies', () => {
     expect(datetimeDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(datetimeContentRule).toMatch(/width:\s*100%/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
+    expect(selectionListRule).toMatch(/flex:\s*0 0 auto/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(singleSelectionRule).toMatch(/justify-content:\s*center/);
     expect(singleSelectionRule).toMatch(/font-size:\s*32px/);

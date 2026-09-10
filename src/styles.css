@@ -527,7 +527,7 @@ footer a { color: inherit; }
 .workspace-selection-tool:hover { background: var(--cream); color: var(--orange); }
 .workspace-selection-tool.is-clear { color: var(--orange); }
 .workspace-selection-list { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; max-height: min(calc(75dvh - 80px), calc(var(--workspace-visual-viewport-height, 100dvh) - 80px), 660px); overflow-y: auto; border: 0; border-radius: 0 0 11px 11px; background: rgba(255,253,248,.28); }
-.workspace-selection-option { position: relative; display: flex; align-items: center; justify-content: flex-start; gap: 9px; min-height: 42px; padding: 7px 12px; border: 0; border-bottom: 1px solid rgba(22,53,47,.12); background: rgba(255,253,248,.22); color: var(--ink); cursor: pointer; font-size: 16px; font-weight: 650; line-height: 1.35; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-selection-option { position: relative; display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-start; gap: 9px; min-height: 42px; padding: 7px 12px; border: 0; border-bottom: 1px solid rgba(22,53,47,.12); background: rgba(255,253,248,.22); color: var(--ink); cursor: pointer; font-size: 16px; font-weight: 650; line-height: 1.35; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-selection-option:last-child { border-bottom: 0; }
 .workspace-selection-option:hover, .workspace-selection-option.selected { background: rgba(236,230,216,.58); }
 .workspace-selection-option-indicator { flex: 0 0 17px; width: 17px; height: 17px; border: 1.5px solid rgba(22,53,47,.42); border-radius: 4px; background: rgba(255,253,248,.48); }
