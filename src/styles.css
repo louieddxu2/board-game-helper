@@ -445,7 +445,7 @@ footer a { color: inherit; }
 .workspace-number-input-shell:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(233,180,76,.22); }
 .workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-column: 2; grid-row: 1; }
 .workspace-number-editor[data-mode="add"] .workspace-number-input-shell, .workspace-number-editor[data-mode="subtract"] .workspace-number-input-shell { grid-column: 2; grid-row: 2; }
-.workspace-number-editor .workspace-value-input { display: block; width: max-content; min-width: var(--workspace-number-input-min-width, 0px); max-width: 100%; padding-inline: 2px; border: 0; background: transparent; cursor: text; text-align: center; direction: ltr; font-variant-numeric: tabular-nums; }
+.workspace-number-editor .workspace-value-input { display: block; width: max-content; min-width: var(--workspace-number-input-min-width, max-content); max-width: 100%; padding-inline: 2px; border: 0; background: transparent; cursor: text; text-align: center; direction: ltr; font-variant-numeric: tabular-nums; }
 .workspace-number-editor[data-mode="direct"] .workspace-value-input { text-align: center; }
 .workspace-number-editor input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 .workspace-number-editor input[type="number"]::-webkit-inner-spin-button, .workspace-number-editor input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }

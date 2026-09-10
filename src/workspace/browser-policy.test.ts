@@ -294,7 +294,7 @@ describe('workspace browser policies', () => {
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
     expect(numberInputRule).toMatch(/width:\s*max-content/);
-    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*0px\)/);
+    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*max-content\)/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
