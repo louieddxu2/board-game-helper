@@ -283,6 +283,7 @@ describe('workspace browser policies', () => {
     const integerValueRule = styles.match(/\.workspace-number-aligned-value\.is-integer\s*\{([^}]*)\}/)?.[1];
 
     expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, 12ch\)/);
+    expect(editorRule).toMatch(/padding:\s*4px 0 6px/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
