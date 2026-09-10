@@ -265,6 +265,16 @@ describe('workspace browser policies', () => {
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 
+  it('does not let the mobile dialog width override content-sized value editors', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 820px)'));
+    const mobileValueDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
+
+    expect(mobileValueDialogRule).toBeDefined();
+    expect(mobileValueDialogRule).toMatch(/width:\s*fit-content/);
+    expect(mobileValueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
+  });
+
   it('keeps the original stepper proportions and centers its number', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const stepRule = styles.match(/\.workspace-number-editor\[data-mode="step"\]\s*\{([^}]*)\}/)?.[1];

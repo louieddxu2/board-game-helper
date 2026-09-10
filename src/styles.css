@@ -677,6 +677,7 @@ footer a { color: inherit; }
   .workspace-cell-external { width: 28px; justify-content: center; padding: 3px; }
   .workspace-zoom-indicator { padding-right: 10px; }
   .workspace-dialog { align-self: center; width: min(460px, 80vw); max-height: min(calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border-radius: 12px; }
+  .workspace-dialog.workspace-value-dialog { width: fit-content; max-width: min(360px, calc(100vw - 24px)); }
   .workspace-dialog.workspace-bulk-number-dialog.is-expanded { max-height: calc(var(--workspace-visual-viewport-height, 100dvh) - 16px); }
   .workspace-bulk-number-dialog.is-expanded .workspace-dialog-content { overflow: hidden; }
   .workspace-ratio-panel { padding: 3px 8px 8px; }
