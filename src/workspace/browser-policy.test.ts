@@ -165,6 +165,8 @@ describe('workspace browser policies', () => {
     const selectionListContainerRule = styles.match(/\.workspace-selection-list\s*\{([^}]*)\}/)?.[1];
     const selectionFooterRule = styles.match(/\.workspace-selection-footer\s*\{([^}]*)\}/)?.[1];
     const selectionListRule = styles.match(/\.workspace-selection-option\s*\{([^}]*)\}/)?.[1];
+    const singleSelectionRule = styles.match(/\.workspace-selection-option:has\(> \.workspace-selection-option-label:only-child\)\s*\{([^}]*)\}/)?.[1];
+    const singleSelectionLabelRule = styles.match(/\.workspace-selection-option > \.workspace-selection-option-label:only-child\s*\{([^}]*)\}/)?.[1];
     const selectionIndicatorRule = styles.match(/\.workspace-selection-option-indicator\s*\{([^}]*)\}/)?.[1];
     const contextActiveRule = styles.match(/\.workspace-table \.workspace-context-active\s*\{([^}]*)\}/)?.[1];
     const lineLimitRule = styles.match(/\.workspace-overflow-line-limited \.workspace-cell-value\s*\{([^}]*)\}/)?.[1];
@@ -206,6 +208,11 @@ describe('workspace browser policies', () => {
     expect(datetimeContentRule).toMatch(/width:\s*100%/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
+    expect(singleSelectionRule).toMatch(/justify-content:\s*center/);
+    expect(singleSelectionRule).toMatch(/font-size:\s*32px/);
+    expect(singleSelectionRule).toMatch(/text-align:\s*center/);
+    expect(singleSelectionLabelRule).toMatch(/width:\s*100%/);
+    expect(singleSelectionLabelRule).toMatch(/text-align:\s*center/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
     expect(contextActiveRule).toMatch(/background:\s*#fff4d6/);
     expect(lineLimitRule).toMatch(/-webkit-line-clamp:\s*var\(--workspace-line-limit\)/);
