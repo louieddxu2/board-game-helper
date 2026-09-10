@@ -247,16 +247,19 @@ describe('workspace browser policies', () => {
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 
-  it('expands proportional allocation without resizing the number editor', () => {
+  it('sizes value dialogs to their content while keeping numeric input centered', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+    const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
 
     expect(valueDialogRule).toMatch(/width:\s*fit-content/);
     expect(valueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(valueInputRule).toMatch(/width:\s*fit-content/);
+    expect(valueInputRule).toMatch(/min-width:\s*0/);
     expect(valueInputRule).toMatch(/field-sizing:\s*content/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
@@ -268,7 +271,7 @@ describe('workspace browser policies', () => {
     const stepOperationRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const stepInputRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
 
-    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(10ch, max-content\) 50px/);
+    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(0, max-content\) 50px/);
     expect(stepOperationRule).toMatch(/width:\s*48px/);
     expect(stepOperationRule).toMatch(/min-height:\s*46px/);
     expect(stepInputRule).toMatch(/text-align:\s*center/);
@@ -286,12 +289,12 @@ describe('workspace browser policies', () => {
     const integerValueRule = styles.match(/\.workspace-number-aligned-value\.is-integer\s*\{([^}]*)\}/)?.[1];
 
     expect(editorRule).toMatch(/width:\s*fit-content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(12ch, max-content\)/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
     expect(editorRule).toMatch(/padding:\s*4px 0 6px/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
-    expect(numberInputRule).toMatch(/width:\s*max-content/);
-    expect(numberInputRule).toMatch(/min-width:\s*100%/);
+    expect(numberInputRule).toMatch(/width:\s*100%/);
+    expect(numberInputRule).toMatch(/min-width:\s*0/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
