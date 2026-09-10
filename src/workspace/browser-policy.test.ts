@@ -271,12 +271,11 @@ describe('workspace browser policies', () => {
     expect(stepInputRule).toMatch(/text-align:\s*center/);
   });
 
-  it('adds adjustment buttons beside the original numeric input only after selection', () => {
+  it('preserves the original numeric editor layout while keeping values readable', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const operatorsRule = styles.match(/\.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
     const directOperatorsRule = styles.match(/\.workspace-number-editor\[data-mode="direct"\] \.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
-    const adjustmentRule = styles.match(/\.workspace-number-editor\[data-mode="add"\]\s*\{([^}]*)\}/)?.[1];
     const adjustmentOperationRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation, \.workspace-number-editor\[data-mode="subtract"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const adjustmentSubtractRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-subtract[^\{]*\{([^}]*)\}/)?.[1];
     const adjustmentAddRule = styles.match(/\.workspace-number-editor\[data-mode="add"\] \.workspace-number-operation-add[^\{]*\{([^}]*)\}/)?.[1];
@@ -285,9 +284,9 @@ describe('workspace browser policies', () => {
     expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, 12ch\)/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
-    expect(adjustmentRule).toMatch(/grid-template-columns:\s*30px minmax\(0, 12ch\) 30px/);
-    expect(adjustmentSubtractRule).toMatch(/grid-column:\s*1/);
-    expect(adjustmentAddRule).toMatch(/grid-column:\s*3/);
+    expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
+    expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
+    expect(adjustmentAddRule).toMatch(/grid-row:\s*2/);
     expect(adjustmentOperationRule).toMatch(/width:\s*30px/);
     expect(integerValueRule).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
   });

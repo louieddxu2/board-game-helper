@@ -443,7 +443,7 @@ footer a { color: inherit; }
 .workspace-number-input-shell:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(233,180,76,.22); }
 .workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-column: 2; grid-row: 1; }
 .workspace-number-editor[data-mode="add"] .workspace-number-input-shell, .workspace-number-editor[data-mode="subtract"] .workspace-number-input-shell { grid-column: 2; grid-row: 2; }
-.workspace-number-editor .workspace-value-input { display: block; min-width: 0; padding-inline: 0; border: 0; background: transparent; cursor: text; text-align: right; direction: ltr; font-variant-numeric: tabular-nums; }
+.workspace-number-editor .workspace-value-input { display: block; min-width: 0; padding-inline: 8px; border: 0; background: transparent; cursor: text; text-align: right; direction: ltr; font-variant-numeric: tabular-nums; }
 .workspace-number-editor[data-mode="direct"] .workspace-value-input { text-align: center; }
 .workspace-number-editor input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 .workspace-number-editor input[type="number"]::-webkit-inner-spin-button, .workspace-number-editor input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }
@@ -451,16 +451,13 @@ footer a { color: inherit; }
 .workspace-number-operation { display: grid; place-items: center; width: 42px; min-height: 42px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--green); cursor: pointer; font-size: 26px; font-weight: 700; line-height: 1; }
 .workspace-number-operation:hover, .workspace-number-operation:focus-visible { background: rgba(255,253,248,.48); color: var(--orange); }
 .workspace-number-operation.is-selected { background: var(--green); color: var(--white); }
-.workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.workspace-number-editor[data-mode="direct"] .workspace-number-input-shell { grid-row: 1 / span 2; align-self: center; }
 .workspace-number-editor[data-mode="direct"] .workspace-number-operators { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .workspace-number-editor[data-mode="direct"] .workspace-number-operation { width: 30px; min-height: 40px; border-radius: 7px; font-size: 23px; }
-.workspace-number-editor[data-mode="add"] { grid-template-columns: 30px minmax(0, 12ch) 30px; }
-.workspace-number-editor[data-mode="subtract"] { grid-template-columns: 30px minmax(0, 12ch) 30px; }
-.workspace-number-editor[data-mode="add"] .workspace-number-input-shell, .workspace-number-editor[data-mode="subtract"] .workspace-number-input-shell { grid-column: 2; grid-row: 2; }
 .workspace-number-editor[data-mode="add"] .workspace-number-operators, .workspace-number-editor[data-mode="subtract"] .workspace-number-operators { display: contents; }
-.workspace-number-editor[data-mode="add"] .workspace-number-operation, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation { width: 30px; min-height: 40px; border-radius: 7px; font-size: 23px; opacity: .35; transition: opacity 150ms ease, background 150ms ease, color 150ms ease; }
-.workspace-number-editor[data-mode="add"] .workspace-number-operation-subtract, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-subtract { grid-column: 1; grid-row: 2; }
-.workspace-number-editor[data-mode="add"] .workspace-number-operation-add, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-add { grid-column: 3; grid-row: 2; }
+.workspace-number-editor[data-mode="add"] .workspace-number-operation, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation { grid-column: 1; width: 30px; min-height: 40px; border-radius: 7px; font-size: 23px; opacity: .35; transition: opacity 150ms ease, background 150ms ease, color 150ms ease; }
+.workspace-number-editor[data-mode="add"] .workspace-number-operation-add, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-subtract { grid-row: 2; }
+.workspace-number-editor[data-mode="add"] .workspace-number-operation-subtract, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation-add { grid-row: 3; }
 .workspace-number-editor[data-mode="add"] .workspace-number-operation.is-selected, .workspace-number-editor[data-mode="subtract"] .workspace-number-operation.is-selected { opacity: 1; }
 .workspace-number-editor[data-mode="step"] { grid-template-columns: 50px minmax(0, 10ch) 50px; min-height: 78px; padding-inline: 0; }
 .workspace-number-editor[data-mode="step"] .workspace-number-operation { width: 48px; min-height: 46px; border-radius: 9px; font-size: 26px; }
