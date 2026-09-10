@@ -71,11 +71,12 @@ describe('workspace numeric input modes', () => {
     expect(screen.getByRole('dialog')).not.toHaveClass('workspace-number-value-dialog');
   });
 
-  it('keeps an empty numeric editor at a non-zero input width', () => {
+  it('keeps an empty numeric editor on the original non-zero grid track', () => {
     const column = { ...createColumn('數量', 'number'), numberInputMode: 'adjust' as const };
     render(<CellInputDialog column={column} value={null} onSave={vi.fn()} />);
 
-    expect(screen.getByRole('spinbutton', { name: '數量輸入' })).toHaveStyle({ '--workspace-number-input-min-width': '12ch' });
+    expect(screen.getByRole('spinbutton', { name: '數量輸入' })).not.toHaveAttribute('style', expect.stringContaining('--workspace-number-input-min-width'));
+    expect(document.querySelector('.workspace-number-editor')).toHaveAttribute('data-mode', 'direct');
   });
 
   it('keeps the numeric field width when switching to an adjustment', async () => {

@@ -199,9 +199,11 @@ describe('workspace browser policies', () => {
     expect(selectionFooterRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionFooterRule).toMatch(/border-top:/);
     const datetimeDialogRule = styles.match(/\.workspace-datetime-dialog\s*\{([^}]*)\}/)?.[1];
-    expect(datetimeDialogRule).toMatch(/width:\s*fit-content/);
-    expect(datetimeDialogRule).toMatch(/min-width:\s*min\(340px,\s*calc\(100vw - 28px\)\)/);
+    const datetimeContentRule = styles.match(/\.workspace-datetime-dialog \.workspace-dialog-content\s*\{([^}]*)\}/)?.[1];
+    expect(datetimeDialogRule).toMatch(/width:\s*min\(340px,\s*75vw\)/);
+    expect(datetimeDialogRule).toMatch(/min-width:\s*min\(340px,\s*75vw\)/);
     expect(datetimeDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
+    expect(datetimeContentRule).toMatch(/width:\s*100%/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
@@ -250,7 +252,7 @@ describe('workspace browser policies', () => {
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 
-  it('gives value dialogs a floor, content sizing, and a width ceiling', () => {
+  it('keeps value dialogs at their original floor while sizing numeric content independently', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
@@ -260,31 +262,32 @@ describe('workspace browser policies', () => {
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
 
-    expect(valueDialogRule).toMatch(/width:\s*fit-content/);
+    expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
     expect(valueDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
     expect(valueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
+    expect(valueDialogRule).not.toMatch(/width:\s*fit-content/);
+    expect(styles.match(/\.workspace-value-dialog \.workspace-dialog-content\s*\{([^}]*)\}/)?.[1]).toMatch(/width:\s*100%/);
     expect(valueInputRule).toMatch(/width:\s*100%/);
     expect(numericDialogRule).toMatch(/width:\s*fit-content/);
     expect(numericDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
     expect(numericDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(numericContentRule).toMatch(/width:\s*fit-content/);
-    expect(numericInputRule).toMatch(/width:\s*fit-content/);
-    expect(numericInputRule).toMatch(/min-width:\s*0/);
+    expect(numericContentRule).toMatch(/margin-inline:\s*auto/);
     expect(numericInputRule).toMatch(/field-sizing:\s*content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(12ch, max-content\)/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 
-  it('applies the floor-and-ceiling rule to value dialogs on mobile', () => {
+  it('keeps mobile value dialogs at their original floor and cap', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 820px)'));
     const mobileValueDialogRule = mobileStyles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const mobileNumericDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
 
     expect(mobileValueDialogRule).toBeDefined();
-    expect(mobileValueDialogRule).toMatch(/width:\s*fit-content/);
+    expect(mobileValueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
     expect(mobileValueDialogRule).toMatch(/min-width:\s*min\(360px,\s*50vw\)/);
     expect(mobileValueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
     expect(mobileNumericDialogRule).toBeDefined();
@@ -299,7 +302,7 @@ describe('workspace browser policies', () => {
     const stepOperationRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const stepInputRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
 
-    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(0, max-content\) 50px/);
+    expect(stepRule).toMatch(/grid-template-columns:\s*50px minmax\(10ch, max-content\) 50px/);
     expect(stepOperationRule).toMatch(/width:\s*48px/);
     expect(stepOperationRule).toMatch(/min-height:\s*46px/);
     expect(stepInputRule).toMatch(/text-align:\s*center/);
@@ -317,12 +320,12 @@ describe('workspace browser policies', () => {
     const integerValueRule = styles.match(/\.workspace-number-aligned-value\.is-integer\s*\{([^}]*)\}/)?.[1];
 
     expect(editorRule).toMatch(/width:\s*fit-content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\)/);
+    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(12ch, max-content\)/);
     expect(editorRule).toMatch(/padding:\s*4px 0 6px/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
-    expect(numberInputRule).toMatch(/width:\s*max-content/);
-    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*12ch\)/);
+    expect(numberInputRule).toMatch(/width:\s*100%/);
+    expect(numberInputRule).toMatch(/min-width:\s*0/);
     expect(numberInputRule).toMatch(/padding-inline:\s*2px/);
     expect(adjustmentOperationRule).toMatch(/grid-column:\s*1/);
     expect(adjustmentSubtractRule).toMatch(/grid-row:\s*3/);
@@ -337,8 +340,8 @@ describe('workspace browser policies', () => {
     const plainEditorRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\]\s*\{([^}]*)\}/)?.[1];
     const plainInputRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\] \.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
 
-    expect(numberInputRule).toMatch(/min-width:\s*var\(--workspace-number-input-min-width,\s*12ch\)/);
-    expect(plainEditorRule).toMatch(/grid-template-columns:\s*minmax\(0, max-content\)/);
+    expect(numberInputRule).toMatch(/min-width:\s*0/);
+    expect(plainEditorRule).toMatch(/grid-template-columns:\s*minmax\(12ch, max-content\)/);
     expect(plainInputRule).toMatch(/grid-column:\s*1/);
   });
 
