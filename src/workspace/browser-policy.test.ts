@@ -198,7 +198,7 @@ describe('workspace browser policies', () => {
     expect(selectionListContainerRule).toMatch(/max-height:\s*min\(calc\(75dvh - 80px\)/);
     expect(selectionFooterRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionFooterRule).toMatch(/border-top:/);
-    expect(styles).toMatch(/\.workspace-datetime-dialog\s*\{[^}]*width:\s*min\(340px,\s*75vw\)/);
+    expect(styles).toMatch(/\.workspace-datetime-dialog\s*\{[^}]*width:\s*min\(340px,\s*calc\(100vw - 28px\)\)/);
     expect(selectionListRule).toMatch(/justify-content:\s*flex-start/);
     expect(selectionListRule).toMatch(/font-size:\s*16px/);
     expect(selectionIndicatorRule).toMatch(/width:\s*17px/);
@@ -247,32 +247,41 @@ describe('workspace browser policies', () => {
     expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
   });
 
-  it('sizes value dialogs to their content while keeping numeric input centered', () => {
+  it('keeps shared value dialogs stable while sizing numeric dialogs to their content', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
+    const numericDialogRule = styles.match(/\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
+    const numericContentRule = styles.match(/\.workspace-number-value-dialog \.workspace-dialog-content\s*\{([^}]*)\}/)?.[1];
+    const numericInputRule = styles.match(/\.workspace-number-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const ratioPanelRule = styles.match(/\.workspace-ratio-panel\s*\{([^}]*)\}/)?.[1];
 
-    expect(valueDialogRule).toMatch(/width:\s*fit-content/);
-    expect(valueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
-    expect(valueInputRule).toMatch(/width:\s*fit-content/);
-    expect(valueInputRule).toMatch(/min-width:\s*0/);
-    expect(valueInputRule).toMatch(/field-sizing:\s*content/);
+    expect(valueDialogRule).toMatch(/width:\s*min\(360px,\s*50vw\)/);
+    expect(valueDialogRule).not.toMatch(/fit-content/);
+    expect(valueInputRule).toMatch(/width:\s*100%/);
+    expect(numericDialogRule).toMatch(/width:\s*fit-content/);
+    expect(numericDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
+    expect(numericContentRule).toMatch(/width:\s*fit-content/);
+    expect(numericInputRule).toMatch(/width:\s*fit-content/);
+    expect(numericInputRule).toMatch(/min-width:\s*0/);
+    expect(numericInputRule).toMatch(/field-sizing:\s*content/);
     expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(0, max-content\) 30px/);
     expect(ratioPanelRule).toMatch(/box-sizing:\s*border-box/);
     expect(ratioPanelRule).toMatch(/width:\s*100%/);
     expect(ratioPanelRule).not.toMatch(/justify-self/);
   });
 
-  it('does not let the mobile dialog width override content-sized value editors', () => {
+  it('only lets the numeric mobile dialog override the shared value width', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 820px)'));
     const mobileValueDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
+    const mobileNumericDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
 
-    expect(mobileValueDialogRule).toBeDefined();
-    expect(mobileValueDialogRule).toMatch(/width:\s*fit-content/);
-    expect(mobileValueDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
+    expect(mobileValueDialogRule).toBeUndefined();
+    expect(mobileNumericDialogRule).toBeDefined();
+    expect(mobileNumericDialogRule).toMatch(/width:\s*fit-content/);
+    expect(mobileNumericDialogRule).toMatch(/max-width:\s*min\(360px,\s*calc\(100vw - 24px\)\)/);
   });
 
   it('keeps the original stepper proportions and centers its number', () => {

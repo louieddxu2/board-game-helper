@@ -433,12 +433,15 @@ footer a { color: inherit; }
 .workspace-cell-name-dialog .workspace-form-field { font-size: 0; }
 .workspace-cell-name-dialog textarea { min-height: 42px; max-height: min(42dvh, 280px); overflow: auto; border: 0; background: transparent; font-size: 24px; font-weight: 700; line-height: 1.35; text-align: center; resize: none; }
 .workspace-cell-name-dialog .workspace-dialog-actions { padding-top: 8px; }
-.workspace-value-dialog { width: fit-content; max-width: min(360px, calc(100vw - 24px)); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
+.workspace-value-dialog { width: min(360px, 50vw); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
 .workspace-value-dialog-overlay { place-items: center; align-content: center; background: transparent; }
-.workspace-value-dialog .workspace-dialog-content { display: block; width: fit-content; max-width: 100%; overflow: visible; padding: 0; }
-.workspace-value-dialog .workspace-value-input { width: fit-content; min-width: 0; max-width: 100%; field-sizing: content; min-height: 46px; padding: 10px 12px; border: 0; border-radius: 9px; outline: 0; background: transparent; color: var(--ink); font-size: 28px; font-weight: 700; line-height: 1.25; text-align: center; }
+.workspace-value-dialog .workspace-dialog-content { display: block; overflow: visible; padding: 0; }
+.workspace-value-dialog .workspace-value-input { width: 100%; min-height: 46px; padding: 10px 12px; border: 0; border-radius: 9px; outline: 0; background: transparent; color: var(--ink); font-size: 28px; font-weight: 700; line-height: 1.25; text-align: center; }
 .workspace-value-dialog .workspace-value-textarea { min-height: 46px; max-height: min(42dvh, 280px); overflow: auto; resize: none; white-space: pre-wrap; }
 .workspace-value-dialog .workspace-value-input:focus { border: 0; outline: 0; }
+.workspace-number-value-dialog { width: fit-content; max-width: min(360px, calc(100vw - 24px)); }
+.workspace-number-value-dialog .workspace-dialog-content { width: fit-content; max-width: 100%; }
+.workspace-number-value-dialog .workspace-value-input { width: fit-content; min-width: 0; max-width: 100%; field-sizing: content; }
 .workspace-number-editor-shell { display: block; min-width: 0; }
 .workspace-number-editor { --workspace-number-fraction-width: 2ch; --workspace-number-input-min-width: 12ch; display: grid; width: fit-content; max-width: 100%; grid-template-columns: 30px minmax(0, max-content) 30px; justify-content: center; align-items: center; min-height: 104px; padding: 4px 0 6px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .workspace-number-input-shell { grid-column: 2; grid-row: 1; min-width: 0; border: 1px solid rgba(22,53,47,.28); border-radius: 8px; background: rgba(255,253,248,.56); box-shadow: inset 0 0 0 1px rgba(255,253,248,.22); }
@@ -484,7 +487,7 @@ footer a { color: inherit; }
 .workspace-number-input-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 .workspace-number-input-mode-options button { min-height: 34px; padding: 4px 8px; border: 1px solid rgba(23, 47, 40, .18); border-radius: 7px; background: rgba(255, 253, 248, .45); color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; }
 .workspace-number-input-mode-options button.selected { border-color: var(--green); background: var(--green); color: var(--white); }
-.workspace-datetime-dialog { width: min(340px, 75vw); background: rgba(236,230,216,.94); backdrop-filter: none; }
+.workspace-datetime-dialog { width: min(340px, calc(100vw - 28px)); background: rgba(236,230,216,.94); backdrop-filter: none; }
 .workspace-datetime-dialog .workspace-dialog-content { display: block; overflow: visible; padding: 6px 12px 14px; }
 .workspace-datetime-editor { display: grid; gap: 8px; width: 100%; color: var(--ink); user-select: none; -webkit-user-select: none; }
 .workspace-datetime-wheel-row { display: flex; align-items: stretch; justify-content: center; gap: 4px; }
@@ -679,7 +682,8 @@ footer a { color: inherit; }
   .workspace-cell-external { width: 28px; justify-content: center; padding: 3px; }
   .workspace-zoom-indicator { padding-right: 10px; }
   .workspace-dialog { align-self: center; width: min(460px, 80vw); max-height: min(calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); border-radius: 12px; }
-  .workspace-dialog.workspace-value-dialog { width: fit-content; max-width: min(360px, calc(100vw - 24px)); }
+  .workspace-value-dialog { width: min(360px, 50vw); }
+  .workspace-dialog.workspace-number-value-dialog { width: fit-content; max-width: min(360px, calc(100vw - 24px)); }
   .workspace-dialog.workspace-bulk-number-dialog.is-expanded { max-height: calc(var(--workspace-visual-viewport-height, 100dvh) - 16px); }
   .workspace-bulk-number-dialog.is-expanded .workspace-dialog-content { overflow: hidden; }
   .workspace-ratio-panel { padding: 3px 8px 8px; }
@@ -695,7 +699,7 @@ footer a { color: inherit; }
   .workspace-name-dialog, .workspace-confirm-dialog, .workspace-cell-name-dialog { width: min(360px, 50vw); }
   .workspace-cell-name-dialog .workspace-dialog-content { padding: 10px 12px 4px; }
   .workspace-cell-name-dialog.has-leading-action .workspace-dialog-content { padding-top: 10px; }
-  .workspace-datetime-dialog { width: min(340px, 75vw); }
+  .workspace-datetime-dialog { width: min(340px, calc(100vw - 28px)); }
   .workspace-value-dialog .workspace-value-input { min-height: 42px; padding: 4px 10px; }
   .workspace-value-dialog .workspace-value-textarea { min-height: 42px; }
   .workspace-link-dialog .workspace-dialog-content { padding: 10px; }

@@ -60,6 +60,17 @@ describe('workspace numeric input modes', () => {
     expect(editor).toHaveAttribute('data-has-adjustment-controls', 'false');
   });
 
+  it('scopes content-sized dialog styling to numeric editors', () => {
+    const numberColumn = { ...createColumn('數量', 'number'), numberInputMode: 'input' as const };
+    const textColumn = createColumn('備註', 'text');
+    render(<CellInputDialog column={numberColumn} value={2} onSave={vi.fn()} />);
+    expect(screen.getByRole('dialog')).toHaveClass('workspace-number-value-dialog');
+
+    cleanup();
+    render(<CellInputDialog column={textColumn} value="備註" onSave={vi.fn()} />);
+    expect(screen.getByRole('dialog')).not.toHaveClass('workspace-number-value-dialog');
+  });
+
   it('keeps an empty numeric editor at a non-zero input width', () => {
     const column = { ...createColumn('數量', 'number'), numberInputMode: 'adjust' as const };
     render(<CellInputDialog column={column} value={null} onSave={vi.fn()} />);
