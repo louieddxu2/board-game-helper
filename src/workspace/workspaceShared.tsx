@@ -1,5 +1,5 @@
 import { WorkspaceModalCloseContext, type WorkspaceModalCloseReason, type WorkspaceModalOwner } from './workspaceModalClose';
-import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceNumberInputMode } from './types';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
@@ -247,6 +247,17 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHT
   useLayoutEffect(() => { resize(); }, [props.value, resize]);
   return <textarea {...props} ref={textareaRef} rows={1} onInput={(event) => { resize(); props.onInput?.(event); }} />;
 });
+
+let workspaceModalScrollLockCount = 0;
+let workspaceModalPreviousBodyOverflow = '';
+
+const workspaceModalFocusableSelector = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
+const workspaceModalFocusableElements = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll<HTMLElement>(workspaceModalFocusableSelector)).filter((element) => {
+  const style = window.getComputedStyle(element);
+  return element.getClientRects().length > 0 && style.visibility !== 'hidden';
+});
+
 type WorkspaceModalProps = {
   title: string;
   children: React.ReactNode;
@@ -262,19 +273,69 @@ type WorkspaceModalProps = {
 
 export const WorkspaceModal = ({ title, children, actions, leadingAction, owner, onClose, onRequestClose, className = '', dialogKind = 'standard' }: WorkspaceModalProps) => {
   const dispatchClose = useContext(WorkspaceModalCloseContext);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const titleId = useId();
   const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
     const onDismiss = () => { if (onRequestClose) onRequestClose(reason); else onClose?.(); };
     if (owner && dispatchClose) dispatchClose(owner, reason, onDismiss);
     else onDismiss();
   }, [dispatchClose, onClose, onRequestClose, owner]);
+  const isTopmost = useCallback(() => {
+    const overlays = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay'));
+    return overlays.at(-1) === overlayRef.current;
+  }, []);
+  const focusFirstDialogControl = useCallback(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.contains(document.activeElement)) return;
+    const content = dialog.querySelector<HTMLElement>('.workspace-dialog-content');
+    const contentControl = content && Array.from(content.querySelectorAll<HTMLElement>(workspaceModalFocusableSelector)).find((element) => {
+      const style = window.getComputedStyle(element);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    const preferred = contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
+    preferred.focus({ preventScroll: true });
+  }, []);
+  useLayoutEffect(() => {
+    focusFirstDialogControl();
+  }, [focusFirstDialogControl]);
+  useLayoutEffect(() => {
+    const body = document.body;
+    if (workspaceModalScrollLockCount === 0) {
+      workspaceModalPreviousBodyOverflow = body.style.overflow;
+      body.style.overflow = 'hidden';
+    }
+    workspaceModalScrollLockCount += 1;
+    return () => {
+      workspaceModalScrollLockCount -= 1;
+      if (workspaceModalScrollLockCount === 0) body.style.overflow = workspaceModalPreviousBodyOverflow;
+    };
+  }, []);
+  useEffect(() => () => {
+    const restoreTarget = restoreFocusRef.current;
+    window.requestAnimationFrame(() => {
+      const topmostOverlay = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay')).at(-1);
+      if (topmostOverlay) {
+        return;
+      }
+      const fallback = document.querySelector<HTMLElement>('.workspace-page button');
+      (restoreTarget?.isConnected && restoreTarget !== document.body ? restoreTarget : fallback)?.focus({ preventScroll: true });
+    });
+  }, []);
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') requestClose('escape'); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || !isTopmost()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      requestClose('escape');
+    };
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [requestClose]);
+  }, [isTopmost, requestClose]);
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
@@ -297,10 +358,18 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
     '--workspace-visual-viewport-height': `${visualViewport.height}px`,
   } as React.CSSProperties : undefined;
   const overlayClass = className.trim().split(/\s+/)[0];
-  return <div className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); requestClose('backdrop'); } }}>
-    <section className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? 'workspace-dialog-title' : undefined}>
+  return <div ref={overlayRef} className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget && isTopmost()) { event.preventDefault(); event.stopPropagation(); requestClose('backdrop'); } }}>
+    <section ref={dialogRef} tabIndex={-1} className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? titleId : undefined} onKeyDownCapture={(event) => {
+      if (event.key !== 'Tab' || !isTopmost()) return;
+      const focusable = workspaceModalFocusableElements(event.currentTarget);
+      if (!focusable.length) { event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }}>
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
-      <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={() => requestClose('close-button')} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
+      <header className="workspace-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" className="workspace-icon-button" onClick={() => requestClose('close-button')} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
       <div className="workspace-dialog-content">{children}</div>
       {actions && <footer className="workspace-dialog-actions">{actions}</footer>}
     </section>

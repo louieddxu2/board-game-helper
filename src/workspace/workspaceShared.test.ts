@@ -1,6 +1,6 @@
 import { createElement } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceModal, calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, matchesWorkspaceFilter, measureWorkspaceText, searchableWorkspaceCellValue, workspaceCellPadding, workspaceMinColumnWidth } from './workspaceShared';
 
 afterEach(() => cleanup());
@@ -21,7 +21,44 @@ describe('workspace editor dialog contract', () => {
 
     const dialog = screen.getByRole('dialog', { name: '操作' });
     expect(dialog).not.toHaveClass('workspace-dialog-editor');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'workspace-dialog-title');
+    const titleId = dialog.getAttribute('aria-labelledby');
+    expect(titleId).toBeTruthy();
+    expect(document.getElementById(titleId!)).toHaveTextContent('操作');
+  });
+
+  it('gives independently mounted titled dialogs distinct accessible title IDs', () => {
+    render(createElement('div', null,
+      createElement(WorkspaceModal, { title: '第一個操作', onClose: () => undefined, children: createElement('p', null, '內容') }),
+      createElement(WorkspaceModal, { title: '第二個操作', onClose: () => undefined, children: createElement('p', null, '內容') }),
+    ));
+
+    const dialogs = screen.getAllByRole('dialog');
+    const titleIds = dialogs.map((dialog) => dialog.getAttribute('aria-labelledby'));
+    expect(new Set(titleIds).size).toBe(2);
+    expect(titleIds.every((id) => id && document.getElementById(id)?.textContent)).toBe(true);
+  });
+
+  it('focuses the first content control and only sends Escape to the visually topmost dialog', () => {
+    const lowerClose = vi.fn();
+    const upperClose = vi.fn();
+    render(createElement('div', null,
+      createElement(WorkspaceModal, { title: '底層', onClose: lowerClose, children: createElement('button', { type: 'button' }, '底層操作') }),
+      createElement(WorkspaceModal, { title: '頂層', onClose: upperClose, children: createElement('input', { 'aria-label': '頂層內容' }) }),
+    ));
+
+    expect(screen.getByRole('textbox', { name: '頂層內容' })).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(upperClose).toHaveBeenCalledOnce();
+    expect(lowerClose).not.toHaveBeenCalled();
+  });
+
+  it('locks document scrolling while a dialog is mounted and restores it on cleanup', () => {
+    const originalOverflow = document.body.style.overflow;
+    const { unmount } = render(createElement(WorkspaceModal, { title: '操作', onClose: () => undefined, children: createElement('p', null, '內容') }));
+
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe(originalOverflow);
   });
 });
 
