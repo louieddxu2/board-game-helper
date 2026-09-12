@@ -1,4 +1,5 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { WorkspaceModalCloseContext, type WorkspaceModalCloseReason, type WorkspaceModalOwner } from './workspaceModalClose';
+import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceNumberInputMode } from './types';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
@@ -246,15 +247,34 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHT
   useLayoutEffect(() => { resize(); }, [props.value, resize]);
   return <textarea {...props} ref={textareaRef} rows={1} onInput={(event) => { resize(); props.onInput?.(event); }} />;
 });
-export const WorkspaceModal = ({ title, children, actions, leadingAction, onClose, className = '', dialogKind = 'standard' }: { title: string; children: React.ReactNode; actions?: React.ReactNode; leadingAction?: React.ReactNode; onClose(): void; className?: string; dialogKind?: 'standard' | 'editor' }) => {
+type WorkspaceModalProps = {
+  title: string;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  leadingAction?: React.ReactNode;
+  owner?: WorkspaceModalOwner;
+  className?: string;
+  dialogKind?: 'standard' | 'editor';
+} & (
+  | { onRequestClose(reason: WorkspaceModalCloseReason): void; onClose?: never }
+  | { onClose(): void; onRequestClose?: never }
+);
+
+export const WorkspaceModal = ({ title, children, actions, leadingAction, owner, onClose, onRequestClose, className = '', dialogKind = 'standard' }: WorkspaceModalProps) => {
+  const dispatchClose = useContext(WorkspaceModalCloseContext);
+  const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
+    const onDismiss = () => { if (onRequestClose) onRequestClose(reason); else onClose?.(); };
+    if (owner && dispatchClose) dispatchClose(owner, reason, onDismiss);
+    else onDismiss();
+  }, [dispatchClose, onClose, onRequestClose, owner]);
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') requestClose('escape'); };
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose]);
+  }, [requestClose]);
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
@@ -277,10 +297,10 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, onClos
     '--workspace-visual-viewport-height': `${visualViewport.height}px`,
   } as React.CSSProperties : undefined;
   const overlayClass = className.trim().split(/\s+/)[0];
-  return <div className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
+  return <div className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); requestClose('backdrop'); } }}>
     <section className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? 'workspace-dialog-title' : undefined}>
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
-      <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={onClose} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
+      <header className="workspace-dialog-heading"><h2 id="workspace-dialog-title">{title}</h2><button type="button" className="workspace-icon-button" onClick={() => requestClose('close-button')} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
       <div className="workspace-dialog-content">{children}</div>
       {actions && <footer className="workspace-dialog-actions">{actions}</footer>}
     </section>

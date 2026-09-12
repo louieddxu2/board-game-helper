@@ -39,6 +39,56 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('WorkspacePage', () => {
+  it.each(['close-button', 'backdrop', 'escape'] as const)('saves a cell draft on %s exactly once', async (reason) => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), '已儲存');
+    if (reason === 'close-button') await user.click(screen.getByRole('button', { name: '關閉' }));
+    else if (reason === 'escape') await user.keyboard('{Escape}');
+    else fireEvent.click(screen.getByRole('dialog').parentElement!);
+
+    expect(screen.getByRole('cell', { name: '花火，名稱：已儲存' })).toBeInTheDocument();
+    expect(saveWorkspace).toHaveBeenCalledTimes(1);
+    expect(saveWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
+      tables: [expect.objectContaining({ rows: [expect.objectContaining({ values: expect.objectContaining({ 'column-text': '已儲存' }) })] })],
+    }));
+  });
+
+  it.each(['close-button', 'browser-back'] as const)('preserves the table name draft policy for %s', async (reason) => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('button', { name: '重新命名表格' }));
+    const input = screen.getByRole('textbox', { name: '名稱' });
+    await user.clear(input);
+    await user.type(input, '新的名稱');
+    if (reason === 'browser-back') fireEvent(window, new PopStateEvent('popstate'));
+    else await user.click(screen.getByRole('button', { name: '關閉' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent(reason === 'browser-back' ? '測試表格' : '新的名稱');
+    expect(saveWorkspace).toHaveBeenCalledTimes(reason === 'browser-back' ? 0 : 1);
+    await user.click(screen.getByRole('button', { name: '重新命名表格' }));
+    expect(screen.getByRole('textbox', { name: '名稱' })).toHaveValue(reason === 'browser-back' ? '測試表格' : '新的名稱');
+  });
+
+  it.each(['close-button', 'browser-back'] as const)('preserves the column draft policy and isolates the next target for %s', async (reason) => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
+    const input = screen.getByRole('textbox', { name: '屬性名稱' });
+    await user.clear(input);
+    await user.type(input, '新屬性');
+    if (reason === 'browser-back') fireEvent(window, new PopStateEvent('popstate'));
+    else await user.click(screen.getByRole('button', { name: '關閉' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('columnheader', { name: reason === 'browser-back' ? '名稱' : '新屬性' })).toBeInTheDocument();
+    expect(saveWorkspace).toHaveBeenCalledTimes(reason === 'browser-back' ? 0 : 1);
+    await user.click(screen.getByRole('columnheader', { name: '數量' }));
+    expect(screen.getByRole('textbox', { name: '屬性名稱' })).toHaveValue('數量');
+  });
+
   const longPress = async (target: Element) => {
     const dispatchPointer = (type: string) => {
       const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 20 });

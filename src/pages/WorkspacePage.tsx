@@ -1,3 +1,4 @@
+import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
@@ -799,8 +800,12 @@ const WorkspacePage = () => {
                                             ? 'search'
                                             : undefined;
 
-  const dismissBrowserLayer = useCallback(() => {
-    switch (browserBackLayer) {
+  const requestClose = useCallback<WorkspaceRequestClose>((owner, reason, onDismiss) => {
+    if (reason !== 'browser-back') {
+      onDismiss?.();
+      return;
+    }
+    switch (owner) {
       case 'google-drive': driveBackup.close(); break;
       case 'confirm': setConfirmDialog(undefined); break;
       case 'workspace-import': setWorkspaceImport(undefined); break;
@@ -825,9 +830,9 @@ const WorkspacePage = () => {
       case 'search': clearSearchAndFilters(); break;
       default: break;
     }
-  }, [browserBackLayer, clearSearchAndFilters, closeBottomNavigationDialog, closeBulkSelection, closeDrawer, driveBackup]);
+  }, [clearSearchAndFilters, closeBottomNavigationDialog, closeBulkSelection, closeDrawer, driveBackup]);
 
-  useWorkspaceBrowserBack({ active: Boolean(browserBackLayer), onBack: dismissBrowserLayer });
+  useWorkspaceBrowserBack({ active: Boolean(browserBackLayer), onBack: () => { if (browserBackLayer) requestClose(browserBackLayer, 'browser-back'); } });
 
   useEffect(() => {
     if (!focusTarget) return;
@@ -1025,9 +1030,9 @@ const WorkspacePage = () => {
     </>;
   }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, bulkSelectedRowIds, bulkSelection, configuring, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale]);
 
-  if (!data) return <section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section>;
+  if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section></WorkspaceModalCloseContext.Provider>;
 
-  return <section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
+  return <WorkspaceModalCloseContext.Provider value={requestClose}><section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading">
@@ -1093,18 +1098,18 @@ const WorkspacePage = () => {
      {bulkEditorOpen && bulkColumn && (bulkColumn.inputType === 'number'
        ? <WorkspaceBulkNumberDialog column={bulkColumn} rows={bulkRows.map((row, index) => ({ rowId: row.id, label: (rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${index + 1} 個物件` }))} initialTotal={typeof bulkDraftValue === 'number' ? bulkDraftValue : null} onClose={() => setBulkEditorOpen(false)} onConfirm={(result) => { setBulkEditorOpen(false); if (result) commitBulkSelection({ sharedValue: result.total, distributedValues: result.values }); }} />
        : bulkColumn.inputType === 'link'
-       ? <LinkInputDialog column={bulkColumn} value={bulkDraftValue} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: value })} />
+       ? <LinkInputDialog owner="bulk-editor" column={bulkColumn} value={bulkDraftValue} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: value })} />
        : bulkColumn.inputType === 'select' || bulkColumn.inputType === 'dynamic-select'
        ? bulkColumn.isMultiple
          ? <WorkspaceBulkMultiSelectDialog column={bulkColumn} rows={bulkMultiSelectRows} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(intents) => { setBulkEditorOpen(false); commitBulkCellUpdates(applyWorkspaceMultiSelectBatch(bulkMultiSelectRows, intents)); }} />
-         : <WorkspaceSelectionDialog column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />
-       : <CellInputDialog column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />)}
+         : <WorkspaceSelectionDialog owner="bulk-editor" column={bulkColumn} value={bulkDraftValue} options={bulkColumn.inputType === 'dynamic-select' && table ? getDynamicOptions(table, bulkColumn.id) : bulkColumn.options} onClose={() => setBulkEditorOpen(false)} onConfirm={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />
+       : <CellInputDialog owner="bulk-editor" column={bulkColumn} value={bulkDraftValue} inputLabel={`${bulkColumn.name}批次輸入`} showConfirm onDismiss={() => setBulkEditorOpen(false)} onSave={(value) => commitBulkSelection({ sharedValue: coerceCellValue(bulkColumn, value) })} />)}
      {hiddenFieldsEditor && hiddenEditorRow && <HiddenFieldsDialog title={hiddenFieldsEditor.title} row={hiddenEditorRow} columns={hiddenColumns} optionsByColumn={hiddenOptionsByColumn} onSave={(values) => saveHiddenFields(hiddenFieldsEditor.rowId, values)} />}
     {pasteDialogOpen && pasteTarget && <WorkspacePasteDialog targetLabel={pasteTargetLabel} onClose={() => setPasteDialogOpen(false)} onApply={pasteMatrix} />}
     {tableImportPreview && <WorkspaceTableImportPreviewDialog table={tableImportPreview.table} source={tableImportPreview.source} onClose={() => setTableImportPreview(undefined)} onImport={finishTableImport} />}
-    {workspaceImport && <WorkspaceModal title="匯入整個資料庫" onClose={() => setWorkspaceImport(undefined)} className="workspace-import-preview-dialog"><div className="workspace-import-summary"><strong>{workspaceImport.tables.length} 張表格 · {workspaceImport.nodes.filter((node) => node.type === 'folder').length} 個資料夾</strong><span>{workspaceImport.tables.reduce((total, item) => total + item.rows.length, 0)} 個物件</span></div><div className="workspace-import-table-names">{workspaceImport.tables.map((item) => <span key={item.id}>{item.name}</span>)}</div><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
+    {workspaceImport && <WorkspaceModal owner="workspace-import" title="匯入整個資料庫" onRequestClose={() => setWorkspaceImport(undefined)} className="workspace-import-preview-dialog"><div className="workspace-import-summary"><strong>{workspaceImport.tables.length} 張表格 · {workspaceImport.nodes.filter((node) => node.type === 'folder').length} 個資料夾</strong><span>{workspaceImport.tables.reduce((total, item) => total + item.rows.length, 0)} 個物件</span></div><div className="workspace-import-table-names">{workspaceImport.tables.map((item) => <span key={item.id}>{item.name}</span>)}</div><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
     {driveBackup.dialogOpen && <GoogleDriveBackupDialog status={driveBackup.status} busy={driveBackup.busy} message={driveBackup.message} error={driveBackup.error} record={driveBackup.record} remoteFile={driveBackup.remoteFile} remoteConflict={driveBackup.remoteConflict} authorized={driveBackup.authorized} onClose={driveBackup.close} onConnect={() => void driveBackup.connect()} onBackup={() => void driveBackup.backup()} onFindRemote={() => void driveBackup.findRemote()} onRestore={() => void driveBackup.restore()} onOverwrite={() => void driveBackup.backup({ force: true })} onDisconnect={() => void driveBackup.disconnect()} />}
-  </section>;
+  </section></WorkspaceModalCloseContext.Provider>;
 };
 
 export { WorkspacePage };

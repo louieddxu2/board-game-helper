@@ -53,7 +53,7 @@ export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, 
     : status === 'dirty' || status === 'never'
       ? <ActionButton onClick={onBackup} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>
       : <ActionButton onClick={onFindRemote} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="download" size={18} />尋找雲端備份</ActionButton>;
-  return <WorkspaceModal title="Google Drive 備份" onClose={onClose} className="workspace-google-drive-dialog">
+  return <WorkspaceModal owner="google-drive" title="Google Drive 備份" onRequestClose={onClose} className="workspace-google-drive-dialog">
     <div className="workspace-google-drive-status">
       <WorkspaceIcon name="download" size={22} />
       <div><strong>{statusLabel(status)}</strong><small>{statusDetail({ status, authorized, record })}</small></div>

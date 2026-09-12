@@ -63,7 +63,7 @@ export const WorkspaceBulkMultiSelectDialog = ({ column, rows, options, onClose,
     setQuery('');
   };
 
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={onClose} className="workspace-selection-dialog workspace-bulk-multi-dialog" actions={<div className="workspace-bulk-multi-actions">
+  return <WorkspaceModal owner="bulk-editor" title={column.name} dialogKind="editor" onRequestClose={onClose} className="workspace-selection-dialog workspace-bulk-multi-dialog" actions={<div className="workspace-bulk-multi-actions">
     <button type="button" className={`workspace-selection-tool is-clear ${allRemoveActive ? 'is-active' : ''}`} aria-pressed={allRemoveActive} onClick={() => setIntents(allRemoveActive ? [] : allRemoveIntents)}><WorkspaceIcon name="close" size={15} />全部移除</button>
     <button type="button" className="workspace-dialog-button primary" disabled={!intents.length} onClick={() => onConfirm(intents)}>確認</button>
   </div>}>
@@ -125,7 +125,7 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
     onConfirm({ total: numericTotal, values: expanded ? values : undefined });
   };
   const validDistribution = total.trim() !== '' && values !== undefined;
-  return <WorkspaceModal title={column.name} dialogKind="editor" onClose={onClose} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`} actions={<button type="button" className="workspace-dialog-button primary" onClick={finish}>確認</button>}>
+  return <WorkspaceModal owner="bulk-editor" title={column.name} dialogKind="editor" onRequestClose={onClose} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`} actions={<button type="button" className="workspace-dialog-button primary" onClick={finish}>確認</button>}>
     <form className="workspace-bulk-number-form" onSubmit={(event) => { event.preventDefault(); finish(); }}>
       <input autoFocus aria-label={`${column.name}批次輸入`} className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={total} onChange={(event) => setTotal(event.target.value)} />
       <button type="button" className="workspace-ratio-disclosure" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><WorkspaceIcon name="chevron" size={16} />比例分配</button>

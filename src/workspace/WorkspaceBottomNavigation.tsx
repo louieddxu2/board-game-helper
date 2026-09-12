@@ -80,7 +80,7 @@ export const WorkspaceBottomNavigationDialog = ({ tables, tableIds, onChange, on
     onChange(next);
   };
 
-  return <WorkspaceModal title="底部導覽列" dialogKind="editor" onClose={onClose} className="workspace-bottom-navigation-dialog">
+  return <WorkspaceModal owner="bottom-navigation" title="底部導覽列" dialogKind="editor" onRequestClose={onClose} className="workspace-bottom-navigation-dialog">
     <div className="workspace-bottom-navigation-list" aria-label="已加入導覽的表格">
       {pinnedItems.map((item, index) => <div
         key={item.tableId}
