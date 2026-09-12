@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
@@ -49,6 +49,16 @@ export function useWorkspaceActions({
   const importTableInputRef = useRef<HTMLInputElement>(null);
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
   const importTableParentId = useRef<string | null>(null);
+  const importGeneration = useRef(0);
+  const importOwnerMounted = useRef(false);
+
+  useEffect(() => {
+    importOwnerMounted.current = true;
+    return () => {
+      importOwnerMounted.current = false;
+      importGeneration.current += 1;
+    };
+  }, []);
 
   const openNameDialog = (mode: NameDialogState['mode'], initialValue: string, parentId?: string | null, node?: WorkspaceNode) => setNameDialog({ mode, initialValue, parentId, node });
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
@@ -213,28 +223,34 @@ export function useWorkspaceActions({
   };
 
   const readImport = async (file: File, kind: 'table' | 'workspace') => {
+    // Both file inputs feed the same import workflow. Only an actual new file
+    // replaces the current request; opening and cancelling a picker does not.
+    const generation = ++importGeneration.current;
+    const parentId = importTableParentId.current;
+    const isCurrentImport = () => importOwnerMounted.current && importGeneration.current === generation;
     setNotice(`正在匯入「${file.name}」…`);
     try {
       const imported = kind === 'workspace' && (/\.zip$/i.test(file.name) || file.type === 'application/zip')
         ? await importWorkspaceArchive(file)
         : await importWorkspaceXlsx(file);
+      if (!isCurrentImport()) return;
       if (kind === 'table') {
         if (imported.isWorkspace || !imported.table || !data) throw new Error('請選擇單張表格檔案');
-        setTableImportPreview({ table: imported.table, source: imported.source, parentId: importTableParentId.current });
+        setTableImportPreview({ table: imported.table, source: imported.source, parentId });
         setNotice('檔案已讀取，請檢查匯入內容');
       } else {
         if (!imported.isWorkspace || !imported.data || !data) throw new Error('請選擇整個資料庫檔案');
         setWorkspaceImport(imported.data);
       }
     } catch (error) {
+      if (!isCurrentImport()) return;
       console.error('[workspace-import] failed', { kind, fileName: file.name, fileSize: file.size, error });
       setNotice(error instanceof Error ? `匯入失敗：${error.message}` : '匯入失敗');
     }
   };
 
-  const finishTableImport = (tableCopy: WorkspaceTable) => {
+  const finishTableImport = (tableCopy: WorkspaceTable, parentId: string | null) => {
     if (!data) return;
-    const parentId = importTableParentId.current;
     const node = createNode('table', tableCopy.name, parentId, getChildren(data, parentId).length, tableCopy.id);
     commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id });
     setTableImportPreview(undefined);
