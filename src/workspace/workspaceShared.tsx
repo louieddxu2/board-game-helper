@@ -266,15 +266,17 @@ type WorkspaceModalProps = {
   owner?: WorkspaceModalOwner;
   className?: string;
   dialogKind?: 'standard' | 'editor';
+  initialFocus?: 'content' | 'close-button';
 } & (
   | { onRequestClose(reason: WorkspaceModalCloseReason): void; onClose?: never }
   | { onClose(): void; onRequestClose?: never }
 );
 
-export const WorkspaceModal = ({ title, children, actions, leadingAction, owner, onClose, onRequestClose, className = '', dialogKind = 'standard' }: WorkspaceModalProps) => {
+export const WorkspaceModal = ({ title, children, actions, leadingAction, owner, onClose, onRequestClose, className = '', dialogKind = 'standard', initialFocus = 'content' }: WorkspaceModalProps) => {
   const dispatchClose = useContext(WorkspaceModalCloseContext);
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const titleId = useId();
   const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
@@ -294,9 +296,11 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
       const style = window.getComputedStyle(element);
       return style.display !== 'none' && style.visibility !== 'hidden';
     });
-    const preferred = contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
+    const preferred = initialFocus === 'close-button'
+      ? closeButtonRef.current ?? dialog
+      : contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
     preferred.focus({ preventScroll: true });
-  }, []);
+  }, [initialFocus]);
   useLayoutEffect(() => {
     focusFirstDialogControl();
   }, [focusFirstDialogControl]);
@@ -369,7 +373,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}
-      <header className="workspace-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" className="workspace-icon-button" onClick={() => requestClose('close-button')} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
+      <header className="workspace-dialog-heading"><h2 id={titleId}>{title}</h2><button ref={closeButtonRef} type="button" className="workspace-icon-button" onClick={() => requestClose('close-button')} aria-label="關閉"><WorkspaceIcon name="close" size={21} /></button></header>
       <div className="workspace-dialog-content">{children}</div>
       {actions && <footer className="workspace-dialog-actions">{actions}</footer>}
     </section>

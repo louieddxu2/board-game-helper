@@ -358,7 +358,6 @@ export const WorkspaceSelectionDialog = ({ owner = 'selection-editor', column, v
   const isDynamic = column.inputType === 'dynamic-select';
   const [query, setQuery] = useState('');
   const [selectedSet, setSelectedSet] = useState<Set<string>>(() => new Set(isMultiple ? parseMultiSelectValues(value) : [value == null ? '' : String(value)]));
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const allOptions = useMemo(() => Array.from(new Set([...options, ...selectedSet].filter(Boolean))), [options, selectedSet]);
   const filtered = useMemo(() => {
@@ -432,9 +431,9 @@ export const WorkspaceSelectionDialog = ({ owner = 'selection-editor', column, v
     else onClose();
   };
 
-  return <WorkspaceModal owner={owner} title={column.name} dialogKind="editor" onRequestClose={finish} className="workspace-selection-dialog" actions={onConfirm ? <button type="button" className="workspace-dialog-button primary" onClick={confirmSelection}>確認</button> : undefined}>
+  return <WorkspaceModal owner={owner} title={column.name} dialogKind="editor" onRequestClose={finish} className="workspace-selection-dialog" initialFocus={isDynamic ? 'close-button' : 'content'} actions={onConfirm ? <button type="button" className="workspace-dialog-button primary" onClick={confirmSelection}>確認</button> : undefined}>
     {isDynamic && <div className="workspace-selection-head">
-      <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input ref={inputRef} inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
+      <label className="workspace-selection-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋或新增選項</span><input inputMode="text" enterKeyHint="done" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); submitQuery(); } }} placeholder="搜尋或輸入…" /><button type="button" onClick={() => setQuery('')} aria-label="清除搜尋" disabled={!query}><WorkspaceIcon name="close" size={17} /></button></label>
     </div>}
     <div className="workspace-selection-list" role="listbox" aria-label={`${column.name}選項`}>
       {filtered.map((option, index) => {
