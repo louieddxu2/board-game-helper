@@ -9,9 +9,8 @@ Handle exactly one clearly defined visual UI defect.
 
 Before editing:
 - Inspect git status and preserve all pre-existing changes.
-- Reproduce the defect in a rendered browser at the specified viewport and interaction state.
 - State the visible mismatch, expected result, and evidence-backed root cause in one sentence.
-- If browser verification is unavailable or the root cause is not supported by rendered DOM, computed styles, or layout measurements, return BLOCKED without editing.
+- Use a rendered browser only when it can diagnose or verify the requested visual mismatch. Do not block a clear, directly owned presentation fix merely because browser access is unavailable.
 
 Implementation:
 - Make one cohesive minimal patch touching at most two tracked files.
@@ -20,7 +19,7 @@ Implementation:
 - Do not modify protected author copy.
 
 Verification:
-- Verify the same rendered browser state after the patch.
+- Verify the same rendered browser state only when rendered evidence is useful for this change. Otherwise report the code evidence and the specific reason browser verification was unnecessary.
 - Do not use CSS source-text or regex tests as evidence of visual success.
 - If the patch fails, remove only your own patch with apply_patch, preserve all pre-existing work, and do not attempt a second implementation.
 - Do not commit or push.

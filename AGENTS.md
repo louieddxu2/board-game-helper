@@ -5,26 +5,24 @@ GPT-6 Astra is the project coordinator. Use the project-scoped custom agents in 
 ## Parent-agent responsibilities
 
 1. The parent translates the user's request into concrete acceptance criteria, identifies missing decisions, delegates work, integrates returned evidence, reviews the final scoped diff, and owns the commit.
-2. Do not use GPT-6 Astra for broad repository searches, routine file reading, implementation, browser operation, test execution, type-checking, or builds when a custom subagent can do that work.
-3. When code ownership, current behavior, dependencies, or the likely change surface is unclear, delegate a focused read-only investigation to `luna_project_reader`. Give it specific questions rather than asking it to understand the whole repository.
+2. Use GPT-6 Astra for task framing, architecture, scope decisions, integration, review, commits, releases, and cross-module reasoning. Delegate routine implementation, repository retrieval, test authoring, and deterministic validation when a suitable custom subagent exists. For a narrow, low-risk change with no suitable route, Astra may act directly rather than creating coordination overhead.
+3. When code ownership, current behavior, dependencies, or the likely change surface is genuinely unclear, delegate a focused read-only investigation to `luna_project_reader`. Do not require a reader pass for a clearly owned, small change.
 4. If returned evidence is incomplete or contradictory, state the concern and send one narrower follow-up retrieval to `luna_project_reader`. Do not silently fill an evidence gap by browsing the repository broadly in the parent.
 5. The parent may read the small final diff and directly relevant subagent report needed to integrate the work. It must not edit implementation files itself while an implementation route is available.
 6. Subagents must never commit or push. After successful implementation and validation, the parent stages only the scoped files and creates the local commit required by this project.
 
-## UI routing
+## UI and interaction routing
 
-1. Trigger this routing automatically whenever the user requests a change to layout, spacing, sizing, alignment, typography, color, visibility, responsive behavior, or other rendered presentation. The user does not need to name an agent.
-2. First write concrete visual acceptance criteria and identify the viewport and interaction states that matter.
-3. For one clear visual adjustment that does not change data, business logic, accessibility behavior, or an API contract, delegate directly to `luna_ui` exactly once. It may perform the narrow reading needed for its own fix; do not add a separate reader pass unless ownership or cause is unclear.
-4. For an unclear change surface, first use `luna_project_reader`, then pass its evidence and the acceptance criteria to `luna_ui`. For an originally ambiguous request, multiple interacting components, or substantial product/design judgment, ask the user for the missing decision when necessary, then route implementation to `terra_ui`.
-5. After an implementation agent returns `PASS`, delegate only the narrow deterministic checks relevant to its changed files to `ui_test_runner`. The implementation agent and parent must not rerun those checks.
-6. If `luna_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, delegate the same acceptance criteria and all evidence to `terra_ui` exactly once. Do not ask Luna to try another implementation workaround.
-7. If `terra_ui` returns `FAIL` or `ESCALATE`, or its post-fix checks fail, the parent reviews the evidence, raises the unresolved concern, and either requests one focused retrieval from `luna_project_reader` or stops for the user's decision. GPT-6 Astra must not become a third implementation loop.
-8. If any agent returns `BLOCKED`, stop and ask the user only for the missing decision, reproduction input, or visual reference.
-9. A UI implementation agent may report success only after rendered browser verification. Tests that inspect CSS source text or regex matches do not prove visual success.
-10. `ui_test_runner` may run tests, type-checks, or builds selected by the parent, but it must never edit code, update snapshots, fix failures, commit, or push.
-11. Add tests only after rendered behavior passes, and only for a stable behavior contract. For a reversible, low-impact presentation change, do not add tests that merely mirror implementation details.
-12. Keep validation proportional to the changed files. Once narrow checks pass, do not broaden or repeat them unless new edits, failures, or unresolved evidence justify it.
+1. First classify the request. A layout problem concerns geometry, responsive placement, clipping, visibility, or visual hierarchy. An interaction problem concerns focus, keyboard display, keyboard navigation, state transitions, saving, or the user's preferred flow. Do not treat an interaction problem as a visual problem merely because it appears in the UI.
+2. Use rendered-browser verification only when the rendered state can distinguish success from failure. Do not require it for every UI change. Code evidence, a stable behavior test, or an explicit user requirement may be stronger evidence.
+3. Desktop rendering never substitutes for mobile evidence. For a mobile-specific geometry, viewport, or touch issue, use the requested mobile viewport only when it can answer the question. For mobile interaction preferences such as whether a virtual keyboard should open, follow the user's stated intent and the focus contract; do not invent a visual verification requirement.
+4. For one clear, presentation-only adjustment with a directly owned selector or component, delegate directly to `luna_ui` exactly once. It may make the narrow reading needed for its own fix. Browser inspection is optional and required only when rendered evidence is necessary to diagnose or verify the stated mismatch.
+5. For focus, keyboard, scroll, state-transition, data, accessibility, or multiple-component behavior, use the ordinary implementation route. Use `terra_ui` only when resolving the issue requires cross-component rendered diagnosis, viewport measurement, or a broader visual implementation. Do not use Terra merely because a change is interactive.
+6. When ownership or cause is genuinely unclear, obtain one focused `luna_project_reader` report first. Research agents are advisor-first: they provide evidence, uncertainty, smallest change surface, and a recommendation; they do not edit, test, or commit unless explicitly reassigned.
+7. All test creation, repair, and refactoring belongs to `luna_test_author`. It changes test files only and implements stable behavior contracts chosen by the parent. `ui_test_runner` only runs the exact commands selected by the parent.
+8. A user request to skip verification is valid for a low-risk, reversible adjustment. Record that verification was skipped; do not replace it with broader checks. For high-risk persistence, security, migration, or release work, explain the concrete missing check before proceeding.
+9. Keep validation proportional. Do not add tests that mirror implementation details, repeat a passing check, or broaden the suite without changed code, a failure, or unresolved risk.
+10. If `luna_ui` or `terra_ui` returns `FAIL`, `ESCALATE`, or `BLOCKED`, the parent decides whether focused evidence is missing. Ask the user only for a decision, reproduction input, or visual reference that changes the outcome.
 
 # Project-specific author copy rules
 
