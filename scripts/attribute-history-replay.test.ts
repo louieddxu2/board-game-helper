@@ -43,12 +43,15 @@ const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeC
 };
 
 test('compatibility cleanup preserves votes and refuses to drop nonempty tables', () => {
-  let before: unknown;
+  let before: Array<Record<string, unknown>> = [];
   const { sqlite } = setup(undefined, (db) => {
-    before = db.prepare('SELECT * FROM attribute_vote_responses ORDER BY response_id').all();
+    before = db.prepare('SELECT * FROM attribute_vote_responses ORDER BY response_id').all() as Array<Record<string, unknown>>;
   });
   try {
-    expect(sqlite.prepare('SELECT * FROM attribute_vote_responses ORDER BY response_id').all()).toEqual(before);
+    const expected = before.map((row) => row.session_id === 'attribute-import:attribute_candidate:49'
+      ? { ...row, subject_a_id: 'attribute_subject_game:game_bgg_40628' }
+      : row);
+    expect(sqlite.prepare('SELECT * FROM attribute_vote_responses ORDER BY response_id').all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);
   } finally { sqlite.close(); }
   expect(() => setup(undefined, (db) => {
@@ -81,10 +84,23 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-condition'").get()).toMatchObject({attribute_id:'attribute_win_method',rating_a:7,rating_b:null,comparison:'B_HIGHER',question_high_pole:'high'});
     expect(sqlite.prepare("SELECT * FROM attribute_vote_events WHERE id='history-event'").get()).toMatchObject({attribute_id:'attribute_win_method',value:2});
     expect(sqlite.prepare("SELECT COUNT(*) n FROM attribute_vote_events WHERE session_id='win-conversion-v1'").get()).toMatchObject({n:0});
-    const unrelatedBefore = sqlite.prepare("SELECT * FROM attribute_score_states WHERE attribute_id <> 'attribute_win_method' ORDER BY subject_id,attribute_id").all();
     await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
     expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").get()).toMatchObject({status:'completed'});
-    expect(sqlite.prepare("SELECT * FROM attribute_score_states WHERE attribute_id <> 'attribute_win_method' ORDER BY subject_id,attribute_id").all()).toEqual(unrelatedBefore);
+    expect(sqlite.prepare("SELECT subject_id FROM attribute_import_candidates WHERE id='attribute_candidate:49'").get()).toMatchObject({
+      subject_id: 'attribute_subject_game:game_bgg_40628',
+    });
+    expect(sqlite.prepare("SELECT display_name,english_name FROM games WHERE id='game_attribute_import_juicy_fruits'").get()).toMatchObject({
+      display_name: '神奇果汁', english_name: 'Juicy Fruits',
+    });
+    const moved = sqlite.prepare(`SELECT state.subject_id,state.direct_count
+      FROM attribute_score_states state
+      JOIN attribute_vote_responses response ON response.attribute_id=state.attribute_id
+      WHERE response.session_id='attribute-import:attribute_candidate:49'
+        AND state.subject_id IN ('attribute_subject_game:game_bgg_40628','attribute_subject_game:game_attribute_import_juicy_fruits')
+      ORDER BY state.subject_id,state.attribute_id`).all() as Array<{ subject_id: string; direct_count: number }>;
+    expect(moved).toHaveLength(12);
+    expect(moved.filter((row) => row.subject_id === 'attribute_subject_game:game_bgg_40628').every((row) => row.direct_count === 1)).toBe(true);
+    expect(moved.filter((row) => row.subject_id === 'attribute_subject_game:game_attribute_import_juicy_fruits').every((row) => row.direct_count === 0)).toBe(true);
     const read = () => sqlite.prepare("SELECT score,rating_deviation,direct_sum,direct_count,evidence_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get();
     const before = read();
     const timestamp = Date.now() + 1000;

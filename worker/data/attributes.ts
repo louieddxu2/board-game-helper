@@ -1524,11 +1524,14 @@ export const processAttributeMergeRebuildJobs = async (
   db: Database,
   timestamp = Date.now(),
   maxBatches = ATTRIBUTE_MERGE_REBUILD_MAX_BATCHES_PER_RUN,
-): Promise<void> => {
+): Promise<boolean> => {
+  let processedAny = false;
   for (let batch = 0; batch < maxBatches; batch += 1) {
     const processed = await processAttributeMergeRebuildBatch(db, timestamp);
     if (!processed) break;
+    processedAny = true;
   }
+  return processedAny;
 };
 
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
