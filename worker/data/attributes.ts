@@ -1265,38 +1265,26 @@ const initializeAttributeMergeRebuild = async (
   await db.batch([
     db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)'),
     db.statement('DELETE FROM attribute_pair_stats WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
-    db.statement('DELETE FROM attribute_score_states WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
     db.statement(`
-      INSERT OR IGNORE INTO attribute_score_states
+      WITH values_for_replay(subject_id, attribute_id, value) AS (
+        SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, rating_a FROM attribute_vote_responses WHERE rating_a IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
+        UNION ALL SELECT CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END, attribute_id, rating_b FROM attribute_vote_responses WHERE rating_b IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
+        UNION ALL SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, value FROM attribute_vote_events e WHERE kind='rating' AND value IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ? AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id=e.response_id AND r.attribute_id IS NOT NULL)
+      ), averages AS (SELECT subject_id,attribute_id,SUM(value) total,COUNT(*) count FROM values_for_replay GROUP BY subject_id,attribute_id)
+      INSERT INTO attribute_score_states
         (subject_id, attribute_id, score, direct_sum, direct_count, comparison_count,
          decisive_comparison_count, evidence_count, model_version, updated_at,
          rating_deviation, random_key, question_slot)
-      SELECT s.id, a.id, 5, 0, 0, 0, 0, 0, ?, ?, 3,
+      SELECT s.id, a.id, COALESCE(d.total*1.0/d.count,5), COALESCE(d.total,0), COALESCE(d.count,0), 0, 0, COALESCE(d.count,0), ?, ?, CASE WHEN d.count IS NULL THEN 3 ELSE 1.5/sqrt(d.count) END,
         lower(hex(randomblob(16))), (abs(random()) % ${ATTRIBUTE_QUESTION_SLOT_COUNT}) + 1
       FROM attribute_subjects s
       CROSS JOIN attributes a
       LEFT JOIN games g ON g.id = s.game_id
+      LEFT JOIN averages d ON d.subject_id=s.id AND d.attribute_id=a.id
       WHERE a.is_active = 1 AND (? IS NULL OR a.id = ?)
         AND ${votableSubjectCondition('s', 'g')}
-    `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp, job.attribute_id, job.attribute_id),
-    db.statement(`
-      WITH values_for_replay(subject_id, attribute_id, value) AS (
-        SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, rating_a
-        FROM attribute_vote_responses WHERE rating_a IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-        UNION ALL SELECT CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END, attribute_id, rating_b
-        FROM attribute_vote_responses WHERE rating_b IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-        UNION ALL SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, value
-        FROM attribute_vote_events e WHERE kind = 'rating' AND value IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-          AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id = e.response_id AND r.attribute_id IS NOT NULL)
-      ), averages AS (SELECT subject_id, attribute_id, SUM(value) AS total, COUNT(*) AS count FROM values_for_replay GROUP BY subject_id, attribute_id)
-      UPDATE attribute_score_states AS state
-      SET score = COALESCE((SELECT total * 1.0 / count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 5),
-          direct_sum = COALESCE((SELECT total FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
-          direct_count = COALESCE((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
-          evidence_count = COALESCE((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
-          rating_deviation = CASE WHEN EXISTS (SELECT 1 FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id) THEN 1.5 / sqrt((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id)) ELSE 3 END
-      WHERE (? IS NULL OR state.attribute_id = ?)
-    `).bind(job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.attribute_id,job.attribute_id),
+      ON CONFLICT(subject_id,attribute_id) DO UPDATE SET score=excluded.score,direct_sum=excluded.direct_sum,direct_count=excluded.direct_count,comparison_count=0,decisive_comparison_count=0,evidence_count=excluded.evidence_count,model_version=excluded.model_version,updated_at=excluded.updated_at,rating_deviation=excluded.rating_deviation
+    `).bind(job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,ATTRIBUTE_SCORE_MODEL_VERSION,timestamp,job.attribute_id,job.attribute_id),
     db.statement(`
       UPDATE attribute_merge_rebuild_jobs
       SET status = 'running', reset_completed = 1, updated_at = ?
@@ -1715,3 +1703,6 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
     if (!lockReleasedInCommit) await releaseAttributeWriteLock(db, lock);
   }
 };
+
+
+
