@@ -1263,6 +1263,7 @@ const initializeAttributeMergeRebuild = async (
   timestamp: number,
 ) => {
   await db.batch([
+    db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)'),
     db.statement('DELETE FROM attribute_pair_stats WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
     db.statement('DELETE FROM attribute_score_states WHERE (? IS NULL OR attribute_id = ?)').bind(job.attribute_id, job.attribute_id),
     db.statement(`
@@ -1278,6 +1279,24 @@ const initializeAttributeMergeRebuild = async (
       WHERE a.is_active = 1 AND (? IS NULL OR a.id = ?)
         AND ${votableSubjectCondition('s', 'g')}
     `).bind(ATTRIBUTE_SCORE_MODEL_VERSION, timestamp, job.attribute_id, job.attribute_id),
+    db.statement(`
+      WITH values_for_replay(subject_id, attribute_id, value) AS (
+        SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, rating_a
+        FROM attribute_vote_responses WHERE rating_a IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
+        UNION ALL SELECT CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END, attribute_id, rating_b
+        FROM attribute_vote_responses WHERE rating_b IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
+        UNION ALL SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, value
+        FROM attribute_vote_events e WHERE kind = 'rating' AND value IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
+          AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id = e.response_id AND r.attribute_id IS NOT NULL)
+      ), averages AS (SELECT subject_id, attribute_id, SUM(value) AS total, COUNT(*) AS count FROM values_for_replay GROUP BY subject_id, attribute_id)
+      UPDATE attribute_score_states AS state
+      SET score = COALESCE((SELECT total * 1.0 / count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 5),
+          direct_sum = COALESCE((SELECT total FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
+          direct_count = COALESCE((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
+          evidence_count = COALESCE((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id), 0),
+          rating_deviation = CASE WHEN EXISTS (SELECT 1 FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id) THEN 1.5 / sqrt((SELECT count FROM averages a WHERE a.subject_id=state.subject_id AND a.attribute_id=state.attribute_id)) ELSE 3 END
+      WHERE (? IS NULL OR state.attribute_id = ?)
+    `).bind(job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.source_subject_id,job.target_subject_id,job.attribute_id,job.attribute_id,job.cutoff_created_at,job.attribute_id,job.attribute_id),
     db.statement(`
       UPDATE attribute_merge_rebuild_jobs
       SET status = 'running', reset_completed = 1, updated_at = ?
@@ -1299,14 +1318,14 @@ const queryAttributeMergeHistoryBatch = async (
         e.attribute_id,
         e.subject_a_id,
         e.subject_b_id,
-        CASE WHEN e.kind = 'rating' THEN e.value ELSE NULL END AS rating_a,
+        NULL AS rating_a,
         NULL AS rating_b,
         CASE WHEN e.kind = 'comparison' THEN e.result ELSE NULL END AS comparison,
         e.created_at
       FROM attribute_vote_events e
       JOIN attributes active_attribute
         ON active_attribute.id = e.attribute_id AND active_attribute.is_active = 1
-      WHERE (? IS NULL OR e.attribute_id = ?) AND e.created_at <= ?
+      WHERE e.kind = 'comparison' AND (? IS NULL OR e.attribute_id = ?) AND e.created_at <= ?
         AND (e.created_at > ? OR (e.created_at = ? AND
           ('event:' || e.response_id || ':' ||
             CASE WHEN e.kind = 'rating' THEN '1:' ELSE '2:' END ||
@@ -1330,14 +1349,14 @@ const queryAttributeMergeHistoryBatch = async (
         r.attribute_id,
         r.subject_a_id,
         r.subject_b_id,
-        r.rating_a,
-        r.rating_b,
+        NULL AS rating_a,
+        NULL AS rating_b,
         r.comparison,
         r.created_at
       FROM attribute_vote_responses r
       JOIN attributes active_attribute
         ON active_attribute.id = r.attribute_id AND active_attribute.is_active = 1
-      WHERE (? IS NULL OR r.attribute_id = ?) AND r.attribute_id IS NOT NULL AND r.created_at <= ?
+      WHERE (? IS NULL OR r.attribute_id = ?) AND r.attribute_id IS NOT NULL AND r.comparison IS NOT NULL AND r.created_at <= ?
         AND (r.created_at > ? OR (r.created_at = ? AND
           ('response:' || r.response_id) > ?))
       ORDER BY r.created_at, stream_id
@@ -1406,6 +1425,7 @@ const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number
         SET status = 'completed', updated_at = ?
         WHERE id = ? AND status = 'running'
       `).bind(timestamp, job.id).run();
+      await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
       return true;
     }
 
@@ -1506,6 +1526,7 @@ const processAttributeMergeRebuildBatch = async (db: Database, timestamp: number
       WHERE id = ? AND status = 'running'
     `).bind(last.created_at, last.stream_id, rows.length < ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE ? 'completed' : 'running', timestamp, job.id));
     await db.batch(statements);
+    if (rows.length < ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'attribute_merge_rebuild_failed';

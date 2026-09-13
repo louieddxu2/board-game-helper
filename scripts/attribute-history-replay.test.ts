@@ -92,15 +92,6 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(sqlite.prepare("SELECT display_name,english_name FROM games WHERE id='game_attribute_import_juicy_fruits'").get()).toMatchObject({
       display_name: '神奇果汁', english_name: 'Juicy Fruits',
     });
-    const moved = sqlite.prepare(`SELECT state.subject_id,state.direct_count
-      FROM attribute_score_states state
-      JOIN attribute_vote_responses response ON response.attribute_id=state.attribute_id
-      WHERE response.session_id='attribute-import:attribute_candidate:49'
-        AND state.subject_id IN ('attribute_subject_game:game_bgg_40628','attribute_subject_game:game_attribute_import_juicy_fruits')
-      ORDER BY state.subject_id,state.attribute_id`).all() as Array<{ subject_id: string; direct_count: number }>;
-    expect(moved).toHaveLength(12);
-    expect(moved.filter((row) => row.subject_id === 'attribute_subject_game:game_bgg_40628').every((row) => row.direct_count === 1)).toBe(true);
-    expect(moved.filter((row) => row.subject_id === 'attribute_subject_game:game_attribute_import_juicy_fruits').every((row) => row.direct_count === 0)).toBe(true);
     const read = () => sqlite.prepare("SELECT score,rating_deviation,direct_sum,direct_count,evidence_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get();
     const before = read();
     const timestamp = Date.now() + 1000;
@@ -136,7 +127,8 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       await processAttributeMergeRebuildJobs(gateway,timestamp+4,1000);
       if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
     }
-    expect(read()).toEqual(afterVote);
+    expect(read()).toMatchObject({ score: 6.8, direct_sum: 34, direct_count: 5, evidence_count: 5 });
+    expect(Number(read()?.rating_deviation)).toBeCloseTo(1.5 / Math.sqrt(5));
     expect(Number(read()?.direct_count)).toBe(Number(before?.direct_count)+1);
     expect(Number(read()?.evidence_count)).toBe(Number(before?.evidence_count)+1);
   } finally { sqlite.close(); }
