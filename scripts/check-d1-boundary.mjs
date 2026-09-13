@@ -69,8 +69,8 @@ if (!/get\('\/api\/export\/public',\s*requireRole\('admin'\)/.test(adminRouteSou
 }
 
 const productionConfigSource = fs.readFileSync(path.resolve('wrangler.production.jsonc'), 'utf8');
-if (!productionConfigSource.includes('"crons": ["0 16 * * *"]')) {
-  violations.push('wrangler.production.jsonc: anonymous view cleanup requires the single daily Taipei-midnight trigger');
+if (!productionConfigSource.includes('"crons": ["0 1 * * *"]')) {
+  violations.push('wrangler.production.jsonc: cleanup and weekly cache require the single daily 09:00 Taipei trigger');
 }
 
 const clientFiles = ['src/pages', 'src/components'];
