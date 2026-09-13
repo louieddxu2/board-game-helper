@@ -255,10 +255,15 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '編輯' }));
     await user.click(screen.getByRole('button', { name: '新增物件' }));
     await longPress(screen.getByRole('cell', { name: '花火，名稱：空白' }));
+    expect(screen.getByRole('table')).toHaveStyle({ '--workspace-table-body-offset': '0px' });
 
     await user.click(screen.getByRole('button', { name: '搜尋並繼續批次選取' }));
     const search = screen.getByRole('searchbox', { name: '搜尋後繼續選取' });
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    viewport.scrollTop = 180;
     await user.type(search, '物件 2');
+    expect(viewport.scrollTop).toBe(0);
+    expect(screen.getByRole('table')).toHaveStyle({ '--workspace-table-body-offset': 'calc(var(--workspace-toolbar-row-height) * 2)' });
     await user.click(screen.getByRole('cell', { name: '物件 2，名稱：空白' }));
     expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
 
@@ -267,6 +272,34 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText('已選 2 · 顯示 1 / 2 項')).not.toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜尋後繼續選取' }).parentElement).toHaveTextContent('1 / 2');
+  });
+
+  it('reveals the first object from the top pull only after batch selection has begun', async () => {
+    render(<WorkspacePage />);
+    const firstCell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await longPressWithoutSyntheticClick(firstCell);
+    const table = screen.getByRole('table');
+    expect(table).toHaveStyle({ '--workspace-table-body-offset': '0px' });
+
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 800 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    const dispatchPointer = (element: Element, type: string, y: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 120, clientY: y });
+      Object.defineProperties(event, { pointerId: { value: 48 }, pointerType: { value: 'touch' } });
+      fireEvent(element, event);
+    };
+
+    dispatchPointer(firstCell, 'pointerdown', 100);
+    dispatchPointer(viewport, 'pointermove', 220);
+    expect(table).toHaveStyle({ '--workspace-table-body-offset': 'calc(var(--workspace-toolbar-row-height) * 1)' });
+    dispatchPointer(viewport, 'pointerup', 220);
   });
 
   it('pastes a rectangular range from the last selected cell and undoes it as one action', async () => {

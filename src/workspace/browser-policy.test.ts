@@ -85,6 +85,7 @@ describe('workspace browser policies', () => {
     const stackedFilterbarRule = styles.match(/\.workspace-filterbar\.has-bulk-toolbar\s*\{([^}]*)\}/)?.[1];
     const tableHeaderOffsetVariableRule = styles.match(/\.workspace-toolbar-layer \.workspace-table\s*\{([^}]*)\}/)?.[1];
     const tableHeaderOffsetRule = styles.match(/\.workspace-toolbar-layer \.workspace-table thead th\s*\{([^}]*)\}/)?.[1];
+    const tableBodyOffsetRule = styles.match(/\.workspace-toolbar-layer \.workspace-table tbody th, \.workspace-toolbar-layer \.workspace-table tbody td\s*\{([^}]*)\}/)?.[1];
 
     expect(toolbarLayerRule).toMatch(/position:\s*relative/);
     expect(toolbarLayerRule).toMatch(/flex:\s*1/);
@@ -98,6 +99,7 @@ describe('workspace browser policies', () => {
     expect(tableHeaderOffsetVariableRule).toMatch(/--workspace-table-header-offset:\s*calc\(var\(--workspace-toolbar-row-height\) \* var\(--workspace-toolbar-row-count\)\)/);
     expect(tableHeaderOffsetRule).toMatch(/top:\s*0/);
     expect(tableHeaderOffsetRule).toMatch(/transform:\s*translate3d\(0,\s*var\(--workspace-table-header-offset,\s*0px\),\s*0\)/);
+    expect(tableBodyOffsetRule).toMatch(/transform:\s*translate3d\(0,\s*var\(--workspace-table-body-offset,\s*0px\),\s*0\)/);
   });
 
   it('anchors workspace toasts to the app bar instead of the first table row', () => {

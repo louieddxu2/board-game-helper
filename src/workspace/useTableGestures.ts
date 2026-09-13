@@ -21,6 +21,7 @@ interface UseTableGesturesProps {
   onDrawerSwipeProgress?: (deltaX: number) => void;
   onDrawerSwipeEnd?: (deltaX: number) => void;
   onOpenSearch?: () => void;
+  onRevealTopRow?: () => void;
   searchOpen?: boolean;
 }
 
@@ -39,7 +40,7 @@ export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0
 export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
 export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, searchOpen = false }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -354,7 +355,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         const viewportMaxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
         const boundaryMaxTop = viewportMaxTop > 0 ? viewportMaxTop : maxTop;
         const boundaryEdge = getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, boundaryMaxTop, deltaY, bounceAxis);
-        if (boundaryEdge && event.pointerType !== 'mouse') armBoundarySearchHold(event.pointerId, boundaryEdge);
+        const pullsPastTop = bounceAxis === 'y'
+          && panStart.current.scrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE
+          && targetScrollTop < 0
+          && deltaY > 0;
+        if (pullsPastTop && onRevealTopRow) {
+          clearBoundarySearchHold();
+          onRevealTopRow();
+        } else if (boundaryEdge && event.pointerType !== 'mouse') armBoundarySearchHold(event.pointerId, boundaryEdge);
         else clearBoundarySearchHold();
       }
 

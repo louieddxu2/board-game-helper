@@ -85,6 +85,7 @@ const WorkspacePage = () => {
   const [viewportWidth, setViewportWidth] = useState(0);
   const [visualViewportHeight, setVisualViewportHeight] = useState<number>();
   const [bulkSelection, setBulkSelection] = useState<WorkspaceBulkSelection>();
+  const [bulkTopRowRevealed, setBulkTopRowRevealed] = useState(false);
   const [bulkEditorOpen, setBulkEditorOpen] = useState(false);
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [lastPasteTarget, setLastPasteTarget] = useState<{ rowId: string; columnId: string }>();
@@ -359,6 +360,7 @@ const WorkspacePage = () => {
     ];
   }, [displayedColumns, rowHeader, table]);
   const hasActiveSearchState = Boolean(searchQuery.trim()) || Object.values(headerFilters).some((state) => hasWorkspaceFilterCriteria(state) || Boolean(state.sort));
+  const topRowRevealActive = searchOpen || bulkTopRowRevealed;
   const clearSearchAndFilters = useCallback(() => {
     setSearchQuery('');
     clearFilters();
@@ -469,9 +471,13 @@ const WorkspacePage = () => {
     setSearchOpen(false);
     setEditBarOpen(false);
     setTableActionsOpen(false);
+    setBulkTopRowRevealed(false);
     setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId] });
     setNotice('已進入批次選取');
   }, [bulkSelection, table, setSearchOpen]);
+  useEffect(() => {
+    if (!bulkSelection) setBulkTopRowRevealed(false);
+  }, [bulkSelection]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -508,7 +514,7 @@ const WorkspacePage = () => {
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, searchOpen });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen });
 
   const tableGestureHandlersRef = useRef({
     beginTableReorder, moveTableReorder, endTableReorder,
@@ -933,6 +939,7 @@ const WorkspacePage = () => {
     maxHeight: `${visualViewportHeight}px`,
   } as React.CSSProperties : undefined;
   const workspaceToolbarRowCount = Number(Boolean(bulkSelection && bulkColumn)) + Number(searchOpen) + Number(editBarOpen || tableActionsOpen);
+  const topRowRevealCount = topRowRevealActive ? Number(Boolean(bulkSelection && bulkColumn)) + Number(searchOpen) : 0;
 
   // Keep the expensive table subtree out of drawer-only state updates. Real workspaces can
   // contain hundreds of rows; opening the drawer must not block the first click while React
@@ -941,7 +948,7 @@ const WorkspacePage = () => {
     if (!table || !tableNode) return null;
     return <>
       <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={stableBeginTablePan} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
-        <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, width: `${renderedTableWidth}px` } as React.CSSProperties}>
+        <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, '--workspace-table-body-offset': topRowRevealCount ? `calc(var(--workspace-toolbar-row-height) * ${topRowRevealCount})` : '0px', width: `${renderedTableWidth}px` } as React.CSSProperties}>
           <colgroup>{renderedColumnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
           {!table.transposed ? <><thead><tr>
             {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}${activeCellColumnId === rowHeader.id ? ' workspace-context-active' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(rowHeader) }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={activeHeaderFilterKeys.has(`column:${rowHeader.id}`)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
@@ -1028,7 +1035,7 @@ const WorkspacePage = () => {
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, bulkSelectedRowIds, bulkSelection, configuring, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, bulkSelectedRowIds, bulkSelection, configuring, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount]);
 
   if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section></WorkspaceModalCloseContext.Provider>;
 
@@ -1037,7 +1044,7 @@ const WorkspacePage = () => {
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading">
         <button type="button" className="workspace-appbar-button workspace-menu-button" aria-label={searchOpen ? '清除搜尋與篩選' : '開啟目錄'} onClick={searchOpen ? clearSearchAndFilters : openDrawer} disabled={!table}><WorkspaceIcon name={searchOpen ? 'filter-off' : 'menu'} size={29} /></button>
-        {searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} autoFocus /><span className="workspace-appbar-search-count">{filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
+        {searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={searchQuery} onChange={(event) => { if (viewportRef.current) viewportRef.current.scrollTop = 0; setSearchQuery(event.target.value); }} autoFocus /><span className="workspace-appbar-search-count">{filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
       </div>
       <div className="workspace-appbar-actions">
         <button type="button" className={`workspace-appbar-button ${searchOpen ? 'active' : ''} ${hasActiveSearchState ? 'has-active-filter' : ''}`} aria-label={bulkSelection ? '搜尋並繼續批次選取' : '搜尋'} onClick={() => { if (!bulkSelection) closeBulkSelection(); setSearchOpen((open) => !open); }} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
