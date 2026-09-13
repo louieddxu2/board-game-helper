@@ -61,8 +61,8 @@ describe('account-gated anonymous game views', () => {
     expect(db.batch).toHaveBeenCalledOnce();
   });
 
-  test('keeps the catalog rebuild on the Sunday UTC run', () => {
-    expect(isWeeklyCatalogRun(Date.parse('2026-08-02T16:00:00.000Z'))).toBe(true);
-    expect(isWeeklyCatalogRun(Date.parse('2026-08-03T16:00:00.000Z'))).toBe(false);
+  test('keeps the catalog rebuild on the Monday 09:00 Taipei run', () => {
+    expect(isWeeklyCatalogRun(Date.parse('2026-08-03T01:00:00.000Z'))).toBe(true);
+    expect(isWeeklyCatalogRun(Date.parse('2026-08-02T01:00:00.000Z'))).toBe(false);
   });
 });

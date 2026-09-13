@@ -47,4 +47,5 @@ export const cleanupGameViewData = async (db: Database, timestamp: number): Prom
   ]);
 };
 
-export const isWeeklyCatalogRun = (timestamp: number): boolean => new Date(timestamp).getUTCDay() === 0;
+/** The production cron runs at 01:00 UTC (09:00 Taipei), after the free D1 daily reset. */
+export const isWeeklyCatalogRun = (timestamp: number): boolean => new Date(timestamp).getUTCDay() === 1;
