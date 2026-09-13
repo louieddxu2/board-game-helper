@@ -96,22 +96,4 @@ SET subject_a_id = CASE
     END
 WHERE session_id = 'attribute-import:attribute_candidate:49';
 
--- Replay canonical response history at the next scheduled run.  Using the
--- same source and target subject requests a full rebuild without remapping
--- unrelated Juicy Fruits activity.
-UPDATE attribute_merge_rebuild_jobs
-SET source_game_id = 'game_bgg_40628',
-    target_game_id = 'game_bgg_40628',
-    source_subject_id = 'attribute_subject_game:game_bgg_40628',
-    target_subject_id = 'attribute_subject_game:game_bgg_40628',
-    attribute_id = NULL,
-    status = 'pending',
-    reset_completed = 0,
-    cursor_created_at = -1,
-    cursor_stream_id = '',
-    cutoff_created_at = CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER),
-    error_message = NULL,
-    updated_at = CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)
-WHERE id = 'win-history-replay-v1';
-
 DROP TABLE migration_0094_guard;

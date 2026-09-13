@@ -140,8 +140,8 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
   ]);
-  const rebuiltAttributes = await processAttributeMergeRebuildJobs(db, controller.scheduledTime);
-  if (rebuiltAttributes || isWeeklyCatalogRun(controller.scheduledTime)) {
+  await processAttributeMergeRebuildJobs(db, controller.scheduledTime);
+  if (isWeeklyCatalogRun(controller.scheduledTime)) {
     await Promise.all([
       rebuildGameCatalog(db, controller.scheduledTime),
       rebuildAttributeCatalog(db, controller.scheduledTime),
