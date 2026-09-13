@@ -75,6 +75,17 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     db.prepare(`INSERT INTO attribute_vote_responses
       (response_id,attribute_id,subject_a_id,rating_a,comparison,activity_json,session_id,created_at,updated_at)
       VALUES('history-condition','attribute_end_condition',?,7,'B_HIGHER','[]','test',2,2)`).run(subject);
+    const comparisonSubjects = db.prepare(`
+      SELECT id FROM attribute_subjects
+      WHERE id <> ? AND game_id IS NOT NULL
+      ORDER BY id LIMIT 2
+    `).all(subject) as Array<{ id: string }>;
+    for (let index = 0; index < 200; index += 1) {
+      db.prepare(`INSERT INTO attribute_vote_responses
+        (response_id,attribute_id,subject_a_id,subject_b_id,comparison,activity_json,session_id,created_at,updated_at)
+        VALUES(?, 'attribute_win_method', ?, ?, 'A_HIGHER', '[]', 'write-budget', ?, ?)`)
+        .run(`memory-only-comparison-${index}`, comparisonSubjects[0].id, comparisonSubjects[1].id, index + 10, index + 10);
+    }
   });
   try {
     const history = sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-score'").get()!;
@@ -86,6 +97,9 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(sqlite.prepare("SELECT COUNT(*) n FROM attribute_vote_events WHERE session_id='win-conversion-v1'").get()).toMatchObject({n:0});
     await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
     expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").get()).toMatchObject({status:'completed'});
+    // 200 comparisons affect calculation only. The replay writes each final
+    // state once, rather than writing the two states and pair stats per vote.
+    expect(gateway.metrics?.().rowsWritten).toBeLessThan(6000);
     expect(sqlite.prepare("SELECT subject_id FROM attribute_import_candidates WHERE id='attribute_candidate:49'").get()).toMatchObject({
       subject_id: 'attribute_subject_game:game_bgg_40628',
     });
