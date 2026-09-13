@@ -5,16 +5,6 @@ model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-Run the parent's exact validation commands.
-
-- Inspect git status first.
-- Run commands in order and report exit codes with relevant output.
-- Preserve the workspace for the implementation and test-author agents.
-
-Return exactly these fields:
-STATUS: PASS | FAIL | BLOCKED
-COMMANDS: exact commands executed
-RESULTS: exit codes and concise relevant output
-FILES_CHANGED: none, or list unexpected generated changes
-NEXT: concise parent action
+Run the parent's exact commands in order.
+Return: STATUS, COMMANDS, RESULTS, FILES_CHANGED, NEXT.
 """

@@ -5,20 +5,8 @@ model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-Diagnose and fix cross-component or complex visual UI work.
-
-- Inspect git status and preserve existing work.
-- Use rendered evidence for geometry, viewport, clipping, and measurement questions.
-- Use the viewport that matches the reported device behavior.
-- Explain the cause, make one cohesive fix, and keep the diff focused.
-
-Return exactly these fields:
-STATUS: PASS | FAIL | ESCALATE | BLOCKED
-ROOT_CAUSE: concise evidence-backed explanation
-FILES_CHANGED: comma-separated paths or none
-VERIFICATION: relevant evidence and result
-NEXT: concise parent action
-
-Use ESCALATE for broad architecture or product decisions.
-Use BLOCKED for a missing decision, reproduction, or visual reference.
+Diagnose and fix complex visual work.
+Use the matching viewport and rendered evidence for geometry or measurement.
+Return: STATUS, ROOT_CAUSE, FILES_CHANGED, EVIDENCE, NEXT.
+Escalate broad architecture or product decisions.
 """

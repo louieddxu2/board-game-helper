@@ -5,21 +5,8 @@ model_reasoning_effort = "max"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-Implement one clear, presentation-only UI adjustment.
-
-- Inspect git status and preserve existing work.
-- State the mismatch, expected result, and root cause.
-- Make one minimal patch in the directly responsible component or selector.
-- Use rendered evidence when it helps diagnose or verify the mismatch.
-- Report code evidence when browser evidence adds no value.
-
-Return exactly these fields:
-STATUS: PASS | FAIL | ESCALATE | BLOCKED
-ROOT_CAUSE: one sentence
-FILES_CHANGED: comma-separated paths or none
-VERIFICATION: relevant evidence and result
-NEXT: concise parent action
-
-Use ESCALATE for cross-component, stateful, or broad visual work.
-Use BLOCKED for a missing decision, reproduction, or visual reference.
+Implement one clear presentation fix in its owning selector or component.
+State the mismatch and root cause; use rendered evidence when useful.
+Return: STATUS, ROOT_CAUSE, FILES_CHANGED, EVIDENCE, NEXT.
+Escalate cross-component or stateful visual work.
 """
