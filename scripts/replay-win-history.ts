@@ -5,8 +5,7 @@ import { mkdtempSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Database, DatabaseStatement } from '../worker/data/database';
-import { processAttributeMergeRebuildJobs } from '../worker/data/attributes';
-import { rebuildAttributeCatalog } from '../worker/data/attributeCatalog';
+import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 import { replayAttributeResponses, type AttributeResponseReplayRecord, type OnlineAttributeState } from '../worker/data/attributeScoring';
 
 const apply = process.argv.includes('--apply');
@@ -44,13 +43,7 @@ const db = {
     } finally { unlinkSync(path); rmdirSync(directory); }
   },
 } as Database;
-const pending = await db.statement("SELECT id FROM attribute_merge_rebuild_jobs WHERE status IN ('pending','running')").all<{id:string}>();
-if (pending.results?.some((row) => row.id !== 'win-history-replay-v1')) throw new Error('Another rebuild is active; refusing to run.');
-if (apply) await processAttributeMergeRebuildJobs(db, Date.now(), 100);
-const job = await db.statement("SELECT status,error_message FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").first<{status:string;error_message:string|null}>();
-console.log(JSON.stringify(job));
-if (job?.status !== 'completed') throw new Error('Win-history replay did not complete.');
-if (apply) await rebuildAttributeCatalog(db, Date.now());
+if (apply) await runCompleteAttributeReplay(db, Date.now());
 
 const history = await db.statement(`
   SELECT 'response:' || response_id AS responseId,created_at AS createdAt,attribute_id AS attributeId,

@@ -3,7 +3,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { createDatabase } from '../worker/data/database';
-import { saveAttributeResponse, processAttributeMergeRebuildJobs } from '../worker/data/attributes';
+import { saveAttributeResponse, processAttributeMergeRebuildJobs, replayAllAttributeScores } from '../worker/data/attributes';
 
 const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeCleanup?: (sqlite: DatabaseSync) => void) => {
   const sqlite = new DatabaseSync(':memory:');
@@ -145,5 +145,9 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(Number(read()?.rating_deviation)).toBeCloseTo(1.5 / Math.sqrt(5));
     expect(Number(read()?.direct_count)).toBe(Number(before?.direct_count)+1);
     expect(Number(read()?.evidence_count)).toBe(Number(before?.evidence_count)+1);
+    // A complete replay is independent of merge-job rows and produces the
+    // same materialized state from raw history.
+    await replayAllAttributeScores(gateway, timestamp + 5);
+    expect(read()).toMatchObject({ score: 6.8, direct_sum: 34, direct_count: 5, evidence_count: 5 });
   } finally { sqlite.close(); }
 });

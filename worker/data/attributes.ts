@@ -1428,8 +1428,12 @@ const releaseAttributeMergeJobLock = async (db: Database, lock: { token: string;
     .bind(lock.lockName, lock.token).run();
 };
 
-const processAttributeMergeRebuild = async (db: Database, timestamp: number): Promise<boolean> => {
-  const job = await db.statement(`
+const processAttributeMergeRebuild = async (
+  db: Database,
+  timestamp: number,
+  suppliedJob?: AttributeMergeRebuildJobRow,
+): Promise<boolean> => {
+  const job = suppliedJob ?? await db.statement(`
     SELECT id, source_game_id, target_game_id, source_subject_id, target_subject_id,
       attribute_id, status, reset_completed, cursor_created_at, cursor_stream_id,
       cutoff_created_at, error_message, created_at, updated_at
@@ -1505,11 +1509,11 @@ const processAttributeMergeRebuild = async (db: Database, timestamp: number): Pr
     `).bind(pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count, timestamp));
     for (const statementBatch of chunk(pairStatements, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     await db.batch([
-      db.statement(`
+      ...(suppliedJob ? [] : [db.statement(`
       UPDATE attribute_merge_rebuild_jobs
       SET status = 'completed', reset_completed = 1, cursor_created_at = ?, cursor_stream_id = ?, error_message = NULL, updated_at = ?
       WHERE id = ? AND status IN ('pending', 'running')
-    `).bind(last?.created_at ?? -1, last?.stream_id ?? '', timestamp, job.id),
+    `).bind(last?.created_at ?? -1, last?.stream_id ?? '', timestamp, job.id)]),
       db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1'),
     ]);
     rebuildModeActive = false;
@@ -1517,7 +1521,7 @@ const processAttributeMergeRebuild = async (db: Database, timestamp: number): Pr
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : 'attribute_merge_rebuild_failed';
     if (rebuildModeActive) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
-    await db.statement(`
+    if (!suppliedJob) await db.statement(`
       UPDATE attribute_merge_rebuild_jobs
       SET status = 'failed', error_message = ?, updated_at = ?
       WHERE id = ? AND status IN ('pending', 'running')
@@ -1533,6 +1537,27 @@ export const processAttributeMergeRebuildJobs = async (
   timestamp = Date.now(),
   _maxBatches?: number,
 ): Promise<boolean> => processAttributeMergeRebuild(db, timestamp);
+
+/** Recalculate every active game+attribute from raw votes, without a merge job. */
+export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<boolean> => {
+  if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
+  return processAttributeMergeRebuild(db, timestamp, {
+    id: 'full-attribute-replay',
+    source_game_id: '',
+    target_game_id: '',
+    source_subject_id: '',
+    target_subject_id: '',
+    attribute_id: null,
+    status: 'running',
+    reset_completed: 0,
+    cursor_created_at: -1,
+    cursor_stream_id: '',
+    cutoff_created_at: timestamp,
+    error_message: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+};
 
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
   if (!lock.names.length) return;

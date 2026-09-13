@@ -7,7 +7,7 @@ import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
 import { cleanupAttributeActivityFeed } from './data/attributes';
-import { rebuildAttributeCatalog } from './data/attributeCatalog';
+import { runCompleteAttributeReplay } from './workflows/attributeReplay';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -143,7 +143,7 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
     await Promise.all([
       rebuildGameCatalog(db, controller.scheduledTime),
-      rebuildAttributeCatalog(db, controller.scheduledTime),
+      runCompleteAttributeReplay(db, controller.scheduledTime),
     ]);
   }
 };
