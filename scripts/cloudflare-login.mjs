@@ -75,6 +75,9 @@ export const runLogin = () => new Promise((resolve, reject) => {
     env: wranglerEnvironment(),
     stdio: ['inherit', 'pipe', 'inherit'],
     windowsHide: false,
+    // npx.cmd needs a shell on managed Windows.  Keep this child alive so its
+    // localhost callback server receives the browser authorization response.
+    shell: process.platform === 'win32',
   });
 
   let output = '';
