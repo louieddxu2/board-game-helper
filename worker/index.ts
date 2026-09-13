@@ -6,7 +6,7 @@ import { createDatabase } from './data/database';
 import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
-import { cleanupAttributeActivityFeed, processAttributeMergeRebuildJobs } from './data/attributes';
+import { cleanupAttributeActivityFeed } from './data/attributes';
 import { rebuildAttributeCatalog } from './data/attributeCatalog';
 
 import { authRoutes } from './routes/auth';
@@ -140,7 +140,6 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
   ]);
-  await processAttributeMergeRebuildJobs(db, controller.scheduledTime);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
     await Promise.all([
       rebuildGameCatalog(db, controller.scheduledTime),
