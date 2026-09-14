@@ -202,7 +202,6 @@ describe('AttributesPage question flow', () => {
       fixedSubjectAId: expect.any(String),
       fixedSubjectBId: expect.any(String),
       fixedAttributeId: attribute.id,
-      includeExtremeExamples: false,
     }));
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });

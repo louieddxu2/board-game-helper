@@ -3,14 +3,12 @@ import type {
   AttributeActivity,
   AttributeComparisonResult,
   AttributeDefinition,
-  AttributeExtremeExamples,
   AttributeImportCandidate,
   AttributeMatrixValue,
   AttributeQuestion,
   AttributeQuestionPayload,
   AttributeSubject,
   AttributeSubjectComponent,
-  AttributeScoreExample,
   AttributesPayload,
 } from '../../src/shared/types';
 import { createId } from '../utils';
@@ -31,7 +29,6 @@ import {
 /** Number of random slots used to sample low-confidence game+attribute items. */
 export const ATTRIBUTE_QUESTION_SLOT_COUNT = 200;
 export const ATTRIBUTE_QUESTION_SEED_SLOT_RETRY_LIMIT = 4;
-export const ATTRIBUTE_EXTREME_EXAMPLE_LIMIT = 2;
 export const ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT = 4;
 export const ATTRIBUTE_QUESTION_PAIR_STAT_LIMIT = 4;
 // The voting screen renders five recent records.  Keep the query aligned with
@@ -41,7 +38,7 @@ export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
 /** Local-D1 budget ceiling for a full answer with two ratings and a comparison. */
 export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 40;
 export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 30;
-export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 21;
+export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 17;
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
 export const ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE = 20;
@@ -253,18 +250,6 @@ interface AttributeMergeRebuildJobRow {
   updated_at: number;
 }
 
-interface AttributeExtremeExampleRow {
-  subject_id: string;
-  subject_slug: string;
-  subject_kind: AttributeSubject['kind'];
-  display_name: string;
-  game_id: string | null;
-  game_slug: string | null;
-  secondary_name: string | null;
-  score: number;
-  direction: 'lowest' | 'highest';
-}
-
 interface ResponseContextRow {
   endpoints_json?: string | null;
   scale_type?: string;
@@ -324,7 +309,6 @@ export interface AttributeQuestionOptions {
   fixedSubjectAId?: string;
   fixedSubjectBId?: string;
   fixedAttributeId?: string;
-  includeExtremeExamples?: boolean;
 }
 
 export interface AttributeResponseInput {
@@ -502,59 +486,6 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
     ${pageLimit}
   `).bind(...binds).all<SubjectRow>();
   return result.results ?? [];
-};
-
-const queryAttributeExtremeExamples = async (
-  db: Database,
-  attributeId: string,
-): Promise<AttributeExtremeExamples> => {
-  const querySlice = async (direction: 'lowest' | 'highest') => {
-    const scoreFilter = direction === 'lowest'
-      ? 's.score >= 0 AND s.score <= 2'
-      : 's.score >= 8 AND s.score <= 10';
-    const order = direction === 'lowest' ? 'ASC' : 'DESC';
-    const result = await db.statement(`
-      SELECT s.subject_id, s.score, candidate_subject.slug AS subject_slug,
-        candidate_subject.kind AS subject_kind, candidate_subject.display_name,
-        candidate_subject.game_id, candidate_game.slug AS game_slug,
-        ${subjectSecondaryNameExpression('candidate_subject', 'candidate_game')} AS secondary_name
-      FROM attribute_score_states s
-      JOIN attribute_subjects candidate_subject ON candidate_subject.id = s.subject_id
-      LEFT JOIN games candidate_game ON candidate_game.id = candidate_subject.game_id
-      WHERE s.attribute_id = ?
-        AND s.evidence_count > 0
-        AND ${scoreFilter}
-        AND ${votableSubjectCondition('candidate_subject', 'candidate_game')}
-      ORDER BY s.score ${order}, s.random_key ${order}, s.subject_id ${order}
-      LIMIT ${ATTRIBUTE_EXTREME_EXAMPLE_LIMIT}
-    `).bind(attributeId).all<Omit<AttributeExtremeExampleRow, 'direction'>>();
-    // The score-first example indexes keep the scan inside the requested
-    // extreme band while the stable random key preserves variety between
-    // games without a random-key wraparound query.
-    return (result.results ?? [])
-      .map((row) => ({ ...row, direction } satisfies AttributeExtremeExampleRow));
-  };
-
-  const [lowest, highest] = await Promise.all([querySlice('lowest'), querySlice('highest')]);
-  const rows = [...lowest, ...highest];
-
-  const extremeExamples: AttributeExtremeExamples = { lowest: [], highest: [] };
-  rows.forEach((row) => {
-    const example: AttributeScoreExample = {
-      score: Number(Number(row.score).toFixed(2)),
-      subject: {
-        id: row.subject_id,
-        slug: row.subject_slug,
-        kind: row.subject_kind,
-        displayName: row.display_name,
-        ...(row.secondary_name ? { secondaryName: row.secondary_name } : {}),
-        ...(row.game_id ? { gameId: row.game_id } : {}),
-        ...(row.game_slug ? { gameSlug: row.game_slug } : {}),
-      },
-    };
-    extremeExamples[row.direction].push(example);
-  });
-  return extremeExamples;
 };
 
 const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<string, AttributeSubjectComponent[]>> => {
@@ -1040,10 +971,7 @@ export const queryAttributeQuestionPayload = async (
     queryAttributeQuestion(db, sessionId, options),
     queryRecentActivities(db),
   ]);
-  const extremeExamples = options.includeExtremeExamples !== false && question
-    ? await queryAttributeExtremeExamples(db, question.attribute.id)
-    : { lowest: [], highest: [] } satisfies AttributeExtremeExamples;
-  return { question, activities, extremeExamples, scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION };
+  return { question, activities, scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION };
 };
 
 const toResponseActivitySubject = (id: string, displayName: string, slug: string, gameSlug: string | null) => ({

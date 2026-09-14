@@ -290,7 +290,6 @@ export const AttributesPage = () => {
       fixedSubjectBId: selection.subjectBId,
       fixedAttributeId: selection.attributeId,
       highPole: options.highPole,
-      includeExtremeExamples: false,
     });
     await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
     return {

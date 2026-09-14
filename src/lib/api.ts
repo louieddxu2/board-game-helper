@@ -439,7 +439,7 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
-  attributeQuestion: (sessionId: string, options: { highPole?: 'low' | 'high'; excludeSubjectAId?: string; excludeSubjectBId?: string; excludeAttributeId?: string; fixedSubjectAId?: string; fixedSubjectBId?: string; fixedAttributeId?: string; includeExtremeExamples?: boolean } = {}) => {
+  attributeQuestion: (sessionId: string, options: { highPole?: 'low' | 'high'; excludeSubjectAId?: string; excludeSubjectBId?: string; excludeAttributeId?: string; fixedSubjectAId?: string; fixedSubjectBId?: string; fixedAttributeId?: string } = {}) => {
     const params = new URLSearchParams({ session: sessionId });
     if (options.excludeSubjectAId) params.set('excludeA', options.excludeSubjectAId);
     if (options.excludeSubjectBId) params.set('excludeB', options.excludeSubjectBId);
@@ -447,7 +447,6 @@ export const api = {
     if (options.fixedSubjectAId) params.set('fixedA', options.fixedSubjectAId);
     if (options.fixedSubjectBId) params.set('fixedB', options.fixedSubjectBId);
     if (options.fixedAttributeId) params.set('fixedAttribute', options.fixedAttributeId);
-    if (options.includeExtremeExamples === false) params.set('examples', '0');
     if (options.highPole) params.set('highPole', options.highPole);
     return uncachedRead<AttributeQuestionPayload>(`/api/attributes/question?${params.toString()}`, 'attribute questions are session-specific and must be current');
   },

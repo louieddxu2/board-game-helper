@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from 'vitest';
 import type { Database, DatabaseStatement } from './data/database';
 import {
   ATTRIBUTE_ACTIVITY_FEED_LIMIT,
-  ATTRIBUTE_EXTREME_EXAMPLE_LIMIT,
   ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT,
   ATTRIBUTE_QUESTION_PAIR_STAT_LIMIT,
   ATTRIBUTE_QUESTION_MAX_ROWS_READ,
@@ -27,7 +26,6 @@ describe('attribute hot-path budgets', () => {
       + ATTRIBUTE_QUESTION_OPPONENT_CANDIDATE_LIMIT
       + ATTRIBUTE_QUESTION_PAIR_STAT_LIMIT
       + 2
-      + (ATTRIBUTE_EXTREME_EXAMPLE_LIMIT * 2)
       + ATTRIBUTE_ACTIVITY_FEED_LIMIT;
     expect(boundedRows).toBe(ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS);
     expect(ATTRIBUTE_QUESTION_MAX_ROWS_READ).toBeGreaterThanOrEqual(boundedRows);
