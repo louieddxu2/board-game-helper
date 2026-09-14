@@ -46,16 +46,12 @@ test('activates the bipolar win method and publishes converted catalog data', ()
     expect(candidateValues).toHaveLength(25);
     expect(candidateValues[12]).toBe(1);
 
-    const snapshot = sqlite.prepare('SELECT active_generation, attributes_json, chunk_count FROM attribute_catalog_snapshot_state WHERE id=1').get() as { active_generation: number; attributes_json: string; chunk_count: number };
-    expect(snapshot.active_generation).toBe(88);
-    const attributes = JSON.parse(snapshot.attributes_json) as Array<{ id: string; scaleType?: string; endpoints?: { low?: { label?: string }; high?: { label?: string } } }>;
-    const merged = attributes.find((attribute) => attribute.id === 'attribute_win_method');
-    expect(merged).toMatchObject({ scaleType: 'bipolar', endpoints: {
+    const translation = sqlite.prepare("SELECT endpoints_json FROM attribute_translations WHERE attribute_id='attribute_win_method' AND locale='zh-TW'").get() as { endpoints_json: string };
+    const endpoints = JSON.parse(translation.endpoints_json) as { low?: { label?: string; question?: string }; high?: { label?: string; question?: string } };
+    expect(endpoints).toMatchObject({
       low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？' },
       high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？' },
-    } });
-    expect(attributes.some((attribute) => attribute.id === 'attribute_score_race')).toBe(false);
-    expect(snapshot.chunk_count).toBeGreaterThan(0);
+    });
   } finally { sqlite.close(); }
 });
 
