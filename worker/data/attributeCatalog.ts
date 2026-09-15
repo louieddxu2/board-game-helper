@@ -28,6 +28,11 @@ interface SnapshotStateRow {
   generated_at: number;
 }
 
+export interface AttributeCatalogSnapshotMeta {
+  generation: number;
+  generatedAt: number;
+}
+
 interface SnapshotChunkRow {
   chunk_number: number;
   entries_json: string;
@@ -173,6 +178,17 @@ export const queryAttributeCatalogSnapshot = async (db: Database): Promise<Attri
   return { state, chunks };
 };
 
+/** One-row freshness check used before applying incremental changes. */
+export const queryAttributeCatalogSnapshotMeta = async (db: Database): Promise<AttributeCatalogSnapshotMeta> => {
+  const row = await db.statement(`
+    SELECT active_generation, generated_at
+    FROM attribute_catalog_snapshot_state
+    WHERE id = 1
+  `).first<Pick<SnapshotStateRow, 'active_generation' | 'generated_at'>>();
+  if (!row) throw new Error('attribute_catalog_unavailable');
+  return { generation: Number(row.active_generation), generatedAt: Number(row.generated_at) };
+};
+
 export const attributeCatalogPayload = ({ state, chunks }: AttributeCatalogSnapshotQuery): AttributeCatalogPayload => {
   const stateRow = state.results?.[0];
   if (!stateRow) throw new Error('attribute_catalog_unavailable');
@@ -228,6 +244,7 @@ export const queryAttributeCatalogChanges = (
 export const attributeCatalogChangesPayload = (
   result: D1Result<CatalogEntryRow>,
   afterVersion: number,
+  snapshot: AttributeCatalogSnapshotMeta,
   limit = ATTRIBUTE_CATALOG_CHANGE_LIMIT,
 ): AttributeCatalogChangesPayload => {
   const changes: AttributeCatalogChange[] = [];
@@ -277,6 +294,7 @@ export const attributeCatalogChangesPayload = (
       ? Number(result.results.at(-1)?.catalog_version)
       : afterVersion,
     hasMore: (result.results ?? []).length === limit,
+    snapshot,
   };
 };
 

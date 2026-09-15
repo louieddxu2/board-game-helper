@@ -52,7 +52,7 @@ describe('bipolar attribute storage compatibility', () => {
       };
       db.prepare('UPDATE attribute_translations SET endpoints_json = ?').run(JSON.stringify(endpoints));
       db.exec("UPDATE attributes SET scale_type = 'bipolar'");
-      const delta = () => attributeCatalogChangesPayload({ results: db.prepare('SELECT * FROM attribute_catalog_entries').all() as never }, 0);
+      const delta = () => attributeCatalogChangesPayload({ results: db.prepare('SELECT * FROM attribute_catalog_entries').all() as never }, 0, { generation: 1, generatedAt: 1 });
       const changed = delta();
       expect(changed.changes[0].attribute).toMatchObject({ scaleType: 'bipolar', endpoints });
       expect(applyAttributeCatalogChanges(cached, changed.changes).attributes[0]).toMatchObject({ endpoints });

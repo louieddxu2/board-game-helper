@@ -32,6 +32,7 @@ try {
     low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？', fullDescription: description('attribute_score_race') },
     high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: description('attribute_end_condition') },
   } };
+  const generatedAt = Date.now();
   const subjects = ['測試遊戲甲', '測試遊戲乙', '測試遊戲丙', '測試遊戲丁'].map((displayName, i) => ({ id: `fixture-${i}`, slug: `fixture-${i}`, kind: 'game', displayName, bggIds: [] }));
   for (const width of [1280, 390]) for (const highPole of ['low', 'high']) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
@@ -44,8 +45,8 @@ try {
       const url = new URL(route.request().url());
       let json;
       if (url.pathname === '/api/session') json = { user: null, googleClientId: null, localDevLogin: false };
-      else if (url.pathname === '/api/attributes/table') json = { generation: 2, throughVersion: 1, generatedAt: Date.now(), attributes: [attribute], subjects, values: subjects.map((subject, i) => ({ subjectId: subject.id, attributeId: attribute.id, score: [0, 2, 8, 10][i], directCount: 1, evidenceCount: 1 })), candidates: [], activities: [] };
-      else if (url.pathname === '/api/attributes/table/changes') json = { changes: [], throughVersion: 1, hasMore: false };
+      else if (url.pathname === '/api/attributes/table') json = { generation: 2, throughVersion: 1, generatedAt, attributes: [attribute], subjects, values: subjects.map((subject, i) => ({ subjectId: subject.id, attributeId: attribute.id, score: [0, 2, 8, 10][i], directCount: 1, evidenceCount: 1 })), candidates: [], activities: [] };
+      else if (url.pathname === '/api/attributes/table/changes') json = { changes: [], throughVersion: 1, hasMore: false, snapshot: { generation: 2, generatedAt } };
       else if (url.pathname === '/api/attributes/question') json = { question: { attribute, highPole, subjectA: subjects[0], subjectB: subjects[1] }, activities: [], questionToken: 'isolated-fixture-question-token-long-enough' };
       else if (url.pathname === '/api/attributes/responses') { submitted = route.request().postDataJSON(); json = { ok: true, updatedValues: [] }; }
       else throw new Error(`Unexpected API request: ${url.pathname}`);

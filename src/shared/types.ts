@@ -292,6 +292,10 @@ export interface AttributeCatalogChangesPayload {
   changes: AttributeCatalogChange[];
   throughVersion: number;
   hasMore: boolean;
+  snapshot: {
+    generation: number;
+    generatedAt: number;
+  };
 }
 
 export interface AttributeQuestionPayload {

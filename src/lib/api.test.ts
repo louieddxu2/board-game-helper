@@ -407,7 +407,7 @@ describe('api versioned attribute table boundary', () => {
   });
 
   test('bootstraps the snapshot and then applies only newer attribute changes', async () => {
-    const noChanges = { changes: [], throughVersion: 10, hasMore: false };
+    const noChanges = { changes: [], throughVersion: 10, hasMore: false, snapshot: { generation: table.generation, generatedAt: table.generatedAt } };
     vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(undefined).mockResolvedValue({ key: 'attributes:table:versioned:v3', data: table, cachedAt: Date.now() });
     const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
@@ -441,12 +441,12 @@ describe('api versioned attribute table boundary', () => {
       cached = applyAttributeCatalogChanges(cached, page.changes, page.throughVersion);
     });
     const pages: AttributeCatalogChangesPayload[] = [
-      { changes: [], throughVersion: 11, hasMore: true },
+      { changes: [], throughVersion: 11, hasMore: true, snapshot: { generation: table.generation, generatedAt: table.generatedAt } },
       { changes: [
         { entryKey: 'attribute:score', catalogVersion: 12, deleted: true },
         { entryKey: 'attribute:condition', catalogVersion: 13, deleted: true },
         { entryKey: 'attribute:win', catalogVersion: 14, deleted: false, attribute: merged },
-      ], throughVersion: 14, hasMore: false },
+      ], throughVersion: 14, hasMore: false, snapshot: { generation: table.generation, generatedAt: table.generatedAt } },
     ];
     const fetchMock = vi.fn().mockImplementation(async (path: string) => ({
       ok: true, headers: new Headers(),
@@ -475,7 +475,7 @@ describe('api versioned attribute table boundary', () => {
       headers: new Headers(),
       json: async () => path === '/api/attributes/table'
         ? repaired
-        : { changes: [], throughVersion: repaired.throughVersion, hasMore: false },
+        : { changes: [], throughVersion: repaired.throughVersion, hasMore: false, snapshot: { generation: repaired.generation, generatedAt: repaired.generatedAt } },
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -493,12 +493,33 @@ describe('api versioned attribute table boundary', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       headers: new Headers(),
-      json: async () => ({ changes: [{ entryKey: 'value:subject-a:attribute-luck', catalogVersion: 11, deleted: false, value: updated.values[0] }], throughVersion: 11, hasMore: false }),
+      json: async () => ({ changes: [{ entryKey: 'value:subject-a:attribute-luck', catalogVersion: 11, deleted: false, value: updated.values[0] }], throughVersion: 11, hasMore: false, snapshot: { generation: table.generation, generatedAt: table.generatedAt } }),
     }));
     const onUpdated = vi.fn();
 
     await expect(api.attributeTable(onUpdated)).resolves.toEqual(table);
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith(updated));
+  });
+
+  test('replaces the local table when the cloud snapshot is newer', async () => {
+    const replacement = { ...table, generation: 2, generatedAt: table.generatedAt + 1, subjects: [...table.subjects, { id: 'subject-b', slug: 'game-b', kind: 'game' as const, displayName: '遊戲乙' }] };
+    const stale = { key: 'attributes:table:versioned:v3', data: table, cachedAt: 1 };
+    vi.spyOn(localDb, 'getSynchronizedAttributeCatalog').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'invalidateAttributeCatalogSync').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestAttributeCatalog').mockResolvedValueOnce(stale).mockResolvedValue({ key: stale.key, data: replacement, cachedAt: Date.now() });
+    const cacheSnapshot = vi.spyOn(localDb, 'cacheAttributeCatalog').mockResolvedValue(undefined);
+    const cacheChanges = vi.spyOn(localDb, 'cacheAttributeCatalogChanges').mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (path: string) => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => path === '/api/attributes/table'
+        ? replacement
+        : { changes: [], throughVersion: table.throughVersion, hasMore: false, snapshot: { generation: replacement.generation, generatedAt: replacement.generatedAt } },
+    })));
+
+    await expect(api.syncAttributeTable()).resolves.toEqual(replacement);
+    expect(cacheSnapshot).toHaveBeenCalledWith(replacement);
+    expect(cacheChanges).toHaveBeenCalledTimes(1);
   });
 });
 

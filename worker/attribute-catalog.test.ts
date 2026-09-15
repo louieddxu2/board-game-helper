@@ -93,9 +93,10 @@ describe('versioned attribute table catalog', () => {
       { entry_key: 'attribute:attribute-luck', catalog_version: 15, entry_json: JSON.stringify({ kind: 'attribute', attribute: { id: 'attribute-luck', key: 'luck', name: '運氣', minValue: 0, maxValue: 10, sortOrder: 0 } }), deleted: 0 },
       { entry_key: 'candidate:candidate-1', catalog_version: 16, entry_json: JSON.stringify({ kind: 'candidate', id: 'candidate-1', displayName: '待處理', valuesJson: JSON.stringify([8]), matchStatus: 'pending', sourceRowNumber: 3 }), deleted: 0 },
       { entry_key: 'value:subject-b:attribute-luck', catalog_version: 17, entry_json: null, deleted: 1 },
-    ] }, 12);
+    ] }, 12, { generation: 18, generatedAt: 456 });
 
     expect(payload.throughVersion).toBe(17);
+    expect(payload.snapshot).toEqual({ generation: 18, generatedAt: 456 });
     expect(payload.changes).toHaveLength(5);
     expect(payload.changes[0]).toMatchObject({ entryKey: 'subject:subject-a', subject: expect.objectContaining({ id: 'subject-a' }) });
     expect(payload.changes[1]).toMatchObject({ value: expect.objectContaining({ score: 6.5 }), subject: expect.objectContaining({ id: 'subject-a' }) });

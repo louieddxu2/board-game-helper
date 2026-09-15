@@ -13,6 +13,7 @@ import {
   ATTRIBUTE_CATALOG_CHANGE_LIMIT,
   queryAttributeCatalogChanges,
   queryAttributeCatalogSnapshot,
+  queryAttributeCatalogSnapshotMeta,
 } from '../data/attributeCatalog';
 import type { AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
@@ -104,8 +105,12 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
   const db = getDatabase(c);
   try {
     c.header('Cache-Control', 'no-store');
-    const result = logD1Query(c, 'attribute_catalog_changes', await queryAttributeCatalogChanges(db, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT));
-    const payload = attributeCatalogChangesPayload(result, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
+    const [result, snapshot] = await Promise.all([
+      queryAttributeCatalogChanges(db, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT),
+      queryAttributeCatalogSnapshotMeta(db),
+    ]);
+    logD1Query(c, 'attribute_catalog_changes', result);
+    const payload = attributeCatalogChangesPayload(result, after, snapshot, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
     setD1MetricsHeader(c, db);
     return c.json(payload);
   } catch (error) {

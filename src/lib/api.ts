@@ -152,6 +152,11 @@ const synchronizeAttributeTable = async (catalog: AttributeCatalogPayload): Prom
       undefined,
       'cache-miss',
     );
+    if (changes.snapshot.generation !== catalog.generation || changes.snapshot.generatedAt !== catalog.generatedAt) {
+      const replacement = await transportRequest<AttributeCatalogPayload>('/api/attributes/table', undefined, 'cache-miss');
+      await localDb.cacheAttributeCatalog(replacement);
+      return synchronizeAttributeTable(replacement);
+    }
     if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('attribute_catalog_sync_stalled');
     await localDb.cacheAttributeCatalogChanges(changes);
     afterVersion = changes.throughVersion;
