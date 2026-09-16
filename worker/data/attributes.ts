@@ -1220,7 +1220,6 @@ const queryAttributeMergeBaselineStates = async (
       WITH values_for_replay(subject_id, attribute_id, value) AS (
         SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, rating_a FROM attribute_vote_responses WHERE rating_a IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
         UNION ALL SELECT CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END, attribute_id, rating_b FROM attribute_vote_responses WHERE rating_b IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-        UNION ALL SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, value FROM attribute_vote_events e WHERE kind='rating' AND value IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ? AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id=e.response_id AND r.attribute_id IS NOT NULL)
       ), averages AS (SELECT subject_id,attribute_id,SUM(value) total,COUNT(*) count FROM values_for_replay GROUP BY subject_id,attribute_id)
       SELECT s.id AS subject_id, a.id AS attribute_id,
         COALESCE(d.total, 0) AS direct_sum, COALESCE(d.count, 0) AS direct_count
@@ -1232,7 +1231,6 @@ const queryAttributeMergeBaselineStates = async (
         AND ${votableSubjectCondition('s', 'g')}
     `).bind(job.source_subject_id, job.target_subject_id, job.attribute_id, job.attribute_id, job.cutoff_created_at,
     job.source_subject_id, job.target_subject_id, job.attribute_id, job.attribute_id, job.cutoff_created_at,
-    job.source_subject_id, job.target_subject_id, job.attribute_id, job.attribute_id, job.cutoff_created_at,
     job.attribute_id, job.attribute_id).all<AttributeMergeBaselineRow>();
   return result.results ?? [];
 };
@@ -1241,41 +1239,7 @@ const queryAttributeMergeHistoryBatch = async (
   db: Database,
   job: AttributeMergeRebuildJobRow,
 ): Promise<AttributeMergeHistoryRow[]> => {
-  const [eventResult, responseResult] = await Promise.all([
-    db.statement(`
-      SELECT
-        'event:' || e.response_id || ':' ||
-          CASE WHEN e.kind = 'rating' THEN '1:' ELSE '2:' END ||
-          e.event_key || ':' || e.id AS stream_id,
-        e.attribute_id,
-        e.subject_a_id,
-        e.subject_b_id,
-        NULL AS rating_a,
-        NULL AS rating_b,
-        CASE WHEN e.kind = 'comparison' THEN e.result ELSE NULL END AS comparison,
-        e.created_at
-      FROM attribute_vote_events e
-      JOIN attributes active_attribute
-        ON active_attribute.id = e.attribute_id AND active_attribute.is_active = 1
-      WHERE e.kind = 'comparison' AND (? IS NULL OR e.attribute_id = ?) AND e.created_at <= ?
-        AND (e.created_at > ? OR (e.created_at = ? AND
-          ('event:' || e.response_id || ':' ||
-            CASE WHEN e.kind = 'rating' THEN '1:' ELSE '2:' END ||
-            e.event_key || ':' || e.id) > ?))
-        AND NOT EXISTS (
-          SELECT 1
-          FROM attribute_vote_responses r
-          WHERE r.response_id = e.response_id AND r.attribute_id IS NOT NULL
-        )
-      ORDER BY e.created_at, stream_id
-      LIMIT ${ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE}
-    `).bind(
-      job.attribute_id, job.attribute_id, job.cutoff_created_at,
-      job.cursor_created_at,
-      job.cursor_created_at,
-      job.cursor_stream_id,
-    ).all<AttributeMergeHistoryRow>(),
-    db.statement(`
+  const responseResult = await db.statement(`
       SELECT
         'response:' || r.response_id AS stream_id,
         r.attribute_id,
@@ -1298,11 +1262,8 @@ const queryAttributeMergeHistoryBatch = async (
       job.cursor_created_at,
       job.cursor_created_at,
       job.cursor_stream_id,
-    ).all<AttributeMergeHistoryRow>(),
-  ]);
-  return [...(eventResult.results ?? []), ...(responseResult.results ?? [])]
-    .sort((left, right) => left.created_at - right.created_at || left.stream_id.localeCompare(right.stream_id))
-    .slice(0, ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE);
+    ).all<AttributeMergeHistoryRow>();
+  return responseResult.results ?? [];
 };
 
 const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
@@ -1582,19 +1543,6 @@ interface FullReplayResponseRow {
   created_at: number;
 }
 
-interface FullReplayEventRow {
-  id: string;
-  response_id: string;
-  event_key: string;
-  kind: 'rating' | 'comparison';
-  attribute_id: string;
-  subject_a_id: string;
-  subject_b_id: string | null;
-  value: number | null;
-  result: AttributeComparisonResult | null;
-  created_at: number;
-}
-
 export interface AttributeReplayResult {
   changed: boolean;
   catalogPayload: AttributesPayload;
@@ -1698,30 +1646,16 @@ const queryFullReplayMaterializedStates = async (db: Database) => {
   };
 };
 
-const queryFullReplayHistory = async (db: Database, cutoff: number): Promise<FullReplayHistoryRow[]> => {
-  // Each source table is read once.  Splitting one response into its ratings
-  // and comparison in memory prevents three scans of the response history.
-  const [responses, events] = await Promise.all([
-    db.statement(`SELECT r.response_id, r.attribute_id, r.subject_a_id, r.subject_b_id,
-      r.rating_a, r.rating_b, r.comparison, r.created_at
-      FROM attribute_vote_responses r JOIN attributes a ON a.id = r.attribute_id AND a.is_active = 1
-      WHERE r.attribute_id IS NOT NULL AND r.created_at <= ?`).bind(cutoff).all<FullReplayResponseRow>(),
-    db.statement(`SELECT e.id, e.response_id, e.event_key, e.kind, e.attribute_id,
-      e.subject_a_id, e.subject_b_id, e.value, e.result, e.created_at
-      FROM attribute_vote_events e JOIN attributes a ON a.id = e.attribute_id AND a.is_active = 1
-      WHERE e.created_at <= ? AND e.kind IN ('rating', 'comparison')`).bind(cutoff).all<FullReplayEventRow>(),
-  ]);
-  const responseIds = new Set((responses.results ?? []).map((row) => row.response_id));
+const queryFullReplayHistory = async (db: Database): Promise<FullReplayHistoryRow[]> => {
+  // The canonical response table is read exactly once. Filtering active
+  // attributes and expanding each response happen in Worker memory.
+  const responses = await db.statement(`SELECT response_id, attribute_id, subject_a_id, subject_b_id,
+    rating_a, rating_b, comparison, created_at FROM attribute_vote_responses`).all<FullReplayResponseRow>();
   const history: FullReplayHistoryRow[] = [];
   for (const row of responses.results ?? []) {
     if (row.rating_a != null) history.push({ stream_id: `response:${row.response_id}:rating-a`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.rating_a, comparison: null, created_at: row.created_at });
     if (row.rating_b != null && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:rating-b`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_b_id, subject_b_id: null, value: row.rating_b, comparison: null, created_at: row.created_at });
     if (row.comparison && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:comparison`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.comparison, created_at: row.created_at });
-  }
-  for (const row of events.results ?? []) {
-    if (responseIds.has(row.response_id)) continue;
-    if (row.kind === 'rating' && row.value != null) history.push({ stream_id: `event:${row.response_id}:rating:${row.event_key}:${row.id}`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.value, comparison: null, created_at: row.created_at });
-    if (row.kind === 'comparison' && row.result && row.subject_b_id) history.push({ stream_id: `event:${row.response_id}:comparison:${row.event_key}:${row.id}`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.result, created_at: row.created_at });
   }
   return history.sort((left, right) => left.created_at - right.created_at || left.stream_id.localeCompare(right.stream_id));
 };
@@ -1761,7 +1695,7 @@ const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectA
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
   const [{ subjectIds, attributes, subjects, candidates, stored, throughVersion }, history, storedPairs] = await Promise.all([
-    queryFullReplayMaterializedStates(db), queryFullReplayHistory(db, timestamp), queryFullReplayPairBaseline(db),
+    queryFullReplayMaterializedStates(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db),
   ]);
   const states = new Map<string, OnlineAttributeState>();
   const directRatings = new Map<string, { total: number; count: number }>();

@@ -64,7 +64,6 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
   const { sqlite } = setup();
   try {
     const beforeClock = sqlite.prepare('SELECT current_version FROM attribute_catalog_clock WHERE id = 1').get() as { current_version: number };
-    const beforeVotes = sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_vote_events').get() as { count: number };
     const beforePairs = sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_pair_stats').get() as { count: number };
     sqlite.exec('INSERT INTO attribute_catalog_rebuild_mode (id) VALUES (1)');
     sqlite.prepare(`INSERT INTO games (
@@ -77,7 +76,7 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_score_states WHERE subject_id = ?').get('attribute_subject_game:game_bulk-mode-test')).toMatchObject({ count: 25 });
     expect(sqlite.prepare('SELECT current_version FROM attribute_catalog_clock WHERE id = 1').get()).toEqual(beforeClock);
     expect(sqlite.prepare("SELECT COUNT(*) AS count FROM attribute_catalog_entries WHERE entry_key LIKE 'subject:attribute_subject_game:game_bulk-mode-test' OR entry_key LIKE 'value:attribute_subject_game:game_bulk-mode-test:%'").get()).toMatchObject({ count: 0 });
-    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_vote_events').get()).toEqual(beforeVotes);
+    expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_pair_stats').get()).toEqual(beforePairs);
   } finally { sqlite.close(); }
 });
@@ -116,8 +115,7 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(JSON.parse(String(history.activity_json))[0]).toMatchObject({attributeId:'attribute_win_method',attributeName:'取勝方式',value:2,attributePoles:{low:'得分取勝',high:'條件取勝'}});
     expect(JSON.parse(String(history.activity_json))[1]).toMatchObject({result:'B_HIGHER',ratingA:2,ratingB:7});
     expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-condition'").get()).toMatchObject({attribute_id:'attribute_win_method',rating_a:7,rating_b:null,comparison:'B_HIGHER',question_high_pole:'high'});
-    expect(sqlite.prepare("SELECT * FROM attribute_vote_events WHERE id='history-event'").get()).toMatchObject({attribute_id:'attribute_win_method',value:2});
-    expect(sqlite.prepare("SELECT COUNT(*) n FROM attribute_vote_events WHERE session_id='win-conversion-v1'").get()).toMatchObject({n:0});
+    expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
     await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
     expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").get()).toMatchObject({status:'completed'});
     // 200 comparisons affect calculation only. The replay writes each final
