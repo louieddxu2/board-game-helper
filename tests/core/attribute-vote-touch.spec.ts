@@ -19,6 +19,7 @@ for (const choice of ['left', 'right', 'similar'] as const) {
     } }));
     await page.route('**/api/attributes/table/changes?*', (route) => route.fulfill({ json: {
       throughVersion: 1, hasMore: false, changes: [],
+      snapshot: { generation: 1, generatedAt: Date.now() },
     } }));
     await page.route('**/api/attributes/question?*', (route) => {
       questionCount += 1;
