@@ -1557,7 +1557,7 @@ interface FullReplaySnapshotRow {
 }
 
 interface FullReplaySnapshotChunkRow { entries_json: string; }
-interface FullReplayCatalogEntryRow { entry_key: string; entry_json: string | null; deleted: number; }
+interface FullReplayCatalogEntryRow { entry_key: string; catalog_version: number; entry_json: string | null; deleted: number; }
 interface FullReplayPairSnapshotRow { active_generation: number; chunk_count: number; }
 interface FullReplayPairSnapshotChunkRow { pairs_json: string; }
 interface FullReplayHistoryRow {
@@ -1569,6 +1569,36 @@ interface FullReplayHistoryRow {
   value: number | null;
   comparison: AttributeComparisonResult | null;
   created_at: number;
+}
+
+interface FullReplayResponseRow {
+  response_id: string;
+  attribute_id: string;
+  subject_a_id: string;
+  subject_b_id: string | null;
+  rating_a: number | null;
+  rating_b: number | null;
+  comparison: AttributeComparisonResult | null;
+  created_at: number;
+}
+
+interface FullReplayEventRow {
+  id: string;
+  response_id: string;
+  event_key: string;
+  kind: 'rating' | 'comparison';
+  attribute_id: string;
+  subject_a_id: string;
+  subject_b_id: string | null;
+  value: number | null;
+  result: AttributeComparisonResult | null;
+  created_at: number;
+}
+
+export interface AttributeReplayResult {
+  changed: boolean;
+  catalogPayload: AttributesPayload;
+  catalogThroughVersion: number;
 }
 
 const parseFullReplayJson = (value: string): unknown => {
@@ -1589,11 +1619,13 @@ const queryFullReplayMaterializedStates = async (db: Database) => {
   const [chunksResult, changesResult] = await Promise.all([
     db.statement(`SELECT entries_json FROM attribute_catalog_snapshot_chunks
       WHERE generation = ? ORDER BY chunk_number`).bind(snapshot.active_generation).all<FullReplaySnapshotChunkRow>(),
-    db.statement(`SELECT entry_key, entry_json, deleted FROM attribute_catalog_entries
+    db.statement(`SELECT entry_key, catalog_version, entry_json, deleted FROM attribute_catalog_entries
       WHERE catalog_version > ? ORDER BY catalog_version, entry_key`).bind(snapshot.through_version).all<FullReplayCatalogEntryRow>(),
   ]);
-  const subjects = new Set<string>();
-  const attributes = new Set<string>();
+  const subjectIds = new Set<string>();
+  const attributes = new Map<string, AttributeDefinition>();
+  const subjects = new Map<string, AttributeSubject>();
+  const candidates = new Map<string, AttributeImportCandidate>();
   const stored = new Map<string, AttributeScoreStateRow>();
   const addValue = (value: Record<string, unknown>) => {
     if (typeof value.subjectId !== 'string' || typeof value.attributeId !== 'string'
@@ -1615,7 +1647,7 @@ const queryFullReplayMaterializedStates = async (db: Database) => {
     });
   };
   const removeSubject = (subjectId: string) => {
-    subjects.delete(subjectId);
+    subjectIds.delete(subjectId); subjects.delete(subjectId);
     for (const key of stored.keys()) if (key.startsWith(`${subjectId}\u0000`)) stored.delete(key);
   };
   const removeAttribute = (attributeId: string) => {
@@ -1628,52 +1660,70 @@ const queryFullReplayMaterializedStates = async (db: Database) => {
       if (kind === 'subject') removeSubject(parts.join(':'));
       else if (kind === 'attribute') removeAttribute(parts.join(':'));
       else if (kind === 'value') stored.delete(mergeStateKey(parts[0], parts.slice(1).join(':')));
+      else if (kind === 'candidate') candidates.delete(parts.join(':'));
       return;
     }
     const entry = parseFullReplayJson(entryJson) as Record<string, unknown>;
     if (entry.kind === 'subject') {
       const subject = entry.subject as Record<string, unknown> | undefined;
-      if (typeof subject?.id === 'string') subjects.add(subject.id);
+      if (typeof subject?.id === 'string') { subjectIds.add(subject.id); subjects.set(subject.id, subject as unknown as AttributeSubject); }
     } else if (entry.kind === 'attribute') {
       const attribute = entry.attribute as Record<string, unknown> | undefined;
-      if (typeof attribute?.id === 'string') attributes.add(attribute.id);
+      if (typeof attribute?.id === 'string') attributes.set(attribute.id, attribute as unknown as AttributeDefinition);
     } else if (entry.kind === 'value') addValue(entry);
+    else if (entry.kind === 'candidate' && typeof entry.id === 'string') candidates.set(entry.id, entry as unknown as AttributeImportCandidate);
   };
   const snapshotAttributes = parseFullReplayJson(snapshot.attributes_json);
   if (!Array.isArray(snapshotAttributes)) throw new Error('invalid_attribute_replay_snapshot');
-  for (const attribute of snapshotAttributes as Array<Record<string, unknown>>) if (typeof attribute.id === 'string') attributes.add(attribute.id);
+  for (const attribute of snapshotAttributes as Array<Record<string, unknown>>) if (typeof attribute.id === 'string') attributes.set(attribute.id, attribute as unknown as AttributeDefinition);
   for (const row of chunksResult.results ?? []) {
     const entries = parseFullReplayJson(row.entries_json);
     if (!Array.isArray(entries)) throw new Error('invalid_attribute_replay_snapshot');
     for (const entry of entries as Array<Record<string, unknown>>) {
-      if (entry.kind !== 'subject') continue;
-      const subject = entry.subject as Record<string, unknown> | undefined;
-      if (typeof subject?.id !== 'string') continue;
-      subjects.add(subject.id);
-      if (Array.isArray(entry.values)) for (const value of entry.values as Array<Record<string, unknown>>) addValue(value);
+      if (entry.kind === 'subject') {
+        const subject = entry.subject as Record<string, unknown> | undefined;
+        if (typeof subject?.id !== 'string') continue;
+        subjectIds.add(subject.id); subjects.set(subject.id, subject as unknown as AttributeSubject);
+        if (Array.isArray(entry.values)) for (const value of entry.values as Array<Record<string, unknown>>) addValue(value);
+      } else if (entry.kind === 'candidate' && typeof entry.candidate === 'object' && entry.candidate) {
+        const candidate = entry.candidate as AttributeImportCandidate;
+        if (typeof candidate.id === 'string') candidates.set(candidate.id, candidate);
+      }
     }
   }
   for (const entry of changesResult.results ?? []) applyEntry(entry.entry_key, entry.entry_json, Boolean(entry.deleted));
-  return { subjects, attributes, stored };
+  return {
+    subjectIds, attributes, subjects, candidates, stored,
+    throughVersion: Number((changesResult.results ?? []).at(-1)?.catalog_version ?? snapshot.through_version),
+  };
 };
 
 const queryFullReplayHistory = async (db: Database, cutoff: number): Promise<FullReplayHistoryRow[]> => {
-  const result = await db.statement(`
-    SELECT 'response:' || r.response_id || ':rating-a' AS stream_id, 'rating' AS kind, r.attribute_id, r.subject_a_id, NULL AS subject_b_id, r.rating_a AS value, NULL AS comparison, r.created_at
-    FROM attribute_vote_responses r JOIN attributes a ON a.id = r.attribute_id AND a.is_active = 1 WHERE r.rating_a IS NOT NULL AND r.created_at <= ?
-    UNION ALL SELECT 'response:' || r.response_id || ':rating-b', 'rating', r.attribute_id, r.subject_b_id, NULL, r.rating_b, NULL, r.created_at
-    FROM attribute_vote_responses r JOIN attributes a ON a.id = r.attribute_id AND a.is_active = 1 WHERE r.rating_b IS NOT NULL AND r.subject_b_id IS NOT NULL AND r.created_at <= ?
-    UNION ALL SELECT 'response:' || r.response_id || ':comparison', 'comparison', r.attribute_id, r.subject_a_id, r.subject_b_id, NULL, r.comparison, r.created_at
-    FROM attribute_vote_responses r JOIN attributes a ON a.id = r.attribute_id AND a.is_active = 1 WHERE r.comparison IS NOT NULL AND r.subject_b_id IS NOT NULL AND r.created_at <= ?
-    UNION ALL SELECT 'event:' || e.response_id || ':rating:' || e.event_key || ':' || e.id, 'rating', e.attribute_id, e.subject_a_id, NULL, e.value, NULL, e.created_at
-    FROM attribute_vote_events e JOIN attributes a ON a.id = e.attribute_id AND a.is_active = 1
-    WHERE e.kind = 'rating' AND e.value IS NOT NULL AND e.created_at <= ? AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id = e.response_id AND r.attribute_id IS NOT NULL)
-    UNION ALL SELECT 'event:' || e.response_id || ':comparison:' || e.event_key || ':' || e.id, 'comparison', e.attribute_id, e.subject_a_id, e.subject_b_id, NULL, e.result, e.created_at
-    FROM attribute_vote_events e JOIN attributes a ON a.id = e.attribute_id AND a.is_active = 1
-    WHERE e.kind = 'comparison' AND e.result IS NOT NULL AND e.subject_b_id IS NOT NULL AND e.created_at <= ? AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id = e.response_id AND r.attribute_id IS NOT NULL)
-    ORDER BY created_at, stream_id
-  `).bind(cutoff, cutoff, cutoff, cutoff, cutoff).all<FullReplayHistoryRow>();
-  return result.results ?? [];
+  // Each source table is read once.  Splitting one response into its ratings
+  // and comparison in memory prevents three scans of the response history.
+  const [responses, events] = await Promise.all([
+    db.statement(`SELECT r.response_id, r.attribute_id, r.subject_a_id, r.subject_b_id,
+      r.rating_a, r.rating_b, r.comparison, r.created_at
+      FROM attribute_vote_responses r JOIN attributes a ON a.id = r.attribute_id AND a.is_active = 1
+      WHERE r.attribute_id IS NOT NULL AND r.created_at <= ?`).bind(cutoff).all<FullReplayResponseRow>(),
+    db.statement(`SELECT e.id, e.response_id, e.event_key, e.kind, e.attribute_id,
+      e.subject_a_id, e.subject_b_id, e.value, e.result, e.created_at
+      FROM attribute_vote_events e JOIN attributes a ON a.id = e.attribute_id AND a.is_active = 1
+      WHERE e.created_at <= ? AND e.kind IN ('rating', 'comparison')`).bind(cutoff).all<FullReplayEventRow>(),
+  ]);
+  const responseIds = new Set((responses.results ?? []).map((row) => row.response_id));
+  const history: FullReplayHistoryRow[] = [];
+  for (const row of responses.results ?? []) {
+    if (row.rating_a != null) history.push({ stream_id: `response:${row.response_id}:rating-a`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.rating_a, comparison: null, created_at: row.created_at });
+    if (row.rating_b != null && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:rating-b`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_b_id, subject_b_id: null, value: row.rating_b, comparison: null, created_at: row.created_at });
+    if (row.comparison && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:comparison`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.comparison, created_at: row.created_at });
+  }
+  for (const row of events.results ?? []) {
+    if (responseIds.has(row.response_id)) continue;
+    if (row.kind === 'rating' && row.value != null) history.push({ stream_id: `event:${row.response_id}:rating:${row.event_key}:${row.id}`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.value, comparison: null, created_at: row.created_at });
+    if (row.kind === 'comparison' && row.result && row.subject_b_id) history.push({ stream_id: `event:${row.response_id}:comparison:${row.event_key}:${row.id}`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.result, created_at: row.created_at });
+  }
+  return history.sort((left, right) => left.created_at - right.created_at || left.stream_id.localeCompare(right.stream_id));
 };
 
 const queryFullReplayPairBaseline = async (db: Database) => {
@@ -1708,21 +1758,21 @@ const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectA
 };
 
 /** Recalculate every active game+attribute from every raw vote, without scanning materialized score rows. */
-export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<boolean> => {
+export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
-  const [{ subjects, attributes, stored }, history, storedPairs] = await Promise.all([
+  const [{ subjectIds, attributes, subjects, candidates, stored, throughVersion }, history, storedPairs] = await Promise.all([
     queryFullReplayMaterializedStates(db), queryFullReplayHistory(db, timestamp), queryFullReplayPairBaseline(db),
   ]);
   const states = new Map<string, OnlineAttributeState>();
   const directRatings = new Map<string, { total: number; count: number }>();
   for (const row of history) {
-    if (row.kind !== 'rating' || row.value == null || !subjects.has(row.subject_a_id) || !attributes.has(row.attribute_id)) continue;
+    if (row.kind !== 'rating' || row.value == null || !subjectIds.has(row.subject_a_id) || !attributes.has(row.attribute_id)) continue;
     const key = mergeStateKey(row.subject_a_id, row.attribute_id);
     const direct = directRatings.get(key) ?? { total: 0, count: 0 };
     direct.total += Number(row.value); direct.count += 1;
     directRatings.set(key, direct);
   }
-  for (const subjectId of subjects) for (const attributeId of attributes) {
+  for (const subjectId of subjectIds) for (const attributeId of attributes.keys()) {
     const direct = directRatings.get(mergeStateKey(subjectId, attributeId));
     states.set(mergeStateKey(subjectId, attributeId), stateFromBaseline({
       subject_id: subjectId, attribute_id: attributeId, direct_sum: direct?.total ?? 0, direct_count: direct?.count ?? 0,
@@ -1730,7 +1780,7 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
   }
   const pairCounts = new Map<string, { subjectAId: string; subjectBId: string; attributeId: string; count: number }>();
   for (const row of history) {
-    if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjects.has(row.subject_a_id) || !subjects.has(row.subject_b_id) || !attributes.has(row.attribute_id) || row.subject_a_id === row.subject_b_id) continue;
+    if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjectIds.has(row.subject_a_id) || !subjectIds.has(row.subject_b_id) || !attributes.has(row.attribute_id) || row.subject_a_id === row.subject_b_id) continue;
     const keyA = mergeStateKey(row.subject_a_id, row.attribute_id);
     const keyB = mergeStateKey(row.subject_b_id, row.attribute_id);
     const updated = applyComparison(states.get(keyA) ?? emptyAttributeState(), states.get(keyB) ?? emptyAttributeState(), row.comparison);
@@ -1760,7 +1810,35 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
   } finally {
     if (rebuildMode) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
   }
-  return changed;
+  const values: AttributeMatrixValue[] = [...states.entries()].map(([key, state]) => {
+    const separator = key.indexOf('\u0000');
+    const subjectId = key.slice(0, separator);
+    const attributeId = key.slice(separator + 1);
+    return {
+      subjectId, attributeId,
+      score: Number(state.score.toFixed(2)), ratingDeviation: Number(state.ratingDeviation.toFixed(3)),
+      ...(state.directCount ? { directAverage: Number((state.directSum / state.directCount).toFixed(2)) } : {}),
+      directCount: state.directCount, comparisonCount: state.comparisonCount,
+      decisiveComparisonCount: state.decisiveComparisonCount, evidenceCount: state.evidenceCount,
+      modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
+      replayState: {
+        score: state.score, ratingDeviation: state.ratingDeviation, directSum: state.directSum,
+        directCount: state.directCount, comparisonCount: state.comparisonCount,
+        decisiveComparisonCount: state.decisiveComparisonCount, evidenceCount: state.evidenceCount,
+        modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
+      },
+    } as AttributeMatrixValue;
+  });
+  return {
+    changed,
+    catalogThroughVersion: throughVersion,
+    catalogPayload: {
+      attributes: [...attributes.values()].sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id)),
+      subjects: [...subjects.values()].sort((left, right) => left.displayName.localeCompare(right.displayName, 'zh-Hant') || left.id.localeCompare(right.id)),
+      values, candidates: [...candidates.values()].sort((left, right) => left.sourceRowNumber - right.sourceRowNumber || left.id.localeCompare(right.id)),
+      activities: [], scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
+    },
+  };
 };
 
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {

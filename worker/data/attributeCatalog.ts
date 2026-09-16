@@ -203,7 +203,12 @@ export const attributeCatalogPayload = ({ state, chunks }: AttributeCatalogSnaps
     (parsed as SnapshotEntry[]).forEach((entry) => {
       if (entry.kind === 'subject' && entry.subject?.id) {
         subjects.set(entry.subject.id, entry.subject);
-        entry.values.forEach((value) => values.set(`${value.subjectId}:${value.attributeId}`, value));
+        // Snapshot rows retain replayState for the Worker. Do not expose that
+        // internal precision payload to browser consumers.
+        entry.values.forEach((value) => {
+          const parsed = parseValue(value);
+          if (parsed) values.set(`${parsed.subjectId}:${parsed.attributeId}`, parsed);
+        });
       }
       if (entry.kind === 'candidate') {
         // Migration 0051 wrote candidate entries in the flat delta shape,
@@ -331,6 +336,17 @@ export const rebuildAttributeCatalog = async (
   if (!clock) throw new Error('attribute_catalog_clock_unavailable');
   const throughVersion = Number(clock.current_version);
   const source = await queryAttributeTableSourcePayload(db);
+  return publishAttributeCatalogSnapshot(db, source, throughVersion, timestamp, options);
+};
+
+/** Write a snapshot from an already materialized payload without rereading D1 source tables. */
+export const publishAttributeCatalogSnapshot = async (
+  db: Database,
+  source: AttributesPayload,
+  throughVersion: number,
+  timestamp = Date.now(),
+  options: { maxChunkBytes?: number } = {},
+): Promise<AttributeCatalogPayload> => {
   const valuesBySubject = new Map<string, AttributeMatrixValue[]>();
   source.values.forEach((value) => {
     const values = valuesBySubject.get(value.subjectId) ?? [];
