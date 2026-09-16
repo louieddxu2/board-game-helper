@@ -19,13 +19,15 @@ describe('core release gate wiring', () => {
     expect(successRecord).toBeGreaterThan(productionSmoke);
   });
 
-  test('release suite includes complete tests, typecheck and browser E2E', () => {
+  test('release suite includes complete tests, typecheck and browser E2E from the production schema baseline', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
     expect(packageJson.scripts['test:release']).toContain('npm test');
     expect(packageJson.scripts['test:release']).toContain('npm run typecheck');
     expect(packageJson.scripts['test:release']).toContain('npm run test:core:e2e');
     expect(packageJson.scripts['test:core:e2e']).toContain('npm run build');
     expect(packageJson.scripts['test:core:e2e']).toContain('playwright test');
+    expect(packageJson.scripts['test:core:prepare']).toContain('prepare-core-test');
+    expect(packageJson.scripts['test:migrations:fresh']).toContain('CORE_TEST_DATABASE_MODE=fresh');
   });
 
   test('pins date-sensitive release checks to the product timezone', () => {

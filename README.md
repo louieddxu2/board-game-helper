@@ -29,17 +29,18 @@ npm run typecheck
 npm run build
 ```
 
-登入及建立／編輯規則是發布不可破壞的核心流程。`npm run test:release` 會依序執行完整 Vitest、型別檢查、正式 build，接著建立隔離的本機 D1、從零套用全部 migration，並用獨立瀏覽器實際完成「登入 → Session Cookie → 建立新遊戲與規則 → 從 API 讀回 → 編輯規則 → 再次讀回 → 登出」。失敗時會在 `test-results/` 與 `playwright-report/` 保留 trace 與畫面；這套測試不會存取正式 D1。
+登入及建立／編輯規則是發布不可破壞的核心流程。`npm run test:release` 會依序執行完整 Vitest、型別檢查、正式 build，接著載入目前正式 D1 的 schema snapshot，只套用該 baseline 之後的 migration，並用獨立瀏覽器實際完成「登入 → Session Cookie → 建立新遊戲與規則 → 從 API 讀回 → 編輯規則 → 再次讀回 → 登出」。這驗證的是「目前正式 schema → 本次 migration」的升級路徑。失敗時會在 `test-results/` 與 `playwright-report/` 保留 trace 與畫面；這套測試不會存取正式 D1。
 
 ```powershell
 npm run test:core
 npm run test:core:e2e
 npm run test:release
+npm run test:migrations:fresh
 ```
 
 Windows 會使用已安裝的 Google Chrome 建立乾淨、獨立的測試瀏覽器狀態；不會使用個人 Chrome profile。其他執行環境需先執行 `npx playwright install chromium`。正式發布完成後，流程還會執行 `npm run smoke:production`，確認健康 API、Session API、Google Client ID、本機登入開關及 Google Identity Services CSP。完整 Google 帳號選擇頁可能受驗證碼及第三方服務影響，因此自動測試以簽章 JWT 合約測試驗證 Google 身分規則，再由本機完整流程驗證相同的使用者、Session、Cookie 與 D1 寫入路徑。
 
-GitHub 對 `master` 的 push 與所有 Pull Request 也會執行相同的 `test:release`；這是獨立於本機發布腳本的第二道阻擋，不能取代正式站發布後的 smoke test。
+GitHub 對 `master` 的 push 與所有 Pull Request 也會執行相同的 `test:release`；這是獨立於本機發布腳本的第二道阻擋，不能取代正式站發布後的 smoke test。`npm run test:migrations:fresh` 則從空白 D1 套用所有 migration，只用於定期 CI、重大發布，或確認整段 migration 歷史；它不是一般發布的前置條件。
 
 ## 正式發布
 
