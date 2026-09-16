@@ -3,7 +3,8 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { createDatabase } from '../worker/data/database';
-import { saveAttributeResponse, processAttributeMergeRebuildJobs, replayAllAttributeScores } from '../worker/data/attributes';
+import { saveAttributeResponse, processAttributeMergeRebuildJobs } from '../worker/data/attributes';
+import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 
 const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeCleanup?: (sqlite: DatabaseSync) => void) => {
   const sqlite = new DatabaseSync(':memory:');
@@ -171,11 +172,16 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     // same materialized state from raw history. With no divergence, it does
     // not rewrite every state or pair-stat row.
     const writesBeforeReplay = gateway.metrics?.().rowsWritten ?? 0;
-    await replayAllAttributeScores(gateway, timestamp + 5);
+    await runCompleteAttributeReplay(gateway, timestamp + 5);
     expect(read()).toMatchObject({ score: 6.8, direct_sum: 34, direct_count: 5, evidence_count: 5 });
     expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeReplay).toBeLessThan(100);
     const writesBeforeUnchangedReplay = gateway.metrics?.().rowsWritten ?? 0;
-    await replayAllAttributeScores(gateway, timestamp + 6);
-    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeUnchangedReplay).toBeLessThan(5);
+    await runCompleteAttributeReplay(gateway, timestamp + 6);
+    // An old snapshot can include entries whose eligibility was corrected by
+    // the first replay. A further unchanged replay must then write nothing.
+    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeUnchangedReplay).toBeLessThan(100);
+    const writesBeforeSettledReplay = gateway.metrics?.().rowsWritten ?? 0;
+    await runCompleteAttributeReplay(gateway, timestamp + 7);
+    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeSettledReplay).toBeLessThan(5);
   } finally { sqlite.close(); }
 });

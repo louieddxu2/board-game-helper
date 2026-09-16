@@ -121,11 +121,20 @@ export const chunkGameCatalog = (games: GameSummary[]): GameSummary[][] => {
   return chunks;
 };
 
-export const rebuildGameCatalog = async (db: Database, timestamp = Date.now()): Promise<GameCatalogPayload> => {
+export const rebuildGameCatalog = async (db: Database, timestamp = Date.now()): Promise<GameCatalogPayload | null> => {
   const clock = await db.statement('SELECT current_version FROM game_catalog_clock WHERE id = 1')
     .first<{ current_version: number }>();
   if (!clock) throw new Error('game_catalog_clock_unavailable');
   const throughVersion = Number(clock.current_version);
+  // The scheduled run must not rewrite the game-list snapshot when no game
+  // data changed.  Attribute replay owns its own snapshot separately.
+  const currentSnapshot = await db.statement(`
+    SELECT active_generation, through_version, chunk_count, generated_at
+    FROM game_catalog_snapshot_state WHERE id = 1
+  `).first<SnapshotStateRow>();
+  if (currentSnapshot && Number(currentSnapshot.through_version) === throughVersion) {
+    return null;
+  }
   const source = await db.statement(`
     SELECT entry_json
     FROM game_catalog_entries

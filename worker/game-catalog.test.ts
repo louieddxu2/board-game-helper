@@ -96,14 +96,26 @@ describe('versioned weekly game catalog', () => {
 
     const payload = await rebuildGameCatalog(db, 456);
 
+    expect(payload).not.toBeNull();
     expect(payload).toMatchObject({ generation: 456, throughVersion: 25, generatedAt: 456 });
-    expect(payload.games).toHaveLength(1001);
+    expect(payload!.games).toHaveLength(1001);
     expect(db.batch).toHaveBeenCalledOnce();
-    expect(writes).toHaveLength(5);
-    expect(writes[0].bind).toHaveBeenCalledWith(456);
-    expect(writes[1].bind).toHaveBeenCalledWith(456, 0, expect.any(String));
-    expect(writes[2].bind).toHaveBeenCalledWith(456, 1, expect.any(String));
-    expect(writes[3].bind).toHaveBeenCalledWith(456, 25, 2, 456);
-    expect(writes[4].bind).toHaveBeenCalledWith(456);
+    // The version check creates one read statement before the five writes.
+    expect(writes).toHaveLength(6);
+    expect(writes[1].bind).toHaveBeenCalledWith(456);
+    expect(writes[2].bind).toHaveBeenCalledWith(456, 0, expect.any(String));
+    expect(writes[3].bind).toHaveBeenCalledWith(456, 1, expect.any(String));
+    expect(writes[4].bind).toHaveBeenCalledWith(456, 25, 2, 456);
+    expect(writes[5].bind).toHaveBeenCalledWith(456);
+  });
+
+  test('does not read chunks or rewrite when the catalog version did not change', async () => {
+    const clock = statement({ first: vi.fn().mockResolvedValue({ current_version: 25 }) });
+    const snapshot = statement({ first: vi.fn().mockResolvedValue({ active_generation: 7, through_version: 25, chunk_count: 1, generated_at: 123 }) });
+    const db = { statement: vi.fn().mockReturnValueOnce(clock).mockReturnValueOnce(snapshot), batch: vi.fn() } as unknown as Database;
+
+    await expect(rebuildGameCatalog(db, 456)).resolves.toBeNull();
+    expect(db.statement).toHaveBeenCalledTimes(2);
+    expect(db.batch).not.toHaveBeenCalled();
   });
 });
