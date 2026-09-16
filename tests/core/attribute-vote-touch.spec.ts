@@ -7,19 +7,20 @@ const subjectB = { id: 'touch-b', slug: 'touch-b', kind: 'game', displayName: '�
 const subjectC = { id: 'touch-c', slug: 'touch-c', kind: 'game', displayName: '觸控遊戲丙', bggIds: [789] };
 const subjectD = { id: 'touch-d', slug: 'touch-d', kind: 'game', displayName: '觸控遊戲丁', bggIds: [101112] };
 const attribute = { id: 'touch-luck', key: 'luck', name: '運氣成分', fullDescription: '觸控換題測試', minValue: 0, maxValue: 10, sortOrder: 0 };
+const snapshotGeneratedAt = 1_700_000_000_000;
 
 for (const choice of ['left', 'right', 'similar'] as const) {
   test(`touch ${choice} answer returns to neutral when the next question reuses a game`, async ({ page }, testInfo) => {
     let questionCount = 0;
     const votes: unknown[] = [];
     await page.route('**/api/attributes/table', (route) => route.fulfill({ json: {
-      generation: 1, throughVersion: 1, generatedAt: Date.now(),
+      generation: 1, throughVersion: 1, generatedAt: snapshotGeneratedAt,
       attributes: [attribute], subjects: [subjectA, subjectB, subjectC, subjectD],
       values: [], candidates: [], activities: [], scoreModelVersion: 'glicko-rd-v1',
     } }));
     await page.route('**/api/attributes/table/changes?*', (route) => route.fulfill({ json: {
       throughVersion: 1, hasMore: false, changes: [],
-      snapshot: { generation: 1, generatedAt: Date.now() },
+      snapshot: { generation: 1, generatedAt: snapshotGeneratedAt },
     } }));
     await page.route('**/api/attributes/question?*', (route) => {
       questionCount += 1;

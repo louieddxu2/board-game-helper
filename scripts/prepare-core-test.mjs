@@ -3,13 +3,15 @@ import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
 const workspaceRoot = process.cwd();
-const stateDirectory = path.resolve(workspaceRoot, '.wrangler', 'core-test-state');
+const stateName = process.env.CORE_TEST_STATE_DIR ?? 'core-test-state';
+const stateDirectory = path.resolve(workspaceRoot, '.wrangler', stateName);
 const expectedParent = `${path.resolve(workspaceRoot, '.wrangler')}${path.sep}`;
 const snapshotPath = path.resolve(workspaceRoot, 'tests', 'fixtures', 'production-d1-schema.sql');
 const baselinePath = path.resolve(workspaceRoot, 'tests', 'fixtures', 'production-d1-schema.version');
+const seedPath = path.resolve(workspaceRoot, 'tests', 'fixtures', 'core-test-seed.sql');
 const mode = process.env.CORE_TEST_DATABASE_MODE ?? 'snapshot';
 
-if (!stateDirectory.startsWith(expectedParent) || path.basename(stateDirectory) !== 'core-test-state') {
+if (!stateDirectory.startsWith(expectedParent) || !/^core-test-state(?:-[a-z0-9-]+)?$/u.test(path.basename(stateDirectory))) {
   throw new Error(`拒絕清除非預期的核心測試目錄：${stateDirectory}`);
 }
 
@@ -39,3 +41,4 @@ runWrangler([...executeArgs, '--file', snapshotPath]);
 for (const migration of migrations.slice(baselineIndex + 1)) {
   runWrangler([...executeArgs, '--file', path.resolve(workspaceRoot, 'migrations', migration)]);
 }
+runWrangler([...executeArgs, '--file', seedPath]);
