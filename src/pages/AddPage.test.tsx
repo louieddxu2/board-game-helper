@@ -33,7 +33,7 @@ vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: mock
 vi.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 vi.mock('../components/GameSearch', () => ({
   clearSearchCache: vi.fn(),
-  GameSearch: ({ onSelect }: { onSelect(game: { id: string; slug: string; displayName: string; ruleCount: number; updatedAt: number }): void }) => <button type="button" onClick={() => onSelect({ id: 'game-1', slug: 'known-game', displayName: '既有遊戲', ruleCount: 0, updatedAt: 1 })}>選擇既有遊戲</button>,
+  GameSearch: ({ onSelect, includeGamesWithoutPublishedRules }: { onSelect(game: { id: string; slug: string; displayName: string; ruleCount: number; updatedAt: number }): void; includeGamesWithoutPublishedRules?: boolean }) => <button type="button" data-includes-zero-rule-games={String(Boolean(includeGamesWithoutPublishedRules))} onClick={() => onSelect({ id: 'game-1', slug: 'known-game', displayName: '既有遊戲', ruleCount: 0, updatedAt: 1 })}>選擇既有遊戲</button>,
 }));
 vi.mock('../components/EditionInput', () => ({ EditionInput: () => null }));
 vi.mock('../components/PlayerCountInput', () => ({ PlayerCountInput: () => null }));
@@ -74,6 +74,13 @@ describe('AddPage contribution constraints', () => {
     expect(screen.getByRole('heading', { name: '使用Google帳戶登入後即可填寫' })).toBeInTheDocument();
     expect(screen.getByText('登入後可有限度地建立規則。')).toBeInTheDocument();
     expect(screen.queryByText('新增一條規則')).not.toBeInTheDocument();
+  });
+
+  test('does not offer games without published rules for a wrong-rule report', () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+
+    expect(screen.getByRole('button', { name: '選擇既有遊戲' })).toHaveAttribute('data-includes-zero-rule-games', 'false');
   });
 
   test('blocks rule entry until a user without game quota selects an existing game', async () => {
