@@ -135,7 +135,6 @@ const votableSubjectCondition = (subjectAlias: string, gameAlias: string) => `(
     AND ${gameAlias}.entity_kind IN ('base', 'expansion')
     AND ${gameAlias}.merged_into_game_id IS NULL
     AND ${gameAlias}.visibility = 'public'
-    AND (${gameAlias}.published_rule_count > 0 OR ${gameAlias}.attribute_enabled = 1)
     AND (
       ${gameAlias}.bgg_id IS NOT NULL
       OR EXISTS (
