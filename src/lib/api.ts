@@ -121,10 +121,12 @@ const gameCatalog = async (onUpdated?: (data: GameCatalogPayload) => void): Prom
 };
 
 const toCatalog = (catalog: GameCatalogPayload, includePrivate: boolean) => ({
-  games: catalog.games.map((game) => ({
-    ...game,
-    ruleCount: includePrivate ? game.totalRuleCount ?? game.ruleCount : game.publishedRuleCount ?? game.ruleCount,
-  })),
+  games: catalog.games
+    .map((game) => ({
+      ...game,
+      ruleCount: includePrivate ? game.totalRuleCount ?? game.ruleCount : game.publishedRuleCount ?? game.ruleCount,
+    }))
+    .filter((game) => (game.publishedRuleCount ?? game.ruleCount) > 0),
 });
 
 const catalogGames = async (includePrivate: boolean, onUpdated?: (data: { games: GameSummary[] }) => void) =>

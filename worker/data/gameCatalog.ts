@@ -35,6 +35,9 @@ const parseGameSummary = (value: string): GameSummary => {
   return parsed;
 };
 
+const hasPublishedRules = (game: GameSummary) =>
+  (game.publishedRuleCount ?? game.ruleCount) > 0;
+
 export const queryGameCatalogSnapshot = async (db: Database): Promise<GameCatalogSnapshotQuery> => {
   const state = await db.statement(`
     SELECT active_generation, through_version, chunk_count, generated_at
@@ -61,7 +64,7 @@ export const gameCatalogPayload = ({ state, chunks }: GameCatalogSnapshotQuery):
     const parsed = JSON.parse(row.games_json) as unknown;
     if (!Array.isArray(parsed)) throw new Error('invalid_game_catalog_chunk');
     return parsed as GameSummary[];
-  });
+  }).filter(hasPublishedRules);
   return {
     generation: Number(stateRow.active_generation),
     throughVersion: Number(stateRow.through_version),
