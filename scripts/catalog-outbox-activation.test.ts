@@ -10,8 +10,8 @@ test('outbox activation removes broad catalog writers but retains component-name
   const sqlite = new DatabaseSync(':memory:');
   try {
     const activationSql = read('scripts/catalog-outbox-activation.sql');
-    expect(activationSql).toContain('BEGIN IMMEDIATE;');
-    expect(activationSql).toContain('COMMIT;');
+    expect(activationSql).not.toMatch(/^\s*BEGIN\s+IMMEDIATE;/m);
+    expect(activationSql).not.toMatch(/^\s*COMMIT;/m);
     sqlite.exec(read('tests/fixtures/production-d1-schema.sql'));
     sqlite.exec(read('migrations/0105_catalog_outbox_foundation.sql'));
     sqlite.exec(activationSql);

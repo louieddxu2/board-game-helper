@@ -3,8 +3,6 @@
 -- compact identity outbox.  The operation is idempotent and does not alter
 -- source games, rules, votes, or score state.
 
-BEGIN IMMEDIATE;
-
 DROP TRIGGER IF EXISTS game_catalog_games_after_insert;
 DROP TRIGGER IF EXISTS game_catalog_games_after_update;
 DROP TRIGGER IF EXISTS game_catalog_games_after_delete;
@@ -656,4 +654,3 @@ END;
 DROP VIEW IF EXISTS attribute_subject_catalog_source;
 
 UPDATE catalog_outbox_settings SET mode = 'outbox' WHERE id = 1;
-COMMIT;
