@@ -422,7 +422,7 @@ describe('api versioned attribute table boundary', () => {
     await expect(api.attributeTable()).resolves.toEqual(table);
 
     expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=10', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(`/api/attributes/table/changes?after=10&generation=${table.generation}&generatedAt=${table.generatedAt}`, expect.any(Object));
     expect(cacheSnapshot).toHaveBeenCalledWith(table);
     expect(cacheChanges).toHaveBeenCalledWith(noChanges);
   });
@@ -456,7 +456,7 @@ describe('api versioned attribute table boundary', () => {
 
     const result = await api.attributeTable();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/attributes/table/changes?after=11', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(`/api/attributes/table/changes?after=11&generation=${table.generation}&generatedAt=${table.generatedAt}`, expect.any(Object));
     expect(cacheChanges).toHaveBeenCalledTimes(2);
     expect(result.attributes).toEqual([merged]);
     expect(result.throughVersion).toBe(14);

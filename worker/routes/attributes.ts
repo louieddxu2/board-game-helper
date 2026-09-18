@@ -102,13 +102,29 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
   const rawAfter = c.req.query('after') ?? '0';
   const after = Number(rawAfter);
   if (!Number.isSafeInteger(after) || after < 0) return c.json({ error: 'invalid_catalog_version' }, 400);
+  const rawGeneration = c.req.query('generation');
+  const rawGeneratedAt = c.req.query('generatedAt');
+  const clientSnapshot = rawGeneration === undefined || rawGeneratedAt === undefined
+    ? undefined
+    : { generation: Number(rawGeneration), generatedAt: Number(rawGeneratedAt) };
+  if ((rawGeneration === undefined) !== (rawGeneratedAt === undefined)
+    || (clientSnapshot && (!Number.isSafeInteger(clientSnapshot.generation) || clientSnapshot.generation < 0
+      || !Number.isSafeInteger(clientSnapshot.generatedAt) || clientSnapshot.generatedAt < 0))) {
+    return c.json({ error: 'invalid_catalog_snapshot' }, 400);
+  }
   const db = getDatabase(c);
   try {
     c.header('Cache-Control', 'no-store');
-    const [result, snapshot] = await Promise.all([
-      queryAttributeCatalogChanges(db, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT),
-      queryAttributeCatalogSnapshotMeta(db),
-    ]);
+    // Read the single active-snapshot row before the delta page.  When a
+    // browser carries an obsolete weekly snapshot, its old delta cursor is
+    // meaningless; return immediately so no catalog entry rows are read.
+    const snapshot = await queryAttributeCatalogSnapshotMeta(db);
+    if (clientSnapshot && (clientSnapshot.generation !== snapshot.generation
+      || clientSnapshot.generatedAt !== snapshot.generatedAt)) {
+      setD1MetricsHeader(c, db);
+      return c.json({ changes: [], throughVersion: after, hasMore: false, snapshot });
+    }
+    const result = await queryAttributeCatalogChanges(db, after, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
     logD1Query(c, 'attribute_catalog_changes', result);
     const payload = attributeCatalogChangesPayload(result, after, snapshot, ATTRIBUTE_CATALOG_CHANGE_LIMIT);
     setD1MetricsHeader(c, db);

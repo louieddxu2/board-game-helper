@@ -149,8 +149,17 @@ const needsInitialAttributeCandidateRepair = (record: AttributeCatalogCacheRecor
 const synchronizeAttributeTable = async (catalog: AttributeCatalogPayload): Promise<AttributeCatalogPayload> => {
   let afterVersion = catalog.throughVersion;
   while (true) {
+    // Send the cached snapshot identity with the delta cursor.  A weekly
+    // snapshot replacement invalidates every old delta cursor, so the Worker
+    // can answer that case from its one-row snapshot state instead of reading
+    // an obsolete page of attribute_catalog_entries first.
+    const cursor = new URLSearchParams({
+      after: String(afterVersion),
+      generation: String(catalog.generation),
+      generatedAt: String(catalog.generatedAt),
+    });
     const changes = await transportRequest<AttributeCatalogChangesPayload>(
-      `/api/attributes/table/changes?after=${afterVersion}`,
+      `/api/attributes/table/changes?${cursor}`,
       undefined,
       'cache-miss',
     );
