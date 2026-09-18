@@ -128,6 +128,11 @@ const main = async () => {
 
   console.log('\n📦 正在執行專案檢查、構建與 Worker 部署...');
   execSync('npm run deploy:code', { stdio: 'inherit' });
+  // The outbox foundation migration is intentionally compatible with the
+  // old Worker.  Switch its triggers only after this deployment completed,
+  // so source changes never fall into a code/schema gap.
+  console.log('\n🧩 正在檢查 catalog outbox 是否需要啟用...');
+  execSync('node scripts/activate-catalog-outbox.mjs', { stdio: 'inherit' });
   console.log('\n🔎 正在驗證正式站健康狀態、Session 設定、Google Client ID 與 CSP...');
   execSync('npm run smoke:production', { stdio: 'inherit' });
   recordSuccessfulDeploy(deployingSha);

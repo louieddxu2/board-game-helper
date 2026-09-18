@@ -395,17 +395,24 @@ const decodeCursor = (cursor: string | undefined): string[] | undefined => {
   }
 };
 
-const queryAttributeDefinitions = async (db: Database): Promise<AttributeDefinition[]> => {
+const queryAttributeDefinitions = async (db: Database, attributeIds?: string[]): Promise<AttributeDefinition[]> => {
+  if (attributeIds && !attributeIds.length) return [];
+  const filter = attributeIds?.length ? `AND a.id IN (${attributeIds.map(() => '?').join(',')})` : '';
   const result = await db.statement(`
     SELECT a.id, a.key, t.name, t.short_description, t.full_description, a.scale_type, t.endpoints_json,
       a.min_value, a.max_value, a.sort_order
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
     WHERE a.is_active = 1
+      ${filter}
     ORDER BY a.sort_order, a.id
-  `).all<AttributeRow>();
+  `).bind(...(attributeIds ?? [])).all<AttributeRow>();
   return (result.results ?? []).map(toAttribute);
 };
+
+/** Targeted publisher lookup. It never needs the complete attribute catalog. */
+export const queryAttributeDefinitionsById = (db: Database, attributeIds: string[]) =>
+  queryAttributeDefinitions(db, attributeIds);
 
 const querySingleAttribute = async (db: Database, attributeId?: string): Promise<AttributeDefinition | null> => {
   if (attributeId) {
@@ -542,6 +549,32 @@ export const queryAttributeSubjects = async (db: Database, subjectIds?: string[]
 };
 
 /**
+ * Read a bounded, self-contained replacement for each requested subject.
+ * This stays separate from the complete table builder so one game change
+ * cannot expand unrelated subjects or score states.
+ */
+export const queryAttributeSubjectBundles = async (
+  db: Database,
+  subjectIds: string[],
+): Promise<Array<{ subject: AttributeSubject; values: AttributeMatrixValue[] }>> => {
+  if (!subjectIds.length) return [];
+  const [subjects, values] = await Promise.all([
+    queryAttributeSubjects(db, subjectIds),
+    queryAttributeValues(db, subjectIds),
+  ]);
+  const valuesBySubject = new Map<string, AttributeMatrixValue[]>();
+  values.forEach((value) => {
+    const current = valuesBySubject.get(value.subjectId) ?? [];
+    current.push(value);
+    valuesBySubject.set(value.subjectId, current);
+  });
+  return subjects.map((subject) => ({
+    subject,
+    values: valuesBySubject.get(subject.id) ?? [],
+  }));
+};
+
+/**
  * Small directory used only to intersect a locally imported BGG collection.
  * It deliberately excludes scores, activities, and components so the voting
  * page never downloads the full attribute table just to resolve BGG IDs.
@@ -578,7 +611,7 @@ const toMatrixValue = (row: AttributeScoreStateRow): AttributeMatrixValue => ({
   modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
 });
 
-const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promise<AttributeMatrixValue[]> => {
+export const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promise<AttributeMatrixValue[]> => {
   if (subjectIds && !subjectIds.length) return [];
   const filter = subjectIds?.length ? `WHERE state.subject_id IN (${subjectIds.map(() => '?').join(',')})` : '';
   const result = await db.statement(`
@@ -586,6 +619,7 @@ const queryAttributeValues = async (db: Database, subjectIds?: string[]): Promis
       state.comparison_count, state.decisive_comparison_count, state.evidence_count
     FROM attribute_score_states state
     ${filter}
+    ORDER BY state.subject_id, state.attribute_id
   `).bind(...(subjectIds ?? [])).all<AttributeScoreStateRow>();
   return (result.results ?? []).map(toMatrixValue);
 };
@@ -599,21 +633,7 @@ const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixVal
     LEFT JOIN games game ON game.id = subject.game_id
     WHERE ${votableSubjectCondition('subject', 'game')}
   `).all<AttributeScoreStateRow>();
-  return (result.results ?? []).map((row) => ({
-    ...toMatrixValue(row),
-    // Browser consumers ignore this. The weekly replay uses it to compare a
-    // full result without scanning attribute_score_states next time.
-    replayState: {
-      score: Number(row.score),
-      ratingDeviation: Number(row.rating_deviation),
-      directSum: Number(row.direct_sum),
-      directCount: Number(row.direct_count),
-      comparisonCount: Number(row.comparison_count),
-      decisiveComparisonCount: Number(row.decisive_comparison_count),
-      evidenceCount: Number(row.evidence_count),
-      modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
-    },
-  }));
+  return (result.results ?? []).map(toMatrixValue);
 };
 
 const parseCandidateValues = (raw: string): Array<number | null> => {
@@ -657,6 +677,29 @@ const queryAllUnprocessedCandidates = async (db: Database): Promise<AttributeImp
     WHERE match_status IN ('pending', 'ambiguous')
     ORDER BY source_row_number, id
   `).all<CandidateRow>();
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    displayName: row.source_name,
+    values: parseCandidateValues(row.values_json),
+    matchStatus: row.match_status,
+    subjectId: row.subject_id ?? undefined,
+    sourceRowNumber: row.source_row_number,
+  }));
+};
+
+/** Targeted publisher lookup for the small unresolved-import queue. */
+export const queryAttributeCandidatesById = async (
+  db: Database,
+  candidateIds: string[],
+): Promise<AttributeImportCandidate[]> => {
+  if (!candidateIds.length) return [];
+  const result = await db.statement(`
+    SELECT id, source_name, values_json, match_status, subject_id, source_row_number
+    FROM attribute_import_candidates
+    WHERE id IN (${candidateIds.map(() => '?').join(',')})
+      AND match_status IN ('pending', 'ambiguous')
+    ORDER BY source_row_number, id
+  `).bind(...candidateIds).all<CandidateRow>();
   return (result.results ?? []).map((row) => ({
     id: row.id,
     displayName: row.source_name,
@@ -1315,8 +1358,9 @@ const rebuildStateStatement = (
 
 const stateMatches = (stored: AttributeScoreStateRow | undefined, next: OnlineAttributeState): boolean => {
   if (!stored || stored.model_version !== ATTRIBUTE_SCORE_MODEL_VERSION) return false;
-  // Older public snapshots round display values. That rounding must not make
-  // a no-op replay rewrite every state; new snapshots retain replayState too.
+  // Legacy materialized rows and private checkpoint payloads can contain
+  // display-rounded values. That rounding must not make a no-op replay
+  // rewrite every state.
   const nearlyEqual = (left: number, right: number, tolerance: number) => Math.abs(left - right) <= tolerance;
   return nearlyEqual(Number(stored.score), next.score, 0.0051)
     && nearlyEqual(Number(stored.rating_deviation), next.ratingDeviation, 0.00051)
@@ -1510,16 +1554,10 @@ export const processAttributeMergeRebuildJobs = async (
   _maxBatches?: number,
 ): Promise<boolean> => processAttributeMergeRebuild(db, timestamp);
 
-interface FullReplaySnapshotRow {
-  active_generation: number;
-  through_version: number;
-  attributes_json: string;
-}
-
-interface FullReplaySnapshotChunkRow { entries_json: string; }
-interface FullReplayCatalogEntryRow { entry_key: string; catalog_version: number; entry_json: string | null; deleted: number; }
 interface FullReplayPairSnapshotRow { active_generation: number; chunk_count: number; }
 interface FullReplayPairSnapshotChunkRow { pairs_json: string; }
+interface FullReplayStateSnapshotRow { active_generation: number; chunk_count: number; }
+interface FullReplayStateSnapshotChunkRow { states_json: string; }
 interface FullReplayHistoryRow {
   stream_id: string;
   kind: 'rating' | 'comparison';
@@ -1553,96 +1591,107 @@ const parseFullReplayJson = (value: string): unknown => {
 };
 
 /**
- * The public catalog snapshot already contains every active score state.
- * Reconstruct from its few chunks plus post-snapshot entries, rather than
- * reading attribute_score_states once per weekly replay.
+ * Replay metadata is derived directly from its source tables.  It is small
+ * (subjects, components, definitions, unresolved imports) and intentionally
+ * excludes both the public snapshot and all public catalog deltas.
  */
-const queryFullReplayMaterializedStates = async (db: Database) => {
-  const snapshot = await db.statement(`
-    SELECT active_generation, through_version, attributes_json
-    FROM attribute_catalog_snapshot_state WHERE id = 1
-  `).first<FullReplaySnapshotRow>();
-  if (!snapshot) throw new Error('attribute_catalog_unavailable');
-  const [chunksResult, changesResult] = await Promise.all([
-    db.statement(`SELECT entries_json FROM attribute_catalog_snapshot_chunks
-      WHERE generation = ? ORDER BY chunk_number`).bind(snapshot.active_generation).all<FullReplaySnapshotChunkRow>(),
-    db.statement(`SELECT entry_key, catalog_version, entry_json, deleted FROM attribute_catalog_entries
-      WHERE catalog_version > ? ORDER BY catalog_version, entry_key`).bind(snapshot.through_version).all<FullReplayCatalogEntryRow>(),
+const queryFullReplayMetadata = async (db: Database) => {
+  const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
+    .first<{ current_version: number }>();
+  if (!clock) throw new Error('attribute_catalog_clock_unavailable');
+  const [attributeRows, subjectRows, candidates] = await Promise.all([
+    queryAttributeDefinitions(db),
+    queryAttributeSubjects(db),
+    queryAllUnprocessedCandidates(db),
   ]);
-  const subjectIds = new Set<string>();
-  const attributes = new Map<string, AttributeDefinition>();
-  const subjects = new Map<string, AttributeSubject>();
-  const candidates = new Map<string, AttributeImportCandidate>();
-  const stored = new Map<string, AttributeScoreStateRow>();
-  const addValue = (value: Record<string, unknown>) => {
-    if (typeof value.subjectId !== 'string' || typeof value.attributeId !== 'string'
-      || typeof value.score !== 'number' || typeof value.ratingDeviation !== 'number'
-      || typeof value.directCount !== 'number' || typeof value.comparisonCount !== 'number'
-      || typeof value.decisiveComparisonCount !== 'number' || typeof value.modelVersion !== 'string') return;
-    const replayState = value.replayState as Record<string, unknown> | undefined;
-    const exact = replayState && typeof replayState.score === 'number' && typeof replayState.ratingDeviation === 'number'
-      && typeof replayState.directSum === 'number' ? replayState : undefined;
-    stored.set(mergeStateKey(value.subjectId, value.attributeId), {
-      subject_id: value.subjectId, attribute_id: value.attributeId, score: typeof exact?.score === 'number' ? exact.score : value.score,
-      rating_deviation: typeof exact?.ratingDeviation === 'number' ? exact.ratingDeviation : value.ratingDeviation,
-      direct_sum: typeof exact?.directSum === 'number' ? exact.directSum : (typeof value.directAverage === 'number' ? value.directAverage * value.directCount : 0),
-      direct_count: typeof exact?.directCount === 'number' ? exact.directCount : value.directCount,
-      comparison_count: typeof exact?.comparisonCount === 'number' ? exact.comparisonCount : value.comparisonCount,
-      decisive_comparison_count: typeof exact?.decisiveComparisonCount === 'number' ? exact.decisiveComparisonCount : value.decisiveComparisonCount,
-      evidence_count: typeof exact?.evidenceCount === 'number' ? exact.evidenceCount : (typeof value.evidenceCount === 'number' ? value.evidenceCount : value.directCount + value.comparisonCount),
-      model_version: typeof exact?.modelVersion === 'string' ? exact.modelVersion : value.modelVersion,
-    });
+  return {
+    subjectIds: new Set(subjectRows.map((subject) => subject.id)),
+    attributes: new Map(attributeRows.map((attribute) => [attribute.id, attribute])),
+    subjects: new Map(subjectRows.map((subject) => [subject.id, subject])),
+    candidates: new Map(candidates.map((candidate) => [candidate.id, candidate])),
+    throughVersion: Number(clock.current_version),
   };
-  const removeSubject = (subjectId: string) => {
-    subjectIds.delete(subjectId); subjects.delete(subjectId);
-    for (const key of stored.keys()) if (key.startsWith(`${subjectId}\u0000`)) stored.delete(key);
-  };
-  const removeAttribute = (attributeId: string) => {
-    attributes.delete(attributeId);
-    for (const [key, value] of stored) if (value.attribute_id === attributeId) stored.delete(key);
-  };
-  const applyEntry = (entryKey: string, entryJson: string | null, deleted: boolean) => {
-    const [kind, ...parts] = entryKey.split(':');
-    if (deleted || !entryJson) {
-      if (kind === 'subject') removeSubject(parts.join(':'));
-      else if (kind === 'attribute') removeAttribute(parts.join(':'));
-      else if (kind === 'value') stored.delete(mergeStateKey(parts[0], parts.slice(1).join(':')));
-      else if (kind === 'candidate') candidates.delete(parts.join(':'));
-      return;
-    }
-    const entry = parseFullReplayJson(entryJson) as Record<string, unknown>;
-    if (entry.kind === 'subject') {
-      const subject = entry.subject as Record<string, unknown> | undefined;
-      if (typeof subject?.id === 'string') { subjectIds.add(subject.id); subjects.set(subject.id, subject as unknown as AttributeSubject); }
-    } else if (entry.kind === 'attribute') {
-      const attribute = entry.attribute as Record<string, unknown> | undefined;
-      if (typeof attribute?.id === 'string') attributes.set(attribute.id, attribute as unknown as AttributeDefinition);
-    } else if (entry.kind === 'value') addValue(entry);
-    else if (entry.kind === 'candidate' && typeof entry.id === 'string') candidates.set(entry.id, entry as unknown as AttributeImportCandidate);
-  };
-  const snapshotAttributes = parseFullReplayJson(snapshot.attributes_json);
-  if (!Array.isArray(snapshotAttributes)) throw new Error('invalid_attribute_replay_snapshot');
-  for (const attribute of snapshotAttributes as Array<Record<string, unknown>>) if (typeof attribute.id === 'string') attributes.set(attribute.id, attribute as unknown as AttributeDefinition);
-  for (const row of chunksResult.results ?? []) {
-    const entries = parseFullReplayJson(row.entries_json);
-    if (!Array.isArray(entries)) throw new Error('invalid_attribute_replay_snapshot');
-    for (const entry of entries as Array<Record<string, unknown>>) {
-      if (entry.kind === 'subject') {
-        const subject = entry.subject as Record<string, unknown> | undefined;
-        if (typeof subject?.id !== 'string') continue;
-        subjectIds.add(subject.id); subjects.set(subject.id, subject as unknown as AttributeSubject);
-        if (Array.isArray(entry.values)) for (const value of entry.values as Array<Record<string, unknown>>) addValue(value);
-      } else if (entry.kind === 'candidate' && typeof entry.candidate === 'object' && entry.candidate) {
-        const candidate = entry.candidate as AttributeImportCandidate;
-        if (typeof candidate.id === 'string') candidates.set(candidate.id, candidate);
-      }
+};
+
+/** Read the compact private state checkpoint used only for replay diffs. */
+const queryFullReplayStateBaseline = async (db: Database) => {
+  const state = await db.statement(`
+    SELECT active_generation, chunk_count
+    FROM attribute_replay_state_snapshot_state
+    WHERE id = 1
+  `).first<FullReplayStateSnapshotRow>();
+  if (!state) return { states: new Map<string, AttributeScoreStateRow>(), available: false };
+  const chunks = await db.statement(`
+    SELECT states_json
+    FROM attribute_replay_state_snapshot_chunks
+    WHERE generation = ?
+    ORDER BY chunk_number
+  `).bind(state.active_generation).all<FullReplayStateSnapshotChunkRow>();
+  if ((chunks.results ?? []).length !== Number(state.chunk_count)) throw new Error('incomplete_attribute_replay_state_baseline');
+  const states = new Map<string, AttributeScoreStateRow>();
+  for (const chunk of chunks.results ?? []) {
+    const rows = parseFullReplayJson(chunk.states_json);
+    if (!Array.isArray(rows)) throw new Error('invalid_attribute_replay_state_baseline');
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length !== 10
+        || typeof row[0] !== 'string' || typeof row[1] !== 'string'
+        || row.slice(2, 9).some((value) => typeof value !== 'number')
+        || typeof row[9] !== 'string') continue;
+      const [subjectId, attributeId, score, ratingDeviation, directSum, directCount,
+        comparisonCount, decisiveComparisonCount, evidenceCount, modelVersion] = row as [
+        string, string, number, number, number, number, number, number, number, string,
+      ];
+      states.set(mergeStateKey(subjectId, attributeId), {
+        subject_id: subjectId,
+        attribute_id: attributeId,
+        score,
+        rating_deviation: ratingDeviation,
+        direct_sum: directSum,
+        direct_count: directCount,
+        comparison_count: comparisonCount,
+        decisive_comparison_count: decisiveComparisonCount,
+        evidence_count: evidenceCount,
+        model_version: modelVersion,
+      });
     }
   }
-  for (const entry of changesResult.results ?? []) applyEntry(entry.entry_key, entry.entry_json, Boolean(entry.deleted));
-  return {
-    subjectIds, attributes, subjects, candidates, stored,
-    throughVersion: Number((changesResult.results ?? []).at(-1)?.catalog_version ?? snapshot.through_version),
-  };
+  return { states, available: true };
+};
+
+const writeFullReplayStateBaseline = async (
+  db: Database,
+  states: Map<string, OnlineAttributeState>,
+  generation: number,
+) => {
+  const rows = [...states.entries()].map(([key, state]) => {
+    const separator = key.indexOf('\u0000');
+    return [
+      key.slice(0, separator), key.slice(separator + 1), state.score,
+      state.ratingDeviation, state.directSum, state.directCount,
+      state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount,
+      ATTRIBUTE_SCORE_MODEL_VERSION,
+    ];
+  });
+  // Keep each D1 JSON cell comfortably below the 1 MB value ceiling.
+  const chunks = chunk(rows, 1000);
+  if (!chunks.length) chunks.push([]);
+  await db.batch([
+    db.statement('DELETE FROM attribute_replay_state_snapshot_chunks WHERE generation = ?').bind(generation),
+    ...chunks.map((entries, index) => db.statement(`
+      INSERT INTO attribute_replay_state_snapshot_chunks (generation, chunk_number, states_json)
+      VALUES (?, ?, ?)
+    `).bind(generation, index, JSON.stringify(entries))),
+    db.statement(`
+      INSERT INTO attribute_replay_state_snapshot_state
+        (id, active_generation, chunk_count, generated_at)
+      VALUES (1, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        active_generation = excluded.active_generation,
+        chunk_count = excluded.chunk_count,
+        generated_at = excluded.generated_at
+    `).bind(generation, chunks.length, generation),
+    db.statement('DELETE FROM attribute_replay_state_snapshot_chunks WHERE generation <> ?').bind(generation),
+  ]);
 };
 
 const queryFullReplayHistory = async (db: Database): Promise<FullReplayHistoryRow[]> => {
@@ -1693,9 +1742,11 @@ const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectA
 /** Recalculate every active game+attribute from every raw vote, without scanning materialized score rows. */
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
-  const [{ subjectIds, attributes, subjects, candidates, stored, throughVersion }, history, storedPairs] = await Promise.all([
-    queryFullReplayMaterializedStates(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db),
+  const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
+    queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
   ]);
+  const { subjectIds, attributes, subjects, candidates, throughVersion } = metadata;
+  const stored = stateBaseline.states;
   const states = new Map<string, OnlineAttributeState>();
   const directRatings = new Map<string, { total: number; count: number }>();
   for (const row of history) {
@@ -1740,6 +1791,7 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
     for (const statementBatch of chunk(pairStatements, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     for (const statementBatch of chunk(stalePairs.map((pair) => db.statement('DELETE FROM attribute_pair_stats WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = ?').bind(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     if (changedPairs.length || stalePairs.length) await writeFullReplayPairBaseline(db, [...pairCounts.values()], timestamp);
+    if (changedStates.length || !stateBaseline.available) await writeFullReplayStateBaseline(db, states, timestamp);
   } finally {
     if (rebuildMode) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
   }
@@ -1754,12 +1806,6 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
       directCount: state.directCount, comparisonCount: state.comparisonCount,
       decisiveComparisonCount: state.decisiveComparisonCount, evidenceCount: state.evidenceCount,
       modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
-      replayState: {
-        score: state.score, ratingDeviation: state.ratingDeviation, directSum: state.directSum,
-        directCount: state.directCount, comparisonCount: state.comparisonCount,
-        decisiveComparisonCount: state.decisiveComparisonCount, evidenceCount: state.evidenceCount,
-        modelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
-      },
     } as AttributeMatrixValue;
   });
   return {

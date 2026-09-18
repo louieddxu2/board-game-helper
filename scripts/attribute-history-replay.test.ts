@@ -8,6 +8,7 @@ import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay'
 
 const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeCleanup?: (sqlite: DatabaseSync) => void) => {
   const sqlite = new DatabaseSync(':memory:');
+  const executedSql: string[] = [];
   for (const name of readdirSync('migrations').filter((file) => file.endsWith('.sql')).sort()) {
     try {
       if (name === '0090_convert_win_vote_history.sql') beforeHistoryConversion?.(sqlite);
@@ -26,6 +27,7 @@ const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeC
     bind: (...values: SQLInputValue[]) => prepare(sql, values),
     run: () => prepare(sql, args).all(),
     all: async () => {
+      executedSql.push(sql);
       const statement = sqlite.prepare(sql);
       if (statement.columns().length) return { results: statement.all(...args), meta: { changes: 0 } };
       const result = statement.run(...args);
@@ -40,7 +42,7 @@ const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeC
       catch (error) { sqlite.exec('ROLLBACK'); throw error; }
     },
   } } as unknown as Parameters<typeof createDatabase>[0]);
-  return { sqlite, gateway };
+  return { sqlite, gateway, executedSql };
 };
 
 test('compatibility cleanup preserves votes and refuses to drop nonempty tables', () => {
@@ -82,7 +84,7 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
 });
 
 test('canonical vote history survives cleanup, new votes and a complete rebuild', async () => {
-  const { sqlite, gateway } = setup((db) => {
+  const { sqlite, gateway, executedSql } = setup((db) => {
     const subject = 'attribute_subject_game:game_attribute_import_the_mind';
     const activities = JSON.stringify([
       { id: 'history-rating', kind: 'rating', attributeId: 'attribute_score_race', attributeName: '得分取勝', subject: { id: subject }, value: 8 },
@@ -167,19 +169,41 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(Number(read()?.direct_count)).toBe(Number(before?.direct_count)+1);
     expect(Number(read()?.evidence_count)).toBe(Number(before?.evidence_count)+1);
     // A complete replay is independent of merge-job rows and produces the
-    // same materialized state from raw history. With no divergence, it does
-    // not rewrite every state or pair-stat row.
+    // same materialized state from raw history. Its comparison checkpoint is
+    // private; it must not reconstruct state from the browser snapshot or
+    // the public catalog-delta table.
     const writesBeforeReplay = gateway.metrics?.().rowsWritten ?? 0;
+    executedSql.length = 0;
     await runCompleteAttributeReplay(gateway, timestamp + 5);
     expect(read()).toMatchObject({ score: 6.8, direct_sum: 34, direct_count: 5, evidence_count: 5 });
-    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeReplay).toBeLessThan(100);
+    // This fixture carries historical responses that predate its materialized
+    // state, so the first authoritative replay can legitimately correct a
+    // few hundred rows. This bound still catches a missing checkpoint, which
+    // used to rewrite every ~6,000 score row.
+    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeReplay).toBeLessThan(500);
+    expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
+      .toEqual({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
+    expect(sqlite.prepare('SELECT active_generation, generated_at, chunk_count FROM attribute_replay_state_snapshot_state WHERE id = 1').get())
+      .toMatchObject({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
     const writesBeforeUnchangedReplay = gateway.metrics?.().rowsWritten ?? 0;
+    executedSql.length = 0;
     await runCompleteAttributeReplay(gateway, timestamp + 6);
-    // An old snapshot can include entries whose eligibility was corrected by
-    // the first replay. A further unchanged replay must then write nothing.
+    // Every complete replay publishes a fresh browser baseline even when its
+    // calculated scores are unchanged, so clients can compare generations.
     expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeUnchangedReplay).toBeLessThan(100);
+    expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
+      .toEqual({ active_generation: timestamp + 6, generated_at: timestamp + 6 });
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
     const writesBeforeSettledReplay = gateway.metrics?.().rowsWritten ?? 0;
+    executedSql.length = 0;
     await runCompleteAttributeReplay(gateway, timestamp + 7);
-    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeSettledReplay).toBeLessThan(5);
+    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeSettledReplay).toBeLessThan(100);
+    expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
+      .toEqual({ active_generation: timestamp + 7, generated_at: timestamp + 7 });
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
   } finally { sqlite.close(); }
 });

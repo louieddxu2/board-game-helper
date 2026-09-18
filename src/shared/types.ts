@@ -285,6 +285,11 @@ export interface AttributeCatalogChange {
   attribute?: AttributeDefinition;
   value?: AttributeMatrixValue;
   subject?: AttributeSubject;
+  /**
+   * A complete replacement for one subject's score rows.  Publishers use
+   * this instead of emitting one catalog entry for every attribute state.
+   */
+  values?: AttributeMatrixValue[];
   candidate?: AttributeImportCandidate;
 }
 

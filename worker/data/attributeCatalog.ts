@@ -287,6 +287,19 @@ export const attributeCatalogChangesPayload = (
         deleted: false,
         subject,
       });
+    } else if (parsed.kind === 'subjectBundle') {
+      const subject = parseSubject(parsed.subject);
+      if (!subject || !Array.isArray(parsed.values)) continue;
+      const values = parsed.values
+        .map(parseValue)
+        .filter((value): value is AttributeMatrixValue => Boolean(value && value.subjectId === subject.id));
+      changes.push({
+        entryKey: row.entry_key,
+        catalogVersion: Number(row.catalog_version),
+        deleted: false,
+        subject,
+        values,
+      });
     } else if (parsed.kind === 'candidate') {
       const candidate = parseCandidate(parsed);
       if (!candidate) continue;

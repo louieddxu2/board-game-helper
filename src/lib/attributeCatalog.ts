@@ -47,8 +47,20 @@ export const applyAttributeCatalogChanges = (
         for (const key of values.keys()) {
           if (key.startsWith(`${subjectId}:`)) values.delete(key);
         }
+      } else if (change.subject) {
+        subjects.set(change.subject.id, mergeAttributeSubjectMetadata(subjects.get(change.subject.id), change.subject));
+        // A subject bundle is authoritative for that subject.  Replacing the
+        // small set of values avoids keeping a stale value when a state was
+        // removed or an attribute ceased to be votable.
+        if (change.values !== undefined) {
+          for (const [key, value] of values) {
+            if (value.subjectId === change.subject.id) values.delete(key);
+          }
+          change.values
+            .filter((value) => value.subjectId === change.subject!.id)
+            .forEach((value) => values.set(valueKey(value), value));
+        }
       }
-      else if (change.subject) subjects.set(change.subject.id, mergeAttributeSubjectMetadata(subjects.get(change.subject.id), change.subject));
     }
     if (change.entryKey.startsWith('value:')) {
       if (change.deleted) {

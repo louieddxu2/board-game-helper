@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { sessionMiddleware } from './auth';
 import type { Env } from './env';
 import { assertMutationOrigin, trustedOrigins } from './utils';
-import { createDatabase } from './data/database';
+import { createDatabase, getDatabase } from './data/database';
+import { flushCatalogOutbox } from './data/catalogOutbox';
 import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
@@ -119,6 +120,20 @@ app.use('/api/*', async (c, next) => {
   await next();
 });
 
+// Source-table triggers only record affected identities.  Finish a successful
+// mutation by publishing those bounded changes while this request still owns
+// the source write.  A failed publish leaves its outbox row for the daily
+// recovery flush instead of rolling back correct domain data.
+app.use('/api/*', async (c, next) => {
+  await next();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) || c.res.status >= 400) return;
+  try {
+    await flushCatalogOutbox(getDatabase(c));
+  } catch (error) {
+    console.error('catalog_outbox_flush_failed', error);
+  }
+});
+
 app.get('/api/health', (c) => c.json({ ok: true }));
 
 app.route('/', authRoutes);
@@ -140,11 +155,17 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
   ]);
+  // The daily run is recovery-only. It drains interrupted publications but
+  // never recalculates vote scores or rewrites a browser snapshot.
+  await flushCatalogOutbox(db, controller.scheduledTime);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
-    await Promise.all([
-      rebuildGameCatalog(db, controller.scheduledTime),
-      runCompleteAttributeReplay(db, controller.scheduledTime),
-    ]);
+    // Game-list snapshots and attribute replay are intentionally separate:
+    // the game snapshot writes only when its own catalog version changed.
+    await rebuildGameCatalog(db, controller.scheduledTime);
+    await runCompleteAttributeReplay(db, controller.scheduledTime);
+    // Replay suppresses its own per-state outbox notifications. This second
+    // pass publishes only a real mutation that raced with the replay.
+    await flushCatalogOutbox(db, controller.scheduledTime);
   }
 };
 

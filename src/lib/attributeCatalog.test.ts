@@ -100,4 +100,19 @@ describe('attribute table catalog delta application', () => {
       components: [{ bggId: 326538 }],
     });
   });
+
+  test('replaces every value for a subject from one compact bundle', () => {
+    const oldValue = { ...base.values[0], attributeId: 'attribute-old' };
+    const replacement = { ...base.values[0], attributeId: 'attribute-new', score: 8.25 };
+    const updated = applyAttributeCatalogChanges({ ...base, values: [oldValue] }, [{
+      entryKey: 'subject:subject-a',
+      catalogVersion: 11,
+      deleted: false,
+      subject: { ...base.subjects[0], displayName: '新名稱' },
+      values: [replacement],
+    }]);
+
+    expect(updated.subjects[0].displayName).toBe('新名稱');
+    expect(updated.values).toEqual([replacement]);
+  });
 });

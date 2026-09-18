@@ -24,6 +24,13 @@ interface CatalogEntryRow {
   deleted: number;
 }
 
+export interface TargetedGameCatalogEntry {
+  gameId: string;
+  deleted: boolean;
+  game?: GameSummary;
+  updatedAt: number;
+}
+
 export interface GameCatalogSnapshotQuery {
   state: D1Result<SnapshotStateRow>;
   chunks: D1Result<SnapshotChunkRow>;
@@ -37,6 +44,28 @@ const parseGameSummary = (value: string): GameSummary => {
 
 const hasPublishedRules = (game: GameSummary) =>
   (game.publishedRuleCount ?? game.ruleCount) > 0;
+
+/**
+ * Publisher-only lookup.  The game ID filter is applied at the source view
+ * boundary, so an edit never rebuilds or scans the public game list.
+ */
+export const queryTargetedGameCatalogEntries = async (
+  db: Database,
+  gameIds: string[],
+): Promise<TargetedGameCatalogEntry[]> => {
+  if (!gameIds.length) return [];
+  const result = await db.statement(`
+    SELECT game_id, entry_json, deleted, updated_at
+    FROM game_catalog_source
+    WHERE game_id IN (${gameIds.map(() => '?').join(',')})
+  `).bind(...gameIds).all<{ game_id: string; entry_json: string | null; deleted: number; updated_at: number }>();
+  return (result.results ?? []).map((row) => ({
+    gameId: row.game_id,
+    deleted: Boolean(row.deleted) || !row.entry_json,
+    ...(row.deleted || !row.entry_json ? {} : { game: parseGameSummary(row.entry_json) }),
+    updatedAt: Number(row.updated_at),
+  }));
+};
 
 export const queryGameCatalogSnapshot = async (db: Database): Promise<GameCatalogSnapshotQuery> => {
   const state = await db.statement(`

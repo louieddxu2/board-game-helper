@@ -682,6 +682,13 @@ export const localDb = {
         } else if (change.subject) {
           const currentSubject = await subjects.get(subjectId);
           await subjects.put(mergeAttributeSubjectMetadata(currentSubject, change.subject));
+          if (change.values !== undefined) {
+            const subjectValues = await values.index('subjectId').getAll(subjectId);
+            await Promise.all(subjectValues.map((value) => values.delete(value.key)));
+            await Promise.all(change.values
+              .filter((value) => value.subjectId === change.subject!.id)
+              .map((value) => values.put({ ...value, key: attributeCatalogValueKey(value) })));
+          }
         }
       } else if (change.entryKey.startsWith('value:')) {
         if (change.deleted) {

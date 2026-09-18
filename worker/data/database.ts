@@ -26,6 +26,11 @@ class Statement implements DatabaseStatement {
     return this.raw.all<T>().then((result) => {
       this.metrics.queries += 1;
       this.metrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+      // `UPDATE ... RETURNING` is intentionally read through `first()` by
+      // catalog publishers so a version range is reserved atomically.  Count
+      // its physical writes as well; otherwise the emitted D1 telemetry
+      // understates precisely the mutations we are trying to budget.
+      this.metrics.rowsWritten += Number(result.meta?.rows_written ?? result.meta?.changes ?? 0);
       return result.results?.[0] ?? null;
     });
   }

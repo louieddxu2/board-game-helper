@@ -105,6 +105,21 @@ describe('versioned attribute table catalog', () => {
     expect(payload.changes[4]).toMatchObject({ deleted: true });
   });
 
+  test('decodes a complete subject bundle as one delta entry', () => {
+    const payload = attributeCatalogChangesPayload({ results: [{
+      entry_key: 'subject:subject-a',
+      catalog_version: 13,
+      entry_json: JSON.stringify({ kind: 'subjectBundle', subject: subject(), values: [value()] }),
+      deleted: 0,
+    }] }, 12, { generation: 18, generatedAt: 456 });
+
+    expect(payload.changes).toEqual([expect.objectContaining({
+      entryKey: 'subject:subject-a',
+      subject: expect.objectContaining({ id: 'subject-a' }),
+      values: [expect.objectContaining({ subjectId: 'subject-a', attributeId: 'attribute-luck' })],
+    })]);
+  });
+
   test('chunks large snapshots without relying on the number of games', () => {
     const chunks = chunkAttributeCatalog(Array.from({ length: 2501 }, (_, index) => ({
       kind: 'subject' as const,
