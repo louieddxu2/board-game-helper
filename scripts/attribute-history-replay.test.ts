@@ -3,7 +3,12 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { createDatabase } from '../worker/data/database';
-import { saveAttributeResponse, processAttributeMergeRebuildJobs } from '../worker/data/attributes';
+import {
+  acquireAttributeMergeLock,
+  processAttributeMergeRebuildJobs,
+  releaseAttributeMergeLock,
+  saveAttributeResponse,
+} from '../worker/data/attributes';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 
 const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeCleanup?: (sqlite: DatabaseSync) => void) => {
@@ -80,6 +85,64 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
     expect(sqlite.prepare("SELECT COUNT(*) AS count FROM attribute_catalog_entries WHERE entry_key LIKE 'subject:attribute_subject_game:game_bulk-mode-test' OR entry_key LIKE 'value:attribute_subject_game:game_bulk-mode-test:%'").get()).toMatchObject({ count: 0 });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_pair_stats').get()).toEqual(beforePairs);
+  } finally { sqlite.close(); }
+});
+
+test('complete replay and live responses cannot cross their state writes', async () => {
+  const { sqlite, gateway } = setup();
+  const timestamp = Date.now();
+  try {
+    // This fixture intentionally retains a historical merge job for its
+    // migration checks. It is unrelated to the replay-vs-live-write lock.
+    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status = 'completed'").run();
+    const subjects = sqlite.prepare(`
+      SELECT id, game_id FROM attribute_subjects
+      WHERE game_id IS NOT NULL
+      ORDER BY id
+      LIMIT 2
+    `).all() as Array<{ id: string; game_id: string }>;
+    expect(subjects).toHaveLength(2);
+    sqlite.prepare(`
+      INSERT INTO attribute_vote_lock (lock_name, token, expires_at)
+      VALUES (?, 'in-flight', ?)
+    `).run(`attribute-vote:attribute_win_method:${subjects[0].id}`, timestamp + 60_000);
+
+    await expect(runCompleteAttributeReplay(gateway, timestamp)).rejects.toThrow('attribute_replay_busy');
+    expect(sqlite.prepare("SELECT lock_name FROM attribute_vote_lock WHERE lock_name = 'attribute-replay'").get()).toBeUndefined();
+
+    sqlite.prepare('DELETE FROM attribute_vote_lock').run();
+    sqlite.prepare(`
+      INSERT INTO attribute_vote_lock (lock_name, token, expires_at)
+      VALUES ('attribute-replay', 'replay-in-progress', ?)
+    `).run(timestamp + 60_000);
+    await expect(saveAttributeResponse(gateway, {
+      subjectAId: subjects[0].id,
+      subjectBId: subjects[1].id,
+      attributeId: 'attribute_win_method',
+      responseId: 'blocked-by-replay',
+      sessionId: 'replay-lock-test',
+      actorId: null,
+      ratingA: 7,
+      timestamp,
+    })).rejects.toThrow('attribute_response_busy');
+    await expect(acquireAttributeMergeLock(
+      gateway, subjects[0].game_id, subjects[1].game_id, timestamp,
+    )).rejects.toThrow('attribute_response_busy');
+    expect(sqlite.prepare(`
+      SELECT lock_name
+      FROM attribute_vote_lock
+      WHERE lock_name = 'attribute-vote:merge-operation'
+    `).get()).toBeUndefined();
+
+    sqlite.prepare("DELETE FROM attribute_vote_lock WHERE lock_name = 'attribute-replay'").run();
+    const mergeLock = await acquireAttributeMergeLock(
+      gateway, subjects[0].game_id, subjects[1].game_id, timestamp,
+    );
+    expect(mergeLock.names).toContain('attribute-vote:merge-operation');
+    await expect(runCompleteAttributeReplay(gateway, timestamp + 1)).rejects.toThrow('attribute_replay_busy');
+    await releaseAttributeMergeLock(gateway, mergeLock);
+    await runCompleteAttributeReplay(gateway, timestamp + 2);
+    expect(sqlite.prepare("SELECT lock_name FROM attribute_vote_lock WHERE lock_name = 'attribute-replay'").get()).toBeUndefined();
   } finally { sqlite.close(); }
 });
 
@@ -185,6 +248,7 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       .toEqual({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
     expect(sqlite.prepare('SELECT active_generation, generated_at, chunk_count FROM attribute_replay_state_snapshot_state WHERE id = 1').get())
       .toMatchObject({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
+    expect(executedSql.filter((sql) => /^\s*SELECT[\s\S]*FROM\s+attribute_vote_responses\b/i.test(sql))).toHaveLength(1);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
     const writesBeforeUnchangedReplay = gateway.metrics?.().rowsWritten ?? 0;

@@ -41,6 +41,15 @@ export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 30;
 export const ATTRIBUTE_QUESTION_MAX_RETURNED_ROWS = 17;
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
+// Complete replay must take a short, global gate before it reads raw history.
+// Otherwise a response that started just before the replay can commit after
+// the history read and then be overwritten by the replay's state writes.
+const ATTRIBUTE_REPLAY_LOCK_NAME = 'attribute-replay';
+const ATTRIBUTE_REPLAY_LOCK_TTL_MS = 2 * 60_000;
+// A game merge changes source data as well as its derived states. This
+// singleton joins the existing per-subject merge locks so a replay cannot
+// start in the gap before a merge job has been recorded.
+const ATTRIBUTE_MERGE_OPERATION_LOCK_NAME = `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:merge-operation`;
 export const ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE = 20;
 export const ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS = 60_000;
 const ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT = 9;
@@ -519,29 +528,6 @@ const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<
   return map;
 };
 
-const queryAllComponents = async (db: Database): Promise<Map<string, AttributeSubjectComponent[]>> => {
-  const result = await db.statement(`
-    SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id
-    FROM attribute_subject_components
-    AS c
-    ORDER BY subject_id, component_order
-  `).all<ComponentRow>();
-  const map = new Map<string, AttributeSubjectComponent[]>();
-  (result.results ?? []).forEach((row) => {
-    const components = map.get(row.subject_id) ?? [];
-    components.push({
-      order: row.component_order,
-      gameId: row.game_id ?? undefined,
-      type: row.component_type,
-      label: row.label,
-      ...(row.english_name ? { englishName: row.english_name } : {}),
-      bggId: row.bgg_id ?? undefined,
-    });
-    map.set(row.subject_id, components);
-  });
-  return map;
-};
-
 export const queryAttributeSubjects = async (db: Database, subjectIds?: string[], page?: SubjectPageOptions): Promise<AttributeSubject[]> => {
   const rows = await querySubjectRows(db, subjectIds, page);
   const components = await queryComponents(db, rows.map((row) => row.id));
@@ -624,18 +610,6 @@ export const queryAttributeValues = async (db: Database, subjectIds?: string[]):
   return (result.results ?? []).map(toMatrixValue);
 };
 
-const queryAllAttributeValues = async (db: Database): Promise<AttributeMatrixValue[]> => {
-  const result = await db.statement(`
-    SELECT state.subject_id, state.attribute_id, state.score, state.rating_deviation, state.direct_sum, state.direct_count,
-      comparison_count, decisive_comparison_count, evidence_count
-    FROM attribute_score_states state
-    JOIN attribute_subjects subject ON subject.id = state.subject_id
-    LEFT JOIN games game ON game.id = subject.game_id
-    WHERE ${votableSubjectCondition('subject', 'game')}
-  `).all<AttributeScoreStateRow>();
-  return (result.results ?? []).map(toMatrixValue);
-};
-
 const parseCandidateValues = (raw: string): Array<number | null> => {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -708,28 +682,6 @@ export const queryAttributeCandidatesById = async (
     subjectId: row.subject_id ?? undefined,
     sourceRowNumber: row.source_row_number,
   }));
-};
-
-/** Full table source used only by the background snapshot builder. */
-export const queryAttributeTableSourcePayload = async (db: Database): Promise<AttributesPayload> => {
-  const [attributes, subjectRows, candidates, values] = await Promise.all([
-    queryAttributeDefinitions(db),
-    querySubjectRows(db),
-    queryAllUnprocessedCandidates(db),
-    queryAllAttributeValues(db),
-  ]);
-  const subjects = subjectRows.map((row) => toSubject(row, new Map()));
-  const components = await queryAllComponents(db);
-  const hydratedSubjects = subjects.map((subject) => ({ ...subject, components: components.get(subject.id) ?? [] }));
-  const visibleSubjectIds = new Set(hydratedSubjects.map((subject) => subject.id));
-  return {
-    attributes,
-    subjects: hydratedSubjects,
-    values: values.filter((value) => visibleSubjectIds.has(value.subjectId)),
-    candidates,
-    activities: [],
-    scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
-  };
 };
 
 const takePage = <T>(rows: T[], limit: number) => ({
@@ -1130,6 +1082,37 @@ interface AttributeWriteLock {
   names: string[];
 }
 
+interface AttributeReplayLock {
+  token: string;
+}
+
+const acquireAttributeReplayLock = async (db: Database, timestamp: number): Promise<AttributeReplayLock> => {
+  const token = createId('attribute-replay-lock');
+  const now = Date.now();
+  const expiresAt = Math.max(now, timestamp) + ATTRIBUTE_REPLAY_LOCK_TTL_MS;
+  await db.statement(`
+    DELETE FROM attribute_vote_lock
+    WHERE lock_name = ? AND expires_at < ?
+  `).bind(ATTRIBUTE_REPLAY_LOCK_NAME, now).run();
+  const acquired = await db.statement(`
+    INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
+    SELECT ?, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM attribute_vote_lock
+      WHERE lock_name GLOB ? AND expires_at >= ?
+    )
+    RETURNING token
+  `).bind(ATTRIBUTE_REPLAY_LOCK_NAME, token, expiresAt, `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:*`, now).first<{ token: string }>();
+  if (acquired?.token !== token) throw new Error('attribute_replay_busy');
+  return { token };
+};
+
+const releaseAttributeReplayLock = (db: Database, lock: AttributeReplayLock) => db.statement(`
+  DELETE FROM attribute_vote_lock
+  WHERE lock_name = ? AND token = ?
+`).bind(ATTRIBUTE_REPLAY_LOCK_NAME, lock.token).run();
+
 const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
   const subjectIds = new Set<string>();
   if (input.comparison != null || input.ratingA != null) subjectIds.add(input.subjectAId);
@@ -1170,19 +1153,28 @@ export const acquireAttributeMergeLock = async (
     db.statement('SELECT id FROM attributes WHERE is_active = 1 ORDER BY id').all<{ id: string }>(),
   ]);
   const subjectIds = [sourceSubjectId, targetSubjectId].filter((id): id is string => Boolean(id));
-  const names = [...new Set((attributes.results ?? []).flatMap((attribute) => subjectIds.map((subjectId) => `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:${attribute.id}:${subjectId}`)))].sort();
-  if (!names.length) return { token: '', names: [] };
+  const names = [...new Set([
+    ATTRIBUTE_MERGE_OPERATION_LOCK_NAME,
+    ...(attributes.results ?? []).flatMap((attribute) => subjectIds.map((subjectId) => `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:${attribute.id}:${subjectId}`)),
+  ])].sort();
   const token = createId('attribute-merge-lock');
-  const expiresAt = Math.max(Date.now(), timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
+  const now = Date.now();
+  const expiresAt = Math.max(now, timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
   const results = await db.batch([
     db.statement(`
       DELETE FROM attribute_vote_lock
-      WHERE lock_name IN (${names.map(() => '?').join(',')}) AND expires_at < ?
-    `).bind(...names, Date.now()),
+      WHERE lock_name IN (${[...names, ATTRIBUTE_REPLAY_LOCK_NAME].map(() => '?').join(',')})
+        AND expires_at < ?
+    `).bind(...names, ATTRIBUTE_REPLAY_LOCK_NAME, now),
     ...names.map((name) => db.statement(`
       INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
-      VALUES (?, ?, ?)
-    `).bind(name, token, expiresAt)),
+      SELECT ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM attribute_vote_lock
+        WHERE lock_name = ? AND expires_at >= ?
+      )
+    `).bind(name, token, expiresAt, ATTRIBUTE_REPLAY_LOCK_NAME, now)),
   ]);
   const acquired = names.filter((_, index) => batchChangeCount(results[index + 1]) === 1);
   if (acquired.length !== names.length) {
@@ -1740,8 +1732,7 @@ const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectA
 };
 
 /** Recalculate every active game+attribute from every raw vote, without scanning materialized score rows. */
-export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
-  if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
+const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
     queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
   ]);
@@ -1820,6 +1811,21 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
   };
 };
 
+/**
+ * Serialize a complete replay with live responses. The global gate is
+ * acquired only when no response currently owns a subject lock; response
+ * acquisition checks the same gate atomically before it touches state.
+ */
+export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
+  if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
+  const lock = await acquireAttributeReplayLock(db, timestamp);
+  try {
+    return await replayAllAttributeScoresLocked(db, timestamp);
+  } finally {
+    await releaseAttributeReplayLock(db, lock);
+  }
+};
+
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
   if (!lock.names.length) return;
   await db.statement(`
@@ -1836,16 +1842,23 @@ const releaseAttributeWriteLockStatement = (db: Database, lock: AttributeWriteLo
 const acquireAttributeWriteLock = async (db: Database, input: AttributeResponseInput): Promise<AttributeWriteLock> => {
   const token = createId('attribute-lock');
   const names = attributeWriteLockNames(input);
-  const expiresAt = Math.max(Date.now(), input.timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
+  const now = Date.now();
+  const expiresAt = Math.max(now, input.timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
   const results = await db.batch([
     db.statement(`
       DELETE FROM attribute_vote_lock
-      WHERE lock_name IN (${names.map(() => '?').join(',')}) AND expires_at < ?
-    `).bind(...names, Date.now()),
+      WHERE lock_name IN (${[...names, ATTRIBUTE_REPLAY_LOCK_NAME].map(() => '?').join(',')})
+        AND expires_at < ?
+    `).bind(...names, ATTRIBUTE_REPLAY_LOCK_NAME, now),
     ...names.map((name) => db.statement(`
       INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
-      VALUES (?, ?, ?)
-    `).bind(name, token, expiresAt)),
+      SELECT ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM attribute_vote_lock
+        WHERE lock_name = ? AND expires_at >= ?
+      )
+    `).bind(name, token, expiresAt, ATTRIBUTE_REPLAY_LOCK_NAME, now)),
   ]);
   const acquired = names.filter((_, index) => batchChangeCount(results[index + 1]) === 1);
   if (acquired.length !== names.length) {

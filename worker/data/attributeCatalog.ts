@@ -10,9 +10,6 @@ import type {
   AttributesPayload,
 } from '../../src/shared/types';
 import type { Database, D1Result } from './database';
-import {
-  queryAttributeTableSourcePayload,
-} from './attributes';
 
 const MAX_ENTRIES_PER_CHUNK = 1000;
 const MAX_CHUNK_BYTES = 1_000_000;
@@ -335,21 +332,6 @@ export const chunkAttributeCatalog = (entries: SnapshotEntry[], maxChunkBytes = 
   if (current.length) chunks.push(current);
   if (!chunks.length) chunks.push([]);
   return chunks;
-};
-
-export const rebuildAttributeCatalog = async (
-  db: Database,
-  timestamp = Date.now(),
-  options: { maxChunkBytes?: number } = {},
-): Promise<AttributeCatalogPayload> => {
-  // Read the cursor before the source rows, matching the game catalog's
-  // snapshot semantics: votes that happen during the build remain deltas.
-  const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
-    .first<{ current_version: number }>();
-  if (!clock) throw new Error('attribute_catalog_clock_unavailable');
-  const throughVersion = Number(clock.current_version);
-  const source = await queryAttributeTableSourcePayload(db);
-  return publishAttributeCatalogSnapshot(db, source, throughVersion, timestamp, options);
 };
 
 /** Write a snapshot from an already materialized payload without rereading D1 source tables. */

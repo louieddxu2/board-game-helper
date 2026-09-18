@@ -1,11 +1,12 @@
-// Operator-only runner: rebuild the production attribute catalog snapshot now.
+// Operator-only runner: replay production attribute votes, then publish the
+// resulting catalog snapshot. It deliberately has no snapshot-only path.
 // Wrangler keeps credentials private; no API tokens are read or printed here.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Database, DatabaseStatement } from '../worker/data/database';
-import { rebuildAttributeCatalog } from '../worker/data/attributeCatalog';
+import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 
 const literal = (value: unknown) => value == null
   ? 'NULL'
@@ -74,7 +75,7 @@ const db: Database = {
 
 const timestamp = Date.now();
 // Keep operator SQL statements comfortably below the Wrangler/D1 CLI limit.
-const payload = await rebuildAttributeCatalog(db, timestamp, { maxChunkBytes: 50_000 });
+await runCompleteAttributeReplay(db, timestamp, { maxChunkBytes: 50_000 });
 const state = await db.statement(`
   SELECT active_generation, through_version, chunk_count, generated_at
   FROM attribute_catalog_snapshot_state WHERE id=1
@@ -88,12 +89,12 @@ const win = await db.statement(`
 `).first<{ value_count: number; min_rd: number; max_rd: number; evidence_values: number }>();
 
 console.log(JSON.stringify({
-  rebuilt: { generation: payload.generation, throughVersion: payload.throughVersion, values: payload.values.length },
+  replayed: true,
   snapshot: state,
   winMethod: win,
 }));
 
-if (!state || state.active_generation !== timestamp || state.through_version !== payload.throughVersion) {
+if (!state || state.active_generation !== timestamp) {
   throw new Error('attribute_catalog_snapshot_verification_failed');
 }
 if (!win || Number(win.value_count) === 0) throw new Error('attribute_win_method_missing_after_rebuild');
