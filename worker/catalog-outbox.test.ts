@@ -72,4 +72,45 @@ describe('catalog outbox publisher', () => {
       values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.5 }],
     });
   });
+
+  test('splits a full outbox page into D1-safe revision-aware deletes', async () => {
+    const statements: CapturedStatement[] = [];
+    const rows = Array.from({ length: 100 }, (_, index) => ({
+      catalog: 'game' as const,
+      entity_key: `game-${index}`,
+      revision: index + 1,
+    }));
+    const db = {
+      statement: vi.fn().mockImplementation((sql: string) => {
+        let statement: CapturedStatement;
+        if (sql.includes('FROM catalog_outbox_settings')) {
+          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ mode: 'outbox' }) });
+        } else if (sql.includes('SELECT catalog, entity_key, revision')) {
+          statement = prepared(sql, { all: vi.fn().mockResolvedValue({ results: rows }) });
+        } else if (sql.includes('FROM game_catalog_source')) {
+          statement = prepared(sql, { all: vi.fn().mockResolvedValue({ results: [] }) });
+        } else if (sql.includes('UPDATE game_catalog_clock')) {
+          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ current_version: 100 }) });
+        } else {
+          statement = prepared(sql);
+        }
+        statements.push(statement);
+        return statement;
+      }),
+      batch: vi.fn().mockResolvedValue([]),
+    } as unknown as Database;
+
+    await expect(flushCatalogOutbox(db, 123)).resolves.toEqual({
+      mode: 'outbox', processed: { game: 100 },
+    });
+
+    const deletes = statements.filter((statement) => statement.sql.includes('DELETE FROM catalog_change_outbox'));
+    expect(deletes).toHaveLength(3);
+    expect(deletes.map((statement) => statement.values)).toEqual([
+      ['game', ...rows.slice(0, 49).flatMap((row) => [row.entity_key, row.revision])],
+      ['game', ...rows.slice(49, 98).flatMap((row) => [row.entity_key, row.revision])],
+      ['game', ...rows.slice(98).flatMap((row) => [row.entity_key, row.revision])],
+    ]);
+    expect(deletes.every((statement) => statement.values.length <= 99)).toBe(true);
+  });
 });

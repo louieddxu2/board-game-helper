@@ -54,6 +54,10 @@ export const ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE = 20;
 export const ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS = 60_000;
 const ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT = 9;
 const ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH = 50;
+// D1 accepts at most 100 bound parameters for one SQL statement. Keep one
+// spare so a future predicate can add a parameter without turning a catalog
+// publication into a runtime failure.
+const D1_SAFE_BOUND_PARAMETER_COUNT = 99;
 /** Local-D1 ceiling below the product limit; final 100-question sample maxed at 99. */
 export const ATTRIBUTE_QUESTION_MAX_ROWS_READ = 99;
 
@@ -89,6 +93,35 @@ interface ComponentRow {
   label: string;
   english_name: string | null;
   bgg_id: number | null;
+}
+
+interface FullReplaySubjectSourceRow {
+  id: string;
+  slug: string;
+  kind: 'game' | 'configuration';
+  display_name: string;
+  game_id: string | null;
+}
+
+interface FullReplayGameSourceRow {
+  id: string;
+  slug: string;
+  display_name: string;
+  english_name: string | null;
+  bgg_id: number | null;
+  entity_kind: string;
+  merged_into_game_id: string | null;
+  visibility: string;
+}
+
+interface FullReplayGameAliasRow {
+  game_id: string;
+  alias: string;
+}
+
+interface FullReplayExternalIdRow {
+  game_id: string;
+  external_id: string;
 }
 
 interface AttributeScoreStateRow {
@@ -391,6 +424,15 @@ const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComp
   };
 };
 
+const toComponent = (row: ComponentRow): AttributeSubjectComponent => ({
+  order: row.component_order,
+  gameId: row.game_id ?? undefined,
+  type: row.component_type,
+  label: row.label,
+  ...(row.english_name ? { englishName: row.english_name } : {}),
+  bggId: row.bgg_id ?? undefined,
+});
+
 const clampPageSize = (limit: number | undefined) => Math.min(ATTRIBUTE_TABLE_PAGE_SIZE, Math.max(1, Math.floor(limit ?? ATTRIBUTE_TABLE_PAGE_SIZE)));
 
 const encodeCursor = (...parts: string[]) => btoa(unescape(encodeURIComponent(parts.join('\u0000'))));
@@ -505,26 +547,19 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
 
 const queryComponents = async (db: Database, subjectIds: string[]): Promise<Map<string, AttributeSubjectComponent[]>> => {
   if (!subjectIds.length) return new Map();
-  const result = await db.statement(`
+  const resultChunks = await Promise.all(chunk(subjectIds, D1_SAFE_BOUND_PARAMETER_COUNT).map((ids) => db.statement(`
     SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id
     FROM attribute_subject_components
     AS c
-    WHERE subject_id IN (${subjectIds.map(() => '?').join(',')})
+    WHERE subject_id IN (${ids.map(() => '?').join(',')})
     ORDER BY subject_id, component_order
-  `).bind(...subjectIds).all<ComponentRow>();
+  `).bind(...ids).all<ComponentRow>()));
   const map = new Map<string, AttributeSubjectComponent[]>();
-  (result.results ?? []).forEach((row) => {
+  for (const result of resultChunks) for (const row of result.results ?? []) {
     const components = map.get(row.subject_id) ?? [];
-    components.push({
-      order: row.component_order,
-      gameId: row.game_id ?? undefined,
-      type: row.component_type,
-      label: row.label,
-      ...(row.english_name ? { englishName: row.english_name } : {}),
-      bggId: row.bgg_id ?? undefined,
-    });
+    components.push(toComponent(row));
     map.set(row.subject_id, components);
-  });
+  }
   return map;
 };
 
@@ -1582,6 +1617,142 @@ const parseFullReplayJson = (value: string): unknown => {
   try { return JSON.parse(value); } catch { throw new Error('invalid_attribute_replay_snapshot'); }
 };
 
+const isChineseName = (value: string) => /[\u4E00-\u9FA5]/.test(value);
+
+const validBggId = (value: number | string | null | undefined): number | null => {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+
+/**
+ * Full replay needs every votable subject for its output snapshot. Read each
+ * compact source table once and assemble that projection in Worker memory;
+ * the interactive subject query intentionally stays separate because it is
+ * optimized for small, targeted requests.
+ */
+const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]> => {
+  // Keep the outer replay's concurrent D1 work at the six-connection limit.
+  const [subjectResult, gameResult, componentResult] = await Promise.all([
+    db.statement(`
+      SELECT id, slug, kind, display_name, game_id
+      FROM attribute_subjects
+      ORDER BY display_name COLLATE NOCASE, id
+    `).all<FullReplaySubjectSourceRow>(),
+    db.statement(`
+      SELECT id, slug, display_name, english_name, bgg_id, entity_kind, merged_into_game_id, visibility
+      FROM games
+    `).all<FullReplayGameSourceRow>(),
+    db.statement(`
+      SELECT subject_id, component_order, game_id, component_type, label, english_name, bgg_id
+      FROM attribute_subject_components
+      ORDER BY subject_id, component_order
+    `).all<ComponentRow>(),
+  ]);
+  const [aliasResult, externalIdResult] = await Promise.all([
+    db.statement(`
+      SELECT game_id, alias
+      FROM game_aliases
+      WHERE alias GLOB '*[一-龥]*'
+      ORDER BY game_id, alias, id
+    `).all<FullReplayGameAliasRow>(),
+    db.statement(`
+      SELECT game_id, external_id
+      FROM game_external_ids
+      WHERE source = 'bgg'
+    `).all<FullReplayExternalIdRow>(),
+  ]);
+
+  const games = new Map((gameResult.results ?? []).map((game) => [game.id, game]));
+  const componentsBySubject = new Map<string, AttributeSubjectComponent[]>();
+  for (const row of componentResult.results ?? []) {
+    const components = componentsBySubject.get(row.subject_id) ?? [];
+    components.push(toComponent(row));
+    componentsBySubject.set(row.subject_id, components);
+  }
+
+  const firstChineseAliasByGame = new Map<string, string>();
+  for (const row of aliasResult.results ?? []) {
+    if (!firstChineseAliasByGame.has(row.game_id)) firstChineseAliasByGame.set(row.game_id, row.alias);
+  }
+  const externalBggIdsByGame = new Map<string, Set<number>>();
+  for (const row of externalIdResult.results ?? []) {
+    const id = validBggId(row.external_id);
+    if (id == null) continue;
+    const ids = externalBggIdsByGame.get(row.game_id) ?? new Set<number>();
+    ids.add(id);
+    externalBggIdsByGame.set(row.game_id, ids);
+  }
+
+  const gameSecondaryName = (game: FullReplayGameSourceRow | undefined): string | undefined => {
+    if (!game) return undefined;
+    const englishName = game.english_name && game.english_name !== game.display_name
+      ? game.english_name
+      : undefined;
+    return isChineseName(game.display_name)
+      ? englishName
+      : firstChineseAliasByGame.get(game.id) ?? englishName;
+  };
+
+  const subjects: AttributeSubject[] = [];
+  for (const row of subjectResult.results ?? []) {
+    const components = componentsBySubject.get(row.id) ?? [];
+    const game = row.game_id ? games.get(row.game_id) : undefined;
+    const baseComponents = components.filter((component) => component.type === 'base');
+    const expansionComponents = components.filter((component) => component.type === 'expansion');
+    const isVotable = row.kind === 'game'
+      ? Boolean(game
+        && (game.entity_kind === 'base' || game.entity_kind === 'expansion')
+        && game.merged_into_game_id == null
+        && game.visibility === 'public'
+        && (validBggId(game.bgg_id) != null
+          || (externalBggIdsByGame.get(game.id)?.size ?? 0) > 0
+          || baseComponents.some((component) => component.bggId != null)))
+      : baseComponents.some((component) => component.bggId != null)
+        && expansionComponents.some((component) => component.bggId != null)
+        && !components.some((component) =>
+          (component.type === 'base' || component.type === 'expansion') && component.bggId == null);
+    if (!isVotable) continue;
+
+    const bggIds = new Set<number>();
+    if (row.kind === 'game') {
+      const id = validBggId(game?.bgg_id);
+      if (id != null) bggIds.add(id);
+    }
+    for (const id of externalBggIdsByGame.get(row.game_id ?? '') ?? []) bggIds.add(id);
+    for (const component of components) {
+      const id = validBggId(component.bggId);
+      if (id != null) bggIds.add(id);
+    }
+
+    let secondaryName = gameSecondaryName(game);
+    if (row.kind === 'configuration') {
+      const base = baseComponents[0];
+      const baseName = gameSecondaryName(base?.gameId ? games.get(base.gameId) : undefined)
+        ?? base?.englishName;
+      const expansionName = expansionComponents
+        .map((component) => component.englishName)
+        .filter((name): name is string => Boolean(name?.trim()))
+        .join(' + ') || undefined;
+      secondaryName = baseName == null
+        ? expansionName
+        : expansionName == null ? baseName : `${baseName} + ${expansionName}`;
+    }
+
+    subjects.push({
+      id: row.id,
+      slug: row.slug,
+      kind: row.kind,
+      displayName: row.display_name,
+      ...(secondaryName ? { secondaryName } : {}),
+      gameId: row.game_id ?? undefined,
+      gameSlug: game?.slug,
+      ...(bggIds.size ? { bggIds: [...bggIds].sort((left, right) => left - right) } : {}),
+      components,
+    });
+  }
+  return subjects;
+};
+
 /**
  * Replay metadata is derived directly from its source tables.  It is small
  * (subjects, components, definitions, unresolved imports) and intentionally
@@ -1591,11 +1762,11 @@ const queryFullReplayMetadata = async (db: Database) => {
   const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
     .first<{ current_version: number }>();
   if (!clock) throw new Error('attribute_catalog_clock_unavailable');
-  const [attributeRows, subjectRows, candidates] = await Promise.all([
+  const [attributeRows, candidates] = await Promise.all([
     queryAttributeDefinitions(db),
-    queryAttributeSubjects(db),
     queryAllUnprocessedCandidates(db),
   ]);
+  const subjectRows = await queryFullReplaySubjects(db);
   return {
     subjectIds: new Set(subjectRows.map((subject) => subject.id)),
     attributes: new Map(attributeRows.map((attribute) => [attribute.id, attribute])),

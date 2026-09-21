@@ -9,6 +9,9 @@ import { queryTargetedGameCatalogEntries } from './gameCatalog';
 import { queryTargetedPublicTagCatalogEntries } from './tagCatalog';
 
 export const CATALOG_OUTBOX_PAGE_SIZE = 100;
+// One catalog parameter plus two parameters per (key, revision) tuple must
+// stay below D1's 100-parameter limit.
+const CATALOG_OUTBOX_DELETE_PAGE_SIZE = 49;
 
 export type CatalogOutboxKind =
   | 'game'
@@ -221,12 +224,14 @@ const publishTagEntries = async (db: Database, tagIds: string[], timestamp: numb
 };
 
 const deletePublishedRows = async (db: Database, catalog: CatalogOutboxKind, rows: CatalogOutboxRow[]): Promise<void> => {
-  if (!rows.length) return;
-  await db.statement(`
-    DELETE FROM catalog_change_outbox
-    WHERE catalog = ?
-      AND (entity_key, revision) IN (${rows.map(() => '(?, ?)').join(', ')})
-  `).bind(catalog, ...rows.flatMap((row) => [row.entity_key, row.revision])).run();
+  for (let index = 0; index < rows.length; index += CATALOG_OUTBOX_DELETE_PAGE_SIZE) {
+    const page = rows.slice(index, index + CATALOG_OUTBOX_DELETE_PAGE_SIZE);
+    await db.statement(`
+      DELETE FROM catalog_change_outbox
+      WHERE catalog = ?
+        AND (entity_key, revision) IN (${page.map(() => '(?, ?)').join(', ')})
+    `).bind(catalog, ...page.flatMap((row) => [row.entity_key, row.revision])).run();
+  }
 };
 
 const outboxMode = async (db: Database): Promise<'legacy' | 'outbox'> => {

@@ -11,7 +11,11 @@ import {
 } from '../worker/data/attributes';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 
-const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeCleanup?: (sqlite: DatabaseSync) => void) => {
+const setup = (
+  beforeHistoryConversion?: (sqlite: DatabaseSync) => void,
+  beforeCleanup?: (sqlite: DatabaseSync) => void,
+  maxBoundParameters = Number.POSITIVE_INFINITY,
+) => {
   const sqlite = new DatabaseSync(':memory:');
   const executedSql: string[] = [];
   for (const name of readdirSync('migrations').filter((file) => file.endsWith('.sql')).sort()) {
@@ -32,6 +36,9 @@ const setup = (beforeHistoryConversion?: (sqlite: DatabaseSync) => void, beforeC
     bind: (...values: SQLInputValue[]) => prepare(sql, values),
     run: () => prepare(sql, args).all(),
     all: async () => {
+      if (args.length > maxBoundParameters) {
+        throw new Error(`too many SQL variables: ${args.length}`);
+      }
       executedSql.push(sql);
       const statement = sqlite.prepare(sql);
       if (statement.columns().length) return { results: statement.all(...args), meta: { changes: 0 } };
@@ -269,5 +276,34 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       .toEqual({ active_generation: timestamp + 7, generated_at: timestamp + 7 });
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
+  } finally { sqlite.close(); }
+});
+
+test('complete replay stays below D1\'s parameter limit with more than one hundred votable subjects', async () => {
+  const { sqlite, gateway } = setup(undefined, undefined, 100);
+  const timestamp = Date.now();
+  try {
+    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status = 'completed'").run();
+    sqlite.exec('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)');
+    const insertGame = sqlite.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, merged_into_game_id,
+        created_by, created_at, updated_at, visibility, review_status, reviewed_at,
+        attribute_enabled, bgg_id, entity_kind
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, 1, 1, 'public', 'pending', NULL, 1, ?, 'base')
+    `);
+    for (let index = 0; index < 101; index += 1) {
+      const id = `game-replay-parameter-limit-${index}`;
+      insertGame.run(id, `replay-parameter-limit-${index}`, `重播參數測試 ${index}`, `重播參數測試 ${index}`, 900_000 + index);
+    }
+    expect(sqlite.prepare(`
+      SELECT COUNT(*) AS count
+      FROM attribute_subjects
+      WHERE id LIKE 'attribute_subject_game:game-replay-parameter-limit-%'
+    `).get()).toEqual({ count: 101 });
+
+    await expect(runCompleteAttributeReplay(gateway, timestamp)).resolves.toBeUndefined();
+    expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
+      .toEqual({ active_generation: timestamp, generated_at: timestamp });
   } finally { sqlite.close(); }
 });
