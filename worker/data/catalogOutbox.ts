@@ -39,7 +39,6 @@ interface CatalogStore {
 }
 
 export interface CatalogOutboxFlushResult {
-  mode: 'legacy' | 'outbox';
   processed: Partial<Record<CatalogOutboxKind, number>>;
 }
 
@@ -234,24 +233,6 @@ const deletePublishedRows = async (db: Database, catalog: CatalogOutboxKind, row
   }
 };
 
-const outboxMode = async (db: Database): Promise<'legacy' | 'outbox'> => {
-  try {
-    const row = await db.statement(`
-      SELECT mode
-      FROM catalog_outbox_settings
-      WHERE id = 1
-    `).first<{ mode: string }>();
-    return row?.mode === 'outbox' ? 'outbox' : 'legacy';
-  } catch (error) {
-    // The foundation migration is deliberately compatible with the old
-    // Worker. If an operator deploys code before that migration, leave the
-    // existing trigger path alone instead of turning a successful mutation
-    // into a cache-publishing failure.
-    if (error instanceof Error && /no such table:\s*catalog_outbox_settings/i.test(error.message)) return 'legacy';
-    throw error;
-  }
-};
-
 /**
  * Publish the IDs collected by SQLite triggers.  Triggers perform no view
  * expansion or JSON work; this function owns those explicit, targeted reads.
@@ -261,8 +242,6 @@ export const flushCatalogOutbox = async (
   timestamp = now(),
   limit = CATALOG_OUTBOX_PAGE_SIZE,
 ): Promise<CatalogOutboxFlushResult> => {
-  const mode = await outboxMode(db);
-  if (mode !== 'outbox') return { mode, processed: {} };
   const result = await db.statement(`
     SELECT catalog, entity_key, revision
     FROM catalog_change_outbox
@@ -289,5 +268,5 @@ export const flushCatalogOutbox = async (
     await deletePublishedRows(db, catalog, catalogRows);
     processed[catalog] = catalogRows.length;
   }
-  return { mode, processed };
+  return { processed };
 };

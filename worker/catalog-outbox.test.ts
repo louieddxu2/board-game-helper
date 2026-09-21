@@ -26,9 +26,7 @@ describe('catalog outbox publisher', () => {
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
         let statement: CapturedStatement;
-        if (sql.includes('FROM catalog_outbox_settings')) {
-          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ mode: 'outbox' }) });
-        } else if (sql.includes('FROM catalog_change_outbox')) {
+        if (sql.includes('FROM catalog_change_outbox')) {
           statement = prepared(sql, { all: vi.fn().mockResolvedValue({ results: [{
             catalog: 'attribute-subject', entity_key: 'subject-a', revision: 3,
           }] }) });
@@ -57,7 +55,7 @@ describe('catalog outbox publisher', () => {
     } as unknown as Database;
 
     await expect(flushCatalogOutbox(db, 123)).resolves.toEqual({
-      mode: 'outbox', processed: { 'attribute-subject': 1 },
+      processed: { 'attribute-subject': 1 },
     });
 
     expect(statements.some((statement) => /attribute_subject_catalog_source|attribute_catalog_snapshot|attribute_catalog_entries\s+WHERE/i.test(statement.sql))).toBe(false);
@@ -83,9 +81,7 @@ describe('catalog outbox publisher', () => {
     const db = {
       statement: vi.fn().mockImplementation((sql: string) => {
         let statement: CapturedStatement;
-        if (sql.includes('FROM catalog_outbox_settings')) {
-          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ mode: 'outbox' }) });
-        } else if (sql.includes('SELECT catalog, entity_key, revision')) {
+        if (sql.includes('SELECT catalog, entity_key, revision')) {
           statement = prepared(sql, { all: vi.fn().mockResolvedValue({ results: rows }) });
         } else if (sql.includes('FROM game_catalog_source')) {
           statement = prepared(sql, { all: vi.fn().mockResolvedValue({ results: [] }) });
@@ -101,7 +97,7 @@ describe('catalog outbox publisher', () => {
     } as unknown as Database;
 
     await expect(flushCatalogOutbox(db, 123)).resolves.toEqual({
-      mode: 'outbox', processed: { game: 100 },
+      processed: { game: 100 },
     });
 
     const deletes = statements.filter((statement) => statement.sql.includes('DELETE FROM catalog_change_outbox'));

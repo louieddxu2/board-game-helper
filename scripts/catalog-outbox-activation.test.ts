@@ -6,10 +6,10 @@ import { expect, test } from 'vitest';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
-test('outbox activation removes broad catalog writers but retains component-name maintenance', () => {
+test('outbox migration removes broad catalog writers but retains component-name maintenance', () => {
   const sqlite = new DatabaseSync(':memory:');
   try {
-    const activationSql = read('scripts/catalog-outbox-activation.sql');
+    const activationSql = read('migrations/0107_catalog_outbox_activation.sql');
     expect(activationSql).not.toMatch(/^\s*BEGIN\s+IMMEDIATE;/m);
     expect(activationSql).not.toMatch(/^\s*COMMIT;/m);
     sqlite.exec(read('tests/fixtures/production-d1-schema.sql'));

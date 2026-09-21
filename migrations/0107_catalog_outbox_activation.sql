@@ -1,7 +1,10 @@
--- Run only after the Worker containing catalogOutbox.ts has been deployed.
--- This switches derived catalog writes from SQL trigger projection to a
--- compact identity outbox.  The operation is idempotent and does not alter
--- source games, rules, votes, or score state.
+-- The active outbox schema belongs in migration history.  Earlier releases
+-- activated these triggers through a post-deployment script, leaving fresh
+-- databases and tests on a different trigger graph from production.
+--
+-- The existing Worker already contains the outbox publisher, so it is safe
+-- to make this the permanent schema.  The operation is idempotent and does
+-- not alter source games, rules, votes, or score state.
 
 DROP TRIGGER IF EXISTS game_catalog_games_after_insert;
 DROP TRIGGER IF EXISTS game_catalog_games_after_update;
