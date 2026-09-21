@@ -8,6 +8,7 @@ import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
 import { cleanupAttributeActivityFeed } from './data/attributes';
+import { cleanupAttributeCatalogDeltas } from './data/catalogRetention';
 import { runCompleteAttributeReplay } from './workflows/attributeReplay';
 
 import { authRoutes } from './routes/auth';
@@ -167,6 +168,9 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     // pass publishes only a real mutation that raced with the replay.
     await flushCatalogOutbox(db, controller.scheduledTime);
   }
+  // The active snapshot is the authoritative browser baseline. Retire only
+  // a small page of deltas it already contains; newer deltas stay available.
+  await cleanupAttributeCatalogDeltas(db);
 };
 
 export { app, scheduled };

@@ -42,3 +42,20 @@ test('stale attribute snapshot cursors read only snapshot metadata, not delta en
   expect(db.statement).toHaveBeenCalledTimes(1);
   expect(deltaStatement.all).not.toHaveBeenCalled();
 });
+
+test('attribute delta cursors require the snapshot identity after retention is enabled', async () => {
+  const db = {
+    statement: vi.fn(),
+    batch: vi.fn(),
+    metrics: () => ({ rowsRead: 0, rowsWritten: 0, queries: 0 }),
+  } as unknown as Database;
+  const app = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
+  app.use('*', async (c, next) => { c.set('database', db); await next(); });
+  app.route('/', attributesRoutes);
+
+  const response = await app.request('/api/attributes/table/changes?after=42');
+
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: 'catalog_snapshot_required' });
+  expect(db.statement).not.toHaveBeenCalled();
+});

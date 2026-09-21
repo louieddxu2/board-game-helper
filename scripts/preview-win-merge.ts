@@ -17,7 +17,16 @@ if (source.startsWith('https://')) {
   catalog = await get<AttributeCatalogPayload>('/api/attributes/table');
   for (let page = 0; ; page++) {
     if (page >= 100) throw new Error('catalog_did_not_converge');
-    const delta = await get<AttributeCatalogChangesPayload>(`/api/attributes/table/changes?after=${catalog.throughVersion}`);
+    const cursor = new URLSearchParams({
+      after: String(catalog.throughVersion),
+      generation: String(catalog.generation),
+      generatedAt: String(catalog.generatedAt),
+    });
+    const delta = await get<AttributeCatalogChangesPayload>(`/api/attributes/table/changes?${cursor}`);
+    if (delta.snapshot.generation !== catalog.generation || delta.snapshot.generatedAt !== catalog.generatedAt) {
+      catalog = await get<AttributeCatalogPayload>('/api/attributes/table');
+      continue;
+    }
     if (delta.throughVersion < catalog.throughVersion || (delta.hasMore && delta.throughVersion <= catalog.throughVersion)) throw new Error('invalid_delta_progress');
     catalog = applyAttributeCatalogChanges(catalog, delta.changes, delta.throughVersion);
     if (!delta.hasMore) break;

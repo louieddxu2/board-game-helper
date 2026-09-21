@@ -112,6 +112,10 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
       || !Number.isSafeInteger(clientSnapshot.generatedAt) || clientSnapshot.generatedAt < 0))) {
     return c.json({ error: 'invalid_catalog_snapshot' }, 400);
   }
+  // Retention removes deltas absorbed by a newer snapshot. A cursor without
+  // its baseline identity could otherwise accept an empty response and keep
+  // an obsolete browser catalog indefinitely.
+  if (!clientSnapshot) return c.json({ error: 'catalog_snapshot_required' }, 409);
   const db = getDatabase(c);
   try {
     c.header('Cache-Control', 'no-store');
