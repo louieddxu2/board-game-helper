@@ -46,12 +46,10 @@ export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
 // the history read and then be overwritten by the replay's state writes.
 const ATTRIBUTE_REPLAY_LOCK_NAME = 'attribute-replay';
 const ATTRIBUTE_REPLAY_LOCK_TTL_MS = 2 * 60_000;
-// A game merge changes source data as well as its derived states. This
-// singleton joins the existing per-subject merge locks so a replay cannot
-// start in the gap before a merge job has been recorded.
+// A game merge rewrites raw vote ownership before it changes the game
+// identity. This singleton joins the existing per-subject locks so a replay
+// cannot read the old ownership during that small transaction window.
 const ATTRIBUTE_MERGE_OPERATION_LOCK_NAME = `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:merge-operation`;
-export const ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE = 20;
-export const ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS = 60_000;
 const ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT = 9;
 const ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH = 50;
 // D1 accepts at most 100 bound parameters for one SQL statement. Keep one
@@ -263,34 +261,6 @@ const subjectSecondaryNameExpression = (subjectAlias: string, gameAlias: string)
     ELSE ${gameSecondaryNameExpression(gameAlias)} END)`;
 };
 
-interface AttributeMergeHistoryRow {
-  stream_id: string;
-  attribute_id: string;
-  subject_a_id: string | null;
-  subject_b_id: string | null;
-  rating_a: number | null;
-  rating_b: number | null;
-  comparison: AttributeComparisonResult | null;
-  created_at: number;
-}
-
-interface AttributeMergeRebuildJobRow {
-  attribute_id: string | null;
-  id: string;
-  source_game_id: string;
-  target_game_id: string;
-  source_subject_id: string;
-  target_subject_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  reset_completed: number;
-  cursor_created_at: number;
-  cursor_stream_id: string;
-  cutoff_created_at: number;
-  error_message: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
 interface ResponseContextRow {
   endpoints_json?: string | null;
   scale_type?: string;
@@ -375,13 +345,8 @@ export interface SavedAttributeResponse {
 export interface AttributeMergeLock {
   token: string;
   names: string[];
-}
-
-export interface AttributeMergeRebuildJobPlan {
-  id: string;
   sourceSubjectId: string | null;
   targetSubjectId: string | null;
-  statement: DatabaseStatement | null;
 }
 
 const toAttribute = (row: AttributeRow): AttributeDefinition => ({
@@ -1163,19 +1128,16 @@ const attributeMergeSubjectIds = async (db: Database, sourceGameId: string, targ
   const result = await db.statement(`
     SELECT subject.game_id, subject.id
     FROM attribute_subjects subject
-    JOIN games game ON game.id = subject.game_id
     WHERE subject.kind = 'game'
       AND subject.game_id IN (?, ?)
-      AND ${votableSubjectCondition('subject', 'game')}
   `).bind(sourceGameId, targetGameId).all<{ game_id: string; id: string }>();
   const byGameId = new Map((result.results ?? []).map((row) => [row.game_id, row.id]));
   return { sourceSubjectId: byGameId.get(sourceGameId) ?? null, targetSubjectId: byGameId.get(targetGameId) ?? null };
 };
 
 /**
- * Stop votes touching either canonical game while an editor merge rebuilds the
- * materialized attribute states. This closes the small race between reading
- * the historical answer stream and committing the rebuilt states.
+ * Stop votes touching either canonical game while an editor merge rewrites
+ * raw vote ownership. This closes the small race with a complete replay.
  */
 export const acquireAttributeMergeLock = async (
   db: Database,
@@ -1216,10 +1178,10 @@ export const acquireAttributeMergeLock = async (
     await releaseAttributeMergeLock(db, { token, names: acquired });
     throw new Error('attribute_response_busy');
   }
-  return { token, names };
+  return { token, names, sourceSubjectId, targetSubjectId };
 };
 
-export const releaseAttributeMergeLock = async (db: Database, lock: AttributeMergeLock): Promise<void> => {
+export const releaseAttributeMergeLock = async (db: Database, lock: Pick<AttributeMergeLock, 'token' | 'names'>): Promise<void> => {
   if (!lock.names.length) return;
   await db.statement(`
     DELETE FROM attribute_vote_lock
@@ -1228,116 +1190,32 @@ export const releaseAttributeMergeLock = async (db: Database, lock: AttributeMer
 };
 
 /**
- * Create a resumable rebuild job. The merge request only inserts this row;
- * historical answers are replayed by processAttributeMergeRebuildJobs().
+ * Keep the canonical response stream attached to the surviving game before a
+ * merge retires its source. A complete replay then needs no merge-specific
+ * interpretation: it simply consumes the normalized history.
  */
-export const prepareAttributeMergeRebuildJob = async (
+export const canonicalizeAttributeMergeVoteSubjects = (
   db: Database,
-  sourceGameId: string,
-  targetGameId: string,
-  timestamp: number,
-): Promise<AttributeMergeRebuildJobPlan> => {
-  const [{ sourceSubjectId, targetSubjectId }, activeJob] = await Promise.all([
-    attributeMergeSubjectIds(db, sourceGameId, targetGameId),
-    db.statement(`
-      SELECT id
-      FROM attribute_merge_rebuild_jobs
-      WHERE status IN ('pending', 'running')
-      LIMIT 1
-    `).first<{ id: string }>(),
-  ]);
-  if (activeJob) throw new Error('attribute_merge_busy');
-  if (!sourceSubjectId || !targetSubjectId) return { id: '', sourceSubjectId, targetSubjectId, statement: null };
-  const id = createId('attribute-merge-rebuild');
-  return {
-    id,
-    sourceSubjectId,
-    targetSubjectId,
-    statement: db.statement(`
-      INSERT INTO attribute_merge_rebuild_jobs
-        (id, source_game_id, target_game_id, source_subject_id, target_subject_id,
-         status, reset_completed, cursor_created_at, cursor_stream_id,
-         cutoff_created_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 'pending', 0, -1, '', ?, ?, ?)
-    `).bind(id, sourceGameId, targetGameId, sourceSubjectId, targetSubjectId, timestamp, timestamp, timestamp),
-  };
+  sourceSubjectId: string | null,
+  targetSubjectId: string | null,
+): DatabaseStatement | null => {
+  if (!sourceSubjectId || !targetSubjectId || sourceSubjectId === targetSubjectId) return null;
+  return db.statement(`
+    UPDATE attribute_vote_responses
+    SET subject_a_id = CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END,
+        subject_b_id = CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END
+    WHERE subject_a_id = ? OR subject_b_id = ?
+  `).bind(sourceSubjectId, targetSubjectId, sourceSubjectId, targetSubjectId, sourceSubjectId, sourceSubjectId);
 };
 
-export const hasActiveAttributeMergeRebuild = async (db: Database): Promise<boolean> => Boolean(await db.statement(`
-  SELECT id
-  FROM attribute_merge_rebuild_jobs
-  WHERE status IN ('pending', 'running')
-  LIMIT 1
-`).first<{ id: string }>());
-
-interface AttributeMergeBaselineRow {
-  subject_id: string;
-  attribute_id: string;
+interface AttributeReplayBaselineRow {
   direct_sum: number;
   direct_count: number;
 }
 
-/**
- * Direct ratings are commutative, so calculate their per-subject baseline in
- * SQL once. Comparisons are then replayed in memory in chronological order.
- */
-const queryAttributeMergeBaselineStates = async (
-  db: Database,
-  job: AttributeMergeRebuildJobRow,
-): Promise<AttributeMergeBaselineRow[]> => {
-  const result = await db.statement(`
-      WITH values_for_replay(subject_id, attribute_id, value) AS (
-        SELECT CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END, attribute_id, rating_a FROM attribute_vote_responses WHERE rating_a IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-        UNION ALL SELECT CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END, attribute_id, rating_b FROM attribute_vote_responses WHERE rating_b IS NOT NULL AND attribute_id IS NOT NULL AND (? IS NULL OR attribute_id = ?) AND created_at <= ?
-      ), averages AS (SELECT subject_id,attribute_id,SUM(value) total,COUNT(*) count FROM values_for_replay GROUP BY subject_id,attribute_id)
-      SELECT s.id AS subject_id, a.id AS attribute_id,
-        COALESCE(d.total, 0) AS direct_sum, COALESCE(d.count, 0) AS direct_count
-      FROM attribute_subjects s
-      CROSS JOIN attributes a
-      LEFT JOIN games g ON g.id = s.game_id
-      LEFT JOIN averages d ON d.subject_id=s.id AND d.attribute_id=a.id
-      WHERE a.is_active = 1 AND (? IS NULL OR a.id = ?)
-        AND ${votableSubjectCondition('s', 'g')}
-    `).bind(job.source_subject_id, job.target_subject_id, job.attribute_id, job.attribute_id, job.cutoff_created_at,
-    job.source_subject_id, job.target_subject_id, job.attribute_id, job.attribute_id, job.cutoff_created_at,
-    job.attribute_id, job.attribute_id).all<AttributeMergeBaselineRow>();
-  return result.results ?? [];
-};
-
-const queryAttributeMergeHistoryBatch = async (
-  db: Database,
-  job: AttributeMergeRebuildJobRow,
-): Promise<AttributeMergeHistoryRow[]> => {
-  const responseResult = await db.statement(`
-      SELECT
-        'response:' || r.response_id AS stream_id,
-        r.attribute_id,
-        r.subject_a_id,
-        r.subject_b_id,
-        NULL AS rating_a,
-        NULL AS rating_b,
-        r.comparison,
-        r.created_at
-      FROM attribute_vote_responses r
-      JOIN attributes active_attribute
-        ON active_attribute.id = r.attribute_id AND active_attribute.is_active = 1
-      WHERE (? IS NULL OR r.attribute_id = ?) AND r.attribute_id IS NOT NULL AND r.comparison IS NOT NULL AND r.created_at <= ?
-        AND (r.created_at > ? OR (r.created_at = ? AND
-          ('response:' || r.response_id) > ?))
-      ORDER BY r.created_at, stream_id
-      LIMIT ${ATTRIBUTE_MERGE_REBUILD_BATCH_SIZE}
-    `).bind(
-      job.attribute_id, job.attribute_id, job.cutoff_created_at,
-      job.cursor_created_at,
-      job.cursor_created_at,
-      job.cursor_stream_id,
-    ).all<AttributeMergeHistoryRow>();
-  return responseResult.results ?? [];
-};
-
 const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
 
-const stateFromBaseline = (row: AttributeMergeBaselineRow): OnlineAttributeState => {
+const stateFromBaseline = (row: AttributeReplayBaselineRow): OnlineAttributeState => {
   const directCount = Number(row.direct_count);
   const directSum = Number(row.direct_sum);
   return {
@@ -1398,19 +1276,6 @@ const stateMatches = (stored: AttributeScoreStateRow | undefined, next: OnlineAt
     && Number(stored.evidence_count) === next.evidenceCount;
 };
 
-const queryStoredRebuildStates = async (
-  db: Database,
-  attributeId: string | null,
-): Promise<AttributeScoreStateRow[]> => {
-  const result = await db.statement(`
-    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
-      comparison_count, decisive_comparison_count, evidence_count, model_version
-    FROM attribute_score_states
-    WHERE (? IS NULL OR attribute_id = ?)
-  `).bind(attributeId, attributeId).all<AttributeScoreStateRow>();
-  return result.results ?? [];
-};
-
 interface StoredPairStatRow {
   subject_a_id: string;
   subject_b_id: string;
@@ -1420,166 +1285,6 @@ interface StoredPairStatRow {
 
 const pairStatKey = (subjectAId: string, subjectBId: string, attributeId: string) =>
   `${subjectAId}\u0000${subjectBId}\u0000${attributeId}`;
-
-const queryStoredRebuildPairStats = async (
-  db: Database,
-  attributeId: string | null,
-): Promise<StoredPairStatRow[]> => {
-  const result = await db.statement(`
-    SELECT subject_a_id, subject_b_id, attribute_id, comparison_count
-    FROM attribute_pair_stats
-    WHERE (? IS NULL OR attribute_id = ?)
-  `).bind(attributeId, attributeId).all<StoredPairStatRow>();
-  return result.results ?? [];
-};
-
-const attributeMergeJobLock = async (db: Database, jobId: string) => {
-  const token = createId('attribute-merge-job-lock');
-  const lockName = `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:rebuild:${jobId}`;
-  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND expires_at < ?')
-    .bind(lockName, Date.now()).run();
-  const result = await db.statement(`
-    INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
-    VALUES (?, ?, ?)
-  `).bind(lockName, token, Date.now() + ATTRIBUTE_MERGE_JOB_LOCK_TTL_MS).run();
-  if (batchChangeCount(result) !== 1) return null;
-  return { token, lockName };
-};
-
-const releaseAttributeMergeJobLock = async (db: Database, lock: { token: string; lockName: string }) => {
-  await db.statement('DELETE FROM attribute_vote_lock WHERE lock_name = ? AND token = ?')
-    .bind(lock.lockName, lock.token).run();
-};
-
-const processAttributeMergeRebuild = async (
-  db: Database,
-  timestamp: number,
-  suppliedJob?: AttributeMergeRebuildJobRow,
-): Promise<boolean> => {
-  const job = suppliedJob ?? await db.statement(`
-    SELECT id, source_game_id, target_game_id, source_subject_id, target_subject_id,
-      attribute_id, status, reset_completed, cursor_created_at, cursor_stream_id,
-      cutoff_created_at, error_message, created_at, updated_at
-    FROM attribute_merge_rebuild_jobs
-    WHERE status IN ('pending', 'running')
-    ORDER BY created_at, id
-    LIMIT 1
-  `).first<AttributeMergeRebuildJobRow>();
-  if (!job) return false;
-  const lock = await attributeMergeJobLock(db, job.id);
-  if (!lock) return false;
-  let rebuildModeActive = false;
-  try {
-    const states = new Map((await queryAttributeMergeBaselineStates(db, job)).map((row) => [
-      mergeStateKey(row.subject_id, row.attribute_id), stateFromBaseline(row),
-    ]));
-    const pairCounts = new Map<string, { subjectAId: string; subjectBId: string; attributeId: string; count: number }>();
-    const getState = (subjectId: string, attributeId: string) => {
-      const key = mergeStateKey(subjectId, attributeId);
-      const state = states.get(key) ?? emptyAttributeState();
-      states.set(key, state);
-      return { key, state };
-    };
-    let replayCursor: AttributeMergeRebuildJobRow = { ...job, cursor_created_at: -1, cursor_stream_id: '' };
-    let last: AttributeMergeHistoryRow | undefined;
-    for (;;) {
-      const rows = await queryAttributeMergeHistoryBatch(db, replayCursor);
-      if (!rows.length) break;
-      rows.forEach((row) => {
-        const subjectAId = row.subject_a_id === job.source_subject_id ? job.target_subject_id : row.subject_a_id;
-        const subjectBId = row.subject_b_id === job.source_subject_id ? job.target_subject_id : row.subject_b_id;
-        if (!subjectAId || !subjectBId || subjectAId === subjectBId || !row.comparison) return;
-        const a = getState(subjectAId, row.attribute_id);
-        const b = getState(subjectBId, row.attribute_id);
-        const updated = applyComparison(a.state, b.state, row.comparison);
-        states.set(a.key, updated.a.next);
-        states.set(b.key, updated.b.next);
-        const [firstSubjectId, secondSubjectId] = subjectAId < subjectBId
-          ? [subjectAId, subjectBId] : [subjectBId, subjectAId];
-        const key = `${firstSubjectId}\u0000${secondSubjectId}\u0000${row.attribute_id}`;
-        const pair = pairCounts.get(key);
-        if (pair) pair.count += 1;
-        else pairCounts.set(key, { subjectAId: firstSubjectId, subjectBId: secondSubjectId, attributeId: row.attribute_id, count: 1 });
-      });
-      last = rows.at(-1)!;
-      replayCursor = { ...replayCursor, cursor_created_at: last.created_at, cursor_stream_id: last.stream_id };
-    }
-
-    // No comparison has written to D1 yet. Compare the complete in-memory
-    // result with materialized rows, then write only the differences.
-    const stateRows = [...states.entries()].map(([key, state]) => {
-      const separator = key.indexOf('\u0000');
-      return { subjectId: key.slice(0, separator), attributeId: key.slice(separator + 1), state };
-    });
-    const storedStates = new Map((await queryStoredRebuildStates(db, job.attribute_id)).map((row) => [
-      mergeStateKey(row.subject_id, row.attribute_id), row,
-    ]));
-    const changedStateRows = stateRows.filter(({ subjectId, attributeId, state }) =>
-      !stateMatches(storedStates.get(mergeStateKey(subjectId, attributeId)), state));
-
-    const storedPairStats = new Map((await queryStoredRebuildPairStats(db, job.attribute_id)).map((row) => [
-      pairStatKey(row.subject_a_id, row.subject_b_id, row.attribute_id), row,
-    ]));
-    const changedPairs = [...pairCounts.values()].filter((pair) =>
-      Number(storedPairStats.get(pairStatKey(pair.subjectAId, pair.subjectBId, pair.attributeId))?.comparison_count) !== pair.count);
-    const stalePairs = [...storedPairStats.values()].filter((pair) => !pairCounts.has(
-      pairStatKey(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)));
-
-    if (changedStateRows.length) {
-      // A state change would otherwise write a catalog delta through its
-      // trigger. The workflow rebuilds the complete snapshot afterwards.
-      await db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)').run();
-      rebuildModeActive = true;
-    }
-    for (const statementBatch of chunk(
-      chunk(changedStateRows, ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT).map((rows) => rebuildStateStatement(db, rows, timestamp)),
-      ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH,
-    )) await db.batch(statementBatch);
-
-    const pairStatements = changedPairs.map((pair) => db.statement(`
-      INSERT INTO attribute_pair_stats
-        (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET
-        comparison_count = excluded.comparison_count,
-      updated_at = excluded.updated_at
-    `).bind(pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count, timestamp));
-    for (const statementBatch of chunk(pairStatements, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
-    for (const statementBatch of chunk(stalePairs.map((pair) => db.statement(`
-      DELETE FROM attribute_pair_stats
-      WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = ?
-    `).bind(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) {
-      await db.batch(statementBatch);
-    }
-    await db.batch([
-      ...(suppliedJob ? [] : [db.statement(`
-      UPDATE attribute_merge_rebuild_jobs
-      SET status = 'completed', reset_completed = 1, cursor_created_at = ?, cursor_stream_id = ?, error_message = NULL, updated_at = ?
-      WHERE id = ? AND status IN ('pending', 'running')
-    `).bind(last?.created_at ?? -1, last?.stream_id ?? '', timestamp, job.id)]),
-      ...(rebuildModeActive ? [db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1')] : []),
-    ]);
-    rebuildModeActive = false;
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 500) : 'attribute_merge_rebuild_failed';
-    if (rebuildModeActive) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
-    if (!suppliedJob) await db.statement(`
-      UPDATE attribute_merge_rebuild_jobs
-      SET status = 'failed', error_message = ?, updated_at = ?
-      WHERE id = ? AND status IN ('pending', 'running')
-    `).bind(message, timestamp, job.id).run();
-    throw error;
-  } finally {
-    await releaseAttributeMergeJobLock(db, lock);
-  }
-};
-
-export const processAttributeMergeRebuildJobs = async (
-  db: Database,
-  timestamp = Date.now(),
-  _maxBatches?: number,
-): Promise<boolean> => processAttributeMergeRebuild(db, timestamp);
 
 interface FullReplayPairSnapshotRow { active_generation: number; chunk_count: number; }
 interface FullReplayPairSnapshotChunkRow { pairs_json: string; }
@@ -1921,7 +1626,7 @@ const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now
   for (const subjectId of subjectIds) for (const attributeId of attributes.keys()) {
     const direct = directRatings.get(mergeStateKey(subjectId, attributeId));
     states.set(mergeStateKey(subjectId, attributeId), stateFromBaseline({
-      subject_id: subjectId, attribute_id: attributeId, direct_sum: direct?.total ?? 0, direct_count: direct?.count ?? 0,
+      direct_sum: direct?.total ?? 0, direct_count: direct?.count ?? 0,
     }));
   }
   const pairCounts = new Map<string, { subjectAId: string; subjectBId: string; attributeId: string; count: number }>();
@@ -1941,19 +1646,24 @@ const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now
     const separator = key.indexOf('\u0000');
     return { subjectId: key.slice(0, separator), attributeId: key.slice(separator + 1), state };
   }).filter(({ subjectId, attributeId, state }) => !stateMatches(stored.get(mergeStateKey(subjectId, attributeId)), state));
+  const staleStates = [...stored.values()].filter((state) => !states.has(mergeStateKey(state.subject_id, state.attribute_id)));
   const changedPairs = [...pairCounts.values()].filter((pair) => Number(storedPairs.get(pairStatKey(pair.subjectAId, pair.subjectBId, pair.attributeId))?.comparison_count) !== pair.count);
   const stalePairs = [...storedPairs.values()].filter((pair) => !pairCounts.has(pairStatKey(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)));
-  const changed = changedStates.length > 0 || changedPairs.length > 0 || stalePairs.length > 0;
+  const changed = changedStates.length > 0 || staleStates.length > 0 || changedPairs.length > 0 || stalePairs.length > 0;
   let rebuildMode = false;
   try {
-    if (changedStates.length) { await db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)').run(); rebuildMode = true; }
+    if (changedStates.length || staleStates.length) { await db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)').run(); rebuildMode = true; }
     for (const statementBatch of chunk(chunk(changedStates, ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT).map((rows) => rebuildStateStatement(db, rows, timestamp)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
+    for (const statementBatch of chunk(staleStates.map((state) => db.statement(`
+      DELETE FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = ?
+    `).bind(state.subject_id, state.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     const pairStatements = changedPairs.map((pair) => db.statement(`INSERT INTO attribute_pair_stats (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET comparison_count = excluded.comparison_count, updated_at = excluded.updated_at`).bind(pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count, timestamp));
     for (const statementBatch of chunk(pairStatements, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     for (const statementBatch of chunk(stalePairs.map((pair) => db.statement('DELETE FROM attribute_pair_stats WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = ?').bind(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
     if (changedPairs.length || stalePairs.length) await writeFullReplayPairBaseline(db, [...pairCounts.values()], timestamp);
-    if (changedStates.length || !stateBaseline.available) await writeFullReplayStateBaseline(db, states, timestamp);
+    if (changedStates.length || staleStates.length || !stateBaseline.available) await writeFullReplayStateBaseline(db, states, timestamp);
   } finally {
     if (rebuildMode) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
   }
@@ -1988,7 +1698,6 @@ const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now
  * acquisition checks the same gate atomically before it touches state.
  */
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
-  if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_merge_rebuild_active');
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
     return await replayAllAttributeScoresLocked(db, timestamp);
@@ -2148,7 +1857,6 @@ const saveAttributeResponseLocked = async (
 export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
   if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
   if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
-  if (await hasActiveAttributeMergeRebuild(db)) throw new Error('attribute_response_busy');
 
   const lock = await acquireAttributeWriteLock(db, input);
   let lockReleasedInCommit = false;

@@ -5,7 +5,8 @@ import { expect, test } from 'vitest';
 import { createDatabase } from '../worker/data/database';
 import {
   acquireAttributeMergeLock,
-  processAttributeMergeRebuildJobs,
+  canonicalizeAttributeMergeVoteSubjects,
+  replayAllAttributeScores,
   releaseAttributeMergeLock,
   saveAttributeResponse,
 } from '../worker/data/attributes';
@@ -99,9 +100,6 @@ test('complete replay and live responses cannot cross their state writes', async
   const { sqlite, gateway } = setup();
   const timestamp = Date.now();
   try {
-    // This fixture intentionally retains a historical merge job for its
-    // migration checks. It is unrelated to the replay-vs-live-write lock.
-    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status = 'completed'").run();
     const subjects = sqlite.prepare(`
       SELECT id, game_id FROM attribute_subjects
       WHERE game_id IS NOT NULL
@@ -153,6 +151,91 @@ test('complete replay and live responses cannot cross their state writes', async
   } finally { sqlite.close(); }
 });
 
+test('a game merge normalizes raw votes before the complete replay rebuilds results', async () => {
+  const { sqlite, gateway } = setup();
+  const timestamp = Date.now();
+  const sourceGameId = 'game-merge-vote-source';
+  const targetGameId = 'game-merge-vote-target';
+  const thirdGameId = 'game-merge-vote-third';
+  const sourceSubjectId = `attribute_subject_game:${sourceGameId}`;
+  const targetSubjectId = `attribute_subject_game:${targetGameId}`;
+  const thirdSubjectId = `attribute_subject_game:${thirdGameId}`;
+  try {
+    const insertGame = sqlite.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, merged_into_game_id,
+        created_by, created_at, updated_at, visibility, review_status, reviewed_at,
+        attribute_enabled, bgg_id, entity_kind
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, 'public', 'pending', NULL, 1, ?, 'base')
+    `);
+    for (const [id, label, bggId] of [
+      [sourceGameId, '合併來源測試', 910001],
+      [targetGameId, '合併目標測試', 910002],
+      [thirdGameId, '合併對照測試', 910003],
+    ] as const) {
+      insertGame.run(id, id.replace('game-', ''), label, label, timestamp, timestamp, bggId);
+    }
+
+    const insertResponse = sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b,
+         comparison, activity_json, session_id, created_at, updated_at)
+      VALUES (?, 'attribute_win_method', ?, ?, ?, ?, ?, '[]', 'merge-normalization-test', ?, ?)
+    `);
+    insertResponse.run('merge-rating-a', sourceSubjectId, thirdSubjectId, 8, null, null, timestamp + 1, timestamp + 1);
+    insertResponse.run('merge-rating-b', thirdSubjectId, sourceSubjectId, null, 2, null, timestamp + 2, timestamp + 2);
+    insertResponse.run('merge-target-rating', targetSubjectId, thirdSubjectId, 6, null, null, timestamp + 3, timestamp + 3);
+    insertResponse.run('merge-comparison', sourceSubjectId, thirdSubjectId, null, null, 'A_HIGHER', timestamp + 4, timestamp + 4);
+    insertResponse.run('merge-self-comparison', sourceSubjectId, targetSubjectId, null, null, 'B_HIGHER', timestamp + 5, timestamp + 5);
+
+    const lock = await acquireAttributeMergeLock(gateway, sourceGameId, targetGameId, timestamp + 6);
+    try {
+      expect(lock).toMatchObject({ sourceSubjectId, targetSubjectId });
+      const canonicalizeVotes = canonicalizeAttributeMergeVoteSubjects(gateway, lock.sourceSubjectId, lock.targetSubjectId);
+      expect(canonicalizeVotes).not.toBeNull();
+      await gateway.batch([
+        canonicalizeVotes!,
+        gateway.statement('UPDATE games SET merged_into_game_id = ?, updated_at = ? WHERE id = ?')
+          .bind(targetGameId, timestamp + 6, sourceGameId),
+      ]);
+    } finally {
+      await releaseAttributeMergeLock(gateway, lock);
+    }
+
+    expect(sqlite.prepare(`
+      SELECT COUNT(*) AS count
+      FROM attribute_vote_responses
+      WHERE subject_a_id = ? OR subject_b_id = ?
+    `).get(sourceSubjectId)).toEqual({ count: 0 });
+    expect(sqlite.prepare(`
+      SELECT subject_a_id, subject_b_id
+      FROM attribute_vote_responses
+      WHERE response_id = 'merge-rating-b'
+    `).get()).toEqual({ subject_a_id: thirdSubjectId, subject_b_id: targetSubjectId });
+
+    const replay = await replayAllAttributeScores(gateway, timestamp + 7);
+    expect(replay.catalogPayload.subjects.some((subject) => subject.id === sourceSubjectId)).toBe(false);
+    expect(replay.catalogPayload.values.some((value) => value.subjectId === sourceSubjectId)).toBe(false);
+    expect(sqlite.prepare(`
+      SELECT direct_sum, direct_count
+      FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(targetSubjectId)).toEqual({ direct_sum: 16, direct_count: 3 });
+
+    const [firstSubjectId, secondSubjectId] = [targetSubjectId, thirdSubjectId].sort();
+    expect(sqlite.prepare(`
+      SELECT comparison_count
+      FROM attribute_pair_stats
+      WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(firstSubjectId, secondSubjectId)).toEqual({ comparison_count: 1 });
+    expect(sqlite.prepare(`
+      SELECT COUNT(*) AS count
+      FROM attribute_pair_stats
+      WHERE subject_a_id = ? OR subject_b_id = ?
+    `).get(sourceSubjectId, sourceSubjectId)).toEqual({ count: 0 });
+  } finally { sqlite.close(); }
+});
+
 test('canonical vote history survives cleanup, new votes and a complete rebuild', async () => {
   const { sqlite, gateway, executedSql } = setup((db) => {
     const subject = 'attribute_subject_game:game_attribute_import_the_mind';
@@ -188,8 +271,7 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect(JSON.parse(String(history.activity_json))[1]).toMatchObject({result:'B_HIGHER',ratingA:2,ratingB:7});
     expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE response_id='history-condition'").get()).toMatchObject({attribute_id:'attribute_win_method',rating_a:7,rating_b:null,comparison:'B_HIGHER',question_high_pole:'high'});
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
-    await processAttributeMergeRebuildJobs(gateway, Date.now()+100, 1000);
-    expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='win-history-replay-v1'").get()).toMatchObject({status:'completed'});
+    await runCompleteAttributeReplay(gateway, Date.now() + 100);
     // 200 comparisons affect calculation only. The replay writes each final
     // state once, rather than writing the two states and pair stats per vote.
     expect(gateway.metrics?.().rowsWritten).toBeLessThan(6000);
@@ -202,19 +284,6 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     const read = () => sqlite.prepare("SELECT score,rating_deviation,direct_sum,direct_count,evidence_count FROM attribute_score_states WHERE subject_id='attribute_subject_game:game_attribute_import_the_mind' AND attribute_id='attribute_win_method'").get();
     const before = read();
     const timestamp = Date.now() + 1000;
-    sqlite.prepare(`INSERT INTO attribute_merge_rebuild_jobs
-      (id,source_game_id,target_game_id,source_subject_id,target_subject_id,status,reset_completed,cursor_created_at,cursor_stream_id,cutoff_created_at,created_at,updated_at)
-      SELECT 'conversion-test',a.game_id,b.game_id,a.id,b.id,'pending',0,-1,'',?,?,?
-      FROM attribute_subjects a JOIN attribute_subjects b ON a.id < b.id
-      WHERE a.game_id IS NOT NULL AND b.game_id IS NOT NULL
-        AND a.id <> 'attribute_subject_game:game_attribute_import_the_mind'
-        AND b.id <> 'attribute_subject_game:game_attribute_import_the_mind' LIMIT 1`).run(timestamp,timestamp,timestamp);
-    for (let i=0;i<100;i++) {
-      await processAttributeMergeRebuildJobs(gateway,timestamp+1,1000);
-      if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
-    }
-    expect(sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()).toMatchObject({status:'completed'});
-    expect(read()).toEqual(before);
     expect(Number(before?.evidence_count)).toBeGreaterThan(1);
     const opponent = sqlite.prepare("SELECT id FROM attribute_subjects WHERE game_id IS NOT NULL AND id <> 'attribute_subject_game:game_attribute_import_the_mind' LIMIT 1").get() as { id: string };
     await saveAttributeResponse(gateway, {
@@ -229,17 +298,11 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       actorId: null, ratingA: 7, timestamp: timestamp + 2,
     })).rejects.toThrow('attribute_subject_not_found');
     expect(read()).toEqual(afterVote);
-    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status='pending',reset_completed=0,cursor_created_at=-1,cursor_stream_id='',cutoff_created_at=? WHERE id='conversion-test'").run(timestamp+3);
-    for (let i=0;i<100;i++) {
-      await processAttributeMergeRebuildJobs(gateway,timestamp+4,1000);
-      if (sqlite.prepare("SELECT status FROM attribute_merge_rebuild_jobs WHERE id='conversion-test'").get()?.status === 'completed') break;
-    }
-    expect(read()).toMatchObject({ score: 6.8, direct_sum: 34, direct_count: 5, evidence_count: 5 });
-    expect(Number(read()?.rating_deviation)).toBeCloseTo(1.5 / Math.sqrt(5));
+    expect(read()).toMatchObject({ direct_sum: 34, direct_count: 5, evidence_count: 5 });
     expect(Number(read()?.direct_count)).toBe(Number(before?.direct_count)+1);
     expect(Number(read()?.evidence_count)).toBe(Number(before?.evidence_count)+1);
-    // A complete replay is independent of merge-job rows and produces the
-    // same materialized state from raw history. Its comparison checkpoint is
+    // A complete replay produces the same materialized state from raw
+    // history. Its comparison checkpoint is
     // private; it must not reconstruct state from the browser snapshot or
     // the public catalog-delta table.
     const writesBeforeReplay = gateway.metrics?.().rowsWritten ?? 0;
@@ -283,7 +346,6 @@ test('complete replay stays below D1\'s parameter limit with more than one hundr
   const { sqlite, gateway } = setup(undefined, undefined, 100);
   const timestamp = Date.now();
   try {
-    sqlite.prepare("UPDATE attribute_merge_rebuild_jobs SET status = 'completed'").run();
     sqlite.exec('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)');
     const insertGame = sqlite.prepare(`
       INSERT INTO games (
