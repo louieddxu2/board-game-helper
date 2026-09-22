@@ -417,7 +417,7 @@ gamesRoutes.post('/api/games/:id/merge', requireRole('editor'), async (c) => {
       queryDb.statement(`
         UPDATE attribute_subject_components
         SET game_id = ?, label = (SELECT display_name FROM games WHERE id = ?)
-        WHERE game_id = ? AND component_type = 'base'
+        WHERE game_id = ? AND component_type IN ('base', 'expansion')
       `).bind(parsed.data.targetGameId, parsed.data.targetGameId, c.req.param('id')),
       ...(canonicalizeVotes ? [canonicalizeVotes] : []),
       queryDb.statement(`

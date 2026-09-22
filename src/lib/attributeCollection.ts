@@ -118,17 +118,25 @@ export const attributeSubjectBggIds = (subject: AttributeSubject) => {
 };
 
 export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds: number[]) => {
-  const byBggId = new Map<number, Set<string>>();
-  catalog.subjects
-    .forEach((subject) => {
-      attributeSubjectBggIds(subject).forEach((bggId) => {
-        const subjectIds = byBggId.get(bggId) ?? new Set<string>();
-        subjectIds.add(subject.id);
-        byBggId.set(bggId, subjectIds);
-      });
-    });
-  const subjectIds = [...new Set(bggIds.flatMap((id) => [...(byBggId.get(id) ?? [])]))];
-  return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => byBggId.has(id)))] };
+  const collection = new Set(bggIds);
+  const matchedBggIds = new Set<number>();
+  const subjectIds = catalog.subjects.flatMap((subject) => {
+    const ids = attributeSubjectBggIds(subject);
+    if (subject.kind === 'configuration') {
+      // A configuration is usable only when its complete setup is present.
+      // A base game alone must not select its expansion configuration.
+      const required = (subject.components ?? [])
+        .filter((component) => (component.type === 'base' || component.type === 'expansion') && component.bggId != null)
+        .map((component) => component.bggId!);
+      if (!required.length || !required.every((id) => collection.has(id))) return [];
+      required.forEach((id) => matchedBggIds.add(id));
+      return [subject.id];
+    }
+    if (!ids.some((id) => collection.has(id))) return [];
+    ids.filter((id) => collection.has(id)).forEach((id) => matchedBggIds.add(id));
+    return [subject.id];
+  });
+  return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => matchedBggIds.has(id)))] };
 };
 
 const randomSample = <T>(items: T[], limit: number, random: () => number): T[] => {

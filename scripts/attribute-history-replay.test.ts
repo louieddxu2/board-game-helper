@@ -16,6 +16,7 @@ const setup = (
   beforeHistoryConversion?: (sqlite: DatabaseSync) => void,
   beforeCleanup?: (sqlite: DatabaseSync) => void,
   maxBoundParameters = Number.POSITIVE_INFINITY,
+  beforeExpansionConfigurationCanonicalization?: (sqlite: DatabaseSync) => void,
 ) => {
   const sqlite = new DatabaseSync(':memory:');
   const executedSql: string[] = [];
@@ -23,6 +24,7 @@ const setup = (
     try {
       if (name === '0090_convert_win_vote_history.sql') beforeHistoryConversion?.(sqlite);
       if (name === '0092_retire_attribute_merge_compatibility.sql') beforeCleanup?.(sqlite);
+      if (name === '0109_canonicalize_expansion_attribute_configurations.sql') beforeExpansionConfigurationCanonicalization?.(sqlite);
       sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
     }
     catch (error) { sqlite.close(); throw new Error(`Migration ${name}: ${String(error)}`); }
@@ -93,6 +95,99 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
     expect(sqlite.prepare("SELECT COUNT(*) AS count FROM attribute_catalog_entries WHERE entry_key LIKE 'subject:attribute_subject_game:game_bulk-mode-test' OR entry_key LIKE 'value:attribute_subject_game:game_bulk-mode-test:%'").get()).toMatchObject({ count: 0 });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_pair_stats').get()).toEqual(beforePairs);
+  } finally { sqlite.close(); }
+});
+
+test('expansion history becomes one base-plus-expansion subject, including future relations', async () => {
+  const timestamp = Date.now();
+  const baseGameId = 'game-expansion-config-base';
+  const expansionGameId = 'game-expansion-config-expansion';
+  const otherGameId = 'game-expansion-config-other';
+  const oldExpansionSubjectId = `attribute_subject_game:${expansionGameId}`;
+  const configurationSubjectId = `attribute_config_expansion:${expansionGameId}:${baseGameId}`;
+  const { sqlite, gateway } = setup(undefined, undefined, Number.POSITIVE_INFINITY, (db) => {
+    const insertGame = db.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, merged_into_game_id,
+        created_by, created_at, updated_at, visibility, review_status, reviewed_at,
+        attribute_enabled, bgg_id, entity_kind
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, 'public', 'pending', NULL, 1, ?, ?)
+    `);
+    insertGame.run(baseGameId, 'expansion-config-base', '組合主遊戲', '組合主遊戲', timestamp, timestamp, 930001, 'base');
+    insertGame.run(expansionGameId, 'expansion-config-expansion', '組合擴充', '組合擴充', timestamp, timestamp, 930002, 'expansion');
+    insertGame.run(otherGameId, 'expansion-config-other', '組合對照', '組合對照', timestamp, timestamp, 930003, 'base');
+    db.prepare(`
+      INSERT INTO game_entity_relations (id, source_game_id, target_game_id, relation_type, created_at)
+      VALUES ('expansion-config-relation', ?, ?, 'expansion_of', ?)
+    `).run(expansionGameId, baseGameId, timestamp);
+    db.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, comparison,
+         activity_json, session_id, created_at, updated_at)
+      VALUES ('expansion-config-history', 'attribute_win_method', ?, ?, 8, 'A_HIGHER',
+        '[{"legacy":true}]', 'expansion-config-history', ?, ?)
+    `).run(oldExpansionSubjectId, `attribute_subject_game:${otherGameId}`, timestamp, timestamp);
+  });
+  try {
+    expect(sqlite.prepare('SELECT id FROM attribute_subjects WHERE id = ?').get(oldExpansionSubjectId)).toBeUndefined();
+    expect(sqlite.prepare(`
+      SELECT component_type, game_id, bgg_id
+      FROM attribute_subject_components
+      WHERE subject_id = ?
+      ORDER BY component_order
+    `).all(configurationSubjectId)).toEqual([
+      { component_type: 'base', game_id: baseGameId, bgg_id: 930001 },
+      { component_type: 'expansion', game_id: expansionGameId, bgg_id: 930002 },
+    ]);
+    expect(sqlite.prepare(`
+      SELECT subject_a_id, subject_b_id, activity_json
+      FROM attribute_vote_responses WHERE response_id = 'expansion-config-history'
+    `).get()).toEqual({
+      subject_a_id: configurationSubjectId,
+      subject_b_id: `attribute_subject_game:${otherGameId}`,
+      activity_json: '[]',
+    });
+    expect(sqlite.prepare(`
+      SELECT COUNT(*) AS count
+      FROM catalog_change_outbox
+      WHERE catalog = 'attribute-subject'
+        AND entity_key IN (?, ?)
+    `).get(oldExpansionSubjectId, configurationSubjectId)).toEqual({ count: 0 });
+
+    const replay = await replayAllAttributeScores(gateway, timestamp + 1);
+    expect(replay.catalogPayload.subjects.some((subject) => subject.id === configurationSubjectId)).toBe(true);
+    expect(replay.catalogPayload.subjects.some((subject) => subject.id === oldExpansionSubjectId)).toBe(false);
+    expect(sqlite.prepare(`
+      SELECT direct_sum, direct_count, comparison_count
+      FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(configurationSubjectId)).toEqual({ direct_sum: 8, direct_count: 1, comparison_count: 1 });
+
+    const futureBaseGameId = 'game-future-config-base';
+    const futureExpansionGameId = 'game-future-config-expansion';
+    sqlite.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, created_at, updated_at,
+        bgg_id, entity_kind, visibility, review_status, attribute_enabled
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 'public', 'pending', 1)
+    `).run(futureBaseGameId, 'future-config-base', '未來主遊戲', '未來主遊戲', timestamp + 2, timestamp + 2, 930004, 'base');
+    sqlite.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, created_at, updated_at,
+        bgg_id, entity_kind, visibility, review_status, attribute_enabled
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 'public', 'pending', 1)
+    `).run(futureExpansionGameId, 'future-config-expansion', '未來擴充', '未來擴充', timestamp + 2, timestamp + 2, 930005, 'expansion');
+    sqlite.prepare(`
+      INSERT INTO game_entity_relations (id, source_game_id, target_game_id, relation_type, created_at)
+      VALUES ('future-config-relation', ?, ?, 'expansion_of', ?)
+    `).run(futureExpansionGameId, futureBaseGameId, timestamp + 2);
+
+    expect(sqlite.prepare('SELECT id FROM attribute_subjects WHERE id = ?')
+      .get(`attribute_subject_game:${futureExpansionGameId}`)).toBeUndefined();
+    expect(sqlite.prepare('SELECT id FROM attribute_subjects WHERE id = ?')
+      .get(`attribute_config_expansion:${futureExpansionGameId}:${futureBaseGameId}`)).toEqual({
+        id: `attribute_config_expansion:${futureExpansionGameId}:${futureBaseGameId}`,
+      });
   } finally { sqlite.close(); }
 });
 

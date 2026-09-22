@@ -70,17 +70,21 @@ describe('local attribute collection question selection', () => {
     });
   });
 
-  test('keeps every votable configuration attached to a collected BGG game', () => {
+  test('requires every component before a configuration enters the collection scope', () => {
     const withConfiguration = catalog();
     withConfiguration.subjects.push({
       id: 'subject-a-expansion',
       slug: 'a-expansion',
       kind: 'configuration',
       displayName: '遊戲甲＋擴充',
-      components: [{ order: 0, type: 'base', label: '遊戲甲', bggId: 123 }],
+      components: [
+        { order: 0, type: 'base', label: '遊戲甲', bggId: 123 },
+        { order: 1, type: 'expansion', label: '擴充', bggId: 321 },
+      ],
     });
 
-    expect(matchCollectionSubjects(withConfiguration, [123]).subjectIds).toEqual(['subject-a', 'subject-a-expansion']);
+    expect(matchCollectionSubjects(withConfiguration, [123]).subjectIds).toEqual(['subject-a']);
+    expect(matchCollectionSubjects(withConfiguration, [123, 321]).subjectIds).toEqual(['subject-a', 'subject-a-expansion']);
   });
 
   test('selects a pair without adding IDs to a server query', () => {

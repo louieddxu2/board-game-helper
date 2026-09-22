@@ -172,7 +172,7 @@ interface ActivityFeedRow {
 const votableSubjectCondition = (subjectAlias: string, gameAlias: string) => `(
   (
     ${subjectAlias}.kind = 'game'
-    AND ${gameAlias}.entity_kind IN ('base', 'expansion')
+    AND ${gameAlias}.entity_kind = 'base'
     AND ${gameAlias}.merged_into_game_id IS NULL
     AND ${gameAlias}.visibility = 'public'
     AND (
@@ -1406,7 +1406,7 @@ const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]
     const expansionComponents = components.filter((component) => component.type === 'expansion');
     const isVotable = row.kind === 'game'
       ? Boolean(game
-        && (game.entity_kind === 'base' || game.entity_kind === 'expansion')
+        && game.entity_kind === 'base'
         && game.merged_into_game_id == null
         && game.visibility === 'public'
         && (validBggId(game.bgg_id) != null
