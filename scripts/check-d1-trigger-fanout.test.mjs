@@ -50,6 +50,9 @@ test('the old declassification trigger and migration are rejected; the current s
     current.exec(`CREATE TRIGGER unsafe_history_read AFTER UPDATE ON games
       BEGIN SELECT COUNT(*) FROM attribute_vote_responses; END`);
     expect(auditTriggerFanout(current)).toContain('unsafe_history_read: trigger reads a growing history table');
+    current.exec(`CREATE TRIGGER unsafe_subject_read AFTER UPDATE ON games
+      BEGIN SELECT COUNT(*) FROM attribute_subjects s; END`);
+    expect(auditTriggerFanout(current)).toContain('unsafe_subject_read: trigger scans attribute_subjects without an indexed subject or game key');
   } finally { current.close(); }
 });
 

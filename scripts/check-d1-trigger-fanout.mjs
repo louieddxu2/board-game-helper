@@ -70,9 +70,13 @@ export const auditTriggerFanout = (db) => {
     const sql = maskCommentsAndStrings(trigger.sql);
     if (historyRead.test(sql)) violations.push(`${trigger.name}: trigger reads a growing history table`);
     for (const statement of sql.split(';')) {
-      if (!/\b(?:FROM|JOIN)\s+attribute_subjects\s+(?:AS\s+)?subject\b/iu.test(statement)) continue;
-      if (!/\bsubject\.(?:id|game_id)\s*(?:=|IN\s*\()/iu.test(statement)) {
-        violations.push(`${trigger.name}: trigger scans attribute_subjects without an indexed subject or game key`);
+      for (const match of statement.matchAll(/\b(?:FROM|JOIN)\s+attribute_subjects(?:\s+(?:AS\s+)?([a-z_][a-z_0-9]*))?/giu)) {
+        const alias = /^(?:WHERE|ON|JOIN|LEFT|RIGHT|INNER|CROSS|ORDER|GROUP|LIMIT)$/iu.test(match[1] ?? '')
+          ? 'attribute_subjects' : match[1] ?? 'attribute_subjects';
+        const indexedKey = new RegExp(`\\b${alias}\\.(?:id|game_id)\\s*(?:=|IN\\s*\\()`, 'iu');
+        if (!indexedKey.test(statement)) {
+          violations.push(`${trigger.name}: trigger scans attribute_subjects without an indexed subject or game key`);
+        }
       }
     }
     violations.push(...unsafeDeletes(db, trigger.sql, `trigger ${trigger.name}`));
