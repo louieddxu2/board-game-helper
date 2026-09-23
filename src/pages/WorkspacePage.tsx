@@ -1,5 +1,5 @@
 import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
@@ -21,6 +21,7 @@ import { savePwaLastRoute } from '../lib/pwaNavigation';
 import { GoogleDriveBackupDialog } from '../workspace/googleDriveBackup/GoogleDriveBackupDialog';
 import { useWorkspaceGoogleDriveBackup } from '../workspace/googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
+import { WorkspaceQuickActionPanel } from '../workspace/WorkspaceQuickActionPanel';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const workspaceLineLimitStyle = (column: WorkspaceColumn) => ({ '--workspace-line-limit': column.lineLimit ? String(column.lineLimit) : undefined } as React.CSSProperties);
@@ -73,6 +74,7 @@ const WorkspacePage = () => {
   const [nodeMenu, setNodeMenu] = useState<WorkspaceNode>();
   const [movingNode, setMovingNode] = useState<WorkspaceNode>();
   const [editBarOpen, setEditBarOpen] = useState(false);
+  const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
   const [historyByTable, setHistoryByTable] = useState<Map<string, WorkspaceTableHistory>>(new Map());
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
@@ -418,7 +420,15 @@ const WorkspacePage = () => {
   useEffect(() => {
     setBulkSelection(undefined);
     setBulkEditorOpen(false);
+    setQuickActionsExpanded(false);
   }, [table?.id]);
+
+  useLayoutEffect(() => {
+    if (!quickActionsExpanded) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [quickActionsExpanded, table?.columns.length, table?.id, table?.rows.length, table?.transposed]);
 
   useEffect(() => {
     if (!data) return;
@@ -1032,10 +1042,23 @@ const WorkspacePage = () => {
             })}
           </tbody></>}
         </table>
+        <WorkspaceQuickActionPanel
+          expanded={quickActionsExpanded}
+          canUndo={Boolean(currentTableHistory?.past.length)}
+          canRedo={Boolean(currentTableHistory?.future.length)}
+          undoTitle={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'}
+          redoTitle={currentTableHistory?.future.at(-1) ? `重做：${currentTableHistory.future.at(-1)!.label}` : '沒有可重做的操作'}
+          onExpand={() => setQuickActionsExpanded(true)}
+          onCollapse={() => setQuickActionsExpanded(false)}
+          onAddRow={addRow}
+          onUndo={undoTable}
+          onRedo={redoTable}
+          onAddColumn={addColumn}
+        />
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, bulkSelectedRowIds, bulkSelection, configuring, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
   if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section></WorkspaceModalCloseContext.Provider>;
 

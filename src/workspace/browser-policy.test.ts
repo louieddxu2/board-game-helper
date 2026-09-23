@@ -124,14 +124,21 @@ describe('workspace browser policies', () => {
     expect(detailRule).toMatch(/display:\s*none/);
   });
 
-  it('adds mobile-only bottom scroll room without changing table cell dimensions', () => {
+  it('uses the mobile bottom scroll room for the collapsible table action panel', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
     const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];
-    const bottomSpacerRule = mobileStyles?.match(/\.workspace-table-viewport::after\s*\{([^}]*)\}/)?.[1];
+    const viewportRule = mobileStyles?.match(/\.workspace-table-viewport\s*\{([^}]*)\}/)?.[1];
+    const panelRule = mobileStyles?.match(/\.workspace-quick-actions\s*\{([^}]*)\}/)?.[1];
+    const collapsedRule = mobileStyles?.match(/\.workspace-quick-actions:not\(\.is-expanded\)\s*\{([^}]*)\}/)?.[1];
+    const editButtonRule = mobileStyles?.match(/\.workspace-appbar-actions \.workspace-appbar-button\[aria-label="編輯"\]\s*\{([^}]*)\}/)?.[1];
 
-    expect(bottomSpacerRule).toMatch(/display:\s*block/);
-    expect(bottomSpacerRule).toMatch(/height:\s*max\(32px,\s*calc\(env\(safe-area-inset-bottom,\s*0px\) \+ 14px\)\)/);
-    expect(bottomSpacerRule).toMatch(/pointer-events:\s*none/);
+    expect(viewportRule).toMatch(/display:\s*flex/);
+    expect(viewportRule).toMatch(/flex-direction:\s*column/);
+    expect(panelRule).toMatch(/margin-top:\s*auto/);
+    expect(panelRule).toMatch(/position:\s*sticky/);
+    expect(collapsedRule).toMatch(/height:\s*max\(32px,\s*calc\(env\(safe-area-inset-bottom,\s*0px\) \+ 14px\)\)/);
+    expect(editButtonRule).toMatch(/display:\s*none/);
+    expect(mobileStyles).not.toMatch(/workspace-table-viewport::after/);
   });
 
   it('keeps the frozen header layer above body content during automatic scrolling', () => {

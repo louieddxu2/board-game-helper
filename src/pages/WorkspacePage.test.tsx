@@ -994,6 +994,44 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
   });
 
+  it('expands the mobile quick-action panel and keeps its four actions connected to table history', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const collapsedPanel = await screen.findByRole('button', { name: '展開快速操作' });
+    expect(collapsedPanel).toHaveAttribute('aria-expanded', 'false');
+    expect(collapsedPanel.parentElement).toHaveClass('workspace-quick-actions');
+    expect(collapsedPanel.parentElement?.parentElement).toHaveClass('workspace-table-viewport');
+
+    await user.click(collapsedPanel);
+    const toolbar = screen.getByRole('toolbar', { name: '快速操作' });
+    const addRow = within(toolbar).getByRole('button', { name: '新增列' });
+    const undo = within(toolbar).getByRole('button', { name: '上一動' });
+    const redo = within(toolbar).getByRole('button', { name: '下一動' });
+    const addColumn = within(toolbar).getByRole('button', { name: '新增欄' });
+    expect([addRow, undo, redo, addColumn].map((button) => button.getAttribute('aria-label'))).toEqual(['新增列', '上一動', '下一動', '新增欄']);
+    expect(undo).toBeDisabled();
+    expect(redo).toBeDisabled();
+    expect(within(toolbar).queryByRole('button', { name: '貼上多格' })).not.toBeInTheDocument();
+
+    await user.click(addRow);
+    expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(undo).not.toBeDisabled();
+    expect(screen.getByRole('toolbar', { name: '快速操作' })).toBeInTheDocument();
+
+    await user.click(undo);
+    expect(screen.queryByRole('row', { name: /物件 2/ })).not.toBeInTheDocument();
+    expect(redo).not.toBeDisabled();
+    await user.click(redo);
+    expect(screen.getByRole('row', { name: /物件 2/ })).toBeInTheDocument();
+
+    await user.click(addColumn);
+    expect(screen.getByRole('columnheader', { name: /屬性 5/ })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '收合快速操作' }));
+    expect(screen.getByRole('button', { name: '展開快速操作' })).toBeInTheDocument();
+  });
+
   it('reveals newly added objects and attributes in the table', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

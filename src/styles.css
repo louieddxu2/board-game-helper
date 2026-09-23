@@ -184,6 +184,7 @@ footer a { color: inherit; }
 .workspace-page, .workspace-page * { scrollbar-width: none; }
 .workspace-page::-webkit-scrollbar, .workspace-page *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .workspace-table-viewport { flex: 1; min-height: 0; max-width: 100%; overflow: auto; overscroll-behavior: contain; background: var(--paper); touch-action: none; cursor: grab; scrollbar-width: none; }
+.workspace-quick-actions { display: none; }
 .workspace-table-viewport, .workspace-column-config-panel { transition: box-shadow 140ms ease; }
 .workspace-table-viewport[data-drag-scroll-edge="left"], .workspace-column-config-panel[data-drag-scroll-edge="left"] { box-shadow: inset 16px 0 18px -18px var(--orange); }
 .workspace-table-viewport[data-drag-scroll-edge="right"], .workspace-column-config-panel[data-drag-scroll-edge="right"] { box-shadow: inset -16px 0 18px -18px var(--orange); }
@@ -667,8 +668,10 @@ footer a { color: inherit; }
   .workspace-appbar-leading, .workspace-appbar-actions { gap: 0; }
   .workspace-appbar-actions { margin-left: auto; }
   .workspace-appbar-button { width: 44px; height: 44px; }
+  .workspace-appbar-actions .workspace-appbar-button[aria-label="編輯"] { display: none; }
   .workspace-toolbar-layer { --workspace-toolbar-row-height: 46px; }
   .workspace-editbar { padding: 0 6px; }
+  .workspace-editbar[aria-label="編輯工具列"] { display: none; }
   .workspace-editbar-group { gap: 0; }
   .workspace-editbar-button { width: 40px; height: 40px; }
   .workspace-paste-button { display: none; }
@@ -678,7 +681,19 @@ footer a { color: inherit; }
   .workspace-appbar-search input { font-size: 16px; }
   .workspace-filterbar-button { min-height: 46px; padding: 3px 5px; }
   .workspace-table th, .workspace-table td { min-width: 0; padding: 2px 3px; }
-  .workspace-table-viewport::after { content: ''; display: block; width: 1px; height: max(32px, calc(env(safe-area-inset-bottom, 0px) + 14px)); pointer-events: none; }
+  .workspace-table-viewport { display: flex; flex-direction: column; align-items: flex-start; }
+  .workspace-table { flex: 0 0 auto; }
+  .workspace-quick-actions { position: sticky; left: 0; z-index: 9; display: block; flex: 0 0 auto; width: 100%; box-sizing: border-box; margin-top: auto; border-top: 1px solid var(--line); background: var(--white); color: var(--green); }
+  .workspace-quick-actions:not(.is-expanded) { height: max(32px, calc(env(safe-area-inset-bottom, 0px) + 14px)); }
+  .workspace-quick-actions-collapsed { display: flex; width: 100%; height: 100%; min-height: 0; align-items: center; justify-content: center; gap: 14px; padding: 0 12px; border: 0; background: transparent; color: var(--green); cursor: pointer; }
+  .workspace-quick-actions-preview { display: flex; align-items: center; justify-content: center; gap: clamp(8px, 4vw, 20px); color: var(--muted); opacity: .62; }
+  .workspace-quick-actions-preview > span { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; white-space: nowrap; }
+  .workspace-quick-actions-collapse { display: grid; width: 100%; height: 25px; place-items: center; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+  .workspace-quick-actions-controls { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, .8fr)) minmax(0, 1.1fr); gap: 4px; padding: 0 7px max(5px, env(safe-area-inset-bottom, 0px)); }
+  .workspace-quick-action { display: flex; min-width: 0; min-height: 52px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 3px 1px; border: 0; border-radius: 7px; background: transparent; color: var(--green); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .workspace-quick-action:hover:not(:disabled), .workspace-quick-action:focus-visible { background: var(--cream); color: var(--orange); }
+  .workspace-quick-action:disabled { color: var(--muted); cursor: not-allowed; opacity: .4; }
+  .workspace-quick-actions.is-expanded { padding-top: 2px; border-radius: 10px 10px 0 0; box-shadow: 0 -5px 14px rgba(22,53,47,.09); }
   .workspace-table .workspace-row-corner, .workspace-row-heading { min-width: 0 !important; }
   .workspace-import-column { grid-template-columns: minmax(0, 1fr) 116px; }
   .workspace-import-date-only { grid-column: 1 / -1; justify-self: end; }
