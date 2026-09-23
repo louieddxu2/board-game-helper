@@ -42,6 +42,6 @@ export const WorkspaceQuickActionPanel = ({
       <span><WorkspaceIcon name="redo" size={14} />下一動</span>
       <span><WorkspaceIcon name="columns-plus" size={15} />欄</span>
     </span>
-    <WorkspaceIcon name="up" size={17} />
+    <span className="workspace-quick-actions-indicator" aria-hidden="true"><WorkspaceIcon name="up" size={18} /></span>
   </button>}
 </div>;

@@ -130,6 +130,9 @@ describe('workspace browser policies', () => {
     const viewportRule = mobileStyles?.match(/\.workspace-table-viewport\s*\{([^}]*)\}/)?.[1];
     const panelRule = mobileStyles?.match(/\.workspace-quick-actions\s*\{([^}]*)\}/)?.[1];
     const collapsedRule = mobileStyles?.match(/\.workspace-quick-actions:not\(\.is-expanded\)\s*\{([^}]*)\}/)?.[1];
+    const collapsedButtonRule = mobileStyles?.match(/\.workspace-quick-actions-collapsed\s*\{([^}]*)\}/)?.[1];
+    const previewRule = mobileStyles?.match(/\.workspace-quick-actions-preview\s*\{([^}]*)\}/)?.[1];
+    const indicatorRule = mobileStyles?.match(/\.workspace-quick-actions-indicator\s*\{([^}]*)\}/)?.[1];
     const editButtonRule = mobileStyles?.match(/\.workspace-appbar-actions \.workspace-appbar-button\[aria-label="編輯"\]\s*\{([^}]*)\}/)?.[1];
 
     expect(viewportRule).toMatch(/display:\s*flex/);
@@ -137,6 +140,13 @@ describe('workspace browser policies', () => {
     expect(panelRule).toMatch(/margin-top:\s*auto/);
     expect(panelRule).toMatch(/position:\s*sticky/);
     expect(collapsedRule).toMatch(/height:\s*max\(32px,\s*calc\(env\(safe-area-inset-bottom,\s*0px\) \+ 14px\)\)/);
+    expect(collapsedButtonRule).toMatch(/position:\s*relative/);
+    expect(previewRule).toMatch(/position:\s*absolute/);
+    expect(previewRule).toMatch(/grid-template-columns:\s*minmax\(0,\s*1\.1fr\) repeat\(2,\s*minmax\(0,\s*\.8fr\)\) minmax\(0,\s*1\.1fr\)/);
+    expect(previewRule).toMatch(/opacity:\s*\.4/);
+    expect(indicatorRule).toMatch(/position:\s*absolute/);
+    expect(indicatorRule).toMatch(/inset:\s*0/);
+    expect(indicatorRule).toMatch(/place-items:\s*center/);
     expect(editButtonRule).toMatch(/display:\s*none/);
     expect(mobileStyles).not.toMatch(/workspace-table-viewport::after/);
   });
