@@ -3,6 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import readline from 'readline';
 import { ensureCloudflareAuth } from './cloudflare-login.mjs';
 import { detectAuthSensitiveReleaseChanges, missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
+import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
+import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
 
 const DEPLOY_STATE_PATH = '.wrangler/last-successful-deploy-sha';
 
@@ -13,27 +15,6 @@ const run = (command, options = {}) => {
     if (options.allowFailure) return error.stdout ?? '';
     throw error;
   }
-};
-
-const checkPendingMigrations = () => {
-  const output = run('cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations list board-game-rules-prod --remote --config wrangler.production.jsonc', { allowFailure: true });
-  const lines = output.split('\n');
-  const pending = [];
-  let inSection = false;
-  for (const line of lines) {
-    if (line.includes('Migrations to be applied:')) {
-      inSection = true;
-      continue;
-    }
-    if (inSection && line.trim().startsWith('│') && !line.includes('Name')) {
-      const match = line.match(/│\s*([^\s│]+)\s*│/);
-      if (match && match[1]) pending.push(match[1]);
-    }
-    if (inSection && line.includes('└') && line.includes('┘')) {
-      inSection = false;
-    }
-  }
-  return pending;
 };
 
 const checkRequiredSecrets = () => {
@@ -100,7 +81,8 @@ const main = async () => {
   checkRequiredSecrets();
   console.log('✅ 正式環境必要 Secret 已設定。');
   console.log('🔍 正在檢查遠端 Cloudflare D1 資料庫的 Migration 狀態...');
-  const pending = checkPendingMigrations();
+  const pending = listPendingRemoteMigrations();
+  checkD1TriggerFanout(pending);
   const isCI = process.env.CI === 'true' || !process.stdin.isTTY;
 
   if (pending.length > 0) {
