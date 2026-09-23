@@ -4,6 +4,7 @@ import { PWA_LAST_ROUTE_STORAGE_KEY, isInstalledPwa, isPwaHomeShortcut, pwaRoute
 afterEach(() => {
   localStorage.clear();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('PWA route memory', () => {
@@ -30,7 +31,7 @@ describe('PWA route memory', () => {
   });
 
   it('saves routes only while running as an installed PWA', () => {
-    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList));
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList)));
     expect(isInstalledPwa()).toBe(true);
     savePwaLastRoute({ pathname: '/workspace' });
     expect(localStorage.getItem(PWA_LAST_ROUTE_STORAGE_KEY)).toBe('/workspace');

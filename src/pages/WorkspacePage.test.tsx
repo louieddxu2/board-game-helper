@@ -36,7 +36,10 @@ beforeEach(() => {
   vi.mocked(saveWorkspace).mockClear();
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe('WorkspacePage', () => {
   it.each(['close-button', 'backdrop', 'escape'] as const)('saves a cell draft on %s exactly once', async (reason) => {
@@ -1364,7 +1367,7 @@ describe('WorkspacePage', () => {
 
   it('marks 返回網站 as an explicit homepage navigation in installed mode', async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList));
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(display-mode: standalone)' } as MediaQueryList)));
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '開啟目錄' }));
 
