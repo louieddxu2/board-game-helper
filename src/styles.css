@@ -1751,8 +1751,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .attribute-vote-page .attribute-game-card-refresh { min-height: 0 !important; }
 .attribute-vote-page .attribute-game-card-refresh-inline { position: absolute; top: 4px; right: 4px; }
 .attribute-rating-track { grid-column: 1 / -1; min-width: 0; }
-.attribute-vote-page .attribute-pole-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }
-.attribute-vote-page .attribute-pole-labels strong { flex: initial; margin: 0; text-align: right; color: var(--green); }
+.attribute-vote-page .attribute-pole-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.attribute-vote-page .attribute-pole-labels > span, .attribute-vote-page .attribute-pole-labels > strong { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.attribute-vote-page .attribute-pole-labels > span { text-align: left; }
+.attribute-vote-page .attribute-pole-labels strong { margin: 0; text-align: right; color: var(--green); }
 .attribute-rating-marker { position: absolute; top: 0; z-index: 2; display: grid; width: max-content; min-width: 0; max-width: calc(100% - 2px); place-items: center; padding: 4px 22px 4px 9px; border: 1px solid var(--orange); border-radius: 6px; background: var(--white); color: var(--ink); transform: translateX(-50%); cursor: grab; font-size: 10px; font-weight: 900; line-height: 1.2; text-align: center; user-select: none; white-space: nowrap; }
 .attribute-rating-marker.is-left { top: auto; bottom: calc(50% + 7px); }
 .attribute-rating-marker.is-right { top: calc(50% + 7px); border-color: var(--green); }
