@@ -51,6 +51,7 @@ export const AddPage = () => {
   const [pasteImportOpen, setPasteImportOpen] = useState(false);
   const [pasteImportText, setPasteImportText] = useState('');
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const draftSaveTimer = useRef<number | undefined>(undefined);
   const selectedGameId = game?.id;
   const isGeneralContributor = Boolean(user && !canEdit);
   const remainingRules = quota?.remainingRules ?? 0;
@@ -120,14 +121,14 @@ export const AddPage = () => {
   }, [selectedGameId, canEdit]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    draftSaveTimer.current = window.setTimeout(() => {
       const draft: Omit<DraftRecord, 'id'> = {
         game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
         gameQuery, englishName, rules, updatedAt: Date.now(),
       };
       void localDb.saveDraft(draft).then(() => setSavedAt(Date.now()));
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => window.clearTimeout(draftSaveTimer.current);
   }, [game, gameQuery, englishName, rules]);
 
   useEffect(() => {
@@ -253,7 +254,19 @@ export const AddPage = () => {
 
   const handleCancel = async () => {
     const hasContent = validRules.some((rule) => rule.statement.trim() || rule.commonMistake?.trim()) || Boolean(game || gameQuery.trim());
-    if (hasContent && !await confirm({ title: '離開草稿？', message: '草稿已自動儲存在這台裝置。', confirmLabel: '離開', cancelLabel: '繼續編輯', discardLabel: '捨棄草稿' })) return;
+    if (hasContent) {
+      const result = await confirm({ title: '離開草稿？', message: '草稿已自動儲存在這台裝置。', confirmLabel: '離開', cancelLabel: '繼續編輯', discardLabel: '捨棄草稿' });
+      if (!result) return;
+      if (result === 'discard') {
+        window.clearTimeout(draftSaveTimer.current);
+        try {
+          await localDb.clearDraft();
+        } catch {
+          setError('無法清除草稿，請稍後再試。');
+          return;
+        }
+      }
+    }
     navigate('/', { replace: true });
   };
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AddPage } from './AddPage';
@@ -51,7 +51,10 @@ vi.mock('../lib/localDb', () => ({
 }));
 
 describe('AddPage contribution constraints', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getDraft.mockResolvedValue(undefined);
@@ -125,6 +128,104 @@ describe('AddPage contribution constraints', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
 
     expect(await screen.findByText('網站首頁')).toBeInTheDocument();
+  });
+
+  test('discards the draft before navigating and cancels a pending autosave', async () => {
+    vi.useFakeTimers();
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.confirm.mockResolvedValue('discard');
+    let finishClearDraft!: () => void;
+    mocks.clearDraft.mockImplementation(() => new Promise<void>((resolve) => { finishClearDraft = resolve; }));
+    render(
+      <MemoryRouter initialEntries={['/add']}>
+        <Routes>
+          <Route path="/add" element={<AddPage />} />
+          <Route path="/" element={<p>網站首頁</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '已填寫的錯誤規則' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ discardLabel: '捨棄草稿' }));
+    expect(mocks.clearDraft).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('網站首頁')).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(251); });
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishClearDraft();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('網站首頁')).toBeInTheDocument();
+  });
+
+  test('leaves the editor while keeping the draft when the user chooses to leave', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.confirm.mockResolvedValue(true);
+    render(
+      <MemoryRouter initialEntries={['/add']}>
+        <Routes>
+          <Route path="/add" element={<AddPage />} />
+          <Route path="/" element={<p>網站首頁</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '保留這份草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(await screen.findByText('網站首頁')).toBeInTheDocument();
+    expect(mocks.clearDraft).not.toHaveBeenCalled();
+  });
+
+  test('stays in the editor when the user chooses to continue editing', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.confirm.mockResolvedValue(false);
+    render(
+      <MemoryRouter initialEntries={['/add']}>
+        <Routes>
+          <Route path="/add" element={<AddPage />} />
+          <Route path="/" element={<p>網站首頁</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '繼續編輯這份草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ cancelLabel: '繼續編輯' })));
+    expect(screen.queryByText('網站首頁')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('繼續編輯這份草稿')).toBeInTheDocument();
+    expect(mocks.clearDraft).not.toHaveBeenCalled();
+  });
+
+  test('stays in the editor and reports an error when discarding the draft fails', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.confirm.mockResolvedValue('discard');
+    mocks.clearDraft.mockRejectedValue(new Error('storage unavailable'));
+    render(
+      <MemoryRouter initialEntries={['/add']}>
+        <Routes>
+          <Route path="/add" element={<AddPage />} />
+          <Route path="/" element={<p>網站首頁</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '清除失敗仍要保留' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('無法清除草稿，請稍後再試。');
+    expect(screen.queryByText('網站首頁')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('清除失敗仍要保留')).toBeInTheDocument();
   });
 
   test('keeps Enter as a newline in the correct-rule textarea', () => {
