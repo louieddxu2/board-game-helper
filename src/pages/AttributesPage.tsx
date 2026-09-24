@@ -13,7 +13,7 @@ import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from 
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
 import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
 import { SessionContext } from '../context/SessionContext';
-import type { AttributeActivity, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
+import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload, AttributeScoreExample } from '../shared/types';
 
 type QuestionMotion = 'idle' | 'answering' | 'leaving' | 'entering' | 'leaving-a' | 'entering-a' | 'leaving-b' | 'entering-b';
 type VoteFeedback = { state: 'saving' | 'saved'; text: string } | null;
@@ -158,6 +158,7 @@ export const AttributesPage = () => {
   const [sessionId] = useState(getAttributeSessionId);
   const collectionIdsRef = useRef<number[]>([]);
   const votingCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
+  const collectionMatchCacheRef = useRef<{ subjects: AttributeCatalogPayload['subjects']; bggIds: number[]; result: ReturnType<typeof matchCollectionSubjects> } | undefined>(undefined);
   const directRatingKeysRef = useRef(new Set<string>());
   const voteScopeRef = useRef<AttributeVoteScope>('all');
   const collectionInputRef = useRef<HTMLInputElement>(null);
@@ -166,6 +167,14 @@ export const AttributesPage = () => {
   const inFlightResponseIdsRef = useRef(new Set<string>());
   const motionTimerRef = useRef<number | undefined>(undefined);
   const mountedRef = useRef(true);
+  const getCollectionMatch = useCallback((catalog: AttributeCatalogPayload, bggIds: number[]) => {
+    const cached = collectionMatchCacheRef.current;
+    if (cached?.subjects === catalog.subjects
+      && cached.bggIds === bggIds) return cached.result;
+    const result = matchCollectionSubjects(catalog, bggIds);
+    collectionMatchCacheRef.current = { subjects: catalog.subjects, bggIds, result };
+    return result;
+  }, []);
   const optimisticActorName = session?.user?.showNickname && session.user.nickname?.trim()
     ? session.user.nickname.trim()
     : '匿名玩家';
@@ -233,13 +242,13 @@ export const AttributesPage = () => {
       votingCatalogRef.current = updated;
       const ids = collectionIdsRef.current;
       if (ids.length) {
-        setCollectionMatchCount(matchCollectionSubjects(updated, ids).matchedBggIds.length);
+        setCollectionMatchCount(getCollectionMatch(updated, ids).matchedBggIds.length);
         setCollectionMatchKnown(true);
       }
     });
     votingCatalogRef.current = catalog;
     return catalog;
-  }, []);
+  }, [getCollectionMatch]);
 
   const refreshCollectionScope = useCallback(async () => {
     const ids = await localDb.getAttributeCollectionIds();
@@ -251,9 +260,9 @@ export const AttributesPage = () => {
       return;
     }
     const catalog = await loadVotingCatalog();
-    setCollectionMatchCount(matchCollectionSubjects(catalog, ids).matchedBggIds.length);
+    setCollectionMatchCount(getCollectionMatch(catalog, ids).matchedBggIds.length);
     setCollectionMatchKnown(true);
-  }, [loadVotingCatalog]);
+  }, [getCollectionMatch, loadVotingCatalog]);
 
   const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
     const catalog = await loadVotingCatalog();
@@ -270,12 +279,9 @@ export const AttributesPage = () => {
       excludedDirectRatingKeys: directRatingKeysRef.current,
     };
     const scopedSubjectIds = voteScopeRef.current === 'collection'
-      ? matchCollectionSubjects(catalog, collectionBggIds).subjectIds
+      ? getCollectionMatch(catalog, collectionBggIds).subjectIds
       : undefined;
-    const [deferred, questionNumber] = await Promise.all([
-      localDb.getDeferredAttributeSubjects(),
-      localDb.getAttributeQuestionNumber(),
-    ]);
+    const { deferred, questionNumber } = await localDb.getAttributeQuestionContext();
     const subjectIds = availableAttributeSubjectIds(catalog, scopedSubjectIds, deferred, questionNumber);
     const selection = chooseScopedAttributeQuestion(catalog, subjectIds, options);
     if (!selection) {
@@ -296,7 +302,7 @@ export const AttributesPage = () => {
       ...next,
       extremeExamples: chooseScopedExtremeExamples(catalog, selection.attributeId, scopedSubjectIds),
     };
-  }, [loadVotingCatalog, sessionId]);
+  }, [getCollectionMatch, loadVotingCatalog, sessionId]);
 
   const deferCurrentAndLoad = async (mode: 'pair' | 'a' | 'b') => {
     if (!question || questionLoading || submitting || awaitingNext) return;

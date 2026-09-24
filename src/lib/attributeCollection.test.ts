@@ -164,6 +164,7 @@ describe('local attribute collection question selection', () => {
 
     expect(selectedAttributes).toEqual(new Set(broad.attributes.map((attribute) => attribute.id)));
     expect(LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE).toBe(10);
+    expect(chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0.999)?.subjectAId).toBe('subject-9');
   });
 
   test('removes directly rated items before building the seed pool', () => {

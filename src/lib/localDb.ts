@@ -450,6 +450,31 @@ export const localDb = {
     const cached = await (await getDatabase()).get('cache', 'attributes:question-number:v1') as CacheRecord<number> | undefined;
     return Number.isSafeInteger(cached?.data) && Number(cached?.data) >= 0 ? Number(cached?.data) : 0;
   },
+  getAttributeQuestionContext: async () => {
+    const db = await getDatabase();
+    const transaction = db.transaction(['cache', 'attributeDeferredSubjects'], 'readonly');
+    const [cached, preferences] = await Promise.all([
+      transaction.objectStore('cache').get('attributes:question-number:v1') as Promise<CacheRecord<number> | undefined>,
+      transaction.objectStore('attributeDeferredSubjects').getAll(),
+    ]);
+    await transaction.done;
+    const questionNumber = Number.isSafeInteger(cached?.data) && Number(cached?.data) >= 0 ? Number(cached?.data) : 0;
+    const active = preferences.filter((preference) => preference.eligibleAfterQuestion > questionNumber);
+    const expiredIds = preferences
+      .filter((preference) => preference.eligibleAfterQuestion <= questionNumber)
+      .map((preference) => preference.subjectId);
+    if (expiredIds.length) {
+      void (async () => {
+        const cleanup = db.transaction('attributeDeferredSubjects', 'readwrite');
+        await Promise.all(expiredIds.map(async (id) => {
+          const current = await cleanup.store.get(id);
+          if (current && current.eligibleAfterQuestion <= questionNumber) await cleanup.store.delete(id);
+        }));
+        await cleanup.done;
+      })().catch(() => undefined);
+    }
+    return { questionNumber, deferred: active };
+  },
   advanceAttributeQuestionNumber: async () => {
     const db = await getDatabase();
     const cached = await db.get('cache', 'attributes:question-number:v1') as CacheRecord<number> | undefined;

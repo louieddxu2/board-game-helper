@@ -52,7 +52,7 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
     vi.spyOn(localDb, 'invalidateAttributeQuestion').mockResolvedValue(undefined);
-    vi.spyOn(localDb, 'getDeferredAttributeSubjects').mockResolvedValue([]);
+    vi.spyOn(localDb, 'getAttributeQuestionContext').mockResolvedValue({ deferred: [], questionNumber: 0 });
     vi.spyOn(localDb, 'getAttributeQuestionNumber').mockResolvedValue(0);
     vi.spyOn(localDb, 'advanceAttributeQuestionNumber').mockResolvedValue(1);
     vi.spyOn(localDb, 'updateAttributeCatalogValues').mockResolvedValue(undefined);

@@ -1,4 +1,4 @@
-import type { AttributeCatalogPayload, AttributeExtremeExamples, AttributeQuestion, AttributeScoreExample, AttributeSubject } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeExtremeExamples, AttributeMatrixValue, AttributeQuestion, AttributeScoreExample, AttributeSubject } from '../shared/types';
 import { attributeDirectRatingKey } from './attributeDirectRatings';
 
 export const MAX_ATTRIBUTE_COLLECTION_CSV_BYTES = 5 * 1024 * 1024;
@@ -38,6 +38,38 @@ export interface DeferredAttributeSubjectPreference {
 
 /** Number of low-confidence game candidates retained for each attribute. */
 export const LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE = 10;
+
+type AttributeValueIndex = {
+  bySubjectAttribute: Map<string, AttributeMatrixValue>;
+  byAttribute: Map<string, AttributeMatrixValue[]>;
+};
+
+const attributeValueIndexes = new WeakMap<AttributeMatrixValue[], AttributeValueIndex>();
+const subjectIndexes = new WeakMap<AttributeSubject[], Map<string, AttributeSubject>>();
+
+const valueIndexFor = (values: AttributeMatrixValue[]) => {
+  const cached = attributeValueIndexes.get(values);
+  if (cached) return cached;
+  const bySubjectAttribute = new Map<string, AttributeMatrixValue>();
+  const byAttribute = new Map<string, AttributeMatrixValue[]>();
+  values.forEach((value) => {
+    bySubjectAttribute.set(`${value.subjectId}\u0000${value.attributeId}`, value);
+    const attributeValues = byAttribute.get(value.attributeId);
+    if (attributeValues) attributeValues.push(value);
+    else byAttribute.set(value.attributeId, [value]);
+  });
+  const index = { bySubjectAttribute, byAttribute };
+  attributeValueIndexes.set(values, index);
+  return index;
+};
+
+const subjectIndexFor = (subjects: AttributeSubject[]) => {
+  const cached = subjectIndexes.get(subjects);
+  if (cached) return cached;
+  const index = new Map(subjects.map((subject) => [subject.id, subject]));
+  subjectIndexes.set(subjects, index);
+  return index;
+};
 
 const normalizeHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s_-]+/g, '');
 
@@ -121,7 +153,6 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
   const collection = new Set(bggIds);
   const matchedBggIds = new Set<number>();
   const subjectIds = catalog.subjects.flatMap((subject) => {
-    const ids = attributeSubjectBggIds(subject);
     if (subject.kind === 'configuration') {
       // A configuration is usable only when its complete setup is present.
       // A base game alone must not select its expansion configuration.
@@ -132,19 +163,29 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
       required.forEach((id) => matchedBggIds.add(id));
       return [subject.id];
     }
-    if (!ids.some((id) => collection.has(id))) return [];
-    ids.filter((id) => collection.has(id)).forEach((id) => matchedBggIds.add(id));
-    return [subject.id];
+    let matched = false;
+    attributeSubjectBggIds(subject).forEach((id) => {
+      if (!collection.has(id)) return;
+      matched = true;
+      matchedBggIds.add(id);
+    });
+    return matched ? [subject.id] : [];
   });
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => matchedBggIds.has(id)))] };
 };
 
 const randomSample = <T>(items: T[], limit: number, random: () => number): T[] => {
-  const pool = [...items];
   const selected: T[] = [];
-  while (pool.length && selected.length < limit) {
-    const index = Math.min(pool.length - 1, Math.floor(Math.max(0, Math.min(1 - Number.EPSILON, random())) * pool.length));
-    selected.push(pool.splice(index, 1)[0]);
+  const swaps = new Map<number, number>();
+  const sampleCount = Math.min(items.length, Math.max(0, Math.floor(limit)));
+  for (let index = 0; index < sampleCount; index += 1) {
+    const remaining = items.length - index;
+    const offset = Math.min(remaining - 1, Math.floor(Math.max(0, Math.min(1 - Number.EPSILON, random())) * remaining));
+    const selectedIndex = index + offset;
+    const selectedValue = swaps.get(selectedIndex) ?? selectedIndex;
+    const displacedValue = swaps.get(index) ?? index;
+    swaps.set(selectedIndex, displacedValue);
+    selected.push(items[selectedValue]);
   }
   return selected;
 };
@@ -160,10 +201,10 @@ export const chooseScopedExtremeExamples = (
   scopedSubjectIds?: string[],
   random: () => number = Math.random,
 ): AttributeExtremeExamples => {
-  const subjects = new Map(catalog.subjects.map((subject) => [subject.id, subject]));
+  const subjects = subjectIndexFor(catalog.subjects);
   const scoped = scopedSubjectIds ? new Set(scopedSubjectIds) : undefined;
-  const candidates = catalog.values
-    .filter((value) => value.attributeId === attributeId && (value.evidenceCount ?? 0) > 0)
+  const candidates = (valueIndexFor(catalog.values).byAttribute.get(attributeId) ?? [])
+    .filter((value) => (value.evidenceCount ?? 0) > 0)
     .flatMap((value): AttributeScoreExample[] => {
       const subject = subjects.get(value.subjectId);
       return subject ? [{ subject, score: Number(value.score.toFixed(2)) }] : [];
@@ -259,7 +300,7 @@ export const chooseScopedAttributeQuestion = (
   const allowedSubjectIds = new Set(subjectIds);
   const availableSubjects = catalog.subjects.filter((subject) => allowedSubjectIds.has(subject.id));
   if (availableSubjects.length < 2 || !catalog.attributes.length) return null;
-  const valueMap = new Map(catalog.values.map((value) => [`${value.subjectId}\u0000${value.attributeId}`, value]));
+  const valueMap = valueIndexFor(catalog.values).bySubjectAttribute;
   const state = (subjectId: string, attributeId: string) => {
     const value = valueMap.get(`${subjectId}\u0000${attributeId}`);
     return { score: value?.score ?? 5, ratingDeviation: value?.ratingDeviation ?? 3, comparisonCount: value?.comparisonCount ?? 0 };
@@ -272,28 +313,32 @@ export const chooseScopedAttributeQuestion = (
   let seedId = options.fixedSubjectAId ?? options.fixedSubjectBId;
   let attributeId = options.fixedAttributeId;
   if (!seedId) {
-    const ranked = availableSubjects.flatMap((subject) => attributeIds.map((candidateAttributeId) => ({
-      subjectId: subject.id,
-      attributeId: candidateAttributeId,
-      ...state(subject.id, candidateAttributeId),
-    })))
-      .filter((candidate) => !isDirectlyRated(candidate.subjectId, candidate.attributeId, options))
-      .sort((left, right) => right.ratingDeviation - left.ratingDeviation);
-    if (!ranked.length) return null;
-    // Select the question (attribute) before selecting games. A single global
-    // top-200 pool can fill with the first attributes in catalog order and
-    // make later attributes effectively invisible. Each attribute still uses
-    // the original low-confidence ranking, but retains its own top ten.
-    const groups = new Map(attributeIds.map((candidateAttributeId) => [
-      candidateAttributeId,
-      ranked.filter((candidate) => candidate.attributeId === candidateAttributeId),
-    ]));
+    type SeedCandidate = { subjectId: string; attributeId: string; ratingDeviation: number };
+    const groups = new Map<string, SeedCandidate[]>();
+    const candidateLimit = LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE;
+    for (const subject of availableSubjects) {
+      for (const candidateAttributeId of attributeIds) {
+        if (isDirectlyRated(subject.id, candidateAttributeId, options)) continue;
+        const ratingDeviation = state(subject.id, candidateAttributeId).ratingDeviation;
+        let group = groups.get(candidateAttributeId);
+        if (!group) {
+          group = [];
+          groups.set(candidateAttributeId, group);
+        }
+        let insertionIndex = 0;
+        // Keep the previous stable-sort order for ties while retaining only
+        // the candidates that can enter the bounded seed pool.
+        while (insertionIndex < group.length && group[insertionIndex].ratingDeviation >= ratingDeviation) insertionIndex += 1;
+        if (insertionIndex >= candidateLimit) continue;
+        group.splice(insertionIndex, 0, { subjectId: subject.id, attributeId: candidateAttributeId, ratingDeviation });
+        if (group.length > candidateLimit) group.pop();
+      }
+    }
     const eligibleAttributeIds = attributeIds.filter((candidateAttributeId) => (groups.get(candidateAttributeId)?.length ?? 0) > 0);
     if (!eligibleAttributeIds.length) return null;
     attributeId = eligibleAttributeIds[Math.floor(randomValue * eligibleAttributeIds.length)];
     const attributeCandidates = groups.get(attributeId) ?? [];
-    const seedPool = attributeCandidates.slice(0, LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE);
-    const seed = seedPool[Math.floor(randomValue * seedPool.length)] ?? attributeCandidates[0] ?? ranked[0];
+    const seed = attributeCandidates[Math.floor(randomValue * attributeCandidates.length)] ?? attributeCandidates[0];
     seedId = seed.subjectId;
     attributeId = seed.attributeId;
   }
