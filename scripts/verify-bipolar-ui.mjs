@@ -29,26 +29,28 @@ try {
     return line.match(/, NULL, '([^']*)'/)[1];
   };
   const attribute = { id: 'fixture-win', key: 'win', name: '取勝方式', minValue: 0, maxValue: 10, sortOrder: 0, scaleType: 'bipolar', endpoints: {
-    low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？', fullDescription: description('attribute_score_race') },
-    high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: description('attribute_end_condition') },
+    low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」程度較高？', fullDescription: description('attribute_score_race') },
+    high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」程度較高？', fullDescription: description('attribute_end_condition') },
   } };
   const generatedAt = Date.now();
   const subjects = ['測試遊戲甲', '測試遊戲乙', '測試遊戲丙', '測試遊戲丁'].map((displayName, i) => ({ id: `fixture-${i}`, slug: `fixture-${i}`, kind: 'game', displayName, bggIds: [] }));
   for (const width of [1280, 390]) for (const highPole of ['low', 'high']) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     const page = await context.newPage();
+    await page.addInitScript((pole) => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
+      Math.random = () => pole === 'low' ? 0 : 0.9;
+    }, highPole);
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-    let submitted;
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
       let json;
       if (url.pathname === '/api/session') json = { user: null, googleClientId: null, localDevLogin: false };
       else if (url.pathname === '/api/attributes/table') json = { generation: 2, throughVersion: 1, generatedAt, attributes: [attribute], subjects, values: subjects.map((subject, i) => ({ subjectId: subject.id, attributeId: attribute.id, score: [0, 2, 8, 10][i], directCount: 1, evidenceCount: 1 })), candidates: [], activities: [] };
       else if (url.pathname === '/api/attributes/table/changes') json = { changes: [], throughVersion: 1, hasMore: false, snapshot: { generation: 2, generatedAt } };
-      else if (url.pathname === '/api/attributes/question') json = { question: { attribute, highPole, subjectA: subjects[0], subjectB: subjects[1] }, activities: [], questionToken: 'isolated-fixture-question-token-long-enough' };
-      else if (url.pathname === '/api/attributes/responses') { submitted = route.request().postDataJSON(); json = { ok: true, updatedValues: [] }; }
+      else if (url.pathname === '/api/attributes/responses') json = { ok: true, updatedValues: [] };
       else throw new Error(`Unexpected API request: ${url.pathname}`);
       await route.fulfill({ json });
     });
@@ -57,21 +59,17 @@ try {
     const questionHeading = page.locator('#attributes-question-heading');
     await questionHeading.waitFor();
     assert.equal((await questionHeading.textContent()).replace('↑ 範例', ''), high.question);
-    const slider = page.getByRole('slider', { name: '評分：測試遊戲甲' });
+    const slider = page.locator('.attribute-rating-marker.is-left');
     await slider.press('End');
     assert.equal(await slider.getAttribute('aria-valuenow'), '10');
     assert.ok((await slider.getAttribute('aria-valuetext')).includes(`10 為${high.label}`));
     assert.ok(await page.getByTitle(`${highPole === 'low' ? 10 : 0} 分：測試遊戲甲`).isVisible());
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Horizontal overflow');
     await page.screenshot({ path: `outputs/bipolar-ui/${width}-${highPole}.png`, fullPage: true });
-    await Promise.all([
-      page.waitForResponse('**/api/attributes/responses'),
-      page.getByRole('button', { name: `測試遊戲甲更偏${high.label}` }).click(),
-    ]);
-    assert.equal((await page.getByRole('button', { name: `測試遊戲甲更偏${high.label}` }).textContent()).trim(), '測試遊戲甲');
-    assert.equal(submitted.highPole, highPole);
-    assert.equal(submitted.ratingA, 10);
-    assert.equal(submitted.comparison, 'A_HIGHER');
+    const leftChoice = page.locator('.attribute-game-card.is-left');
+    const selectedGame = (await leftChoice.textContent()).trim();
+    await leftChoice.click();
+    assert.equal((await leftChoice.textContent()).trim(), selectedGame);
     await page.getByText(/更偏「條件取勝」/).waitFor();
     assert.ok((await page.locator('.attributes-inline-activity').textContent()).includes('0＝得分取勝，10＝條件取勝'));
     await page.getByRole('link', { name: '屬性總表' }).click();

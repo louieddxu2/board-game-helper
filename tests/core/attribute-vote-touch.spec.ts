@@ -11,8 +11,9 @@ const snapshotGeneratedAt = 1_700_000_000_000;
 
 for (const choice of ['left', 'right', 'similar'] as const) {
   test(`touch ${choice} answer returns to neutral when the next question reuses a game`, async ({ page }, testInfo) => {
-    let questionCount = 0;
+    let questionRequests = 0;
     const votes: unknown[] = [];
+    await page.addInitScript(() => { Math.random = () => 0; });
     await page.route('**/api/attributes/table', (route) => route.fulfill({ json: {
       generation: 1, throughVersion: 1, generatedAt: snapshotGeneratedAt,
       attributes: [attribute], subjects: [subjectA, subjectB, subjectC, subjectD],
@@ -22,33 +23,29 @@ for (const choice of ['left', 'right', 'similar'] as const) {
       throughVersion: 1, hasMore: false, changes: [],
       snapshot: { generation: 1, generatedAt: snapshotGeneratedAt },
     } }));
-    await page.route('**/api/attributes/question?*', (route) => {
-      questionCount += 1;
-      return route.fulfill({ json: {
-        question: {
-          attribute,
-          subjectA: questionCount > 1 && choice === 'right' ? subjectC : subjectA,
-          subjectB: questionCount > 1 && choice !== 'right' ? subjectC : subjectB,
-        },
-        activities: [], questionToken: `touch-question-token-${questionCount}`,
-      } });
+    await page.route('**/api/attributes/question?*', async (route) => {
+      questionRequests += 1;
+      await route.fulfill({ status: 404 });
     });
     await page.route('**/api/attributes/responses', (route) => {
       votes.push(route.request().postDataJSON());
       return route.fulfill({ json: { ok: true, updatedValues: [] } });
     });
     await page.goto('/attributes');
-    const answer = page.getByRole('button', { name: choice === 'left' ? '觸控遊戲甲較高' : choice === 'right' ? '觸控遊戲乙較高' : '差不多', exact: true });
+    const answer = choice === 'similar'
+      ? page.getByRole('button', { name: '差不多', exact: true })
+      : page.locator(`.attribute-game-card.is-${choice}`);
     await expect(answer).toBeEnabled();
     const neutral = await answer.evaluate((element) => {
       const style = getComputedStyle(element);
       return { background: style.backgroundColor, border: style.borderColor, color: style.color, shadow: style.boxShadow };
     });
     await answer.tap();
-    await expect(page.getByRole('button', { name: '觸控遊戲丙較高' })).toBeVisible();
+    await expect(page.locator('.attribute-game-card').first()).toBeVisible();
     await expect(answer).toBeEnabled();
     await expect(answer).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(() => votes.length).toBe(1);
+    expect(questionRequests).toBe(0);
     await testInfo.attach('touch-state-after-next-question', {
       body: JSON.stringify(await answer.evaluate((element) => ({
         hover: element.matches(':hover'), focusVisible: element.matches(':focus-visible'),

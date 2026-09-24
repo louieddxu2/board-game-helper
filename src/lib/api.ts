@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestionPayload, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -455,20 +455,15 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
-  attributeQuestion: (sessionId: string, options: { highPole?: 'low' | 'high'; excludeSubjectAId?: string; excludeSubjectBId?: string; excludeAttributeId?: string; fixedSubjectAId?: string; fixedSubjectBId?: string; fixedAttributeId?: string } = {}) => {
-    const params = new URLSearchParams({ session: sessionId });
-    if (options.excludeSubjectAId) params.set('excludeA', options.excludeSubjectAId);
-    if (options.excludeSubjectBId) params.set('excludeB', options.excludeSubjectBId);
-    if (options.excludeAttributeId) params.set('excludeAttribute', options.excludeAttributeId);
-    if (options.fixedSubjectAId) params.set('fixedA', options.fixedSubjectAId);
-    if (options.fixedSubjectBId) params.set('fixedB', options.fixedSubjectBId);
-    if (options.fixedAttributeId) params.set('fixedAttribute', options.fixedAttributeId);
-    if (options.highPole) params.set('highPole', options.highPole);
-    return uncachedRead<AttributeQuestionPayload>(`/api/attributes/question?${params.toString()}`, 'attribute questions are session-specific and must be current');
+  saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => {
+    // Drop questionToken from older IndexedDB outbox rows. The server now
+    // validates the submitted attribute and subjects against active records.
+    const response = { ...input };
+    delete response.questionToken;
+    return mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
+      method: 'POST', body: JSON.stringify(response),
+    });
   },
-  saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
-    method: 'POST', body: JSON.stringify(input),
-  }),
   recordView: (gameId: string) => mutation<{ success: boolean; counted: boolean }>(`/api/games/${gameId}/view`, { method: 'POST', body: '{}' }),
   patchGame: async (id: string, input: { displayName: string; englishName?: string; aliases?: string[] }) => {
     const response = await mutation<{ ok: true; game: GameSummary }>(`/api/games/${id}`, {

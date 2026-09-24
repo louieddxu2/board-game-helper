@@ -76,7 +76,6 @@ describe('AttributesPage question flow', () => {
       high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: '條件端原文' },
     } };
     vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValue(highPole === 'low' ? 0 : 0.9);
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -102,7 +101,6 @@ describe('AttributesPage question flow', () => {
     expect(localDb.addPendingAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ highPole, ratingA: 10 }));
     await waitFor(() => expect(document.querySelector('.attributes-inline-activity')?.textContent).toContain(highPole === 'low'
       ? '遊戲乙 比 遊戲甲（0） 更偏「條件取勝」' : '遊戲甲（10） 比 遊戲乙 更偏「條件取勝」'));
-    expect(questionSpy).not.toHaveBeenCalled();
     expect(sharedAttributeCatalog.values[0].score).toBe(0);
   });
 
@@ -135,19 +133,15 @@ describe('AttributesPage question flow', () => {
       low: { label: '得分取勝', question: '得分？' }, high: { label: '條件取勝', question: '條件？' },
     } };
     vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
-    const spy = vi.spyOn(api, 'attributeQuestion');
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
-    expect(spy).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: /得分取勝/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '不知道，換一組' }));
-    expect(spy).not.toHaveBeenCalled();
   });
 
   test('starts with a locally selected question without game selectors or rendering the full table', async () => {
     const tableSpy = vi.spyOn(api, 'attributeTable');
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     vi.spyOn(api, 'attributeTable').mockResolvedValue({ ...sharedAttributeCatalog, activities: recentActivities });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -201,7 +195,6 @@ describe('AttributesPage question flow', () => {
     expect(screen.getByRole('button', { name: '全部遊戲' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '我的收藏' })).toBeDisabled();
     expect(tableSpy).toHaveBeenCalledTimes(1);
-    expect(questionSpy).not.toHaveBeenCalled();
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
@@ -226,19 +219,17 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue({
       key: 'attributes:question:v1',
-      data: { question, activities: recentActivities, extremeExamples, questionToken: 'cached-question-token-that-is-long-enough' },
+      data: { question, activities: recentActivities, extremeExamples },
       scope: 'all',
       cachedAt: Date.now(),
     });
     vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: /哪款遊戲的.*「運氣成分」.*較多？/ })).toBeInTheDocument();
     expect(screen.queryByText('載入中…')).not.toBeInTheDocument();
     expect(screen.queryByText('目前離線，回答會先暫存在本機。')).not.toBeInTheDocument();
-    expect(questionSpy).not.toHaveBeenCalled();
   });
 
   test('switches to an imported collection through the shared attribute catalog cache', async () => {
@@ -249,19 +240,16 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'setAttributeVoteScope').mockResolvedValue('attributes:vote-scope:v1');
     const tableSpy = vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '我的收藏 (2)' }));
     await waitFor(() => expect(tableSpy).toHaveBeenCalledTimes(1));
-    expect(questionSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: '全部遊戲' })).not.toBeDisabled());
   });
 
   test('selects the next question locally after submitting', async () => {
     const tableSpy = vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     const updatedValue = { subjectId: subjectA.id, attributeId: attribute.id, score: 6, ratingDeviation: 2.5, directCount: 1, comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 2, modelVersion: 'glicko-rd-v1' };
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [updatedValue] });
 
@@ -272,7 +260,6 @@ describe('AttributesPage question flow', () => {
 
     expect(screen.getByRole('button', { name: '遊戲甲較高' })).toHaveClass('is-selected');
     expect(await screen.findByText('已記錄：遊戲甲較高')).toBeInTheDocument();
-    expect(questionSpy).not.toHaveBeenCalled();
     expect(api.saveAttributeResponse).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'A_HIGHER', ratingA: 6 }));
     expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent(/比匿名玩家.*遊戲甲（6）.*運氣成分.*遊戲乙/);
     expect(screen.getByLabelText('最近投票記錄')).not.toHaveTextContent('你 認為');
@@ -282,7 +269,6 @@ describe('AttributesPage question flow', () => {
   });
 
   test('does not carry a comparison highlight when the next question reuses a game', async () => {
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -291,7 +277,6 @@ describe('AttributesPage question flow', () => {
     fireEvent.click(leftCard);
     expect(leftCard).toHaveClass('is-selected');
 
-    expect(questionSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: '遊戲甲較高' })).not.toHaveClass('is-selected'));
     expect(screen.getByRole('heading', { name: /哪款遊戲的/ })).toBeInTheDocument();
   });
@@ -302,7 +287,6 @@ describe('AttributesPage question flow', () => {
     { key: 'ArrowRight', rating: 6 },
   ])('excludes a newly entered $rating rating from both sides of the next local selection', async ({ key, rating }) => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
@@ -310,7 +294,6 @@ describe('AttributesPage question flow', () => {
     fireEvent.keyDown(await screen.findByRole('slider', { name: '評分：遊戲甲' }), { key });
     fireEvent.click(screen.getByRole('button', { name: '遊戲甲較高' }));
 
-    expect(questionSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(localDb.recordAttributeDirectRatings).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ subjectAId: subjectA.id, ratingA: rating }),
@@ -319,7 +302,6 @@ describe('AttributesPage question flow', () => {
   });
 
   test('requests the next question before the cloud response finishes', async () => {
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     let resolveSave: ((value: { ok: true; updatedValues: [] }) => void) | undefined;
     const saveSpy = vi.spyOn(api, 'saveAttributeResponse').mockImplementation(() => new Promise((resolve) => {
       resolveSave = resolve;
@@ -328,7 +310,6 @@ describe('AttributesPage question flow', () => {
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
-    expect(questionSpy).not.toHaveBeenCalled();
     expect(saveSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: /哪款遊戲的/ })).toBeInTheDocument();
 
@@ -337,7 +318,6 @@ describe('AttributesPage question flow', () => {
   });
 
   test('does not wait for local IndexedDB writes before requesting the next question', async () => {
-    vi.spyOn(api, 'attributeQuestion');
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
     vi.mocked(localDb.updateAttributeCatalogValues).mockImplementation(() => new Promise(() => undefined));
     vi.mocked(localDb.clearDeferredAttributeSubject).mockImplementation(() => new Promise(() => undefined));
@@ -345,11 +325,9 @@ describe('AttributesPage question flow', () => {
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
 
-    expect(api.attributeQuestion).not.toHaveBeenCalled();
   });
 
   test('keeps the same response id when a background failure is synced later', async () => {
-    vi.spyOn(api, 'attributeQuestion');
     const saveSpy = vi.spyOn(api, 'saveAttributeResponse')
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValue({ ok: true, updatedValues: [] });
@@ -372,14 +350,12 @@ describe('AttributesPage question flow', () => {
   });
 
   test('treats similar as an answer and unknown as a D1-write-free local cooldown', async () => {
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
     const saveSpy = vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
 
     const { unmount } = render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '差不多' }));
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ comparison: 'SIMILAR' })));
-    expect(questionSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).not.toBeDisabled());
     unmount();
     vi.clearAllMocks();
@@ -388,20 +364,17 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).not.toBeDisabled());
     fireEvent.click(await screen.findByRole('button', { name: '不知道，換一組' }));
 
-    expect(questionSpy).not.toHaveBeenCalled();
     expect(saveSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(localDb.deferAttributeSubject).toHaveBeenCalledTimes(2));
     expect(localDb.deferAttributeSubject).toHaveBeenCalledWith(expect.any(String), expect.any(Array), expect.any(Number), 20);
   });
 
   test('defers only the replaced side for one hundred questions', async () => {
-    const questionSpy = vi.spyOn(api, 'attributeQuestion');
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).not.toBeDisabled());
     fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
 
-    expect(questionSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(localDb.deferAttributeSubject).toHaveBeenCalledTimes(1));
     expect(localDb.deferAttributeSubject).toHaveBeenCalledWith(subjectA.id, [123], expect.any(Number), 100);
   });

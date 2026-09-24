@@ -54,7 +54,6 @@ GitHub 對 `master` 的 push 與所有 Pull Request 也會執行相同的 `test:
 npm run cloudflare:login
 npx wrangler d1 create board-game-rules-prod --config wrangler.production.jsonc
 npx wrangler secret put EMAIL_HASH_SECRET --config wrangler.production.jsonc
-npx wrangler secret put ATTRIBUTE_QUESTION_SECRET --config wrangler.production.jsonc
 ```
 
 把建立結果中的 `database_id` 填入 `wrangler.production.jsonc`，再執行：

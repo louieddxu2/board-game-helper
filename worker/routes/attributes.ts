@@ -1,10 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
-import { chooseAttributeHighPole } from '../../src/shared/attributeScale';
 import { getDatabase } from '../data/database';
 import {
-  queryAttributeQuestionPayload,
   saveAttributeResponse,
 } from '../data/attributes';
 import {
@@ -17,23 +15,12 @@ import {
 } from '../data/attributeCatalog';
 import type { AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
-import { now, signAttributeQuestionToken, verifyAttributeQuestionToken } from '../utils';
+import { now } from '../utils';
 import { logD1Query } from './shared';
 
 const attributesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 const sessionIdSchema = z.string().trim().min(8).max(120).regex(/^[A-Za-z0-9:_-]+$/);
-
-const questionQuerySchema = z.object({
-  highPole: z.enum(['low', 'high']).optional(),
-  sessionId: sessionIdSchema,
-  excludeSubjectAId: z.string().trim().max(200).optional(),
-  excludeSubjectBId: z.string().trim().max(200).optional(),
-  excludeAttributeId: z.string().trim().max(200).optional(),
-  fixedSubjectAId: z.string().trim().max(200).optional(),
-  fixedSubjectBId: z.string().trim().max(200).optional(),
-  fixedAttributeId: z.string().trim().max(200).optional(),
-});
 
 export const attributeResponseSchema = z.object({
   highPole: z.enum(['low', 'high']).optional(),
@@ -41,7 +28,6 @@ export const attributeResponseSchema = z.object({
   subjectBId: z.string().trim().min(1).max(200),
   attributeId: z.string().trim().min(1).max(200),
   responseId: sessionIdSchema,
-  questionToken: z.string().trim().min(32).max(512).optional(),
   comparison: z.enum(ATTRIBUTE_COMPARISON_RESULTS).nullable().optional(),
   ratingA: z.number().int().min(0).max(10).nullable().optional(),
   ratingB: z.number().int().min(0).max(10).nullable().optional(),
@@ -51,7 +37,7 @@ export const attributeResponseSchema = z.object({
 const respondWithAttributeError = (c: any, error: unknown) => {
   const message = error instanceof Error ? error.message : '';
   if (message === 'attribute_not_found' || message === 'attribute_subject_not_found') return c.json({ error: message }, 404);
-  if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty' || message === 'attribute_question_invalid') return c.json({ error: message }, 400);
+  if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty') return c.json({ error: message }, 400);
   if (message === 'attribute_response_busy') return c.json({ error: message }, 409);
   throw error;
 };
@@ -139,61 +125,11 @@ attributesRoutes.get('/api/attributes/table/changes', async (c) => {
   }
 });
 
-attributesRoutes.get('/api/attributes/question', async (c) => {
-  const parsed = questionQuerySchema.safeParse({
-    highPole: c.req.query('highPole') || undefined,
-    sessionId: c.req.query('session'),
-    excludeSubjectAId: c.req.query('excludeA') || undefined,
-    excludeSubjectBId: c.req.query('excludeB') || undefined,
-    excludeAttributeId: c.req.query('excludeAttribute') || undefined,
-    fixedSubjectAId: c.req.query('fixedA') || undefined,
-    fixedSubjectBId: c.req.query('fixedB') || undefined,
-    fixedAttributeId: c.req.query('fixedAttribute') || undefined,
-  });
-  if (!parsed.success) return c.json({ error: 'invalid_input' }, 400);
-  const db = getDatabase(c);
-  try {
-    c.header('Cache-Control', 'no-store');
-    const payload = await queryAttributeQuestionPayload(db, parsed.data.sessionId, parsed.data);
-    setD1MetricsHeader(c, db);
-    if (!payload.question) return c.json(payload);
-    const retainDirection = parsed.data.fixedAttributeId && (parsed.data.fixedSubjectAId || parsed.data.fixedSubjectBId)
-      ? parsed.data.highPole : undefined;
-    if (payload.question.attribute.scaleType === 'bipolar') {
-      payload.question.highPole = chooseAttributeHighPole(payload.question.attribute, retainDirection);
-    }
-    const questionToken = await signAttributeQuestionToken({
-      highPole: payload.question.highPole,
-      sessionId: parsed.data.sessionId,
-      attributeId: payload.question.attribute.id,
-      subjectAId: payload.question.subjectA.id,
-      subjectBId: payload.question.subjectB.id,
-    }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
-    return c.json({ ...payload, questionToken });
-  } catch (error) {
-    setD1MetricsHeader(c, db);
-    return respondWithAttributeError(c, error);
-  }
-});
-
 attributesRoutes.post('/api/attributes/responses', async (c) => {
   const parsed = attributeResponseSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message === 'attribute_response_empty' ? 'attribute_response_empty' : 'invalid_input' }, 400);
   const db = getDatabase(c);
   try {
-    // Legacy clients may still send a signed token. New offline clients can
-    // queue locally selected questions without requesting a D1-backed token;
-    // saveAttributeResponse validates the active attribute and subjects.
-    if (parsed.data.questionToken) {
-      const validQuestion = await verifyAttributeQuestionToken(parsed.data.questionToken, {
-        highPole: parsed.data.highPole,
-        sessionId: parsed.data.sessionId,
-        attributeId: parsed.data.attributeId,
-        subjectAId: parsed.data.subjectAId,
-        subjectBId: parsed.data.subjectBId,
-      }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
-      if (!validQuestion) return c.json({ error: 'attribute_question_invalid' }, 400);
-    }
     const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
       actorId: c.get('user')?.id ?? null,

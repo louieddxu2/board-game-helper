@@ -35,7 +35,6 @@
     "GOOGLE_CLIENT_ID": "core-flow-test.apps.googleusercontent.com",
     "GOOGLE_DRIVE_CLIENT_ID": "core-drive-test.apps.googleusercontent.com",
     "BOOTSTRAP_ADMIN_EMAIL": "core-flow@example.com",
-    "EMAIL_HASH_SECRET": "core-flow-test-email-hmac-secret-at-least-32-characters",
-    "ATTRIBUTE_QUESTION_SECRET": "core-flow-test-attribute-secret-at-least-32-characters"
+    "EMAIL_HASH_SECRET": "core-flow-test-email-hmac-secret-at-least-32-characters"
   }
 }

@@ -16,6 +16,12 @@ describe('attribute route', () => {
     expect(await response.json()).toEqual({ error: 'attribute_vote_subject_directory_disabled' });
   });
 
+  test('removes the obsolete D1-backed question endpoint', async () => {
+    const response = await attributesRoutes.request('https://rules.example/api/attributes/question?session=session-123');
+
+    expect(response.status).toBe(404);
+  });
+
   test('does not expose rating or comparison writes', async () => {
     const ratingResponse = await attributesRoutes.request('https://rules.example/api/attributes/ratings', {
       method: 'POST',
@@ -39,7 +45,11 @@ describe('attribute route', () => {
     expect(attributeResponseSchema.safeParse(base).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123' }).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', comparison: 'SIMILAR' }).success).toBe(true);
-    expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', questionToken: 'question-token-that-is-long-enough-for-schema', comparison: 'SIMILAR' }).success).toBe(true);
+    const legacyQueuedResponse = attributeResponseSchema.safeParse({
+      ...base, responseId: 'response-123', questionToken: 'question-token-that-is-long-enough-for-schema', comparison: 'SIMILAR',
+    });
+    expect(legacyQueuedResponse.success).toBe(true);
+    if (legacyQueuedResponse.success) expect(legacyQueuedResponse.data).not.toHaveProperty('questionToken');
     const reverse = { ...base, responseId: 'response-123', ratingA: 0, highPole: 'low' };
     expect(attributeResponseSchema.parse(reverse)).toMatchObject({ highPole: 'low', ratingA: 0 });
     expect(attributeResponseSchema.safeParse({ ...reverse, highPole: 'other' }).success).toBe(false);

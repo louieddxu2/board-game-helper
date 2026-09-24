@@ -308,7 +308,6 @@ export interface AttributeQuestionPayload {
   activities: AttributeActivity[];
   extremeExamples?: AttributeExtremeExamples;
   scoreModelVersion?: string;
-  questionToken?: string;
 }
 
 export interface AttributeMatrixValue {
