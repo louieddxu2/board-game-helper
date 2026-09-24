@@ -34,11 +34,12 @@ describe('attribute route', () => {
 
   test('requires a response id and at least one answer in a response', () => {
     const base = {
-      subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123', questionToken: 'question-token-that-is-long-enough-for-schema',
+      subjectAId: 'a', subjectBId: 'b', attributeId: 'attribute', sessionId: 'session-123',
     };
     expect(attributeResponseSchema.safeParse(base).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123' }).success).toBe(false);
     expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', comparison: 'SIMILAR' }).success).toBe(true);
+    expect(attributeResponseSchema.safeParse({ ...base, responseId: 'response-123', questionToken: 'question-token-that-is-long-enough-for-schema', comparison: 'SIMILAR' }).success).toBe(true);
     const reverse = { ...base, responseId: 'response-123', ratingA: 0, highPole: 'low' };
     expect(attributeResponseSchema.parse(reverse)).toMatchObject({ highPole: 'low', ratingA: 0 });
     expect(attributeResponseSchema.safeParse({ ...reverse, highPole: 'other' }).success).toBe(false);

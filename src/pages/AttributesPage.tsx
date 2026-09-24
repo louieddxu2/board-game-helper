@@ -7,7 +7,7 @@ import { useClampedAxisMarker } from '../components/useClampedAxisMarker';
 import { ApiError, api } from '../lib/api';
 import { attributeComparisonWording, attributeQuestionEnding } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
-import { attributeDisplayEndpoints, canonicalAttributeAnswer, orientAttributeScore } from '../shared/attributeScale';
+import { attributeDisplayEndpoints, canonicalAttributeAnswer, chooseAttributeHighPole, orientAttributeScore } from '../shared/attributeScale';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from '../lib/attributeDirectRatings';
 import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects, parseGeekGroupCollectionCsv, type ScopedAttributeQuestionOptions } from '../lib/attributeCollection';
@@ -156,6 +156,7 @@ export const AttributesPage = () => {
   const [collectionMessage, setCollectionMessage] = useState('');
   const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
+  const recentActivitiesRef = useRef<AttributeActivity[]>([]);
   const collectionIdsRef = useRef<number[]>([]);
   const votingCatalogRef = useRef<Awaited<ReturnType<typeof api.attributeTable>> | undefined>(undefined);
   const collectionMatchCacheRef = useRef<{ subjects: AttributeCatalogPayload['subjects']; bggIds: number[]; result: ReturnType<typeof matchCollectionSubjects> } | undefined>(undefined);
@@ -189,6 +190,7 @@ export const AttributesPage = () => {
 
   const applyQuestionPayload = useCallback((nextPayload: AttributeQuestionPayload, scope: AttributeVoteScope = voteScopeRef.current) => {
     setPayload(nextPayload);
+    recentActivitiesRef.current = nextPayload.activities;
     setQuestion(nextPayload.question ?? undefined);
     const confirmedResponseIds = new Set(nextPayload.activities.map((activity) => activity.responseId).filter((id): id is string => Boolean(id)));
     if (confirmedResponseIds.size) {
@@ -247,6 +249,7 @@ export const AttributesPage = () => {
       }
     });
     votingCatalogRef.current = catalog;
+    if (!recentActivitiesRef.current.length) recentActivitiesRef.current = catalog.activities ?? [];
     return catalog;
   }, [getCollectionMatch]);
 
@@ -291,18 +294,30 @@ export const AttributesPage = () => {
         extremeExamples: { lowest: [], highest: [] },
       } satisfies AttributeQuestionPayload;
     }
-    const next = await api.attributeQuestion(sessionId, {
-      fixedSubjectAId: selection.subjectAId,
-      fixedSubjectBId: selection.subjectBId,
-      fixedAttributeId: selection.attributeId,
-      highPole: options.highPole,
-    });
+    const subjectA = catalog.subjects.find((subject) => subject.id === selection.subjectAId);
+    const subjectB = catalog.subjects.find((subject) => subject.id === selection.subjectBId);
+    const attribute = catalog.attributes.find((item) => item.id === selection.attributeId);
+    if (!subjectA || !subjectB || !attribute) {
+      return { question: null, activities: recentActivitiesRef.current } satisfies AttributeQuestionPayload;
+    }
+    const next: AttributeQuestionPayload = {
+      question: {
+        subjectA,
+        subjectB,
+        attribute,
+        highPole: attribute.scaleType === 'bipolar' ? chooseAttributeHighPole(attribute, options.highPole) : undefined,
+      },
+      // Keep the last locally available feed; refreshing it is independent
+      // from selecting and displaying the next question.
+      activities: recentActivitiesRef.current,
+      scoreModelVersion: catalog.scoreModelVersion,
+    };
     await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
     return {
       ...next,
       extremeExamples: chooseScopedExtremeExamples(catalog, selection.attributeId, scopedSubjectIds),
     };
-  }, [getCollectionMatch, loadVotingCatalog, sessionId]);
+  }, [getCollectionMatch, loadVotingCatalog]);
 
   const deferCurrentAndLoad = async (mode: 'pair' | 'a' | 'b') => {
     if (!question || questionLoading || submitting || awaitingNext) return;
@@ -560,10 +575,6 @@ export const AttributesPage = () => {
       setResponseError('請至少選一個比較結果或填一個分數。');
       return;
     }
-    if (!payload?.questionToken) {
-      setResponseError('這一題已經過期，請重新取得題目。');
-      return;
-    }
     if (awaitingNext) return;
     setSubmitting(true);
     setResponseError('');
@@ -574,7 +585,6 @@ export const AttributesPage = () => {
       subjectAId: question.subjectA.id,
       subjectBId: question.subjectB.id,
       attributeId: question.attribute.id,
-      questionToken: payload.questionToken,
       responseId,
       comparison: selectedComparison,
       ratingA: parsedRatingA,

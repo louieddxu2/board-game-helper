@@ -192,7 +192,7 @@ export interface PendingAttributeResponse {
   subjectAId: string;
   subjectBId: string;
   attributeId: string;
-  questionToken: string;
+  questionToken?: string;
   responseId: string;
   comparison?: AttributeComparisonResult | null;
   ratingA?: number | null;

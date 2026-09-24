@@ -41,7 +41,7 @@ export const attributeResponseSchema = z.object({
   subjectBId: z.string().trim().min(1).max(200),
   attributeId: z.string().trim().min(1).max(200),
   responseId: sessionIdSchema,
-  questionToken: z.string().trim().min(32).max(512),
+  questionToken: z.string().trim().min(32).max(512).optional(),
   comparison: z.enum(ATTRIBUTE_COMPARISON_RESULTS).nullable().optional(),
   ratingA: z.number().int().min(0).max(10).nullable().optional(),
   ratingB: z.number().int().min(0).max(10).nullable().optional(),
@@ -181,14 +181,19 @@ attributesRoutes.post('/api/attributes/responses', async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message === 'attribute_response_empty' ? 'attribute_response_empty' : 'invalid_input' }, 400);
   const db = getDatabase(c);
   try {
-    const validQuestion = await verifyAttributeQuestionToken(parsed.data.questionToken, {
-      highPole: parsed.data.highPole,
-      sessionId: parsed.data.sessionId,
-      attributeId: parsed.data.attributeId,
-      subjectAId: parsed.data.subjectAId,
-      subjectBId: parsed.data.subjectBId,
-    }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
-    if (!validQuestion) return c.json({ error: 'attribute_question_invalid' }, 400);
+    // Legacy clients may still send a signed token. New offline clients can
+    // queue locally selected questions without requesting a D1-backed token;
+    // saveAttributeResponse validates the active attribute and subjects.
+    if (parsed.data.questionToken) {
+      const validQuestion = await verifyAttributeQuestionToken(parsed.data.questionToken, {
+        highPole: parsed.data.highPole,
+        sessionId: parsed.data.sessionId,
+        attributeId: parsed.data.attributeId,
+        subjectAId: parsed.data.subjectAId,
+        subjectBId: parsed.data.subjectBId,
+      }, c.env.ATTRIBUTE_QUESTION_SECRET ?? c.env.EMAIL_HASH_SECRET);
+      if (!validQuestion) return c.json({ error: 'attribute_question_invalid' }, 400);
+    }
     const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
       actorId: c.get('user')?.id ?? null,

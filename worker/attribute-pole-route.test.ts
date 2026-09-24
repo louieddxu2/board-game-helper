@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { attributesRoutes } from './routes/attributes';
-import { queryAttributeQuestionPayload } from './data/attributes';
+import { queryAttributeQuestionPayload, saveAttributeResponse } from './data/attributes';
 import { verifyAttributeQuestionToken } from './utils';
 
 vi.mock('./data/database', () => ({ getDatabase: () => ({}) }));
@@ -43,4 +43,21 @@ test('does not attach a random pole to a unipolar attribute', async () => {
   expect(response.status).toBe(200);
   const payload = await response.json() as { question: { highPole?: string } };
   expect(payload.question.highPole).toBeUndefined();
+});
+
+test('accepts locally selected offline votes without a question token', async () => {
+  vi.mocked(saveAttributeResponse).mockResolvedValue({ updatedValues: [], activities: [] });
+  const response = await attributesRoutes.request('https://example.test/api/attributes/responses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      subjectAId: 'a', subjectBId: 'b', attributeId: 'score', responseId: 'response-123',
+      sessionId: 'session-123', comparison: 'SIMILAR',
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(saveAttributeResponse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    subjectAId: 'a', subjectBId: 'b', attributeId: 'score', comparison: 'SIMILAR',
+  }));
 });
