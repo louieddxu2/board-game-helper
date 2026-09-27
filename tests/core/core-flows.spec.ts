@@ -51,7 +51,8 @@ test('登入、建立規則、編輯規則與登出皆實際持久化', async ({
   await expect(page.getByRole('link', { name: '管理', exact: true })).toBeVisible();
   const ruleCard = page.locator(`[id="rule-${submission.ruleIds[0]}"]`);
   const ruleToggle = ruleCard.getByRole('button', { name: originalRule, exact: true });
-  if (await ruleToggle.getAttribute('aria-expanded') === 'false') await ruleToggle.click();
+  // Submission navigates to #rule-<id>; GamePage opens that rule after loading.
+  // Clicking while that effect is still pending can immediately close it again.
   await expect(ruleToggle).toHaveAttribute('aria-expanded', 'true');
   const editButton = ruleCard.getByRole('button', { name: '編輯', exact: true });
   await expect(editButton).toBeVisible();
