@@ -534,29 +534,30 @@ describe('WorkspacePage', () => {
 
     await longPress(first);
     const toolbar = screen.getByRole('toolbar', { name: '批次編輯 數量' });
-    const total = within(toolbar).getByRole('status', { name: '總和' });
-    const average = within(toolbar).getByRole('status', { name: '平均' });
+    const statsButton = within(toolbar).getByRole('button', { name: '目前顯示總和 2，點按切換平均' });
     const batchButton = within(toolbar).getByRole('button', { name: '開啟 數量 批次輸入' });
     expect(batchButton).toHaveTextContent(/^批次$/);
-    expect(within(toolbar).getByText('總和：')).toBeInTheDocument();
-    expect(within(toolbar).getByText('平均：')).toBeInTheDocument();
-    expect(total).toHaveTextContent('2');
-    expect(average).toHaveTextContent('2');
+    expect(within(statsButton).getByText('總和')).toHaveClass('is-active');
+    expect(within(statsButton).getByText('平均')).not.toHaveClass('is-active');
 
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：4.5' }));
-    expect(total).toHaveTextContent('6.5');
-    expect(average).toHaveTextContent('3.25');
+    expect(statsButton).toHaveAccessibleName('目前顯示總和 6.5，點按切換平均');
+    await user.click(statsButton);
+    expect(statsButton).toHaveAccessibleName('目前顯示平均 3.25，點按切換總和');
+    expect(within(statsButton).getByText('平均')).toHaveClass('is-active');
     await user.click(screen.getByRole('cell', { name: '物件 3，數量：空白' }));
     expect(toolbar).toHaveTextContent('已選 3 格');
-    expect(total).toHaveTextContent('6.5');
-    expect(average).toHaveTextContent('2.17');
+    expect(statsButton).toHaveAccessibleName('目前顯示平均 2.17，點按切換總和');
 
+    await user.click(statsButton);
+    expect(statsButton).toHaveAccessibleName('目前顯示總和 6.5，點按切換平均');
+    expect(within(statsButton).getByText('總和')).toHaveClass('is-active');
     await user.click(first);
-    expect(total).toHaveTextContent('4.5');
-    expect(average).toHaveTextContent('2.25');
+    expect(statsButton).toHaveAccessibleName('目前顯示總和 4.5，點按切換平均');
+    await user.click(statsButton);
+    expect(statsButton).toHaveAccessibleName('目前顯示平均 2.25，點按切換總和');
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：4.5' }));
-    expect(total).toHaveTextContent('0');
-    expect(average).toHaveTextContent('0');
+    expect(statsButton).toHaveAccessibleName('目前顯示平均 0，點按切換總和');
   });
 
   it('embeds collapsed proportional allocation below the batch number input', async () => {
