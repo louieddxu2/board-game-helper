@@ -3,20 +3,34 @@ import { distributeWorkspaceTotal, summarizeWorkspaceMultiSelectOptions, type Wo
 import type { WorkspaceColumn } from './types';
 import { WorkspaceIcon, WorkspaceModal } from './workspaceShared';
 
-export const WorkspaceBulkEditToolbar = ({ column, count, onCancel, onOpenEditor }: {
+export const WorkspaceBulkEditToolbar = ({ column, count, numericValues, onCancel, onOpenEditor }: {
   column: WorkspaceColumn;
   count: number;
+  numericValues: number[];
   onCancel(): void;
   onOpenEditor(): void;
-}) => <div className="workspace-editbar workspace-bulk-toolbar" role="toolbar" aria-label={`批次編輯 ${column.name}`}>
-  <div className="workspace-editbar-group">
-    <button type="button" className="workspace-editbar-button" aria-label="結束批次選取" onClick={onCancel}><WorkspaceIcon name="close" size={21} /></button>
-    <span className="workspace-bulk-count">已選 {count} 格</span>
-  </div>
-  <div className="workspace-bulk-actions">
-    <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`開啟 ${column.name} 批次輸入`}><WorkspaceIcon name="edit" size={16} /><span className="workspace-bulk-property">{column.name || '未命名屬性'}</span><span className="workspace-bulk-summary">批次輸入</span></button>
-  </div>
-</div>;
+}) => {
+  const total = numericValues.length ? numericValues.reduce((sum, value) => sum + value, 0) : undefined;
+  const format = (value: number | undefined) => value === undefined || !Number.isFinite(value)
+    ? '—' : value.toLocaleString('zh-Hant-TW', { maximumFractionDigits: 4 });
+  const totalText = format(total);
+  const averageText = format(total === undefined ? undefined : total / numericValues.length);
+  return <div className="workspace-editbar workspace-bulk-toolbar" role="toolbar" aria-label={`批次編輯 ${column.name}`}>
+    <div className="workspace-editbar-group">
+      <button type="button" className="workspace-editbar-button" aria-label="結束批次選取" onClick={onCancel}><WorkspaceIcon name="close" size={21} /></button>
+      <div className="workspace-bulk-meta">
+        <span className="workspace-bulk-count">已選 {count} 格</span>
+        {column.inputType === 'number' && <div className="workspace-bulk-stats">
+          <span className="workspace-bulk-stat"><span>總和</span><output aria-label="總和" title={`總和 ${totalText}`}>{totalText}</output></span>
+          <span className="workspace-bulk-stat"><span>平均</span><output aria-label="平均" title={`平均 ${averageText}`}>{averageText}</output></span>
+        </div>}
+      </div>
+    </div>
+    <div className="workspace-bulk-actions">
+      <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`開啟 ${column.name} 批次輸入`}><WorkspaceIcon name="edit" size={16} /><span className="workspace-bulk-summary">批次輸入</span></button>
+    </div>
+  </div>;
+};
 
 export const WorkspaceBulkMultiSelectDialog = ({ column, rows, options, onClose, onConfirm }: {
   column: WorkspaceColumn;

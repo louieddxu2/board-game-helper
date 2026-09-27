@@ -521,6 +521,42 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
   });
 
+  it('updates selected number totals and averages without counting blank cells', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    const first = await screen.findByRole('cell', { name: '花火，數量：2' });
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
+    await user.type(screen.getByRole('spinbutton', { name: '數量輸入' }), '4.5');
+    fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
+
+    await longPress(first);
+    const toolbar = screen.getByRole('toolbar', { name: '批次編輯 數量' });
+    const total = within(toolbar).getByRole('status', { name: '總和' });
+    const average = within(toolbar).getByRole('status', { name: '平均' });
+    const batchButton = within(toolbar).getByRole('button', { name: '開啟 數量 批次輸入' });
+    expect(batchButton).toHaveTextContent(/^批次輸入$/);
+    expect(total).toHaveTextContent('2');
+    expect(average).toHaveTextContent('2');
+
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：4.5' }));
+    expect(total).toHaveTextContent('6.5');
+    expect(average).toHaveTextContent('3.25');
+    await user.click(screen.getByRole('cell', { name: '物件 3，數量：空白' }));
+    expect(toolbar).toHaveTextContent('已選 3 格');
+    expect(total).toHaveTextContent('6.5');
+    expect(average).toHaveTextContent('3.25');
+
+    await user.click(first);
+    expect(total).toHaveTextContent('4.5');
+    expect(average).toHaveTextContent('4.5');
+    await user.click(screen.getByRole('cell', { name: '物件 2，數量：4.5' }));
+    expect(total).toHaveTextContent('—');
+    expect(average).toHaveTextContent('—');
+  });
+
   it('embeds collapsed proportional allocation below the batch number input', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
