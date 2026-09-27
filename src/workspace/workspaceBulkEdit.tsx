@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { distributeWorkspaceTotal, summarizeWorkspaceMultiSelectOptions, type WorkspaceMultiSelectBatchIntent, type WorkspaceMultiSelectBatchRow, type WorkspaceMultiSelectOptionSummary } from './bulkEdit';
 import type { WorkspaceColumn } from './types';
 import { WorkspaceIcon, WorkspaceModal } from './workspaceShared';
@@ -121,6 +121,9 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
     : initialNumbers.length === rows.length ? String(initialNumbers.reduce((sum, value) => sum + value, 0)) : '');
   const [roundToIntegers, setRoundToIntegers] = useState(() => initialNumbers.length === 0 || initialNumbers.every(Number.isInteger));
   const [expanded, setExpanded] = useState(() => initialValues !== undefined);
+  const tabsId = useId();
+  const allTabRef = useRef<HTMLButtonElement>(null);
+  const ratioTabRef = useRef<HTMLButtonElement>(null);
   const [ratios, setRatios] = useState<Record<string, string>>(() => {
     const magnitudes = rows.map((row) => Math.abs(initialValues?.[row.rowId] ?? 0));
     const hasMagnitude = magnitudes.some((value) => value > 0);
@@ -140,10 +143,20 @@ export const WorkspaceBulkNumberDialog = ({ column, rows, initialValues, initial
     onConfirm({ total: numericTotal, values: expanded ? values : undefined });
   };
   const validDistribution = total.trim() !== '' && values !== undefined;
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextExpanded = event.key === 'Home' ? false : event.key === 'End' ? true : !expanded;
+    setExpanded(nextExpanded);
+    (nextExpanded ? ratioTabRef : allTabRef).current?.focus();
+  };
   return <WorkspaceModal owner="bulk-editor" title={column.name} dialogKind="editor" onRequestClose={onClose} className={`workspace-value-dialog workspace-bulk-number-dialog ${expanded ? 'is-expanded' : ''}`} actions={<button type="button" className="workspace-dialog-button primary" onClick={finish}>確認</button>}>
-    <form className="workspace-bulk-number-form" onSubmit={(event) => { event.preventDefault(); finish(); }}>
+    <div className="workspace-bulk-number-tabs" role="tablist" aria-label="批次輸入方式" onKeyDown={handleTabKeyDown}>
+      <button ref={allTabRef} id={`${tabsId}-all`} type="button" role="tab" className={`workspace-bulk-number-tab ${expanded ? '' : 'is-active'}`} aria-selected={!expanded} aria-controls={`${tabsId}-panel`} tabIndex={expanded ? -1 : 0} onClick={() => setExpanded(false)}>全部輸入</button>
+      <button ref={ratioTabRef} id={`${tabsId}-ratio`} type="button" role="tab" className={`workspace-bulk-number-tab ${expanded ? 'is-active' : ''}`} aria-selected={expanded} aria-controls={`${tabsId}-panel`} tabIndex={expanded ? 0 : -1} onClick={() => setExpanded(true)}>比例分配</button>
+    </div>
+    <form id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${expanded ? 'ratio' : 'all'}`} className="workspace-bulk-number-form" onSubmit={(event) => { event.preventDefault(); finish(); }}>
       <input autoFocus aria-label={`${column.name}批次輸入`} className="workspace-value-input" type="number" inputMode="decimal" enterKeyHint="done" step="any" value={total} onChange={(event) => setTotal(event.target.value)} />
-      <button type="button" className="workspace-ratio-disclosure" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}><WorkspaceIcon name="chevron" size={16} />比例分配</button>
       {expanded && <div className="workspace-ratio-panel">
         <label className="workspace-ratio-round"><input className="workspace-compact-checkbox" type="checkbox" checked={roundToIntegers} onChange={(event) => setRoundToIntegers(event.target.checked)} />近似取整</label>
         <div className="workspace-ratio-list">

@@ -166,9 +166,10 @@ footer a { color: inherit; }
 .workspace-bulk-summary { color: var(--white); font-size: 14px; font-weight: 900; letter-spacing: .01em; }
 .workspace-bulk-confirm { color: var(--orange); }
 .workspace-bulk-number-form { display: grid; min-height: 0; }
-.workspace-ratio-disclosure { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 4px 10px; border: 0; border-top: 1px solid rgba(22,53,47,.16); background: rgba(255,253,248,.24); color: var(--green); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
-.workspace-ratio-disclosure svg { transition: transform 150ms ease; }
-.workspace-ratio-disclosure[aria-expanded="true"] svg { transform: rotate(90deg); }
+.workspace-bulk-number-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border-bottom: 1px solid rgba(22,53,47,.16); border-radius: 8px 8px 0 0; background: rgba(255,253,248,.24); }
+.workspace-bulk-number-tab { min-height: 38px; padding: 5px 3px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.workspace-bulk-number-tab.is-active { border-bottom-color: var(--green); background: var(--white); color: var(--green); font-weight: 800; }
+.workspace-bulk-number-tab:focus-visible { outline: 2px solid var(--orange); outline-offset: -3px; }
 .workspace-ratio-panel { box-sizing: border-box; width: 100%; display: grid; gap: 4px; min-height: 0; padding: 4px 10px 10px; border: 1px solid rgba(22,53,47,.12); border-top: 0; border-radius: 0 0 10px 10px; background: rgba(236,230,216,.72); }
 .workspace-ratio-round { display: flex; align-items: center; gap: 8px; min-height: 36px; color: var(--muted); font-size: 13px; }
 .workspace-compact-checkbox { box-sizing: border-box; width: 16px !important; min-width: 16px; height: 16px !important; min-height: 16px !important; margin: 0; padding: 0; border: 1.5px solid rgba(22,53,47,.55); border-radius: 3px; appearance: none; -webkit-appearance: none; background: rgba(255,253,248,.72); cursor: pointer; }

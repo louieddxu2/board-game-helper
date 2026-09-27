@@ -496,7 +496,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
-    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    await user.click(screen.getByRole('tab', { name: '比例分配' }));
     const ratioInput = screen.getByRole('spinbutton', { name: '物件 2比例' }) as HTMLInputElement;
     const selectContents = vi.spyOn(ratioInput, 'select');
     await user.click(ratioInput);
@@ -512,7 +512,7 @@ describe('WorkspacePage', () => {
     const reopenedTotal = screen.getByRole('spinbutton', { name: '數量批次輸入' });
     await user.clear(reopenedTotal);
     await user.type(reopenedTotal, '10');
-    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    await user.click(screen.getByRole('tab', { name: '比例分配' }));
     const reopenedRatio = screen.getByRole('spinbutton', { name: '物件 2比例' });
     await user.clear(reopenedRatio);
     await user.type(reopenedRatio, '3');
@@ -560,7 +560,7 @@ describe('WorkspacePage', () => {
     expect(statsButton).toHaveAccessibleName('目前顯示平均 0，點按切換總和');
   });
 
-  it('embeds collapsed proportional allocation below the batch number input', async () => {
+  it('switches number batch modes with tabs', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
@@ -569,23 +569,34 @@ describe('WorkspacePage', () => {
     await longPress(screen.getByRole('cell', { name: '花火，數量：2' }));
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：空白' }));
 
-    expect(screen.queryByRole('button', { name: '比例分配' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '比例分配' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     const dialog = screen.getByRole('dialog');
-    const disclosure = within(dialog).getByRole('button', { name: '比例分配' });
-    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    const allTab = within(dialog).getByRole('tab', { name: '全部輸入' });
+    const ratioTab = within(dialog).getByRole('tab', { name: '比例分配' });
+    expect(within(dialog).getByRole('tablist', { name: '批次輸入方式' })).toBeInTheDocument();
+    expect(allTab).toHaveAttribute('aria-selected', 'true');
+    expect(ratioTab).toHaveAttribute('aria-selected', 'false');
+    expect(within(dialog).getByRole('tabpanel', { name: '全部輸入' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('spinbutton', { name: '花火比例' })).not.toBeInTheDocument();
 
-    await user.click(disclosure);
-    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    await user.click(ratioTab);
+    expect(ratioTab).toHaveAttribute('aria-selected', 'true');
+    expect(within(dialog).getByRole('tabpanel', { name: '比例分配' })).toBeInTheDocument();
     expect(within(dialog).getByRole('spinbutton', { name: '花火比例' })).toBeInTheDocument();
     expect(within(dialog).getByText('近似取整')).toBeInTheDocument();
     expect(within(dialog).queryByText('結果')).not.toBeInTheDocument();
     expect(within(dialog).getAllByText('→').length).toBeGreaterThan(0);
+    await user.click(allTab);
+    expect(allTab).toHaveAttribute('aria-selected', 'true');
+    expect(within(dialog).queryByRole('spinbutton', { name: '花火比例' })).not.toBeInTheDocument();
+    await user.keyboard('{ArrowRight}');
+    expect(ratioTab).toHaveFocus();
+    expect(ratioTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
-  it('keeps the shared number input and proportional total synchronized', async () => {
+  it('keeps the batch number while switching between all input and proportional distribution', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await waitFor(() => expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument());
@@ -598,12 +609,16 @@ describe('WorkspacePage', () => {
     const sharedInput = screen.getByRole('spinbutton', { name: '數量批次輸入' });
     await user.clear(sharedInput);
     await user.type(sharedInput, '12');
-    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    await user.click(screen.getByRole('tab', { name: '比例分配' }));
     expect(sharedInput).toHaveValue(12);
     await user.clear(sharedInput);
     await user.type(sharedInput, '20');
     expect(sharedInput).toHaveValue(20);
-    expect(screen.getByRole('button', { name: '確認' })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: '全部輸入' }));
+    expect(sharedInput).toHaveValue(20);
+    await user.click(screen.getByRole('button', { name: '確認' }));
+    expect(screen.getByRole('cell', { name: '花火，數量：20' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '物件 2，數量：20' })).toBeInTheDocument();
   });
 
   it('does not apply a batch value when its dialog is dismissed', async () => {
@@ -619,7 +634,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '開啟 數量 批次輸入' }));
     await user.clear(screen.getByRole('spinbutton', { name: '數量批次輸入' }));
     await user.type(screen.getByRole('spinbutton', { name: '數量批次輸入' }), '10');
-    await user.click(screen.getByRole('button', { name: '比例分配' }));
+    await user.click(screen.getByRole('tab', { name: '比例分配' }));
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('toolbar', { name: '批次編輯 數量' })).toBeInTheDocument();
