@@ -537,12 +537,23 @@ const WorkspacePage = () => {
     setTableActionsOpen(false);
   }, []);
 
+  const toggleBulkCell = useCallback((rowId: string, columnId: string) => {
+    if (!bulkSelection || bulkSelection.tableId !== table?.id) return;
+    setLastPasteTarget({ rowId, columnId });
+    if (bulkSelection.columnId !== columnId) {
+      setNotice('批次編輯只能選取同一屬性的格子');
+      return;
+    }
+    setBulkSelection((current) => current?.tableId === table.id && current.columnId === columnId
+      ? toggleBulkSelectionRow(current, rowId) : current);
+  }, [bulkSelection, table]);
+
   const {
-    textScale, panning, tableReorderVisual, ignoreNextTableClick,
+    textScale, panning, tableReorderVisual, consumeSuppressedTableClick,
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: toggleBulkCell, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen });
 
   const tableGestureHandlersRef = useRef({
     beginTableReorder, moveTableReorder, endTableReorder,
@@ -584,17 +595,13 @@ const WorkspacePage = () => {
   const stableAddTable = useCallback((parentId: string | null) => addTableRef.current(parentId), []);
 
   const handleDataCellClick = useCallback((row: WorkspaceRow, column: WorkspaceColumn) => {
-    setLastPasteTarget({ rowId: row.id, columnId: column.id });
     if (!bulkSelection) {
+      setLastPasteTarget({ rowId: row.id, columnId: column.id });
       stableOpenCell(row, column);
       return;
     }
-    if (bulkSelection.columnId !== column.id) {
-      setNotice('批次編輯只能選取同一屬性的格子');
-      return;
-    }
-    setBulkSelection(toggleBulkSelectionRow(bulkSelection, row.id));
-  }, [bulkSelection, stableOpenCell]);
+    toggleBulkCell(row.id, column.id);
+  }, [bulkSelection, stableOpenCell, toggleBulkCell]);
 
   const closeBulkSelection = useCallback(() => {
     setBulkSelection(undefined);
@@ -975,7 +982,7 @@ const WorkspacePage = () => {
   const workspaceTableView = useMemo(() => {
     if (!table || !tableNode) return null;
     return <>
-      <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={stableBeginTablePan} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (ignoreNextTableClick.current) { event.preventDefault(); event.stopPropagation(); ignoreNextTableClick.current = false; } }}>
+      <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={stableBeginTablePan} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (consumeSuppressedTableClick(event)) { event.preventDefault(); event.stopPropagation(); } }}>
         <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, '--workspace-table-body-offset': topRowRevealCount ? `calc(var(--workspace-toolbar-row-height) * ${topRowRevealCount})` : '0px', width: `${renderedTableWidth}px` } as React.CSSProperties}>
           <colgroup>{renderedColumnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
           {!table.transposed ? <><thead><tr>
@@ -1076,7 +1083,7 @@ const WorkspacePage = () => {
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
   if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section></WorkspaceModalCloseContext.Provider>;
 

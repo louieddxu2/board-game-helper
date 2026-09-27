@@ -210,7 +210,7 @@ describe('WorkspacePage', () => {
     expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
   });
 
-  it('sweeps across same-column rows, fills skipped rows, then permits a normal swipe from that column', async () => {
+  it('sweeps across same-column rows, fills skipped rows, then permits a guard-band swipe from that column', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await screen.findByRole('table');
@@ -236,11 +236,11 @@ describe('WorkspacePage', () => {
       dispatchTouchPointer(viewport, 'pointerup', 145, 130, 81);
 
       viewport.scrollTop = 100;
-      dispatchTouchPointer(source, 'pointerdown', 140, 100, 82);
-      dispatchTouchPointer(viewport, 'pointermove', 140, 50, 82);
+      dispatchTouchPointer(source, 'pointerdown', 105, 100, 82);
+      dispatchTouchPointer(viewport, 'pointermove', 105, 50, 82);
       expect(viewport.scrollTop).toBe(150);
       expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 4 格');
-      dispatchTouchPointer(viewport, 'pointerup', 140, 50, 82);
+      dispatchTouchPointer(viewport, 'pointerup', 105, 50, 82);
     } finally {
       document.elementFromPoint = originalElementFromPoint;
     }
@@ -260,7 +260,6 @@ describe('WorkspacePage', () => {
     dispatchTouchPointer(viewport, 'pointerup', 105, 150, 83);
 
     dispatchTouchPointer(source, 'pointerdown', 140, 100, 84);
-    await new Promise((resolve) => window.setTimeout(resolve, 450));
     viewport.scrollTop = 100;
     dispatchTouchPointer(viewport, 'pointermove', 155, 135, 84);
     expect(viewport.scrollTop).toBe(65);
@@ -293,6 +292,71 @@ describe('WorkspacePage', () => {
       dispatchTouchPointer(viewport, 'pointermove', 140, 60, 85);
       expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
       dispatchTouchPointer(viewport, 'pointerup', 140, 60, 85);
+    } finally {
+      document.elementFromPoint = originalElementFromPoint;
+    }
+  });
+
+  it('toggles a same-column cell on a central touch tap without another long press', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    const source = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    const otherColumn = screen.getByRole('cell', { name: '物件 2，數量：空白' });
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    second.getBoundingClientRect = () => ({ left: 100, right: 180, top: 120, bottom: 160, width: 80, height: 40, x: 100, y: 120, toJSON: () => ({}) });
+    await longPressWithoutSyntheticClick(source);
+
+    dispatchTouchPointer(second, 'pointerdown', 140, 140, 86);
+    dispatchTouchPointer(viewport, 'pointerup', 140, 140, 86);
+    fireEvent.click(second, { clientX: 140, clientY: 140 });
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+
+    dispatchTouchPointer(second, 'pointerdown', 140, 140, 87);
+    dispatchTouchPointer(viewport, 'pointerup', 140, 140, 87);
+    fireEvent.click(second, { clientX: 140, clientY: 140 });
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+
+    dispatchTouchPointer(second, 'pointerdown', 140, 140, 92);
+    dispatchTouchPointer(viewport, 'pointermove', 140, 155, 92);
+    dispatchTouchPointer(viewport, 'pointerup', 140, 155, 92);
+    fireEvent.click(second, { clientX: 140, clientY: 155 });
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+
+    dispatchTouchPointer(second, 'pointerdown', 105, 140, 88);
+    dispatchTouchPointer(viewport, 'pointerup', 105, 140, 88);
+    fireEvent.click(second, { clientX: 105, clientY: 140 });
+    dispatchTouchPointer(otherColumn, 'pointerdown', 140, 140, 89);
+    dispatchTouchPointer(viewport, 'pointerup', 140, 140, 89);
+    fireEvent.click(otherColumn, { clientX: 140, clientY: 140 });
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+  });
+
+  it('starts a same-column touch sweep immediately after multi-selection is active', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    for (let index = 0; index < 3; index += 1) await user.click(screen.getByRole('button', { name: '新增物件' }));
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    const fourth = screen.getByRole('cell', { name: '物件 4，名稱：空白' });
+    second.getBoundingClientRect = () => ({ left: 100, right: 180, top: 120, bottom: 160, width: 80, height: 40, x: 100, y: 120, toJSON: () => ({}) });
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => fourth);
+    try {
+      await longPressWithoutSyntheticClick(source);
+      viewport.scrollTop = 100;
+      dispatchTouchPointer(second, 'pointerdown', 140, 140, 90);
+      dispatchTouchPointer(viewport, 'pointermove', 145, 210, 90);
+      dispatchTouchPointer(viewport, 'pointerup', 145, 210, 90);
+      fireEvent.click(second, { clientX: 145, clientY: 210 });
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 4 格');
+      expect(viewport.scrollTop).toBe(100);
     } finally {
       document.elementFromPoint = originalElementFromPoint;
     }
@@ -2197,5 +2261,32 @@ describe('WorkspacePage', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 550));
     expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toBeInTheDocument();
     dispatchPointer(viewport, 'pointerup', 120, 100);
+  });
+
+  it('does not open search from an upward boundary pull during multi-selection', async () => {
+    render(<WorkspacePage />);
+    const cell = await screen.findByRole('cell', { name: '花火，名稱：空白' });
+    await longPressWithoutSyntheticClick(cell);
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 400 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollWidth: { configurable: true, value: 800 },
+      scrollHeight: { configurable: true, value: 600 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollTop: { configurable: true, writable: true, value: 300 },
+    });
+
+    vi.useFakeTimers();
+    try {
+      dispatchTouchPointer(cell, 'pointerdown', 120, 220, 91);
+      dispatchTouchPointer(viewport, 'pointermove', 120, 100, 91);
+      act(() => vi.advanceTimersByTime(600));
+      expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+      dispatchTouchPointer(viewport, 'pointerup', 120, 100, 91);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

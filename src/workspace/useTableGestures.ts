@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WorkspaceData, WorkspaceTable } from './types';
 import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
@@ -27,6 +27,8 @@ type CellHoldSession = {
   active: boolean;
   canSweep: boolean;
   startedInLane: boolean;
+  immediate: boolean;
+  blockTap: boolean;
   mode: 'pending' | 'selecting';
 };
 
@@ -57,6 +59,8 @@ interface UseTableGesturesProps {
   minTextScale: number;
   onCellLongPress?: (rowId: string, columnId: string) => boolean | void;
   onCellSweep?: (fromRowId: string, toRowId: string, columnId: string) => void;
+  onCellTap?: (rowId: string, columnId: string) => void;
+  bulkSelectionColumnId?: string;
   onDrawerSwipeProgress?: (deltaX: number) => void;
   onDrawerSwipeEnd?: (deltaX: number) => void;
   onOpenSearch?: () => void;
@@ -79,7 +83,7 @@ export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0
 export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
 export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -102,6 +106,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const panMetrics = useRef<{ table: HTMLTableElement | null; bounds: ReturnType<typeof getTableContentScrollBounds> } | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
+  const ignoredTouchClickAt = useRef<{ x: number; y: number } | undefined>(undefined);
+  const ignoreNextTableClickTimer = useRef<number | undefined>(undefined);
   const cellHold = useRef<CellHoldSession | undefined>(undefined);
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
@@ -116,8 +122,38 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     boundarySearchHold.current = undefined;
   };
 
+  const suppressNextTableClick = (duration: number, touchPoint?: { x: number; y: number }) => {
+    if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
+    ignoreNextTableClick.current = true;
+    ignoredTouchClickAt.current = touchPoint;
+    ignoreNextTableClickTimer.current = window.setTimeout(() => {
+      ignoreNextTableClick.current = false;
+      ignoredTouchClickAt.current = undefined;
+      ignoreNextTableClickTimer.current = undefined;
+    }, duration);
+  };
+
+  const consumeSuppressedTableClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!ignoreNextTableClick.current) return false;
+    const touchPoint = ignoredTouchClickAt.current;
+    if (touchPoint) {
+      const click = event.nativeEvent as MouseEvent & { pointerType?: string; sourceCapabilities?: { firesTouchEvents?: boolean } };
+      const fromTouch = click.pointerType === 'touch' || click.sourceCapabilities?.firesTouchEvents;
+      if (!fromTouch && (click.pointerType === 'mouse' || Math.hypot(click.clientX - touchPoint.x, click.clientY - touchPoint.y) > 12)) return false;
+    }
+    if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
+    ignoreNextTableClick.current = false;
+    ignoredTouchClickAt.current = undefined;
+    ignoreNextTableClickTimer.current = undefined;
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (bulkSelectionColumnId) clearBoundarySearchHold();
+  }, [bulkSelectionColumnId]);
+
   const armBoundarySearchHold = (pointerId: number, edge: 'top' | 'bottom') => {
-    if (!onOpenSearch || searchOpen) {
+    if (!onOpenSearch || searchOpen || bulkSelectionColumnId) {
       clearBoundarySearchHold();
       return;
     }
@@ -134,8 +170,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panMetrics.current = undefined;
       pointerMoved.current = true;
       setPanning(false);
-      ignoreNextTableClick.current = true;
-      window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+      suppressNextTableClick(120);
       onOpenSearch();
     }, TABLE_BOUNDARY_SEARCH_HOLD_MS);
     boundarySearchHold.current = hold;
@@ -223,8 +258,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       })));
       setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
     }
-    ignoreNextTableClick.current = true;
-    window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+    suppressNextTableClick(120);
     event.preventDefault();
     return true;
   };
@@ -256,25 +290,30 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       const rowId = cell?.dataset.bulkRowId;
       const columnId = cell?.dataset.bulkColumnId;
       if (rowId && columnId) {
+        const startedInLane = isInCellSweepLane(cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed));
+        const bulkTouch = event.pointerType === 'touch' && Boolean(bulkSelectionColumnId);
+        const immediate = bulkTouch && columnId === bulkSelectionColumnId && startedInLane;
         const hold: CellHoldSession = {
           pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
           x: event.clientX, y: event.clientY, cell, columnId, lastRowId: rowId,
           directionX: event.clientX, directionY: event.clientY,
-          active: false, canSweep: false,
-          startedInLane: isInCellSweepLane(cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed)),
+          active: immediate, canSweep: immediate, startedInLane,
+          immediate, blockTap: bulkTouch && !immediate,
           mode: 'pending',
         };
-        hold.timer = window.setTimeout(() => {
-          if (cellHold.current !== hold) return;
-          hold.active = true;
-          pointers.current.clear();
-          panStart.current = undefined;
-          pinchStart.current = undefined;
-          setPanning(false);
-          ignoreNextTableClick.current = true;
-          try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may have ended. */ }
-          hold.canSweep = onCellLongPress(rowId, columnId) !== false;
-        }, tableReorderHoldMs);
+        if (!bulkTouch) {
+          hold.timer = window.setTimeout(() => {
+            if (cellHold.current !== hold) return;
+            hold.active = true;
+            pointers.current.clear();
+            panStart.current = undefined;
+            pinchStart.current = undefined;
+            setPanning(false);
+            suppressNextTableClick(500, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
+            try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may have ended. */ }
+            hold.canSweep = onCellLongPress(rowId, columnId) !== false;
+          }, tableReorderHoldMs);
+        }
         cellHold.current = hold;
       }
     } else if (cellHold.current?.timer) {
@@ -342,8 +381,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         pointerMoved.current = true;
         setPanning(false);
         momentumScroll.stop();
-        ignoreNextTableClick.current = true;
-        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 120);
+        suppressNextTableClick(120);
         try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
         onDrawerSwipeProgress?.(deltaX);
         event.preventDefault();
@@ -353,7 +391,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     }
     const hold = cellHold.current;
     if (hold?.pointerId === event.pointerId) {
-      if (!hold.active && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) > 8) {
+      if (!hold.active && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) > (hold.blockTap ? 10 : 8)) {
         if (hold.timer) window.clearTimeout(hold.timer);
         cellHold.current = undefined;
       } else if (hold.active) {
@@ -370,7 +408,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
             event.preventDefault();
             return;
           }
-          if (hold.canSweep && inLane && isCellSweepDirection(deltaX, deltaY, transposed)) {
+          const sweepDirection = hold.canSweep && inLane && isCellSweepDirection(deltaX, deltaY, transposed);
+          if (sweepDirection && (!hold.immediate || onCellLongPress?.(hold.lastRowId, hold.columnId) !== false)) {
             hold.mode = 'selecting';
             hold.directionX = event.clientX;
             hold.directionY = event.clientY;
@@ -468,7 +507,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
 
         const viewportMaxTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
         const boundaryMaxTop = viewportMaxTop > 0 ? viewportMaxTop : maxTop;
-        const boundaryEdge = getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, boundaryMaxTop, deltaY, bounceAxis);
+        const boundaryEdge = bulkSelectionColumnId ? undefined : getTableBoundarySearchEdge(panStart.current.scrollTop, targetScrollTop, boundaryMaxTop, deltaY, bounceAxis);
         const pullsPastTop = bounceAxis === 'y'
           && panStart.current.scrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE
           && targetScrollTop < 0
@@ -498,10 +537,15 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (hold?.pointerId === event.pointerId) {
       if (hold.timer) window.clearTimeout(hold.timer);
       cellHold.current = undefined;
-      if (hold.active) {
+      if (hold.active || hold.blockTap) {
         const viewport = event.currentTarget;
         if (viewport.hasPointerCapture?.(event.pointerId)) {
           try { viewport.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have ended. */ }
+        }
+        if (hold.immediate && hold.mode === 'pending' && event.type !== 'pointercancel'
+          && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) <= 10
+          && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed))) {
+          onCellTap?.(hold.lastRowId, hold.columnId);
         }
         pointers.current.delete(event.pointerId);
         panStart.current = undefined;
@@ -509,7 +553,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         panAxis.current = undefined;
         pointerMoved.current = false;
         setPanning(false);
-        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 0);
+        suppressNextTableClick(500, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
         event.preventDefault();
         return;
       }
@@ -540,8 +584,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panMetrics.current = undefined;
       panAxis.current = undefined;
       if (moved) {
-        ignoreNextTableClick.current = true;
-        window.setTimeout(() => { ignoreNextTableClick.current = false; }, 0);
+        suppressNextTableClick(event.pointerType === 'touch' ? 500 : 0, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
       }
       if (event.pointerType === 'touch') {
         pendingScaleSave.current = table ? { tableId: table.id, scale: textScaleRef.current } : undefined;
@@ -554,11 +597,12 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
+    if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
     momentumScroll.stop();
   }, [momentumScroll.stop]);
 
   return {
-    textScale, panning, tableReorderVisual, ignoreNextTableClick,
+    textScale, panning, tableReorderVisual, consumeSuppressedTableClick,
     setTextScale, applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
