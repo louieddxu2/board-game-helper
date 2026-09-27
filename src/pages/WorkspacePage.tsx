@@ -466,14 +466,14 @@ const WorkspacePage = () => {
   const [localMinTextScale, setLocalMinTextScale] = useState(0.35);
 
   const startBulkSelection = useCallback((rowId: string, columnId: string) => {
-    if (!table || !table.columns.some((column) => column.id === columnId)) return;
+    if (!table || !table.columns.some((column) => column.id === columnId)) return false;
     if (bulkSelection) {
       if (bulkSelection.columnId !== columnId) {
         setNotice('批次編輯只能選取同一屬性的格子');
-        return;
+        return false;
       }
-      setBulkSelection(toggleBulkSelectionRow(bulkSelection, rowId));
-      return;
+      setBulkSelection((current) => current && !current.rowIds.includes(rowId) ? { ...current, rowIds: [...current.rowIds, rowId] } : current);
+      return true;
     }
     setEditing(undefined);
     setSelectionEditor(undefined);
@@ -484,7 +484,25 @@ const WorkspacePage = () => {
     setBulkTopRowRevealed(false);
     setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId] });
     setNotice('已進入批次選取');
+    return true;
   }, [bulkSelection, table, setSearchOpen]);
+  const sweepBulkSelection = useCallback((fromRowId: string, toRowId: string, columnId: string) => {
+    const fromIndex = filteredRows.findIndex((row) => row.id === fromRowId);
+    const toIndex = filteredRows.findIndex((row) => row.id === toRowId);
+    if (!table || fromIndex < 0 || toIndex < 0) return;
+    const crossedIds = filteredRows.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1).map((row) => row.id);
+    setBulkSelection((current) => {
+      if (!current || current.tableId !== table.id || current.columnId !== columnId) return current;
+      const rowIds = [...current.rowIds];
+      const selected = new Set(rowIds);
+      for (const id of crossedIds) {
+        if (selected.has(id)) continue;
+        selected.add(id);
+        rowIds.push(id);
+      }
+      return rowIds.length === current.rowIds.length ? current : { ...current, rowIds };
+    });
+  }, [filteredRows, table]);
   useEffect(() => {
     if (!bulkSelection) setBulkTopRowRevealed(false);
   }, [bulkSelection]);
@@ -524,7 +542,7 @@ const WorkspacePage = () => {
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen });
 
   const tableGestureHandlersRef = useRef({
     beginTableReorder, moveTableReorder, endTableReorder,
@@ -965,7 +983,7 @@ const WorkspacePage = () => {
             {displayedColumns.map((column) => {
               const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
               const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
-              return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={activeHeaderFilterKeys.has(`column:${column.id}`)} onFilter={() => setFilterTarget({ axis: 'column', id: column.id, label: column.name })} /></th>;
+              return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={activeHeaderFilterKeys.has(`column:${column.id}`)} onFilter={() => setFilterTarget({ axis: 'column', id: column.id, label: column.name })} /></th>;
             })}
             {hasHiddenColumns && <th className="workspace-hidden-columns-heading" aria-label="隱藏欄位"><WorkspaceIcon name="eye-off" size={17} /></th>}
           </tr></thead>
@@ -985,7 +1003,7 @@ const WorkspacePage = () => {
                 const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
                 const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
                 const isBulkSelected = bulkSelection?.columnId === column.id && bulkSelectedRowIds.has(row.id);
-                return <td key={column.id} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(column)} ${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
+                return <td key={column.id} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
                   <div className="workspace-cell-layout">
                     {multiChips.length > 0 ? (
                       <div className="workspace-multi-chip-list workspace-cell-value">
@@ -1016,7 +1034,7 @@ const WorkspacePage = () => {
               const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
               const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
               return <tr key={column.id}>
-                <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
+                <th scope="row" data-column-id={column.id} className={`workspace-row-heading ${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => setConfiguring({ column, isRowHeader: false })} onContextMenu={(event) => { event.preventDefault(); }}><button type="button" className="workspace-row-name">{column.name}</button></th>
                 {filteredRows.map((row) => {
                   const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
                   const rowAccessibleLabel = rowLabel || `第 ${filteredRows.findIndex((item) => item.id === row.id) + 1} 個物件`;
@@ -1025,7 +1043,7 @@ const WorkspacePage = () => {
                   const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
                   const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
                   const isBulkSelected = bulkSelection?.columnId === column.id && bulkSelectedRowIds.has(row.id);
-                  return <td key={row.id} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(column)} ${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
+                  return <td key={row.id} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
                     <div className="workspace-cell-layout">
                       {multiChips.length > 0 ? (
                         <div className="workspace-multi-chip-list workspace-cell-value">

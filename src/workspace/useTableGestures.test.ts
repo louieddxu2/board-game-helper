@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { canInitiateDrawerSwipe, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, shouldKeepDrawerOpen, shouldOpenDrawer } from './useTableGestures';
+import { canInitiateDrawerSwipe, cellSweepGuardSize, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, shouldKeepDrawerOpen, shouldOpenDrawer } from './useTableGestures';
+
+describe('cell sweep intent', () => {
+  it('requires a deliberate three-to-one stroke instead of the ordinary vertical pan angle', () => {
+    expect(isCellSweepDirection(6, 20, false)).toBe(true);
+    expect(isCellSweepDirection(7, 20, false)).toBe(false);
+    expect(isCellSweepDirection(0, 10, false)).toBe(false);
+    expect(isCellSweepDirection(20, 6, true)).toBe(true);
+    expect(isCellSweepDirection(20, 7, true)).toBe(false);
+  });
+
+  it('keeps a usable middle lane when a column is at the minimum width', () => {
+    const rect = { left: 100, right: 140, top: 20, bottom: 80, width: 40, height: 60 } as DOMRect;
+    expect(cellSweepGuardSize(rect.width)).toBe(4);
+    expect(isInCellSweepLane(rect, 104, 40, false)).toBe(true);
+    expect(isInCellSweepLane(rect, 103, 40, false)).toBe(false);
+    expect(isInCellSweepLane(rect, 136, 40, false)).toBe(true);
+    expect(isInCellSweepLane(rect, 137, 40, false)).toBe(false);
+    expect(isInCellSweepLane(rect, 120, 28, true)).toBe(false);
+    expect(isInCellSweepLane(rect, 120, 50, true)).toBe(true);
+  });
+});
 
 describe('drawer swipe geometry', () => {
   it('follows the finger while opening from the table', () => {

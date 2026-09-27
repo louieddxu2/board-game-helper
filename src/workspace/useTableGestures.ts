@@ -8,6 +8,44 @@ import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdg
 
 export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
 const TABLE_BOUNDARY_SCROLL_TOLERANCE = 2;
+export const CELL_SWEEP_INTENT_DISTANCE = 20;
+export const CELL_SWEEP_DIRECTION_RATIO = 3;
+const CELL_SWEEP_CROSS_AXIS_DISTANCE = 10;
+
+type CellHoldSession = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  cell: HTMLTableCellElement;
+  columnId: string;
+  lastRowId: string;
+  directionX: number;
+  directionY: number;
+  timer?: number;
+  active: boolean;
+  canSweep: boolean;
+  startedInLane: boolean;
+  mode: 'pending' | 'selecting';
+};
+
+export const cellSweepGuardSize = (extent: number) => Math.max(0, Math.min(12, extent * 0.15, (extent - 32) / 2));
+
+export const isInCellSweepLane = (rect: DOMRect, x: number, y: number, transposed: boolean) => {
+  const extent = transposed ? rect.height : rect.width;
+  if (extent < 32) return false;
+  const inset = cellSweepGuardSize(extent);
+  const coordinate = transposed ? y : x;
+  const start = transposed ? rect.top : rect.left;
+  return coordinate >= start + inset && coordinate <= start + extent - inset;
+};
+
+export const isCellSweepDirection = (deltaX: number, deltaY: number, transposed: boolean) => {
+  const primary = Math.abs(transposed ? deltaX : deltaY);
+  const cross = Math.abs(transposed ? deltaY : deltaX);
+  return primary >= CELL_SWEEP_INTENT_DISTANCE && primary >= CELL_SWEEP_DIRECTION_RATIO * cross;
+};
 
 interface UseTableGesturesProps {
   table: WorkspaceTable | undefined;
@@ -17,7 +55,8 @@ interface UseTableGesturesProps {
   workspacePageRef: React.RefObject<HTMLElement | null>;
   setNotice: (msg: string) => void;
   minTextScale: number;
-  onCellLongPress?: (rowId: string, columnId: string) => void;
+  onCellLongPress?: (rowId: string, columnId: string) => boolean | void;
+  onCellSweep?: (fromRowId: string, toRowId: string, columnId: string) => void;
   onDrawerSwipeProgress?: (deltaX: number) => void;
   onDrawerSwipeEnd?: (deltaX: number) => void;
   onOpenSearch?: () => void;
@@ -40,7 +79,7 @@ export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0
 export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
 export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
@@ -63,7 +102,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const panMetrics = useRef<{ table: HTMLTableElement | null; bounds: ReturnType<typeof getTableContentScrollBounds> } | undefined>(undefined);
   const pointerMoved = useRef(false);
   const ignoreNextTableClick = useRef(false);
-  const cellHold = useRef<{ pointerId: number; startX: number; startY: number; timer?: number; active: boolean } | undefined>(undefined);
+  const cellHold = useRef<CellHoldSession | undefined>(undefined);
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
@@ -197,6 +236,11 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if ((event.target as Element).closest('input, textarea')) return;
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
+    const activeHold = cellHold.current;
+    if (activeHold?.active && activeHold.pointerId !== event.pointerId) {
+      cellHold.current = undefined;
+      pointers.current.set(activeHold.pointerId, { x: activeHold.x, y: activeHold.y });
+    }
     if (pointers.current.size === 0 && event.pointerType !== 'mouse' && (onDrawerSwipeProgress || onDrawerSwipeEnd)) {
       const allowed = canInitiateDrawerSwipe(event.clientX);
       const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
@@ -212,7 +256,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       const rowId = cell?.dataset.bulkRowId;
       const columnId = cell?.dataset.bulkColumnId;
       if (rowId && columnId) {
-        const hold: { pointerId: number; startX: number; startY: number; timer?: number; active: boolean } = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+        const hold: CellHoldSession = {
+          pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+          x: event.clientX, y: event.clientY, cell, columnId, lastRowId: rowId,
+          directionX: event.clientX, directionY: event.clientY,
+          active: false, canSweep: false,
+          startedInLane: isInCellSweepLane(cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed)),
+          mode: 'pending',
+        };
         hold.timer = window.setTimeout(() => {
           if (cellHold.current !== hold) return;
           hold.active = true;
@@ -221,7 +272,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
           pinchStart.current = undefined;
           setPanning(false);
           ignoreNextTableClick.current = true;
-          onCellLongPress(rowId, columnId);
+          try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may have ended. */ }
+          hold.canSweep = onCellLongPress(rowId, columnId) !== false;
         }, tableReorderHoldMs);
         cellHold.current = hold;
       }
@@ -248,6 +300,21 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panAxis.current = undefined;
       panMetrics.current = undefined;
     }
+  };
+
+  const resumeTablePanFromHold = (hold: CellHoldSession, viewport: HTMLDivElement, x: number, y: number, includeCurrentMove: boolean) => {
+    cellHold.current = undefined;
+    pointers.current.set(hold.pointerId, { x, y });
+    panStart.current = {
+      pointerId: hold.pointerId,
+      x: includeCurrentMove ? hold.startX : x,
+      y: includeCurrentMove ? hold.startY : y,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    panAxis.current = undefined;
+    panMetrics.current = undefined;
+    pointerMoved.current = false;
   };
 
   const moveTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -290,8 +357,55 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         if (hold.timer) window.clearTimeout(hold.timer);
         cellHold.current = undefined;
       } else if (hold.active) {
-        event.preventDefault();
-        return;
+        hold.x = event.clientX;
+        hold.y = event.clientY;
+        const transposed = Boolean(table?.transposed);
+        const inLane = hold.startedInLane && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX, event.clientY, transposed);
+        const deltaX = event.clientX - hold.startX;
+        const deltaY = event.clientY - hold.startY;
+        if (hold.mode === 'pending') {
+          const cross = Math.abs(transposed ? deltaY : deltaX);
+          const resolved = !hold.canSweep || !inLane || cross >= CELL_SWEEP_CROSS_AXIS_DISTANCE || Math.hypot(deltaX, deltaY) >= CELL_SWEEP_INTENT_DISTANCE;
+          if (!resolved) {
+            event.preventDefault();
+            return;
+          }
+          if (hold.canSweep && inLane && isCellSweepDirection(deltaX, deltaY, transposed)) {
+            hold.mode = 'selecting';
+            hold.directionX = event.clientX;
+            hold.directionY = event.clientY;
+          } else {
+            resumeTablePanFromHold(hold, event.currentTarget, event.clientX, event.clientY, true);
+          }
+        }
+        if (cellHold.current === hold && hold.mode === 'selecting') {
+          if (!inLane) {
+            resumeTablePanFromHold(hold, event.currentTarget, event.clientX, event.clientY, false);
+            event.preventDefault();
+            return;
+          }
+          const segmentX = event.clientX - hold.directionX;
+          const segmentY = event.clientY - hold.directionY;
+          const segmentCross = Math.abs(transposed ? segmentY : segmentX);
+          if (segmentCross >= CELL_SWEEP_CROSS_AXIS_DISTANCE || Math.hypot(segmentX, segmentY) >= CELL_SWEEP_INTENT_DISTANCE) {
+            if (!isCellSweepDirection(segmentX, segmentY, transposed)) {
+              resumeTablePanFromHold(hold, event.currentTarget, event.clientX, event.clientY, false);
+              event.preventDefault();
+              return;
+            }
+            hold.directionX = event.clientX;
+            hold.directionY = event.clientY;
+          }
+          const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest<HTMLTableCellElement>('td[data-bulk-row-id][data-bulk-column-id]');
+          const targetRowId = target?.dataset.bulkColumnId === hold.columnId ? target.dataset.bulkRowId : undefined;
+          if (targetRowId && targetRowId !== hold.lastRowId) {
+            onCellSweep?.(hold.lastRowId, targetRowId, hold.columnId);
+            hold.lastRowId = targetRowId;
+          }
+          event.preventDefault();
+          return;
+        }
+        // The hold became a pan; continue with the normal pan handler below.
       }
     }
     if (!pointers.current.has(event.pointerId)) return;
@@ -385,6 +499,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (hold.timer) window.clearTimeout(hold.timer);
       cellHold.current = undefined;
       if (hold.active) {
+        const viewport = event.currentTarget;
+        if (viewport.hasPointerCapture?.(event.pointerId)) {
+          try { viewport.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have ended. */ }
+        }
         pointers.current.delete(event.pointerId);
         panStart.current = undefined;
         pinchStart.current = undefined;

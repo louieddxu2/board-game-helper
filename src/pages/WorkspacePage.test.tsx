@@ -115,6 +115,12 @@ describe('WorkspacePage', () => {
     dispatchPointer('pointerup');
   };
 
+  const dispatchTouchPointer = (target: Element, type: string, x: number, y: number, pointerId: number) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+    Object.defineProperties(event, { pointerId: { value: pointerId }, pointerType: { value: 'touch' } });
+    fireEvent(target, event);
+  };
+
   it('adds and cancels the current table in the bottom navigation', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
@@ -202,6 +208,94 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '編輯' }));
     await user.click(screen.getByRole('button', { name: '復原' }));
     expect(screen.queryByText('共同內容')).not.toBeInTheDocument();
+  });
+
+  it('sweeps across same-column rows, fills skipped rows, then permits a normal swipe from that column', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    for (let index = 0; index < 3; index += 1) await user.click(screen.getByRole('button', { name: '新增物件' }));
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    const fourth = screen.getByRole('cell', { name: '物件 4，名稱：空白' });
+    source.getBoundingClientRect = () => ({ left: 100, right: 180, top: 80, bottom: 120, width: 80, height: 40, x: 100, y: 80, toJSON: () => ({}) });
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn((_x, y) => y >= 160 ? fourth : second);
+    try {
+      dispatchTouchPointer(source, 'pointerdown', 140, 100, 81);
+      await waitFor(() => expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格'));
+      expect(source).toHaveClass('is-bulk-column');
+      expect(second).toHaveClass('is-bulk-column');
+      expect(screen.getByRole('cell', { name: '物件 2，數量：空白' })).not.toHaveClass('is-bulk-column');
+      dispatchTouchPointer(viewport, 'pointermove', 145, 180, 81);
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 4 格');
+      dispatchTouchPointer(viewport, 'pointermove', 145, 130, 81);
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 4 格');
+      dispatchTouchPointer(viewport, 'pointerup', 145, 130, 81);
+
+      viewport.scrollTop = 100;
+      dispatchTouchPointer(source, 'pointerdown', 140, 100, 82);
+      dispatchTouchPointer(viewport, 'pointermove', 140, 50, 82);
+      expect(viewport.scrollTop).toBe(150);
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 4 格');
+      dispatchTouchPointer(viewport, 'pointerup', 140, 50, 82);
+    } finally {
+      document.elementFromPoint = originalElementFromPoint;
+    }
+  });
+
+  it('treats the column guard bands and a two-to-one diagonal as table drags after a hold', async () => {
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    source.getBoundingClientRect = () => ({ left: 100, right: 180, top: 80, bottom: 120, width: 80, height: 40, x: 100, y: 80, toJSON: () => ({}) });
+    dispatchTouchPointer(source, 'pointerdown', 105, 100, 83);
+    await waitFor(() => expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格'));
+    viewport.scrollTop = 100;
+    dispatchTouchPointer(viewport, 'pointermove', 105, 150, 83);
+    expect(viewport.scrollTop).toBe(50);
+    dispatchTouchPointer(viewport, 'pointerup', 105, 150, 83);
+
+    dispatchTouchPointer(source, 'pointerdown', 140, 100, 84);
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    viewport.scrollTop = 100;
+    dispatchTouchPointer(viewport, 'pointermove', 155, 135, 84);
+    expect(viewport.scrollTop).toBe(65);
+    expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格');
+    dispatchTouchPointer(viewport, 'pointerup', 155, 135, 84);
+  });
+
+  it('changes a held sweep into a pan when the finger leaves the central lane', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
+    const source = screen.getByRole('cell', { name: '花火，名稱：空白' });
+    const second = screen.getByRole('cell', { name: '物件 2，名稱：空白' });
+    source.getBoundingClientRect = () => ({ left: 100, right: 180, top: 80, bottom: 120, width: 80, height: 40, x: 100, y: 80, toJSON: () => ({}) });
+    const originalElementFromPoint = document.elementFromPoint;
+    document.elementFromPoint = vi.fn(() => second);
+    try {
+      dispatchTouchPointer(source, 'pointerdown', 140, 100, 85);
+      await waitFor(() => expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 1 格'));
+      dispatchTouchPointer(viewport, 'pointermove', 140, 130, 85);
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+      viewport.scrollTop = 100;
+      dispatchTouchPointer(viewport, 'pointermove', 176, 140, 85);
+      expect(viewport.scrollTop).toBe(100);
+      dispatchTouchPointer(viewport, 'pointermove', 176, 100, 85);
+      expect(viewport.scrollTop).toBe(140);
+      dispatchTouchPointer(viewport, 'pointermove', 140, 60, 85);
+      expect(screen.getByRole('toolbar', { name: '批次編輯 名稱' })).toHaveTextContent('已選 2 格');
+      dispatchTouchPointer(viewport, 'pointerup', 140, 60, 85);
+    } finally {
+      document.elementFromPoint = originalElementFromPoint;
+    }
   });
 
   it('batch-adds a multi-select option using aggregate counts and undoes it as one action', async () => {
