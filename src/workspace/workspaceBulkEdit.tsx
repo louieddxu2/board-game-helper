@@ -10,24 +10,22 @@ export const WorkspaceBulkEditToolbar = ({ column, count, numericValues, onCance
   onCancel(): void;
   onOpenEditor(): void;
 }) => {
-  const total = numericValues.length ? numericValues.reduce((sum, value) => sum + value, 0) : undefined;
+  const total = count ? numericValues.reduce((sum, value) => sum + value, 0) : undefined;
   const format = (value: number | undefined) => value === undefined || !Number.isFinite(value)
     ? '—' : value.toLocaleString('zh-Hant-TW', { maximumFractionDigits: 4 });
   const totalText = format(total);
-  const averageText = format(total === undefined ? undefined : total / numericValues.length);
+  const averageText = format(total === undefined ? undefined : total / count);
   return <div className="workspace-editbar workspace-bulk-toolbar" role="toolbar" aria-label={`批次編輯 ${column.name}`}>
     <div className="workspace-editbar-group">
       <button type="button" className="workspace-editbar-button" aria-label="結束批次選取" onClick={onCancel}><WorkspaceIcon name="close" size={21} /></button>
-      <div className="workspace-bulk-meta">
-        <span className="workspace-bulk-count">已選 {count} 格</span>
-        {column.inputType === 'number' && <div className="workspace-bulk-stats">
-          <span className="workspace-bulk-stat"><span>總和</span><output aria-label="總和" title={`總和 ${totalText}`}>{totalText}</output></span>
-          <span className="workspace-bulk-stat"><span>平均</span><output aria-label="平均" title={`平均 ${averageText}`}>{averageText}</output></span>
-        </div>}
-      </div>
+      <span className="workspace-bulk-count">已選 {count} 格</span>
+      {column.inputType === 'number' && <div className="workspace-bulk-stats">
+        <span className="workspace-bulk-stat"><span>總和：</span><output aria-label="總和" title={`總和 ${totalText}`}>{totalText}</output></span>
+        <span className="workspace-bulk-stat"><span>平均：</span><output aria-label="平均" title={`平均 ${averageText}`}>{averageText}</output></span>
+      </div>}
     </div>
     <div className="workspace-bulk-actions">
-      <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`開啟 ${column.name} 批次輸入`}><WorkspaceIcon name="edit" size={16} /><span className="workspace-bulk-summary">批次輸入</span></button>
+      <button type="button" className="workspace-bulk-value" onClick={onOpenEditor} aria-label={`開啟 ${column.name} 批次輸入`}><span className="workspace-bulk-summary">批次</span><WorkspaceIcon name="edit" size={16} /></button>
     </div>
   </div>;
 };

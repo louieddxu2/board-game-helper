@@ -148,15 +148,14 @@ footer a { color: inherit; }
 .workspace-editbar-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .35; }
 .workspace-table-toolsbar .workspace-editbar-button { width: 40px; height: 40px; }
 .workspace-bulk-toolbar { gap: 10px; }
-.workspace-bulk-toolbar .workspace-editbar-group { flex: 1 1 auto; min-width: 0; }
-.workspace-bulk-meta { display: grid; min-width: 0; gap: 1px; }
-.workspace-bulk-count { padding-left: 2px; color: var(--green); font-size: 13px; font-weight: 800; white-space: nowrap; }
-.workspace-bulk-stats { display: flex; gap: 9px; min-width: 0; max-width: 100%; }
-.workspace-bulk-stat { display: flex; gap: 3px; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.workspace-bulk-toolbar .workspace-editbar-group { flex: 1 1 auto; min-width: 0; gap: 4px; }
+.workspace-bulk-count { flex: 0 0 auto; padding-left: 2px; color: var(--green); font-size: 13px; font-weight: 800; white-space: nowrap; }
+.workspace-bulk-stats { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-content: center; column-gap: 6px; row-gap: 0; min-width: 0; }
+.workspace-bulk-stat { display: flex; flex: 0 0 auto; max-width: 100%; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .workspace-bulk-stat > span { flex: 0 0 auto; }
 .workspace-bulk-stat output { display: block; min-width: 0; overflow: hidden; color: var(--green); font-variant-numeric: tabular-nums; font-weight: 800; text-overflow: ellipsis; }
 .workspace-bulk-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; }
-.workspace-bulk-value { display: flex; align-items: center; gap: 7px; min-height: 38px; padding: 6px 12px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: var(--white); box-shadow: 0 2px 0 rgba(22,53,47,.16); cursor: pointer; text-align: left; transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.workspace-bulk-value { display: flex; align-items: center; gap: 4px; min-height: 38px; padding: 6px 9px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: var(--white); box-shadow: 0 2px 0 rgba(22,53,47,.16); cursor: pointer; text-align: left; transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
 .workspace-bulk-value:hover, .workspace-bulk-value:focus-visible { border-color: var(--orange); background: var(--orange); box-shadow: 0 3px 0 rgba(183,70,47,.18); }
 .workspace-bulk-value:active { box-shadow: none; transform: translateY(1px); }
 .workspace-bulk-value svg { flex: 0 0 auto; color: var(--yellow); }

@@ -183,7 +183,7 @@ describe('WorkspacePage', () => {
     await longPress(first);
     const bulkToolbar = screen.getByRole('toolbar', { name: '批次編輯 名稱' });
     expect(bulkToolbar).toHaveTextContent('已選 1 格');
-    expect(within(bulkToolbar).getByText('批次輸入')).toBeInTheDocument();
+    expect(within(bulkToolbar).getByText('批次')).toBeInTheDocument();
     expect(within(bulkToolbar).queryByText('設定內容')).not.toBeInTheDocument();
     expect(document.querySelector('.workspace-toolbar-layer')).toHaveStyle({ '--workspace-toolbar-row-count': '1' });
     expect(screen.queryByRole('button', { name: '輸入至已選方格' })).not.toBeInTheDocument();
@@ -521,7 +521,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('cell', { name: '物件 2，數量：7' })).toBeInTheDocument();
   });
 
-  it('updates selected number totals and averages without counting blank cells', async () => {
+  it('updates selected number totals and averages across every selected cell', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     const first = await screen.findByRole('cell', { name: '花火，數量：2' });
@@ -537,7 +537,9 @@ describe('WorkspacePage', () => {
     const total = within(toolbar).getByRole('status', { name: '總和' });
     const average = within(toolbar).getByRole('status', { name: '平均' });
     const batchButton = within(toolbar).getByRole('button', { name: '開啟 數量 批次輸入' });
-    expect(batchButton).toHaveTextContent(/^批次輸入$/);
+    expect(batchButton).toHaveTextContent(/^批次$/);
+    expect(within(toolbar).getByText('總和：')).toBeInTheDocument();
+    expect(within(toolbar).getByText('平均：')).toBeInTheDocument();
     expect(total).toHaveTextContent('2');
     expect(average).toHaveTextContent('2');
 
@@ -547,14 +549,14 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('cell', { name: '物件 3，數量：空白' }));
     expect(toolbar).toHaveTextContent('已選 3 格');
     expect(total).toHaveTextContent('6.5');
-    expect(average).toHaveTextContent('3.25');
+    expect(average).toHaveTextContent('2.1667');
 
     await user.click(first);
     expect(total).toHaveTextContent('4.5');
-    expect(average).toHaveTextContent('4.5');
+    expect(average).toHaveTextContent('2.25');
     await user.click(screen.getByRole('cell', { name: '物件 2，數量：4.5' }));
-    expect(total).toHaveTextContent('—');
-    expect(average).toHaveTextContent('—');
+    expect(total).toHaveTextContent('0');
+    expect(average).toHaveTextContent('0');
   });
 
   it('embeds collapsed proportional allocation below the batch number input', async () => {
