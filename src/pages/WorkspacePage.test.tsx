@@ -549,7 +549,7 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('cell', { name: '物件 3，數量：空白' }));
     expect(toolbar).toHaveTextContent('已選 3 格');
     expect(total).toHaveTextContent('6.5');
-    expect(average).toHaveTextContent('2.1667');
+    expect(average).toHaveTextContent('2.17');
 
     await user.click(first);
     expect(total).toHaveTextContent('4.5');

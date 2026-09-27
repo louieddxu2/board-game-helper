@@ -12,7 +12,7 @@ export const WorkspaceBulkEditToolbar = ({ column, count, numericValues, onCance
 }) => {
   const total = count ? numericValues.reduce((sum, value) => sum + value, 0) : undefined;
   const format = (value: number | undefined) => value === undefined || !Number.isFinite(value)
-    ? '—' : value.toLocaleString('zh-Hant-TW', { maximumFractionDigits: 4 });
+    ? '—' : value.toLocaleString('zh-Hant-TW', { maximumFractionDigits: 2 });
   const totalText = format(total);
   const averageText = format(total === undefined ? undefined : total / count);
   return <div className="workspace-editbar workspace-bulk-toolbar" role="toolbar" aria-label={`批次編輯 ${column.name}`}>
