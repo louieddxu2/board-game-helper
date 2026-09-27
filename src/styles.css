@@ -154,8 +154,8 @@ footer a { color: inherit; }
 .workspace-bulk-stat-toggle:hover { border-color: var(--green); }
 .workspace-bulk-stat-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 .workspace-bulk-stat-modes { display: flex; flex: 0 0 auto; flex-direction: column; gap: 1px; white-space: nowrap; }
-.workspace-bulk-stat-mode { color: var(--muted); font-size: 11px; font-weight: 700; line-height: 1.1; }
-.workspace-bulk-stat-mode.is-active { border-radius: 3px; background: rgba(233,180,76,.28); color: var(--green); font-weight: 900; }
+.workspace-bulk-stat-mode { color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1.1; }
+.workspace-bulk-stat-mode.is-active { border-radius: 3px; background: rgba(233,180,76,.28); color: var(--green); font-size: 11px; font-weight: 900; }
 .workspace-bulk-stat-toggle output { display: block; min-width: 0; overflow: hidden; padding-left: 4px; border-left: 1px solid var(--line); color: var(--green); font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-bulk-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; }
 .workspace-bulk-value { display: flex; align-items: center; gap: 4px; min-height: 38px; padding: 6px 9px; border: 1px solid var(--green); border-radius: 8px; background: var(--green); color: var(--white); box-shadow: 0 2px 0 rgba(22,53,47,.16); cursor: pointer; text-align: left; transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
