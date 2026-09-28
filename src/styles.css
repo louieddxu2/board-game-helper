@@ -427,10 +427,25 @@ footer a { color: inherit; }
 .workspace-filter-range label { display: grid; gap: 5px; color: var(--green); font-size: 13px; font-weight: 700; }
 .workspace-filter-range input { min-width: 0; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font: inherit; }
 .workspace-filter-range > span { padding-bottom: 10px; color: var(--muted); }
-.workspace-filter-date-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 8px; }
-.workspace-filter-date-range label { display: grid; gap: 5px; color: var(--green); font-size: 13px; font-weight: 700; }
-.workspace-filter-date-range input { min-width: 0; min-height: 38px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--ink); font: inherit; }
-.workspace-filter-date-range > span { padding-bottom: 10px; color: var(--muted); }
+.workspace-dialog.workspace-date-filter-dialog { width: min(360px, calc(100vw - 24px)); max-height: min(88dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); }
+.workspace-date-filter-editor { display: grid; gap: 10px; user-select: none; -webkit-user-select: none; }
+.workspace-date-filter-precision { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.workspace-date-filter-precision button { display: grid; gap: 5px; min-height: 38px; padding: 3px 2px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.workspace-date-filter-precision button[aria-pressed="true"] { color: var(--green); }
+.workspace-date-filter-precision-segment { height: 6px; border-radius: 999px; background: rgba(22,53,47,.16); }
+.workspace-date-filter-precision .is-filled .workspace-date-filter-precision-segment { background: var(--orange); }
+.workspace-date-filter-precision button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.workspace-date-filter-bound { display: grid; gap: 3px; padding: 5px 8px 3px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,253,248,.45); }
+.workspace-date-filter-bound-heading { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
+.workspace-date-filter-bound h3 { margin: 0; color: var(--green); font-size: 13px; font-weight: 800; }
+.workspace-date-filter-bound-heading button { min-height: 22px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-date-filter-bound-heading button[aria-pressed="true"] { background: var(--green); color: var(--white); }
+.workspace-date-filter-note, .workspace-date-filter-error { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.workspace-date-filter-error { color: #a52f23; }
+.workspace-date-filter-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.workspace-date-filter-actions button { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-weight: 700; }
+.workspace-date-filter-actions .primary { border-color: var(--orange); background: var(--orange); color: var(--white); }
+.workspace-date-filter-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .workspace-filter-aggregate { display: grid; grid-template-columns: 1fr 1fr minmax(0, 1.2fr); gap: 6px; align-items: stretch; }
 .workspace-filter-aggregate button { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; }
 .workspace-filter-aggregate button:hover, .workspace-filter-aggregate button.selected { border-color: var(--orange); color: var(--orange); box-shadow: inset 0 -2px var(--yellow); }
@@ -504,15 +519,22 @@ footer a { color: inherit; }
 .workspace-datetime-dialog .workspace-dialog-content { display: block; width: 100%; min-width: 0; max-width: 100%; margin-inline: 0; overflow: visible; padding: 6px 12px 14px; }
 .workspace-datetime-editor { display: grid; gap: 8px; width: 100%; color: var(--ink); user-select: none; -webkit-user-select: none; }
 .workspace-datetime-wheel-row { display: flex; align-items: stretch; justify-content: center; gap: 4px; }
-.workspace-datetime-wheel { position: relative; display: grid; flex: 1 1 0; grid-template-rows: repeat(3, 32px); min-width: 0; padding: 2px 0 13px; touch-action: none; cursor: grab; }
+.workspace-datetime-wheel { position: relative; display: grid; flex: 1 1 0; min-width: 0; padding: 2px 0 13px; touch-action: none; cursor: grab; }
 .workspace-datetime-wheel:active { cursor: grabbing; }
+.workspace-datetime-wheel:focus-visible { outline: 2px solid var(--yellow); outline-offset: 1px; }
+.workspace-datetime-wheel-window { height: 96px; overflow: hidden; }
+.workspace-datetime-wheel-track { display: grid; grid-template-rows: repeat(5, 32px); transform: translateY(calc(-32px + var(--workspace-wheel-offset, 0px))); transition: transform 150ms ease-out; }
+.workspace-datetime-wheel.is-dragging .workspace-datetime-wheel-track { transition: none; }
 .workspace-datetime-wheel button { min-width: 0; min-height: 32px; padding: 0 4px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 32px; opacity: .55; }
 .workspace-datetime-wheel button:hover { color: var(--orange); opacity: .9; }
 .workspace-datetime-wheel button.selected { border-bottom: 2px solid var(--yellow); color: var(--green); font-size: 20px; font-weight: 800; opacity: 1; }
 .workspace-datetime-wheel-empty { min-height: 32px; }
+.workspace-datetime-wheel-disabled-value { display: grid; place-items: center; height: 32px; color: var(--muted); font-size: 20px; font-weight: 700; }
+.workspace-datetime-wheel.is-disabled { cursor: default; }
 .workspace-datetime-wheel-center-editor { display: grid; place-items: center; min-height: 32px; }
 .workspace-dialog .workspace-datetime-year-input { width: min(76px, 100%); min-height: 30px; padding: 1px 3px; border: 0; border-bottom: 2px solid var(--yellow); border-radius: 0; background: rgba(255,253,248,.72); color: var(--green); font-size: 18px; font-weight: 800; text-align: center; }
 .workspace-datetime-wheel-unit { position: absolute; right: 0; bottom: 0; left: 0; color: var(--muted); font-size: 11px; line-height: 12px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .workspace-datetime-wheel-track { transition: none; } }
 .workspace-datetime-divider { height: 1px; margin: 0 8px; background: rgba(22,53,47,.18); }
 .workspace-datetime-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; padding: 0 2px; }
 .workspace-datetime-clear { min-height: 30px; padding: 2px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--orange); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }

@@ -1,6 +1,7 @@
 import { WorkspaceModalCloseContext, type WorkspaceModalCloseReason, type WorkspaceModalOwner } from './workspaceModalClose';
 import { forwardRef, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceNumberInputMode } from './types';
+import type { DateFilterPrecision } from './dateFilter';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
 
@@ -11,7 +12,7 @@ export type TableReorderVisual = { kind: TableReorderKind; sourceId: string; tar
 export type TableReorderSession = TableReorderVisual & { pointerId: number; startX: number; startY: number; active: boolean; dragIntentConfirmed?: boolean; timer?: number };
 export type HeaderFilterTarget = { axis: 'column' | 'row'; id: string; label: string };
 export type HeaderFilterAggregate = 'sum' | 'average';
-export type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; aggregate?: HeaderFilterAggregate };
+export type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; datePrecision?: DateFilterPrecision; aggregate?: HeaderFilterAggregate };
 export type HeaderFilterOption = { key: string; label: string; count: number; color?: string };
 export type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode; row?: WorkspaceRow; table?: WorkspaceTable };
 export const workspaceColorPalette = [
@@ -148,7 +149,7 @@ export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputC
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
 export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
-  if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null) {
+  if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null && !(inputType === 'datetime' && (state.min?.trim() || state.max?.trim()))) {
     const includedSet = new Set(state.includedKeys);
     if (inputType === 'datetime') {
       const monthKey = workspaceDateMonthKey(value);
@@ -175,17 +176,10 @@ export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: Wor
   if (inputType === 'datetime' && (state.min?.trim() || state.max?.trim())) {
     const normalized = normalizeWorkspaceDateTime(value);
     if (!normalized) return false;
-    const timestamp = new Date(normalized).getTime();
-    const boundary = (raw: string | undefined, endOfDay: boolean) => {
-      if (!raw?.trim()) return undefined;
-      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
-      if (!match) return undefined;
-      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
-    };
-    const minimum = boundary(state.min, false);
-    const maximum = boundary(state.max, true);
-    if (minimum !== undefined && timestamp < minimum) return false;
-    if (maximum !== undefined && timestamp > maximum) return false;
+    const date = new Date(normalized);
+    const localDay = `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    if (state.min && localDay < state.min) return false;
+    if (state.max && localDay > state.max) return false;
   }
   return true;
 };

@@ -30,12 +30,14 @@ const normalizeFilterState = (value: unknown): HeaderFilterState | undefined => 
       : null;
   const sort = candidate.sort === 'asc' || candidate.sort === 'desc' ? candidate.sort : null;
   const aggregate = candidate.aggregate === 'sum' || candidate.aggregate === 'average' ? candidate.aggregate : undefined;
+  const datePrecision = candidate.datePrecision === 'year' || candidate.datePrecision === 'month' || candidate.datePrecision === 'day' ? candidate.datePrecision : undefined;
   return {
     includedKeys,
     sort,
     ...(typeof candidate.query === 'string' ? { query: candidate.query } : {}),
     ...(typeof candidate.min === 'string' ? { min: candidate.min } : {}),
     ...(typeof candidate.max === 'string' ? { max: candidate.max } : {}),
+    ...(datePrecision ? { datePrecision } : {}),
     ...(aggregate ? { aggregate } : {}),
   };
 };

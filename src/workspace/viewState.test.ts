@@ -35,4 +35,14 @@ describe('workspace table view state', () => {
       searchQuery: '', searchOpen: false, headerFilters: { bad: { includedKeys: null, sort: null } }, scrollLeft: 0, scrollTop: 0,
     });
   });
+
+  it('restores the chosen date filter precision', () => {
+    saveWorkspaceTableViewState('dates', {
+      searchQuery: '', searchOpen: true,
+      headerFilters: { 'column:date': { includedKeys: null, sort: null, min: '2024-01-01', max: '2025-12-31', datePrecision: 'year' } },
+      scrollLeft: 0, scrollTop: 0,
+    });
+
+    expect(loadWorkspaceTableViewState('dates').headerFilters['column:date'].datePrecision).toBe('year');
+  });
 });

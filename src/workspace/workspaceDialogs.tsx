@@ -4,6 +4,7 @@ import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, ge
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTextAlign } from "./types";
 import { AutoGrowTextarea, defaultInputTypeFor, HeaderFilterAggregate, HeaderFilterOption, HeaderFilterState, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, NameDialogState, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from "./workspaceShared";
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
+import { dateFilterBoundary, dateFilterDaysInMonth, dateFilterParts, type DateFilterParts, type DateFilterPrecision } from './dateFilter';
 
 type NumericEditMode = 'direct' | 'add' | 'subtract';
 
@@ -187,10 +188,16 @@ export const CellInputDialog = ({ owner = 'cell-editor', column, value, inputLab
 
 const range = (start: number, end: number) => Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
 
-const WheelPicker = ({ label, value, options, onChange, loop = false, centerEditor, onCenterClick }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean; centerEditor?: React.ReactNode; onCenterClick?(): void }) => {
-  const dragRef = useRef<{ pointerId: number; startY: number; lastStep: number } | undefined>(undefined);
+const WheelPicker = ({ label, value, options, onChange, loop = false, centerEditor, onCenterClick, disabled = false }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean; centerEditor?: React.ReactNode; onCenterClick?(): void; disabled?: boolean }) => {
+  const dragRef = useRef<{ pointerId: number; startY: number; lastStep: number; moved: boolean } | undefined>(undefined);
+  const valueRef = useRef(value);
+  const suppressClickRef = useRef(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  useLayoutEffect(() => { valueRef.current = value; }, [value]);
   const index = Math.max(0, options.indexOf(value));
   const valueAt = (offset: number) => {
+    if (disabled) return undefined;
     if (!options.length) return undefined;
     let nextIndex = index + offset;
     if (loop) nextIndex = (nextIndex % options.length + options.length) % options.length;
@@ -198,29 +205,44 @@ const WheelPicker = ({ label, value, options, onChange, loop = false, centerEdit
     return options[nextIndex];
   };
   const moveBy = (delta: number) => {
-    const nextIndex = index + delta;
+    if (disabled || !options.length || !delta) return;
+    const nextIndex = Math.max(0, options.indexOf(valueRef.current)) + delta;
+    let nextValue: number | undefined;
     if (loop) {
-      onChange(options[(nextIndex % options.length + options.length) % options.length]);
-      return;
+      nextValue = options[(nextIndex % options.length + options.length) % options.length];
+    } else if (nextIndex >= 0 && nextIndex < options.length) {
+      nextValue = options[nextIndex];
     }
-    if (nextIndex >= 0 && nextIndex < options.length) onChange(options[nextIndex]);
+    if (nextValue !== undefined && nextValue !== valueRef.current) {
+      valueRef.current = nextValue;
+      onChange(nextValue);
+    }
   };
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = undefined;
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    suppressClickRef.current = dragRef.current.moved;
+    dragRef.current = undefined;
+    setDragging(false);
+    setDragOffset(0);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
-  return <div className="workspace-datetime-wheel" role="listbox" aria-label={label} tabIndex={0}
-    onWheel={(event) => { event.preventDefault(); moveBy(event.deltaY > 0 ? 1 : -1); }}
+  return <div className={`workspace-datetime-wheel${dragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}`} role={disabled ? 'group' : 'listbox'} aria-label={disabled ? `${label}未啟用` : label} aria-disabled={disabled || undefined} tabIndex={disabled ? -1 : 0}
+    onWheel={(event) => { if (disabled) return; event.preventDefault(); moveBy(event.deltaY > 0 ? 1 : -1); }}
     onKeyDown={(event) => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); moveBy(event.key === 'ArrowDown' ? 1 : -1); } }}
-    onPointerDown={(event) => { if (event.button !== 0) return; dragRef.current = { pointerId: event.pointerId, startY: event.clientY, lastStep: 0 }; event.currentTarget.setPointerCapture?.(event.pointerId); }}
-    onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const step = Math.trunc((drag.startY - event.clientY) / 22); if (step !== drag.lastStep) { moveBy(step - drag.lastStep); drag.lastStep = step; } }}
-    onPointerUp={endDrag} onPointerCancel={endDrag}>
-    {[-1, 0, 1].map((offset) => {
+    onPointerDown={(event) => { if (disabled || event.button !== 0 || (event.target as HTMLElement).closest('input')) return; suppressClickRef.current = false; dragRef.current = { pointerId: event.pointerId, startY: event.clientY, lastStep: 0, moved: false }; setDragging(true); event.currentTarget.setPointerCapture?.(event.pointerId); }}
+    onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const delta = drag.startY - event.clientY; if (Math.abs(delta) > 4) drag.moved = true; const step = Math.trunc(delta / 32); if (step !== drag.lastStep) { moveBy(step - drag.lastStep); drag.lastStep = step; } setDragOffset(-(delta - step * 32)); }}
+    onPointerUp={endDrag} onPointerCancel={endDrag}
+    onClickCapture={(event) => { if (suppressClickRef.current) { event.preventDefault(); event.stopPropagation(); suppressClickRef.current = false; } }}>
+    <div className="workspace-datetime-wheel-window"><div className="workspace-datetime-wheel-track" style={{ '--workspace-wheel-offset': `${dragOffset}px` } as React.CSSProperties}>
+    {[-2, -1, 0, 1, 2].map((offset) => {
+      if (disabled) return offset === 0 ? <span className="workspace-datetime-wheel-disabled-value" key={offset}>－</span> : <span className="workspace-datetime-wheel-empty" aria-hidden="true" key={offset} />;
       const option = valueAt(offset);
       if (offset === 0 && centerEditor) return <span className="workspace-datetime-wheel-center-editor" key="center-editor">{centerEditor}</span>;
       return option === undefined
         ? <span className="workspace-datetime-wheel-empty" aria-hidden="true" key={offset} />
-        : <button type="button" role="option" aria-selected={offset === 0} className={offset === 0 ? 'selected' : ''} key={option} onClick={() => offset === 0 && onCenterClick ? onCenterClick() : onChange(option)}>{String(option)}</button>;
+        : <button type="button" role="option" aria-selected={offset === 0} className={offset === 0 ? 'selected' : ''} key={offset} onClick={() => offset === 0 && onCenterClick ? onCenterClick() : onChange(option)}>{String(option)}</button>;
     })}
+    </div></div>
     <span className="workspace-datetime-wheel-unit">{label}</span>
   </div>;
 };
@@ -257,7 +279,7 @@ export const DateTimeWheelEditor = ({ value, ariaLabel, showTime = true, onChang
   };
   return <div className={`workspace-datetime-editor ${showTime ? '' : 'is-date-only'}`} role="group" aria-label={ariaLabel}>
     <div className="workspace-datetime-wheel-row" aria-label="日期">
-      <WheelPicker label="年" value={parts.year} options={range(Math.min(currentYear - 100, parts.year - 2), Math.max(currentYear + 100, parts.year + 2))} onChange={(next) => updatePart('year', next)} onCenterClick={() => { setYearDraft(String(parts.year)); setEditingYear(true); }} centerEditor={editingYear ? <input autoFocus aria-label="輸入年份" className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={commitYear} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(); } if (event.key === 'Escape') { setYearDraft(String(parts.year)); setEditingYear(false); } }} /> : undefined} />
+      <WheelPicker label="年" value={parts.year} options={range(Math.max(1, Math.min(currentYear - 100, parts.year - 2)), Math.min(9999, Math.max(currentYear + 100, parts.year + 2)))} onChange={(next) => updatePart('year', next)} onCenterClick={() => { setYearDraft(String(parts.year)); setEditingYear(true); }} centerEditor={editingYear ? <input autoFocus aria-label="輸入年份" className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={commitYear} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(); } if (event.key === 'Escape') { setYearDraft(String(parts.year)); setEditingYear(false); } }} /> : undefined} />
       <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop onChange={(next) => updatePart('month', next)} />
       <WheelPicker label="日" value={parts.day} options={range(1, daysInMonth)} loop onChange={(next) => updatePart('day', next)} />
     </div>
@@ -285,7 +307,65 @@ export const LinkInputDialog = ({ owner = 'cell-editor', column, value, onDelete
     </div>
   </WorkspaceModal>;
 };
-export const HeaderFilterDialog = ({ label, inputType, options, numericValues, state, onClose, onSort, onToggle, onSelectAll, onClearAll, onQuery, onRange, onAggregate }: { label: string; inputType?: WorkspaceInputType; options: HeaderFilterOption[]; numericValues: number[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void; onQuery(query: string): void; onRange(min: string, max: string): void; onAggregate(aggregate: HeaderFilterAggregate): void }) => {
+const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilterState; onApply(min: string, max: string, precision: DateFilterPrecision): void; onClear(): void }) => {
+  const now = new Date();
+  const today = { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
+  const [precision, setPrecision] = useState<DateFilterPrecision>(state.datePrecision ?? (state.min || state.max ? 'day' : 'month'));
+  const [start, setStart] = useState<DateFilterParts>(() => dateFilterParts(state.min, today));
+  const [end, setEnd] = useState<DateFilterParts>(() => dateFilterParts(state.max, today));
+  const [startEnabled, setStartEnabled] = useState(() => Boolean(state.min) || !state.max);
+  const [endEnabled, setEndEnabled] = useState(() => Boolean(state.max) || !state.min);
+  const [editingYear, setEditingYear] = useState<'start' | 'end' | null>(null);
+  const [yearDraft, setYearDraft] = useState('');
+  const hasRange = Boolean(state.min || state.max);
+  const hasLegacyMonths = state.includedKeys !== null && !hasRange;
+  const currentYear = now.getFullYear();
+  const setPart = (endpoint: 'start' | 'end', key: keyof DateFilterParts, value: number) => {
+    const setter = endpoint === 'start' ? setStart : setEnd;
+    setter((current) => {
+      const next = { ...current, [key]: value };
+      next.day = Math.min(next.day, dateFilterDaysInMonth(next.year, next.month));
+      return next;
+    });
+  };
+  const commitYear = (endpoint: 'start' | 'end') => {
+    const year = Number(yearDraft);
+    setEditingYear(null);
+    if (Number.isInteger(year) && year >= 1 && year <= 9999) setPart(endpoint, 'year', year);
+  };
+  const choosePrecision = (next: DateFilterPrecision) => {
+    if (next === precision) return;
+    if (precision === 'year' && next !== 'year') {
+      setStart((current) => ({ ...current, month: 1, day: 1 }));
+      setEnd((current) => ({ ...current, month: 12, day: 31 }));
+    } else if (precision === 'month' && next === 'day') {
+      setStart((current) => ({ ...current, day: 1 }));
+      setEnd((current) => ({ ...current, day: dateFilterDaysInMonth(current.year, current.month) }));
+    }
+    setPrecision(next);
+  };
+  const minimum = startEnabled ? dateFilterBoundary(start, precision, false) : '';
+  const maximum = endEnabled ? dateFilterBoundary(end, precision, true) : '';
+  const invalidRange = Boolean(minimum && maximum && minimum > maximum);
+  const wheelRow = (endpoint: 'start' | 'end', parts: DateFilterParts, enabled: boolean) => <div className="workspace-datetime-wheel-row" role="group" aria-label={`${endpoint === 'start' ? '開始' : '結束'}日期`}>
+    <WheelPicker label="年" value={parts.year} options={range(Math.max(1, Math.min(currentYear - 100, parts.year - 2)), Math.min(9999, Math.max(currentYear + 100, parts.year + 2)))} disabled={!enabled} onChange={(value) => setPart(endpoint, 'year', value)} onCenterClick={() => { setEditingYear(endpoint); setYearDraft(String(parts.year)); }} centerEditor={editingYear === endpoint ? <input autoFocus aria-label={`輸入${endpoint === 'start' ? '開始' : '結束'}年份`} className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={() => commitYear(endpoint)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(endpoint); } if (event.key === 'Escape') { setEditingYear(null); } }} /> : undefined} />
+    <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop disabled={!enabled || precision === 'year'} onChange={(value) => setPart(endpoint, 'month', value)} />
+    <WheelPicker label="日" value={parts.day} options={range(1, dateFilterDaysInMonth(parts.year, parts.month))} loop disabled={!enabled || precision !== 'day'} onChange={(value) => setPart(endpoint, 'day', value)} />
+  </div>;
+  return <div className="workspace-date-filter-editor">
+    <div className="workspace-date-filter-precision" role="group" aria-label="日期篩選精度">
+      {(['year', 'month', 'day'] as const).map((item, index) => <button key={item} type="button" className={(['year', 'month', 'day'] as const).indexOf(precision) >= index ? 'is-filled' : ''} aria-pressed={precision === item} onClick={() => choosePrecision(item)}><span>{item === 'year' ? '年' : item === 'month' ? '月' : '日'}</span><span className="workspace-date-filter-precision-segment" aria-hidden="true" /></button>)}
+    </div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3><button type="button" aria-label="不限開始日期" aria-pressed={!startEnabled} onClick={() => setStartEnabled((current) => !current)}>不限</button></div>{wheelRow('start', start, startEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3><button type="button" aria-label="不限結束日期" aria-pressed={!endEnabled} onClick={() => setEndEnabled((current) => !current)}>不限</button></div>{wheelRow('end', end, endEnabled)}</div>
+    {hasLegacyMonths && <p className="workspace-date-filter-note">先前選取的年月仍在篩選中；套用新範圍或清除後會取代它。</p>}
+    {!hasRange && !hasLegacyMonths && <p className="workspace-date-filter-note">目前未設定日期範圍</p>}
+    {invalidRange && <p className="workspace-date-filter-error" role="alert">結束日期須晚於開始日期</p>}
+    <div className="workspace-date-filter-actions"><button type="button" onClick={() => { setStartEnabled(true); setEndEnabled(true); onClear(); }}>清除範圍</button><button type="button" className="primary" disabled={invalidRange} onClick={() => onApply(minimum, maximum, precision)}>套用範圍</button></div>
+  </div>;
+};
+
+export const HeaderFilterDialog = ({ label, inputType, options, numericValues, state, onClose, onSort, onToggle, onSelectAll, onClearAll, onQuery, onRange, onDateRange, onClearDate, onAggregate }: { label: string; inputType?: WorkspaceInputType; options: HeaderFilterOption[]; numericValues: number[]; state: HeaderFilterState; onClose(): void; onSort(direction: 'asc' | 'desc'): void; onToggle(key: string): void; onSelectAll(): void; onClearAll(): void; onQuery(query: string): void; onRange(min: string, max: string): void; onDateRange(min: string, max: string, precision: DateFilterPrecision): void; onClearDate(): void; onAggregate(aggregate: HeaderFilterAggregate): void }) => {
   const [optionQuery, setOptionQuery] = useState('');
   const isText = inputType === 'text';
   const isNumber = inputType === 'number';
@@ -299,7 +379,7 @@ export const HeaderFilterDialog = ({ label, inputType, options, numericValues, s
   const aggregateValue = numericValues.length
     ? aggregate === 'sum' ? numericValues.reduce((total, value) => total + value, 0) : numericValues.reduce((total, value) => total + value, 0) / numericValues.length
     : undefined;
-  return <WorkspaceModal owner="filter" title={`篩選 ${label}`} onRequestClose={onClose} className="workspace-filter-dialog">
+  return <WorkspaceModal owner="filter" title={`篩選 ${label}`} onRequestClose={onClose} className={`workspace-filter-dialog${isDate ? ' workspace-date-filter-dialog' : ''}`}>
     <div className="workspace-filter-sort" role="group" aria-label={`排序 ${label}`}>
       <button type="button" className={state.sort === 'asc' ? 'selected' : ''} onClick={() => onSort('asc')}><WorkspaceIcon name="up" size={18} />升冪</button>
       <button type="button" className={state.sort === 'desc' ? 'selected' : ''} onClick={() => onSort('desc')}><WorkspaceIcon name="down" size={18} />降冪</button>
@@ -318,18 +398,7 @@ export const HeaderFilterDialog = ({ label, inputType, options, numericValues, s
       </div>
       <p className="workspace-filter-result-count">目前符合 {numericValues.length} 筆</p>
     </>}
-    {isDate && <>
-      <div className="workspace-filter-date-range" role="group" aria-label={`${label}日期範圍`}>
-        <label>開始日期<input type="date" aria-label={`${label}開始日期`} value={state.min ?? ''} onChange={(event) => onRange(event.target.value, state.max ?? '')} /></label>
-        <span aria-hidden="true">至</span>
-        <label>結束日期<input type="date" aria-label={`${label}結束日期`} value={state.max ?? ''} onChange={(event) => onRange(state.min ?? '', event.target.value)} /></label>
-      </div>
-      <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部年月</button><button type="button" onClick={onClearAll}>清除年月</button></div>
-      <div className="workspace-filter-options" role="group" aria-label={`${label}年月篩選`}>
-        {visibleOptions.map((option) => <label key={option.key}><input type="checkbox" aria-label={option.label} checked={selected === null || selected.has(option.key)} onChange={() => onToggle(option.key)} /><span>{option.label}</span><span className="workspace-filter-option-count">{option.count}</span></label>)}
-        {!visibleOptions.length && <p>沒有日期資料</p>}
-      </div>
-    </>}
+    {isDate && <DateRangeFilterEditor state={state} onApply={onDateRange} onClear={onClearDate} />}
     {!isText && !isNumber && !isDate && <>
       <label className="workspace-filter-search"><WorkspaceIcon name="search" size={19} /><span className="sr-only">搜尋{label}的值</span><input type="search" aria-label={`搜尋${label}的值`} value={optionQuery} onChange={(event) => setOptionQuery(event.target.value)} /></label>
       <div className="workspace-filter-selection-actions"><button type="button" onClick={onSelectAll}>全部</button><button type="button" onClick={onClearAll}>清除</button></div>

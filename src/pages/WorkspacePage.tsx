@@ -22,6 +22,7 @@ import { GoogleDriveBackupDialog } from '../workspace/googleDriveBackup/GoogleDr
 import { useWorkspaceGoogleDriveBackup } from '../workspace/googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
 import { WorkspaceQuickActionPanel } from '../workspace/WorkspaceQuickActionPanel';
+import { formatDateFilterBound } from '../workspace/dateFilter';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const workspaceLineLimitStyle = (column: WorkspaceColumn) => ({ '--workspace-line-limit': column.lineLimit ? String(column.lineLimit) : undefined } as React.CSSProperties);
@@ -41,8 +42,8 @@ const workspaceFilterSummary = (state?: HeaderFilterState) => {
   const parts: string[] = [];
   const query = state.query?.trim();
   if (query) parts.push(`含「${query}」`);
-  if (state.min?.trim() || state.max?.trim()) parts.push(`${state.min?.trim() || '-∞'}～${state.max?.trim() || '+∞'}`);
-  if (state.includedKeys !== null) {
+  if (state.min?.trim() || state.max?.trim()) parts.push(state.datePrecision ? `${formatDateFilterBound(state.min, state.datePrecision) || '不限'}～${formatDateFilterBound(state.max, state.datePrecision) || '不限'}` : `${state.min?.trim() || '-∞'}～${state.max?.trim() || '+∞'}`);
+  if (state.includedKeys !== null && !(state.min?.trim() || state.max?.trim())) {
     const selected = state.includedKeys.map(workspaceFilterKeyLabel);
     parts.push(selected.length ? `${selected.slice(0, 2).join('、')}${selected.length > 2 ? '…' : ''}` : '無結果');
   }
@@ -347,7 +348,7 @@ const WorkspacePage = () => {
     headerFilters, filterTarget, setFilterTarget, clearFilters,
     searchedRows, filteredRows, visibleColumns,
     activeFilterState, activeFilterOptions, activeFilterInputType, activeNumericValues,
-    setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveFilterAggregate, toggleActiveFilterOption,
+    setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveDateRange, clearActiveDateRange, setActiveFilterAggregate, toggleActiveFilterOption,
     updateActiveFilter, isHeaderFilterActive, viewStateReady, scrollPosition, setScrollPosition
   } = useWorkspaceFilter({ table, rowHeader, tableRowsById });
 
@@ -1144,7 +1145,7 @@ const WorkspacePage = () => {
     {movingNode && <MoveNodeDialog node={movingNode} data={data} onClose={() => setMovingNode(undefined)} onMove={(parentId) => relocateNode(movingNode, parentId)} />}
      {columnVisibilityOpen && table && <ColumnVisibilityDialog columns={table.columns} onClose={() => setColumnVisibilityOpen(false)} onToggle={toggleColumnVisibility} />}
     {bottomNavigationDraft !== undefined && <WorkspaceBottomNavigationDialog tables={navigationTables} tableIds={bottomNavigationDraft} onChange={setBottomNavigationDraft} onClose={closeBottomNavigationDialog} />}
-    {filterTarget && <HeaderFilterDialog label={filterTarget.label} inputType={activeFilterInputType} options={activeFilterOptions} numericValues={activeNumericValues} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} onQuery={setActiveFilterQuery} onRange={setActiveFilterRange} onAggregate={setActiveFilterAggregate} />}
+    {filterTarget && <HeaderFilterDialog key={`${filterTarget.axis}:${filterTarget.id}`} label={filterTarget.label} inputType={activeFilterInputType} options={activeFilterOptions} numericValues={activeNumericValues} state={activeFilterState} onClose={() => setFilterTarget(undefined)} onSort={setActiveFilterSort} onToggle={toggleActiveFilterOption} onSelectAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: null }))} onClearAll={() => updateActiveFilter((state) => ({ ...state, includedKeys: [] }))} onQuery={setActiveFilterQuery} onRange={setActiveFilterRange} onDateRange={setActiveDateRange} onClearDate={clearActiveDateRange} onAggregate={setActiveFilterAggregate} />}
     {tableCreateParentId !== undefined && <TableCreateDialog onClose={() => setTableCreateParentId(undefined)} onCreate={() => { const parentId = tableCreateParentId; setTableCreateParentId(undefined); addTable(parentId); }} onImport={() => { importTableParentId.current = tableCreateParentId; chooseImport('table'); }} />}
     {nameDialog && <NameDialog state={nameDialog} onClose={() => setNameDialog(undefined)} onSubmit={submitName} onDelete={nameDialog.row ? () => { const row = nameDialog.row!; setNameDialog(undefined); askDeleteRow(row, table?.rows.findIndex((item) => item.id === row.id) ?? 0); } : undefined} />}
     {confirmDialog && <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} onClose={() => setConfirmDialog(undefined)} onConfirm={confirmDialog.onConfirm} />}

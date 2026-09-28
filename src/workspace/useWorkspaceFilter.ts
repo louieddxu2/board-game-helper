@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
+import type { DateFilterPrecision } from './dateFilter';
 import { displayWorkspaceCellValue, formatWorkspaceDateMonth, parseMultiSelectValues, workspaceCellColor, workspaceDateMonthKey, workspaceOptionColor } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
 import { loadWorkspaceTableViewState, saveWorkspaceTableViewState } from './viewState';
@@ -168,6 +169,8 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
   };
   const setActiveFilterQuery = (query: string) => updateActiveFilter((state) => ({ ...state, query }));
   const setActiveFilterRange = (min: string, max: string) => updateActiveFilter((state) => ({ ...state, min, max }));
+  const setActiveDateRange = (min: string, max: string, datePrecision: DateFilterPrecision) => updateActiveFilter((state) => ({ ...state, min, max, datePrecision, includedKeys: null }));
+  const clearActiveDateRange = () => updateActiveFilter((state) => ({ ...state, min: '', max: '', includedKeys: null }));
   const setActiveFilterAggregate = (aggregate: HeaderFilterAggregate) => updateActiveFilter((state) => ({ ...state, aggregate }));
   const toggleActiveFilterOption = (key: string) => updateActiveFilter((state) => {
     const selected = state.includedKeys === null ? new Set(activeFilterOptions.map((option) => option.key)) : new Set(state.includedKeys);
@@ -189,7 +192,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     headerFilters, setHeaderFilters, filterTarget, setFilterTarget,
     searchedRows, filteredRows, visibleColumns, clearFilters,
     activeFilterKey, activeFilterState, activeFilterOptions, activeFilterInputType, activeNumericValues,
-    setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveFilterAggregate, toggleActiveFilterOption,
+    setActiveFilterSort, setActiveFilterQuery, setActiveFilterRange, setActiveDateRange, clearActiveDateRange, setActiveFilterAggregate, toggleActiveFilterOption,
     updateActiveFilter, isHeaderFilterActive,
     viewStateReady: Boolean(table && viewTableId === table.id), scrollPosition, setScrollPosition
   };

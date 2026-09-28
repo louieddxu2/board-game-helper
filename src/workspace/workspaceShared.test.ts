@@ -237,4 +237,11 @@ describe('workspace date filters', () => {
     expect(matchesWorkspaceFilter('2024-03-01T00:00:00+08:00', 'datetime', state)).toBe(false);
     expect(matchesWorkspaceFilter(null, 'datetime', state)).toBe(false);
   });
+
+  it('uses a date range instead of an older selected-month restriction', () => {
+    const state = { includedKeys: ['date-month:2024-01'], sort: null, min: '2024-03-01', max: '2024-03-31', datePrecision: 'month' as const };
+
+    expect(matchesWorkspaceFilter('2024-03-15T12:00:00+08:00', 'datetime', state)).toBe(true);
+    expect(matchesWorkspaceFilter('2024-01-15T12:00:00+08:00', 'datetime', state)).toBe(false);
+  });
 });
