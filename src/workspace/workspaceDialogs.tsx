@@ -317,7 +317,8 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
   const [start, setStart] = useState<DateFilterParts>(() => dateFilterParts(state.min, today));
   const [end, setEnd] = useState<DateFilterParts>(() => dateFilterParts(state.max, today));
   const [startEnabled, setStartEnabled] = useState(() => Boolean(state.min) || !state.max);
-  const [endEnabled, setEndEnabled] = useState(() => Boolean(state.max) || !state.min);
+  // An absent max has never been set; an empty max alongside a min is an explicit open end.
+  const [endEnabled, setEndEnabled] = useState(() => state.max !== '' || !state.min);
   const [editingYear, setEditingYear] = useState<'start' | 'end' | null>(null);
   const [yearDraft, setYearDraft] = useState('');
   const hasRange = Boolean(state.min || state.max);
@@ -347,6 +348,14 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
     }
     setPrecision(next);
   };
+  const clearRange = () => {
+    setStart(today);
+    setEnd(today);
+    setStartEnabled(true);
+    setEndEnabled(true);
+    setPrecision('day');
+    onClear();
+  };
   const minimum = startEnabled ? dateFilterBoundary(start, precision, false) : '';
   const maximum = endEnabled ? dateFilterBoundary(end, precision, true) : '';
   const invalidRange = Boolean(minimum && maximum && minimum > maximum);
@@ -364,7 +373,7 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
     {hasLegacyMonths && <p className="workspace-date-filter-note">先前選取的年月仍在篩選中；套用新範圍或清除後會取代它。</p>}
     {!hasRange && !hasLegacyMonths && <p className="workspace-date-filter-note">目前未設定日期範圍</p>}
     {invalidRange && <p className="workspace-date-filter-error" role="alert">結束日期須晚於開始日期</p>}
-    <div className="workspace-date-filter-actions"><button type="button" onClick={() => { setStartEnabled(true); setEndEnabled(true); onClear(); }}>清除範圍</button><button type="button" className="primary" disabled={invalidRange} onClick={() => onApply(minimum, maximum, precision)}>套用範圍</button></div>
+    <div className="workspace-date-filter-actions"><button type="button" onClick={clearRange}>清除範圍</button><button type="button" className="primary" disabled={invalidRange} onClick={() => onApply(minimum, maximum, precision)}>套用範圍</button></div>
   </div>;
 };
 

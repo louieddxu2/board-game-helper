@@ -26,6 +26,37 @@ describe('workspace date range filter', () => {
     expect(within(end).getByRole('listbox', { name: '日' }).querySelector('button.selected')).toHaveTextContent(String(today.getDate()));
   });
 
+  it('uses today for an unset end date even when a start date already exists', () => {
+    const today = new Date();
+    const expectedToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const { onDateRange } = renderDateFilter({ includedKeys: null, sort: null, min: '2024-01-01' });
+    const end = screen.getByRole('group', { name: '結束日期' });
+
+    expect(within(end).getByRole('listbox', { name: '年' }).querySelector('button.selected')).toHaveTextContent(String(today.getFullYear()));
+    expect(within(end).getByRole('listbox', { name: '月' }).querySelector('button.selected')).toHaveTextContent(String(today.getMonth() + 1));
+    expect(within(end).getByRole('listbox', { name: '日' }).querySelector('button.selected')).toHaveTextContent(String(today.getDate()));
+    fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
+    expect(onDateRange).toHaveBeenCalledWith('2024-01-01', expectedToday, 'day');
+  });
+
+  it('restores today after a date range has been cleared', () => {
+    renderDateFilter({ includedKeys: null, sort: null, min: '', max: '' });
+    const end = screen.getByRole('group', { name: '結束日期' });
+    expect(within(end).getByRole('listbox', { name: '日' }).querySelector('button.selected')).toHaveTextContent(String(new Date().getDate()));
+  });
+
+  it('returns to day precision and today immediately when clearing an existing range', () => {
+    const { onClearDate } = renderDateFilter({ includedKeys: null, sort: null, min: '2024-01-01', max: '2024-12-31', datePrecision: 'year' });
+    fireEvent.click(screen.getByRole('button', { name: '清除範圍' }));
+
+    const end = screen.getByRole('group', { name: '結束日期' });
+    expect(screen.getByRole('button', { name: '日' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(end).getByRole('listbox', { name: '年' }).querySelector('button.selected')).toHaveTextContent(String(new Date().getFullYear()));
+    expect(within(end).getByRole('listbox', { name: '月' }).querySelector('button.selected')).toHaveTextContent(String(new Date().getMonth() + 1));
+    expect(within(end).getByRole('listbox', { name: '日' }).querySelector('button.selected')).toHaveTextContent(String(new Date().getDate()));
+    expect(onClearDate).toHaveBeenCalledTimes(1);
+  });
+
   it('extends a month range through its final day, including leap February', () => {
     expect(dateFilterBoundary({ year: 2024, month: 2, day: 12 }, 'month', true)).toBe('2024-02-29');
     expect(dateFilterBoundary({ year: 2025, month: 2, day: 12 }, 'month', true)).toBe('2025-02-28');

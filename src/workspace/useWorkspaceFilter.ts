@@ -170,7 +170,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
   const setActiveFilterQuery = (query: string) => updateActiveFilter((state) => ({ ...state, query }));
   const setActiveFilterRange = (min: string, max: string) => updateActiveFilter((state) => ({ ...state, min, max }));
   const setActiveDateRange = (min: string, max: string, datePrecision: DateFilterPrecision) => updateActiveFilter((state) => ({ ...state, min, max, datePrecision, includedKeys: null }));
-  const clearActiveDateRange = () => updateActiveFilter((state) => ({ ...state, min: '', max: '', includedKeys: null }));
+  const clearActiveDateRange = () => updateActiveFilter((state) => ({ ...state, min: '', max: '', datePrecision: undefined, includedKeys: null }));
   const setActiveFilterAggregate = (aggregate: HeaderFilterAggregate) => updateActiveFilter((state) => ({ ...state, aggregate }));
   const toggleActiveFilterOption = (key: string) => updateActiveFilter((state) => {
     const selected = state.includedKeys === null ? new Set(activeFilterOptions.map((option) => option.key)) : new Set(state.includedKeys);
