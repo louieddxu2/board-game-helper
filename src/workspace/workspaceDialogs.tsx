@@ -310,7 +310,7 @@ export const LinkInputDialog = ({ owner = 'cell-editor', column, value, onDelete
 const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilterState; onApply(min: string, max: string, precision: DateFilterPrecision): void; onClear(): void }) => {
   const now = new Date();
   const today = { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
-  const [precision, setPrecision] = useState<DateFilterPrecision>(state.datePrecision ?? (state.min || state.max ? 'day' : 'month'));
+  const [precision, setPrecision] = useState<DateFilterPrecision>(state.datePrecision ?? 'day');
   const [start, setStart] = useState<DateFilterParts>(() => dateFilterParts(state.min, today));
   const [end, setEnd] = useState<DateFilterParts>(() => dateFilterParts(state.max, today));
   const [startEnabled, setStartEnabled] = useState(() => Boolean(state.min) || !state.max);
@@ -356,8 +356,8 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
     <div className="workspace-date-filter-precision" role="group" aria-label="日期篩選精度">
       {(['year', 'month', 'day'] as const).map((item, index) => <button key={item} type="button" className={(['year', 'month', 'day'] as const).indexOf(precision) >= index ? 'is-filled' : ''} aria-pressed={precision === item} onClick={() => choosePrecision(item)}><span>{item === 'year' ? '年' : item === 'month' ? '月' : '日'}</span><span className="workspace-date-filter-precision-segment" aria-hidden="true" /></button>)}
     </div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3><button type="button" aria-label="不限開始日期" aria-pressed={!startEnabled} onClick={() => setStartEnabled((current) => !current)}>不限</button></div>{wheelRow('start', start, startEnabled)}</div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3><button type="button" aria-label="不限結束日期" aria-pressed={!endEnabled} onClick={() => setEndEnabled((current) => !current)}>不限</button></div>{wheelRow('end', end, endEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3><button type="button" aria-pressed={!startEnabled} onClick={() => setStartEnabled((current) => !current)}>{startEnabled ? '不設開始日期' : '設定開始日期'}</button></div>{wheelRow('start', start, startEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3><button type="button" aria-pressed={!endEnabled} onClick={() => setEndEnabled((current) => !current)}>{endEnabled ? '不設結束日期' : '設定結束日期'}</button></div>{wheelRow('end', end, endEnabled)}</div>
     {hasLegacyMonths && <p className="workspace-date-filter-note">先前選取的年月仍在篩選中；套用新範圍或清除後會取代它。</p>}
     {!hasRange && !hasLegacyMonths && <p className="workspace-date-filter-note">目前未設定日期範圍</p>}
     {invalidRange && <p className="workspace-date-filter-error" role="alert">結束日期須晚於開始日期</p>}

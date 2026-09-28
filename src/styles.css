@@ -435,11 +435,12 @@ footer a { color: inherit; }
 .workspace-date-filter-precision-segment { height: 6px; border-radius: 999px; background: rgba(22,53,47,.16); }
 .workspace-date-filter-precision .is-filled .workspace-date-filter-precision-segment { background: var(--orange); }
 .workspace-date-filter-precision button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-.workspace-date-filter-bound { display: grid; gap: 3px; padding: 5px 8px 3px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,253,248,.45); }
-.workspace-date-filter-bound-heading { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
-.workspace-date-filter-bound h3 { margin: 0; color: var(--green); font-size: 13px; font-weight: 800; }
-.workspace-date-filter-bound-heading button { min-height: 22px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.workspace-date-filter-bound { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,253,248,.45); }
+.workspace-date-filter-bound-heading { display: flex; align-items: center; justify-content: space-between; min-height: 20px; padding: 2px 8px; border-radius: 7px 7px 0 0; background: rgba(47,111,94,.09); }
+.workspace-date-filter-bound h3 { margin: 0; color: var(--green); font-size: 12px; font-weight: 800; line-height: 1.2; }
+.workspace-date-filter-bound-heading button { min-height: 20px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 11px; }
 .workspace-date-filter-bound-heading button[aria-pressed="true"] { background: var(--green); color: var(--white); }
+.workspace-date-filter-bound .workspace-datetime-wheel-row { padding: 2px 8px 3px; }
 .workspace-date-filter-note, .workspace-date-filter-error { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .workspace-date-filter-error { color: #a52f23; }
 .workspace-date-filter-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

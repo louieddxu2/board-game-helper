@@ -15,6 +15,17 @@ const renderDateFilter = (state: HeaderFilterState) => {
 };
 
 describe('workspace date range filter', () => {
+  it('starts at day precision and shows today as the initial end date', () => {
+    const today = new Date();
+    renderDateFilter({ includedKeys: null, sort: null });
+    const end = screen.getByRole('group', { name: '結束日期' });
+
+    expect(screen.getByRole('button', { name: '日' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(end).getByRole('listbox', { name: '年' }).querySelector('button.selected')).toHaveTextContent(String(today.getFullYear()));
+    expect(within(end).getByRole('listbox', { name: '月' }).querySelector('button.selected')).toHaveTextContent(String(today.getMonth() + 1));
+    expect(within(end).getByRole('listbox', { name: '日' }).querySelector('button.selected')).toHaveTextContent(String(today.getDate()));
+  });
+
   it('extends a month range through its final day, including leap February', () => {
     expect(dateFilterBoundary({ year: 2024, month: 2, day: 12 }, 'month', true)).toBe('2024-02-29');
     expect(dateFilterBoundary({ year: 2025, month: 2, day: 12 }, 'month', true)).toBe('2025-02-28');
@@ -45,7 +56,7 @@ describe('workspace date range filter', () => {
     expect(screen.queryByDisplayValue('2024-03')).not.toBeInTheDocument();
     expect(document.querySelector('input[type="date"]')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
-    expect(onDateRange).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-01$/), expect.any(String), 'month');
+    expect(onDateRange).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), expect.any(String), 'day');
     fireEvent.click(screen.getByRole('button', { name: '清除範圍' }));
     expect(onClearDate).toHaveBeenCalledTimes(1);
   });
@@ -65,9 +76,12 @@ describe('workspace date range filter', () => {
 
   it('preserves an open-ended date range', () => {
     const { onDateRange } = renderDateFilter({ includedKeys: null, sort: null, min: '2024-03-01', max: '', datePrecision: 'month' });
-    expect(screen.getByRole('button', { name: '不限結束日期' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '設定結束日期' })).toHaveAttribute('aria-pressed', 'true');
     const end = screen.getByRole('group', { name: '結束日期' });
     expect(within(end).getByRole('group', { name: '年未啟用' })).toHaveTextContent('－');
+    fireEvent.click(screen.getByRole('button', { name: '設定結束日期' }));
+    expect(screen.getByRole('button', { name: '不設結束日期' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: '不設結束日期' }));
     fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
     expect(onDateRange).toHaveBeenCalledWith('2024-03-01', '', 'month');
   });
