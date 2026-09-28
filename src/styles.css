@@ -222,6 +222,9 @@ footer a { color: inherit; }
 .workspace-table.is-bouncing.is-bounce-x tbody td { transform: translate3d(var(--workspace-bounce-x, 0px), var(--workspace-table-body-offset, 0px), 0); }
 .workspace-table.is-bouncing.is-bounce-y tbody th[scope="row"], .workspace-table.is-bouncing.is-bounce-y tbody td { transform: translate3d(0, calc(var(--workspace-bounce-y, 0px) + var(--workspace-table-body-offset, 0px)), 0); }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; padding: 2px 3px; border-right: 1px solid var(--workspace-grid-line); border-bottom: 1px solid var(--workspace-grid-line); vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
+.workspace-table .workspace-virtual-spacer td { padding: 0; border: 0; line-height: 0; pointer-events: none; }
+.workspace-table .workspace-virtual-column-spacer { padding: 0; border: 0; pointer-events: none; }
+.workspace-load-error button { margin-left: 4px; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 6; cursor: pointer; background: var(--cream); color: var(--green); font-size: inherit; font-weight: 700; }
 .workspace-toolbar-layer .workspace-table { --workspace-table-header-offset: calc(var(--workspace-toolbar-row-height) * var(--workspace-toolbar-row-count)); }
 .workspace-toolbar-layer .workspace-table thead th { top: 0; transform: translate3d(0, var(--workspace-table-header-offset, 0px), 0); }

@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
 import { WorkspacePage } from './WorkspacePage';
 
-vi.mock('../workspace/db', () => ({
-  loadWorkspace: async () => ({
+vi.mock('../workspace/db', () => {
+  const loadWorkspace = async () => ({
     version: 1,
     activeNodeId: 'node-table',
     nodes: [{ id: 'node-table', type: 'table', name: '測試表格', parentId: null, order: 0, tableId: 'table-1' }],
@@ -14,7 +14,10 @@ vi.mock('../workspace/db', () => ({
       columns: [{ id: 'column-text', name: '名稱', inputType: 'text', options: [] }],
       rows: [{ id: 'row-1', name: '花火', values: { 'column-text': null } }],
     }],
-  }),
+  });
+  return {
+  loadWorkspace,
+  loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true }),
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
   saveWorkspaceHistory: vi.fn(async () => undefined),
@@ -22,7 +25,8 @@ vi.mock('../workspace/db', () => ({
   clearAllWorkspaceHistories: vi.fn(async () => undefined),
   deleteWorkspaceHistories: vi.fn(async () => undefined),
   flushWorkspaceSaves: vi.fn(async () => undefined),
-}));
+};
+});
 
 beforeEach(() => window.localStorage.clear());
 afterEach(() => cleanup());

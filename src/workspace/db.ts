@@ -72,11 +72,29 @@ export const loadWorkspace = async (): Promise<WorkspaceData> => {
   return loaded;
 };
 
-export const saveWorkspace = (data: WorkspaceData) => {
+/** Read only the active table for the first paint. Other tables hydrate after it. */
+export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; complete: boolean }> => {
+  if (!database) return { data: emptyWorkspace(), complete: true };
+  await saveQueue.catch(() => undefined);
+  const db = await database;
+  const meta = await db.get('meta', META_KEY);
+  const active = meta?.nodes.find((node) => node.id === meta.activeNodeId && node.type === 'table');
+  if (!meta || !active?.tableId) return { data: await loadWorkspace(), complete: true };
+  const table = await db.get('tables', active.tableId);
+  if (!table) return { data: await loadWorkspace(), complete: true };
+  const normalized = normalizeWorkspace({ ...meta, tables: [table] });
+  // Normalization filters pins by loaded tables; retain metadata until the rest hydrate.
+  const data = { ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
+  savedTables = new Map(data.tables.map((item) => [item.id, item]));
+  savedTableSignatures = new Map();
+  return { data, complete: false };
+};
+
+export const saveWorkspace = (data: WorkspaceData, options?: { partial?: boolean }) => {
   if (!database) return Promise.resolve();
   const pending = saveQueue.catch(() => undefined).then(async () => {
     const db = await database;
-    const storedIds = (await db.getAllKeys('tables')).map(String);
+    const storedIds = options?.partial ? [] : (await db.getAllKeys('tables')).map(String);
     const changedTables = data.tables.filter((table) => savedTables.get(table.id) !== table);
     for (const table of changedTables) {
       const previous = savedTables.get(table.id);
@@ -84,7 +102,7 @@ export const saveWorkspace = (data: WorkspaceData) => {
     }
     const changedPlan = createWorkspaceStoragePlan({ ...data, tables: changedTables }, savedTableSignatures, []);
     const currentIds = new Set(data.tables.map((table) => table.id));
-    const plan = { ...changedPlan, deletes: storedIds.filter((id) => !currentIds.has(id)) };
+    const plan = { ...changedPlan, deletes: options?.partial ? [] : storedIds.filter((id) => !currentIds.has(id)) };
     const transaction = db.transaction(['meta', 'tables'], 'readwrite');
     await transaction.objectStore('meta').put(plan.meta, META_KEY);
     await Promise.all([
@@ -94,7 +112,9 @@ export const saveWorkspace = (data: WorkspaceData) => {
     await transaction.done;
     for (const [id, signature] of plan.signatures) savedTableSignatures.set(id, signature);
     for (const id of plan.deletes) savedTableSignatures.delete(id);
-    savedTables = new Map(data.tables.map((table) => [table.id, table]));
+    savedTables = options?.partial
+      ? new Map([...savedTables, ...data.tables.map((table) => [table.id, table] as const)])
+      : new Map(data.tables.map((table) => [table.id, table]));
   });
   saveQueue = pending;
   return pending;

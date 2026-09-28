@@ -415,6 +415,6 @@ describe('workspace browser policies', () => {
     expect(navigationRule).toMatch(/flex:\s*0 0 auto/);
     expect(navigationRule).toMatch(/env\(safe-area-inset-bottom/);
     expect(navigationRule).not.toMatch(/position:\s*fixed/);
-    expect(pageSource).toMatch(/!virtualKeyboardOpen && bottomNavigationItems\.length > 0/);
+    expect(pageSource).toMatch(/!virtualKeyboardOpen && allTablesReady && bottomNavigationItems\.length > 0/);
   });
 });

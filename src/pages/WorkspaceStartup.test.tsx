@@ -8,17 +8,21 @@ const db = vi.hoisted(() => ({
   saveWorkspaceHistory: vi.fn(async () => undefined), appendWorkspaceHistoryEntry: vi.fn(async (_entry: WorkspaceTableHistoryEntry) => undefined),
 }));
 vi.mock('../workspace/backgroundWork', () => ({ afterWorkspacePaint: (work: () => void) => { work(); return () => undefined; } }));
-vi.mock('../workspace/db', () => ({
-  ...db,
-  loadWorkspace: async () => ({
+vi.mock('../workspace/db', () => {
+  const loadWorkspace = async () => ({
     version: 1, activeNodeId: 'node-1', nodes: [{ id: 'node-1', type: 'table', tableId: 'table-1', name: '本機表格', parentId: null, order: 0 }],
     tables: [{ id: 'table-1', name: '本機表格', rowHeaderName: '項目', updatedAt: 1,
       columns: [{ id: 'column-1', name: '名稱', inputType: 'text', options: [] }],
       rows: [{ id: 'row-1', name: '物件', values: { 'column-1': '原值' } }],
     }],
-  }),
+  });
+  return {
+  ...db,
+  loadWorkspace,
+  loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true }),
   clearAllWorkspaceHistories: vi.fn(), deleteWorkspaceHistories: vi.fn(), flushWorkspaceSaves: vi.fn(),
-}));
+};
+});
 
 let resolveHistory: (history: Map<string, WorkspaceTableHistory>) => void;
 beforeEach(() => {
