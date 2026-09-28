@@ -135,6 +135,43 @@ test('a large offline table renders a bounded row window and retains the other t
   await expect(page.getByRole('button', { name: /測試表 7/ }).first()).toBeVisible();
 });
 
+test('variable-height rows keep visible content while scrolling and zooming', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await seed(page, 1, 250, 2);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
+    const transaction = db.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const table = await new Promise<any>((done) => { const get = store.get('table-0'); get.onsuccess = () => done(get.result); });
+    table.columns[0].overflowMode = 'wrap';
+    table.columns[0].widthLimitChars = 8;
+    table.columns[0].lineLimit = 4;
+    for (let index = 0; index < table.rows.length; index += 3) table.rows[index].values['column-0'] = '較長的多行內容 '.repeat(20);
+    store.put(table, 'table-0');
+    await new Promise<void>((done) => { transaction.oncomplete = () => done(); });
+    db.close();
+  });
+  await page.reload();
+  const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
+  await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
+  expect(await rows.first().evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(40);
+  const viewport = page.locator('.workspace-table-viewport');
+  const hasVisibleRow = () => viewport.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return [...element.querySelectorAll<HTMLTableRowElement>('tbody tr[data-virtual-row-id]')]
+      .some((row) => { const rowRect = row.getBoundingClientRect(); return rowRect.bottom > rect.top && rowRect.top < rect.bottom; });
+  });
+  for (const fraction of [0.25, 0.5, 0.75, 1]) {
+    await viewport.evaluate((element, at) => { element.scrollTop = element.scrollHeight * at; }, fraction);
+    await expect.poll(hasVisibleRow).toBe(true);
+    expect(await rows.count()).toBeLessThan(80);
+  }
+  await viewport.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 });
+  await expect(page.locator('.workspace-table')).toHaveCSS('--workspace-text-scale', '1.2');
+  await expect.poll(hasVisibleRow).toBe(true);
+});
+
 test('an edit during active-table-only loading cannot delete the tables still on disk', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
@@ -168,6 +205,53 @@ test('an edit during active-table-only loading cannot delete the tables still on
   await expect(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]')).toContainText('先改目前表格');
   await page.getByRole('button', { name: '開啟目錄' }).click();
   await expect(page.getByRole('button', { name: /測試表 7/ }).first()).toBeVisible();
+});
+
+test('an older offline tab cannot overwrite a newer table, and explicit deletion still removes it', async ({ page, context }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await waitForOfflineShell(page);
+  await seed(page);
+  await page.reload();
+  await expect(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]')).toContainText('資料 0-0');
+
+  const peer = await context.newPage();
+  await peer.goto(`${site.origin}/workspace`);
+  await expect(peer.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 0');
+  await context.setOffline(true);
+  await peer.getByRole('button', { name: '開啟目錄' }).click();
+  await peer.getByRole('button', { name: '新增表格' }).click();
+  await peer.getByRole('button', { name: '建立空白表格' }).click();
+  await peer.getByRole('textbox', { name: '表格名稱' }).fill('第二分頁新表');
+  await peer.getByRole('textbox', { name: '表格名稱' }).press('Enter');
+
+  const readStorage = () => page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
+    const transaction = db.transaction(['meta', 'tables', 'history']);
+    const read = <T>(store: IDBObjectStore, key: string) => new Promise<T>((done) => { const get = store.get(key); get.onsuccess = () => done(get.result); });
+    const meta = await read<{ storageRevision?: string; nodes: Array<{ name: string }> }>(transaction.objectStore('meta'), 'workspace');
+    const table = await read<{ rows: Array<{ values: Record<string, string> }> }>(transaction.objectStore('tables'), 'table-0');
+    const history = await read<{ past: unknown[] }>(transaction.objectStore('history'), 'table-0');
+    const keys = await new Promise<IDBValidKey[]>((done) => { const get = transaction.objectStore('tables').getAllKeys(); get.onsuccess = () => done(get.result); });
+    db.close();
+    return { revision: meta.storageRevision, names: meta.nodes.map((node) => node.name), keys: keys.length, value: table.rows[0].values['column-0'], history: history.past.length };
+  });
+  await expect.poll(async () => (await readStorage()).names).toContain('第二分頁新表');
+  const peerRevision = (await readStorage()).revision;
+
+  await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
+  const editor = page.getByRole('textbox').first();
+  await editor.fill('舊分頁編輯');
+  await editor.press('Escape');
+  await expect(page.getByRole('alert')).toContainText('另一個分頁已更新本機資料');
+  expect(await readStorage()).toEqual({ revision: peerRevision, names: ['測試表 0', '第二分頁新表'], keys: 2, value: '資料 0-0', history: 40 });
+
+  await peer.getByRole('button', { name: '開啟目錄' }).click();
+  await peer.getByRole('button', { name: '開啟第二分頁新表操作' }).click();
+  await peer.getByRole('button', { name: '刪除' }).click();
+  await peer.getByRole('button', { name: '確認' }).click();
+  await expect.poll(async () => (await readStorage()).keys).toBe(1);
+  expect((await readStorage()).names).toEqual(['測試表 0']);
 });
 
 test('a large transposed table draws only the visible object columns', async ({ page }) => {

@@ -3,7 +3,7 @@ import { createWorkspaceStoragePlan, tableStorageSignature } from './db';
 import { createTable, emptyWorkspace } from './model';
 
 describe('workspace independent table storage', () => {
-  it('writes only changed tables and removes tables no longer referenced', () => {
+  it('writes changed tables and deletes only explicitly removed tables', () => {
     const unchanged = createTable('不變');
     const changed = createTable('修改前');
     const removed = createTable('已刪除');
@@ -15,11 +15,13 @@ describe('workspace independent table storage', () => {
     const nextChanged = { ...changed, name: '修改後', updatedAt: changed.updatedAt + 1 };
     const data = { ...emptyWorkspace(), tables: [unchanged, nextChanged] };
 
-    const plan = createWorkspaceStoragePlan(data, signatures, [unchanged.id, changed.id, removed.id]);
+    const plan = createWorkspaceStoragePlan(data, signatures, [removed.id]);
 
     expect(plan.upserts.map((table) => table.id)).toEqual([changed.id]);
     expect(plan.deletes).toEqual([removed.id]);
     expect(plan.meta).not.toHaveProperty('tables');
+    expect(createWorkspaceStoragePlan(data, signatures).deletes).toEqual([]);
+    expect(createWorkspaceStoragePlan(data, signatures, [unchanged.id]).deletes).toEqual([]);
   });
 
   it('stores bottom navigation order in workspace metadata without rewriting tables', () => {

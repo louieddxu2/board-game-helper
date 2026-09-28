@@ -71,6 +71,58 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it('blocks manual and automatic uploads until local data is saved', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({
+      data: createData(),
+      backupBlockedReason: '本機資料尚未完成儲存',
+      loadGoogleClientId: async () => 'client-id',
+      onRestored: vi.fn(),
+      setNotice: vi.fn(),
+    }));
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { expect(await result.current.backup()).toBe(false); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(result.current.error).toBe('本機資料尚未完成儲存');
+    expect(mocks.backup).not.toHaveBeenCalled();
+  });
+
+  it('checks local storage freshness before an upload and reports another-tab edits', async () => {
+    const verifyCurrentData = vi.fn(async () => {
+      const error = new Error('stale');
+      error.name = 'WorkspaceStorageConflictError';
+      throw error;
+    });
+    const onStorageConflict = vi.fn();
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({
+      data: createData(),
+      verifyCurrentData,
+      onStorageConflict,
+      loadGoogleClientId: async () => 'client-id',
+      onRestored: vi.fn(),
+      setNotice: vi.fn(),
+    }));
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { expect(await result.current.backup()).toBe(false); });
+    expect(verifyCurrentData).toHaveBeenCalledTimes(1);
+    expect(onStorageConflict).toHaveBeenCalledTimes(1);
+    expect(mocks.backup).not.toHaveBeenCalled();
+  });
+
+  it('does not upload an obsolete snapshot after a newer local edit', async () => {
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({
+      data: createData(),
+      isCurrentData: () => false,
+      loadGoogleClientId: async () => 'client-id',
+      onRestored: vi.fn(),
+      setNotice: vi.fn(),
+    }));
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { expect(await result.current.backup()).toBe(false); });
+    expect(result.current.error).toContain('備份準備期間已有變更');
+    expect(mocks.backup).not.toHaveBeenCalled();
+  });
+
   it('defers fingerprint inspection until the backup drawer opens', () => {
     const savedData = createData();
     const currentData = {

@@ -20,6 +20,7 @@ vi.mock('../workspace/db', () => {
   ...db,
   loadWorkspace,
   loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true }),
+  assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   clearAllWorkspaceHistories: vi.fn(), deleteWorkspaceHistories: vi.fn(), flushWorkspaceSaves: vi.fn(),
 };
 });

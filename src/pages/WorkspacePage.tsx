@@ -1,6 +1,6 @@
 import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { appendWorkspaceHistoryEntry, clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
+import { appendWorkspaceHistoryEntry, assertWorkspaceStorageCurrent, clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
@@ -83,6 +83,7 @@ const WorkspacePage = () => {
   const [historyReady, setHistoryReady] = useState(false);
   const [allTablesReady, setAllTablesReady] = useState(false);
   const [remainingLoadError, setRemainingLoadError] = useState(false);
+  const [storageConflict, setStorageConflict] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
@@ -127,6 +128,9 @@ const WorkspacePage = () => {
   const drawerSwipeClickTargetRef = useRef<Element | null>(null);
   const drawerItemDraggingRef = useRef(false);
   const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
+
+  // Only allow full saves after the render using the complete table set has committed.
+  useLayoutEffect(() => { allTablesReadyRef.current = allTablesReady; }, [allTablesReady]);
 
   const openDrawer = useCallback(() => {
     if (!allTablesReadyRef.current) {
@@ -309,7 +313,7 @@ const WorkspacePage = () => {
       cancelHistoryLoad = afterWorkspacePaint(() => {
         const finishTables = async () => {
           if (initial.complete) return;
-          const remaining = await loadWorkspace();
+          const remaining = await loadWorkspace({ expectCurrentRevision: true });
           if (cancelled) return;
           const current = dataRef.current;
           const currentTables = new Map(current?.tables.map((table) => [table.id, table]));
@@ -318,7 +322,6 @@ const WorkspacePage = () => {
             : remaining;
           dataRef.current = merged;
           setData(merged);
-          allTablesReadyRef.current = true;
           setAllTablesReady(true);
         };
         const finish = (stored: Map<string, WorkspaceTableHistory>) => {
@@ -330,9 +333,10 @@ const WorkspacePage = () => {
           setHistoryByTable(histories);
           setHistoryReady(true);
         };
-        void finishTables().then(loadWorkspaceHistories).then(finish).catch(() => {
+        void finishTables().then(loadWorkspaceHistories).then(finish).catch((error: unknown) => {
           if (cancelled) return;
-          if (!allTablesReadyRef.current) setRemainingLoadError(true);
+          if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
+          else if (!allTablesReadyRef.current) setRemainingLoadError(true);
           else {
             setNotice('先前的復原紀錄讀取失敗，表格仍可使用');
             finish(new Map());
@@ -342,6 +346,12 @@ const WorkspacePage = () => {
     };
     void reload().catch(() => { if (!cancelled) setLoadError(true); });
     return () => { cancelled = true; cancelHistoryLoad?.(); };
+  }, []);
+
+  const reportSaveError = useCallback((error: unknown) => {
+    setSaveState('error');
+    if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
+    else setNotice('本機儲存失敗，請先匯出資料備份');
   }, []);
 
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
@@ -355,30 +365,34 @@ const WorkspacePage = () => {
       return;
     }
     const mutation = explicitMutation ?? (previous ? inferWorkspaceTableMutation(previous, next) : undefined);
-    const meaningfulChange = !previous || JSON.stringify({ nodes: previous.nodes, tables: previous.tables, bottomNavigationTableIds: previous.bottomNavigationTableIds ?? [] }) !== JSON.stringify({ nodes: next.nodes, tables: next.tables, bottomNavigationTableIds: next.bottomNavigationTableIds ?? [] });
+    const meaningfulChange = !previous
+      || previous.nodes !== next.nodes
+      || previous.tables !== next.tables
+      || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
     const committed = meaningfulChange ? { ...next, updatedAt: Date.now() } : next;
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
+    const historyWrites: Array<() => void> = [];
     setData(committed);
     dataRef.current = committed;
     if (options?.clearAllHistory) {
       historyResetRef.current.all = true;
       historyRef.current = new Map();
       setHistoryByTable(new Map());
-      void clearAllWorkspaceHistories();
+      historyWrites.push(() => { void clearAllWorkspaceHistories(); });
     } else if (options?.clearTableHistoryIds?.length) {
       options.clearTableHistoryIds.forEach((id) => historyResetRef.current.ids.add(id));
       const nextHistories = new Map(historyRef.current);
       options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      void deleteWorkspaceHistories(options.clearTableHistoryIds);
+      historyWrites.push(() => { void deleteWorkspaceHistories(options.clearTableHistoryIds!); });
     } else if (removedTableIds.length) {
       removedTableIds.forEach((id) => historyResetRef.current.ids.add(id));
       const nextHistories = new Map(historyRef.current);
       removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      void deleteWorkspaceHistories(removedTableIds);
+      historyWrites.push(() => { void deleteWorkspaceHistories(removedTableIds); });
     }
     if (mutation) {
       const currentHistory = historyRef.current.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
@@ -386,21 +400,25 @@ const WorkspacePage = () => {
       const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      if (historyReadyRef.current) void saveWorkspaceHistory(nextHistory);
-      else void appendWorkspaceHistoryEntry(nextHistory.past[nextHistory.past.length - 1]);
+      if (historyReadyRef.current) historyWrites.push(() => { void saveWorkspaceHistory(nextHistory); });
+      else historyWrites.push(() => { void appendWorkspaceHistoryEntry(nextHistory.past[nextHistory.past.length - 1]); });
     }
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
-    void (allTablesReadyRef.current ? saveWorkspace(committed) : saveWorkspace(committed, { partial: true })).then(() => {
+    const saveOptions = !allTablesReadyRef.current
+      ? { partial: true, deletedTableIds: removedTableIds }
+      : removedTableIds.length ? { deletedTableIds: removedTableIds } : undefined;
+    const save = saveOptions ? saveWorkspace(committed, saveOptions) : saveWorkspace(committed);
+    void save.then(() => {
+      historyWrites.forEach((write) => write());
       if (saveRevision !== saveRevisionRef.current) return;
       setSaveState('saved');
       setLastSavedAt(Date.now());
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (saveRevision !== saveRevisionRef.current) return;
-      setSaveState('error');
-      setNotice('本機儲存失敗，請先匯出資料備份');
+      reportSaveError(error);
     });
-  }, []);
+  }, [reportSaveError]);
 
   const table = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
@@ -482,10 +500,16 @@ const WorkspacePage = () => {
     window.localStorage.setItem(workspaceLastExportStorageKey, String(now));
   }, []);
   const backupNeedsAttention = !lastExportAt || Date.now() - lastExportAt > workspaceBackupReminderMs;
+  const noteStorageConflict = useCallback(() => setStorageConflict(true), []);
+  const isCurrentWorkspaceData = useCallback((snapshot: WorkspaceData) => dataRef.current === snapshot, []);
 
   const driveBackup = useWorkspaceGoogleDriveBackup({
     data: allTablesReady ? data : undefined,
     inspectChanges: drawerOpen,
+    backupBlockedReason: storageConflict ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟' : saveState !== 'saved' ? '本機資料尚未完成儲存，請稍後再備份' : undefined,
+    verifyCurrentData: assertWorkspaceStorageCurrent,
+    isCurrentData: isCurrentWorkspaceData,
+    onStorageConflict: noteStorageConflict,
     loadGoogleClientId: loadGoogleDriveClientId,
     onRestored: (next) => setWorkspaceImport(next),
     setNotice,
@@ -514,20 +538,21 @@ const WorkspacePage = () => {
 
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
-    const widthFor = (column: WorkspaceColumn, headerValue = column.name, values: WorkspaceCellValue[] = []) => {
+    const widthFor = (column: WorkspaceColumn, headerValue = column.name, valueForRow?: (row: WorkspaceRow) => WorkspaceCellValue) => {
       const shouldMeasureValues = column.overflowMode === 'expand' || Boolean(column.widthLimitChars);
-      const measuredValues = shouldMeasureValues ? values.map((value) => measureWorkspaceText(displayWorkspaceColumnValue(value, column), 20, 400)) : [];
-      const valueWidth = measuredValues.length ? Math.max(...measuredValues) : 0;
+      let valueWidth = 0;
+      if (shouldMeasureValues && valueForRow) {
+        for (const row of table.rows) valueWidth = Math.max(valueWidth, measureWorkspaceText(displayWorkspaceColumnValue(valueForRow(row), column), 20, 400));
+      }
       const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
         ? Math.min(valueWidth, column.widthLimitChars * 20)
         : column.overflowMode === 'expand' ? valueWidth : 0;
       return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
     };
-    const rowHeaderValues = table.rows.map((row) => row.name);
-    const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, rowHeaderValues);
-    if (!table.transposed) return [rowHeaderWidth, ...displayedColumns.map((column) => widthFor(column, column.name, table.rows.map((row) => row.values[column.id] ?? null)))];
+    const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, (row) => row.name);
+    if (!table.transposed) return [rowHeaderWidth, ...displayedColumns.map((column) => widthFor(column, column.name, (row) => row.values[column.id] ?? null))];
     const properties = [rowHeader, ...displayedColumns];
-    const propertyWidth = Math.max(...properties.map((column) => measureWorkspaceText(column.name, 20, 600)));
+    const propertyWidth = properties.reduce((width, column) => Math.max(width, measureWorkspaceText(column.name, 20, 600)), 0);
     const rowWidths = filteredRows.map((row) => Math.max(
       widthFor(rowHeader, displayWorkspaceColumnValue(row.name, rowHeader)),
       ...properties.map((column) => {
@@ -826,17 +851,16 @@ const WorkspacePage = () => {
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
     void (allTablesReadyRef.current ? saveWorkspace(nextData) : saveWorkspace(nextData, { partial: true })).then(() => {
+      void saveWorkspaceHistory(nextHistory);
       if (saveRevision !== saveRevisionRef.current) return;
       setSaveState('saved');
       setLastSavedAt(Date.now());
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (saveRevision !== saveRevisionRef.current) return;
-      setSaveState('error');
-      setNotice('本機儲存失敗');
+      reportSaveError(error);
     });
-    void saveWorkspaceHistory(nextHistory);
     setNotice(direction === 'undo' ? `已復原：${entry.label}` : `已重做：${entry.label}`);
-  }, [data, table]);
+  }, [data, reportSaveError, table]);
 
   const undoTable = useCallback(() => moveTableHistory('undo'), [moveTableHistory]);
   const redoTable = useCallback(() => moveTableHistory('redo'), [moveTableHistory]);
@@ -1236,7 +1260,9 @@ const WorkspacePage = () => {
         <button type="button" className={`workspace-appbar-button ${tableActionsOpen ? 'active' : ''}`} aria-label="設定" onClick={() => { closeBulkSelection(); setTableActionsOpen((open) => !open); setEditBarOpen(false); setSearchOpen(false); }} disabled={!table}><WorkspaceIcon name="settings" size={29} /></button>
       </div>
       {notice && <div className="workspace-notice workspace-appbar-notice" role="status">{notice}</div>}
-      {remainingLoadError && <div className="workspace-notice workspace-appbar-notice workspace-load-error" role="alert">其他表格讀取失敗，<button type="button" onClick={() => window.location.reload()}>重新開啟</button></div>}
+      {storageConflict
+        ? <div className="workspace-notice workspace-appbar-notice workspace-load-error" role="alert">另一個分頁已更新本機資料；此頁無法繼續儲存。請先確認未儲存內容，必要時<button type="button" onClick={exportCurrent}>匯出此表</button>，再重新開啟。</div>
+        : remainingLoadError && <div className="workspace-notice workspace-appbar-notice workspace-load-error" role="alert">其他表格讀取失敗，<button type="button" onClick={() => window.location.reload()}>重新開啟</button></div>}
     </header>
     <div className="workspace-toolbar-layer" style={{ '--workspace-toolbar-row-count': workspaceToolbarRowCount } as React.CSSProperties}>
     {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} numericValues={bulkNumericValues} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} />}

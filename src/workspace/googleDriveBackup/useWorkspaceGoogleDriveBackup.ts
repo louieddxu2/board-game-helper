@@ -67,12 +67,16 @@ const workspaceUpdatedAt = (data?: WorkspaceData) => data ? Math.max(data.update
 export interface UseWorkspaceGoogleDriveBackupOptions {
   data?: WorkspaceData;
   inspectChanges?: boolean;
+  backupBlockedReason?: string;
+  verifyCurrentData?(): Promise<void>;
+  isCurrentData?(snapshot: WorkspaceData): boolean;
+  onStorageConflict?(): void;
   loadGoogleClientId(): Promise<string | null>;
   onRestored(data: WorkspaceData): void;
   setNotice(message: string): void;
 }
 
-export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loadGoogleClientId, onRestored, setNotice }: UseWorkspaceGoogleDriveBackupOptions) => {
+export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, backupBlockedReason, verifyCurrentData, isCurrentData, onStorageConflict, loadGoogleClientId, onRestored, setNotice }: UseWorkspaceGoogleDriveBackupOptions) => {
   const [record, setRecord] = useState<WorkspaceDriveBackupRecord>(loadRecord);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState<BusyState>(null);
@@ -180,6 +184,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loa
   }, [authorized, busy, connect, manuallyDisconnected, online]);
 
   const backup = useCallback(async ({ automatic = false, force = false, tableIds }: { automatic?: boolean; force?: boolean; tableIds?: string[] } = {}) => {
+    if (backupBlockedReason) { if (!automatic) setError(backupBlockedReason); return false; }
     if (!data) return false;
     if (automatic && (!autoBackupEnabled || manuallyDisconnected)) return false;
     if (automatic && !authorized) return false;
@@ -196,6 +201,11 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loa
           setError('雲端備份已在其他裝置變更，請先載入雲端版本或明確選擇覆蓋');
           return false;
         }
+      }
+      await verifyCurrentData?.();
+      if (isCurrentData && !isCurrentData(data)) {
+        setError('本機資料在備份準備期間已有變更，請稍後再試');
+        return false;
       }
       const sourceUpdatedAt = workspaceUpdatedAt(data) || Date.now();
       const selectedTableIds = tableIds ?? data.tables.map((table) => table.id);
@@ -241,14 +251,17 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loa
       setAutoRetryAt(0);
       return true;
     } catch (cause) {
+      if (cause instanceof Error && cause.name === 'WorkspaceStorageConflictError') onStorageConflict?.();
       const conflictFile = cause && typeof cause === 'object' && 'remoteFile' in cause ? (cause as RemoteBackupConflictError).remoteFile : undefined;
       if (conflictFile !== undefined) { setRemoteFile(conflictFile); setRemoteConflict(true); }
       setAuthorized(authRef.current?.isAuthorized ?? false);
-      setError(cause instanceof Error ? cause.message : 'Google Drive 備份失敗');
+      setError(cause instanceof Error && cause.name === 'WorkspaceStorageConflictError'
+        ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟'
+        : cause instanceof Error ? cause.message : 'Google Drive 備份失敗');
       if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
       return false;
     } finally { setBusy(null); }
-  }, [autoBackupEnabled, authorized, data, ensureBackup, folderRemoteMatchesRecord, manuallyDisconnected, online, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, setNotice, structureFingerprint]);
+  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, setNotice, structureFingerprint, verifyCurrentData]);
 
   const findRemote = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
@@ -317,7 +330,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loa
 
   const hasPendingBackup = status === 'never' || status === 'dirty';
   useEffect(() => {
-    if (!autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy || !authorized || remoteConflict) return;
+    if (backupBlockedReason || !autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy || !authorized || remoteConflict) return;
     const now = Date.now();
     const lastTableBackupAt = (tableId: string) => record.tableBackups[tableId]?.lastBackupAt
       ?? (record.structureFingerprint === null ? record.lastBackupAt ?? 0 : 0);
@@ -331,7 +344,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loa
     const delay = Math.max(AUTO_BACKUP_DEBOUNCE_MS, nextAllowedAt - now);
     const timer = window.setTimeout(() => { void backup({ automatic: true, tableIds: eligibleTableIds }); }, delay);
     return () => window.clearTimeout(timer);
-  }, [autoBackupEnabled, autoRetryAt, authorized, backup, busy, dirtyTables, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt, record.tableBackups, remoteConflict, structureDirty]);
+  }, [autoBackupEnabled, autoRetryAt, authorized, backup, backupBlockedReason, busy, dirtyTables, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt, record.tableBackups, remoteConflict, structureDirty]);
 
   return {
     dialogOpen,
