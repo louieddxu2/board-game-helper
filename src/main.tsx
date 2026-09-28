@@ -17,10 +17,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       });
     }
     void navigator.serviceWorker.register('/sw.js').then((registration) => {
-      void registration.update();
+      void registration.update().catch(() => undefined);
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') void registration.update();
+        if (document.visibilityState === 'visible') void registration.update().catch(() => undefined);
       });
-    });
+    }).catch(() => undefined); // Offline launches use the already installed worker.
   });
 }

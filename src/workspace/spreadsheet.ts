@@ -1,7 +1,9 @@
-import readXlsxFile, { type CellValue, type Sheet } from 'read-excel-file/browser';
+import type { CellValue, Sheet } from 'read-excel-file/browser';
 import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
+
+const readXlsxFile = async (file: File | Blob) => (await import('read-excel-file/browser')).default(file);
 
 const TABLE_SETTINGS_MARKER = '__workspace_table_settings';
 const WORKSPACE_MARKER = '__workspace';

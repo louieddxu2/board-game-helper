@@ -1,6 +1,6 @@
 import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
+import { appendWorkspaceHistoryEntry, clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
@@ -16,13 +16,14 @@ import { applyWorkspaceMultiSelectBatch, type WorkspaceBulkSelection } from '../
 import { WorkspaceBulkEditToolbar, WorkspaceBulkMultiSelectDialog, WorkspaceBulkNumberDialog } from '../workspace/workspaceBulkEdit';
 import { WorkspacePasteDialog, WorkspaceTableImportPreviewDialog } from '../workspace/workspaceDataDialogs';
 import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from '../workspace/workspacePaste';
-import { api } from '../lib/api';
 import { savePwaLastRoute } from '../lib/pwaNavigation';
 import { GoogleDriveBackupDialog } from '../workspace/googleDriveBackup/GoogleDriveBackupDialog';
 import { useWorkspaceGoogleDriveBackup } from '../workspace/googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
 import { WorkspaceQuickActionPanel } from '../workspace/WorkspaceQuickActionPanel';
 import { formatDateFilterBound } from '../workspace/dateFilter';
+import { afterWorkspacePaint } from '../workspace/backgroundWork';
+import { hydrateWorkspaceHistories } from '../workspace/history';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const workspaceLineLimitStyle = (column: WorkspaceColumn) => ({ '--workspace-line-limit': column.lineLimit ? String(column.lineLimit) : undefined } as React.CSSProperties);
@@ -77,6 +78,8 @@ const WorkspacePage = () => {
   const [editBarOpen, setEditBarOpen] = useState(false);
   const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
   const [historyByTable, setHistoryByTable] = useState<Map<string, WorkspaceTableHistory>>(new Map());
+  const [historyReady, setHistoryReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [bottomNavigationDraft, setBottomNavigationDraft] = useState<string[]>();
@@ -106,6 +109,8 @@ const WorkspacePage = () => {
   const activeCellElementRef = useRef<HTMLElement | null>(null);
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
+  const historyReadyRef = useRef(false);
+  const historyResetRef = useRef({ all: false, ids: new Set<string>() });
   const saveRevisionRef = useRef(0);
   const googleDriveClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
   const drawerCloseTimerRef = useRef<number | undefined>(undefined);
@@ -245,7 +250,7 @@ const WorkspacePage = () => {
   const loadGoogleDriveClientId = useCallback(async () => {
     if (googleDriveClientId !== undefined) return googleDriveClientId;
     if (!googleDriveClientIdPromiseRef.current) {
-      googleDriveClientIdPromiseRef.current = api.session().then((session) => {
+      googleDriveClientIdPromiseRef.current = import('../lib/api').then(({ api }) => api.session()).then((session) => {
         const clientId = session.googleDriveClientId ?? null;
         setGoogleDriveClientId(clientId);
         return clientId;
@@ -263,27 +268,47 @@ const WorkspacePage = () => {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const reload = useCallback(async () => {
-    const [loaded, histories] = await Promise.all([loadWorkspace(), loadWorkspaceHistories()]);
-    setData(loaded);
-    dataRef.current = loaded;
-    historyRef.current = histories;
-    setHistoryByTable(histories);
-    setLastSavedAt(Math.max(0, ...loaded.tables.map((table) => table.updatedAt)) || undefined);
-    const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
-    let restored = new Set(folderIds);
-    try {
-      const stored = window.localStorage.getItem(expandedFoldersStorageKey);
-      if (stored !== null) restored = new Set((JSON.parse(stored) as unknown[]).filter((id): id is string => typeof id === 'string' && folderIds.has(id)));
-    } catch { /* Ignore damaged UI preferences. */ }
-    let current = loaded.nodes.find((node) => node.id === loaded.activeNodeId);
-    while (current?.parentId) {
-      restored.add(current.parentId);
-      current = loaded.nodes.find((node) => node.id === current?.parentId);
-    }
-    setExpanded(restored);
+  useEffect(() => {
+    let cancelled = false;
+    let cancelHistoryLoad: (() => void) | undefined;
+    const reload = async () => {
+      const loaded = await loadWorkspace();
+      if (cancelled) return;
+      setData(loaded);
+      dataRef.current = loaded;
+      setLastSavedAt(Math.max(0, ...loaded.tables.map((table) => table.updatedAt)) || undefined);
+      const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
+      let restored = new Set(folderIds);
+      try {
+        const stored = window.localStorage.getItem(expandedFoldersStorageKey);
+        if (stored !== null) restored = new Set((JSON.parse(stored) as unknown[]).filter((id): id is string => typeof id === 'string' && folderIds.has(id)));
+      } catch { /* Ignore damaged UI preferences. */ }
+      let current = loaded.nodes.find((node) => node.id === loaded.activeNodeId);
+      while (current?.parentId) {
+        restored.add(current.parentId);
+        current = loaded.nodes.find((node) => node.id === current?.parentId);
+      }
+      setExpanded(restored);
+      cancelHistoryLoad = afterWorkspacePaint(() => {
+        const finish = (stored: Map<string, WorkspaceTableHistory>) => {
+          if (cancelled) return;
+          const pending = historyRef.current;
+          const histories = hydrateWorkspaceHistories(stored, pending, new Set(dataRef.current?.tables.map((table) => table.id)), historyResetRef.current);
+          historyRef.current = histories;
+          historyReadyRef.current = true;
+          setHistoryByTable(histories);
+          setHistoryReady(true);
+        };
+        void loadWorkspaceHistories().then(finish).catch(() => {
+          if (cancelled) return;
+          setNotice('先前的復原紀錄讀取失敗，表格仍可使用');
+          finish(new Map());
+        });
+      });
+    };
+    void reload().catch(() => { if (!cancelled) setLoadError(true); });
+    return () => { cancelled = true; cancelHistoryLoad?.(); };
   }, []);
-  useEffect(() => { void reload(); }, [reload]);
 
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
     const previous = dataRef.current;
@@ -294,16 +319,19 @@ const WorkspacePage = () => {
     setData(committed);
     dataRef.current = committed;
     if (options?.clearAllHistory) {
+      historyResetRef.current.all = true;
       historyRef.current = new Map();
       setHistoryByTable(new Map());
       void clearAllWorkspaceHistories();
     } else if (options?.clearTableHistoryIds?.length) {
+      options.clearTableHistoryIds.forEach((id) => historyResetRef.current.ids.add(id));
       const nextHistories = new Map(historyRef.current);
       options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
       void deleteWorkspaceHistories(options.clearTableHistoryIds);
     } else if (removedTableIds.length) {
+      removedTableIds.forEach((id) => historyResetRef.current.ids.add(id));
       const nextHistories = new Map(historyRef.current);
       removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
@@ -316,7 +344,8 @@ const WorkspacePage = () => {
       const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      void saveWorkspaceHistory(nextHistory);
+      if (historyReadyRef.current) void saveWorkspaceHistory(nextHistory);
+      else void appendWorkspaceHistoryEntry(nextHistory.past[nextHistory.past.length - 1]);
     }
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
@@ -342,6 +371,7 @@ const WorkspacePage = () => {
   const bottomNavigationItems = useMemo(() => (data?.bottomNavigationTableIds ?? []).flatMap((tableId) => navigationTableById.get(tableId) ?? []), [data?.bottomNavigationTableIds, navigationTableById]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table]);
   const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table]);
+  const tableRowIndexes = useMemo(() => new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [table?.rows]);
 
   const {
     searchQuery, setSearchQuery, searchOpen, setSearchOpen,
@@ -375,7 +405,7 @@ const WorkspacePage = () => {
       .map(([key]) => key),
   ), [headerFilters]);
   const hasHiddenColumns = hiddenColumns.length > 0;
-  const hiddenOptionsByColumn = useMemo(() => Object.fromEntries(hiddenColumns.map((column) => [column.id, column.inputType === 'dynamic-select' && table ? getDynamicOptions(table, column.id) : column.options])), [hiddenColumns, table]);
+  const hiddenOptionsByColumn = useMemo(() => hiddenFieldsEditor ? Object.fromEntries(hiddenColumns.map((column) => [column.id, column.inputType === 'dynamic-select' && table ? getDynamicOptions(table, column.id) : column.options])) : {}, [hiddenColumns, hiddenFieldsEditor, table]);
   const bulkColumn = useMemo(() => bulkSelection && table?.id === bulkSelection.tableId ? table.columns.find((column) => column.id === bulkSelection.columnId) : undefined, [bulkSelection, table]);
   const bulkSelectedRowIds = useMemo(() => new Set(bulkSelection?.rowIds ?? []), [bulkSelection?.rowIds]);
   const bulkRows = useMemo(() => bulkSelection ? bulkSelection.rowIds.flatMap((rowId) => {
@@ -413,6 +443,7 @@ const WorkspacePage = () => {
 
   const driveBackup = useWorkspaceGoogleDriveBackup({
     data,
+    inspectChanges: drawerOpen,
     loadGoogleClientId: loadGoogleDriveClientId,
     onRestored: (next) => setWorkspaceImport(next),
     setNotice,
@@ -731,7 +762,7 @@ const WorkspacePage = () => {
   };
 
   const moveTableHistory = useCallback((direction: 'undo' | 'redo') => {
-    if (!data || !table) return;
+    if (!data || !table || !historyReadyRef.current) return;
     const currentHistory = historyRef.current.get(table.id) ?? createEmptyWorkspaceTableHistory(table.id);
     const source = direction === 'undo' ? currentHistory.past : currentHistory.future;
     const entry = source[source.length - 1];
@@ -764,7 +795,7 @@ const WorkspacePage = () => {
 
   const undoTable = useCallback(() => moveTableHistory('undo'), [moveTableHistory]);
   const redoTable = useCallback(() => moveTableHistory('redo'), [moveTableHistory]);
-  const currentTableHistory = table ? historyByTable.get(table.id) : undefined;
+  const currentTableHistory = table && historyReady ? historyByTable.get(table.id) : undefined;
 
   const layoutViewportWidth = table?.transposed || !hasHiddenColumns ? viewportWidth : Math.max(0, viewportWidth - 44);
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
@@ -999,7 +1030,7 @@ const WorkspacePage = () => {
             {hasHiddenColumns && <th className="workspace-hidden-columns-heading" aria-label="隱藏欄位"><WorkspaceIcon name="eye-off" size={17} /></th>}
           </tr></thead>
           <tbody>{filteredRows.map((row) => {
-            const originalIndex = table.rows.findIndex((item) => item.id === row.id);
+            const originalIndex = tableRowIndexes.get(row.id) ?? -1;
             const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
             const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
             const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
@@ -1032,7 +1063,7 @@ const WorkspacePage = () => {
           })}</tbody></> : <><thead><tr>
             {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}${activeCellColumnId === rowHeader.id ? ' workspace-context-active' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(rowHeader) }} onClick={() => setConfiguring({ column: rowHeader, isRowHeader: true })}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={activeHeaderFilterKeys.has(`column:${rowHeader.id}`)} onFilter={() => setFilterTarget({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
             {filteredRows.map((row) => {
-              const originalIndex = table.rows.findIndex((item) => item.id === row.id);
+              const originalIndex = tableRowIndexes.get(row.id) ?? -1;
               const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
               const rowAccessibleLabel = rowLabel || `第 ${originalIndex + 1} 個物件`;
               const isSource = tableReorderVisual?.kind === 'row' && tableReorderVisual.sourceId === row.id;
@@ -1087,9 +1118,9 @@ const WorkspacePage = () => {
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
-  if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading"><p>正在開啟本地 Workspace…</p></section></WorkspaceModalCloseContext.Provider>;
+  if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider>;
 
   return <WorkspaceModalCloseContext.Provider value={requestClose}><section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>

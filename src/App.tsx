@@ -1,6 +1,4 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import { Layout } from './components/Layout';
-import { SessionProvider } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import { isInstalledPwa, isPwaHomeShortcut, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './lib/pwaNavigation';
@@ -22,9 +20,17 @@ const ErrorFallback = () => (
   </section>
 );
 
+const installedPwa = isInstalledPwa();
+if (installedPwa) {
+  const homeShortcut = isPwaHomeShortcut(window.location);
+  const restoredRoute = homeShortcut ? '/' : pwaRouteToRestore(window.location.pathname, readPwaLastRoute());
+  // Choose the entry before matching lazy routes, so resuming a table never loads the homepage first.
+  if (restoredRoute) window.history.replaceState(window.history.state, '', restoredRoute);
+}
+
 const router = createBrowserRouter([
   { path: '/workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }), errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback },
-  { path: '/', element: <SessionProvider><Layout /></SessionProvider>, errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback, children: [
+  { path: '/', lazy: async () => ({ Component: (await import('./components/SiteLayout')).SiteLayout }), errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback, children: [
     { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
     { path: 'add', lazy: async () => ({ Component: (await import('./pages/AddPage')).AddPage }) },
     { path: 'games/:identifier', lazy: async () => ({ Component: (await import('./pages/GamePage')).GamePage }) },
@@ -40,16 +46,7 @@ const router = createBrowserRouter([
   ] },
 ]);
 
-const installedPwa = isInstalledPwa();
-const launchedFromPwaHomeShortcut = installedPwa && typeof window !== 'undefined' && isPwaHomeShortcut({ pathname: window.location.pathname, search: window.location.search });
-const shouldRestorePwaRoute = installedPwa && typeof window !== 'undefined' && pwaRouteToRestore(window.location.pathname, readPwaLastRoute(), launchedFromPwaHomeShortcut);
-if (launchedFromPwaHomeShortcut) {
-  void router.navigate('/', { replace: true });
-} else if (shouldRestorePwaRoute) {
-  void router.navigate(shouldRestorePwaRoute);
-} else if (installedPwa) {
-  savePwaLastRoute(router.state.location);
-}
+if (installedPwa) savePwaLastRoute(router.state.location);
 
 router.subscribe((state) => {
   savePwaLastRoute(state.location);

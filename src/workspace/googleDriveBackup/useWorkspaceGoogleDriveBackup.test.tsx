@@ -37,12 +37,13 @@ const createData = (updatedAt = now.getTime()): WorkspaceData => {
   return { version: 1, nodes: [], tables: [first, second], activeNodeId: null, updatedAt };
 };
 
-const renderBackup = (data = createData()) => renderHook(({ value }) => useWorkspaceGoogleDriveBackup({
+const renderBackup = (data = createData(), inspectChanges = true) => renderHook(({ value, inspect }: { value: WorkspaceData; inspect?: boolean }) => useWorkspaceGoogleDriveBackup({
   data: value,
+  inspectChanges: inspect,
   loadGoogleClientId: vi.fn(async () => 'client-id'),
   onRestored: vi.fn(),
   setNotice: vi.fn(),
-}), { initialProps: { value: data } });
+}), { initialProps: { value: data, inspect: inspectChanges } });
 
 const receiptFor = (data: WorkspaceData) => ({
   file: { id: 'manifest-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T10:00:02.000Z' },
@@ -70,6 +71,29 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it('defers fingerprint inspection until the backup drawer opens', () => {
+    const savedData = createData();
+    const currentData = {
+      ...savedData,
+      tables: savedData.tables.map((table, index) => index === 0 ? { ...table, name: '尚未備份的新名稱', updatedAt: table.updatedAt + 1 } : table),
+    };
+    window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: 'manifest-saved', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: savedData.updatedAt,
+      remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: savedData.tables.length, folderCount: 0,
+      structureFingerprint: workspaceStructureBackupFingerprint(savedData),
+      tableBackups: Object.fromEntries(savedData.tables.map((table) => [table.id, {
+        lastBackupAt: now.getTime(), sourceUpdatedAt: table.updatedAt,
+        contentFingerprint: workspaceTableBackupFingerprint(table), driveFileId: `drive-${table.id}`,
+      }])),
+    }));
+
+    const hook = renderBackup(currentData, false);
+    expect(hook.result.current.status).toBe('checking');
+
+    hook.rerender({ value: currentData, inspect: true });
+    expect(hook.result.current.status).toBe('dirty');
+  });
+
   it('starts connecting as soon as the drawer entry opens the backup dialog', async () => {
     const { result } = renderBackup();
 
@@ -223,7 +247,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
 
     const edited = { ...original, tables: original.tables.map((table, index) => index === 0 ? { ...table, name: '上傳期間的新名稱', updatedAt: table.updatedAt + 1 } : table), updatedAt: original.updatedAt! + 1 };
-    hook.rerender({ value: edited });
+    hook.rerender({ value: edited, inspect: true });
     await act(async () => { resolveUpload(receiptFor(uploadedData!)); await pendingUpload; });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(hook.result.current.busy).toBeNull();

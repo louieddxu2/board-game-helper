@@ -33,7 +33,7 @@ export interface WorkspaceDriveTableBackupRecord {
 }
 
 type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
-export type WorkspaceDriveBackupStatus = 'offline' | 'never' | 'dirty' | 'saved' | 'disconnected';
+export type WorkspaceDriveBackupStatus = 'offline' | 'never' | 'dirty' | 'saved' | 'disconnected' | 'checking';
 
 const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureFingerprint: null, tableBackups: {} });
 
@@ -66,12 +66,13 @@ const workspaceUpdatedAt = (data?: WorkspaceData) => data ? Math.max(data.update
 
 export interface UseWorkspaceGoogleDriveBackupOptions {
   data?: WorkspaceData;
+  inspectChanges?: boolean;
   loadGoogleClientId(): Promise<string | null>;
   onRestored(data: WorkspaceData): void;
   setNotice(message: string): void;
 }
 
-export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRestored, setNotice }: UseWorkspaceGoogleDriveBackupOptions) => {
+export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, loadGoogleClientId, onRestored, setNotice }: UseWorkspaceGoogleDriveBackupOptions) => {
   const [record, setRecord] = useState<WorkspaceDriveBackupRecord>(loadRecord);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState<BusyState>(null);
@@ -89,9 +90,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
   const legacyBackupRef = useRef<GoogleDriveSingleFileBackup | undefined>(undefined);
   const clientIdLoadedRef = useRef(false);
   const clientIdRef = useRef<string | null>(null);
-  const structureFingerprint = data ? workspaceStructureBackupFingerprint(data) : '';
-  const dirtyTables = useMemo(() => data?.tables.filter((table) => record.tableBackups[table.id]?.contentFingerprint !== workspaceTableBackupFingerprint(table)) ?? [], [data, record.tableBackups]);
-  const structureDirty = data ? (record.structureFingerprint !== structureFingerprint
+  const inspectBackup = inspectChanges || dialogOpen || authorized;
+  const structureFingerprint = useMemo(() => data && inspectBackup ? workspaceStructureBackupFingerprint(data) : '', [data, inspectBackup]);
+  const dirtyTables = useMemo(() => inspectBackup ? data?.tables.filter((table) => record.tableBackups[table.id]?.contentFingerprint !== workspaceTableBackupFingerprint(table)) ?? [] : [], [data, inspectBackup, record.tableBackups]);
+  const structureDirty = data && inspectBackup ? (record.structureFingerprint !== structureFingerprint
     || Object.keys(record.tableBackups).some((id) => !data.tables.some((table) => table.id === id))) : false;
 
   const remoteMatchesRecord = useCallback((file: DriveFile | null) => {
@@ -230,7 +232,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
         remoteModifiedTime: receipt.file.modifiedTime ?? null,
         tableCount: receipt.manifest.tables.length,
         folderCount: receipt.manifest.folders.length,
-        structureFingerprint,
+        structureFingerprint: workspaceStructureBackupFingerprint(data),
         tableBackups: nextTableBackups,
       };
       setAuthorized(true);
@@ -308,9 +310,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, loadGoogleClientId, onRest
     if (manuallyDisconnected) return 'disconnected';
     if (!online) return 'offline' as const;
     if (!record.lastBackupAt) return 'never' as const;
+    if (!inspectBackup) return 'checking' as const;
     if (structureDirty || dirtyTables.length > 0) return 'dirty' as const;
     return 'saved' as const;
-  }, [dirtyTables.length, manuallyDisconnected, online, record.lastBackupAt, structureDirty]);
+  }, [dirtyTables.length, inspectBackup, manuallyDisconnected, online, record.lastBackupAt, structureDirty]);
 
   const hasPendingBackup = status === 'never' || status === 'dirty';
   useEffect(() => {

@@ -56,6 +56,27 @@ export const pruneWorkspaceTableHistory = (history: WorkspaceTableHistory, now =
   };
 };
 
+/** Edits made while disk history loads take precedence, including imports and deletions. */
+export const hydrateWorkspaceHistories = (
+  stored: Map<string, WorkspaceTableHistory>,
+  pending: Map<string, WorkspaceTableHistory>,
+  tableIds: Set<string>,
+  reset: { all: boolean; ids: Set<string> },
+) => {
+  const merged = new Map<string, WorkspaceTableHistory>();
+  for (const tableId of tableIds) {
+    const previous = reset.all || reset.ids.has(tableId) ? undefined : stored.get(tableId);
+    const current = pending.get(tableId);
+    if (current) merged.set(tableId, pruneWorkspaceTableHistory({
+      ...current,
+      // The disk read may already contain an early edit that was queued before it.
+      past: [...new Map([...(previous?.past ?? []), ...current.past].map((entry) => [entry.id, entry])).values()],
+    }));
+    else if (previous) merged.set(tableId, previous);
+  }
+  return merged;
+};
+
 const historyEntryId = () => {
   const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   return `history-${random}`;

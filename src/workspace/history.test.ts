@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyWorkspaceTableHistoryAction, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pruneWorkspaceTableHistory, pushWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs } from './history';
+import { applyWorkspaceTableHistoryAction, createEmptyWorkspaceTableHistory, hydrateWorkspaceHistories, inferWorkspaceTableMutation, pruneWorkspaceTableHistory, pushWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs } from './history';
 import { emptyWorkspace } from './model';
 import type { WorkspaceData, WorkspaceTable } from './types';
 
@@ -12,6 +12,45 @@ const table = (): WorkspaceTable => ({
 const data = (current = table()): WorkspaceData => ({ ...emptyWorkspace(), activeNodeId: 'node-1', nodes: [{ id: 'node-1', type: 'table', name: current.name, parentId: null, order: 0, tableId: current.id }], tables: [current] });
 
 describe('workspace table history', () => {
+  const historyEntry = (id: string, createdAt = Date.now()) => ({
+    id,
+    tableId: 'table-1',
+    label: id,
+    createdAt,
+    action: { type: 'set-cell' as const, rowId: 'row-1', columnId: 'column-1', before: null, after: id },
+  });
+
+  it('merges an edit made while persisted history is still loading and drops the old redo branch', () => {
+    const stored = new Map([['table-1', {
+      tableId: 'table-1',
+      past: [historyEntry('stored-edit')],
+      future: [historyEntry('stale-redo')],
+    }]]);
+    const pending = new Map([['table-1', {
+      tableId: 'table-1',
+      past: [historyEntry('startup-edit')],
+      future: [],
+    }]]);
+
+    const result = hydrateWorkspaceHistories(stored, pending, new Set(['table-1']), { all: false, ids: new Set() });
+
+    expect(result.get('table-1')?.past.map((entry) => entry.id)).toEqual(['stored-edit', 'startup-edit']);
+    expect(result.get('table-1')?.future).toEqual([]);
+  });
+
+  it('does not resurrect history after a table or workspace history reset during loading', () => {
+    const stored = new Map([
+      ['table-1', { tableId: 'table-1', past: [historyEntry('deleted-table')], future: [] }],
+      ['table-2', { tableId: 'table-2', past: [historyEntry('cleared-workspace')], future: [] }],
+    ]);
+
+    const deletedTable = hydrateWorkspaceHistories(stored, new Map(), new Set(['table-1']), { all: false, ids: new Set(['table-1']) });
+    expect(deletedTable).toEqual(new Map());
+
+    const clearedWorkspace = hydrateWorkspaceHistories(stored, new Map(), new Set(['table-1', 'table-2']), { all: true, ids: new Set() });
+    expect(clearedWorkspace).toEqual(new Map());
+  });
+
   it('expires entries after six hours and keeps at most fifty per direction', () => {
     const now = 10_000_000;
     const entries = Array.from({ length: 55 }, (_, index) => ({ id: String(index), tableId: 'table-1', label: String(index), createdAt: now - index, action: { type: 'set-cell' as const, rowId: 'row-1', columnId: 'column-1', before: null, after: index } }));

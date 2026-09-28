@@ -26,6 +26,7 @@ vi.mock('../workspace/db', () => ({
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
   saveWorkspaceHistory: vi.fn(async () => undefined),
+  appendWorkspaceHistoryEntry: vi.fn(async () => undefined),
   clearAllWorkspaceHistories: vi.fn(async () => undefined),
   deleteWorkspaceHistories: vi.fn(async () => undefined),
   flushWorkspaceSaves: vi.fn(async () => undefined),

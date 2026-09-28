@@ -1,6 +1,6 @@
 import { openDB, type DBSchema } from 'idb';
 import { emptyWorkspace, normalizeWorkspace } from './model';
-import { pruneWorkspaceTableHistory, type WorkspaceTableHistory } from './history';
+import { createEmptyWorkspaceTableHistory, pruneWorkspaceTableHistory, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry } from './history';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
 
 type WorkspaceMetadata = {
@@ -35,6 +35,7 @@ const database = typeof indexedDB === 'undefined'
 let saveQueue: Promise<void> = Promise.resolve();
 let historySaveQueue: Promise<void> = Promise.resolve();
 let savedTableSignatures = new Map<string, string>();
+let savedTables = new Map<string, WorkspaceTable>();
 
 export const tableStorageSignature = (table: WorkspaceTable) => JSON.stringify(table);
 
@@ -56,13 +57,16 @@ export const loadWorkspace = async (): Promise<WorkspaceData> => {
   const meta = await db.get('meta', META_KEY);
   if (meta) {
     const loaded = normalizeWorkspace({ ...meta, tables: await db.getAll('tables') });
-    savedTableSignatures = new Map(loaded.tables.map((table) => [table.id, tableStorageSignature(table)]));
+    // Keep immutable snapshots. Only changed tables need serialization when saving.
+    savedTables = new Map(loaded.tables.map((table) => [table.id, table]));
+    savedTableSignatures = new Map();
     return loaded;
   }
 
   const legacy = await db.get('state', STATE_KEY);
   const loaded = normalizeWorkspace(legacy ?? emptyWorkspace());
   savedTableSignatures = new Map();
+  savedTables = new Map();
   await saveWorkspace(loaded);
   await db.delete('state', STATE_KEY);
   return loaded;
@@ -73,7 +77,14 @@ export const saveWorkspace = (data: WorkspaceData) => {
   const pending = saveQueue.catch(() => undefined).then(async () => {
     const db = await database;
     const storedIds = (await db.getAllKeys('tables')).map(String);
-    const plan = createWorkspaceStoragePlan(data, savedTableSignatures, storedIds);
+    const changedTables = data.tables.filter((table) => savedTables.get(table.id) !== table);
+    for (const table of changedTables) {
+      const previous = savedTables.get(table.id);
+      if (previous && !savedTableSignatures.has(table.id)) savedTableSignatures.set(table.id, tableStorageSignature(previous));
+    }
+    const changedPlan = createWorkspaceStoragePlan({ ...data, tables: changedTables }, savedTableSignatures, []);
+    const currentIds = new Set(data.tables.map((table) => table.id));
+    const plan = { ...changedPlan, deletes: storedIds.filter((id) => !currentIds.has(id)) };
     const transaction = db.transaction(['meta', 'tables'], 'readwrite');
     await transaction.objectStore('meta').put(plan.meta, META_KEY);
     await Promise.all([
@@ -81,7 +92,9 @@ export const saveWorkspace = (data: WorkspaceData) => {
       ...plan.deletes.map((id) => transaction.objectStore('tables').delete(id)),
     ]);
     await transaction.done;
-    savedTableSignatures = plan.signatures;
+    for (const [id, signature] of plan.signatures) savedTableSignatures.set(id, signature);
+    for (const id of plan.deletes) savedTableSignatures.delete(id);
+    savedTables = new Map(data.tables.map((table) => [table.id, table]));
   });
   saveQueue = pending;
   return pending;
@@ -91,26 +104,21 @@ export const flushWorkspaceSaves = () => saveQueue;
 
 export const loadWorkspaceHistories = async (): Promise<Map<string, WorkspaceTableHistory>> => {
   if (!database) return new Map();
+  await historySaveQueue.catch(() => undefined);
   const db = await database;
   const histories = await db.getAll('history');
   const now = Date.now();
   const result = new Map<string, WorkspaceTableHistory>();
-  const transaction = db.transaction('history', 'readwrite');
-  const writes: Promise<unknown>[] = [];
   for (const history of histories) {
     const pruned = pruneWorkspaceTableHistory(history, now);
     result.set(pruned.tableId, pruned);
-    if (JSON.stringify(pruned) === JSON.stringify(history)) continue;
-    if (pruned.past.length === 0 && pruned.future.length === 0) writes.push(transaction.store.delete(history.tableId));
-    else writes.push(transaction.store.put(pruned, history.tableId));
   }
-  await Promise.all(writes);
-  await transaction.done;
+  // Pruned records are persisted on the next edit, never on the startup read path.
   return result;
 };
 
 export const saveWorkspaceHistory = (history: WorkspaceTableHistory) => {
-  historySaveQueue = historySaveQueue.then(async () => {
+  historySaveQueue = historySaveQueue.catch(() => undefined).then(async () => {
     if (!database) return;
     const db = await database;
     const pruned = pruneWorkspaceTableHistory(history);
@@ -123,8 +131,22 @@ export const saveWorkspaceHistory = (history: WorkspaceTableHistory) => {
   return historySaveQueue;
 };
 
+/** Persist early edits without waiting for every table's history to hydrate. */
+export const appendWorkspaceHistoryEntry = (entry: WorkspaceTableHistoryEntry) => {
+  historySaveQueue = historySaveQueue.catch(() => undefined).then(async () => {
+    if (!database) return;
+    const db = await database;
+    const transaction = db.transaction('history', 'readwrite');
+    const previous = await transaction.store.get(entry.tableId) ?? createEmptyWorkspaceTableHistory(entry.tableId);
+    const next = pruneWorkspaceTableHistory({ tableId: entry.tableId, past: [...previous.past, entry], future: [] });
+    await transaction.store.put(next, entry.tableId);
+    await transaction.done;
+  });
+  return historySaveQueue;
+};
+
 export const deleteWorkspaceHistories = (tableIds: readonly string[]) => {
-  historySaveQueue = historySaveQueue.then(async () => {
+  historySaveQueue = historySaveQueue.catch(() => undefined).then(async () => {
     if (!database || tableIds.length === 0) return;
     const db = await database;
     const transaction = db.transaction('history', 'readwrite');
@@ -135,7 +157,7 @@ export const deleteWorkspaceHistories = (tableIds: readonly string[]) => {
 };
 
 export const clearAllWorkspaceHistories = () => {
-  historySaveQueue = historySaveQueue.then(async () => {
+  historySaveQueue = historySaveQueue.catch(() => undefined).then(async () => {
     if (!database) return;
     const db = await database;
     await db.clear('history');
@@ -159,4 +181,5 @@ export const clearWorkspace = async () => {
   ]);
   await transaction.done;
   savedTableSignatures = new Map();
+  savedTables = new Map();
 };

@@ -1,6 +1,8 @@
-const SHELL_CACHE = 'wrong-rules-shell-v6';
+const SHELL_CACHE = 'wrong-rules-shell-__BUILD_ID__';
 const PUBLIC_CACHE = 'wrong-rules-public-v6';
-const SHELL = ['/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+const BUILD_ASSETS = /* BUILD_ASSETS */ [];
+const INDEX_SHA256 = '__INDEX_SHA256__';
+const SHELL = ['/', '/standalone-mode.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', ...BUILD_ASSETS];
 
 const expectedAssetType = (url) => {
   if (url.pathname.endsWith('.js')) return 'javascript';
@@ -11,25 +13,29 @@ const expectedAssetType = (url) => {
 const isValidAsset = (response, expectedType) =>
   response?.ok && (response.headers.get('content-type') || '').toLowerCase().includes(expectedType);
 
-const recoverCurrentAsset = async (request, expectedType) => {
-  const indexResponse = await fetch('/', { cache: 'no-store' });
-  if (!indexResponse.ok) return undefined;
-  const html = await indexResponse.text();
-  const extension = expectedType === 'javascript' ? 'js' : 'css';
-  const match = html.match(new RegExp(`(?:src|href)=["']([^"']+\\.${extension})["']`));
-  if (!match) return undefined;
-  const currentUrl = new URL(match[1], self.location.origin);
-  const response = await fetch(currentUrl, { cache: 'no-store' });
-  return isValidAsset(response, expectedType) ? response : undefined;
-};
-
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL_CACHE);
-    await cache.addAll(SHELL);
-    const indexResponse = await fetch('/', { cache: 'reload' });
-    if (indexResponse.ok) await cache.put('/', indexResponse);
-    await self.skipWaiting();
+    // Validate before publishing: SPA fallback HTML must never be cached as a JS chunk.
+    const responses = await Promise.all(SHELL.map(async (path) => {
+      const response = await fetch(new Request(new URL(path, self.location.origin), { cache: 'reload' }));
+      const expectedType = expectedAssetType(new URL(path, self.location.origin));
+      if (!response.ok || (expectedType && !isValidAsset(response, expectedType))) throw new Error(`Cannot cache ${path}`);
+      // Consume each body immediately: install-time fetches have a small concurrency
+      // limit, so holding every response open until Promise.all can stall the queue.
+      const body = await response.arrayBuffer();
+      if (path === '/' && /^[a-f0-9]{64}$/.test(INDEX_SHA256)) {
+        const digest = await crypto.subtle.digest('SHA-256', body);
+        const actual = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
+        if (actual !== INDEX_SHA256) throw new Error('Shell changed during install; retry with the matching build');
+      }
+      const headers = new Headers(response.headers);
+      headers.delete('content-encoding');
+      headers.delete('content-length');
+      return [path, new Response(body, { status: response.status, headers })];
+    }));
+    await Promise.all(responses.map(([path, response]) => cache.put(path, response)));
+    // Updates wait for existing tabs to close so an editing session keeps its matching shell.
   })());
 });
 
@@ -37,7 +43,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys
-      .filter((key) => ![SHELL_CACHE, PUBLIC_CACHE].includes(key))
+      .filter((key) => key.startsWith('wrong-rules-shell-') && key !== SHELL_CACHE)
       .map((key) => caches.delete(key)));
     await self.clients.claim();
   })());
@@ -77,39 +83,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith('/assets/') || SHELL.includes(url.pathname) && url.pathname !== '/') {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
       const expectedType = expectedAssetType(url);
       const cached = await cache.match(request);
-      if (isValidAsset(cached, expectedType)) return cached;
+      if (cached?.ok && (!expectedType || isValidAsset(cached, expectedType))) return cached;
       if (cached) await cache.delete(request);
 
       const response = await fetch(request);
-      if (isValidAsset(response, expectedType)) {
+      if (response.ok && (!expectedType || isValidAsset(response, expectedType))) {
         await cache.put(request, response.clone());
         return response;
       }
 
-      const recovered = await recoverCurrentAsset(request, expectedType);
-      if (recovered) {
-        await cache.put(request, recovered.clone());
-        return recovered;
-      }
+      // Never substitute a different module for a missing hashed chunk.
       return response;
     })());
     return;
   }
 
-  if (request.mode === 'navigate') {
+  if (request.mode === 'navigate' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/pwa-reset')) {
     event.respondWith((async () => {
-      try {
-        const response = await fetch(request, { cache: 'no-store' });
-        if (response.ok) void (await caches.open(SHELL_CACHE)).put('/', response.clone());
-        return response;
-      } catch {
-        return (await caches.match('/')) || Response.error();
-      }
+      const cache = await caches.open(SHELL_CACHE);
+      const cached = await cache.match('/');
+      if (cached) return cached;
+      return fetch(request);
     })());
   }
 });

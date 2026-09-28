@@ -13,7 +13,7 @@ const formatTime = (value: number | string | null | undefined) => {
 
 const busyLabel = (busy: BusyState) => busy === 'connecting' ? '正在連結…' : busy === 'backing-up' ? '正在備份…' : busy === 'finding' ? '正在尋找…' : busy === 'restoring' ? '正在載入…' : '';
 
-const statusLabel = (status: WorkspaceDriveBackupStatus) => status === 'offline' ? '目前離線' : status === 'disconnected' ? '已主動斷線' : status === 'dirty' ? '有未備份變更' : status === 'saved' ? '已完成備份' : '尚未備份';
+const statusLabel = (status: WorkspaceDriveBackupStatus) => status === 'checking' ? '正在檢查備份變更' : status === 'offline' ? '目前離線' : status === 'disconnected' ? '已主動斷線' : status === 'dirty' ? '有未備份變更' : status === 'saved' ? '已完成備份' : '尚未備份';
 const statusDetail = ({ status, authorized, record }: Pick<GoogleDriveBackupDialogProps, 'status' | 'authorized' | 'record'>) => {
   if (status === 'disconnected') return '自動備份已暫停，請重新連結';
   if (status === 'offline') return '恢復連線後才能同步';

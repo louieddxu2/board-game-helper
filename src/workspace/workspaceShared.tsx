@@ -106,15 +106,22 @@ export const reorderBeforeOrAfter = <Item extends { id: string }>(items: Item[],
   next.splice(targetIndex + (after ? 1 : 0), 0, source);
   return next;
 };
+let workspaceTextContext: CanvasRenderingContext2D | null | undefined;
+const workspaceTextWidths = new Map<string, number>();
 export const measureWorkspaceText = (text: string, fontSize: number, fontWeight: number) => {
   if (!text.trim()) return 0;
   if (typeof document === 'undefined') return Math.max(fontSize, text.length * fontSize);
   if (typeof window !== 'undefined' && /jsdom/i.test(window.navigator.userAgent)) return Math.max(fontSize, text.length * fontSize);
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
+  const key = JSON.stringify([fontSize, fontWeight, text]);
+  const cached = workspaceTextWidths.get(key);
+  if (cached !== undefined) return cached;
+  const context = workspaceTextContext ??= document.createElement('canvas').getContext('2d');
   if (!context) return Math.max(fontSize, text.length * fontSize);
   context.font = `${fontWeight} ${fontSize}px "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif`;
-  return Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
+  const width = Math.max(0, ...text.split('\n').filter((line) => line.length > 0).map((line) => context.measureText(line).width));
+  if (workspaceTextWidths.size >= 4096) workspaceTextWidths.clear();
+  workspaceTextWidths.set(key, width);
+  return width;
 };
 export const overflowClassName = (column: WorkspaceColumn) => {
   const mode = column.overflowMode ?? (column.inputType === 'link' ? 'ellipsis' : 'wrap');
