@@ -97,7 +97,7 @@ describe('workspace date range filter', () => {
     fireEvent.pointerUp(wheel, { pointerId: 1, clientY: 84 });
 
     expect(within(end).getByRole('listbox', { name: label })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '不設結束日期' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '結束日期不限' })).toHaveTextContent('不限');
     fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
     expect(onDateRange).toHaveBeenCalledWith('2024-01-01', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), precision);
   });

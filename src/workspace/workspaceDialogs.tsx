@@ -359,8 +359,8 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
     <div className="workspace-date-filter-precision" role="group" aria-label="日期篩選精度">
       {(['year', 'month', 'day'] as const).map((item, index) => <button key={item} type="button" className={(['year', 'month', 'day'] as const).indexOf(precision) >= index ? 'is-filled' : ''} aria-pressed={precision === item} onClick={() => choosePrecision(item)}><span>{item === 'year' ? '年' : item === 'month' ? '月' : '日'}</span><span className="workspace-date-filter-precision-segment" aria-hidden="true" /></button>)}
     </div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3>{startEnabled ? <button type="button" onClick={() => setStartEnabled(false)}>不設開始日期</button> : <span>滑動－以設定</span>}</div>{wheelRow('start', start, startEnabled)}</div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3>{endEnabled ? <button type="button" onClick={() => setEndEnabled(false)}>不設結束日期</button> : <span>滑動－以設定</span>}</div>{wheelRow('end', end, endEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3>{startEnabled ? <button type="button" aria-label="開始日期不限" onClick={() => setStartEnabled(false)}>不限</button> : <span>滑動－以設定</span>}</div>{wheelRow('start', start, startEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3>{endEnabled ? <button type="button" aria-label="結束日期不限" onClick={() => setEndEnabled(false)}>不限</button> : <span>滑動－以設定</span>}</div>{wheelRow('end', end, endEnabled)}</div>
     {hasLegacyMonths && <p className="workspace-date-filter-note">先前選取的年月仍在篩選中；套用新範圍或清除後會取代它。</p>}
     {!hasRange && !hasLegacyMonths && <p className="workspace-date-filter-note">目前未設定日期範圍</p>}
     {invalidRange && <p className="workspace-date-filter-error" role="alert">結束日期須晚於開始日期</p>}
