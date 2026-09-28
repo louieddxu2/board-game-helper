@@ -439,7 +439,7 @@ footer a { color: inherit; }
 .workspace-date-filter-bound-heading { display: flex; align-items: center; justify-content: space-between; min-height: 20px; padding: 2px 8px; border-radius: 7px 7px 0 0; background: rgba(47,111,94,.09); }
 .workspace-date-filter-bound h3 { margin: 0; color: var(--green); font-size: 12px; font-weight: 800; line-height: 1.2; }
 .workspace-date-filter-bound-heading button { min-height: 20px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 11px; }
-.workspace-date-filter-bound-heading button[aria-pressed="true"] { background: var(--green); color: var(--white); }
+.workspace-date-filter-bound-heading span { color: var(--muted); font-size: 11px; }
 .workspace-date-filter-bound .workspace-datetime-wheel-row { padding: 2px 8px 3px; }
 .workspace-date-filter-note, .workspace-date-filter-error { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .workspace-date-filter-error { color: #a52f23; }
@@ -532,6 +532,9 @@ footer a { color: inherit; }
 .workspace-datetime-wheel-empty { min-height: 32px; }
 .workspace-datetime-wheel-disabled-value { display: grid; place-items: center; height: 32px; color: var(--muted); font-size: 20px; font-weight: 700; }
 .workspace-datetime-wheel.is-disabled { cursor: default; }
+.workspace-datetime-wheel.is-disabled.is-activatable { cursor: grab; }
+.workspace-datetime-wheel.is-disabled.is-activatable:active { cursor: grabbing; }
+.workspace-datetime-wheel.is-activatable .workspace-datetime-wheel-disabled-value { border-bottom: 2px dashed var(--yellow); color: var(--green); }
 .workspace-datetime-wheel-center-editor { display: grid; place-items: center; min-height: 32px; }
 .workspace-dialog .workspace-datetime-year-input { width: min(76px, 100%); min-height: 30px; padding: 1px 3px; border: 0; border-bottom: 2px solid var(--yellow); border-radius: 0; background: rgba(255,253,248,.72); color: var(--green); font-size: 18px; font-weight: 800; text-align: center; }
 .workspace-datetime-wheel-unit { position: absolute; right: 0; bottom: 0; left: 0; color: var(--muted); font-size: 11px; line-height: 12px; text-align: center; }

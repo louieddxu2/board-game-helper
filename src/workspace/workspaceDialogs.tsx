@@ -188,12 +188,13 @@ export const CellInputDialog = ({ owner = 'cell-editor', column, value, inputLab
 
 const range = (start: number, end: number) => Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
 
-const WheelPicker = ({ label, value, options, onChange, loop = false, centerEditor, onCenterClick, disabled = false }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean; centerEditor?: React.ReactNode; onCenterClick?(): void; disabled?: boolean }) => {
+const WheelPicker = ({ label, value, options, onChange, loop = false, centerEditor, onCenterClick, disabled = false, onActivate }: { label: string; value: number; options: number[]; onChange(value: number): void; loop?: boolean; centerEditor?: React.ReactNode; onCenterClick?(): void; disabled?: boolean; onActivate?(): void }) => {
   const dragRef = useRef<{ pointerId: number; startY: number; lastStep: number; moved: boolean } | undefined>(undefined);
   const valueRef = useRef(value);
   const suppressClickRef = useRef(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const canActivate = disabled && Boolean(onActivate);
   useLayoutEffect(() => { valueRef.current = value; }, [value]);
   const index = Math.max(0, options.indexOf(value));
   const valueAt = (offset: number) => {
@@ -219,20 +220,22 @@ const WheelPicker = ({ label, value, options, onChange, loop = false, centerEdit
     }
   };
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId !== event.pointerId) return;
-    suppressClickRef.current = dragRef.current.moved;
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    suppressClickRef.current = drag.moved;
     dragRef.current = undefined;
     setDragging(false);
     setDragOffset(0);
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
-  return <div className={`workspace-datetime-wheel${dragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}`} role={disabled ? 'group' : 'listbox'} aria-label={disabled ? `${label}未啟用` : label} aria-disabled={disabled || undefined} tabIndex={disabled ? -1 : 0}
-    onWheel={(event) => { if (disabled) return; event.preventDefault(); moveBy(event.deltaY > 0 ? 1 : -1); }}
-    onKeyDown={(event) => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); moveBy(event.key === 'ArrowDown' ? 1 : -1); } }}
-    onPointerDown={(event) => { if (disabled || event.button !== 0 || (event.target as HTMLElement).closest('input')) return; suppressClickRef.current = false; dragRef.current = { pointerId: event.pointerId, startY: event.clientY, lastStep: 0, moved: false }; setDragging(true); event.currentTarget.setPointerCapture?.(event.pointerId); }}
-    onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const delta = drag.startY - event.clientY; if (Math.abs(delta) > 4) drag.moved = true; const step = Math.trunc(delta / 32); if (step !== drag.lastStep) { moveBy(step - drag.lastStep); drag.lastStep = step; } setDragOffset(-(delta - step * 32)); }}
+  return <div className={`workspace-datetime-wheel${dragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}${canActivate ? ' is-activatable' : ''}`} role={canActivate ? 'button' : disabled ? 'group' : 'listbox'} aria-label={canActivate ? `${label}未設定，滑動以設定` : disabled ? `${label}未啟用` : label} aria-disabled={disabled && !canActivate || undefined} tabIndex={disabled && !canActivate ? -1 : 0}
+    onWheel={(event) => { if (disabled) { if (canActivate) { event.preventDefault(); onActivate?.(); } return; } event.preventDefault(); moveBy(event.deltaY > 0 ? 1 : -1); }}
+    onKeyDown={(event) => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || canActivate && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); if (canActivate) onActivate?.(); else moveBy(event.key === 'ArrowDown' ? 1 : -1); } }}
+    onPointerDown={(event) => { if (disabled && !canActivate || event.button !== 0 || (event.target as HTMLElement).closest('input')) return; suppressClickRef.current = false; dragRef.current = { pointerId: event.pointerId, startY: event.clientY, lastStep: 0, moved: false }; setDragging(true); event.currentTarget.setPointerCapture?.(event.pointerId); }}
+    onPointerMove={(event) => { const drag = dragRef.current; if (!drag || drag.pointerId !== event.pointerId) return; const delta = drag.startY - event.clientY; if (canActivate) { setDragOffset(-Math.max(-12, Math.min(12, delta))); if (Math.abs(delta) >= 12) { drag.moved = true; drag.startY = event.clientY; drag.lastStep = 0; setDragOffset(0); onActivate?.(); } return; } if (Math.abs(delta) > 4) drag.moved = true; const step = Math.trunc(delta / 32); if (step !== drag.lastStep) { moveBy(step - drag.lastStep); drag.lastStep = step; } setDragOffset(-(delta - step * 32)); }}
     onPointerUp={endDrag} onPointerCancel={endDrag}
-    onClickCapture={(event) => { if (suppressClickRef.current) { event.preventDefault(); event.stopPropagation(); suppressClickRef.current = false; } }}>
+    onClickCapture={(event) => { if (suppressClickRef.current) { event.preventDefault(); event.stopPropagation(); suppressClickRef.current = false; } }}
+    onClick={() => { if (canActivate) onActivate?.(); }}>
     <div className="workspace-datetime-wheel-window"><div className="workspace-datetime-wheel-track" style={{ '--workspace-wheel-offset': `${dragOffset}px` } as React.CSSProperties}>
     {[-2, -1, 0, 1, 2].map((offset) => {
       if (disabled) return offset === 0 ? <span className="workspace-datetime-wheel-disabled-value" key={offset}>－</span> : <span className="workspace-datetime-wheel-empty" aria-hidden="true" key={offset} />;
@@ -348,16 +351,16 @@ const DateRangeFilterEditor = ({ state, onApply, onClear }: { state: HeaderFilte
   const maximum = endEnabled ? dateFilterBoundary(end, precision, true) : '';
   const invalidRange = Boolean(minimum && maximum && minimum > maximum);
   const wheelRow = (endpoint: 'start' | 'end', parts: DateFilterParts, enabled: boolean) => <div className="workspace-datetime-wheel-row" role="group" aria-label={`${endpoint === 'start' ? '開始' : '結束'}日期`}>
-    <WheelPicker label="年" value={parts.year} options={range(Math.max(1, Math.min(currentYear - 100, parts.year - 2)), Math.min(9999, Math.max(currentYear + 100, parts.year + 2)))} disabled={!enabled} onChange={(value) => setPart(endpoint, 'year', value)} onCenterClick={() => { setEditingYear(endpoint); setYearDraft(String(parts.year)); }} centerEditor={editingYear === endpoint ? <input autoFocus aria-label={`輸入${endpoint === 'start' ? '開始' : '結束'}年份`} className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={() => commitYear(endpoint)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(endpoint); } if (event.key === 'Escape') { setEditingYear(null); } }} /> : undefined} />
-    <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop disabled={!enabled || precision === 'year'} onChange={(value) => setPart(endpoint, 'month', value)} />
-    <WheelPicker label="日" value={parts.day} options={range(1, dateFilterDaysInMonth(parts.year, parts.month))} loop disabled={!enabled || precision !== 'day'} onChange={(value) => setPart(endpoint, 'day', value)} />
+    <WheelPicker label="年" value={parts.year} options={range(Math.max(1, Math.min(currentYear - 100, parts.year - 2)), Math.min(9999, Math.max(currentYear + 100, parts.year + 2)))} disabled={!enabled} onActivate={!enabled ? () => endpoint === 'start' ? setStartEnabled(true) : setEndEnabled(true) : undefined} onChange={(value) => setPart(endpoint, 'year', value)} onCenterClick={() => { setEditingYear(endpoint); setYearDraft(String(parts.year)); }} centerEditor={editingYear === endpoint ? <input autoFocus aria-label={`輸入${endpoint === 'start' ? '開始' : '結束'}年份`} className="workspace-datetime-year-input" type="number" inputMode="numeric" min="1" max="9999" value={yearDraft} onChange={(event) => setYearDraft(event.target.value)} onBlur={() => commitYear(endpoint)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitYear(endpoint); } if (event.key === 'Escape') { setEditingYear(null); } }} /> : undefined} />
+    <WheelPicker label="月" value={parts.month} options={range(1, 12)} loop disabled={!enabled || precision === 'year'} onActivate={!enabled && precision !== 'year' ? () => endpoint === 'start' ? setStartEnabled(true) : setEndEnabled(true) : undefined} onChange={(value) => setPart(endpoint, 'month', value)} />
+    <WheelPicker label="日" value={parts.day} options={range(1, dateFilterDaysInMonth(parts.year, parts.month))} loop disabled={!enabled || precision !== 'day'} onActivate={!enabled && precision === 'day' ? () => endpoint === 'start' ? setStartEnabled(true) : setEndEnabled(true) : undefined} onChange={(value) => setPart(endpoint, 'day', value)} />
   </div>;
   return <div className="workspace-date-filter-editor">
     <div className="workspace-date-filter-precision" role="group" aria-label="日期篩選精度">
       {(['year', 'month', 'day'] as const).map((item, index) => <button key={item} type="button" className={(['year', 'month', 'day'] as const).indexOf(precision) >= index ? 'is-filled' : ''} aria-pressed={precision === item} onClick={() => choosePrecision(item)}><span>{item === 'year' ? '年' : item === 'month' ? '月' : '日'}</span><span className="workspace-date-filter-precision-segment" aria-hidden="true" /></button>)}
     </div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3><button type="button" aria-pressed={!startEnabled} onClick={() => setStartEnabled((current) => !current)}>{startEnabled ? '不設開始日期' : '設定開始日期'}</button></div>{wheelRow('start', start, startEnabled)}</div>
-    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3><button type="button" aria-pressed={!endEnabled} onClick={() => setEndEnabled((current) => !current)}>{endEnabled ? '不設結束日期' : '設定結束日期'}</button></div>{wheelRow('end', end, endEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>開始日期</h3>{startEnabled ? <button type="button" onClick={() => setStartEnabled(false)}>不設開始日期</button> : <span>滑動－以設定</span>}</div>{wheelRow('start', start, startEnabled)}</div>
+    <div className="workspace-date-filter-bound"><div className="workspace-date-filter-bound-heading"><h3>結束日期</h3>{endEnabled ? <button type="button" onClick={() => setEndEnabled(false)}>不設結束日期</button> : <span>滑動－以設定</span>}</div>{wheelRow('end', end, endEnabled)}</div>
     {hasLegacyMonths && <p className="workspace-date-filter-note">先前選取的年月仍在篩選中；套用新範圍或清除後會取代它。</p>}
     {!hasRange && !hasLegacyMonths && <p className="workspace-date-filter-note">目前未設定日期範圍</p>}
     {invalidRange && <p className="workspace-date-filter-error" role="alert">結束日期須晚於開始日期</p>}

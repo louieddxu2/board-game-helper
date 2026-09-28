@@ -76,14 +76,41 @@ describe('workspace date range filter', () => {
 
   it('preserves an open-ended date range', () => {
     const { onDateRange } = renderDateFilter({ includedKeys: null, sort: null, min: '2024-03-01', max: '', datePrecision: 'month' });
-    expect(screen.getByRole('button', { name: '設定結束日期' })).toHaveAttribute('aria-pressed', 'true');
     const end = screen.getByRole('group', { name: '結束日期' });
-    expect(within(end).getByRole('group', { name: '年未啟用' })).toHaveTextContent('－');
-    fireEvent.click(screen.getByRole('button', { name: '設定結束日期' }));
-    expect(screen.getByRole('button', { name: '不設結束日期' })).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(screen.getByRole('button', { name: '不設結束日期' }));
+    expect(within(end).getByRole('button', { name: '年未設定，滑動以設定' })).toHaveTextContent('－');
+    expect(screen.queryByRole('button', { name: '設定結束日期' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
     expect(onDateRange).toHaveBeenCalledWith('2024-03-01', '', 'month');
+  });
+
+  it.each([
+    { precision: 'year' as const, label: '年' },
+    { precision: 'month' as const, label: '月' },
+    { precision: 'day' as const, label: '日' },
+  ])('activates an open end by swiping its $label dash', ({ precision, label }) => {
+    vi.stubGlobal('PointerEvent', MouseEvent);
+    const { onDateRange } = renderDateFilter({ includedKeys: null, sort: null, min: '2024-01-01', max: '', datePrecision: precision });
+    const end = screen.getByRole('group', { name: '結束日期' });
+    const wheel = within(end).getByRole('button', { name: `${label}未設定，滑動以設定` });
+    fireEvent.pointerDown(wheel, { button: 0, pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(wheel, { pointerId: 1, clientY: 84 });
+    fireEvent.pointerUp(wheel, { pointerId: 1, clientY: 84 });
+
+    expect(within(end).getByRole('listbox', { name: label })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '不設結束日期' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '套用範圍' }));
+    expect(onDateRange).toHaveBeenCalledWith('2024-01-01', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), precision);
+  });
+
+  it('does not activate a month dash excluded by year precision', () => {
+    vi.stubGlobal('PointerEvent', MouseEvent);
+    renderDateFilter({ includedKeys: null, sort: null, min: '2024-01-01', max: '', datePrecision: 'year' });
+    const end = screen.getByRole('group', { name: '結束日期' });
+    const month = within(end).getByRole('group', { name: '月未啟用' });
+    fireEvent.pointerDown(month, { button: 0, pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(month, { pointerId: 1, clientY: 70 });
+    fireEvent.pointerUp(month, { pointerId: 1, clientY: 70 });
+    expect(within(end).getByRole('button', { name: '年未設定，滑動以設定' })).toBeInTheDocument();
   });
 });
 
