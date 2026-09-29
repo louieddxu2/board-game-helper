@@ -157,6 +157,25 @@ test('pointer-opened action dialogs focus the dialog surface and keyboard-opened
   await expect(nodeActions).toHaveCSS('outline-style', 'solid');
 });
 
+test('a pointer-opened filter restores its trigger even when the browser leaves search focused during the tap', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page);
+  await page.goto(`${site.origin}/workspace`);
+
+  await page.getByRole('button', { name: '搜尋', exact: true }).click();
+  const search = page.getByRole('searchbox', { name: '搜尋此表' });
+  await expect(search).toBeFocused();
+  const filterButton = page.getByRole('button', { name: '篩選 欄位 0' });
+  await filterButton.evaluate((button) => {
+    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    (button as HTMLButtonElement).click();
+  });
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.locator('.workspace-overlay').click({ position: { x: 4, y: 4 } });
+  await expect(filterButton).toBeFocused();
+  await expect(search).not.toBeFocused();
+});
+
 test('a large offline table renders a bounded row window and retains the other tables after editing', async ({ page, context }) => {
   await page.goto(`${site.origin}/workspace`);
   await waitForOfflineShell(page);

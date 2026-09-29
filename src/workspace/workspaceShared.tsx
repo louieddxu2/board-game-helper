@@ -253,14 +253,21 @@ let workspaceModalScrollLockCount = 0;
 let workspaceModalPreviousBodyOverflow = '';
 
 type WorkspaceInputModality = 'pointer' | 'keyboard';
-export const WorkspaceInputModalityContext = createContext<{ current: WorkspaceInputModality } | null>(null);
+type WorkspaceInputState = { kind: WorkspaceInputModality; pointerTarget: HTMLElement | null; pointerAt: number };
+export const WorkspaceInputModalityContext = createContext<{ current: WorkspaceInputState } | null>(null);
 
 export const useWorkspaceInputModality = () => {
-  const modality = useRef<WorkspaceInputModality>('pointer');
+  const modality = useRef<WorkspaceInputState>({ kind: 'pointer', pointerTarget: null, pointerAt: 0 });
   useLayoutEffect(() => {
-    const onPointer = () => { modality.current = 'pointer'; };
+    const onPointer = (event: Event) => {
+      modality.current = {
+        kind: 'pointer',
+        pointerTarget: event.target instanceof Element ? event.target.closest<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [role="button"], [tabindex]:not([tabindex="-1"])') : null,
+        pointerAt: performance.now(),
+      };
+    };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) modality.current = 'keyboard';
+      if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) modality.current = { kind: 'keyboard', pointerTarget: null, pointerAt: 0 };
     };
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('touchstart', onPointer, true);
@@ -303,8 +310,9 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const inputModality = useContext(WorkspaceInputModalityContext);
-  const openedByPointerRef = useRef(inputModality?.current === 'pointer');
-  const restoreFocusRef = useRef<HTMLElement | null>(typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const openedByPointerRef = useRef(inputModality?.current.kind === 'pointer');
+  const pointerTrigger = openedByPointerRef.current && inputModality && performance.now() - inputModality.current.pointerAt < 2000 ? inputModality.current.pointerTarget : null;
+  const restoreFocusRef = useRef<HTMLElement | null>(openedByPointerRef.current ? pointerTrigger : typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const restoreFocusVisibleRef = useRef(restoreFocusRef.current?.matches(':focus-visible') ?? false);
   const titleId = useId();
   const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
@@ -346,7 +354,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   }, []);
   useEffect(() => () => {
     const restoreTarget = restoreFocusRef.current;
-    const restoreVisibleFocus = inputModality ? inputModality.current === 'keyboard' : restoreFocusVisibleRef.current;
+    const restoreVisibleFocus = inputModality ? inputModality.current.kind === 'keyboard' : restoreFocusVisibleRef.current;
     window.requestAnimationFrame(() => {
       const topmostOverlay = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay')).at(-1);
       if (topmostOverlay) {
