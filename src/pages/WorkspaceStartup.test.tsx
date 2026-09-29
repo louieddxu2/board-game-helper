@@ -43,6 +43,24 @@ const editBeforeHistoryLoads = async () => {
 };
 
 describe('workspace startup', () => {
+  it('retains search focus when the directory finishes loading', async () => {
+    const base = await loadWorkspace();
+    const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };
+    const full = { ...base, nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }], tables: [...base.tables, otherTable] };
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    let finishTableLoad!: (value: typeof full) => void;
+    vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
+    render(<WorkspacePage />);
+    fireEvent.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const search = screen.getByRole('searchbox', { name: '搜尋表格與資料夾' });
+    search.focus();
+    fireEvent.change(search, { target: { value: '其他' } });
+    await act(async () => finishTableLoad(full));
+    const hydratedSearch = screen.getByRole('searchbox', { name: '搜尋表格與資料夾' });
+    expect(hydratedSearch).toHaveValue('其他');
+    expect(document.activeElement).toBe(hydratedSearch);
+  });
+
   it('opens the directory before remaining tables load and switches to a queued table after hydration', async () => {
     const base = await loadWorkspace();
     const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };
