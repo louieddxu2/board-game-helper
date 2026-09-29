@@ -311,21 +311,62 @@ test('an installed PWA restores its table before loading homepage modules', asyn
 test('reports repeat startup timing with many local tables on a throttled mobile viewport', async ({ page, context }, info) => {
   const client = await context.newCDPSession(page);
   await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  let timingInstalled = false;
   const measure = async (origin: string, virtualized: boolean) => {
     await page.goto(`${origin}/workspace`);
     await expect(page.locator('.workspace-page')).toBeVisible();
     await waitForOfflineShell(page);
     await seed(page, 8, 250, 12);
+    if (!timingInstalled) await page.addInitScript(() => {
+      const timing = { firstPaintAt: 0, drawerAt: 0, fullDrawerAt: 0 };
+      Object.assign(window, { __workspaceStartupTiming: timing });
+      let scheduled = false;
+      const observeFirstRow = new MutationObserver(() => {
+        if (scheduled || !document.querySelector('.workspace-table tbody tr')) return;
+        scheduled = true;
+        observeFirstRow.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          timing.firstPaintAt = performance.now();
+          const tryOpen = () => {
+            if (document.querySelector('aside.workspace-drawer')) {
+              timing.drawerAt = performance.now();
+              const waitForFullDrawer = () => {
+                if (document.querySelector('.workspace-drawer-create')) { timing.fullDrawerAt = performance.now(); return; }
+                window.setTimeout(waitForFullDrawer, 16);
+              };
+              waitForFullDrawer();
+              return;
+            }
+            document.querySelector<HTMLButtonElement>('button[aria-label="開啟目錄"]')?.click();
+            window.setTimeout(tryOpen, 16);
+          };
+          tryOpen();
+        }));
+      });
+      observeFirstRow.observe(document, { childList: true, subtree: true });
+    });
+    timingInstalled = true;
     const samples: number[] = [];
+    const drawerSamples: number[] = [];
+    const fullDrawerSamples: number[] = [];
     for (let index = 0; index < 5; index++) {
       await page.reload();
       if (virtualized) {
         await expect(page.locator('.workspace-table tbody tr[data-virtual-row-id]').first()).toHaveAttribute('data-virtual-row-id', 'row-0');
         expect(await page.locator('.workspace-table tbody tr[data-virtual-row-id]').count()).toBeLessThan(80);
       } else await expect(page.locator('.workspace-table tbody tr')).toHaveCount(250);
-      samples.push(await page.evaluate(() => new Promise<number>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(performance.now()))))));
+      await expect(page.getByRole('complementary', { name: 'Workspace 目錄' })).toBeVisible();
+      await expect(page.getByRole('button', { name: '新增表格' })).toBeVisible();
+      await expect.poll(() => page.evaluate(() => (window as unknown as { __workspaceStartupTiming: { fullDrawerAt: number } }).__workspaceStartupTiming.fullDrawerAt)).toBeGreaterThan(0);
+      const timing = await page.evaluate(() => (window as unknown as { __workspaceStartupTiming: { firstPaintAt: number; drawerAt: number; fullDrawerAt: number } }).__workspaceStartupTiming);
+      expect(timing.firstPaintAt).toBeGreaterThan(0);
+      expect(timing.drawerAt).toBeGreaterThan(0);
+      expect(timing.fullDrawerAt).toBeGreaterThan(0);
+      samples.push(timing.firstPaintAt);
+      drawerSamples.push(timing.drawerAt);
+      fullDrawerSamples.push(timing.fullDrawerAt);
     }
-    return { samples: samples.map(Math.round), medianMs: Math.round([...samples].sort((a, b) => a - b)[2]) };
+    return { samples: samples.map(Math.round), medianMs: Math.round([...samples].sort((a, b) => a - b)[2]), drawerSamples: drawerSamples.map(Math.round), drawerMedianMs: Math.round([...drawerSamples].sort((a, b) => a - b)[2]), fullDrawerSamples: fullDrawerSamples.map(Math.round), fullDrawerMedianMs: Math.round([...fullDrawerSamples].sort((a, b) => a - b)[2]) };
   };
   const current = await measure(site.origin, true);
   let baseline: Awaited<ReturnType<typeof measure>> | undefined;

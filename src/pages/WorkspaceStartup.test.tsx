@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspacePage } from './WorkspacePage';
+import { loadWorkspace, loadWorkspaceInitial } from '../workspace/db';
 import type { WorkspaceTableHistory, WorkspaceTableHistoryEntry } from '../workspace/history';
 
 const db = vi.hoisted(() => ({
@@ -9,17 +10,18 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock('../workspace/backgroundWork', () => ({ afterWorkspacePaint: (work: () => void) => { work(); return () => undefined; } }));
 vi.mock('../workspace/db', () => {
-  const loadWorkspace = async () => ({
+  const loadWorkspace = vi.fn(async () => ({
     version: 1, activeNodeId: 'node-1', nodes: [{ id: 'node-1', type: 'table', tableId: 'table-1', name: '本機表格', parentId: null, order: 0 }],
     tables: [{ id: 'table-1', name: '本機表格', rowHeaderName: '項目', updatedAt: 1,
       columns: [{ id: 'column-1', name: '名稱', inputType: 'text', options: [] }],
       rows: [{ id: 'row-1', name: '物件', values: { 'column-1': '原值' } }],
     }],
-  });
+  }));
+  const loadWorkspaceInitial = vi.fn(async () => ({ data: await loadWorkspace(), complete: true }));
   return {
   ...db,
   loadWorkspace,
-  loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true }),
+  loadWorkspaceInitial,
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   clearAllWorkspaceHistories: vi.fn(), deleteWorkspaceHistories: vi.fn(), flushWorkspaceSaves: vi.fn(),
 };
@@ -41,6 +43,54 @@ const editBeforeHistoryLoads = async () => {
 };
 
 describe('workspace startup', () => {
+  it('opens the directory before remaining tables load and switches to a queued table after hydration', async () => {
+    const base = await loadWorkspace();
+    const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };
+    const full = {
+      ...base,
+      nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }],
+      tables: [...base.tables, otherTable],
+    };
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    let finishTableLoad!: (value: typeof full) => void;
+    vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
+
+    render(<WorkspacePage />);
+    fireEvent.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
+    expect(within(drawer).getByRole('status')).toHaveTextContent('正在讀取其他表格');
+    expect(screen.queryByRole('button', { name: '新增表格' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('其他表格'));
+    expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('本機表格');
+    expect(db.saveWorkspace).not.toHaveBeenCalled();
+
+    await act(async () => finishTableLoad(full));
+    await waitFor(() => expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('其他表格'));
+    expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a queued table switch when the early directory closes', async () => {
+    const base = await loadWorkspace();
+    const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };
+    const full = {
+      ...base,
+      nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }],
+      tables: [...base.tables, otherTable],
+    };
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    let finishTableLoad!: (value: typeof full) => void;
+    vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
+
+    render(<WorkspacePage />);
+    fireEvent.click(await screen.findByRole('button', { name: '開啟目錄' }));
+    fireEvent.click(screen.getByText('其他表格'));
+    fireEvent.click(within(screen.getByRole('complementary', { name: 'Workspace 目錄' })).getByRole('button', { name: '關閉目錄' }));
+
+    await act(async () => finishTableLoad(full));
+    expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('本機表格');
+    expect(db.saveWorkspace).not.toHaveBeenCalled();
+  });
+
   it('shows editable data before history resolves and reconciles an already persisted early edit exactly once', async () => {
     render(<WorkspacePage />);
     await editBeforeHistoryLoads();
