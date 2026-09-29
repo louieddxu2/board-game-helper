@@ -253,31 +253,50 @@ let workspaceModalScrollLockCount = 0;
 let workspaceModalPreviousBodyOverflow = '';
 
 type WorkspaceInputModality = 'pointer' | 'keyboard';
-type WorkspaceInputState = { kind: WorkspaceInputModality; pointerTarget: HTMLElement | null; pointerAt: number };
+type WorkspaceReturnFocus = { target: HTMLElement | null; parent: WorkspaceReturnFocus | null };
+const workspaceModalReturnFocus = new WeakMap<HTMLElement, WorkspaceReturnFocus>();
+type WorkspaceActivation = { kind: WorkspaceInputModality; target: HTMLElement | null; parent: WorkspaceReturnFocus | null };
+type WorkspaceInputState = { kind: WorkspaceInputModality; activation: WorkspaceActivation | null };
 export const WorkspaceInputModalityContext = createContext<{ current: WorkspaceInputState } | null>(null);
 
 export const useWorkspaceInputModality = () => {
-  const modality = useRef<WorkspaceInputState>({ kind: 'pointer', pointerTarget: null, pointerAt: 0 });
+  const modality = useRef<WorkspaceInputState>({ kind: 'pointer', activation: null });
   useLayoutEffect(() => {
-    const onPointer = (event: Event) => {
-      modality.current = {
-        kind: 'pointer',
-        pointerTarget: event.target instanceof Element ? event.target.closest<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [role="button"], [tabindex]:not([tabindex="-1"])') : null,
-        pointerAt: performance.now(),
+    const captureActivation = (event: Event) => {
+      const target = event.target instanceof Element ? event.target.closest<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [role="button"][tabindex]:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])') : null;
+      const parentOverlay = target?.closest<HTMLElement>('.workspace-overlay');
+      const activation: WorkspaceActivation = {
+        kind: modality.current.kind,
+        target,
+        parent: parentOverlay ? workspaceModalReturnFocus.get(parentOverlay) ?? null : null,
       };
+      modality.current.activation = activation;
+      // A dialog opened in this event can use the trigger; a later async dialog cannot.
+      window.setTimeout(() => {
+        if (modality.current.activation === activation) modality.current.activation = null;
+      }, 0);
+    };
+    const onPointer = () => {
+      modality.current.kind = 'pointer';
+      modality.current.activation = null;
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) modality.current = { kind: 'keyboard', pointerTarget: null, pointerAt: 0 };
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
+      modality.current.kind = 'keyboard';
+      modality.current.activation = null;
+      captureActivation(event);
     };
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('touchstart', onPointer, true);
     document.addEventListener('mousedown', onPointer, true);
     document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('click', captureActivation, true);
     return () => {
       document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('touchstart', onPointer, true);
       document.removeEventListener('mousedown', onPointer, true);
       document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('click', captureActivation, true);
     };
   }, []);
   return modality;
@@ -289,6 +308,28 @@ const workspaceModalFocusableElements = (dialog: HTMLElement) => Array.from(dial
   const style = window.getComputedStyle(element);
   return element.getClientRects().length > 0 && style.visibility !== 'hidden';
 });
+
+const connectedReturnTarget = (origin: WorkspaceReturnFocus, within?: HTMLElement) => {
+  for (let current: WorkspaceReturnFocus | null = origin; current; current = current.parent) {
+    const target = current.target;
+    if (target?.isConnected && target !== document.body && (!within || within.contains(target))) return target;
+  }
+  return null;
+};
+
+const focusWorkspaceReturnTarget = (target: HTMLElement, showFocusRing: boolean) => {
+  if (showFocusRing) target.classList.remove('workspace-restored-pointer-focus');
+  target.focus({ preventScroll: true });
+  if (showFocusRing || document.activeElement !== target || !target.matches('button, a[href], [role="dialog"]') || target.classList.contains('workspace-restored-pointer-focus')) return;
+  const clearPointerFocus = () => {
+    target.classList.remove('workspace-restored-pointer-focus');
+    target.removeEventListener('blur', clearPointerFocus);
+    target.removeEventListener('keydown', clearPointerFocus);
+  };
+  target.classList.add('workspace-restored-pointer-focus');
+  target.addEventListener('blur', clearPointerFocus);
+  target.addEventListener('keydown', clearPointerFocus);
+};
 
 type WorkspaceModalProps = {
   title: string;
@@ -310,10 +351,17 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const inputModality = useContext(WorkspaceInputModalityContext);
-  const openedByPointerRef = useRef(inputModality?.current.kind === 'pointer');
-  const pointerTrigger = openedByPointerRef.current && inputModality && performance.now() - inputModality.current.pointerAt < 2000 ? inputModality.current.pointerTarget : null;
-  const restoreFocusRef = useRef<HTMLElement | null>(openedByPointerRef.current ? pointerTrigger : typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  const restoreFocusVisibleRef = useRef(restoreFocusRef.current?.matches(':focus-visible') ?? false);
+  const activation = inputModality?.current.activation;
+  const openedByPointerRef = useRef((activation?.kind ?? inputModality?.current.kind) === 'pointer');
+  const activeAtOpen = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activationTarget = activation?.target ?? (!inputModality ? activeAtOpen : null);
+  const parentOverlay = activationTarget?.closest<HTMLElement>('.workspace-overlay');
+  const workspacePageRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef<WorkspaceReturnFocus>({
+    target: activationTarget,
+    parent: activation?.parent ?? (parentOverlay ? workspaceModalReturnFocus.get(parentOverlay) ?? null : null),
+  });
+  const restoreFocusVisibleRef = useRef(restoreFocusRef.current.target?.matches(':focus-visible') ?? false);
   const titleId = useId();
   const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
     const onDismiss = () => { if (onRequestClose) onRequestClose(reason); else onClose?.(); };
@@ -335,8 +383,17 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
     const preferred = initialFocus === 'close-button'
       ? closeButtonRef.current ?? dialog
       : contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
-    (openedByPointerRef.current && preferred.matches('button, a[href], [role="button"]') ? dialog : preferred).focus({ preventScroll: true });
+    const target = openedByPointerRef.current && preferred.matches('button, a[href], [role="button"]') ? dialog : preferred;
+    focusWorkspaceReturnTarget(target, !openedByPointerRef.current);
   }, [initialFocus]);
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    if (overlay) {
+      workspaceModalReturnFocus.set(overlay, restoreFocusRef.current);
+      workspacePageRef.current = overlay.closest<HTMLElement>('.workspace-page');
+    }
+    return () => { if (overlay) workspaceModalReturnFocus.delete(overlay); };
+  }, []);
   useLayoutEffect(() => {
     focusFirstDialogControl();
   }, [focusFirstDialogControl]);
@@ -353,29 +410,27 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
     };
   }, []);
   useEffect(() => () => {
-    const restoreTarget = restoreFocusRef.current;
+    const restoreOrigin = restoreFocusRef.current;
     const restoreVisibleFocus = inputModality ? inputModality.current.kind === 'keyboard' : restoreFocusVisibleRef.current;
     window.requestAnimationFrame(() => {
+      if (document.querySelector('.workspace-page') !== workspacePageRef.current) return;
       const topmostOverlay = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay')).at(-1);
       if (topmostOverlay) {
+        const topmostDialog = topmostOverlay.querySelector<HTMLElement>('[role="dialog"]');
+        if (topmostDialog && !topmostDialog.contains(document.activeElement)) {
+          const target = connectedReturnTarget(restoreOrigin, topmostDialog) ?? topmostDialog;
+          focusWorkspaceReturnTarget(target, restoreVisibleFocus);
+          if (document.activeElement !== target) focusWorkspaceReturnTarget(topmostDialog, restoreVisibleFocus);
+        }
         return;
       }
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement && active.isConnected) return;
-      const fallback = restoreVisibleFocus ? document.querySelector<HTMLElement>('.workspace-page button') : null;
-      const target = restoreTarget?.isConnected && restoreTarget !== document.body ? restoreTarget : fallback;
+      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement && active !== workspacePageRef.current && active.isConnected) return;
+      const fallback = restoreVisibleFocus ? workspacePageRef.current : null;
+      const target = connectedReturnTarget(restoreOrigin) ?? fallback;
       if (!target) return;
-      target.focus({ preventScroll: true });
-      if (!restoreVisibleFocus && document.activeElement === target && target.matches('button, a[href]')) {
-        const clearPointerFocus = () => {
-          target.classList.remove('workspace-restored-pointer-focus');
-          target.removeEventListener('blur', clearPointerFocus);
-          target.removeEventListener('keydown', clearPointerFocus);
-        };
-        target.classList.add('workspace-restored-pointer-focus');
-        target.addEventListener('blur', clearPointerFocus);
-        target.addEventListener('keydown', clearPointerFocus);
-      }
+      focusWorkspaceReturnTarget(target, restoreVisibleFocus);
+      if (document.activeElement !== target && fallback) focusWorkspaceReturnTarget(fallback, restoreVisibleFocus);
     });
   }, []);
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();
@@ -414,7 +469,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   } as React.CSSProperties : undefined;
   const overlayClass = className.trim().split(/\s+/)[0];
   return <div ref={overlayRef} className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget && isTopmost()) { event.preventDefault(); event.stopPropagation(); requestClose('backdrop'); } }}>
-    <section ref={dialogRef} tabIndex={-1} data-pointer-opened={openedByPointerRef.current ? '' : undefined} className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? titleId : undefined} onKeyDownCapture={(event) => {
+    <section ref={dialogRef} tabIndex={-1} className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? titleId : undefined} onKeyDownCapture={(event) => {
       if (event.key !== 'Tab' || !isTopmost()) return;
       const focusable = workspaceModalFocusableElements(event.currentTarget);
       if (!focusable.length) { event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); return; }

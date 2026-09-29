@@ -48,7 +48,8 @@ button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button, input, textarea, select, summary, a { min-height: 44px; }
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
-.workspace-page .workspace-restored-pointer-focus:focus-visible { outline: none; }
+.workspace-page .workspace-restored-pointer-focus:focus { outline: none; }
+.workspace-page:focus { outline: none; }
 a { color: inherit; }
 h1, h2, h3, p { margin-top: 0; }
 h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacing: -0.035em; }
@@ -337,7 +338,6 @@ footer a { color: inherit; }
 .workspace-empty-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 14px; background: var(--cream); color: var(--orange); }
 .workspace-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); overflow: auto; background: transparent; font-size: 16px; --workspace-text-scale: 1; }
 .workspace-dialog { position: relative; width: min(460px, 100%); max-height: min(calc(var(--workspace-visual-viewport-height, 100dvh) - 36px), 720px); display: flex; flex-direction: column; overflow: hidden; border-radius: 10px; background: rgba(255,253,248,.82); backdrop-filter: none; box-shadow: 0 18px 50px rgba(23,47,40,.28); font-size: 16px; --workspace-text-scale: 1; }
-.workspace-dialog[data-pointer-opened]:focus { outline: none; }
 .workspace-dialog.has-leading-action { overflow: visible; }
 .workspace-dialog-leading-action { position: absolute; top: -13px; left: -13px; z-index: 5; }
 .workspace-dialog-delete { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 2px solid var(--white); border-radius: 50%; background: #a52f23; color: var(--white); box-shadow: 0 3px 10px rgba(95,20,15,.3); cursor: pointer; }

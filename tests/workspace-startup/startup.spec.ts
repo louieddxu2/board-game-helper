@@ -176,6 +176,21 @@ test('a pointer-opened filter restores its trigger even when the browser leaves 
   await expect(search).not.toBeFocused();
 });
 
+test('a keyboard action-to-editor transition returns to its original directory trigger', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page);
+  await page.goto(`${site.origin}/workspace`);
+
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const nodeActions = page.getByRole('button', { name: '開啟測試表 0操作' });
+  await nodeActions.focus();
+  await nodeActions.press('Enter');
+  await page.getByRole('dialog').getByRole('button', { name: '重新命名' }).press('Enter');
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await expect(nodeActions).toBeFocused();
+});
+
 test('a large offline table renders a bounded row window and retains the other tables after editing', async ({ page, context }) => {
   await page.goto(`${site.origin}/workspace`);
   await waitForOfflineShell(page);
