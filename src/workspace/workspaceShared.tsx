@@ -1,5 +1,5 @@
 import { WorkspaceModalCloseContext, type WorkspaceModalCloseReason, type WorkspaceModalOwner } from './workspaceModalClose';
-import { forwardRef, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { createContext, forwardRef, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceNumberInputMode } from './types';
 import type { DateFilterPrecision } from './dateFilter';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
@@ -252,6 +252,30 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHT
 let workspaceModalScrollLockCount = 0;
 let workspaceModalPreviousBodyOverflow = '';
 
+type WorkspaceInputModality = 'pointer' | 'keyboard';
+export const WorkspaceInputModalityContext = createContext<{ current: WorkspaceInputModality } | null>(null);
+
+export const useWorkspaceInputModality = () => {
+  const modality = useRef<WorkspaceInputModality>('pointer');
+  useLayoutEffect(() => {
+    const onPointer = () => { modality.current = 'pointer'; };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) modality.current = 'keyboard';
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('touchstart', onPointer, true);
+    document.addEventListener('mousedown', onPointer, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('touchstart', onPointer, true);
+      document.removeEventListener('mousedown', onPointer, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, []);
+  return modality;
+};
+
 const workspaceModalFocusableSelector = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
 
 const workspaceModalFocusableElements = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll<HTMLElement>(workspaceModalFocusableSelector)).filter((element) => {
@@ -278,6 +302,8 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const inputModality = useContext(WorkspaceInputModalityContext);
+  const openedByPointerRef = useRef(inputModality?.current === 'pointer');
   const restoreFocusRef = useRef<HTMLElement | null>(typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const restoreFocusVisibleRef = useRef(restoreFocusRef.current?.matches(':focus-visible') ?? false);
   const titleId = useId();
@@ -301,7 +327,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
     const preferred = initialFocus === 'close-button'
       ? closeButtonRef.current ?? dialog
       : contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
-    preferred.focus({ preventScroll: true });
+    (openedByPointerRef.current && preferred.matches('button, a[href], [role="button"]') ? dialog : preferred).focus({ preventScroll: true });
   }, [initialFocus]);
   useLayoutEffect(() => {
     focusFirstDialogControl();
@@ -320,12 +346,14 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   }, []);
   useEffect(() => () => {
     const restoreTarget = restoreFocusRef.current;
-    const restoreVisibleFocus = restoreFocusVisibleRef.current;
+    const restoreVisibleFocus = inputModality ? inputModality.current === 'keyboard' : restoreFocusVisibleRef.current;
     window.requestAnimationFrame(() => {
       const topmostOverlay = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay')).at(-1);
       if (topmostOverlay) {
         return;
       }
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement && active.isConnected) return;
       const fallback = restoreVisibleFocus ? document.querySelector<HTMLElement>('.workspace-page button') : null;
       const target = restoreTarget?.isConnected && restoreTarget !== document.body ? restoreTarget : fallback;
       if (!target) return;
@@ -378,7 +406,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   } as React.CSSProperties : undefined;
   const overlayClass = className.trim().split(/\s+/)[0];
   return <div ref={overlayRef} className={`workspace-overlay ${overlayClass ? `${overlayClass}-overlay` : ''}`} style={overlayStyle} role="presentation" onClick={(event) => { if (event.target === event.currentTarget && isTopmost()) { event.preventDefault(); event.stopPropagation(); requestClose('backdrop'); } }}>
-    <section ref={dialogRef} tabIndex={-1} className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? titleId : undefined} onKeyDownCapture={(event) => {
+    <section ref={dialogRef} tabIndex={-1} data-pointer-opened={openedByPointerRef.current ? '' : undefined} className={`workspace-dialog ${dialogKind === 'editor' ? 'workspace-dialog-editor' : ''} ${leadingAction ? 'has-leading-action' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={dialogKind === 'editor' ? title : undefined} aria-labelledby={dialogKind === 'standard' ? titleId : undefined} onKeyDownCapture={(event) => {
       if (event.key !== 'Tab' || !isTopmost()) return;
       const focusable = workspaceModalFocusableElements(event.currentTarget);
       if (!focusable.length) { event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); return; }

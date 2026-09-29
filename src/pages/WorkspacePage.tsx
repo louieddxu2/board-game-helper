@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { appendWorkspaceHistoryEntry, assertWorkspaceStorageCurrent, clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
-import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
+import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, useWorkspaceInputModality, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, WorkspaceInputModalityContext, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, HeaderFilterDialog, HiddenFieldsDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
@@ -64,6 +64,7 @@ const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string
 };
 
 const WorkspacePage = () => {
+  const inputModality = useWorkspaceInputModality();
   const [data, setData] = useState<WorkspaceData>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerOffset, setDrawerOffset] = useState(0);
@@ -1261,9 +1262,9 @@ const WorkspacePage = () => {
     </>;
   }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, columnWindow.virtual, columnWindow.visibleRows, columnWindow.visibleWidths, columnWindow.leftPadding, columnWindow.rightPadding, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
-  if (!data) return <WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider>;
+  if (!data) return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider></WorkspaceInputModalityContext.Provider>;
 
-  return <WorkspaceModalCloseContext.Provider value={requestClose}><section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
+  return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section ref={workspacePageRef} className="workspace-page" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading">
@@ -1343,7 +1344,7 @@ const WorkspacePage = () => {
     {tableImportPreview && <WorkspaceTableImportPreviewDialog table={tableImportPreview.table} source={tableImportPreview.source} onClose={() => setTableImportPreview(undefined)} onImport={(tableCopy) => finishTableImport(tableCopy, tableImportPreview.parentId)} />}
     {workspaceImport && <WorkspaceModal owner="workspace-import" title="匯入整個資料庫" onRequestClose={() => setWorkspaceImport(undefined)} className="workspace-import-preview-dialog"><div className="workspace-import-summary"><strong>{workspaceImport.tables.length} 張表格 · {workspaceImport.nodes.filter((node) => node.type === 'folder').length} 個資料夾</strong><span>{workspaceImport.tables.reduce((total, item) => total + item.rows.length, 0)} 個物件</span></div><div className="workspace-import-table-names">{workspaceImport.tables.map((item) => <span key={item.id}>{item.name}</span>)}</div><div className="workspace-import-actions"><button type="button" className="workspace-dialog-button secondary" onClick={() => finishWorkspaceImport('merge')}>合併</button><button type="button" className="workspace-dialog-button danger" onClick={() => finishWorkspaceImport('replace')}>取代</button></div></WorkspaceModal>}
     {driveBackup.dialogOpen && <GoogleDriveBackupDialog status={driveBackup.status} busy={driveBackup.busy} message={driveBackup.message} error={driveBackup.error} record={driveBackup.record} remoteFile={driveBackup.remoteFile} remoteConflict={driveBackup.remoteConflict} authorized={driveBackup.authorized} onClose={driveBackup.close} onConnect={() => void driveBackup.connect()} onBackup={() => void driveBackup.backup()} onFindRemote={() => void driveBackup.findRemote()} onRestore={() => void driveBackup.restore()} onOverwrite={() => void driveBackup.backup({ force: true })} onDisconnect={() => void driveBackup.disconnect()} />}
-  </section></WorkspaceModalCloseContext.Provider>;
+  </section></WorkspaceModalCloseContext.Provider></WorkspaceInputModalityContext.Provider>;
 };
 
 export { WorkspacePage };

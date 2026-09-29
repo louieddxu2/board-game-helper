@@ -103,19 +103,20 @@ test('a previously unvisited workspace opens offline and edits, undo, and saves 
 });
 
 test('closing a pointer-opened editor does not outline a toolbar button, while keyboard focus remains visible', async ({ page }) => {
-  await page.goto(`${site.origin}/workspace`);
+  await page.goto(`${site.origin}/privacy`);
   await seed(page);
-  await page.reload();
+  await page.goto(`${site.origin}/workspace`);
+  await expect.poll(() => page.evaluate(() => document.activeElement === document.body)).toBe(true);
 
   const menuButton = page.getByRole('button', { name: '開啟目錄' });
   const titleButton = page.getByRole('button', { name: '重新命名表格' });
   await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
-  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await page.locator('.workspace-overlay').click({ position: { x: 4, y: 4 } });
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(menuButton).not.toBeFocused();
 
   await titleButton.click();
-  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await page.locator('.workspace-overlay').click({ position: { x: 4, y: 4 } });
   await expect(titleButton).toBeFocused();
   await expect(titleButton).toHaveCSS('outline-style', 'none');
 
@@ -129,6 +130,31 @@ test('closing a pointer-opened editor does not outline a toolbar button, while k
   await page.getByRole('dialog').getByRole('textbox').press('Escape');
   await expect(titleButton).toBeFocused();
   await expect(titleButton).toHaveCSS('outline-style', 'solid');
+});
+
+test('pointer-opened action dialogs focus the dialog surface and keyboard-opened dialogs focus an action', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page);
+  await page.goto(`${site.origin}/workspace`);
+
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const nodeActions = page.getByRole('button', { name: '開啟測試表 0操作' });
+  await nodeActions.click();
+  const dialog = page.getByRole('dialog');
+  const renameAction = dialog.getByRole('button', { name: '重新命名' });
+  await expect(dialog).toBeFocused();
+  await expect(dialog).toHaveCSS('outline-style', 'none');
+  await expect(renameAction).not.toBeFocused();
+  await dialog.getByRole('button', { name: '關閉' }).click();
+  await expect(nodeActions).toBeFocused();
+  await expect(nodeActions).toHaveCSS('outline-style', 'none');
+
+  await nodeActions.press('Enter');
+  await expect(renameAction).toBeFocused();
+  await expect(renameAction).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Escape');
+  await expect(nodeActions).toBeFocused();
+  await expect(nodeActions).toHaveCSS('outline-style', 'solid');
 });
 
 test('a large offline table renders a bounded row window and retains the other tables after editing', async ({ page, context }) => {
