@@ -279,6 +279,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const restoreFocusVisibleRef = useRef(restoreFocusRef.current?.matches(':focus-visible') ?? false);
   const titleId = useId();
   const requestClose = useCallback((reason: WorkspaceModalCloseReason) => {
     const onDismiss = () => { if (onRequestClose) onRequestClose(reason); else onClose?.(); };
@@ -319,13 +320,26 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
   }, []);
   useEffect(() => () => {
     const restoreTarget = restoreFocusRef.current;
+    const restoreVisibleFocus = restoreFocusVisibleRef.current;
     window.requestAnimationFrame(() => {
       const topmostOverlay = Array.from(document.querySelectorAll<HTMLElement>('.workspace-overlay')).at(-1);
       if (topmostOverlay) {
         return;
       }
-      const fallback = document.querySelector<HTMLElement>('.workspace-page button');
-      (restoreTarget?.isConnected && restoreTarget !== document.body ? restoreTarget : fallback)?.focus({ preventScroll: true });
+      const fallback = restoreVisibleFocus ? document.querySelector<HTMLElement>('.workspace-page button') : null;
+      const target = restoreTarget?.isConnected && restoreTarget !== document.body ? restoreTarget : fallback;
+      if (!target) return;
+      target.focus({ preventScroll: true });
+      if (!restoreVisibleFocus && document.activeElement === target && target.matches('button, a[href]')) {
+        const clearPointerFocus = () => {
+          target.classList.remove('workspace-restored-pointer-focus');
+          target.removeEventListener('blur', clearPointerFocus);
+          target.removeEventListener('keydown', clearPointerFocus);
+        };
+        target.classList.add('workspace-restored-pointer-focus');
+        target.addEventListener('blur', clearPointerFocus);
+        target.addEventListener('keydown', clearPointerFocus);
+      }
     });
   }, []);
   const [visualViewport, setVisualViewport] = useState<{ top: number; left: number; width: number; height: number }>();

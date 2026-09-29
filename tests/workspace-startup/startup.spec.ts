@@ -102,6 +102,35 @@ test('a previously unvisited workspace opens offline and edits, undo, and saves 
   expect(errors).toEqual([]);
 });
 
+test('closing a pointer-opened editor does not outline a toolbar button, while keyboard focus remains visible', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await seed(page);
+  await page.reload();
+
+  const menuButton = page.getByRole('button', { name: '開啟目錄' });
+  const titleButton = page.getByRole('button', { name: '重新命名表格' });
+  await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
+  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(menuButton).not.toBeFocused();
+
+  await titleButton.click();
+  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await expect(titleButton).toBeFocused();
+  await expect(titleButton).toHaveCSS('outline-style', 'none');
+
+  await page.keyboard.press('Tab');
+  const searchButton = page.getByRole('button', { name: '搜尋', exact: true });
+  await expect(searchButton).toBeFocused();
+  await expect(searchButton).toHaveCSS('outline-style', 'solid');
+
+  await page.keyboard.press('Shift+Tab');
+  await titleButton.press('Enter');
+  await page.getByRole('dialog').getByRole('textbox').press('Escape');
+  await expect(titleButton).toBeFocused();
+  await expect(titleButton).toHaveCSS('outline-style', 'solid');
+});
+
 test('a large offline table renders a bounded row window and retains the other tables after editing', async ({ page, context }) => {
   await page.goto(`${site.origin}/workspace`);
   await waitForOfflineShell(page);

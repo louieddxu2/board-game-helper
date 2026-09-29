@@ -48,6 +48,7 @@ button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button, input, textarea, select, summary, a { min-height: 44px; }
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.workspace-page .workspace-restored-pointer-focus:focus-visible { outline: none; }
 a { color: inherit; }
 h1, h2, h3, p { margin-top: 0; }
 h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacing: -0.035em; }
