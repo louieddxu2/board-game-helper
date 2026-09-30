@@ -150,9 +150,14 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
           const direction = isSorted ? sort.direction : undefined;
           const poles = attributeDisplayEndpoints(attribute);
           const sortLabel = poles && direction ? `偏${poles[direction === 'desc' ? 'high' : 'low'].label}優先` : direction === 'desc' ? '由大到小' : direction === 'asc' ? '由小到大' : '正常';
-          return <th scope="col" key={attribute.id} title={poles ? undefined : attribute.fullDescription} aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : 'none'}>
+          return <th scope="col" key={attribute.id} aria-sort={direction === 'desc' ? 'descending' : direction === 'asc' ? 'ascending' : 'none'}>
             <button type="button" className={`attributes-matrix-sort ${isSorted ? 'is-sorted' : ''}`} onClick={() => toggleSort(attribute.id)} aria-label={`${attribute.name}排序：${sortLabel}`}><span>{attribute.name}</span><span className="attributes-matrix-sort-indicator" aria-hidden="true">{direction === 'desc' ? '↓' : direction === 'asc' ? '↑' : '↕'}</span></button>
-            {poles && <div className="attributes-matrix-poles"><span>0＝{poles.low.label}</span><span>10＝{poles.high.label}</span>{direction && <span>{sortLabel}</span>}<details><summary>兩端說明</summary>{(['low', 'high'] as const).map((pole) => <div key={pole}><strong>{poles[pole].label}</strong><p>{poles[pole].fullDescription ?? poles[pole].shortDescription ?? '尚無說明'}</p></div>)}</details></div>}
+            {poles && <div className="attributes-matrix-poles"><span>0＝{poles.low.label}</span><span>10＝{poles.high.label}</span>{direction && <span>{sortLabel}</span>}</div>}
+            <details className="attributes-matrix-description">
+              <summary>{poles ? '兩端說明' : '屬性說明'}</summary>
+              <p>{attribute.fullDescription ?? attribute.shortDescription ?? '尚無說明'}</p>
+              {poles && (['low', 'high'] as const).map((pole) => <div key={pole}><strong>{poles[pole].label}</strong><p>{poles[pole].fullDescription ?? poles[pole].shortDescription ?? '尚無說明'}</p></div>)}
+            </details>
           </th>;
         })}</tr></thead>
         <tbody>{sortedRows.map((row) => {
