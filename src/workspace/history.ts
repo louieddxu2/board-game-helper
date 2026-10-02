@@ -290,8 +290,10 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
 
   const beforeRowIds = beforeTable.rows.map((row) => row.id);
   const nextRowIds = nextTable.rows.map((row) => row.id);
-  const addedRowIds = nextRowIds.filter((id) => !beforeRowIds.includes(id));
-  const removedRowIds = beforeRowIds.filter((id) => !nextRowIds.includes(id));
+  const beforeRowIdSet = new Set(beforeRowIds);
+  const nextRowIdSet = new Set(nextRowIds);
+  const addedRowIds = nextRowIds.filter((id) => !beforeRowIdSet.has(id));
+  const removedRowIds = beforeRowIds.filter((id) => !nextRowIdSet.has(id));
   if (addedRowIds.length === 1 && removedRowIds.length === 0 && sameColumns(beforeTable, nextTable)) {
     const row = nextTable.rows.find((item) => item.id === addedRowIds[0]);
     if (row) return mutation('新增物件', { type: 'add-row', row, index: nextRowIds.indexOf(row.id) });
