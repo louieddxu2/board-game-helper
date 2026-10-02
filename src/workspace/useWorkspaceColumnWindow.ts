@@ -21,6 +21,7 @@ export const useWorkspaceColumnWindow = (
   viewportWidth: number,
   enabled: boolean,
 ) => {
+  const rowIndexes = useMemo(() => new Map(rows.map((row, index) => [row.id, index])), [rows]);
   const offsets = useMemo(() => {
     const result = [0];
     for (let index = 0; index < rows.length; index += 1) result.push(result[result.length - 1] + (widths[index + 1] ?? 48));
@@ -38,8 +39,8 @@ export const useWorkspaceColumnWindow = (
     leftPadding: virtual ? offsets[first] : 0,
     rightPadding: virtual ? offsets[rows.length] - offsets[last] : 0,
     offsetForRow: useCallback((id: string) => {
-      const index = rows.findIndex((row) => row.id === id);
-      return index < 0 ? undefined : (widths[0] ?? 0) + offsets[index];
-    }, [offsets, rows, widths]),
+      const index = rowIndexes.get(id);
+      return index === undefined ? undefined : (widths[0] ?? 0) + offsets[index];
+    }, [offsets, rowIndexes, widths]),
   };
 };

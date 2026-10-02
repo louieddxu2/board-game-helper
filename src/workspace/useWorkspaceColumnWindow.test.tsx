@@ -23,4 +23,17 @@ describe('transposed workspace visible columns', () => {
     expect(result.current.visibleRows.at(-1)?.id).toBe('row-249');
     expect(result.current.rightPadding).toBe(0);
   });
+
+  it('recomputes exact offsets from the visible object identities after filtering', () => {
+    const nextRows = rows.slice(40, 200);
+    const nextWidths = [100, ...nextRows.map(() => 50)];
+    const { result, rerender } = renderHook(({ visibleRows, visibleWidths }) => useWorkspaceColumnWindow(visibleRows, visibleWidths, 0, 390, true), {
+      initialProps: { visibleRows: rows, visibleWidths: widths },
+    });
+
+    rerender({ visibleRows: nextRows, visibleWidths: nextWidths });
+    expect(result.current.visibleRows[0]?.id).toBe('row-40');
+    expect(result.current.offsetForRow('row-100')).toBe(100 + 60 * 50);
+    expect(result.current.offsetForRow('row-39')).toBeUndefined();
+  });
 });

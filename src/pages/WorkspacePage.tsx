@@ -26,6 +26,7 @@ import { afterWorkspacePaint } from '../workspace/backgroundWork';
 import { hydrateWorkspaceHistories } from '../workspace/history';
 import { useWorkspaceRowWindow } from '../workspace/useWorkspaceRowWindow';
 import { useWorkspaceColumnWindow } from '../workspace/useWorkspaceColumnWindow';
+import { createWorkspaceTextWidthCache } from '../workspace/workspaceTextWidthCache';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 const workspaceLineLimitStyle = (column: WorkspaceColumn) => ({ '--workspace-line-limit': column.lineLimit ? String(column.lineLimit) : undefined } as React.CSSProperties);
@@ -130,6 +131,8 @@ const WorkspacePage = () => {
   const drawerItemDraggingRef = useRef(false);
   const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
   const pendingOpenNodeIdRef = useRef<string | undefined>(undefined);
+  const lastUserScrollAtRef = useRef(0);
+  const programmaticTableScrollRef = useRef(false);
 
   // Only allow full saves after the render using the complete table set has committed.
   useLayoutEffect(() => { allTablesReadyRef.current = allTablesReady; }, [allTablesReady]);
@@ -428,8 +431,8 @@ const WorkspacePage = () => {
   }) ?? [], [data]);
   const navigationTableById = useMemo(() => new Map(navigationTables.map((item) => [item.tableId, item])), [navigationTables]);
   const bottomNavigationItems = useMemo(() => (data?.bottomNavigationTableIds ?? []).flatMap((tableId) => navigationTableById.get(tableId) ?? []), [data?.bottomNavigationTableIds, navigationTableById]);
-  const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table]);
-  const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table]);
+  const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table?.id, table?.rowHeader, table?.rowHeaderName]);
+  const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table?.rows]);
   const tableRowIndexes = useMemo(() => new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [table?.rows]);
 
   const {
@@ -441,11 +444,12 @@ const WorkspacePage = () => {
     updateActiveFilter, isHeaderFilterActive, viewStateReady, scrollPosition, setScrollPosition
   } = useWorkspaceFilter({ table, rowHeader, tableRowsById });
 
-  const hiddenColumns = useMemo(() => table?.columns.filter((column) => column.hidden) ?? [], [table]);
+  const hiddenColumns = useMemo(() => table?.columns.filter((column) => column.hidden) ?? [], [table?.columns]);
   const displayedColumns = useMemo(() => visibleColumns.filter((column) => !column.hidden), [visibleColumns]);
+  const filteredRowIndexes = useMemo(() => new Map(filteredRows.map((row, index) => [row.id, index])), [filteredRows]);
   const searchFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
     if (!table || !rowHeader) return [];
-    if (table.transposed) return table.rows.map((row) => ({ axis: 'row', id: row.id, label: displayWorkspaceColumnValue(row.name, rowHeader) || '未命名物件' }));
+    if (table.transposed) return [];
     return [
       { axis: 'column', id: rowHeader.id, label: rowHeader.name || '未命名欄位' },
       ...displayedColumns.map((column) => ({ axis: 'column' as const, id: column.id, label: column.name || '未命名欄位' })),
@@ -535,34 +539,34 @@ const WorkspacePage = () => {
     window.localStorage.setItem(expandedFoldersStorageKey, JSON.stringify([...expanded]));
   }, [data, expanded]);
 
+  const textWidthCache = useMemo(() => createWorkspaceTextWidthCache(), []);
   const columnTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
     const widthFor = (column: WorkspaceColumn, headerValue = column.name, valueForRow?: (row: WorkspaceRow) => WorkspaceCellValue) => {
       const shouldMeasureValues = column.overflowMode === 'expand' || Boolean(column.widthLimitChars);
       let valueWidth = 0;
       if (shouldMeasureValues && valueForRow) {
-        for (const row of table.rows) valueWidth = Math.max(valueWidth, measureWorkspaceText(displayWorkspaceColumnValue(valueForRow(row), column), 20, 400));
+        for (const row of table.rows) valueWidth = Math.max(valueWidth, textWidthCache.measure(row, column, valueForRow(row)));
       }
       const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
         ? Math.min(valueWidth, column.widthLimitChars * 20)
         : column.overflowMode === 'expand' ? valueWidth : 0;
       return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
     };
-    const rowHeaderWidth = widthFor(rowHeader, rowHeader.name, (row) => row.name);
-    if (!table.transposed) return [rowHeaderWidth, ...displayedColumns.map((column) => widthFor(column, column.name, (row) => row.values[column.id] ?? null))];
+    if (!table.transposed) return [widthFor(rowHeader, rowHeader.name, (row) => row.name), ...displayedColumns.map((column) => widthFor(column, column.name, (row) => row.values[column.id] ?? null))];
     const properties = [rowHeader, ...displayedColumns];
     const propertyWidth = properties.reduce((width, column) => Math.max(width, measureWorkspaceText(column.name, 20, 600)), 0);
     const rowWidths = filteredRows.map((row) => Math.max(
-      widthFor(rowHeader, displayWorkspaceColumnValue(row.name, rowHeader)),
+      textWidthCache.measure(row, rowHeader, row.name, 600) + (rowHeader.inputType === 'link' && rowHeader.overflowMode === 'expand' ? 46 : 0),
       ...properties.map((column) => {
         if (column.overflowMode !== 'expand' && !column.widthLimitChars) return 0;
-        const measured = measureWorkspaceText(displayWorkspaceColumnValue(column.id === rowHeader.id ? row.name : row.values[column.id] ?? null, column), 20, 400);
+        const measured = textWidthCache.measure(row, column, column.id === rowHeader.id ? row.name : row.values[column.id] ?? null);
         const visibleWidth = column.overflowMode === 'expand' ? measured : column.widthLimitChars ? Math.min(measured, column.widthLimitChars * 20) : 0;
         return visibleWidth + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
       }),
     ));
     return [propertyWidth, ...rowWidths];
-  }, [displayedColumns, filteredRows, rowHeader, table]);
+  }, [displayedColumns, filteredRows, rowHeader, table?.rows, table?.transposed, textWidthCache]);
 
   const [localMinTextScale, setLocalMinTextScale] = useState(0.35);
 
@@ -887,9 +891,35 @@ const WorkspacePage = () => {
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
   const renderedColumnWidths = useMemo(() => table?.transposed || !hasHiddenColumns ? columnWidths : [...columnWidths, 44], [columnWidths, hasHiddenColumns, table?.transposed]);
   const renderedTableWidth = useMemo(() => table?.transposed || !hasHiddenColumns ? tableWidth : tableWidth + 44, [hasHiddenColumns, table?.transposed, tableWidth]);
-  const rowMeasurementKey = `${table?.id ?? ''}:${textScale}:${renderedColumnWidths.join(',')}:${displayedColumns.map((column) => `${column.id}:${column.lineLimit ?? ''}:${column.overflowMode}`).join(',')}`;
-  const rowWindow = useWorkspaceRowWindow(filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table && !table.transposed));
+  const rowMeasurementKey = useMemo(() => table?.transposed
+    ? `${table.id}:transposed`
+    : `${table?.id ?? ''}:${textScale}:${renderedColumnWidths.join(',')}:${displayedColumns.map((column) => `${column.id}:${column.lineLimit ?? ''}:${column.overflowMode}`).join(',')}`,
+  [displayedColumns, renderedColumnWidths, table?.id, table?.transposed, textScale]);
+  const rowWindowOrderKey = useMemo(() => `${searchQuery}\u0000${Object.entries(headerFilters)
+    .filter(([key]) => key.startsWith('column:'))
+    .map(([key, state]) => JSON.stringify([key, state.includedKeys, state.query, state.min, state.max, state.datePrecision, state.sort]))
+    .join('\u0001')}`, [headerFilters, searchQuery]);
+  const renderedRowScopeRef = useRef(table?.id);
+  useLayoutEffect(() => { renderedRowScopeRef.current = table?.id; }, [table?.id]);
+  const rowWindowAtBottom = Boolean(renderedRowScopeRef.current === table?.id && viewportRef.current && viewportRef.current.scrollTop >= viewportRef.current.scrollHeight - viewportRef.current.clientHeight - 2);
+  const rowWindow = useWorkspaceRowWindow(filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table && !table.transposed), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom);
   const columnWindow = useWorkspaceColumnWindow(filteredRows, renderedColumnWidths, virtualScrollLeft, viewportWidth || window.innerWidth, Boolean(table?.transposed));
+  const appliedRowWindowOrderKeyRef = useRef({ scope: table?.id ?? '', key: rowWindowOrderKey });
+  useLayoutEffect(() => {
+    const scope = table?.id ?? '';
+    if (appliedRowWindowOrderKeyRef.current.scope !== scope) {
+      appliedRowWindowOrderKeyRef.current = { scope, key: rowWindowOrderKey };
+      return;
+    }
+    if (appliedRowWindowOrderKeyRef.current.key === rowWindowOrderKey) return;
+    appliedRowWindowOrderKeyRef.current = { scope, key: rowWindowOrderKey };
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    programmaticTableScrollRef.current = true;
+    viewport.scrollTop = 0;
+    setVirtualScrollTop(0);
+    window.requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
+  }, [rowWindowOrderKey, table?.id]);
   useLayoutEffect(() => {
     if (!rowWindow.virtual || typeof ResizeObserver === 'undefined') return;
     const elements = viewportRef.current?.querySelectorAll<HTMLTableRowElement>('tbody tr[data-virtual-row-id]');
@@ -900,13 +930,41 @@ const WorkspacePage = () => {
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [rowMeasurementKey, rowWindow.first, rowWindow.last, rowWindow.measureRow, rowWindow.virtual, rowWindow.visibleRows]);
+  const rowAnchorRetryRef = useRef<number | undefined>(undefined);
+  const [rowAnchorRetry, setRowAnchorRetry] = useState(0);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const pendingTop = rowWindow.pendingScrollTop;
+    if (pendingTop === undefined || !viewport) return;
+    const targetTop = rowWindow.pendingStickToBottom
+      ? Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+      : pendingTop;
+    const waitForUserScroll = Math.max(0, 120 - (performance.now() - lastUserScrollAtRef.current));
+    if (waitForUserScroll > 0) {
+      if (rowAnchorRetryRef.current !== undefined) window.clearTimeout(rowAnchorRetryRef.current);
+      rowAnchorRetryRef.current = window.setTimeout(() => {
+        rowAnchorRetryRef.current = undefined;
+        setRowAnchorRetry((value) => value + 1);
+      }, waitForUserScroll);
+      return;
+    }
+    rowWindow.consumePendingScrollTop();
+    if (Math.abs(viewport.scrollTop - targetTop) < 0.5) return;
+    programmaticTableScrollRef.current = true;
+    viewport.scrollTop = targetTop;
+    setVirtualScrollTop(viewport.scrollTop);
+    window.requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
+  }, [rowAnchorRetry, rowWindow.consumePendingScrollTop, rowWindow.pendingScrollTop, rowWindow.pendingStickToBottom]);
+  useEffect(() => () => {
+    if (rowAnchorRetryRef.current !== undefined) window.clearTimeout(rowAnchorRetryRef.current);
+  }, []);
   const focusScrollHandledRef = useRef('');
   useEffect(() => {
     const focusKey = `${table?.id ?? ''}:${focusTarget?.rowId ?? ''}`;
     if (focusKey === focusScrollHandledRef.current) return;
     focusScrollHandledRef.current = focusKey;
     if (!focusTarget) return;
-    const index = filteredRows.findIndex((row) => row.id === focusTarget.rowId);
+    const index = filteredRowIndexes.get(focusTarget.rowId) ?? -1;
     if (rowWindow.virtual && (index < rowWindow.first || index >= rowWindow.last)) {
       const offset = rowWindow.offsetForRow(focusTarget.rowId);
       const viewport = viewportRef.current;
@@ -922,14 +980,33 @@ const WorkspacePage = () => {
         setVirtualScrollLeft(viewport.scrollLeft);
       }
     }
-  }, [columnWindow, filteredRows, focusTarget, rowWindow, table?.id]);
+  }, [columnWindow, filteredRowIndexes, focusTarget, rowWindow, table?.id]);
+  const transposedFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
+    if (!table?.transposed || !rowHeader) return [];
+    return columnWindow.visibleRows.map((row) => ({
+      axis: 'row',
+      id: row.id,
+      label: displayWorkspaceColumnValue(row.name, rowHeader) || '未命名物件',
+    }));
+  }, [columnWindow.visibleRows, rowHeader, table?.transposed]);
   const filterbarSlots = useMemo<Array<HeaderFilterTarget | undefined>>(() => {
     if (!table) return [];
-    const slots: Array<HeaderFilterTarget | undefined> = table.transposed ? [undefined, ...searchFilterTargets] : [...searchFilterTargets];
+    const slots: Array<HeaderFilterTarget | undefined> = table.transposed ? [undefined, ...transposedFilterTargets] : [...searchFilterTargets];
     if (!table.transposed && hasHiddenColumns) slots.push(undefined);
     return slots;
-  }, [hasHiddenColumns, searchFilterTargets, table]);
-  const filterbarTrackStyle = useMemo(() => ({ gridTemplateColumns: renderedColumnWidths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` }), [renderedColumnWidths, renderedTableWidth]);
+  }, [hasHiddenColumns, searchFilterTargets, table, transposedFilterTargets]);
+  const filterbarTrackStyle = useMemo(() => {
+    if (table?.transposed && columnWindow.virtual) {
+      const widths = [
+        renderedColumnWidths[0] ?? 0,
+        ...(columnWindow.leftPadding > 0 ? [columnWindow.leftPadding] : []),
+        ...columnWindow.visibleWidths,
+        ...(columnWindow.rightPadding > 0 ? [columnWindow.rightPadding] : []),
+      ];
+      return { gridTemplateColumns: widths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` };
+    }
+    return { gridTemplateColumns: renderedColumnWidths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` };
+  }, [columnWindow.leftPadding, columnWindow.rightPadding, columnWindow.virtual, columnWindow.visibleWidths, renderedColumnWidths, renderedTableWidth, table?.transposed]);
 
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
   const activeEditingRowIndex = activeEditingRow && table ? table.rows.findIndex((item) => item.id === activeEditingRow.id) : -1;
@@ -1050,14 +1127,18 @@ const WorkspacePage = () => {
     const viewport = viewportRef.current;
     const filterbar = filterbarRef.current;
     if (!viewport || !filterbar) return;
-    if (source === viewport) filterbar.scrollLeft = viewport.scrollLeft;
-    else viewport.scrollLeft = filterbar.scrollLeft;
+    if (source === viewport) {
+      if (Math.abs(filterbar.scrollLeft - viewport.scrollLeft) >= 0.5) filterbar.scrollLeft = viewport.scrollLeft;
+    } else if (Math.abs(viewport.scrollLeft - filterbar.scrollLeft) >= 0.5) {
+      viewport.scrollLeft = filterbar.scrollLeft;
+    }
   }, []);
 
   const scrollSaveTimerRef = useRef<number | undefined>(undefined);
   const virtualScrollFrameRef = useRef<number | undefined>(undefined);
   const handleTableViewportScroll = useCallback((source: HTMLDivElement) => {
     syncFilterbarScroll(source);
+    if (!programmaticTableScrollRef.current) lastUserScrollAtRef.current = performance.now();
     if (virtualScrollFrameRef.current === undefined) virtualScrollFrameRef.current = window.requestAnimationFrame(() => {
       virtualScrollFrameRef.current = undefined;
       setVirtualScrollTop(source.scrollTop);
@@ -1220,7 +1301,7 @@ const WorkspacePage = () => {
                 {columnWindow.leftPadding > 0 && <td className="workspace-virtual-column-spacer" aria-hidden="true" />}
                 {columnWindow.visibleRows.map((row) => {
                   const rowLabel = displayWorkspaceColumnValue(row.name, rowHeader!);
-                  const rowAccessibleLabel = rowLabel || `第 ${filteredRows.findIndex((item) => item.id === row.id) + 1} 個物件`;
+                  const rowAccessibleLabel = rowLabel || `第 ${(filteredRowIndexes.get(row.id) ?? 0) + 1} 個物件`;
                   const value = row.values[column.id] ?? null;
                   const displayValue = displayWorkspaceColumnValue(value, column);
                   const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
@@ -1260,7 +1341,7 @@ const WorkspacePage = () => {
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, columnWindow.virtual, columnWindow.visibleRows, columnWindow.visibleWidths, columnWindow.leftPadding, columnWindow.rightPadding, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, columnWindow.virtual, columnWindow.visibleRows, columnWindow.visibleWidths, columnWindow.leftPadding, columnWindow.rightPadding, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRowIndexes, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
   if (!data) return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider></WorkspaceInputModalityContext.Provider>;
 
@@ -1283,7 +1364,17 @@ const WorkspacePage = () => {
     </header>
     <div className="workspace-toolbar-layer" style={{ '--workspace-toolbar-row-count': workspaceToolbarRowCount } as React.CSSProperties}>
     {bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulkSelection.rowIds.length} numericValues={bulkNumericValues} onCancel={closeBulkSelection} onOpenEditor={() => setBulkEditorOpen(true)} />}
-    {searchOpen && table && <div ref={filterbarRef} className={`workspace-filterbar${bulkSelection && bulkColumn ? ' has-bulk-toolbar' : ''}`} aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{filterbarSlots.map((target, index) => target ? (() => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${index === 0 ? 'is-frozen' : ''} ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className={`workspace-filterbar-spacer ${index === 0 ? 'is-frozen' : ''}`} aria-hidden="true" />)}</div></div>}
+    {searchOpen && table && <div ref={filterbarRef} className={`workspace-filterbar${bulkSelection && bulkColumn ? ' has-bulk-toolbar' : ''}`} aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{table.transposed && columnWindow.virtual ? <>
+      <span className="workspace-filterbar-spacer is-frozen" aria-hidden="true" />
+      {columnWindow.leftPadding > 0 && <span className="workspace-filterbar-spacer" aria-hidden="true" />}
+      {transposedFilterTargets.map((target) => {
+        const state = headerFilters[`${target.axis}:${target.id}`];
+        const active = isHeaderFilterActive(target.axis, target.id);
+        const summary = workspaceFilterSummary(state);
+        return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>;
+      })}
+      {columnWindow.rightPadding > 0 && <span className="workspace-filterbar-spacer" aria-hidden="true" />}
+    </> : filterbarSlots.map((target, index) => target ? (() => { const state = headerFilters[`${target.axis}:${target.id}`]; const active = isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${index === 0 ? 'is-frozen' : ''} ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => setFilterTarget(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className={`workspace-filterbar-spacer ${index === 0 ? 'is-frozen' : ''}`} aria-hidden="true" />)}</div></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
         <button type="button" className="workspace-editbar-button" aria-label="復原" title={currentTableHistory?.past.at(-1) ? `復原：${currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={undoTable} disabled={!currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>

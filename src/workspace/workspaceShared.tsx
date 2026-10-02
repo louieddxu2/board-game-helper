@@ -155,9 +155,9 @@ export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLE
 export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputCategory => inputType === 'select' || inputType === 'dynamic-select' ? 'select' : inputType === 'link' || inputType === 'datetime' ? 'other' : 'text';
 export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
-export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean) => {
+export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean, preparedIncludedKeys?: ReadonlySet<string>) => {
   if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null && !(inputType === 'datetime' && (state.min?.trim() || state.max?.trim()))) {
-    const includedSet = new Set(state.includedKeys);
+    const includedSet = preparedIncludedKeys ?? new Set(state.includedKeys);
     if (inputType === 'datetime') {
       const monthKey = workspaceDateMonthKey(value);
       if (!includedSet.has(monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null))) return false;

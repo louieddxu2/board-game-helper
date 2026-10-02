@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { applyWorkspaceTableHistoryAction } from './history';
 import { importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
-import type { WorkspaceData, WorkspaceTable } from './types';
+import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from './useWorkspaceActions';
 
 vi.mock('./spreadsheet', async (importOriginal) => ({
@@ -31,6 +32,18 @@ const makeProps = (): Parameters<typeof useWorkspaceActions>[0] => ({
   setNameDialog: vi.fn(), setConfirmDialog: vi.fn(), setWorkspaceImport: vi.fn(), setTableImportPreview: vi.fn(),
   onExported: vi.fn(), nameDialog: undefined, selectionEditor: undefined, configuring: undefined, workspaceImport: undefined,
 });
+
+const editableRowHeader: WorkspaceColumn = { id: 'row-header-table-1', name: '物件', inputType: 'text', options: [] };
+const editableColumn: WorkspaceColumn = { id: 'column-1', name: '名稱', inputType: 'text', options: [] };
+const editableTable: WorkspaceTable = {
+  id: 'table-1', name: '可編輯表格', rowHeaderName: editableRowHeader.name, rowHeader: editableRowHeader,
+  columns: [editableColumn], rows: [{ id: 'row-1', name: '第一筆', values: { [editableColumn.id]: null } }], updatedAt: 1,
+};
+const editableData: WorkspaceData = {
+  version: 1, activeNodeId: 'node-1', tables: [editableTable],
+  nodes: [{ id: 'node-1', type: 'table', name: editableTable.name, parentId: null, order: 0, tableId: editableTable.id }],
+};
+const makeEditableProps = () => ({ ...makeProps(), data: editableData, table: editableTable, rowHeader: editableRowHeader });
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
@@ -116,5 +129,71 @@ describe('Workspace import ownership', () => {
     });
     expect(screen.getByTestId('preview')).toHaveTextContent('none');
     expect(screen.getByTestId('notice').textContent).toBe(initialNotice);
+  });
+});
+
+describe('Workspace single-cell editing', () => {
+  it('emits an explicit set-cell mutation whose real history action can undo and redo a data-cell edit', () => {
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => result.current.saveCellValue('row-1', editableColumn, '新的內容'));
+
+    const [nextData, mutation] = vi.mocked(props.commit).mock.calls[0];
+    expect(mutation).toMatchObject({
+      tableId: editableTable.id,
+      label: '編輯儲存格',
+      action: { type: 'set-cell', rowId: 'row-1', columnId: editableColumn.id, before: null, after: '新的內容' },
+    });
+    expect(nextData.tables[0].rows[0].values[editableColumn.id]).toBe('新的內容');
+    expect(props.setEditing).toHaveBeenCalledWith(undefined);
+
+    const undo = applyWorkspaceTableHistoryAction(nextData, editableTable.id, mutation!.action, 'undo');
+    expect(undo.tables[0].rows[0].values[editableColumn.id]).toBeNull();
+    const redo = applyWorkspaceTableHistoryAction(undo, editableTable.id, mutation!.action, 'redo');
+    expect(redo.tables[0].rows[0].values[editableColumn.id]).toBe('新的內容');
+  });
+
+  it('uses the row-header column and object label for a row-header edit', () => {
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => result.current.saveCellValue('row-1', editableRowHeader, '第二筆'));
+
+    const [nextData, mutation] = vi.mocked(props.commit).mock.calls[0];
+    expect(mutation).toMatchObject({
+      tableId: editableTable.id,
+      label: '編輯物件',
+      action: { type: 'set-cell', rowId: 'row-1', columnId: editableRowHeader.id, before: '第一筆', after: '第二筆' },
+    });
+    expect(nextData.tables[0].rows[0].name).toBe('第二筆');
+
+    const undo = applyWorkspaceTableHistoryAction(nextData, editableTable.id, mutation!.action, 'undo');
+    expect(undo.tables[0].rows[0].name).toBe('第一筆');
+    const redo = applyWorkspaceTableHistoryAction(undo, editableTable.id, mutation!.action, 'redo');
+    expect(redo.tables[0].rows[0].name).toBe('第二筆');
+  });
+
+  it.each([
+    { label: 'data cell', column: editableColumn, value: null },
+    { label: 'row header', column: editableRowHeader, value: '第一筆' },
+  ])('does not commit a no-op $label edit but always closes the editor', ({ column, value }) => {
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => result.current.saveCellValue('row-1', column, value));
+
+    expect(props.commit).not.toHaveBeenCalled();
+    expect(props.setEditing).toHaveBeenCalledWith(undefined);
+  });
+
+  it('closes an editor for a missing row without inventing a history entry', () => {
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => result.current.saveCellValue('missing-row', editableColumn, '內容'));
+
+    expect(props.commit).not.toHaveBeenCalled();
+    expect(props.setEditing).toHaveBeenCalledWith(undefined);
   });
 });

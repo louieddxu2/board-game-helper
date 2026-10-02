@@ -54,38 +54,40 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
       { value: row.name, inputType: rowHeader?.inputType, dateOnly: rowHeader?.dateOnly },
       ...table.columns.map((column) => ({ value: row.values[column.id] ?? null, inputType: column.inputType, dateOnly: column.dateOnly })),
     ].some(({ value, inputType, dateOnly }) => searchableWorkspaceCellValue(value, inputType, dateOnly).toLocaleLowerCase().includes(query)));
-  }, [deferredSearchQuery, rowHeader, table]);
+  }, [deferredSearchQuery, rowHeader, table?.columns, table?.rows]);
 
   const filteredRows = useMemo(() => {
     if (!table || !rowHeader) return [];
-    const columnIds = new Set([rowHeader.id, ...table.columns.map((column) => column.id)]);
-    const columnFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && hasWorkspaceFilterCriteria(state));
-    const rows = searchedRows.filter((row) => columnFilters.every(([key, state]) => {
-      const columnId = key.slice(7);
+    const columnsById = new Map([...table.columns, rowHeader].map((column) => [column.id, column]));
+    const columnFilters = Object.entries(headerFilters)
+      .filter(([key, state]) => key.startsWith('column:') && columnsById.has(key.slice(7)) && hasWorkspaceFilterCriteria(state))
+      .map(([key, state]) => ({ column: columnsById.get(key.slice(7))!, state, includedKeys: state.includedKeys === null ? undefined : new Set(state.includedKeys) }));
+    const rows = columnFilters.length ? searchedRows.filter((row) => columnFilters.every(({ column, state, includedKeys }) => {
+      const columnId = column.id;
       const value = columnId === rowHeader.id ? row.name : row.values[columnId] ?? null;
-      const col = columnId === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === columnId);
-      return matchesWorkspaceFilter(value, col?.inputType, state, col?.isMultiple);
-    }));
-    const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnIds.has(key.slice(7)) && state.sort);
+      return matchesWorkspaceFilter(value, column.inputType, state, column.isMultiple, includedKeys);
+    })) : searchedRows;
+    const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnsById.has(key.slice(7)) && state.sort);
     if (!sortedEntry) return rows;
     const [key, state] = sortedEntry;
     const columnId = key.slice(7);
+    const column = columnsById.get(columnId)!;
     const direction = state.sort === 'desc' ? -1 : 1;
     return rows.map((row, index) => ({ row, index })).sort((left, right) => {
       const leftValue = columnId === rowHeader.id ? left.row.name : left.row.values[columnId] ?? null;
       const rightValue = columnId === rowHeader.id ? right.row.name : right.row.values[columnId] ?? null;
-      const column = columnId === rowHeader.id ? rowHeader : table.columns.find((item) => item.id === columnId);
       return compareWorkspaceCellValues(leftValue, rightValue, column?.inputType, column?.dateOnly) * direction || left.index - right.index;
     }).map(({ row }) => row);
-  }, [headerFilters, rowHeader, searchedRows, table]);
+  }, [headerFilters, rowHeader, searchedRows, table?.columns]);
 
   const visibleColumns = useMemo(() => {
     if (!table) return [];
     const visibleRowIds = new Set(filteredRows.map((row) => row.id));
-    const rowFilters = Object.entries(headerFilters).filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && hasWorkspaceFilterCriteria(state));
-    const columns = table.columns.filter((column) => rowFilters.every(([key, state]) => {
-      const row = tableRowsById.get(key.slice(4));
-      return Boolean(row && matchesWorkspaceFilter(row.values[column.id] ?? null, column.inputType, state, column.isMultiple));
+    const rowFilters = Object.entries(headerFilters)
+      .filter(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && hasWorkspaceFilterCriteria(state))
+      .map(([key, state]) => ({ row: tableRowsById.get(key.slice(4)), state, includedKeys: state.includedKeys === null ? undefined : new Set(state.includedKeys) }));
+    const columns = table.columns.filter((column) => rowFilters.every(({ row, state, includedKeys }) => {
+      return Boolean(row && matchesWorkspaceFilter(row.values[column.id] ?? null, column.inputType, state, column.isMultiple, includedKeys));
     }));
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('row:') && visibleRowIds.has(key.slice(4)) && state.sort);
     if (!sortedEntry) return columns;
@@ -94,7 +96,7 @@ export function useWorkspaceFilter({ table, rowHeader, tableRowsById }: UseWorks
     if (!row) return columns;
     const direction = state.sort === 'desc' ? -1 : 1;
     return columns.map((column, index) => ({ column, index })).sort((left, right) => compareWorkspaceCellValues(row.values[left.column.id] ?? null, row.values[right.column.id] ?? null, left.column.inputType) * direction || left.index - right.index).map(({ column }) => column);
-  }, [filteredRows, headerFilters, table, tableRowsById]);
+  }, [filteredRows, headerFilters, table?.columns, tableRowsById]);
 
   const activeFilterKey = filterTarget ? `${filterTarget.axis}:${filterTarget.id}` : '';
   const activeFilterState = headerFilters[activeFilterKey] ?? { includedKeys: null, sort: null };

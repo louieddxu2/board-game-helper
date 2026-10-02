@@ -46,7 +46,7 @@ const waitForOfflineShell = async (page: Page) => {
   })).toBe('activated');
 };
 
-const seed = async (page: Page, tables = 1, rows = 4, columns = 2) => page.evaluate(async ({ tables, rows, columns }) => {
+const seed = async (page: Page, tables = 1, rows = 4, columns = 2, historyEntries = 40) => page.evaluate(async ({ tables, rows, columns, historyEntries }) => {
   const request = indexedDB.open('board-game-helper-workspace', 3);
   request.onupgradeneeded = () => {
     for (const name of ['state', 'meta', 'tables', 'history']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
@@ -60,12 +60,33 @@ const seed = async (page: Page, tables = 1, rows = 4, columns = 2) => page.evalu
       columns: Array.from({ length: columns }, (_, col) => ({ id: `column-${col}`, name: `欄位 ${col}`, inputType: 'text', overflowMode: 'expand', options: [] })),
       rows: Array.from({ length: rows }, (_, row) => ({ id: `row-${row}`, name: `項目 ${row}`, values: Object.fromEntries(Array.from({ length: columns }, (_, col) => [`column-${col}`, `資料 ${row}-${col}`])) })),
     }, `table-${index}`);
-    transaction.objectStore('history').put({ tableId: `table-${index}`, future: [], past: Array.from({ length: 40 }, (_, entry) => ({ id: `entry-${index}-${entry}`, tableId: `table-${index}`, label: '歷史編輯', createdAt: Date.now(), action: { type: 'set-cells', columnId: 'column-0', changes: Array.from({ length: rows }, (_, row) => ({ rowId: `row-${row}`, before: '之前', after: `資料 ${row}-0` })) } })) }, `table-${index}`);
+    transaction.objectStore('history').put({ tableId: `table-${index}`, future: [], past: Array.from({ length: historyEntries }, (_, entry) => ({ id: `entry-${index}-${entry}`, tableId: `table-${index}`, label: '歷史編輯', createdAt: Date.now(), action: { type: 'set-cells', columnId: 'column-0', changes: Array.from({ length: rows }, (_, row) => ({ rowId: `row-${row}`, before: '之前', after: `資料 ${row}-0` })) } })) }, `table-${index}`);
   }
   await new Promise<void>((done, reject) => { transaction.oncomplete = () => done(); transaction.onerror = () => reject(transaction.error); });
   db.close();
   localStorage.setItem('board-game-helper-google-drive-backup', JSON.stringify({ lastBackupAt: Date.now(), tableBackups: {}, structureFingerprint: '' }));
-}, { tables, rows, columns });
+}, { tables, rows, columns, historyEntries });
+
+const readTableCell = (page: Page, tableId: string, rowId: string, columnId: string) => page.evaluate(async ({ tableId, rowId, columnId }) => {
+  const request = indexedDB.open('board-game-helper-workspace', 3);
+  const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
+  const table = await new Promise<any>((done, reject) => {
+    const get = db.transaction('tables').objectStore('tables').get(tableId);
+    get.onsuccess = () => done(get.result);
+    get.onerror = () => reject(get.error);
+  });
+  db.close();
+  const row = table.rows.find((item: { id: string }) => item.id === rowId);
+  return row?.values[columnId] ?? null;
+}, { tableId, rowId, columnId });
+
+const visibleVirtualRowIds = (page: Page) => page.locator('.workspace-table tbody tr[data-virtual-row-id]').evaluateAll((items) => items.map((item) => item.getAttribute('data-virtual-row-id')));
+
+const transposedLabels = async (page: Page) => {
+  const headers = await page.locator('.workspace-table thead th[data-row-id] button.workspace-column-name').evaluateAll((items) => items.map((item) => item.textContent?.trim() || ''));
+  const filters = await page.locator('.workspace-filterbar-button').evaluateAll((items) => items.map((item) => (item.getAttribute('aria-label') || '').replace(/^篩選\s*/, '')));
+  return { headers, filters };
+};
 
 test('a previously unvisited workspace opens offline and edits, undo, and saves remain local', async ({ page, context }, info) => {
   const errors: string[] = [];
@@ -226,6 +247,7 @@ test('a large offline table renders a bounded row window and retains the other t
 
 test('variable-height rows keep visible content while scrolling and zooming', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 250, 2);
   await page.evaluate(async () => {
     const request = indexedDB.open('board-game-helper-workspace', 3);
@@ -259,6 +281,157 @@ test('variable-height rows keep visible content while scrolling and zooming', as
   await viewport.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 });
   await expect(page.locator('.workspace-table')).toHaveCSS('--workspace-text-scale', '1.2');
   await expect.poll(hasVisibleRow).toBe(true);
+});
+
+test('a 10,000-row expandable table keeps the final edit mounted and round-trips it through history', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
+  await seed(page, 1, 10_000, 2, 0);
+  await page.reload();
+
+  const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
+  await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
+  expect(await rows.count()).toBeLessThan(80);
+  const viewport = page.locator('.workspace-table-viewport');
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(rows.last()).toHaveAttribute('data-virtual-row-id', 'row-9999');
+  await expect(rows.last()).toBeInViewport();
+
+  const cell = page.locator('td[data-bulk-row-id="row-9999"][data-bulk-column-id="column-0"]');
+  await cell.click();
+  const editor = page.getByRole('textbox').first();
+  await editor.fill('最後一列的超長內容，讓可展開欄寬重新量測並保留底部錨點');
+  await editor.press('Escape');
+  await expect(cell).toContainText('最後一列的超長內容');
+  await expect(rows.last()).toBeInViewport();
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('最後一列的超長內容，讓可展開欄寬重新量測並保留底部錨點');
+
+  await page.getByRole('button', { name: '展開快速操作' }).click();
+  await page.getByRole('button', { name: '上一動', exact: true }).click();
+  await expect(cell).toContainText('資料 9999-0');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('資料 9999-0');
+  await page.getByRole('button', { name: '下一動', exact: true }).click();
+  await expect(cell).toContainText('最後一列的超長內容');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('最後一列的超長內容，讓可展開欄寬重新量測並保留底部錨點');
+});
+
+test('10,000 variable-height rows keep the mid-scroll row identity after zoom measurement', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
+  await seed(page, 1, 10_000, 2, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
+    const transaction = db.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const table = await new Promise<any>((done, reject) => { const get = store.get('table-0'); get.onsuccess = () => done(get.result); get.onerror = () => reject(get.error); });
+    table.columns[0].overflowMode = 'wrap';
+    table.columns[0].widthLimitChars = 8;
+    table.columns[0].lineLimit = 4;
+    for (let index = 0; index < table.rows.length; index += 7) table.rows[index].values['column-0'] = '多行內容 '.repeat(24);
+    store.put(table, 'table-0');
+    await new Promise<void>((done, reject) => { transaction.oncomplete = () => done(); transaction.onerror = () => reject(transaction.error); });
+    db.close();
+  });
+  await page.reload();
+
+  const viewport = page.locator('.workspace-table-viewport');
+  const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
+  await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight * 0.5; });
+  await expect.poll(async () => (await visibleVirtualRowIds(page)).length).toBeGreaterThan(0);
+  await page.evaluate(async () => { for (let frame = 0; frame < 16; frame++) await new Promise(requestAnimationFrame); });
+  const anchorId = await viewport.evaluate((element) => {
+    const viewportRect = element.getBoundingClientRect();
+    return [...element.querySelectorAll<HTMLTableRowElement>('tbody tr[data-virtual-row-id]')]
+      .find((row) => { const rect = row.getBoundingClientRect(); return rect.top < viewportRect.bottom && rect.bottom > viewportRect.top; })
+      ?.dataset.virtualRowId ?? '';
+  });
+  expect(anchorId).toMatch(/^row-\d+$/);
+
+  await viewport.dispatchEvent('wheel', { ctrlKey: true, deltaY: -100 });
+  await expect(page.locator('.workspace-table')).toHaveCSS('--workspace-text-scale', '1.2');
+  await expect.poll(() => viewport.evaluate((element, id) => {
+    const viewportRect = element.getBoundingClientRect();
+    const row = element.querySelector<HTMLTableRowElement>(`tbody tr[data-virtual-row-id="${id}"]`);
+    if (!row) return false;
+    const rect = row.getBoundingClientRect();
+    return rect.bottom > viewportRect.top && rect.top < viewportRect.bottom;
+  }, anchorId)).toBe(true);
+  expect(await rows.count()).toBeLessThan(80);
+});
+
+test('a transposed 10,000-row table bounds its filter toolbar and tracks visible object labels during search and horizontal scroll', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
+  await seed(page, 1, 10_000, 12, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
+    const transaction = db.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const table = await new Promise<any>((done, reject) => { const get = store.get('table-0'); get.onsuccess = () => done(get.result); get.onerror = () => reject(get.error); });
+    store.put({ ...table, transposed: true }, 'table-0');
+    await new Promise<void>((done, reject) => { transaction.oncomplete = () => done(); transaction.onerror = () => reject(transaction.error); });
+    db.close();
+    localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({ version: 1, tables: {
+      'table-0': { searchQuery: '', searchOpen: true, headerFilters: { 'row:row-0': { includedKeys: null, sort: 'asc' } }, scrollLeft: 0, scrollTop: 0 },
+    } }));
+  });
+  await page.reload();
+
+  const viewport = page.locator('.workspace-table-viewport');
+  const toolbar = page.locator('.workspace-filterbar');
+  await expect(toolbar).toBeVisible();
+  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
+  await expect.poll(async () => (await transposedLabels(page)).filters).toEqual(expect.arrayContaining(['項目 0']));
+  const initialLabels = await transposedLabels(page);
+  expect(initialLabels.filters).toEqual(initialLabels.headers);
+
+  const search = page.getByRole('searchbox', { name: '搜尋此表' });
+  await search.fill('資料 9999-0');
+  await expect.poll(async () => (await transposedLabels(page)).headers).toEqual(['項目 9999']);
+  await expect.poll(async () => (await transposedLabels(page)).filters).toEqual(['項目 9999']);
+
+  await search.fill('');
+  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
+  await toolbar.evaluate((element) => { element.scrollLeft = element.scrollWidth; element.dispatchEvent(new Event('scroll', { bubbles: true })); });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>('.workspace-table-viewport');
+    const toolbar = document.querySelector<HTMLElement>('.workspace-filterbar');
+    return viewport && toolbar ? Math.abs(viewport.scrollLeft - toolbar.scrollLeft) : Number.POSITIVE_INFINITY;
+  })).toBeLessThan(1);
+  await expect.poll(async () => (await transposedLabels(page)).headers).toEqual(expect.arrayContaining(['項目 9999']));
+  const endLabels = await transposedLabels(page);
+  expect(endLabels.filters).toEqual(endLabels.headers);
+  expect(await page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
+});
+
+test('stored scroll restoration is scoped per table and does not carry one table bottom to another', async ({ page }) => {
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
+  await seed(page, 2, 250, 2, 0);
+  await page.evaluate(() => {
+    localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({ version: 1, tables: {
+      'table-0': { searchQuery: '', searchOpen: false, headerFilters: {}, scrollLeft: 0, scrollTop: 6000 },
+      'table-1': { searchQuery: '', searchOpen: false, headerFilters: {}, scrollLeft: 0, scrollTop: 72 },
+    } }));
+  });
+  await page.reload();
+
+  const viewport = page.locator('.workspace-table-viewport');
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(5000);
+  await expect.poll(() => visibleVirtualRowIds(page)).toContain('row-166');
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(2);
+
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name-text').click();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(50);
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(1000);
+  await expect.poll(() => visibleVirtualRowIds(page)).toContain('row-2');
 });
 
 test('an edit during active-table-only loading cannot delete the tables still on disk', async ({ page }) => {

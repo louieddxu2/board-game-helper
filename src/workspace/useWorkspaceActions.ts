@@ -129,11 +129,19 @@ export function useWorkspaceActions({
   const saveCellValue = (rowId: string, column: WorkspaceColumn, value: WorkspaceCellValue) => {
     if (!data || !table) return;
     const isRowHeader = rowHeader?.id === column.id;
+    const row = table.rows.find((item) => item.id === rowId);
+    if (!row) { setEditing(undefined); return; }
+    const before = isRowHeader ? row.name : row.values[column.id] ?? null;
+    if (JSON.stringify(before) === JSON.stringify(value)) { setEditing(undefined); return; }
     commit(updateTable(data, table.id, (current) => ({
       ...current,
       updatedAt: Date.now(),
       rows: current.rows.map((row) => row.id === rowId ? isRowHeader ? { ...row, name: value } : { ...row, values: { ...row.values, [column.id]: value } } : row),
-    })));
+    })), {
+      tableId: table.id,
+      label: isRowHeader ? '編輯物件' : '編輯儲存格',
+      action: { type: 'set-cell', rowId, columnId: column.id, before, after: value },
+    });
     setEditing(undefined);
   };
 

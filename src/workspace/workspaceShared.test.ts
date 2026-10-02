@@ -221,6 +221,23 @@ describe('workspace text measurements', () => {
 });
 
 describe('workspace date filters', () => {
+  it('accepts a prepared included-key set for scalar, multi-select, and date values', () => {
+    const textState = { includedKeys: ['text:alpha'], sort: null };
+    const textKeys = new Set(['text:alpha']);
+    expect(matchesWorkspaceFilter('alpha', 'select', textState, false, textKeys)).toBe(true);
+    expect(matchesWorkspaceFilter('beta', 'select', textState, false, textKeys)).toBe(false);
+
+    const multiState = { includedKeys: ['text:黃'], sort: null };
+    const multiKeys = new Set(['text:黃']);
+    expect(matchesWorkspaceFilter('紅, 黃', 'select', multiState, true, multiKeys)).toBe(true);
+    expect(matchesWorkspaceFilter('紅', 'select', multiState, true, multiKeys)).toBe(false);
+
+    const dateState = { includedKeys: ['date-month:2024-02'], sort: null };
+    const dateKeys = new Set(['date-month:2024-02']);
+    expect(matchesWorkspaceFilter('2024-02-03T14:05+08:00', 'datetime', dateState, false, dateKeys)).toBe(true);
+    expect(matchesWorkspaceFilter('2024-03-03T14:05+08:00', 'datetime', dateState, false, dateKeys)).toBe(false);
+  });
+
   it('filters date-time values by selected year-month keys', () => {
     const state = { includedKeys: ['date-month:2024-02'], sort: null };
 
