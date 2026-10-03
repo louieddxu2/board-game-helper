@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData } from '../types';
-import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, workspaceStructureBackupFingerprint, workspaceTableBackupFingerprint, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
+import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
+import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
@@ -21,21 +22,21 @@ export interface WorkspaceDriveBackupRecord {
   remoteModifiedTime: string | null;
   tableCount: number;
   folderCount: number;
-  structureFingerprint: string | null;
+  structureRevision: string | null;
   tableBackups: Record<string, WorkspaceDriveTableBackupRecord>;
 }
 
 export interface WorkspaceDriveTableBackupRecord {
   lastBackupAt: number;
   sourceUpdatedAt: number;
-  contentFingerprint: string;
+  changeRevision?: string;
   driveFileId: string | null;
 }
 
 type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
 export type WorkspaceDriveBackupStatus = 'offline' | 'never' | 'dirty' | 'saved' | 'disconnected' | 'checking';
 
-const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureFingerprint: null, tableBackups: {} });
+const emptyRecord = (): WorkspaceDriveBackupRecord => ({ fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureRevision: null, tableBackups: {} });
 
 const loadRecord = (): WorkspaceDriveBackupRecord => {
   try {
@@ -50,8 +51,14 @@ const loadRecord = (): WorkspaceDriveBackupRecord => {
       remoteModifiedTime: typeof value.remoteModifiedTime === 'string' ? value.remoteModifiedTime : null,
       tableCount: typeof value.tableCount === 'number' ? value.tableCount : 0,
       folderCount: typeof value.folderCount === 'number' ? value.folderCount : 0,
-      structureFingerprint: typeof value.structureFingerprint === 'string' ? value.structureFingerprint : null,
-      tableBackups: value.tableBackups && typeof value.tableBackups === 'object' ? value.tableBackups : {},
+      structureRevision: typeof value.structureRevision === 'string' ? value.structureRevision : null,
+      tableBackups: value.tableBackups && typeof value.tableBackups === 'object'
+        ? Object.fromEntries(Object.entries(value.tableBackups).filter(([, table]) => table && typeof table === 'object').map(([id, table]) => [id, {
+          lastBackupAt: table.lastBackupAt,
+          sourceUpdatedAt: table.sourceUpdatedAt,
+          ...(typeof table.changeRevision === 'string' ? { changeRevision: table.changeRevision } : {}),
+          driveFileId: table.driveFileId,
+        }])) : {},
     };
   } catch {
     return emptyRecord();
@@ -95,10 +102,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const clientIdLoadedRef = useRef(false);
   const clientIdRef = useRef<string | null>(null);
   const inspectBackup = inspectChanges || dialogOpen || authorized;
-  const structureFingerprint = useMemo(() => data && inspectBackup ? workspaceStructureBackupFingerprint(data) : '', [data, inspectBackup]);
-  const dirtyTables = useMemo(() => inspectBackup ? data?.tables.filter((table) => record.tableBackups[table.id]?.contentFingerprint !== workspaceTableBackupFingerprint(table)) ?? [] : [], [data, inspectBackup, record.tableBackups]);
-  const structureDirty = data && inspectBackup ? (record.structureFingerprint !== structureFingerprint
-    || Object.keys(record.tableBackups).some((id) => !data.tables.some((table) => table.id === id))) : false;
+  const dirtyTables = useMemo(() => inspectBackup ? data?.tables.filter((table) => record.tableBackups[table.id]?.changeRevision !== workspaceTableChangeRevision(table)) ?? [] : [], [data, inspectBackup, record.tableBackups]);
+  const structureDirty = useMemo(() => {
+    if (!data || !inspectBackup) return false;
+    const tableIds = new Set(data.tables.map((table) => table.id));
+    return record.structureRevision !== workspaceStructureChangeRevision(data)
+      || Object.keys(record.tableBackups).some((id) => !tableIds.has(id));
+  }, [data, inspectBackup, record.structureRevision, record.tableBackups]);
 
   const remoteMatchesRecord = useCallback((file: DriveFile | null) => {
     if (!file) return record.fileId === null;
@@ -228,7 +238,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         nextTableBackups[table.id] = {
           lastBackupAt: completedAt,
           sourceUpdatedAt: table.updatedAt,
-          contentFingerprint: workspaceTableBackupFingerprint(table),
+          changeRevision: workspaceTableChangeRevision(table),
           driveFileId: refs.get(table.id)?.driveFileId ?? null,
         };
       }
@@ -242,7 +252,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         remoteModifiedTime: receipt.file.modifiedTime ?? null,
         tableCount: receipt.manifest.tables.length,
         folderCount: receipt.manifest.folders.length,
-        structureFingerprint: workspaceStructureBackupFingerprint(data),
+        structureRevision: workspaceStructureChangeRevision(data),
         tableBackups: nextTableBackups,
       };
       setAuthorized(true);
@@ -261,7 +271,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
       return false;
     } finally { setBusy(null); }
-  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, setNotice, structureFingerprint, verifyCurrentData]);
+  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, setNotice, verifyCurrentData]);
 
   const findRemote = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
@@ -333,7 +343,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (backupBlockedReason || !autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy || !authorized || remoteConflict) return;
     const now = Date.now();
     const lastTableBackupAt = (tableId: string) => record.tableBackups[tableId]?.lastBackupAt
-      ?? (record.structureFingerprint === null ? record.lastBackupAt ?? 0 : 0);
+      ?? (record.structureRevision === null ? record.lastBackupAt ?? 0 : 0);
     const eligibleTableIds = dirtyTables
       .filter((table) => now >= lastTableBackupAt(table.id) + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS)
       .map((table) => table.id);

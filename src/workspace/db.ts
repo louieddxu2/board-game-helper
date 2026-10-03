@@ -7,6 +7,7 @@ type WorkspaceMetadata = {
   version: WorkspaceData['version'];
   storageRevision?: string;
   updatedAt?: number;
+  structureRevision?: string;
   nodes: WorkspaceNode[];
   activeNodeId: string | null;
   bottomNavigationTableIds?: string[];
@@ -54,6 +55,7 @@ const nextStorageRevision = () => typeof crypto !== 'undefined' && 'randomUUID' 
 const normalizeStoredWorkspace = (meta: WorkspaceMetadata, tables: WorkspaceTable[]) => normalizeWorkspace({
   version: meta.version,
   updatedAt: meta.updatedAt,
+  structureRevision: meta.structureRevision,
   nodes: meta.nodes,
   activeNodeId: meta.activeNodeId,
   bottomNavigationTableIds: meta.bottomNavigationTableIds,
@@ -66,7 +68,7 @@ export const createWorkspaceStoragePlan = (data: WorkspaceData, signatures: Read
   const nextSignatures = new Map(data.tables.map((table) => [table.id, tableStorageSignature(table)]));
   const currentIds = new Set(nextSignatures.keys());
   return {
-    meta: { version: data.version, updatedAt: data.updatedAt, nodes: data.nodes, activeNodeId: data.activeNodeId, bottomNavigationTableIds: data.bottomNavigationTableIds ?? [] } satisfies WorkspaceMetadata,
+    meta: { version: data.version, updatedAt: data.updatedAt, structureRevision: data.structureRevision, nodes: data.nodes, activeNodeId: data.activeNodeId, bottomNavigationTableIds: data.bottomNavigationTableIds ?? [] } satisfies WorkspaceMetadata,
     upserts: data.tables.filter((table) => signatures.get(table.id) !== nextSignatures.get(table.id)),
     deletes: deletedTableIds.filter((id) => !currentIds.has(id)),
     signatures: nextSignatures,

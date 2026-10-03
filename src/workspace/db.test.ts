@@ -32,4 +32,15 @@ describe('workspace independent table storage', () => {
     expect(plan.upserts).toEqual([]);
     expect(plan.meta.bottomNavigationTableIds).toEqual([table.id]);
   });
+
+  it('keeps structure and table revisions in the independent storage plan', () => {
+    const table = { ...createTable('有修訂版本'), changeRevision: 'table-revision-1' };
+    const signatures = new Map<string, string>();
+    const data = { ...emptyWorkspace(), structureRevision: 'structure-revision-1', tables: [table] };
+
+    const plan = createWorkspaceStoragePlan(data, signatures);
+
+    expect(plan.meta.structureRevision).toBe('structure-revision-1');
+    expect(plan.upserts).toEqual([expect.objectContaining({ id: table.id, changeRevision: 'table-revision-1' })]);
+  });
 });

@@ -19,6 +19,7 @@ import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from '../workspace
 import { savePwaLastRoute } from '../lib/pwaNavigation';
 import { GoogleDriveBackupDialog } from '../workspace/googleDriveBackup/GoogleDriveBackupDialog';
 import { useWorkspaceGoogleDriveBackup } from '../workspace/googleDriveBackup/useWorkspaceGoogleDriveBackup';
+import { assignWorkspaceChangeRevisions } from '../workspace/changeRevisions';
 import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
 import { WorkspaceQuickActionPanel } from '../workspace/WorkspaceQuickActionPanel';
 import { formatDateFilterBound } from '../workspace/dateFilter';
@@ -371,7 +372,7 @@ const WorkspacePage = () => {
       || previous.nodes !== next.nodes
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
-    const committed = meaningfulChange ? { ...next, updatedAt: Date.now() } : next;
+    const committed = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
     const historyWrites: Array<() => void> = [];
     setData(committed);
@@ -858,7 +859,7 @@ const WorkspacePage = () => {
     const source = direction === 'undo' ? currentHistory.past : currentHistory.future;
     const entry = source[source.length - 1];
     if (!entry) return;
-    const nextData = applyWorkspaceTableHistoryActionWithNode(data, table.id, entry.action, direction);
+    const nextData = assignWorkspaceChangeRevisions(data, applyWorkspaceTableHistoryActionWithNode(data, table.id, entry.action, direction));
     const nextHistory: WorkspaceTableHistory = direction === 'undo'
       ? { tableId: table.id, past: currentHistory.past.slice(0, -1), future: [...currentHistory.future, entry] }
       : { tableId: table.id, past: [...currentHistory.past, entry], future: currentHistory.future.slice(0, -1) };

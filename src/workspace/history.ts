@@ -233,6 +233,7 @@ export const applyWorkspaceTableHistoryActionWithNode = (
 
 const tableWithout = (table: WorkspaceTable, keys: Array<'updatedAt' | 'textScale'>) => {
   const copy = { ...table } as Partial<WorkspaceTable>;
+  delete copy.changeRevision;
   for (const key of keys) delete copy[key];
   return copy;
 };

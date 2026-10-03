@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
-import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
 import type { WorkspaceData } from './types';
 
 const ensureBlobArrayBuffer = () => {
@@ -58,6 +58,46 @@ const replaceStoredWorkbookText = async (blob: Blob, search: string, replacement
   expect(match).toBeGreaterThanOrEqual(0);
   bytes.set(replacementBytes, match);
   return new Blob([bytes], { type: blob.type });
+};
+
+const replaceStoredWorkbookTextWithDifferentLength = async (blob: Blob, search: string, replacement: string) => {
+  ensureBlobArrayBuffer();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const read16 = (offset: number) => bytes[offset] | (bytes[offset + 1] << 8);
+  const read32 = (offset: number) => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+  const set32 = (target: Uint8Array, offset: number, value: number) => {
+    target[offset] = value & 0xff;
+    target[offset + 1] = (value >>> 8) & 0xff;
+    target[offset + 2] = (value >>> 16) & 0xff;
+    target[offset + 3] = (value >>> 24) & 0xff;
+  };
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+  let replaced = false;
+  while (offset + 4 <= bytes.length && read32(offset) === 0x04034b50) {
+    const size = read32(offset + 18);
+    const nameLength = read16(offset + 26);
+    const extraLength = read16(offset + 28);
+    const headerLength = 30 + nameLength + extraLength;
+    const contentStart = offset + headerLength;
+    const content = decoder.decode(bytes.subarray(contentStart, contentStart + size));
+    const nextContent = !replaced && content.includes(search) ? content.replace(search, replacement) : content;
+    if (nextContent !== content) replaced = true;
+    const nextBytes = encoder.encode(nextContent);
+    const header = bytes.slice(offset, contentStart);
+    set32(header, 18, nextBytes.length);
+    set32(header, 22, nextBytes.length);
+    parts.push(header, nextBytes);
+    offset = contentStart + size;
+  }
+  expect(replaced).toBe(true);
+  const rebuilt = new Uint8Array(parts.reduce((total, part) => total + part.length, bytes.length - offset));
+  let writeOffset = 0;
+  for (const part of parts) { rebuilt.set(part, writeOffset); writeOffset += part.length; }
+  rebuilt.set(bytes.slice(offset), writeOffset);
+  return new Blob([rebuilt], { type: blob.type });
 };
 
 const makeFixture = (): WorkspaceData => {
@@ -330,6 +370,63 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.transposed).toBe(true);
     expect(imported.table?.columns.map((column) => column.name)).toEqual(source.tables[0].columns.map((column) => column.name));
     expect(imported.table?.rows.map((row) => row.name)).toEqual(source.tables[0].rows.map((row) => row.name));
+  });
+
+  it('preserves table and workspace revisions through XLSX and ZIP exports', async () => {
+    ensureBlobArrayBuffer();
+    const source = makeFixture();
+    source.tables[0].changeRevision = 'table-revision-1';
+    source.structureRevision = 'structure-revision-1';
+    source.bottomNavigationTableIds = [source.tables[0].id];
+
+    const singleTable = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]), { preserveIds: true });
+    expect(singleTable.table?.changeRevision).toBe('table-revision-1');
+
+    const workspace = await importWorkspaceXlsx(exportWorkspaceXlsx(source));
+    expect(workspace.data?.structureRevision).toBe('structure-revision-1');
+    expect(workspace.data?.tables[0].changeRevision).toBe('table-revision-1');
+
+    const archive = await importWorkspaceArchive(await exportWorkspaceArchive(source));
+    expect(archive.data?.structureRevision).toBe('structure-revision-1');
+    expect(archive.data?.tables[0].changeRevision).toBe('table-revision-1');
+  });
+
+  it('parses legacy fingerprint manifests by named columns without restoring the fingerprint', async () => {
+    const source = makeFixture();
+    source.structureRevision = 'structure-revision-legacy';
+    source.tables[0].id = 'table-1';
+    source.nodes[0] = { ...source.nodes[0], id: 'node-1', tableId: 'table-1' };
+    const currentManifest = exportWorkspaceBackupManifestXlsx(source, [], [{
+      id: 'table-1', nodeId: 'node-1', folderId: null, name: '收藏表', updatedAt: 99,
+      changeRevision: 'legacy-content', driveFileId: 'drive-table-1', fileName: '收藏表.xlsx',
+    }], 123);
+    const legacyManifest = await replaceStoredWorkbookTextWithDifferentLength(currentManifest, 'changeRevision', 'contentFingerprint');
+
+    const imported = await importWorkspaceBackupManifestXlsx(legacyManifest);
+
+    expect(imported.structureRevision).toBe('structure-revision-legacy');
+    expect(imported.tables).toEqual([expect.objectContaining({ id: 'table-1', driveFileId: 'drive-table-1', fileName: '收藏表.xlsx', updatedAt: 99 })]);
+    expect(imported.tables[0]).not.toHaveProperty('contentFingerprint');
+    expect(imported.tables[0]).not.toHaveProperty('changeRevision');
+  });
+
+  it('exports change revisions in the current manifest schema', async () => {
+    const source = makeFixture();
+    source.structureRevision = 'structure-revision-2';
+    source.tables[0].changeRevision = 'table-revision-2';
+    const manifest = await importWorkspaceBackupManifestXlsx(exportWorkspaceBackupManifestXlsx(source, [], [{
+      id: source.tables[0].id,
+      nodeId: source.nodes[0].id,
+      folderId: null,
+      name: source.tables[0].name,
+      updatedAt: source.tables[0].updatedAt,
+      changeRevision: source.tables[0].changeRevision,
+      driveFileId: 'drive-table-1',
+      fileName: '收藏清單.xlsx',
+    }], 123));
+
+    expect(manifest.structureRevision).toBe('structure-revision-2');
+    expect(manifest.tables[0].changeRevision).toBe('table-revision-2');
   });
 
   it('round-trips the workspace tree through multiple sheets', async () => {

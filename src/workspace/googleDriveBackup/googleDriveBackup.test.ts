@@ -138,21 +138,23 @@ describe('Google Drive folder backup boundary', () => {
     });
     const fetchImpl = fetchMock as unknown as typeof fetch;
     const table = createTable('收藏表');
+    const secondTable = createTable('第二表');
     const folder = createNode('folder', '桌遊', null, 0);
     const tableNode = createNode('table', table.name, folder.id, 0, table.id);
-    const data: WorkspaceData = { version: 1, nodes: [folder, tableNode], tables: [table], activeNodeId: tableNode.id };
+    const secondTableNode = createNode('table', secondTable.name, folder.id, 1, secondTable.id);
+    const data: WorkspaceData = { version: 1, nodes: [folder, tableNode, secondTableNode], tables: [table, secondTable], activeNodeId: tableNode.id };
     const backup = createGoogleDriveFolderBackup({ tokenProvider: { getAccessToken: vi.fn(async () => 'token') }, folderPath: ['App', 'Backups'], backupKey: 'workspace-v2', fetchImpl });
 
     const receipt = await backup.backup(data, { sourceUpdatedAt: 42 });
     expect(receipt.manifest.folders).toHaveLength(1);
-    expect(receipt.manifest.tables).toHaveLength(1);
+    expect(receipt.manifest.tables).toHaveLength(2);
     expect(receipt.file.name).toBe('manifest.xlsx');
     expect(receipt.file.mimeType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const manifest = await importWorkspaceBackupManifestXlsx(blobFromBytes(files.get(receipt.file.id)?.body));
     expect(manifest.nodes).toEqual(data.nodes);
     expect(manifest.folders[0].driveFolderId).toBe(receipt.manifest.folders[0].driveFolderId);
     expect(manifest.tables[0].driveFileId).toBe(receipt.manifest.tables[0].driveFileId);
-    const tableFile = [...files.values()].find((file) => file.appProperties?.backupKind === 'table');
+    const tableFile = [...files.values()].find((file) => file.appProperties?.backupKind === 'table' && file.appProperties?.localId === table.id);
     expect(tableFile?.parents).toContain(receipt.manifest.folders[0].driveFolderId);
     expect(tableFile?.name).toBe('收藏表.xlsx');
     const importedTable = await importWorkspaceXlsx(blobFromBytes(tableFile?.body), { preserveIds: true });
@@ -163,14 +165,22 @@ describe('Google Drive folder backup boundary', () => {
     expect(restored.nodes).toEqual(data.nodes);
     expect(restored.activeNodeId).toBe(data.activeNodeId);
     expect(restored.tables[0].name).toBe('收藏表');
+    expect(restored.tables[1].name).toBe('第二表');
 
     const uploadCount = fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length;
     await backup.backup(data, { sourceUpdatedAt: 42 });
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/upload/drive/v3/files')).length).toBe(uploadCount + 3);
+
+    const manualReceipt = await backup.findRemoteFile();
+    expect(manualReceipt).not.toBeNull();
+    const manualManifest = await importWorkspaceBackupManifestXlsx(blobFromBytes(files.get(manualReceipt!.id)?.body));
+    const secondTableFileId = manualManifest.tables.find((item) => item.id === secondTable.id)?.driveFileId;
+    const partialReceipt = await backup.backup(data, { sourceUpdatedAt: 42 }, { complete: false, tableIds: [table.id] });
+    expect(partialReceipt.manifest.tables.find((item) => item.id === secondTable.id)?.driveFileId).toBe(secondTableFileId);
 
     const originalTableFileId = receipt.manifest.tables[0].driveFileId;
     const changedTable = { ...table, name: '新版收藏表', updatedAt: 43 };
-    const changedData: WorkspaceData = { ...data, tables: [changedTable], updatedAt: 43 };
+    const changedData: WorkspaceData = { ...data, tables: [changedTable, secondTable], updatedAt: 43 };
     failNextManifestUpload = true;
     await expect(backup.backup(changedData, { sourceUpdatedAt: 43 })).rejects.toThrow('manifest upload failed');
     const restoredAfterFailure = await backup.restore();
@@ -185,14 +195,14 @@ describe('Google Drive folder backup boundary', () => {
 
     const changedManifestFile = files.get(changedReceipt.file.id);
     if (!changedManifestFile) throw new Error('missing changed manifest fixture');
-    changedManifestFile.appProperties = { ...changedManifestFile.appProperties, parentManifestIds: JSON.stringify([receipt.file.id]) };
+    changedManifestFile.appProperties = { ...changedManifestFile.appProperties, parentManifestIds: JSON.stringify([partialReceipt.file.id]) };
     files.set('manifest-competing-branch', {
       ...changedManifestFile,
       id: 'manifest-competing-branch',
       appProperties: {
         ...changedManifestFile.appProperties,
         backedUpAt: String(Number(changedManifestFile.appProperties?.backedUpAt ?? 0) + 1),
-        parentManifestIds: JSON.stringify([receipt.file.id]),
+        parentManifestIds: JSON.stringify([partialReceipt.file.id]),
       },
     });
     expect((await backup.findRemoteFile())?.appProperties?.backupForkCount).toBe('2');

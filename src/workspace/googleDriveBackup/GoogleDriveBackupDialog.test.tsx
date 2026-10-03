@@ -10,7 +10,7 @@ const createProps = (overrides: Partial<GoogleDriveBackupDialogProps> = {}): Goo
   busy: null,
   message: '',
   error: '',
-  record: { fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureFingerprint: null, tableBackups: {} },
+  record: { fileId: null, fileName: null, lastBackupAt: null, sourceUpdatedAt: null, remoteModifiedTime: null, tableCount: 0, folderCount: 0, structureRevision: null, tableBackups: {} },
   remoteFile: null,
   authorized: false,
   onClose: vi.fn(),

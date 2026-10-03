@@ -2,22 +2,7 @@
 
 ## 本機備份狀態
 
-備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；目前備份 metadata 以獨立 localStorage key 保存，僅包含檔案識別與時間，不包含 access token。
-
-```ts
-interface WorkspaceBackupState {
-  provider: 'google-drive';
-  status: 'disconnected' | 'ready' | 'dirty' | 'uploading' | 'offline' | 'error';
-  manifestFileId: string | null;
-  tableCount: number;
-  folderCount: number;
-  lastBackupAt: number | null;
-  lastBackupChecksum: string | null;
-  localChecksum: string | null;
-  schemaVersion: 1;
-  updatedAt: number;
-}
-```
+備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；備份 metadata 以獨立 localStorage key 保存，包含檔案識別、時間與小型修訂標記，不包含 access token 或表格內容。
 
 目前實作的最小資料形狀是：
 
@@ -30,10 +15,21 @@ interface WorkspaceDriveBackupRecord {
   remoteModifiedTime: string | null;
   tableCount: number;
   folderCount: number;
+  structureRevision: string | null;
+  tableBackups: Record<string, {
+    lastBackupAt: number;
+    sourceUpdatedAt: number;
+    changeRevision?: string;
+    driveFileId: string | null;
+  }>;
 }
 ```
 
-不保存 access token、refresh token、帳號識別資訊或 workspace 內容。`dirty` 狀態由目前 workspace 的 `updatedAt` 與上次備份的 `sourceUpdatedAt` 比較而來。
+`dirty` 狀態比較表格的 `changeRevision` 與結構的 `structureRevision`，不掃描儲存格、不計算內容指紋。一般提交、復原／重做與匯入會為變更的表格產生新標記；資料夾、目前表格及底部導覽列變更則更新結構標記。修改後再復原仍視為待備份變更。`updatedAt` 保留時間用途，IndexedDB 的 `storageRevision` 保留跨分頁衝突檢查用途。
+
+舊資料未包含標記時，暫以既有更新時間作為相容標記；第一次本機修改會開始保存新的修訂標記。舊備份紀錄與 manifest 的指紋欄位會被忽略，新紀錄不再寫入。表格 XLSX、Workspace XLSX 與 ZIP 保存選用修訂欄位，格式版本維持 v1。
+
+手動完整備份重新上傳全部表格；自動備份上傳到期的變更表格，每張表格仍最多 30 分鐘一次。未選中的表格沿用已發布的檔案識別，最後上傳新的 manifest 發布備份。若 manifest 上傳失敗，先前發布的備份仍可還原。雲端檔案版本與分支衝突檢查獨立於修訂標記。
 
 ## 雲端檔案識別
 

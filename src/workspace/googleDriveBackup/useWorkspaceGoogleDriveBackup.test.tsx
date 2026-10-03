@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTable } from '../model';
 import type { WorkspaceData } from '../types';
-import { workspaceStructureBackupFingerprint, workspaceTableBackupFingerprint } from './folderBackup';
+import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import { GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
 
 const mocks = vi.hoisted(() => ({
@@ -32,9 +32,9 @@ const autoBackupKey = 'board-game-helper-google-drive-auto-backup';
 const now = new Date('2026-08-21T10:00:00.000Z');
 
 const createData = (updatedAt = now.getTime()): WorkspaceData => {
-  const first = { ...createTable('表格 A'), updatedAt };
-  const second = { ...createTable('表格 B'), updatedAt };
-  return { version: 1, nodes: [], tables: [first, second], activeNodeId: null, updatedAt };
+  const first = { ...createTable('表格 A'), updatedAt, changeRevision: 'table-revision-a' };
+  const second = { ...createTable('表格 B'), updatedAt, changeRevision: 'table-revision-b' };
+  return { version: 1, nodes: [], tables: [first, second], activeNodeId: null, updatedAt, structureRevision: 'structure-revision-a' };
 };
 
 const renderBackup = (data = createData(), inspectChanges = true) => renderHook(({ value, inspect }: { value: WorkspaceData; inspect?: boolean }) => useWorkspaceGoogleDriveBackup({
@@ -48,8 +48,9 @@ const renderBackup = (data = createData(), inspectChanges = true) => renderHook(
 const receiptFor = (data: WorkspaceData) => ({
   file: { id: 'manifest-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T10:00:02.000Z' },
   manifest: {
-    tables: data.tables.map((table) => ({ id: table.id, updatedAt: table.updatedAt, contentFingerprint: workspaceTableBackupFingerprint(table), driveFileId: `drive-${table.id}` })),
+    tables: data.tables.map((table) => ({ id: table.id, updatedAt: table.updatedAt, changeRevision: workspaceTableChangeRevision(table), driveFileId: `drive-${table.id}`, nodeId: '', folderId: null, name: table.name, fileName: `${table.name}.xlsx` })),
     folders: [],
+    structureRevision: workspaceStructureChangeRevision(data),
   },
 });
 
@@ -123,19 +124,19 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(mocks.backup).not.toHaveBeenCalled();
   });
 
-  it('defers fingerprint inspection until the backup drawer opens', () => {
+  it('defers revision inspection until the backup drawer opens', () => {
     const savedData = createData();
     const currentData = {
       ...savedData,
-      tables: savedData.tables.map((table, index) => index === 0 ? { ...table, name: '尚未備份的新名稱', updatedAt: table.updatedAt + 1 } : table),
+      tables: savedData.tables.map((table, index) => index === 0 ? { ...table, name: '尚未備份的新名稱', updatedAt: table.updatedAt + 1, changeRevision: 'table-revision-a-new' } : table),
     };
     window.localStorage.setItem(recordKey, JSON.stringify({
       fileId: 'manifest-saved', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: savedData.updatedAt,
       remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: savedData.tables.length, folderCount: 0,
-      structureFingerprint: workspaceStructureBackupFingerprint(savedData),
+      structureRevision: workspaceStructureChangeRevision(savedData),
       tableBackups: Object.fromEntries(savedData.tables.map((table) => [table.id, {
         lastBackupAt: now.getTime(), sourceUpdatedAt: table.updatedAt,
-        contentFingerprint: workspaceTableBackupFingerprint(table), driveFileId: `drive-${table.id}`,
+        changeRevision: workspaceTableChangeRevision(table), driveFileId: `drive-${table.id}`,
       }])),
     }));
 
@@ -144,6 +145,55 @@ describe('workspace Google Drive automatic backup scheduling', () => {
 
     hook.rerender({ value: currentData, inspect: true });
     expect(hook.result.current.status).toBe('dirty');
+  });
+
+  it('checks revisions without traversing table rows or cell values', () => {
+    const source = createData();
+    const trappedTable = { ...source.tables[0] };
+    Object.defineProperty(trappedTable, 'rows', {
+      configurable: true,
+      enumerable: true,
+      get() { throw new Error('backup inspection must not read table rows'); },
+    });
+    const data = { ...source, tables: [trappedTable, source.tables[1]] };
+    window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: 'manifest-saved', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: data.updatedAt,
+      remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: data.tables.length, folderCount: 0,
+      structureRevision: workspaceStructureChangeRevision(data),
+      tableBackups: Object.fromEntries(data.tables.map((table) => [table.id, {
+        lastBackupAt: now.getTime(), sourceUpdatedAt: table.updatedAt,
+        changeRevision: workspaceTableChangeRevision(table), driveFileId: `drive-${table.id}`,
+      }])),
+    }));
+
+    const hook = renderBackup(data);
+
+    expect(hook.result.current.status).toBe('saved');
+  });
+
+  it('drops legacy fingerprint fields when it rewrites the local backup record', async () => {
+    const data = createData();
+    window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: null, fileName: null, lastBackupAt: now.getTime(), sourceUpdatedAt: data.updatedAt,
+      remoteModifiedTime: null, tableCount: data.tables.length, folderCount: 0,
+      structureFingerprint: 'legacy-structure',
+      tableBackups: Object.fromEntries(data.tables.map((table) => [table.id, {
+        lastBackupAt: now.getTime(), sourceUpdatedAt: table.updatedAt,
+        contentFingerprint: 'legacy-content', driveFileId: `drive-${table.id}`,
+      }])),
+    }));
+    const hook = renderBackup(data);
+
+    await act(async () => { await hook.result.current.connect(); });
+    await act(async () => { expect(await hook.result.current.backup()).toBe(true); });
+
+    const stored = JSON.parse(window.localStorage.getItem(recordKey) ?? '{}') as Record<string, unknown>;
+    expect(stored).not.toHaveProperty('structureFingerprint');
+    expect(stored).toHaveProperty('structureRevision');
+    for (const backup of Object.values((stored.tableBackups ?? {}) as Record<string, Record<string, unknown>>)) {
+      expect(backup).not.toHaveProperty('contentFingerprint');
+      expect(backup).toHaveProperty('changeRevision');
+    }
   });
 
   it('starts connecting as soon as the drawer entry opens the backup dialog', async () => {
@@ -203,7 +253,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     window.localStorage.setItem(recordKey, JSON.stringify({
       fileId: 'manifest-current', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: now.getTime(),
       remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: 2, folderCount: 0,
-      structureFingerprint: workspaceStructureBackupFingerprint(data), tableBackups: {},
+      structureRevision: workspaceStructureChangeRevision(data), tableBackups: {},
     }));
     mocks.findRemoteFile.mockResolvedValue({
       id: 'manifest-current', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:59:00.000Z', appProperties: { backupForkCount: '2' },
@@ -218,7 +268,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     window.localStorage.setItem(recordKey, JSON.stringify({
       fileId: 'manifest-old', fileName: 'manifest.xlsx', lastBackupAt: now.getTime() - 60_000,
       sourceUpdatedAt: now.getTime() - 10_000, remoteModifiedTime: '2026-08-21T09:00:00.000Z', tableCount: 2, folderCount: 0,
-      structureFingerprint: workspaceStructureBackupFingerprint(data), tableBackups: {},
+      structureRevision: workspaceStructureChangeRevision(data), tableBackups: {},
     }));
     mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-old', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:30:00.000Z' });
     const { result } = renderBackup(data);
@@ -239,10 +289,10 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     window.localStorage.setItem(recordKey, JSON.stringify({
       fileId: 'manifest-current', fileName: 'manifest.xlsx', lastBackupAt: now.getTime(), sourceUpdatedAt: now.getTime() - 10_000,
       remoteModifiedTime: '2026-08-21T09:59:00.000Z', tableCount: 2, folderCount: 0,
-      structureFingerprint: workspaceStructureBackupFingerprint(data),
+      structureRevision: workspaceStructureChangeRevision(data),
       tableBackups: {
-        [first.id]: { lastBackupAt: now.getTime(), sourceUpdatedAt: first.updatedAt - 1, contentFingerprint: 'old-a', driveFileId: 'drive-a' },
-        [second.id]: { lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1, sourceUpdatedAt: second.updatedAt - 1, contentFingerprint: 'old-b', driveFileId: 'drive-b' },
+        [first.id]: { lastBackupAt: now.getTime(), sourceUpdatedAt: first.updatedAt - 1, changeRevision: 'old-a', driveFileId: 'drive-a' },
+        [second.id]: { lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1, sourceUpdatedAt: second.updatedAt - 1, changeRevision: 'old-b', driveFileId: 'drive-b' },
       },
     }));
     mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-current', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:59:00.000Z' });
@@ -298,7 +348,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     await act(async () => { await hook.result.current.connect(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
 
-    const edited = { ...original, tables: original.tables.map((table, index) => index === 0 ? { ...table, name: '上傳期間的新名稱', updatedAt: table.updatedAt + 1 } : table), updatedAt: original.updatedAt! + 1 };
+    const edited = { ...original, tables: original.tables.map((table, index) => index === 0 ? { ...table, name: '上傳期間的新名稱', updatedAt: table.updatedAt + 1, changeRevision: 'table-revision-a-during-upload' } : table), updatedAt: original.updatedAt! + 1 };
     hook.rerender({ value: edited, inspect: true });
     await act(async () => { resolveUpload(receiptFor(uploadedData!)); await pendingUpload; });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });

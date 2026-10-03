@@ -80,6 +80,13 @@ describe('workspace table history', () => {
     expect(redone.tables[0].rows[0].values['column-1']).toBe('新值');
   });
 
+  it('does not turn a revision metadata change into a user history entry', () => {
+    const before = data({ ...table(), changeRevision: 'revision-before' });
+    const after = data({ ...table(), changeRevision: 'revision-after' });
+
+    expect(inferWorkspaceTableMutation(before, after)).toBeUndefined();
+  });
+
   it('infers row and column insertion without adding history for text scale', () => {
     const before = data();
     const newRow = { id: 'row-2', name: '第二筆', values: { 'column-1': null } };

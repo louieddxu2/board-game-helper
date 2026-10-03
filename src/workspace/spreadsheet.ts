@@ -18,11 +18,11 @@ const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-
 
 type AssertNever<T extends never> = T;
 type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'numberInputMode' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly';
-type SerializedTableFields = 'id' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
+type SerializedTableFields = 'id' | 'changeRevision' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
 type SerializedRowFields = 'id' | 'name' | 'values';
-type SerializedWorkspaceFields = 'version' | 'updatedAt' | 'nodes' | 'tables' | 'activeNodeId' | 'bottomNavigationTableIds';
+type SerializedWorkspaceFields = 'version' | 'structureRevision' | 'updatedAt' | 'nodes' | 'tables' | 'activeNodeId' | 'bottomNavigationTableIds';
 type SupportedCellValue = string | number | WorkspaceLinkValue | null;
 export type WorkspaceXlsxSchemaCoverage = [
   AssertNever<Exclude<keyof WorkspaceColumn, SerializedColumnFields>>,
@@ -102,6 +102,7 @@ const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknow
   [TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION],
   ['data_sheet', dataSheetName],
   ['table_id', table.id],
+  ['change_revision', table.changeRevision ?? ''],
   ['table_name', table.name],
   ['row_header_name', rowHeader.name],
   ['text_scale', table.textScale ?? 1],
@@ -124,6 +125,7 @@ const workspaceRows = (data: WorkspaceData): unknown[][] => [
   [WORKSPACE_MARKER, CURRENT_XLSX_FORMAT_VERSION],
   ['format', WORKSPACE_FORMAT],
   ['active_node_id', data.activeNodeId ?? ''],
+  ['structure_revision', data.structureRevision ?? ''],
   ['bottom_navigation_table_ids', ...(data.bottomNavigationTableIds ?? [])],
   ['nodes', 'id', 'type', 'name', 'parentId', 'order', 'tableId'],
   ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
@@ -227,7 +229,7 @@ export interface WorkspaceBackupTableFileRef {
   name: string;
   updatedAt: number;
   /** Optional in v1 manifests so older backups remain importable. */
-  contentFingerprint?: string;
+  changeRevision?: string;
   driveFileId: string;
   fileName: string;
 }
@@ -242,6 +244,7 @@ export interface WorkspaceBackupFolderRef {
 
 export interface ImportedWorkspaceBackupManifest {
   nodes: WorkspaceNode[];
+  structureRevision?: string;
   activeNodeId: string | null;
   bottomNavigationTableIds: string[];
   sourceUpdatedAt: number;
@@ -256,13 +259,14 @@ export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: 
     ['format', 'board-game-helper-workspace-backup'],
     ['source_updated_at', sourceUpdatedAt],
     ['active_node_id', data.activeNodeId ?? ''],
+    ['structure_revision', data.structureRevision ?? ''],
     ['bottom_navigation_table_ids', ...(data.bottomNavigationTableIds ?? [])],
     ['nodes', 'id', 'type', 'name', 'parentId', 'order', 'tableId'],
     ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
     ['folder_files', 'id', 'name', 'parentId', 'order', 'driveFolderId'],
     ...folders.map((folder) => ['folder_file', folder.id, folder.name, folder.parentId ?? '', folder.order, folder.driveFolderId]),
-    ['table_files', 'id', 'nodeId', 'folderId', 'name', 'updatedAt', 'contentFingerprint', 'driveFileId', 'fileName'],
-    ...tables.map((table) => ['table_file', table.id, table.nodeId, table.folderId ?? '', table.name, table.updatedAt, table.contentFingerprint ?? '', table.driveFileId, table.fileName]),
+    ['table_files', 'id', 'nodeId', 'folderId', 'name', 'updatedAt', 'driveFileId', 'fileName', 'changeRevision'],
+    ...tables.map((table) => ['table_file', table.id, table.nodeId, table.folderId ?? '', table.name, table.updatedAt, table.driveFileId, table.fileName, table.changeRevision ?? '']),
   ],
 }]);
 
@@ -437,6 +441,7 @@ const parseSeparatedTable = (settingsRows: SheetRows, dataRows: SheetRows): Work
   assertSheetVersion(settingsRows, TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION);
   const tableId = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'table_id')?.[1]) || makeId('table');
   const tableName = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'table_name')?.[1]) || '匯入表格';
+  const changeRevision = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'change_revision')?.[1]);
   const textScaleValue = Number(settingsRows.find((row) => stringValue(row[0]) === 'text_scale')?.[1]);
   const textScale = Number.isFinite(textScaleValue) ? Math.max(0.1, Math.min(2.5, textScaleValue)) : 1;
   const transposed = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'transposed_view')?.[1]) === 'true';
@@ -453,7 +458,7 @@ const parseSeparatedTable = (settingsRows: SheetRows, dataRows: SheetRows): Work
     name: parseCellValue(row[0], rowHeader) ?? '',
     values: Object.fromEntries(columns.map((column, index) => [column.id, parseCellValue(row[index + 1], column)])),
   }));
-  return { id: tableId, name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows, updatedAt: Date.now() };
+  return { id: tableId, ...(changeRevision ? { changeRevision } : {}), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows, updatedAt: Date.now() };
 };
 
 const uniqueColumnName = (candidate: string, used: Set<string>) => {
@@ -516,7 +521,7 @@ const parsePlainTable = (rows: SheetRows, sheetName: string): WorkspaceTable => 
   return { id: makeId('table'), name: sheetName || '匯入表格', rowHeaderName, rowHeader, textScale: 1, columns, rows: rowsData, updatedAt: Date.now() };
 };
 
-type ParsedWorkspaceRows = { nodes: WorkspaceNode[]; activeNodeId: string | null; bottomNavigationTableIds: string[] };
+type ParsedWorkspaceRows = { nodes: WorkspaceNode[]; structureRevision?: string; activeNodeId: string | null; bottomNavigationTableIds: string[] };
 const parseWorkspaceRows = (rows: SheetRows, marker: string): ParsedWorkspaceRows => {
   assertSheetVersion(rows, marker, CURRENT_XLSX_FORMAT_VERSION);
   const activeNodeId = stringValue(rows.find((row) => stringValue(row[0]) === 'active_node_id')?.[1]) || null;
@@ -524,7 +529,8 @@ const parseWorkspaceRows = (rows: SheetRows, marker: string): ParsedWorkspaceRow
   const nodes = rows.filter((row) => stringValue(row[0]) === 'node').map((row) => ({
     id: stringValue(row[1]) || makeId('node'), type: stringValue(row[2]) === 'folder' ? 'folder' : 'table', name: stringValue(row[3]) || '未命名項目', parentId: stringValue(row[4]) || null, order: typeof row[5] === 'number' ? row[5] : Number(row[5]) || 0, ...(stringValue(row[6]) ? { tableId: stringValue(row[6]) } : {}),
   } as WorkspaceNode));
-  return { nodes, activeNodeId, bottomNavigationTableIds };
+  const structureRevision = stringValue(rows.find((row) => stringValue(row[0]) === 'structure_revision')?.[1]);
+  return { nodes, ...(structureRevision ? { structureRevision } : {}), activeNodeId, bottomNavigationTableIds };
 };
 
 const parseWorkspace = (rows: SheetRows): ParsedWorkspaceRows => parseWorkspaceRows(rows, WORKSPACE_MARKER);
@@ -550,7 +556,7 @@ const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest =
     folderId: stringValue(row[3]) || null,
     name: stringValue(row[4]),
     updatedAt: Number(row[tableColumn('updatedAt', 5)]) || 0,
-    ...(stringValue(row[tableColumn('contentFingerprint', -1)]) ? { contentFingerprint: stringValue(row[tableColumn('contentFingerprint', -1)]) } : {}),
+    ...(stringValue(row[tableColumn('changeRevision', -1)]) ? { changeRevision: stringValue(row[tableColumn('changeRevision', -1)]) } : {}),
     driveFileId: stringValue(row[tableColumn('driveFileId', 6)]),
     fileName: stringValue(row[tableColumn('fileName', 7)]),
   })).filter((table) => table.id && table.nodeId && table.fileName);
@@ -668,7 +674,7 @@ export const importWorkspaceArchive = async (file: Blob): Promise<ImportedWorksp
   for (const node of manifest.nodes.filter((item) => item.type === 'table')) {
     if (!node.tableId || !tableRefs.has(node.tableId)) throw new Error(`ZIP 備份缺少表格索引：${node.name}`);
   }
-  return { isWorkspace: true, source: 'workspace', data: { version: 1, nodes: manifest.nodes, tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds } };
+  return { isWorkspace: true, source: 'workspace', data: { version: 1, structureRevision: manifest.structureRevision, nodes: manifest.nodes, tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds } };
 };
 
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {
@@ -723,7 +729,7 @@ export const importWorkspaceXlsx = async (file: Blob, options: { preserveIds?: b
   const parsed = parseWorkspace(workspaceSheet.data);
   const tables = settingsSheets.map(parseSettingsSheet);
   const tableMap = new Map(tables.map((table) => [table.id, table]));
-  const data: WorkspaceData = { version: 1, nodes: parsed.nodes, tables, activeNodeId: parsed.activeNodeId, bottomNavigationTableIds: parsed.bottomNavigationTableIds };
+  const data: WorkspaceData = { version: 1, structureRevision: parsed.structureRevision, nodes: parsed.nodes, tables, activeNodeId: parsed.activeNodeId, bottomNavigationTableIds: parsed.bottomNavigationTableIds };
   for (const node of data.nodes) {
     if (node.type === 'table' && (!node.tableId || !tableMap.has(node.tableId))) throw new Error(`找不到表格：${node.name}`);
   }

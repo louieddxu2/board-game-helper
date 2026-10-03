@@ -124,6 +124,6 @@ ZIP 上傳 → 驗證 manifest 與各表格 → 合併／取代預覽
 
 1. 備份資料夾讓使用者在 Drive 中看得到，使用 `drive.file`。
 2. Drive 授權與還原由使用者主動觸發；連結成功後可在當次工作階段自動備份，每張表格每 30 分鐘最多一次。
-3. Drive 上維護一個 manifest 與每張表格／資料夾的對應項目，靠 app properties 找回，不每次建立重複檔案。
+3. Drive 上以 manifest 維護每張表格／資料夾的對應項目，靠 app properties 找回。待備份狀態使用修訂標記；選中的表格上傳新版本，再以新的 manifest 發布整次備份，不計算內容指紋。
 4. 不在本機保存 Drive access token；使用者重新整理後，必要時重新走 GIS 授權。
 5. 還原仍先回到既有的「合併／取代」匯入預覽，不直接覆蓋目前 workspace。

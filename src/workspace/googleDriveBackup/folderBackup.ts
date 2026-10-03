@@ -1,4 +1,5 @@
 import { normalizeWorkspace } from '../model';
+import { workspaceTableChangeRevision } from '../changeRevisions';
 import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsx, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, type WorkspaceBackupFolderRef, type WorkspaceBackupTableFileRef } from '../spreadsheet';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from '../types';
 import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
@@ -31,7 +32,7 @@ export interface DriveWorkspaceTableRef {
   folderId: string | null;
   name: string;
   updatedAt: number;
-  contentFingerprint?: string;
+  changeRevision?: string;
   driveFileId: string;
   fileName: string;
 }
@@ -43,6 +44,7 @@ export interface DriveWorkspaceManifest {
   updatedAt: number;
   sourceUpdatedAt: number;
   activeNodeId: string | null;
+  structureRevision?: string;
   nodes: WorkspaceNode[];
   folders: DriveWorkspaceFolderRef[];
   tables: DriveWorkspaceTableRef[];
@@ -79,25 +81,6 @@ export class RemoteBackupConflictError extends Error {
 }
 
 const parentOf = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>) => node.parentId ? nodes.get(node.parentId) : undefined;
-
-const stableSerialize = (value: unknown): string => {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
-  const object = value as Record<string, unknown>;
-  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(object[key])}`).join(',')}}`;
-};
-
-export const workspaceTableBackupFingerprint = (table: WorkspaceTable) => {
-  const { updatedAt: _updatedAt, ...content } = table;
-  return stableSerialize(content);
-};
-
-const nodeStructure = (data: WorkspaceData) => ({
-  activeNodeId: data.activeNodeId,
-  nodes: data.nodes.map(({ id, type, name, parentId, order, tableId }) => ({ id, type, name, parentId, order, tableId: tableId ?? null })),
-});
-
-export const workspaceStructureBackupFingerprint = (data: WorkspaceData) => stableSerialize(nodeStructure(data));
 
 const folderDepth = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>, visiting = new Set<string>()): number => {
   if (!node.parentId) return 0;
@@ -204,35 +187,6 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const previousTables = new Map((previous?.tables ?? []).map((item) => [item.id, item]));
     const fallbackUpdatedAt = Math.max(0, ...data.tables.map((table) => table.updatedAt)) || Date.now();
     const sourceUpdatedAt = typeof metadata.sourceUpdatedAt === 'number' ? metadata.sourceUpdatedAt : Number(metadata.sourceUpdatedAt ?? fallbackUpdatedAt);
-    const sameTables = previous?.tables.length === data.tables.length && data.tables.every((table) => {
-      const oldTable = previousTables.get(table.id);
-      return oldTable && (oldTable.contentFingerprint ? oldTable.contentFingerprint === workspaceTableBackupFingerprint(table) : oldTable.updatedAt === table.updatedAt);
-    });
-    const sameFolders = previous?.folders.length === data.nodes.filter((node) => node.type === 'folder').length
-      && data.nodes.filter((node) => node.type === 'folder').every((node) => {
-        const oldFolder = previousFolders.get(node.id);
-        return oldFolder?.name === node.name && oldFolder.parentId === node.parentId && oldFolder.order === node.order;
-      });
-    if (remoteState.heads.length <= 1 && previousFile && previous && previous.sourceUpdatedAt === sourceUpdatedAt && sameTables && sameFolders
-      && workspaceStructureBackupFingerprint(data) === workspaceStructureBackupFingerprint({ ...data, nodes: previous.nodes, activeNodeId: previous.activeNodeId })) {
-      return {
-        file: previousFile,
-        backupKey: options.backupKey,
-        parentId: root,
-        sourceUpdatedAt,
-        manifest: {
-          format: DRIVE_MANIFEST_FORMAT,
-          version: DRIVE_MANIFEST_VERSION,
-          backupKey: options.backupKey,
-          updatedAt: sourceUpdatedAt,
-          sourceUpdatedAt,
-          activeNodeId: previous.activeNodeId,
-          nodes: previous.nodes,
-          folders: previous.folders,
-          tables: previous.tables,
-        },
-      };
-    }
     const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
     const driveFolderIds = new Map<string, string>();
     const folders: DriveWorkspaceFolderRef[] = [];
@@ -260,23 +214,12 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       if (!parentId) throw new Error(`找不到表格父層：${node.name}`);
       const previousTable = previousTables.get(table.id);
       const fileName = `${table.name || node.name || table.id}.xlsx`;
-      const contentFingerprint = workspaceTableBackupFingerprint(table);
-      const contentChanged = !previousTable
-        ? true
-        : previousTable.contentFingerprint
-          ? previousTable.contentFingerprint !== contentFingerprint
-          : previousTable.updatedAt !== table.updatedAt;
       if (!selectedTableIds.has(table.id) && previousTable) {
-        tableRefs.push({ ...previousTable, nodeId: node.id, folderId: node.parentId });
+        tableRefs.push({ id: previousTable.id, nodeId: node.id, folderId: node.parentId, name: previousTable.name, updatedAt: previousTable.updatedAt, changeRevision: previousTable.changeRevision, driveFileId: previousTable.driveFileId, fileName: previousTable.fileName });
         continue;
       }
-      let file: DriveFile;
-      if (contentChanged || !previousTable) {
-        file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
-      } else {
-        file = { id: previousTable.driveFileId, name: previousTable.fileName };
-      }
-      tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, contentFingerprint, driveFileId: file.id, fileName });
+      const file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
+      tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, changeRevision: workspaceTableChangeRevision(table), driveFileId: file.id, fileName });
     }
 
     const manifest: DriveWorkspaceManifest = {
@@ -286,17 +229,11 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       updatedAt: sourceUpdatedAt,
       sourceUpdatedAt,
       activeNodeId: data.activeNodeId,
+      structureRevision: data.structureRevision,
       nodes: data.nodes,
       folders,
       tables: tableRefs,
     };
-    const manifestNeedsUpdate = !previousFile
-      || !previous
-      || workspaceStructureBackupFingerprint(data) !== workspaceStructureBackupFingerprint({ ...data, nodes: previous.nodes, activeNodeId: previous.activeNodeId })
-      || stableSerialize(folders) !== stableSerialize(previous.folders)
-      || stableSerialize(tableRefs) !== stableSerialize(previous.tables)
-      || previous.sourceUpdatedAt !== sourceUpdatedAt;
-    if (remoteState.heads.length <= 1 && !manifestNeedsUpdate && previousFile) return { file: previousFile, backupKey: options.backupKey, parentId: root, sourceUpdatedAt, manifest };
     const parentManifestIds = 'expectedRemoteFileId' in runOptions
       ? previousFile ? [previousFile.id] : []
       : remoteState.heads.map((file) => file.id);
@@ -328,7 +265,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
         if (!imported.table) throw new Error(`雲端表格格式錯誤：${ref.name}`);
         tables.push(imported.table);
       }
-      return normalizeWorkspace({ version: 1, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds });
+      return normalizeWorkspace({ version: 1, structureRevision: manifest.structureRevision, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds });
     },
   };
 };

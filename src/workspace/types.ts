@@ -41,6 +41,8 @@ export interface WorkspaceRow {
 
 export interface WorkspaceTable {
   id: string;
+  /** Changes on local mutations, including undo and imports; independent of wall-clock time. */
+  changeRevision?: string;
   name: string;
   rowHeaderName: string;
   rowHeader?: WorkspaceColumn;
@@ -62,6 +64,8 @@ export interface WorkspaceNode {
 
 export interface WorkspaceData {
   version: 1;
+  /** Revision of navigation and folder structure, separate from table edits. */
+  structureRevision?: string;
   /** Monotonic local revision for changes that are not owned by one table (for example folder moves). */
   updatedAt?: number;
   nodes: WorkspaceNode[];
