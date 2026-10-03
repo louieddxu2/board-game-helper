@@ -47,7 +47,7 @@ const waitForOfflineShell = async (page: Page) => {
 };
 
 const seed = async (page: Page, tables = 1, rows = 4, columns = 2, historyEntries = 40) => page.evaluate(async ({ tables, rows, columns, historyEntries }) => {
-  const request = indexedDB.open('board-game-helper-workspace', 3);
+  const request = indexedDB.open('board-game-helper-workspace');
   request.onupgradeneeded = () => {
     for (const name of ['state', 'meta', 'tables', 'history']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
   };
@@ -68,15 +68,21 @@ const seed = async (page: Page, tables = 1, rows = 4, columns = 2, historyEntrie
 }, { tables, rows, columns, historyEntries });
 
 const readTableCell = (page: Page, tableId: string, rowId: string, columnId: string) => page.evaluate(async ({ tableId, rowId, columnId }) => {
-  const request = indexedDB.open('board-game-helper-workspace', 3);
+  const request = indexedDB.open('board-game-helper-workspace');
   const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
+  const transaction = db.transaction(['tables', 'rowChunks']);
   const table = await new Promise<any>((done, reject) => {
-    const get = db.transaction('tables').objectStore('tables').get(tableId);
+    const get = transaction.objectStore('tables').get(tableId);
     get.onsuccess = () => done(get.result);
     get.onerror = () => reject(get.error);
   });
+  const rows = table.rows ?? await new Promise<any[]>((done, reject) => {
+    const get = transaction.objectStore('rowChunks').getAll(IDBKeyRange.bound([tableId, ''], [tableId, '\uffff']));
+    get.onsuccess = () => done(get.result.flatMap((chunk) => chunk.rows));
+    get.onerror = () => reject(get.error);
+  });
   db.close();
-  const row = table.rows.find((item: { id: string }) => item.id === rowId);
+  const row = rows.find((item: { id: string }) => item.id === rowId);
   return row?.values[columnId] ?? null;
 }, { tableId, rowId, columnId });
 
@@ -109,14 +115,7 @@ test('a previously unvisited workspace opens offline and edits, undo, and saves 
   await expect(cell).toContainText('資料 0-0');
   await page.getByRole('button', { name: '下一動', exact: true }).click();
   await expect(cell).toContainText('離線編輯');
-  await expect.poll(() => page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
-    const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
-    const tableRequest = db.transaction('tables').objectStore('tables').get('table-0');
-    const table = await new Promise<any>((done) => { tableRequest.onsuccess = () => done(tableRequest.result); });
-    db.close();
-    return table.rows[0].values['column-0'];
-  })).toBe('離線編輯');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe('離線編輯');
   await page.reload();
   await expect(cell).toContainText('離線編輯');
   await page.screenshot({ path: info.outputPath('offline-workspace.png') });
@@ -232,7 +231,7 @@ test('a large offline table renders a bounded row window and retains the other t
   await editor.press('Escape');
   await expect(page.locator('td[data-bulk-row-id="row-249"][data-bulk-column-id="column-0"]')).toContainText('底部修改');
   await expect.poll(() => page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
     const transaction = db.transaction('tables');
     const keys = await new Promise<IDBValidKey[]>((done) => { const get = transaction.objectStore('tables').getAllKeys(); get.onsuccess = () => done(get.result); });
@@ -250,7 +249,7 @@ test('variable-height rows keep visible content while scrolling and zooming', as
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 250, 2);
   await page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
     const transaction = db.transaction('tables', 'readwrite');
     const store = transaction.objectStore('tables');
@@ -320,7 +319,7 @@ test('10,000 variable-height rows keep the mid-scroll row identity after zoom me
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 10_000, 2, 0);
   await page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
     const transaction = db.transaction('tables', 'readwrite');
     const store = transaction.objectStore('tables');
@@ -366,7 +365,7 @@ test('a transposed 10,000-row table bounds its filter toolbar and tracks visible
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 10_000, 12, 0);
   await page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done, reject) => { request.onsuccess = () => done(request.result); request.onerror = () => reject(request.error); });
     const transaction = db.transaction('tables', 'readwrite');
     const store = transaction.objectStore('tables');
@@ -394,6 +393,7 @@ test('a transposed 10,000-row table bounds its filter toolbar and tracks visible
   await expect.poll(async () => (await transposedLabels(page)).filters).toEqual(['項目 9999']);
 
   await search.fill('');
+  await expect(page.locator('.workspace-appbar-search-count')).toHaveText('10000 / 10000');
   await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
   await toolbar.evaluate((element) => { element.scrollLeft = element.scrollWidth; element.dispatchEvent(new Event('scroll', { bubbles: true })); });
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
@@ -439,9 +439,9 @@ test('an edit during active-table-only loading cannot delete the tables still on
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 8);
   await page.addInitScript(() => {
-    const original = IDBObjectStore.prototype.getAll;
-    IDBObjectStore.prototype.getAll = function (this: IDBObjectStore, ...args: unknown[]) {
-      if (this.name === 'tables' && !sessionStorage.getItem('workspace-test-full-read-failed')) {
+    const original = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (this: IDBObjectStore, ...args: unknown[]) {
+      if (this.name === 'tables' && args[0] === 'table-1' && !sessionStorage.getItem('workspace-test-full-read-failed')) {
         sessionStorage.setItem('workspace-test-full-read-failed', '1');
         throw new Error('Simulated delayed full-table read');
       }
@@ -456,7 +456,7 @@ test('an edit during active-table-only loading cannot delete the tables still on
   await editor.fill('先改目前表格');
   await editor.press('Escape');
   await expect.poll(() => page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
     const transaction = db.transaction('tables');
     const keys = await new Promise<IDBValidKey[]>((done) => { const get = transaction.objectStore('tables').getAllKeys(); get.onsuccess = () => done(get.result); });
@@ -467,6 +467,52 @@ test('an edit during active-table-only loading cannot delete the tables still on
   await expect(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]')).toContainText('先改目前表格');
   await page.getByRole('button', { name: '開啟目錄' }).click();
   await expect(page.getByRole('button', { name: /測試表 7/ }).first()).toBeVisible();
+});
+
+test('pinned tables are usable at the mobile bottom edge even if later background reads fail', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
+  await seed(page, 3, 4, 2, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace');
+    const db = await new Promise<IDBDatabase>(done => { request.onsuccess = () => done(request.result); });
+    const transaction = db.transaction('meta', 'readwrite');
+    const get = transaction.objectStore('meta').get('workspace');
+    get.onsuccess = () => transaction.objectStore('meta').put({ ...get.result, bottomNavigationTableIds: ['table-1'] }, 'workspace');
+    await new Promise<void>(done => { transaction.oncomplete = () => done(); });
+    db.close();
+  });
+  await page.addInitScript(() => {
+    const original = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (this: IDBObjectStore, ...args: unknown[]) {
+      if (this.name === 'tables' && args[0] === 'table-2' && !sessionStorage.getItem('workspace-test-after-pins-failed')) {
+        sessionStorage.setItem('workspace-test-after-pins-failed', '1');
+        throw new Error('Simulated later background read failure');
+      }
+      return Reflect.apply(original, this, args);
+    };
+  });
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('其他表格讀取失敗');
+  const bar = page.getByRole('navigation', { name: '常用表格' });
+  await expect(bar).toBeVisible();
+  const geometry = await bar.evaluate(element => ({ bottom: element.getBoundingClientRect().bottom, top: element.getBoundingClientRect().top, height: window.innerHeight, tableBottom: document.querySelector('.workspace-table-viewport')!.getBoundingClientRect().bottom }));
+  expect(Math.abs(geometry.bottom - geometry.height)).toBeLessThan(2);
+  expect(geometry.tableBottom).toBeLessThanOrEqual(geometry.top + 1);
+  await bar.getByRole('button', { name: '開啟表格 測試表 1' }).click();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  const cell = page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]');
+  await cell.click();
+  const editor = page.getByRole('textbox').first();
+  await editor.fill('常用表格先編輯');
+  await editor.press('Escape');
+  await expect.poll(() => readTableCell(page, 'table-1', 'row-0', 'column-0')).toBe('常用表格先編輯');
+  await page.reload();
+  await expect(cell).toContainText('常用表格先編輯');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
 
 test('an older offline tab cannot overwrite a newer table, and explicit deletion still removes it', async ({ page, context }) => {
@@ -487,16 +533,18 @@ test('an older offline tab cannot overwrite a newer table, and explicit deletion
   await peer.getByRole('textbox', { name: '表格名稱' }).press('Enter');
 
   const readStorage = () => page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
-    const transaction = db.transaction(['meta', 'tables', 'history']);
+    const transaction = db.transaction(['meta', 'tables', 'history', 'rowChunks']);
     const read = <T>(store: IDBObjectStore, key: string) => new Promise<T>((done) => { const get = store.get(key); get.onsuccess = () => done(get.result); });
-    const meta = await read<{ storageRevision?: string; nodes: Array<{ name: string }> }>(transaction.objectStore('meta'), 'workspace');
-    const table = await read<{ rows: Array<{ values: Record<string, string> }> }>(transaction.objectStore('tables'), 'table-0');
+    const meta = await read<{ nodes: Array<{ name: string }> }>(transaction.objectStore('meta'), 'workspace');
+    const storage = await read<{ storageRevision: string }>(transaction.objectStore('meta'), 'storage');
+    const table = await read<{ rows?: Array<{ id: string; values: Record<string, string> }>; rowOrder?: string[] }>(transaction.objectStore('tables'), 'table-0');
+    const rows = table.rows ?? await new Promise<any[]>((done) => { const get = transaction.objectStore('rowChunks').getAll(IDBKeyRange.bound(['table-0', ''], ['table-0', '\uffff'])); get.onsuccess = () => done(get.result.flatMap((chunk) => chunk.rows)); });
     const history = await read<{ past: unknown[] }>(transaction.objectStore('history'), 'table-0');
     const keys = await new Promise<IDBValidKey[]>((done) => { const get = transaction.objectStore('tables').getAllKeys(); get.onsuccess = () => done(get.result); });
     db.close();
-    return { revision: meta.storageRevision, names: meta.nodes.map((node) => node.name), keys: keys.length, value: table.rows[0].values['column-0'], history: history.past.length };
+    return { revision: storage.storageRevision, names: meta.nodes.map((node) => node.name), keys: keys.length, value: rows.find(row => row.id === 'row-0').values['column-0'], history: history.past.length };
   });
   await expect.poll(async () => (await readStorage()).names).toContain('第二分頁新表');
   const peerRevision = (await readStorage()).revision;
@@ -521,7 +569,7 @@ test('a large transposed table draws only the visible object columns', async ({ 
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 250, 12);
   await page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((done) => { request.onsuccess = () => done(request.result); });
     const transaction = db.transaction('tables', 'readwrite');
     const store = transaction.objectStore('tables');

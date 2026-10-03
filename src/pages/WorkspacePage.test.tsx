@@ -29,11 +29,6 @@ vi.mock('../workspace/db', () => {
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
-  saveWorkspaceHistory: vi.fn(async () => undefined),
-  appendWorkspaceHistoryEntry: vi.fn(async () => undefined),
-  clearAllWorkspaceHistories: vi.fn(async () => undefined),
-  deleteWorkspaceHistories: vi.fn(async () => undefined),
-  flushWorkspaceSaves: vi.fn(async () => undefined),
 };
 });
 
@@ -61,6 +56,9 @@ describe('WorkspacePage', () => {
     expect(saveWorkspace).toHaveBeenCalledTimes(1);
     expect(saveWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
       tables: [expect.objectContaining({ rows: [expect.objectContaining({ values: expect.objectContaining({ 'column-text': '已儲存' }) })] })],
+    }), expect.objectContaining({
+      mutation: expect.objectContaining({ tableId: 'table-1', action: expect.objectContaining({ type: 'set-cell', rowId: 'row-1', columnId: 'column-text', after: '已儲存' }) }),
+      history: expect.objectContaining({ replace: expect.any(Array) }),
     }));
   });
 
@@ -136,7 +134,7 @@ describe('WorkspacePage', () => {
 
     expect(await screen.findByRole('navigation', { name: '常用表格' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '開啟表格 測試表格' })).toHaveAttribute('aria-current', 'page');
-    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: ['table-1'] }));
+    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: ['table-1'] }), expect.objectContaining({ history: expect.any(Object) }));
 
     await user.click(screen.getByRole('button', { name: '開啟目錄' }));
     await user.click(screen.getByRole('button', { name: '管理底部導覽列' }));
@@ -144,7 +142,7 @@ describe('WorkspacePage', () => {
     fireEvent.click(document.querySelector('.workspace-bottom-navigation-dialog-overlay')!);
 
     expect(screen.queryByRole('navigation', { name: '常用表格' })).not.toBeInTheDocument();
-    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: [] }));
+    expect(vi.mocked(saveWorkspace)).toHaveBeenLastCalledWith(expect.objectContaining({ bottomNavigationTableIds: [] }), expect.objectContaining({ history: expect.any(Object) }));
   });
 
   it('releases the bottom navigation height while the virtual keyboard is open', async () => {
@@ -944,7 +942,7 @@ describe('WorkspacePage', () => {
       tables: expect.arrayContaining([expect.objectContaining({
         columns: expect.arrayContaining([expect.objectContaining({ id: 'column-select', inputType: 'text', options: ['合作', '競爭'] })]),
       })]),
-    })));
+    }), expect.objectContaining({ history: expect.any(Object) })));
 
     await user.click(screen.getByRole('button', { name: '類型' }));
     await user.click(screen.getByRole('button', { name: '選單' }));
@@ -1112,13 +1110,13 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.2' }));
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
       tables: expect.arrayContaining([expect.objectContaining({ id: 'table-1', textScale: 1.2 })]),
-    })));
+    }), expect.objectContaining({ history: expect.any(Object) })));
 
     fireEvent.click(screen.getByRole('button', { name: '放大文字' }));
     await waitFor(() => expect(screen.getByRole('table')).toHaveStyle({ '--workspace-text-scale': '1.3' }));
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
       tables: expect.arrayContaining([expect.objectContaining({ id: 'table-1', textScale: 1.3 })]),
-    })));
+    }), expect.objectContaining({ history: expect.any(Object) })));
   });
 
   it('scales only the table while keeping modal zoom isolated', async () => {
@@ -1406,7 +1404,7 @@ describe('WorkspacePage', () => {
       dispatchPointer(tree, 'pointerup', 30, 140);
       await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
         nodes: expect.arrayContaining([expect.objectContaining({ id: 'node-table', parentId: 'folder-1' })]),
-      })));
+      }), expect.objectContaining({ history: expect.any(Object) })));
     } finally {
       document.elementFromPoint = previousElementFromPoint;
     }
@@ -1456,7 +1454,7 @@ describe('WorkspacePage', () => {
 
       await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
         nodes: expect.arrayContaining([expect.objectContaining({ id: 'node-table', parentId: 'folder-1' })]),
-      })));
+      }), expect.objectContaining({ history: expect.any(Object) })));
       await new Promise((resolve) => window.setTimeout(resolve, 200));
       expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
     } finally {
@@ -2085,7 +2083,7 @@ describe('WorkspacePage', () => {
         tables: expect.arrayContaining([expect.objectContaining({
           columns: expect.arrayContaining([expect.objectContaining({ id: 'column-number' })]),
         })]),
-      })));
+      }), expect.objectContaining({ history: expect.any(Object) })));
       const latestColumnSave = vi.mocked(saveWorkspace).mock.calls.at(-1)?.[0];
       expect(latestColumnSave?.tables[0].columns.slice(0, 2).map((column) => column.id)).toEqual(['column-number', 'column-text']);
 

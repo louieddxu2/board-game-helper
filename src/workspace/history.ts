@@ -231,21 +231,21 @@ export const applyWorkspaceTableHistoryActionWithNode = (
   return updateTableNodeName(next, tableId, direction === 'redo' ? action.after : action.before);
 };
 
-const tableWithout = (table: WorkspaceTable, keys: Array<'updatedAt' | 'textScale'>) => {
-  const copy = { ...table } as Partial<WorkspaceTable>;
-  delete copy.changeRevision;
-  for (const key of keys) delete copy[key];
-  return copy;
+const same = (left: unknown, right: unknown) => left === right || JSON.stringify(left) === JSON.stringify(right);
+const sameRows = (left: WorkspaceTable, right: WorkspaceTable) => left.rows === right.rows || (left.rows.length === right.rows.length && left.rows.every((row, index) => same(row, right.rows[index])));
+const sameColumns = (left: WorkspaceTable, right: WorkspaceTable) => left.columns === right.columns || (left.columns.length === right.columns.length && left.columns.every((column, index) => same(column, right.columns[index])));
+const sameTableContent = (left: WorkspaceTable, right: WorkspaceTable, ignoreTextScale = false) => {
+  if (left === right) return true;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)] as Array<keyof WorkspaceTable>);
+  keys.delete('updatedAt'); keys.delete('changeRevision');
+  if (ignoreTextScale) keys.delete('textScale');
+  return [...keys].every(key => key === 'rows' ? sameRows(left, right) : key === 'columns' ? sameColumns(left, right) : same(left[key], right[key]));
 };
-
-const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-const sameRows = (left: WorkspaceTable, right: WorkspaceTable) => same(left.rows, right.rows);
-const sameColumns = (left: WorkspaceTable, right: WorkspaceTable) => same(left.columns, right.columns);
 
 export const inferWorkspaceTableMutation = (before: WorkspaceData, after: WorkspaceData): WorkspaceTableMutation | undefined => {
   const changed = after.tables.filter((nextTable) => {
     const previous = before.tables.find((table) => table.id === nextTable.id);
-    return previous && !same(tableWithout(previous, ['updatedAt']), tableWithout(nextTable, ['updatedAt'])) && !same(tableWithout(previous, ['updatedAt', 'textScale']), tableWithout(nextTable, ['updatedAt', 'textScale']));
+    return previous && !sameTableContent(previous, nextTable, true);
   });
   if (changed.length !== 1) return undefined;
   const nextTable = changed[0];
@@ -254,11 +254,10 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
   const tableId = nextTable.id;
   const mutation = (label: string, action: WorkspaceTableHistoryAction): WorkspaceTableMutation => ({ tableId, label, action });
 
-  if (beforeTable.textScale !== nextTable.textScale && same(tableWithout(beforeTable, ['updatedAt', 'textScale']), tableWithout(nextTable, ['updatedAt', 'textScale']))) return undefined;
-  if (beforeTable.transposed !== nextTable.transposed && same(tableWithout(beforeTable, ['updatedAt']), { ...tableWithout(nextTable, ['updatedAt']), transposed: beforeTable.transposed })) {
+  if (beforeTable.transposed !== nextTable.transposed && sameTableContent(beforeTable, { ...nextTable, transposed: beforeTable.transposed })) {
     return mutation('切換表格方向', { type: 'set-transposed', before: Boolean(beforeTable.transposed), after: Boolean(nextTable.transposed) });
   }
-  if (beforeTable.name !== nextTable.name && same({ ...tableWithout(beforeTable, ['updatedAt']), name: nextTable.name }, tableWithout(nextTable, ['updatedAt']))) {
+  if (beforeTable.name !== nextTable.name && sameTableContent({ ...beforeTable, name: nextTable.name }, nextTable)) {
     return mutation('重新命名表格', { type: 'rename-table', before: beforeTable.name, after: nextTable.name });
   }
   if ((beforeTable.rowHeaderName !== nextTable.rowHeaderName || !same(beforeTable.rowHeader, nextTable.rowHeader)) && sameRows(beforeTable, nextTable) && sameColumns(beforeTable, nextTable)) {

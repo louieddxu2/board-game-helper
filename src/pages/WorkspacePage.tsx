@@ -1,6 +1,6 @@
 import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { appendWorkspaceHistoryEntry, assertWorkspaceStorageCurrent, clearAllWorkspaceHistories, deleteWorkspaceHistories, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, saveWorkspaceHistory } from '../workspace/db';
+import { assertWorkspaceStorageCurrent, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, type WorkspaceSaveOptions } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, useWorkspaceInputModality, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, WorkspaceInputModalityContext, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
@@ -88,6 +88,7 @@ const WorkspacePage = () => {
   const [remainingLoadError, setRemainingLoadError] = useState(false);
   const [storageConflict, setStorageConflict] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [storageUpgradeBlocked, setStorageUpgradeBlocked] = useState(() => document.documentElement.hasAttribute('data-workspace-storage-blocked'));
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [bottomNavigationDraft, setBottomNavigationDraft] = useState<string[]>();
@@ -123,6 +124,7 @@ const WorkspacePage = () => {
   const historyReadyRef = useRef(false);
   const allTablesReadyRef = useRef(false);
   const historyResetRef = useRef({ all: false, ids: new Set<string>() });
+  const pendingHistoryResetRef = useRef({ all: false, ids: new Set<string>() });
   const saveRevisionRef = useRef(0);
   const googleDriveClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
   const drawerCloseTimerRef = useRef<number | undefined>(undefined);
@@ -292,11 +294,17 @@ const WorkspacePage = () => {
   useEffect(() => {
     let cancelled = false;
     let cancelHistoryLoad: (() => void) | undefined;
+    const blocked = () => setStorageUpgradeBlocked(true);
+    const changedVersion = () => { setStorageConflict(true); setNotice('本機儲存格式已更新，請重新開啟此頁面'); };
+    window.addEventListener('workspace-storage-blocked', blocked);
+    window.addEventListener('workspace-storage-versionchange', changedVersion);
     const reload = async () => {
       const initial = await loadWorkspaceInitial();
       const loaded = initial.data;
       if (cancelled) return;
       setData(loaded);
+      document.documentElement.removeAttribute('data-workspace-storage-blocked');
+      setStorageUpgradeBlocked(false);
       dataRef.current = loaded;
       allTablesReadyRef.current = initial.complete;
       setAllTablesReady(initial.complete);
@@ -316,15 +324,23 @@ const WorkspacePage = () => {
       cancelHistoryLoad = afterWorkspacePaint(() => {
         const finishTables = async () => {
           if (initial.complete) return;
-          const remaining = await loadWorkspace({ expectCurrentRevision: true });
+          const mergeLoaded = (remaining: WorkspaceData) => {
+            if (cancelled) return;
+            const current = dataRef.current;
+            const currentTables = new Map(current?.tables.map((table) => [table.id, table]));
+            const merged = current
+              ? { ...current, bottomNavigationTableIds: remaining.bottomNavigationTableIds, tables: remaining.tables.map((table) => currentTables.get(table.id) ?? table) }
+              : remaining;
+            dataRef.current = merged;
+            setData(merged);
+          };
+          // Measured 10k-row reads exceed the requested 0.5 ms threshold. Preload pins first.
+          const pins = (loaded.bottomNavigationTableIds ?? []).filter(id => !loaded.tables.some(table => table.id === id) && loaded.nodes.some(node => node.tableId === id));
+          if (pins.length) mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, tableIds: pins }));
           if (cancelled) return;
-          const current = dataRef.current;
-          const currentTables = new Map(current?.tables.map((table) => [table.id, table]));
-          const merged = current
-            ? { ...current, bottomNavigationTableIds: remaining.bottomNavigationTableIds, tables: remaining.tables.map((table) => currentTables.get(table.id) ?? table) }
-            : remaining;
-          dataRef.current = merged;
-          setData(merged);
+          mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
+          if (cancelled) return;
+          allTablesReadyRef.current = true;
           setAllTablesReady(true);
         };
         const finish = (stored: Map<string, WorkspaceTableHistory>) => {
@@ -348,7 +364,11 @@ const WorkspacePage = () => {
       });
     };
     void reload().catch(() => { if (!cancelled) setLoadError(true); });
-    return () => { cancelled = true; cancelHistoryLoad?.(); };
+    return () => {
+      cancelled = true; cancelHistoryLoad?.();
+      window.removeEventListener('workspace-storage-blocked', blocked);
+      window.removeEventListener('workspace-storage-versionchange', changedVersion);
+    };
   }, []);
 
   const reportSaveError = useCallback((error: unknown) => {
@@ -357,45 +377,50 @@ const WorkspacePage = () => {
     else setNotice('本機儲存失敗，請先匯出資料備份');
   }, []);
 
+  useEffect(() => {
+    const failed = (event: Event) => reportSaveError((event as CustomEvent<unknown>).detail);
+    window.addEventListener('workspace-storage-error', failed);
+    return () => window.removeEventListener('workspace-storage-error', failed);
+  }, [reportSaveError]);
+
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
     const previous = dataRef.current;
     if (!allTablesReadyRef.current && previous && (
-      next.activeNodeId !== previous.activeNodeId
+      (next.activeNodeId !== previous.activeNodeId && !getTableForNode(next, next.activeNodeId))
       || next.tables.length !== previous.tables.length
       || next.tables.some((table, index) => table.id !== previous.tables[index]?.id)
     )) {
       setNotice('正在讀取其他表格，請稍候');
       return;
     }
-    const mutation = explicitMutation ?? (previous ? inferWorkspaceTableMutation(previous, next) : undefined);
+    const mutation = explicitMutation ?? (previous && !options?.clearAllHistory ? inferWorkspaceTableMutation(previous, next) : undefined);
     const meaningfulChange = !previous
       || previous.nodes !== next.nodes
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
     const committed = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
-    const historyWrites: Array<() => void> = [];
     setData(committed);
     dataRef.current = committed;
     if (options?.clearAllHistory) {
       historyResetRef.current.all = true;
+      pendingHistoryResetRef.current = { all: true, ids: new Set() };
       historyRef.current = new Map();
       setHistoryByTable(new Map());
-      historyWrites.push(() => { void clearAllWorkspaceHistories(); });
     } else if (options?.clearTableHistoryIds?.length) {
       options.clearTableHistoryIds.forEach((id) => historyResetRef.current.ids.add(id));
+      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...options.clearTableHistoryIds]) };
       const nextHistories = new Map(historyRef.current);
       options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      historyWrites.push(() => { void deleteWorkspaceHistories(options.clearTableHistoryIds!); });
     } else if (removedTableIds.length) {
       removedTableIds.forEach((id) => historyResetRef.current.ids.add(id));
+      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...removedTableIds]) };
       const nextHistories = new Map(historyRef.current);
       removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      historyWrites.push(() => { void deleteWorkspaceHistories(removedTableIds); });
     }
     if (mutation) {
       const currentHistory = historyRef.current.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
@@ -403,17 +428,24 @@ const WorkspacePage = () => {
       const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
       historyRef.current = nextHistories;
       setHistoryByTable(nextHistories);
-      if (historyReadyRef.current) historyWrites.push(() => { void saveWorkspaceHistory(nextHistory); });
-      else historyWrites.push(() => { void appendWorkspaceHistoryEntry(nextHistory.past[nextHistory.past.length - 1]); });
     }
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
-    const saveOptions = !allTablesReadyRef.current
-      ? { partial: true, deletedTableIds: removedTableIds }
-      : removedTableIds.length ? { deletedTableIds: removedTableIds } : undefined;
-    const save = saveOptions ? saveWorkspace(committed, saveOptions) : saveWorkspace(committed);
+    const reset = pendingHistoryResetRef.current;
+    const histories = [...historyRef.current.values()];
+    const saveOptions: WorkspaceSaveOptions = {
+      partial: !allTablesReadyRef.current,
+      deletedTableIds: removedTableIds,
+      mutation,
+      replaceTableIds: options?.clearAllHistory ? committed.tables.filter(table => previous?.tables.find(item => item.id === table.id) !== table).map(table => table.id) : undefined,
+      history: {
+        clearAll: reset.all, deleteTableIds: [...reset.ids],
+        ...(historyReadyRef.current ? { replace: histories } : { append: histories.flatMap(history => history.past) }),
+      },
+    };
+    const save = saveWorkspace(committed, saveOptions);
     void save.then(() => {
-      historyWrites.forEach((write) => write());
+      if (pendingHistoryResetRef.current === reset) pendingHistoryResetRef.current = { all: false, ids: new Set() };
       if (saveRevision !== saveRevisionRef.current) return;
       setSaveState('saved');
       setLastSavedAt(Date.now());
@@ -698,7 +730,7 @@ const WorkspacePage = () => {
 
   const openDrawerNode = useCallback((node: WorkspaceNode) => {
     if (node.id === dataRef.current?.activeNodeId) { closeDrawer(); return; }
-    if (node.type === 'table' && !allTablesReadyRef.current) {
+    if (node.type === 'table' && !dataRef.current?.tables.some(table => table.id === node.tableId)) {
       pendingOpenNodeIdRef.current = node.id;
       setNotice('正在開啟表格…');
       return;
@@ -707,8 +739,9 @@ const WorkspacePage = () => {
   }, [closeDrawer, openNode]);
 
   useEffect(() => {
-    if (!allTablesReady || !data || !pendingOpenNodeIdRef.current) return;
+    if (!data || !pendingOpenNodeIdRef.current) return;
     const node = data.nodes.find((item) => item.id === pendingOpenNodeIdRef.current);
+    if (!allTablesReady && !data.tables.some(table => table.id === node?.tableId)) return;
     pendingOpenNodeIdRef.current = undefined;
     if (node?.type === 'table' && node.tableId && data.tables.some((item) => item.id === node.tableId)) openNode(node);
     else if (node?.type === 'table') setNotice('無法開啟表格，請確認本機資料');
@@ -872,8 +905,13 @@ const WorkspacePage = () => {
     setSelectionEditor(undefined);
     const saveRevision = ++saveRevisionRef.current;
     setSaveState('saving');
-    void (allTablesReadyRef.current ? saveWorkspace(nextData) : saveWorkspace(nextData, { partial: true })).then(() => {
-      void saveWorkspaceHistory(nextHistory);
+    const reset = pendingHistoryResetRef.current;
+    void saveWorkspace(nextData, {
+      partial: !allTablesReadyRef.current,
+      mutation: { tableId: table.id, action: entry.action },
+      history: { clearAll: reset.all, deleteTableIds: [...reset.ids], replace: [...nextHistories.values()] },
+    }).then(() => {
+      if (pendingHistoryResetRef.current === reset) pendingHistoryResetRef.current = { all: false, ids: new Set() };
       if (saveRevision !== saveRevisionRef.current) return;
       setSaveState('saved');
       setLastSavedAt(Date.now());
@@ -1344,7 +1382,7 @@ const WorkspacePage = () => {
     </>;
   }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, columnWindow.virtual, columnWindow.visibleRows, columnWindow.visibleWidths, columnWindow.leftPadding, columnWindow.rightPadding, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, filteredRowIndexes, filteredRows, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, setFilterTarget, stableAddTable, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable]);
 
-  if (!data) return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider></WorkspaceInputModalityContext.Provider>;
+  if (!data) return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section className="workspace-page workspace-loading">{storageUpgradeBlocked ? <p>請關閉其他開啟此工作區的分頁或視窗，讓本機儲存格式完成更新。</p> : loadError ? <><p>無法讀取本機表格，請重新開啟再試一次。</p><button type="button" onClick={() => window.location.reload()}>重新開啟</button></> : <p>正在開啟本地 Workspace…</p>}</section></WorkspaceModalCloseContext.Provider></WorkspaceInputModalityContext.Provider>;
 
   return <WorkspaceInputModalityContext.Provider value={inputModality}><WorkspaceModalCloseContext.Provider value={requestClose}><section ref={workspacePageRef} className="workspace-page" tabIndex={-1} aria-label="動態表格工作區" style={workspacePageStyle} onPaste={handleWorkspacePaste}>
     <h1 className="sr-only">動態表格</h1>
@@ -1397,7 +1435,7 @@ const WorkspacePage = () => {
       </main>
     </div>
     </div>
-    {!virtualKeyboardOpen && allTablesReady && bottomNavigationItems.length > 0 && <WorkspaceBottomNavigation items={bottomNavigationItems} activeTableId={table?.id} onOpen={(item) => {
+    {!virtualKeyboardOpen && bottomNavigationItems.length > 0 && <WorkspaceBottomNavigation items={bottomNavigationItems} activeTableId={table?.id} onOpen={(item) => {
       const node = data.nodes.find((candidate) => candidate.id === item.nodeId);
       if (!node || node.id === data.activeNodeId) return;
       closeBulkSelection();

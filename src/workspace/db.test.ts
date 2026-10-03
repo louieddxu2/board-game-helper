@@ -1,46 +1,67 @@
 import { describe, expect, it } from 'vitest';
-import { createWorkspaceStoragePlan, tableStorageSignature } from './db';
-import { createTable, emptyWorkspace } from './model';
+import {
+  createWorkspaceTableStorageSnapshot,
+  planWorkspaceTableStorageWrite,
+  updateWorkspaceTableStorageSnapshot,
+} from './rowChunkStorage';
+import { createTable } from './model';
+import type { WorkspaceTable } from './types';
 
-describe('workspace independent table storage', () => {
-  it('writes changed tables and deletes only explicitly removed tables', () => {
-    const unchanged = createTable('不變');
-    const changed = createTable('修改前');
-    const removed = createTable('已刪除');
-    const signatures = new Map([
-      [unchanged.id, tableStorageSignature(unchanged)],
-      [changed.id, tableStorageSignature(changed)],
-      [removed.id, tableStorageSignature(removed)],
-    ]);
-    const nextChanged = { ...changed, name: '修改後', updatedAt: changed.updatedAt + 1 };
-    const data = { ...emptyWorkspace(), tables: [unchanged, nextChanged] };
+const makeTable = (rowCount: number): WorkspaceTable => {
+  const table = createTable('排程測試');
+  const columnId = table.columns[0].id;
+  return {
+    ...table,
+    rows: Array.from({ length: rowCount }, (_, index) => ({
+      id: `row-${index}`,
+      name: `物件 ${index}`,
+      values: { [columnId]: `值 ${index}` },
+    })),
+  };
+};
 
-    const plan = createWorkspaceStoragePlan(data, signatures, [removed.id]);
+const setCell = (table: WorkspaceTable, rowId: string, value: string): WorkspaceTable => {
+  const columnId = table.columns[0].id;
+  return {
+    ...table,
+    updatedAt: table.updatedAt + 1,
+    rows: table.rows.map((row) => row.id === rowId ? { ...row, values: { ...row.values, [columnId]: value } } : row),
+  };
+};
 
-    expect(plan.upserts.map((table) => table.id)).toEqual([changed.id]);
-    expect(plan.deletes).toEqual([removed.id]);
-    expect(plan.meta).not.toHaveProperty('tables');
-    expect(createWorkspaceStoragePlan(data, signatures).deletes).toEqual([]);
-    expect(createWorkspaceStoragePlan(data, signatures, [unchanged.id]).deletes).toEqual([]);
+describe('workspace storage save snapshots', () => {
+  it('keeps chunk IDs stable across two queued snapshots', () => {
+    const initial = makeTable(512);
+    const saved = createWorkspaceTableStorageSnapshot(initial);
+    const firstEdit = setCell(initial, 'row-0', '第一次編輯');
+    const firstSnapshot = updateWorkspaceTableStorageSnapshot(saved, firstEdit, {
+      type: 'set-cell', rowId: 'row-0', columnId: initial.columns[0].id, before: '值 0', after: '第一次編輯',
+    });
+    const secondEdit = setCell(firstEdit, 'row-256', '第二次編輯');
+    const secondSnapshot = updateWorkspaceTableStorageSnapshot(firstSnapshot, secondEdit, {
+      type: 'set-cell', rowId: 'row-256', columnId: initial.columns[0].id, before: '值 256', after: '第二次編輯',
+    });
+
+    expect(secondSnapshot.record.chunkIds).toEqual(saved.record.chunkIds);
+    expect([...secondSnapshot.chunks.keys()]).toEqual([...saved.chunks.keys()]);
+    expect(secondSnapshot.record.rowOrder).toEqual(saved.record.rowOrder);
   });
 
-  it('stores bottom navigation order in workspace metadata without rewriting tables', () => {
-    const table = createTable('常用表格');
-    const signatures = new Map([[table.id, tableStorageSignature(table)]]);
-    const plan = createWorkspaceStoragePlan({ ...emptyWorkspace(), tables: [table], bottomNavigationTableIds: [table.id] }, signatures, [table.id]);
+  it('keeps both changed chunks dirty when the first queued save did not advance its baseline', () => {
+    const initial = makeTable(512);
+    const saved = createWorkspaceTableStorageSnapshot(initial);
+    const firstEdit = setCell(initial, 'row-0', 'A');
+    const firstSnapshot = updateWorkspaceTableStorageSnapshot(saved, firstEdit, {
+      type: 'set-cell', rowId: 'row-0', columnId: initial.columns[0].id, before: '值 0', after: 'A',
+    });
+    const secondEdit = setCell(firstEdit, 'row-256', 'B');
+    const secondSnapshot = updateWorkspaceTableStorageSnapshot(firstSnapshot, secondEdit, {
+      type: 'set-cell', rowId: 'row-256', columnId: initial.columns[0].id, before: '值 256', after: 'B',
+    });
 
-    expect(plan.upserts).toEqual([]);
-    expect(plan.meta.bottomNavigationTableIds).toEqual([table.id]);
-  });
+    const plan = planWorkspaceTableStorageWrite(secondSnapshot, saved);
 
-  it('keeps structure and table revisions in the independent storage plan', () => {
-    const table = { ...createTable('有修訂版本'), changeRevision: 'table-revision-1' };
-    const signatures = new Map<string, string>();
-    const data = { ...emptyWorkspace(), structureRevision: 'structure-revision-1', tables: [table] };
-
-    const plan = createWorkspaceStoragePlan(data, signatures);
-
-    expect(plan.meta.structureRevision).toBe('structure-revision-1');
-    expect(plan.upserts).toEqual([expect.objectContaining({ id: table.id, changeRevision: 'table-revision-1' })]);
+    expect(plan.upserts.map((chunk) => chunk.chunkId)).toEqual(saved.record.chunkIds);
+    expect(plan.deletes).toEqual([]);
   });
 });

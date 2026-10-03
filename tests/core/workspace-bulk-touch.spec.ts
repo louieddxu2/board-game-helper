@@ -10,7 +10,7 @@ test('same-column touches select immediately while guard-band panning cannot ope
 
   // Seed only local Workspace data so this test exercises browser touch handling.
   await page.evaluate(async () => {
-    const request = indexedDB.open('board-game-helper-workspace', 3);
+    const request = indexedDB.open('board-game-helper-workspace');
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
