@@ -143,8 +143,8 @@ export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean;
 };
 
 /** Read only the active table. The rest, with pinned tables first, load after paint. */
-export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; complete: boolean }> => {
-  if (!database) return { data: emptyWorkspace(), complete: true };
+export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; complete: boolean; storageVersion: number | null }> => {
+  if (!database) return { data: emptyWorkspace(), complete: true, storageVersion: null };
   const pending = saveQueue;
   await pending.catch(() => undefined);
   const db = await database;
@@ -165,7 +165,7 @@ export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; com
   }
   await transaction.done;
   if (saveQueue !== pending) return loadWorkspaceInitial();
-  if (!meta || !table) return { data: await loadWorkspace(), complete: true };
+  if (!meta || !table) return { data: await loadWorkspace(), complete: true, storageVersion: db.version };
   const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: [table] });
   const data = { ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
   resetSnapshots();
@@ -173,7 +173,7 @@ export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; com
   savedTables.set(table.id, { snapshot, legacy: !stored });
   workingTables.set(table.id, snapshot); tableSnapshots.set(snapshot.table, snapshot);
   savedMetadata = metadataOf(data); savedStorageRevision = state?.storageRevision ?? null; savedUpdatedAt = state?.updatedAt;
-  return { data, complete: false };
+  return { data, complete: false, storageVersion: db.version };
 };
 
 const isHistoryHead = (history: StoredHistoryHead | WorkspaceTableHistory): history is StoredHistoryHead => 'storageFormat' in history && history.storageFormat === 'history-entries-v1';

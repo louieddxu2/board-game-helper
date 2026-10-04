@@ -17,7 +17,7 @@ vi.mock('../workspace/db', () => {
       rows: [{ id: 'row-1', name: '物件', values: { 'column-1': '原值' } }],
     }],
   }));
-  const loadWorkspaceInitial = vi.fn(async () => ({ data: await loadWorkspace(), complete: true }));
+  const loadWorkspaceInitial = vi.fn(async () => ({ data: await loadWorkspace(), complete: true, storageVersion: 4 }));
   return {
   ...db,
   loadWorkspace,
@@ -46,7 +46,7 @@ describe('workspace startup', () => {
     const base = await loadWorkspace();
     const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };
     const full = { ...base, nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }], tables: [...base.tables, otherTable] };
-    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false, storageVersion: 4 });
     let finishTableLoad!: (value: typeof full) => void;
     vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
     render(<WorkspacePage />);
@@ -68,7 +68,7 @@ describe('workspace startup', () => {
       nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }],
       tables: [...base.tables, otherTable],
     };
-    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false, storageVersion: 4 });
     let finishTableLoad!: (value: typeof full) => void;
     vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
 
@@ -76,6 +76,7 @@ describe('workspace startup', () => {
     fireEvent.click(await screen.findByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     expect(within(drawer).getByRole('status')).toHaveTextContent('正在讀取其他表格');
+    expect(within(drawer).getByLabelText('版本資訊')).toHaveTextContent('版本 開發版 · 儲存格式 v4');
     expect(screen.queryByRole('button', { name: '新增表格' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('其他表格'));
     expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('本機表格');
@@ -105,7 +106,7 @@ describe('workspace startup', () => {
       ],
       tables: [activeTable, pinnedTable, otherTable],
     };
-    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: [activeTable] }, complete: false });
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: [activeTable] }, complete: false, storageVersion: 4 });
     let resolvePinned!: (value: typeof full) => void;
     let resolveFull!: (value: typeof full) => void;
     vi.mocked(loadWorkspace)
@@ -153,7 +154,7 @@ describe('workspace startup', () => {
       nodes: [...base.nodes, { ...base.nodes[0], id: 'node-2', tableId: otherTable.id, name: otherTable.name, order: 1 }],
       tables: [...base.tables, otherTable],
     };
-    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false });
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false, storageVersion: 4 });
     let finishTableLoad!: (value: typeof full) => void;
     vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
 

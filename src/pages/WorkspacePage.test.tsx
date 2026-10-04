@@ -25,7 +25,7 @@ vi.mock('../workspace/db', () => {
   });
   return {
   loadWorkspace,
-  loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true }),
+  loadWorkspaceInitial: async () => ({ data: await loadWorkspace(), complete: true, storageVersion: 4 }),
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
