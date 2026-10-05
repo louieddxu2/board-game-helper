@@ -16,7 +16,7 @@ describe('workspace model', () => {
     expect(displayWorkspaceCellValue({ url: 'HTTP://example.com/game', label: '' }, 'link')).toBe('example.com/game');
   });
 
-  it('derives dynamic options in first-seen order without empty or duplicate values', () => {
+  it('ranks dynamic options by the number of rows using them without empty or duplicate values', () => {
     const table = createTable('收藏');
     const column = createColumn('狀態', 'dynamic-select');
     table.columns.push(column);
@@ -144,7 +144,8 @@ describe('workspace model', () => {
     table.rows[1].values[table.columns[0].id] = '香蕉、橘子';
 
     const options = getDynamicOptions(table, table.columns[0].id);
-    expect(options).toEqual(['蘋果', '香蕉', '橘子']);
+    expect(options[0]).toBe('香蕉');
+    expect(new Set(options)).toEqual(new Set(['蘋果', '香蕉', '橘子']));
   });
 
   it('upgrades a legacy first column into an editable text property without losing row names', () => {

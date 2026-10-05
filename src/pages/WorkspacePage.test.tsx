@@ -827,6 +827,40 @@ describe('WorkspacePage', () => {
     expect(screen.getByText('新標籤')).toBeInTheDocument();
   });
 
+  it('ranks dynamic options by usage after editing and undo/redo', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，標籤：空白' }));
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '編輯' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+    await user.click(screen.getByRole('button', { name: '新增物件' }));
+
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '搜尋或新增選項' }), '少用');
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('cell', { name: '物件 2，標籤：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '搜尋或新增選項' }), '常用');
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('cell', { name: '物件 3，標籤：空白' }));
+    await user.click(screen.getByRole('option', { name: '常用' }));
+
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：少用' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['常用', '少用']);
+    await user.click(screen.getByRole('option', { name: '常用' }));
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：常用' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['常用']);
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+
+    await user.click(screen.getByRole('button', { name: '復原' }));
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：少用' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['常用', '少用']);
+    fireEvent.click(document.querySelector('.workspace-selection-dialog-overlay')!);
+    await user.click(screen.getByRole('button', { name: '重做' }));
+    await user.click(screen.getByRole('cell', { name: '花火，標籤：常用' }));
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['常用']);
+  });
+
   it('reuses an existing dynamic option instead of creating a case variant', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

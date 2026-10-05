@@ -2,7 +2,8 @@ import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../works
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { assertWorkspaceStorageCurrent, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, saveWorkspace, type WorkspaceSaveOptions } from '../workspace/db';
 import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
-import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getDynamicOptions, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
+import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
+import { WorkspaceDynamicOptionsCache } from '../workspace/dynamicOptionsCache';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, useWorkspaceInputModality, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, WorkspaceInputModalityContext, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
@@ -123,6 +124,8 @@ const WorkspacePage = () => {
   const drawerElementRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
   const dataRef = useRef<WorkspaceData | undefined>(undefined);
+  const dynamicOptionsCacheRef = useRef(new WorkspaceDynamicOptionsCache());
+  const getDynamicOptions = useCallback((table: WorkspaceTable, columnId: string) => dynamicOptionsCacheRef.current.getOptions(table, columnId), []);
   const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
   const historyReadyRef = useRef(false);
   const allTablesReadyRef = useRef(false);
@@ -404,6 +407,7 @@ const WorkspacePage = () => {
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
     const committed = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
+    dynamicOptionsCacheRef.current.update(previous, committed, mutation);
     setData(committed);
     dataRef.current = committed;
     if (options?.clearAllHistory) {
@@ -725,7 +729,7 @@ const WorkspacePage = () => {
     selectCellValue, addRow, askDeleteRow, addColumn, askDeleteColumn, saveColumn,
     exportCurrent, exportAll, chooseImport, readImport, finishTableImport, finishWorkspaceImport
   } = useWorkspaceActions({
-    data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
+    data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
     setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
     setTableActionsOpen, setTableCreateParentId, setNameDialog,
     setConfirmDialog, setWorkspaceImport, setTableImportPreview, onExported: markExported,
@@ -903,6 +907,7 @@ const WorkspacePage = () => {
     const nextHistories = new Map(historyRef.current).set(table.id, nextHistory);
     historyRef.current = nextHistories;
     setHistoryByTable(nextHistories);
+    dynamicOptionsCacheRef.current.update(data, nextData, { tableId: table.id, action: entry.action }, direction);
     setData(nextData);
     dataRef.current = nextData;
     setEditing(undefined);

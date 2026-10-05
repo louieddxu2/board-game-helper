@@ -236,23 +236,51 @@ export const getChildren = (data: WorkspaceData, parentId: string | null) => dat
   .filter((node) => node.parentId === parentId)
   .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh-Hant'));
 
-export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
-  const column = columnId === getRowHeaderColumn(table).id ? getRowHeaderColumn(table) : table.columns.find((col) => col.id === columnId);
-  const seen = new Set<string>();
-  const options: string[] = [];
-  for (const row of table.rows) {
-    const value = columnId === getRowHeaderColumn(table).id ? row.name : row.values[columnId];
-    if (typeof value !== 'string' || !value.trim()) continue;
-    const rawList = (column?.isMultiple || /[,，、;；]/.test(value)) ? parseMultiSelectValues(value) : [value.trim()];
-    for (const item of rawList) {
-      const normalized = item.trim();
-      const key = normalized.toLocaleLowerCase();
-      if (!normalized || seen.has(key)) continue;
-      seen.add(key);
-      options.push(normalized);
-    }
+export type WorkspaceDynamicOptionCounts = Map<string, { count: number; spellings: Map<string, number> }>;
+
+/** A row contributes at most one use per option, including case variants. */
+export const dynamicCellOptions = (value: WorkspaceCellValue, isMultiple?: boolean) => {
+  const options = new Map<string, string>();
+  if (typeof value !== 'string' || !value.trim()) return options;
+  const values = isMultiple || /[,，、;；]/.test(value) ? parseMultiSelectValues(value) : [value];
+  for (const item of values) {
+    const label = item.trim();
+    const key = label.toLocaleLowerCase();
+    if (label && !options.has(key)) options.set(key, label);
   }
   return options;
+};
+
+export const adjustDynamicOptionCounts = (counts: WorkspaceDynamicOptionCounts, value: WorkspaceCellValue, isMultiple: boolean | undefined, delta: 1 | -1) => {
+  for (const [key, label] of dynamicCellOptions(value, isMultiple)) {
+    let option = counts.get(key);
+    if (!option) {
+      if (delta < 0) return false;
+      option = { count: 0, spellings: new Map() };
+      counts.set(key, option);
+    }
+    const spellingCount = (option.spellings.get(label) ?? 0) + delta;
+    if (spellingCount < 0) return false;
+    option.count += delta;
+    if (spellingCount) option.spellings.set(label, spellingCount);
+    else option.spellings.delete(label);
+    if (!option.count) counts.delete(key);
+  }
+  return true;
+};
+
+export const sortDynamicOptionCounts = (counts: WorkspaceDynamicOptionCounts) => [...counts.values()]
+  .sort((left, right) => right.count - left.count)
+  .map((option) => option.spellings.keys().next().value!);
+
+export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
+  const rowHeader = getRowHeaderColumn(table);
+  const column = columnId === rowHeader.id ? rowHeader : table.columns.find((col) => col.id === columnId);
+  const counts: WorkspaceDynamicOptionCounts = new Map();
+  for (const row of table.rows) {
+    adjustDynamicOptionCounts(counts, columnId === rowHeader.id ? row.name : row.values[columnId], column?.isMultiple, 1);
+  }
+  return sortDynamicOptionCounts(counts);
 };
 
 export const resolveActiveTableNodeId = (data: WorkspaceData, preferredNodeId = data.activeNodeId) => {

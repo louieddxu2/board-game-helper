@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getDynamicOptions, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { NameDialogState } from './workspaceShared';
@@ -11,6 +11,7 @@ interface UseWorkspaceActionsProps {
   table: WorkspaceTable | undefined;
   rowHeader: WorkspaceColumn | undefined;
   commit: (next: WorkspaceData, mutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => void;
+  getDynamicOptions: (table: WorkspaceTable, columnId: string) => string[];
   setNotice: (msg: string) => void;
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
   setDrawerOpen: (open: boolean) => void;
@@ -40,7 +41,7 @@ export type WorkspaceTableImportPreview = {
 };
 
 export function useWorkspaceActions({
-  data, table, rowHeader, commit, setNotice, setExpanded, setDrawerOpen,
+  data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
   setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
   setTableActionsOpen, setTableCreateParentId, setNameDialog,
   setConfirmDialog, setWorkspaceImport, setTableImportPreview, onExported, nameDialog, selectionEditor, configuring, workspaceImport

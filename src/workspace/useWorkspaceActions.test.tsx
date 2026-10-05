@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyWorkspaceTableHistoryAction } from './history';
+import { getDynamicOptions } from './model';
 import { importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
 import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from './useWorkspaceActions';
@@ -26,7 +27,7 @@ const deferred = () => {
 };
 const makeProps = (): Parameters<typeof useWorkspaceActions>[0] => ({
   data, table: undefined, rowHeader: undefined,
-  commit: vi.fn(), setNotice: vi.fn(), setExpanded: vi.fn(), setDrawerOpen: vi.fn(),
+  commit: vi.fn(), getDynamicOptions, setNotice: vi.fn(), setExpanded: vi.fn(), setDrawerOpen: vi.fn(),
   setEditing: vi.fn(), setFocusTarget: vi.fn(), setSelectionEditor: vi.fn(), setConfiguring: vi.fn(),
   setNodeMenu: vi.fn(), setMovingNode: vi.fn(), setTableActionsOpen: vi.fn(), setTableCreateParentId: vi.fn(),
   setNameDialog: vi.fn(), setConfirmDialog: vi.fn(), setWorkspaceImport: vi.fn(), setTableImportPreview: vi.fn(),
