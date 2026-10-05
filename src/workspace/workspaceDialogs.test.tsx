@@ -6,6 +6,23 @@ import { CellInputDialog, ColumnConfig } from './workspaceDialogs';
 
 afterEach(() => cleanup());
 
+describe('workspace column settings', () => {
+  it('focuses the dialog surface and waits for an explicit click to edit the name', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<ColumnConfig column={createColumn('分類')} onSave={onSave} />);
+    const name = screen.getByRole('textbox', { name: '屬性名稱' });
+    expect(screen.getByRole('dialog', { name: '屬性設定' })).toHaveFocus();
+    expect(name).not.toHaveFocus();
+    await user.click(name);
+    await user.clear(name);
+    await user.type(name, '收藏分類');
+    expect(name).toHaveFocus();
+    fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: '收藏分類' }));
+  });
+});
+
 describe('workspace numeric input modes', () => {
   it('saves the selected numeric input mode from column settings', async () => {
     const user = userEvent.setup();
@@ -13,7 +30,10 @@ describe('workspace numeric input modes', () => {
     render(<ColumnConfig column={{ ...createColumn('數量', 'number'), numberInputMode: 'input' }} onSave={onSave} />);
 
     expect(screen.getByRole('button', { name: '輸入' })).toHaveClass('selected');
+    expect(screen.getByRole('button', { name: '輸入' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: '加減1' }));
+    expect(screen.getByRole('button', { name: '加減1' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '輸入' })).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ inputType: 'number', numberInputMode: 'step' }));

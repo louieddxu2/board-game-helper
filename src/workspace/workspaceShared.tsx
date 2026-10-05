@@ -339,7 +339,7 @@ type WorkspaceModalProps = {
   owner?: WorkspaceModalOwner;
   className?: string;
   dialogKind?: 'standard' | 'editor';
-  initialFocus?: 'content' | 'close-button';
+  initialFocus?: 'content' | 'close-button' | 'dialog';
 } & (
   | { onRequestClose(reason: WorkspaceModalCloseReason): void; onClose?: never }
   | { onClose(): void; onRequestClose?: never }
@@ -380,7 +380,7 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
       const style = window.getComputedStyle(element);
       return style.display !== 'none' && style.visibility !== 'hidden';
     });
-    const preferred = initialFocus === 'close-button'
+    const preferred = initialFocus === 'dialog' ? dialog : initialFocus === 'close-button'
       ? closeButtonRef.current ?? dialog
       : contentControl ?? workspaceModalFocusableElements(content ?? dialog)[0] ?? workspaceModalFocusableElements(dialog)[0] ?? dialog;
     const target = openedByPointerRef.current && preferred.matches('button, a[href], [role="button"]') ? dialog : preferred;
@@ -475,7 +475,8 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
       if (!focusable.length) { event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); return; }
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (document.activeElement === event.currentTarget) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
       {leadingAction && <div className="workspace-dialog-leading-action">{leadingAction}</div>}

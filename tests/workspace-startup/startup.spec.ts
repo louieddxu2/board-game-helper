@@ -122,6 +122,30 @@ test('a previously unvisited workspace opens offline and edits, undo, and saves 
   expect(errors).toEqual([]);
 });
 
+test('column settings wait for explicit name editing and keep keyboard navigation inside the dialog', async ({ page }, info) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 1, 4, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '屬性設定' });
+  const name = dialog.getByRole('textbox', { name: '屬性名稱' });
+  await expect(dialog).toBeFocused();
+  await expect(name).not.toBeFocused();
+  await expect(dialog.getByRole('group', { name: '輸入類型' }).getByRole('button', { name: '文字', pressed: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '置左', pressed: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('column-settings.png') });
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: '數字', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: '刪除屬性' })).toBeFocused();
+  await name.click();
+  await expect(name).toBeFocused();
+  await name.fill('收藏分類');
+  await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: '收藏分類' })).toBeVisible();
+});
+
 test('closing a pointer-opened editor does not outline a toolbar button, while keyboard focus remains visible', async ({ page }) => {
   await page.goto(`${site.origin}/privacy`);
   await seed(page);
