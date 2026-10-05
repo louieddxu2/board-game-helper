@@ -23,6 +23,85 @@ let errors: string[];
 test.beforeEach(async ({ page }) => { errors = []; page.on('pageerror', error => errors.push(error.message)); });
 test.afterEach(() => expect(errors).toEqual([]));
 
+test('dynamic attributes persist activation and incremental counts across browser reloads', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10000);
+    let table = api.data.tables[0];
+    const columnId = table.columns[0].id;
+    table = { ...table, rows: table.rows.map((row, index) => ({ ...row, values: { ...row.values, [columnId]: index < 6000 ? 'Common' : 'Rare' } })) };
+    api.data = { ...api.data, tables: [table] };
+    await api.db.saveWorkspace(api.data);
+    const column = { ...table.columns[0], inputType: 'dynamic-select' as const };
+    const revised = api.assignWorkspaceChangeRevisions(api.data, { ...api.data, tables: [{ ...table, columns: [column, ...table.columns.slice(1)] }] });
+    api.data = api.dynamicOptionsCache.prepare(api.data, revised, { tableId: table.id, action: { type: 'update-column', before: table.columns[0], after: column } });
+    await api.db.saveWorkspace(api.data);
+    const activated = await api.readDisk();
+    api.instrument();
+    await api.edit(9999, 'Common');
+    return { columnId, activated, edited: await api.readDisk(), writes: api.writes };
+  });
+  expect(result.activated.states[0].columnState[result.columnId].dynamicOptions.counts.map((item: { count: number }) => item.count)).toEqual([6000, 4000]);
+  expect(result.edited.states[0].columnState[result.columnId].dynamicOptions.counts.map((item: { count: number }) => item.count)).toEqual([6001, 3999]);
+  expect(result.writes.filter(write => write.store === 'rowChunks')).toHaveLength(1);
+  expect(result.writes.filter(write => write.store === 'tables')).toHaveLength(0);
+  expect(result.writes.filter(write => write.store === 'tableState')).toHaveLength(1);
+  expect(new Set(result.writes.map(write => write.transaction)).size).toBe(1);
+
+  await page.reload();
+  const reopened = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    const initial = await api.db.loadWorkspaceInitial();
+    api.instrument();
+    const data = await api.db.loadWorkspace({ expectCurrentRevision: true });
+    await api.db.flushWorkspaceSaves();
+    return { counts: initial.data.tables[0].columns[0].dynamicOptions?.counts.map(item => item.count), options: new api.WorkspaceDynamicOptionsCache().getOptions(data.tables[0], data.tables[0].columns[0].id), writes: api.writes };
+  });
+  expect(reopened.counts).toEqual([6001, 3999]);
+  expect(reopened.options).toEqual(['Common', 'Rare']);
+  expect(reopened.writes).toEqual([]);
+});
+
+test('legacy dynamic attributes rebuild once and persist only their column state', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(600);
+    const table = api.data.tables[0];
+    api.data = api.model.ensureWorkspaceDynamicOptions({ ...api.data, tables: [{ ...table, columns: [{ ...table.columns[0], inputType: 'dynamic-select' }, ...table.columns.slice(1)] }] });
+    await api.db.saveWorkspace(api.data);
+    const request = indexedDB.open('board-game-helper-workspace');
+    const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+    const transaction = connection.transaction('tableState', 'readwrite');
+    transaction.objectStore('tableState').put({ updatedAt: table.updatedAt, changeRevision: table.changeRevision }, table.id);
+    await new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onabort = () => reject(transaction.error); });
+    connection.close();
+  });
+  await page.reload();
+  const repaired = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    api.data = (await api.db.loadWorkspaceInitial()).data;
+    api.instrument();
+    await api.db.loadWorkspace({ expectCurrentRevision: true });
+    await api.db.flushWorkspaceSaves();
+    return { disk: await api.readDisk(), writes: api.writes, columnId: api.data.tables[0].columns[0].id };
+  });
+  expect(repaired.disk.states[0].columnState[repaired.columnId].dynamicOptions.counts).toHaveLength(600);
+  expect(repaired.writes.filter(write => write.store === 'rowChunks' || write.store === 'tables')).toEqual([]);
+  expect(repaired.writes.filter(write => write.store === 'tableState')).toHaveLength(1);
+  await page.reload();
+  const writes = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.db.loadWorkspaceInitial();
+    api.instrument();
+    await api.db.loadWorkspace({ expectCurrentRevision: true });
+    await api.db.flushWorkspaceSaves();
+    return api.writes;
+  });
+  expect(writes).toEqual([]);
+});
+
 test('10k-row cell commits write one chunk and a new history entry in the same transaction', async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async () => {
@@ -342,7 +421,7 @@ test('format-only background migration preserves semantic revisions and timestam
     return api.readDisk();
   });
   expect(result.tables[0].storageFormat).toBe('row-chunks-v1');
-  expect(result.states[0]).toEqual({ updatedAt: 100, changeRevision: 'original-content' });
+  expect(result.states[0]).toEqual({ updatedAt: 100, changeRevision: 'original-content', columnState: {} });
   expect(result.meta).toContainEqual(expect.objectContaining({ structureRevision: 'original-structure' }));
   const storage = result.meta.find(item => 'storageRevision' in item);
   expect(storage.updatedAt).toBe(100);

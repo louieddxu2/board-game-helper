@@ -76,13 +76,19 @@ IndexedDB schema 從舊版本 3 升為版本 4；這與 XLSX／ZIP／Drive 的�
 | `meta["workspace"]` | nodes、activeNodeId、bottomNavigationTableIds、structureRevision、workspace version | 否 |
 | `meta["storage"]` | storageRevision、workspace updatedAt | 是，小型紀錄 |
 | `tables[tableId]` | 表格定義、rowOrder、chunkIds、chunkCapacity、儲存格式識別 | 否 |
-| `tableState[tableId]` | table updatedAt、changeRevision | 是，小型紀錄 |
+| `tableState[tableId]` | table updatedAt、changeRevision、各欄位的可變狀態 `columnState` | 是；動態選項統計的大小取決於不同選項數 |
 | `rowChunks[[tableId, chunkId]]` | 區塊列物件 | 是，只寫受影響區塊 |
 | `history[tableId]` | past／future 的 entry ID 與 createdAt 清單 | 是，小型紀錄 |
 | `historyEntries[[tableId, entryId]]` | 單次操作的 action、label、createdAt 等 | 是，只寫新操作 |
 | `state["workspace"]` | 既有舊格式相容來源 | 遷移完成後移除 |
 
 `tables` 的表格定義包含名稱、row header、columns、textScale、transposed，排除 rows、updatedAt、changeRevision。定義與順序共用一筆紀錄，降低第一版 schema 複雜度；欄位名稱或設定改變時會一併寫入 row ID 清單，但不寫入所有儲存格值。若量測證實這部分有成本，再將定義與 layout 拆開。
+
+2026-10-05 的動態列表統計存於對應 `WorkspaceColumn.dynamicOptions`，在屬性設定存為 `dynamic-select` 時立即依現有欄值建立。內容包括每個選項的使用列數、大小寫形式的列數、解析設定及來源 table revision；相同選項在同一列重複出現只計一次。普通編輯、貼上、新增／刪除列與復原／重做依 action 更新計數，選單按列數由多到少顯示，同次數不另設排序規則。
+
+物理儲存由既有 `tableState.columnState[columnId].dynamicOptions` 保存，載入時組回對應欄位；`tables.definition` 不包含統計，統計變更不會觸發一萬個 row ID 的目錄重寫。資料區塊、統計及歷史在同一個 transaction 提交。持久化的統計 snapshot 不被後續編輯修改；操作歷史只保存欄位設定，排除可由現有列維護的統計。
+
+有效統計在重載後直接建立記憶體索引；舊表、缺失／失效統計或解析設定變更才重新掃描該欄。舊表補建後由首次畫面後的既有保存佇列寫回 column state，不重寫資料區塊。IndexedDB 維持 v4；XLSX／ZIP／Drive 格式維持 v1，不帶出統計，匯入時自動重建。計數更新只解析受影響的值，但不可變 snapshot 與 IndexedDB 序列化仍與不同選項數成正比；一萬個互異選項會比一萬列共用少數選項花費更多記憶體與保存成本。
 
 ```ts
 type StoredTable = {

@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, emptyWorkspace, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, emptyWorkspace, ensureTableDynamicOptions, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
+  it.each(['missing', 'stale', 'invalid'] as const)('reconstructs %s persisted dynamic statistics from actual cells', (kind) => {
+    const original = createTable('統計修復');
+    original.columns[0] = { ...original.columns[0], inputType: 'dynamic-select' };
+    const columnId = original.columns[0].id;
+    original.rows[0].values[columnId] = 'Actual';
+    const saved = ensureTableDynamicOptions(original);
+    const statistics = saved.columns[0].dynamicOptions!;
+    const dynamicOptions = kind === 'missing' ? undefined : kind === 'stale' ? { ...statistics, sourceRevision: 'old' }
+      : { ...statistics, counts: [{ key: 'actual', count: 99, spellings: [['Actual', 1] as [string, number]] }] };
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [{ ...saved, columns: [{ ...saved.columns[0], dynamicOptions }] }] }).tables[0];
+    expect(normalized.columns[0].dynamicOptions).toEqual(statistics);
+    expect(normalized.columns[0].dynamicOptions).not.toBe(dynamicOptions);
+  });
+
+  it('saves a valid empty dynamic column and preserves it on normalization', () => {
+    const table = createTable('空清單');
+    table.columns[0] = { ...table.columns[0], inputType: 'dynamic-select' };
+    const saved = ensureTableDynamicOptions(table);
+    expect(saved.columns[0].dynamicOptions?.counts).toEqual([]);
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [saved] });
+    expect(normalized.tables[0].columns[0].dynamicOptions).toBe(saved.columns[0].dynamicOptions);
+  });
+
   it('recognizes explicit web addresses without turning ordinary text into links', () => {
     expect(isWorkspaceUrlText('https://example.com/game')).toBe(true);
     expect(isWorkspaceUrlText('www.example.com/game')).toBe(true);

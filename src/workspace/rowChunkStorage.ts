@@ -1,6 +1,6 @@
 import { makeId } from './model';
 import type { WorkspaceTableHistoryAction } from './history';
-import type { WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 
 export const defaultRowChunkCapacity = 256;
 export type RowChunkCapacity = 128 | 256;
@@ -13,7 +13,12 @@ export interface StoredWorkspaceTable {
   rowOrder: string[];
 }
 export interface StoredWorkspaceRowChunk { tableId: string; chunkId: string; rows: WorkspaceRow[] }
-export interface StoredWorkspaceTableState { updatedAt: number; changeRevision?: string }
+export interface StoredWorkspaceTableState {
+  updatedAt: number;
+  changeRevision?: string;
+  /** Mutable column fields, joined back into the corresponding column on load. */
+  columnState?: Record<string, Pick<WorkspaceColumn, 'dynamicOptions'>>;
+}
 export interface WorkspaceRowLocation { chunkId: string; slot: number }
 export interface WorkspaceTableStorageSnapshot {
   table: WorkspaceTable;
@@ -27,11 +32,44 @@ export class WorkspaceStorageIntegrityError extends Error {
   constructor(message: string) { super(message); this.name = 'WorkspaceStorageIntegrityError'; }
 }
 const invalid = (message: string): never => { throw new WorkspaceStorageIntegrityError(message); };
-const definitionOf = ({ rows: _rows, updatedAt: _updatedAt, changeRevision: _revision, ...definition }: WorkspaceTable): WorkspaceTableDefinition => definition;
+const columnDefinitions = new WeakMap<WorkspaceColumn, WorkspaceColumn>();
+const columnDefinition = (column: WorkspaceColumn) => {
+  if (!('dynamicOptions' in column)) return column;
+  let definition = columnDefinitions.get(column);
+  if (!definition) {
+    const { dynamicOptions: _statistics, ...rest } = column;
+    definition = rest;
+    columnDefinitions.set(column, definition);
+  }
+  return definition;
+};
+const definitionOf = ({ rows: _rows, updatedAt: _updatedAt, changeRevision: _revision, ...definition }: WorkspaceTable): WorkspaceTableDefinition => ({
+  ...definition,
+  rowHeader: definition.rowHeader ? columnDefinition(definition.rowHeader) : undefined,
+  columns: definition.columns.some(column => 'dynamicOptions' in column) ? definition.columns.map(columnDefinition) : definition.columns,
+});
+const sameColumnDefinition = (left: WorkspaceColumn | undefined, right: WorkspaceColumn | undefined) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  const keys = Object.keys(left) as Array<keyof WorkspaceColumn>;
+  return keys.length === Object.keys(right).length && keys.every(key => left[key] === right[key]);
+};
 const sameDefinition = (left: WorkspaceTableDefinition, right: WorkspaceTableDefinition) =>
   left.id === right.id && left.name === right.name && left.rowHeaderName === right.rowHeaderName
-  && left.rowHeader === right.rowHeader && left.columns === right.columns
+  && sameColumnDefinition(left.rowHeader, right.rowHeader)
+  && (left.columns === right.columns || (left.columns.length === right.columns.length && left.columns.every((column, index) => sameColumnDefinition(column, right.columns[index]))))
   && left.textScale === right.textScale && left.transposed === right.transposed;
+
+const columnStateOf = (table: WorkspaceTable): NonNullable<StoredWorkspaceTableState['columnState']> => Object.fromEntries(
+  [...(table.rowHeader ? [table.rowHeader] : []), ...table.columns].flatMap(column => column.dynamicOptions ? [[column.id, { dynamicOptions: column.dynamicOptions }]] : []),
+);
+
+export const hasCurrentWorkspaceColumnState = (table: WorkspaceTable, state?: StoredWorkspaceTableState) => {
+  const current = columnStateOf(table);
+  const stored = state?.columnState ?? {};
+  const ids = Object.keys(current);
+  return ids.length === Object.keys(stored).length && ids.every(id => current[id].dynamicOptions === stored[id]?.dynamicOptions);
+};
 
 export const isChunkedWorkspaceTable = (value: WorkspaceTable | StoredWorkspaceTable): value is StoredWorkspaceTable =>
   'storageFormat' in value && value.storageFormat === 'row-chunks-v1';
@@ -57,7 +95,16 @@ export const assembleChunkedWorkspaceTable = (tableId: string, record: StoredWor
     seen.add(id);
     return row;
   });
-  return { ...record.definition, ...state, rows: ordered };
+  const { columnState: storedColumnState, ...tableState } = state;
+  // Derived statistics can be discarded and rebuilt without blocking table data.
+  const columnState = storedColumnState && typeof storedColumnState === 'object' && !Array.isArray(storedColumnState) ? storedColumnState : undefined;
+  const restoreColumn = (column: WorkspaceColumn): WorkspaceColumn => columnState === undefined ? column
+    : { ...column, dynamicOptions: columnState[column.id]?.dynamicOptions };
+  return {
+    ...record.definition, ...tableState, rows: ordered,
+    rowHeader: record.definition.rowHeader ? restoreColumn(record.definition.rowHeader) : undefined,
+    columns: record.definition.columns.map(restoreColumn),
+  };
 };
 
 /** Chunks and the UI share the normalized row objects, including on mixed-format reads. */
@@ -120,7 +167,8 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
     rows[location.slot] = row;
   };
   const affected = affectedCellRowIds(action);
-  if (affected && previous.table.rows.length === table.rows.length && previous.table.columns === table.columns) {
+  const sameColumnIds = previous.table.columns.length === table.columns.length && previous.table.columns.every((column, index) => column.id === table.columns[index].id);
+  if (affected && previous.table.rows.length === table.rows.length && sameColumnIds) {
     for (const id of affected) {
       const index = previous.rowIndexes.get(id);
       const location = previous.locations.get(id);
@@ -189,5 +237,5 @@ export const planWorkspaceTableStorageWrite = (snapshot: WorkspaceTableStorageSn
   definition: legacy || !saved || snapshot.record !== saved.record ? snapshot.record : undefined,
   upserts: [...snapshot.chunks.values()].filter(chunk => legacy || saved?.chunks.get(chunk.chunkId) !== chunk),
   deletes: legacy ? [] : [...(saved?.chunks.keys() ?? [])].filter(id => !snapshot.chunks.has(id)),
-  state: { updatedAt: snapshot.table.updatedAt, changeRevision: snapshot.table.changeRevision } satisfies StoredWorkspaceTableState,
+  state: { updatedAt: snapshot.table.updatedAt, changeRevision: snapshot.table.changeRevision, columnState: columnStateOf(snapshot.table) } satisfies StoredWorkspaceTableState,
 });

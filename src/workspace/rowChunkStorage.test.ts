@@ -3,11 +3,14 @@ import {
   assembleChunkedWorkspaceTable,
   createWorkspaceTableStorageSnapshot,
   defaultRowChunkCapacity,
+  hasCurrentWorkspaceColumnState,
   planWorkspaceTableStorageWrite,
   updateWorkspaceTableStorageSnapshot,
   WorkspaceStorageIntegrityError,
 } from './rowChunkStorage';
-import { createColumn, createTable } from './model';
+import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from './model';
+import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
+import { assignWorkspaceChangeRevisions } from './changeRevisions';
 import type { WorkspaceTable } from './types';
 
 const makeTable = (rowCount: number): WorkspaceTable => {
@@ -41,6 +44,64 @@ const setCell = (table: WorkspaceTable, rowId: string, value: string): Workspace
 };
 
 describe('workspace row chunk storage contracts', () => {
+  it('stores dynamic statistics with column state and edits one chunk without rewriting 10,000 row IDs', () => {
+    const original = makeTable(10_000);
+    original.columns[0] = { ...original.columns[0], inputType: 'dynamic-select' };
+    const columnId = original.columns[0].id;
+    original.rows = original.rows.map((row, index) => ({ ...row, values: { [columnId]: index < 6_000 ? 'Common' : 'Rare' } }));
+    const table = ensureTableDynamicOptions(original);
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const data = { ...emptyWorkspace(), tables: [table] };
+    const action = cellAction(table, 'row-9999', 'Rare', 'Common');
+    const revised = assignWorkspaceChangeRevisions(data, { ...data, tables: [setCell(table, 'row-9999', 'Common')] });
+    const prepared = new WorkspaceDynamicOptionsCache().prepare(data, revised, { tableId: table.id, action });
+    const next = updateWorkspaceTableStorageSnapshot(saved, prepared.tables[0], action);
+    const plan = planWorkspaceTableStorageWrite(next, saved);
+
+    expect(plan.definition).toBeUndefined();
+    expect(next.record.rowOrder).toBe(saved.record.rowOrder);
+    expect(plan.upserts).toHaveLength(1);
+    expect(plan.state.columnState?.[columnId].dynamicOptions).toMatchObject({ counts: [{ count: 6_001 }, { count: 3_999 }] });
+    expect(next.record.definition.columns[0].dynamicOptions).toBeUndefined();
+
+    const persisted = structuredClone({ record: next.record, state: plan.state, chunks: [...next.chunks.values()] });
+    const reopened = assembleChunkedWorkspaceTable(table.id, persisted.record, persisted.state, persisted.chunks);
+    const normalized = normalizeWorkspace({ ...data, tables: [reopened] }).tables[0];
+    expect(hasCurrentWorkspaceColumnState(normalized, persisted.state)).toBe(true);
+    expect(new WorkspaceDynamicOptionsCache().getOptions(normalized, columnId)).toEqual(['Common', 'Rare']);
+    expect(normalized).not.toHaveProperty('columnState');
+  });
+
+  it('repairs missing or invalid legacy statistics by writing state only', () => {
+    const table = makeTable(257);
+    table.columns[0] = { ...table.columns[0], inputType: 'dynamic-select' };
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const state = { updatedAt: table.updatedAt };
+    const assembled = assembleChunkedWorkspaceTable(table.id, saved.record, state, [...saved.chunks.values()]);
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [assembled] }).tables[0];
+    expect(hasCurrentWorkspaceColumnState(normalized, state)).toBe(false);
+    const baseline = createWorkspaceTableStorageSnapshot(normalized, { record: saved.record, chunks: [...saved.chunks.values()] });
+    const plan = planWorkspaceTableStorageWrite(baseline, baseline);
+    expect(plan.definition).toBeUndefined();
+    expect(plan.upserts).toEqual([]);
+    expect(plan.state.columnState?.[table.columns[0].id].dynamicOptions?.counts).toHaveLength(257);
+  });
+
+  it('drops saved statistics when a column is disabled or deleted', () => {
+    const original = makeTable(1);
+    original.columns[0] = { ...original.columns[0], inputType: 'dynamic-select' };
+    const table = ensureTableDynamicOptions(original);
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const data = { ...emptyWorkspace(), tables: [table] };
+    for (const columns of [[{ ...table.columns[0], inputType: 'text' as const }], []]) {
+      const prepared = new WorkspaceDynamicOptionsCache().prepare(data, { ...data, tables: [{ ...table, columns }] });
+      const next = updateWorkspaceTableStorageSnapshot(saved, prepared.tables[0]);
+      const plan = planWorkspaceTableStorageWrite(next, saved);
+      expect(plan.state.columnState).toEqual({});
+      expect(hasCurrentWorkspaceColumnState(prepared.tables[0], plan.state)).toBe(true);
+    }
+  });
+
   it('uses 256 row chunks and preserves their IDs through normal edits', () => {
     const table = makeTable(513);
     const initial = createWorkspaceTableStorageSnapshot(table);

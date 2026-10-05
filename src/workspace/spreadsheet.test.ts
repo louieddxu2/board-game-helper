@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createNode, createRow, createTable, emptyWorkspace } from './model';
+import { createColumn, createNode, createRow, createTable, emptyWorkspace, ensureWorkspaceDynamicOptions } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
 import type { WorkspaceData } from './types';
 
@@ -115,6 +115,25 @@ const makeFixture = (): WorkspaceData => {
 };
 
 describe('workspace spreadsheet format', () => {
+  it('keeps XLSX settings unchanged and rebuilds dynamic column statistics on import', async () => {
+    const source = makeFixture();
+    const table = source.tables[0];
+    table.columns[1] = { ...table.columns[1], inputType: 'dynamic-select', isMultiple: true, options: [] };
+    const columnId = table.columns[1].id;
+    table.rows[0].values[columnId] = 'Rare';
+    table.rows.push(...['Common, common', 'Common'].map(value => ({ ...createRow(table.columns), values: { [columnId]: value } })));
+    const prepared = ensureWorkspaceDynamicOptions(source);
+    for (const exported of [exportWorkspaceXlsx(prepared, prepared.tables[0]), exportWorkspaceXlsx(prepared)]) {
+      const workbook = await readStoredWorkbook(exported);
+      expect(JSON.stringify(workbook.sheetRows(1))).not.toContain('dynamicOptions');
+      const imported = await importWorkspaceXlsx(exported);
+      const restored = imported.table ?? imported.data!.tables[0];
+      expect(restored.columns[1]).toMatchObject({ inputType: 'dynamic-select', isMultiple: true, options: [], dynamicOptions: {
+        version: 1, counts: [{ key: 'rare', count: 1 }, { key: 'common', count: 2 }],
+      } });
+    }
+  });
+
   it('infers conservative property types for ordinary spreadsheet imports', () => {
     expect(inferPlainColumnSettings([1, 2, 3])).toMatchObject({ inputType: 'number' });
     expect(inferPlainColumnSettings(['example.com/a', 'https://example.org/b'])).toMatchObject({ inputType: 'link' });

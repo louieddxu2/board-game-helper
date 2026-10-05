@@ -43,6 +43,25 @@ afterEach(() => {
 });
 
 describe('WorkspacePage', () => {
+  it('persists column statistics immediately when dynamic-list settings are saved', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), '常用');
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    vi.mocked(saveWorkspace).mockClear();
+
+    await user.click(screen.getByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '選單' }));
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await waitFor(() => expect(saveWorkspace).toHaveBeenCalledTimes(1));
+    const saved = vi.mocked(saveWorkspace).mock.calls[0][0].tables[0];
+    expect(saved.columns[0]).toMatchObject({ inputType: 'dynamic-select', dynamicOptions: {
+      version: 1, sourceRevision: saved.changeRevision, counts: [{ key: '常用', count: 1, spellings: [['常用', 1]] }],
+    } });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it.each(['close-button', 'backdrop', 'escape'] as const)('saves a cell draft on %s exactly once', async (reason) => {
     const user = userEvent.setup();
     render(<WorkspacePage />);

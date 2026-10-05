@@ -82,9 +82,27 @@ const historyEntryId = () => {
   return `history-${random}`;
 };
 
+const columnConfiguration = (column: WorkspaceColumn | undefined) => {
+  if (!column || !('dynamicOptions' in column)) return column;
+  const { dynamicOptions: _statistics, ...configuration } = column;
+  return configuration;
+};
+
+/** Statistics follow the current rows; history only needs the user's column settings. */
+const historyAction = (action: WorkspaceTableHistoryAction): WorkspaceTableHistoryAction => {
+  switch (action.type) {
+    case 'update-column': return { ...action, before: columnConfiguration(action.before)!, after: columnConfiguration(action.after)! };
+    case 'update-row-header': return { ...action, before: columnConfiguration(action.before), after: columnConfiguration(action.after) };
+    case 'add-column':
+    case 'remove-column': return { ...action, column: columnConfiguration(action.column)! };
+    case 'paste-range': return { ...action, addedColumns: action.addedColumns.map(column => columnConfiguration(column)!) };
+    default: return action;
+  }
+};
+
 export const pushWorkspaceTableHistory = (history: WorkspaceTableHistory, mutation: WorkspaceTableMutation, now = Date.now()) => pruneWorkspaceTableHistory({
   tableId: mutation.tableId,
-  past: [...history.past, { id: historyEntryId(), tableId: mutation.tableId, label: mutation.label, createdAt: now, action: mutation.action }],
+  past: [...history.past, { id: historyEntryId(), tableId: mutation.tableId, label: mutation.label, createdAt: now, action: historyAction(mutation.action) }],
   future: [],
 }, now);
 
@@ -232,14 +250,15 @@ export const applyWorkspaceTableHistoryActionWithNode = (
 };
 
 const same = (left: unknown, right: unknown) => left === right || JSON.stringify(left) === JSON.stringify(right);
+const sameColumn = (left: WorkspaceColumn | undefined, right: WorkspaceColumn | undefined) => left === right || same(columnConfiguration(left), columnConfiguration(right));
 const sameRows = (left: WorkspaceTable, right: WorkspaceTable) => left.rows === right.rows || (left.rows.length === right.rows.length && left.rows.every((row, index) => same(row, right.rows[index])));
-const sameColumns = (left: WorkspaceTable, right: WorkspaceTable) => left.columns === right.columns || (left.columns.length === right.columns.length && left.columns.every((column, index) => same(column, right.columns[index])));
+const sameColumns = (left: WorkspaceTable, right: WorkspaceTable) => left.columns === right.columns || (left.columns.length === right.columns.length && left.columns.every((column, index) => sameColumn(column, right.columns[index])));
 const sameTableContent = (left: WorkspaceTable, right: WorkspaceTable, ignoreTextScale = false) => {
   if (left === right) return true;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)] as Array<keyof WorkspaceTable>);
   keys.delete('updatedAt'); keys.delete('changeRevision');
   if (ignoreTextScale) keys.delete('textScale');
-  return [...keys].every(key => key === 'rows' ? sameRows(left, right) : key === 'columns' ? sameColumns(left, right) : same(left[key], right[key]));
+  return [...keys].every(key => key === 'rows' ? sameRows(left, right) : key === 'columns' ? sameColumns(left, right) : key === 'rowHeader' ? sameColumn(left.rowHeader, right.rowHeader) : same(left[key], right[key]));
 };
 
 export const inferWorkspaceTableMutation = (before: WorkspaceData, after: WorkspaceData): WorkspaceTableMutation | undefined => {
@@ -252,7 +271,7 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
   const beforeTable = before.tables.find((table) => table.id === nextTable.id);
   if (!beforeTable) return undefined;
   const tableId = nextTable.id;
-  const mutation = (label: string, action: WorkspaceTableHistoryAction): WorkspaceTableMutation => ({ tableId, label, action });
+  const mutation = (label: string, action: WorkspaceTableHistoryAction): WorkspaceTableMutation => ({ tableId, label, action: historyAction(action) });
 
   if (beforeTable.transposed !== nextTable.transposed && sameTableContent(beforeTable, { ...nextTable, transposed: beforeTable.transposed })) {
     return mutation('切換表格方向', { type: 'set-transposed', before: Boolean(beforeTable.transposed), after: Boolean(nextTable.transposed) });
@@ -260,7 +279,7 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
   if (beforeTable.name !== nextTable.name && sameTableContent({ ...beforeTable, name: nextTable.name }, nextTable)) {
     return mutation('重新命名表格', { type: 'rename-table', before: beforeTable.name, after: nextTable.name });
   }
-  if ((beforeTable.rowHeaderName !== nextTable.rowHeaderName || !same(beforeTable.rowHeader, nextTable.rowHeader)) && sameRows(beforeTable, nextTable) && sameColumns(beforeTable, nextTable)) {
+  if ((beforeTable.rowHeaderName !== nextTable.rowHeaderName || !sameColumn(beforeTable.rowHeader, nextTable.rowHeader)) && sameRows(beforeTable, nextTable) && sameColumns(beforeTable, nextTable)) {
     return mutation('設定物件屬性', { type: 'update-row-header', before: beforeTable.rowHeader, after: nextTable.rowHeader, beforeName: beforeTable.rowHeaderName, afterName: nextTable.rowHeaderName });
   }
 
@@ -280,7 +299,7 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
     return mutation('重新排列屬性', { type: 'reorder-columns', beforeIds: beforeColumnIds, afterIds: nextColumnIds });
   }
   if (same(beforeColumnIds, nextColumnIds)) {
-    const changedColumns = beforeTable.columns.filter((column, index) => !same(column, nextTable.columns[index]));
+    const changedColumns = beforeTable.columns.filter((column, index) => !sameColumn(column, nextTable.columns[index]));
     if (changedColumns.length === 1 && sameRows(beforeTable, nextTable)) {
       const beforeColumn = changedColumns[0];
       const afterColumn = nextTable.columns.find((column) => column.id === beforeColumn.id);

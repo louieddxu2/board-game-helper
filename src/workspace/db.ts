@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPTransaction } from 'idb';
 import { emptyWorkspace, normalizeWorkspace } from './model';
 import { pruneWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
-import { assembleChunkedWorkspaceTable, createWorkspaceTableStorageSnapshot, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
+import { assembleChunkedWorkspaceTable, createWorkspaceTableStorageSnapshot, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
 
 type WorkspaceMetadata = {
@@ -51,7 +51,7 @@ let saveQueue: Promise<void> = Promise.resolve();
 let savedStorageRevision: string | null = null;
 let savedMetadata: WorkspaceMetadata | undefined;
 let savedUpdatedAt: number | undefined;
-let savedTables = new Map<string, { snapshot: WorkspaceTableStorageSnapshot; legacy: boolean }>();
+let savedTables = new Map<string, { snapshot: WorkspaceTableStorageSnapshot; legacy: boolean; columnStatePending?: boolean }>();
 let workingTables = new Map<string, WorkspaceTableStorageSnapshot>();
 let tableSnapshots = new WeakMap<WorkspaceTable, WorkspaceTableStorageSnapshot>();
 let savedHistories = new Map<string, WorkspaceTableHistory>();
@@ -118,7 +118,7 @@ export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean;
     if (!record) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
     if (!isChunkedWorkspaceTable(record)) return { id, table: record, stored: undefined };
     const [tableState, chunks] = await Promise.all([transaction.objectStore('tableState').get(id), transaction.objectStore('rowChunks').getAll(tableRange(id))]);
-    return { id, table: assembleChunkedWorkspaceTable(id, record, tableState, chunks), stored: { record, chunks } };
+    return { id, table: assembleChunkedWorkspaceTable(id, record, tableState, chunks), stored: { record, chunks, state: tableState } };
   }));
   await transaction.done;
   if (saveQueue !== pending) return loadWorkspace(options);
@@ -129,7 +129,7 @@ export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean;
   normalized.tables.forEach((table, index) => {
     const item = loadedRecords[index];
     const snapshot = createWorkspaceTableStorageSnapshot(table, item.stored);
-    savedTables.set(table.id, { snapshot, legacy: !item.stored });
+    savedTables.set(table.id, { snapshot, legacy: !item.stored, columnStatePending: Boolean(item.stored && !hasCurrentWorkspaceColumnState(table, item.stored.state)) });
     workingTables.set(table.id, snapshot); tableSnapshots.set(table, snapshot);
   });
   savedStorageRevision = state?.storageRevision ?? null;
@@ -154,13 +154,13 @@ export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; com
   const state = asStorageState(stateValue);
   const active = meta?.nodes.find(node => node.id === meta.activeNodeId && node.type === 'table');
   const record = active?.tableId ? await transaction.objectStore('tables').get(active.tableId) : undefined;
-  let stored: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[] } | undefined;
+  let stored: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[]; state?: StoredWorkspaceTableState } | undefined;
   let table: WorkspaceTable | undefined;
   if (record && active?.tableId) {
     if (isChunkedWorkspaceTable(record)) {
       const [tableState, chunks] = await Promise.all([transaction.objectStore('tableState').get(active.tableId), transaction.objectStore('rowChunks').getAll(tableRange(active.tableId))]);
       table = assembleChunkedWorkspaceTable(active.tableId, record, tableState, chunks);
-      stored = { record, chunks };
+      stored = { record, chunks, state: tableState };
     } else table = record;
   }
   await transaction.done;
@@ -170,7 +170,7 @@ export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; com
   const data = { ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
   resetSnapshots();
   const snapshot = createWorkspaceTableStorageSnapshot(data.tables[0], stored);
-  savedTables.set(table.id, { snapshot, legacy: !stored });
+  savedTables.set(table.id, { snapshot, legacy: !stored, columnStatePending: Boolean(stored && !hasCurrentWorkspaceColumnState(data.tables[0], stored.state)) });
   workingTables.set(table.id, snapshot); tableSnapshots.set(snapshot.table, snapshot);
   savedMetadata = metadataOf(data); savedStorageRevision = state?.storageRevision ?? null; savedUpdatedAt = state?.updatedAt;
   return { data, complete: false, storageVersion: db.version };
@@ -235,7 +235,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
   const removedSnapshots = new Map(removed.map(id => [id, workingTables.get(id)]));
   return enqueueSave(async () => {
     const db = await database;
-    const plans = snapshots.filter(snapshot => savedTables.get(snapshot.table.id)?.snapshot !== snapshot || savedTables.get(snapshot.table.id)?.legacy).map(snapshot => ({ snapshot, plan: planWorkspaceTableStorageWrite(snapshot, savedTables.get(snapshot.table.id)?.snapshot, savedTables.get(snapshot.table.id)?.legacy) }));
+    const plans = snapshots.filter(snapshot => savedTables.get(snapshot.table.id)?.snapshot !== snapshot || savedTables.get(snapshot.table.id)?.legacy || savedTables.get(snapshot.table.id)?.columnStatePending).map(snapshot => ({ snapshot, plan: planWorkspaceTableStorageWrite(snapshot, savedTables.get(snapshot.table.id)?.snapshot, savedTables.get(snapshot.table.id)?.legacy) }));
     const transaction = db.transaction([...stores], 'readwrite');
     const writes: Promise<unknown>[] = [];
     try {
@@ -271,7 +271,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
 };
 
 const scheduleLegacyTableMigrations = (data: WorkspaceData) => {
-  for (const table of data.tables) if (savedTables.get(table.id)?.legacy) void saveWorkspace({ ...data, tables: [table] }, { partial: true }).catch(notifyStorageError);
+  for (const table of data.tables) if (savedTables.get(table.id)?.legacy || savedTables.get(table.id)?.columnStatePending) void saveWorkspace({ ...data, tables: [table] }, { partial: true }).catch(notifyStorageError);
 };
 export const flushWorkspaceSaves = () => saveQueue;
 export const flushWorkspaceHistorySaves = () => saveQueue;

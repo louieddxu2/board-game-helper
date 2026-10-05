@@ -16,12 +16,21 @@ export interface WorkspaceNumberRange {
 
 export type WorkspaceCellValue = string | number | WorkspaceLinkValue | null;
 
+export interface WorkspaceDynamicOptions {
+  version: 1;
+  sourceRevision: string;
+  isMultiple: boolean;
+  counts: Array<{ key: string; count: number; spellings: Array<[string, number]> }>;
+}
+
 export interface WorkspaceColumn {
   id: string;
   name: string;
   inputType: WorkspaceInputType;
   numberInputMode?: WorkspaceNumberInputMode;
   options: string[];
+  /** Persisted frequency statistics owned by a dynamic-list column. */
+  dynamicOptions?: WorkspaceDynamicOptions;
   optionColors?: Record<string, string>;
   numberRanges?: WorkspaceNumberRange[];
   hidden?: boolean;

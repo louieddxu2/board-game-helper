@@ -1,4 +1,5 @@
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynamicOptions, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
+import { workspaceTableChangeRevision } from './changeRevisions';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
 export const MAX_BOTTOM_NAVIGATION_TABLES = 5;
@@ -200,27 +201,36 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => {
   const bottomNavigationTableIds = [...new Set(Array.isArray(data.bottomNavigationTableIds) ? data.bottomNavigationTableIds : [])]
     .filter((tableId): tableId is string => typeof tableId === 'string' && tableIds.has(tableId))
     .slice(0, MAX_BOTTOM_NAVIGATION_TABLES);
-  return {
+  const normalized: WorkspaceData = {
     ...data,
     bottomNavigationTableIds,
     tables: data.tables.map((table) => {
       const rowHeader = getRowHeaderColumn(table);
       const columns = table.columns.map((column) => normalizeColumn(column));
+      const changedDynamicColumns = new Set<string>();
+      const rows = table.rows.map((row, index) => {
+        const name = normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`;
+        if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
+        const values = Object.fromEntries(columns.map((column) => {
+          const before = row.values[column.id] ?? null;
+          const after = normalizeCellValue(before, column.inputType);
+          if (column.inputType === 'dynamic-select' && before !== after) changedDynamicColumns.add(column.id);
+          return [column.id, after];
+        }));
+        return { ...row, name, values };
+      });
       return {
         ...table,
         rowHeaderName: rowHeader.name,
-        rowHeader,
+        rowHeader: changedDynamicColumns.has(rowHeader.id) ? { ...rowHeader, dynamicOptions: undefined } : rowHeader,
         textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
         transposed: Boolean(table.transposed),
-        columns,
-        rows: table.rows.map((row, index) => ({
-          ...row,
-          name: normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`,
-          values: Object.fromEntries(columns.map((column) => [column.id, normalizeCellValue(row.values[column.id] ?? null, column.inputType)])),
-        })),
+        columns: columns.map(column => changedDynamicColumns.has(column.id) ? { ...column, dynamicOptions: undefined } : column),
+        rows,
       };
     }),
   };
+  return ensureWorkspaceDynamicOptions(normalized);
 };
 
 export const createNode = (type: WorkspaceNode['type'], name: string, parentId: string | null, order: number, tableId?: string): WorkspaceNode => ({
@@ -273,14 +283,60 @@ export const sortDynamicOptionCounts = (counts: WorkspaceDynamicOptionCounts) =>
   .sort((left, right) => right.count - left.count)
   .map((option) => option.spellings.keys().next().value!);
 
-export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => {
+export const collectDynamicOptionCounts = (table: WorkspaceTable, columnId: string) => {
   const rowHeader = getRowHeaderColumn(table);
   const column = columnId === rowHeader.id ? rowHeader : table.columns.find((col) => col.id === columnId);
   const counts: WorkspaceDynamicOptionCounts = new Map();
   for (const row of table.rows) {
     adjustDynamicOptionCounts(counts, columnId === rowHeader.id ? row.name : row.values[columnId], column?.isMultiple, 1);
   }
-  return sortDynamicOptionCounts(counts);
+  return counts;
+};
+
+export const getDynamicOptions = (table: WorkspaceTable, columnId: string) => sortDynamicOptionCounts(collectDynamicOptionCounts(table, columnId));
+
+export const readDynamicOptions = (column: WorkspaceColumn, sourceRevision: string): WorkspaceDynamicOptionCounts | undefined => {
+  const stored = column.dynamicOptions;
+  if (!stored || stored.version !== 1 || stored.sourceRevision !== sourceRevision || stored.isMultiple !== Boolean(column.isMultiple) || !Array.isArray(stored.counts)) return undefined;
+  const counts: WorkspaceDynamicOptionCounts = new Map();
+  for (const item of stored.counts) {
+    if (!item || typeof item.key !== 'string' || !item.key || counts.has(item.key) || !Number.isSafeInteger(item.count) || item.count <= 0 || !Array.isArray(item.spellings)) return undefined;
+    const spellings = new Map<string, number>();
+    let total = 0;
+    for (const pair of item.spellings) {
+      if (!Array.isArray(pair) || pair.length !== 2) return undefined;
+      const [label, count] = pair;
+      if (typeof label !== 'string' || !label || label !== label.trim() || label.toLocaleLowerCase() !== item.key || spellings.has(label) || !Number.isSafeInteger(count) || count <= 0) return undefined;
+      spellings.set(label, count);
+      total += count;
+    }
+    if (total !== item.count) return undefined;
+    counts.set(item.key, { count: total, spellings });
+  }
+  return counts;
+};
+
+export const writeDynamicOptions = (counts: WorkspaceDynamicOptionCounts, sourceRevision: string, isMultiple: boolean): WorkspaceDynamicOptions => ({
+  version: 1, sourceRevision, isMultiple,
+  counts: [...counts].map(([key, option]) => ({ key, count: option.count, spellings: [...option.spellings] })),
+});
+
+/** Old tables and imported text acquire their column statistics once, before use. */
+export const ensureTableDynamicOptions = (table: WorkspaceTable): WorkspaceTable => {
+  const sourceRevision = workspaceTableChangeRevision(table);
+  const prepare = (column: WorkspaceColumn) => {
+    if (column.inputType !== 'dynamic-select') return column.dynamicOptions ? { ...column, dynamicOptions: undefined } : column;
+    if (readDynamicOptions(column, sourceRevision)) return column;
+    return { ...column, dynamicOptions: writeDynamicOptions(collectDynamicOptionCounts(table, column.id), sourceRevision, Boolean(column.isMultiple)) };
+  };
+  const rowHeader = table.rowHeader ? prepare(table.rowHeader) : undefined;
+  const columns = table.columns.map(prepare);
+  return rowHeader === table.rowHeader && columns.every((column, index) => column === table.columns[index]) ? table : { ...table, rowHeader, columns };
+};
+
+export const ensureWorkspaceDynamicOptions = (data: WorkspaceData): WorkspaceData => {
+  const tables = data.tables.map(ensureTableDynamicOptions);
+  return tables.every((table, index) => table === data.tables[index]) ? data : { ...data, tables };
 };
 
 export const resolveActiveTableNodeId = (data: WorkspaceData, preferredNodeId = data.activeNodeId) => {

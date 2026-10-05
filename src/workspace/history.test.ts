@@ -12,6 +12,27 @@ const table = (): WorkspaceTable => ({
 const data = (current = table()): WorkspaceData => ({ ...emptyWorkspace(), activeNodeId: 'node-1', nodes: [{ id: 'node-1', type: 'table', name: current.name, parentId: null, order: 0, tableId: current.id }], tables: [current] });
 
 describe('workspace table history', () => {
+  it('ignores derived statistics during mutation inference and never saves them in history', () => {
+    const before = data();
+    const column = before.tables[0].columns[0];
+    const statistics = { version: 1 as const, sourceRevision: 'current', isMultiple: false, counts: [], toJSON() { throw new Error('Statistics must not be serialized into history'); } };
+    before.tables[0].columns[0] = { ...column, inputType: 'dynamic-select', dynamicOptions: statistics };
+    const refreshed: WorkspaceTable = { ...before.tables[0], columns: [{ ...before.tables[0].columns[0], dynamicOptions: { ...statistics, sourceRevision: 'refreshed' } }] };
+    expect(inferWorkspaceTableMutation(before, data(refreshed))).toBeUndefined();
+
+    const configured = { ...refreshed, columns: [{ ...refreshed.columns[0], hidden: true }] };
+    const mutation = inferWorkspaceTableMutation(before, data(configured))!;
+    expect(mutation.action.type).toBe('update-column');
+    if (mutation.action.type !== 'update-column') throw new Error('Expected column settings history');
+    expect(mutation.action.before).not.toHaveProperty('dynamicOptions');
+    expect(mutation.action.after).not.toHaveProperty('dynamicOptions');
+    const stored = pushWorkspaceTableHistory(createEmptyWorkspaceTableHistory('table-1'), {
+      ...mutation, action: { type: 'update-column', before: before.tables[0].columns[0], after: configured.columns[0] },
+    });
+    expect(() => JSON.stringify(stored)).not.toThrow();
+    expect(applyWorkspaceTableHistoryAction(data(configured), 'table-1', stored.past[0].action, 'undo').tables[0].columns[0].hidden).toBeUndefined();
+  });
+
   const historyEntry = (id: string, createdAt = Date.now()) => ({
     id,
     tableId: 'table-1',

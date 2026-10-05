@@ -3,11 +3,13 @@ import * as model from '../../src/workspace/model';
 import * as history from '../../src/workspace/history';
 import * as spreadsheet from '../../src/workspace/spreadsheet';
 import { assignWorkspaceChangeRevisions } from '../../src/workspace/changeRevisions';
+import { WorkspaceDynamicOptionsCache } from '../../src/workspace/dynamicOptionsCache';
 import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
 const fixture = {
-  db, model, history, spreadsheet,
+  db, model, history, spreadsheet, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache,
+  dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),
   writes: [] as Write[],
@@ -26,6 +28,7 @@ const fixture = {
     this.data = model.normalizeWorkspace({ ...model.emptyWorkspace(), structureRevision: 'structure-before', tables: tableList, nodes: tableList.map((table, index) => model.createNode('table', table.name, null, index, table.id)) });
     this.data.activeNodeId = this.data.nodes[0]?.id ?? null;
     this.histories = new Map();
+    this.dynamicOptionsCache = new WorkspaceDynamicOptionsCache();
     await db.saveWorkspace(this.data, { history: { clearAll: true } });
     this.writes = [];
   },
@@ -35,7 +38,8 @@ const fixture = {
     const row = table.rows[index];
     const columnId = table.columns[0].id;
     const mutation: history.WorkspaceTableMutation = { tableId: table.id, label: '編輯', action: { type: 'set-cell', rowId: row.id, columnId, before: row.values[columnId], after: value } };
-    this.data = assignWorkspaceChangeRevisions(previous, { ...previous, tables: previous.tables.map(item => item === table ? { ...table, updatedAt: Date.now(), rows: table.rows.map(item => item === row ? { ...row, values: { ...row.values, [columnId]: value } } : item) } : item) });
+    const revised = assignWorkspaceChangeRevisions(previous, { ...previous, tables: previous.tables.map(item => item === table ? { ...table, updatedAt: Date.now(), rows: table.rows.map(item => item === row ? { ...row, values: { ...row.values, [columnId]: value } } : item) } : item) });
+    this.data = this.dynamicOptionsCache.prepare(previous, revised, mutation);
     const nextHistory = history.pushWorkspaceTableHistory(this.histories.get(table.id) ?? history.createEmptyWorkspaceTableHistory(table.id), mutation);
     this.histories.set(table.id, nextHistory);
     const options: db.WorkspaceSaveOptions = { mutation, history: append ? { append: [...this.histories.values()].flatMap(item => item.past) } : { replace: [...this.histories.values()] } };

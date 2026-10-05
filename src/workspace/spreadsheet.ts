@@ -1,5 +1,5 @@
 import type { CellValue, Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
+import { createColumn, createNode, createRow, createTable, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
 
@@ -18,6 +18,8 @@ const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'dynamic-
 
 type AssertNever<T extends never> = T;
 type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'numberInputMode' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly';
+// Statistics belong to local columns; imported workbook text rebuilds them.
+type IntentionallyRegeneratedColumnFields = 'dynamicOptions';
 type SerializedTableFields = 'id' | 'changeRevision' | 'name' | 'rowHeaderName' | 'rowHeader' | 'textScale' | 'transposed' | 'columns' | 'rows';
 type IntentionallyRegeneratedTableFields = 'updatedAt';
 type SerializedNodeFields = 'id' | 'type' | 'name' | 'parentId' | 'order' | 'tableId';
@@ -25,7 +27,7 @@ type SerializedRowFields = 'id' | 'name' | 'values';
 type SerializedWorkspaceFields = 'version' | 'structureRevision' | 'updatedAt' | 'nodes' | 'tables' | 'activeNodeId' | 'bottomNavigationTableIds';
 type SupportedCellValue = string | number | WorkspaceLinkValue | null;
 export type WorkspaceXlsxSchemaCoverage = [
-  AssertNever<Exclude<keyof WorkspaceColumn, SerializedColumnFields>>,
+  AssertNever<Exclude<keyof WorkspaceColumn, SerializedColumnFields | IntentionallyRegeneratedColumnFields>>,
   AssertNever<Exclude<keyof WorkspaceTable, SerializedTableFields | IntentionallyRegeneratedTableFields>>,
   AssertNever<Exclude<keyof WorkspaceNode, SerializedNodeFields>>,
   AssertNever<Exclude<keyof WorkspaceRow, SerializedRowFields>>,
@@ -724,10 +726,10 @@ export const importWorkspaceXlsx = async (file: Blob, options: { preserveIds?: b
     const table = settingsSheets.length
       ? parseSettingsSheet(settingsSheets[0])
       : parsePlainTable(sheets[0].data, sheets[0].sheet);
-    return { isWorkspace: false, source: settingsSheets.length ? 'structured' : 'plain', table: options.preserveIds ? table : remapTable(table) };
+    return { isWorkspace: false, source: settingsSheets.length ? 'structured' : 'plain', table: ensureTableDynamicOptions(options.preserveIds ? table : remapTable(table)) };
   }
   const parsed = parseWorkspace(workspaceSheet.data);
-  const tables = settingsSheets.map(parseSettingsSheet);
+  const tables = settingsSheets.map(sheet => ensureTableDynamicOptions(parseSettingsSheet(sheet)));
   const tableMap = new Map(tables.map((table) => [table.id, table]));
   const data: WorkspaceData = { version: 1, structureRevision: parsed.structureRevision, nodes: parsed.nodes, tables, activeNodeId: parsed.activeNodeId, bottomNavigationTableIds: parsed.bottomNavigationTableIds };
   for (const node of data.nodes) {

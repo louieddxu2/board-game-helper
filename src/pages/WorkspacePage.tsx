@@ -405,9 +405,9 @@ const WorkspacePage = () => {
       || previous.nodes !== next.nodes
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
-    const committed = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
+    const revised = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
+    const committed = dynamicOptionsCacheRef.current.prepare(previous, revised, mutation);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
-    dynamicOptionsCacheRef.current.update(previous, committed, mutation);
     setData(committed);
     dataRef.current = committed;
     if (options?.clearAllHistory) {
@@ -900,14 +900,14 @@ const WorkspacePage = () => {
     const source = direction === 'undo' ? currentHistory.past : currentHistory.future;
     const entry = source[source.length - 1];
     if (!entry) return;
-    const nextData = assignWorkspaceChangeRevisions(data, applyWorkspaceTableHistoryActionWithNode(data, table.id, entry.action, direction));
+    const revised = assignWorkspaceChangeRevisions(data, applyWorkspaceTableHistoryActionWithNode(data, table.id, entry.action, direction));
+    const nextData = dynamicOptionsCacheRef.current.prepare(data, revised, { tableId: table.id, action: entry.action }, direction);
     const nextHistory: WorkspaceTableHistory = direction === 'undo'
       ? { tableId: table.id, past: currentHistory.past.slice(0, -1), future: [...currentHistory.future, entry] }
       : { tableId: table.id, past: [...currentHistory.past, entry], future: currentHistory.future.slice(0, -1) };
     const nextHistories = new Map(historyRef.current).set(table.id, nextHistory);
     historyRef.current = nextHistories;
     setHistoryByTable(nextHistories);
-    dynamicOptionsCacheRef.current.update(data, nextData, { tableId: table.id, action: entry.action }, direction);
     setData(nextData);
     dataRef.current = nextData;
     setEditing(undefined);
