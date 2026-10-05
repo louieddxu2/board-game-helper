@@ -42,6 +42,7 @@ const convertColumn = (table: WorkspaceTable, columnId: string, inputType: Works
   const nextColumn: WorkspaceColumn = {
     ...previous,
     inputType,
+    dynamicOptions: undefined,
     options: inputType === 'select'
       ? [...new Set(table.rows.map((row) => displayWorkspaceColumnValue(isRowHeader ? row.name : row.values[columnId] ?? null, previous)).filter(Boolean))]
       : previous.options,

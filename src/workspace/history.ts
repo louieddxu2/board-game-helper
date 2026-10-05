@@ -43,6 +43,7 @@ export interface WorkspaceTableMutation {
 export interface WorkspaceCommitOptions {
   clearTableHistoryIds?: string[];
   clearAllHistory?: boolean;
+  importedTableIds?: string[];
 }
 
 export const createEmptyWorkspaceTableHistory = (tableId: string): WorkspaceTableHistory => ({ tableId, past: [], future: [] });

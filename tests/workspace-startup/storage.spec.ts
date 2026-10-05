@@ -63,13 +63,14 @@ test('dynamic attributes persist activation and incremental counts across browse
   expect(reopened.writes).toEqual([]);
 });
 
-test('legacy dynamic attributes rebuild once and persist only their column state', async ({ page }) => {
+for (const activeTable of [true, false]) test(`legacy dynamic attributes rebuild once and persist only their column state (active table: ${activeTable})`, async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
-  await page.evaluate(async () => {
+  await page.evaluate(async (activeTable) => {
     const api = window.workspaceStorageFixture;
     await api.initialize(600);
     const table = api.data.tables[0];
     api.data = api.model.ensureWorkspaceDynamicOptions({ ...api.data, tables: [{ ...table, columns: [{ ...table.columns[0], inputType: 'dynamic-select' }, ...table.columns.slice(1)] }] });
+    if (!activeTable) api.data.activeNodeId = null;
     await api.db.saveWorkspace(api.data);
     const request = indexedDB.open('board-game-helper-workspace');
     const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
@@ -77,16 +78,18 @@ test('legacy dynamic attributes rebuild once and persist only their column state
     transaction.objectStore('tableState').put({ updatedAt: table.updatedAt, changeRevision: table.changeRevision }, table.id);
     await new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onabort = () => reject(transaction.error); });
     connection.close();
-  });
+  }, activeTable);
   await page.reload();
   const repaired = await page.evaluate(async () => {
     const api = window.workspaceStorageFixture;
-    api.data = (await api.db.loadWorkspaceInitial()).data;
+    const initial = await api.db.loadWorkspaceInitial();
+    api.data = initial.data;
     api.instrument();
     await api.db.loadWorkspace({ expectCurrentRevision: true });
     await api.db.flushWorkspaceSaves();
-    return { disk: await api.readDisk(), writes: api.writes, columnId: api.data.tables[0].columns[0].id };
+    return { disk: await api.readDisk(), writes: api.writes, columnId: api.data.tables[0].columns[0].id, complete: initial.complete };
   });
+  expect(repaired.complete).toBe(!activeTable);
   expect(repaired.disk.states[0].columnState[repaired.columnId].dynamicOptions.counts).toHaveLength(600);
   expect(repaired.writes.filter(write => write.store === 'rowChunks' || write.store === 'tables')).toEqual([]);
   expect(repaired.writes.filter(write => write.store === 'tableState')).toHaveLength(1);
@@ -100,6 +103,34 @@ test('legacy dynamic attributes rebuild once and persist only their column state
     return api.writes;
   });
   expect(writes).toEqual([]);
+});
+
+test('cleared dynamic object names remain empty without repeated storage repairs', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(1);
+    const table = api.data.tables[0];
+    const rowHeader = { ...api.model.getRowHeaderColumn(table), inputType: 'dynamic-select' as const };
+    const next = { ...api.data, tables: [{ ...table, rowHeader, rows: [{ ...table.rows[0], name: null }] }] };
+    api.data = api.dynamicOptionsCache.prepare(api.data, api.assignWorkspaceChangeRevisions(api.data, next));
+    await api.db.saveWorkspace(api.data);
+  });
+  for (let reload = 0; reload < 2; reload += 1) {
+    await page.reload();
+    const result = await page.evaluate(async () => {
+      const api = window.workspaceStorageFixture;
+      api.data = (await api.db.loadWorkspaceInitial()).data;
+      api.instrument();
+      await api.db.loadWorkspace({ expectCurrentRevision: true });
+      await api.db.flushWorkspaceSaves();
+      const table = api.data.tables[0];
+      return { name: table.rows[0].name, options: api.dynamicOptionsCache.getOptions(table, api.model.getRowHeaderColumn(table).id), writes: api.writes };
+    });
+    expect(result.name).toBeNull();
+    expect(result.options).toEqual([]);
+    expect(result.writes).toEqual([]);
+  }
 });
 
 test('10k-row cell commits write one chunk and a new history entry in the same transaction', async ({ page }) => {

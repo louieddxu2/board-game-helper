@@ -20,6 +20,18 @@ export class WorkspaceDynamicOptionsCache {
     return cache.options ??= sortDynamicOptionCounts(cache.counts);
   }
 
+  /** Import parsers have already counted these exact rows, before the local revision changes. */
+  primeImportedTables(data: WorkspaceData, tableIds: readonly string[]) {
+    const imported = new Set(tableIds);
+    for (const table of data.tables) {
+      if (!imported.has(table.id)) continue;
+      this.tables.delete(table.id);
+      for (const column of [getRowHeaderColumn(table), ...table.columns]) {
+        if (column.inputType === 'dynamic-select') this.getColumnCache(table, column.id);
+      }
+    }
+  }
+
   private getColumnCache(table: WorkspaceTable, columnId: string): ColumnCache {
     const rowHeader = getRowHeaderColumn(table);
     const column = columnId === rowHeader.id ? rowHeader : table.columns.find(item => item.id === columnId);
@@ -42,6 +54,7 @@ export class WorkspaceDynamicOptionsCache {
       const before = previous?.tables.find(table => table.id === after.id);
       if (!before || before === after) continue;
       for (const column of [getRowHeaderColumn(before), ...before.columns]) {
+        if (this.tables.get(after.id)?.get(column.id)?.rows === after.rows) continue;
         if (column.inputType === 'dynamic-select' && column.dynamicOptions) this.getColumnCache(before, column.id);
       }
     }
@@ -67,16 +80,19 @@ export class WorkspaceDynamicOptionsCache {
     for (const [tableId, columns] of this.tables) {
       const after = nextTables.get(tableId);
       const before = previous?.tables.find(table => table.id === tableId);
-      if (!after || !before) { this.tables.delete(tableId); continue; }
+      if (!after) { this.tables.delete(tableId); continue; }
       if (before === after) continue;
       const rowHeader = getRowHeaderColumn(after);
       const action = mutation?.tableId === tableId ? mutation.action : undefined;
       for (const [columnId, cache] of columns) {
         const column = columnId === rowHeader.id ? rowHeader : after.columns.find(item => item.id === columnId);
-        if (column?.inputType !== 'dynamic-select' || cache.isMultiple !== Boolean(column.isMultiple) || cache.rows !== before.rows) {
+        if (column?.inputType !== 'dynamic-select' || cache.isMultiple !== Boolean(column.isMultiple)) {
           columns.delete(columnId);
           continue;
         }
+        // A primed import already indexes the final rows; applying its mutation would count twice.
+        if (cache.rows === after.rows) continue;
+        if (!before || cache.rows !== before.rows) { columns.delete(columnId); continue; }
         if (before.rows !== after.rows && (!action || !this.applyAction(cache, columnId, rowHeader.id, action, direction))) {
           columns.set(columnId, { rows: after.rows, isMultiple: cache.isMultiple, counts: collectDynamicOptionCounts(after, columnId) });
           continue;

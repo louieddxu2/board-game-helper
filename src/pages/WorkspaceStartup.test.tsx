@@ -42,6 +42,16 @@ const editBeforeHistoryLoads = async () => {
 };
 
 describe('workspace startup', () => {
+  it('flushes rebuilt statistics after paint even when the initial fallback loaded all tables', async () => {
+    const base = await loadWorkspace();
+    vi.mocked(loadWorkspace).mockClear();
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: base, complete: true, storageVersion: 4 });
+    render(<WorkspacePage />);
+    expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
+    await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
+    expect(loadWorkspace).toHaveBeenCalledExactlyOnceWith({ expectCurrentRevision: true });
+  });
+
   it('retains search focus when the directory finishes loading', async () => {
     const base = await loadWorkspace();
     const otherTable = { ...base.tables[0], id: 'table-2', name: '其他表格' };

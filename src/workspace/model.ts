@@ -209,7 +209,7 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => {
       const columns = table.columns.map((column) => normalizeColumn(column));
       const changedDynamicColumns = new Set<string>();
       const rows = table.rows.map((row, index) => {
-        const name = normalizeCellValue(row.name, rowHeader.inputType) ?? `項目 ${index + 1}`;
+        const name = row.name === undefined ? `項目 ${index + 1}` : normalizeCellValue(row.name, rowHeader.inputType);
         if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
         const values = Object.fromEntries(columns.map((column) => {
           const before = row.values[column.id] ?? null;

@@ -26,6 +26,19 @@ describe('workspace model', () => {
     expect(normalized.tables[0].columns[0].dynamicOptions).toBe(saved.columns[0].dynamicOptions);
   });
 
+  it('preserves a cleared dynamic row name and its statistics across repeated normalization', () => {
+    const table = createTable('空名稱');
+    table.rowHeader = { id: `row-header-${table.id}`, name: '物件', inputType: 'dynamic-select', options: [] };
+    table.rows[0].name = null;
+    const saved = ensureTableDynamicOptions(table);
+    const statistics = saved.rowHeader!.dynamicOptions;
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [saved] });
+    const reopened = normalizeWorkspace(normalized).tables[0];
+    expect(reopened.rows[0].name).toBeNull();
+    expect(reopened.rowHeader!.dynamicOptions).toBe(statistics);
+    expect(statistics?.counts).toEqual([]);
+  });
+
   it('recognizes explicit web addresses without turning ordinary text into links', () => {
     expect(isWorkspaceUrlText('https://example.com/game')).toBe(true);
     expect(isWorkspaceUrlText('www.example.com/game')).toBe(true);

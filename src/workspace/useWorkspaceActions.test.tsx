@@ -65,7 +65,18 @@ describe('Workspace import ownership', () => {
     act(() => result.current.finishTableImport(preview.table, preview.parentId));
     expect(props.commit).toHaveBeenCalledWith(expect.objectContaining({
       nodes: expect.arrayContaining([expect.objectContaining({ tableId: 'first', parentId: 'A' })]),
-    }));
+    }), undefined, { importedTableIds: ['first'] });
+  });
+
+  it.each(['replace', 'merge'] as const)('marks only incoming tables for statistics reuse during %s', (mode) => {
+    const props = { ...makeEditableProps(), workspaceImport: { ...data, tables: [table] } };
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    act(() => result.current.finishWorkspaceImport(mode));
+    const [next, , options] = vi.mocked(props.commit).mock.calls[0];
+    const incoming = next.tables.filter(item => item !== editableTable);
+    expect(options).toEqual({ clearAllHistory: true, importedTableIds: incoming.map(item => item.id) });
+    expect(incoming).toHaveLength(1);
+    if (mode === 'merge') expect(next.tables[0]).toBe(editableTable);
   });
 
   it.each(['success', 'failure'] as const)('ignores an older table result after the newer selection succeeds (%s)', async (outcome) => {

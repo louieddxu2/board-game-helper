@@ -330,7 +330,11 @@ const WorkspacePage = () => {
       setExpanded(restored);
       cancelHistoryLoad = afterWorkspacePaint(() => {
         const finishTables = async () => {
-          if (initial.complete) return;
+          if (initial.complete) {
+            // Full-load fallbacks can also have rebuilt column statistics to persist.
+            await loadWorkspace({ expectCurrentRevision: true });
+            return;
+          }
           const mergeLoaded = (remaining: WorkspaceData) => {
             if (cancelled) return;
             const current = dataRef.current;
@@ -405,6 +409,7 @@ const WorkspacePage = () => {
       || previous.nodes !== next.nodes
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
+    if (options?.importedTableIds) dynamicOptionsCacheRef.current.primeImportedTables(next, options.importedTableIds);
     const revised = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
     const committed = dynamicOptionsCacheRef.current.prepare(previous, revised, mutation);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];

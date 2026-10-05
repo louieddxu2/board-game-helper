@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createColumn, createNode, createRow, createTable, emptyWorkspace, ensureWorkspaceDynamicOptions } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, inferPlainColumnSettings } from './spreadsheet';
 import type { WorkspaceData } from './types';
+import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
+import { assignWorkspaceChangeRevisions, workspaceTableChangeRevision } from './changeRevisions';
 
 const ensureBlobArrayBuffer = () => {
   if (typeof Blob.prototype.arrayBuffer === 'function') return;
@@ -115,6 +117,36 @@ const makeFixture = (): WorkspaceData => {
 };
 
 describe('workspace spreadsheet format', () => {
+  it('retags valid legacy statistics when merging imported tables without recounting their cells', () => {
+    const source = makeFixture();
+    const table = source.tables[0];
+    table.updatedAt = 1;
+    table.changeRevision = undefined;
+    table.columns[1] = { ...table.columns[1], inputType: 'dynamic-select', options: [] };
+    const saved = ensureWorkspaceDynamicOptions(source);
+    const originalStatistics = saved.tables[0].columns[1].dynamicOptions!;
+    const copied = cloneImportedWorkspace(saved);
+    const imported = copied.tables[0];
+    expect(imported.columns[1].dynamicOptions?.sourceRevision).toBe(workspaceTableChangeRevision(imported));
+    expect(imported.columns[1].dynamicOptions?.counts).toBe(originalStatistics.counts);
+    expect(originalStatistics.sourceRevision).toBe('legacy:1');
+    let reads = 0;
+    imported.rows = imported.rows.map(row => ({ ...row, get values() { reads += 1; return row.values; } }));
+    const cache = new WorkspaceDynamicOptionsCache();
+    cache.primeImportedTables(copied, [imported.id]);
+    const prepared = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, copied));
+    expect(cache.getOptions(prepared.tables[0], imported.columns[1].id)).toEqual(['已擁有']);
+    expect(reads).toBe(0);
+  });
+
+  it('does not make stale statistics valid by remapping import IDs', () => {
+    const source = makeFixture();
+    source.tables[0].columns[1].inputType = 'dynamic-select';
+    const saved = ensureWorkspaceDynamicOptions(source);
+    saved.tables[0].columns[1].dynamicOptions!.sourceRevision = 'stale';
+    expect(cloneImportedWorkspace(saved).tables[0].columns[1].dynamicOptions).toBeUndefined();
+  });
+
   it('keeps XLSX settings unchanged and rebuilds dynamic column statistics on import', async () => {
     const source = makeFixture();
     const table = source.tables[0];

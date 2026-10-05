@@ -90,6 +90,8 @@ IndexedDB schema 從舊版本 3 升為版本 4；這與 XLSX／ZIP／Drive 的�
 
 有效統計在重載後直接建立記憶體索引；舊表、缺失／失效統計或解析設定變更才重新掃描該欄。舊表補建後由首次畫面後的既有保存佇列寫回 column state，不重寫資料區塊。IndexedDB 維持 v4；XLSX／ZIP／Drive 格式維持 v1，不帶出統計，匯入時自動重建。計數更新只解析受影響的值，但不可變 snapshot 與 IndexedDB 序列化仍與不同選項數成正比；一萬個互異選項會比一萬列共用少數選項花費更多記憶體與保存成本。
 
+匯入確認以 `importedTableIds` 明確標記新資料，在指派本地 revision 前從匯入統計建立索引，避免確認時再掃描一次欄值。合併只重映射 ID、保留值的欄位可沿用有效統計；預覽變更欄位型態會清除該欄統計並在確認時重建。完整載入的 fallback 也在首次畫面後觸發補建保存。明確清空為 `null` 的物件名稱維持空白，不補成預設名稱或產生虛構選項。
+
 ```ts
 type StoredTable = {
   storageFormat: 'row-chunks-v1';

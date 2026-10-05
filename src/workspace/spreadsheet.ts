@@ -1,5 +1,6 @@
 import type { CellValue, Sheet } from 'read-excel-file/browser';
-import { createColumn, createNode, createRow, createTable, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime } from './model';
+import { createColumn, createNode, createRow, createTable, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime, readDynamicOptions } from './model';
+import { workspaceTableChangeRevision } from './changeRevisions';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
 
@@ -680,12 +681,21 @@ export const importWorkspaceArchive = async (file: Blob): Promise<ImportedWorksp
 };
 
 const remapTable = (table: WorkspaceTable): WorkspaceTable => {
+  const updatedAt = Date.now();
+  const sourceRevision = workspaceTableChangeRevision(table);
+  const targetRevision = workspaceTableChangeRevision({ ...table, updatedAt });
+  // ID remapping copies the same values. Legacy timestamp revisions still need retagging.
+  const copyColumn = (column: WorkspaceColumn, id: string): WorkspaceColumn => ({
+    ...column, id, options: [...column.options],
+    dynamicOptions: readDynamicOptions(column, sourceRevision) && column.dynamicOptions
+      ? { ...column.dynamicOptions, sourceRevision: targetRevision } : undefined,
+  });
   const columnMap = new Map(table.columns.map((column) => [column.id, makeId('column')]));
-  const columns = table.columns.map((column) => ({ ...column, id: columnMap.get(column.id)!, options: [...column.options] }));
+  const columns = table.columns.map((column) => copyColumn(column, columnMap.get(column.id)!));
   const tableId = makeId('table');
-  const rowHeader = { ...getRowHeaderColumn(table), id: `row-header-${tableId}`, options: [...getRowHeaderColumn(table).options] };
+  const rowHeader = copyColumn(getRowHeaderColumn(table), `row-header-${tableId}`);
   const cloneValue = (value: WorkspaceCellValue): WorkspaceCellValue => isWorkspaceLinkValue(value) ? { ...value } : value;
-  return { ...table, id: tableId, name: `${table.name}（匯入）`, rowHeaderName: rowHeader.name, rowHeader, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: cloneValue(row.name), values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, cloneValue(row.values[column.id] ?? null)])) })), updatedAt: Date.now() };
+  return { ...table, id: tableId, name: `${table.name}（匯入）`, rowHeaderName: rowHeader.name, rowHeader, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: cloneValue(row.name), values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, cloneValue(row.values[column.id] ?? null)])) })), updatedAt };
 };
 
 export interface ImportedWorkspace {

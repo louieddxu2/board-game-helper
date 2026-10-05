@@ -81,6 +81,55 @@ describe('dynamic option frequency cache', () => {
     expect(table.columns[0].dynamicOptions).toBeUndefined();
   });
 
+  it.each(['new', 'replace'] as const)('reuses imported 10,000-row statistics when committing a %s table', (mode) => {
+    const { table, column, data } = fixture([]);
+    let reads = 0;
+    table.rows = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `r${index}`, name: `項目 ${index}`,
+      get values() { reads += 1; return { [column.id]: index < 6_000 ? 'Common' : 'Rare' }; },
+    }));
+    const imported = ensureTableDynamicOptions(table);
+    expect(reads).toBe(10_000);
+    const originalStatistics = imported.columns[0].dynamicOptions!;
+    const previous = { ...data, tables: mode === 'new' ? [] : [ensureTableDynamicOptions({
+      ...table, rows: [{ id: 'old', name: '舊列', values: { [column.id]: 'Old' } }],
+    })] };
+    const cache = new WorkspaceDynamicOptionsCache();
+    if (mode === 'replace') expect(cache.getOptions(previous.tables[0], column.id)).toEqual(['Old']);
+    const next = { ...data, tables: [imported] };
+    cache.primeImportedTables(next, [table.id]);
+    const prepared = cache.prepare(previous, assignWorkspaceChangeRevisions(previous, next));
+    expect(reads).toBe(10_000);
+    expect(cache.getOptions(prepared.tables[0], column.id)).toEqual(['Common', 'Rare']);
+    expect(prepared.tables[0].columns[0].dynamicOptions?.counts).toBe(originalStatistics.counts);
+    expect(prepared.tables[0].columns[0].dynamicOptions?.sourceRevision).toBe(workspaceTableChangeRevision(prepared.tables[0]));
+    expect(originalStatistics.sourceRevision).toBe(workspaceTableChangeRevision(table));
+    expect(prepared.tables[0].changeRevision).not.toBe(table.changeRevision);
+
+    const edited = prepareTransition(cache, prepared, { type: 'set-cell', rowId: 'r9999', columnId: column.id, before: 'Rare', after: 'Common' });
+    expect(edited.tables[0].columns[0].dynamicOptions?.counts.map(item => item.count)).toEqual([6_001, 3_999]);
+    expect(originalStatistics.counts.map(item => item.count)).toEqual([6_000, 4_000]);
+  });
+
+  it.each(['missing', 'stale', 'parser'] as const)('rebuilds %s import statistics once before assigning a local revision', (kind) => {
+    const { table, column, data } = fixture(['["A"]']);
+    const saved = ensureTableDynamicOptions(table);
+    const importedColumn = { ...saved.columns[0] };
+    if (kind === 'missing') importedColumn.dynamicOptions = undefined;
+    if (kind === 'stale') importedColumn.dynamicOptions = { ...importedColumn.dynamicOptions!, sourceRevision: 'old' };
+    if (kind === 'parser') importedColumn.isMultiple = true;
+    let reads = 0;
+    const imported = { ...saved, columns: [importedColumn], rows: saved.rows.map(row => ({
+      ...row, get values() { reads += 1; return row.values; },
+    })) };
+    const next = { ...data, tables: [imported] };
+    const cache = new WorkspaceDynamicOptionsCache();
+    cache.primeImportedTables(next, [table.id]);
+    const prepared = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, next));
+    expect(reads).toBe(1);
+    expect(cache.getOptions(prepared.tables[0], column.id)).toEqual([kind === 'parser' ? 'A' : '["A"]']);
+  });
+
   it('rebuilds after a row replacement even when the caller carries old persisted statistics', () => {
     const { table, column, data } = fixture(['A']);
     const initial = { ...data, tables: [ensureTableDynamicOptions(table)] };

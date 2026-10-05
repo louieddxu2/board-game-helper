@@ -261,7 +261,7 @@ export function useWorkspaceActions({
   const finishTableImport = (tableCopy: WorkspaceTable, parentId: string | null) => {
     if (!data) return;
     const node = createNode('table', tableCopy.name, parentId, getChildren(data, parentId).length, tableCopy.id);
-    commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id });
+    commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id }, undefined, { importedTableIds: [tableCopy.id] });
     setTableImportPreview(undefined);
     setDrawerOpen(false);
     setNotice(`已匯入「${tableCopy.name}」`);
@@ -281,7 +281,8 @@ export function useWorkspaceActions({
         };
         return { ...merged, activeNodeId: resolveActiveTableNodeId(merged, copy.nodes.find((node) => node.type === 'table')?.id) };
       })();
-    commit(next, undefined, { clearAllHistory: true });
+    const importedTableIds = next.tables.filter(table => mode === 'replace' || !data.tables.includes(table)).map(table => table.id);
+    commit(next, undefined, { clearAllHistory: true, importedTableIds });
     setWorkspaceImport(undefined);
     setNotice(mode === 'replace' ? '資料庫已取代' : '資料庫已合併');
   };
