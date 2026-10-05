@@ -118,6 +118,10 @@ export class WorkspaceDynamicOptionsCache {
         return action.columnId !== columnId || change(action.before, action.after);
       case 'set-cells':
         return action.columnId !== columnId || action.changes.every(item => change(item.before, item.after));
+      case 'update-column':
+        return action.after.id !== columnId || (action.changes ?? []).every(item => change(item.before, item.after));
+      case 'update-row-header':
+        return rowHeaderId !== columnId || (action.changes ?? []).every(item => change(item.before, item.after));
       case 'paste-range': {
         // New rows already contain their pasted values; don't count their changes twice.
         const added = new Set(action.addedRows.map(row => row.id));
@@ -132,8 +136,6 @@ export class WorkspaceDynamicOptionsCache {
       case 'add-column':
       case 'remove-column':
       case 'reorder-columns':
-      case 'update-column':
-      case 'update-row-header':
       case 'rename-table':
       case 'set-transposed':
         return true;

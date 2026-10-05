@@ -1,6 +1,7 @@
 import { getRowHeaderColumn } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
+import type { WorkspaceColumnValueChange } from './columnConversion';
 
 export const workspaceHistoryRetentionMs = 6 * 60 * 60 * 1000;
 export const workspaceHistoryLimit = 50;
@@ -15,8 +16,8 @@ export type WorkspaceTableHistoryAction =
   | { type: 'add-column'; column: WorkspaceColumn; index: number }
   | { type: 'remove-column'; column: WorkspaceColumn; index: number; values: Record<string, WorkspaceCellValue> }
   | { type: 'reorder-columns'; beforeIds: string[]; afterIds: string[] }
-  | { type: 'update-column'; before: WorkspaceColumn; after: WorkspaceColumn }
-  | { type: 'update-row-header'; before?: WorkspaceColumn; after?: WorkspaceColumn; beforeName: string; afterName: string }
+  | { type: 'update-column'; before: WorkspaceColumn; after: WorkspaceColumn; changes?: WorkspaceColumnValueChange[] }
+  | { type: 'update-row-header'; before?: WorkspaceColumn; after?: WorkspaceColumn; beforeName: string; afterName: string; changes?: WorkspaceColumnValueChange[] }
   | { type: 'rename-table'; before: string; after: string }
   | { type: 'set-transposed'; before: boolean; after: boolean };
 
@@ -89,7 +90,7 @@ const columnConfiguration = (column: WorkspaceColumn | undefined) => {
   return configuration;
 };
 
-/** Statistics follow the current rows; history only needs the user's column settings. */
+/** Statistics follow the current rows; history retains settings and any converted values. */
 const historyAction = (action: WorkspaceTableHistoryAction): WorkspaceTableHistoryAction => {
   switch (action.type) {
     case 'update-column': return { ...action, before: columnConfiguration(action.before)!, after: columnConfiguration(action.after)! };
@@ -223,9 +224,23 @@ export const applyWorkspaceTableHistoryAction = (
       case 'reorder-columns':
         return tableWithUpdatedAt({ ...current, columns: reorderByIds(current.columns, forward ? action.afterIds : action.beforeIds) });
       case 'update-column':
-        return tableWithUpdatedAt({ ...current, columns: current.columns.map((column) => column.id === action.after.id ? (forward ? action.after : action.before) : column) });
       case 'update-row-header':
-        return tableWithUpdatedAt({ ...current, rowHeader: forward ? action.after : action.before, rowHeaderName: forward ? action.afterName : action.beforeName });
+        return tableWithUpdatedAt({
+          ...current,
+          ...(action.type === 'update-column'
+            ? { columns: current.columns.map(column => column.id === action.after.id ? (forward ? action.after : action.before) : column) }
+            : { rowHeader: forward ? action.after : action.before, rowHeaderName: forward ? action.afterName : action.beforeName }),
+          rows: action.changes?.length ? (() => {
+            const changes = new Map(action.changes.map(change => [change.rowId, change]));
+            return current.rows.map(row => {
+              const change = changes.get(row.id);
+              if (!change) return row;
+              const value = forward ? change.after : change.before;
+              return action.type === 'update-row-header' ? { ...row, name: value }
+                : { ...row, values: { ...row.values, [action.after.id]: value } };
+            });
+          })() : current.rows,
+        });
       case 'rename-table':
         return tableWithUpdatedAt({ ...current, name: forward ? action.after : action.before });
       case 'set-transposed':

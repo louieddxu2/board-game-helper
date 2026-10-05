@@ -383,18 +383,23 @@ describe('workspace spreadsheet format', () => {
     const link = createColumn('規則', 'link');
     link.overflowMode = 'expand';
     table.columns.push(link);
-    table.rows[0].values[link.id] = { url: 'https://example.com/rules', label: '規則頁' };
+    table.rows[0].values[link.id] = { url: 'example.com/rules', label: '規則頁' };
+    const labelOnlyRow = createRow(table.columns, '第二筆');
+    labelOnlyRow.values[link.id] = { url: '', label: '僅名稱' };
+    table.rows.push(labelOnlyRow);
 
     const exported = exportWorkspaceXlsx(source, table);
     const workbook = await readStoredWorkbook(exported);
     const imported = await importWorkspaceXlsx(exported);
 
     expect(workbook.sheetRows(0)[1]).toContain('遊戲頁面\nhttps://example.com/game');
-    expect(workbook.sheetRows(0)[1]).toContain('規則頁\nhttps://example.com/rules');
+    expect(workbook.sheetRows(0)[1]).toContain('規則頁\nexample.com/rules');
+    expect(workbook.sheetRows(0)[2]).toContain('僅名稱\n');
     expect(imported.table?.rowHeader).toMatchObject({ name: '來源', inputType: 'link', overflowMode: 'ellipsis' });
     expect(imported.table?.rows[0].name).toEqual({ url: 'https://example.com/game', label: '遊戲頁面' });
     expect(imported.table?.columns.at(-1)).toMatchObject({ name: '規則', inputType: 'link', overflowMode: 'expand' });
-    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'https://example.com/rules', label: '規則頁' });
+    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'example.com/rules', label: '規則頁' });
+    expect(imported.table?.rows[1].values[imported.table.columns.at(-1)!.id]).toEqual({ url: '', label: '僅名稱' });
   });
 
   it('round-trips date-time values as normalized ISO strings', async () => {

@@ -784,8 +784,9 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
     <button type="button" className="workspace-option-add" onClick={addOption}><WorkspaceIcon name="plus" size={18} />新增選項</button>
   </div>;
 };
-export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): void; onDelete?(): void }) => {
+export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): string | void; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
+  const [error, setError] = useState('');
   const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
   const [lineLimitEnabled, setLineLimitEnabled] = useState(() => column.lineLimit !== undefined);
   const save = () => {
@@ -793,10 +794,12 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
     const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
     const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
     const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
-    onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
+    const failure = onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
+    setError(failure ?? '');
   };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
+    setError('');
     setActivePanel('input');
     setDraft((current) => {
       const currentCategory = inputCategoryFor(current.inputType);
@@ -804,13 +807,16 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
       return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
     });
   };
-  const chooseInputSubtype = (inputType: WorkspaceInputType) => setDraft((current) => ({
-    ...current,
-    inputType,
-    numberInputMode: inputType === 'number' && current.numberInputMode === undefined ? 'input' : current.numberInputMode,
-    options: inputType === 'select' && current.options.length === 0 && suggestedOptions.length <= 10 ? suggestedOptions : current.options,
-    overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode,
-  }));
+  const chooseInputSubtype = (inputType: WorkspaceInputType) => {
+    setError('');
+    setDraft(current => ({
+      ...current,
+      inputType,
+      numberInputMode: inputType === 'number' && current.numberInputMode === undefined ? 'input' : current.numberInputMode,
+      options: inputType === 'select' && current.options.length === 0 && suggestedOptions.length <= 10 ? suggestedOptions : current.options,
+      overflowMode: inputType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode,
+    }));
+  };
   const currentOverflowMode = draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap');
   return <WorkspaceModal owner="column-config" title="屬性設定" dialogKind="editor" initialFocus="dialog" onRequestClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
     <div className="workspace-column-config">
@@ -821,6 +827,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
         <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} aria-pressed={activePanel === 'overflow'} onClick={() => setActivePanel('overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>
       </div>
       <div className="workspace-column-config-panel">
+        {error && <p className="form-error" role="alert">{error}</p>}
         {activePanel === 'input' ? <>
           <div className="workspace-input-subtype-options">
             <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} aria-pressed={draft.inputType === value} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>

@@ -30,7 +30,7 @@ describe('workspace data dialogs', () => {
     expect(onImport.mock.calls[0][0].rows[0].values[table.columns[0].id]).toBe(12);
   });
 
-  it('invalidates dynamic statistics after preview type conversion changes values', async () => {
+  it('keeps original values and dynamic statistics when preview type changes are toggled back', async () => {
     const table = createTable('匯入表');
     table.columns[0] = { ...table.columns[0], name: '數量', inputType: 'dynamic-select' };
     const columnId = table.columns[0].id;
@@ -42,13 +42,13 @@ describe('workspace data dialogs', () => {
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '數量型態' }), 'dynamic-select');
     await userEvent.click(screen.getByRole('button', { name: '匯入表格' }));
     const imported = onImport.mock.calls[0][0];
-    expect(imported.columns[0].dynamicOptions).toBeUndefined();
-    expect(imported.rows[0].values[columnId]).toBe('12');
+    expect(imported.columns[0].dynamicOptions).toEqual(saved.columns[0].dynamicOptions);
+    expect(imported.rows[0].values[columnId]).toBe('0012');
     const next = { ...emptyWorkspace(), tables: [imported] };
     const cache = new WorkspaceDynamicOptionsCache();
     cache.primeImportedTables(next, [imported.id]);
     const committed = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, next));
-    expect(cache.getOptions(committed.tables[0], columnId)).toEqual(['12']);
-    expect(saved.columns[0].dynamicOptions?.counts[0].key).toBe('0012');
+    expect(cache.getOptions(committed.tables[0], columnId)).toEqual(['0012']);
+    expect(committed.tables[0].columns[0].dynamicOptions?.counts[0].key).toBe('0012');
   });
 });

@@ -147,6 +147,7 @@ export const createWorkspaceTableStorageSnapshot = (table: WorkspaceTable, store
 const affectedCellRowIds = (action: WorkspaceTableHistoryAction | undefined) => {
   if (action?.type === 'set-cell') return [action.rowId];
   if (action?.type === 'set-cells') return [...new Set(action.changes.map(change => change.rowId))];
+  if ((action?.type === 'update-column' || action?.type === 'update-row-header') && action.changes) return action.changes.map(change => change.rowId);
   if (action?.type === 'paste-range' && !action.addedRows.length && !action.addedColumns.length) return [...new Set(action.changes.map(change => change.rowId))];
   return undefined;
 };

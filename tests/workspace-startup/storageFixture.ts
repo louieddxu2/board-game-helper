@@ -4,11 +4,12 @@ import * as history from '../../src/workspace/history';
 import * as spreadsheet from '../../src/workspace/spreadsheet';
 import { assignWorkspaceChangeRevisions } from '../../src/workspace/changeRevisions';
 import { WorkspaceDynamicOptionsCache } from '../../src/workspace/dynamicOptionsCache';
+import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion';
 import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
 const fixture = {
-  db, model, history, spreadsheet, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache,
+  db, model, history, spreadsheet, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
   dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),

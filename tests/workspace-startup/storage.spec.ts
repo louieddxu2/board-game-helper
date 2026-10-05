@@ -23,6 +23,65 @@ let errors: string[];
 test.beforeEach(async ({ page }) => { errors = []; page.on('pageerror', error => errors.push(error.message)); });
 test.afterEach(() => expect(errors).toEqual([]));
 
+test('saved column conversions persist rows, counts and original values for undo across reloads', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  const converted = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(600);
+    const source = api.data.tables[0];
+    const column = { ...source.columns[0], inputType: 'link' as const };
+    const table = { ...source, columns: [column, ...source.columns.slice(1)], rows: source.rows.map((row, index) => ({
+      ...row, values: { ...row.values, [column.id]: { url: `http://example.com/game/${index}`, label: index < 400 ? 'Common' : 'Rare' } },
+    })) };
+    api.data = api.assignWorkspaceChangeRevisions(api.data, { ...api.data, tables: [table] });
+    await api.db.saveWorkspace(api.data);
+    const previous = api.data;
+    const prepared = api.prepareWorkspaceColumnSave(previous.tables[0], { ...column, inputType: 'dynamic-select' });
+    const mutation = { tableId: table.id, label: '設定屬性', action: {
+      type: 'update-column' as const, before: column, after: prepared.table.columns[0], changes: prepared.changes,
+    } };
+    api.data = api.dynamicOptionsCache.prepare(previous, api.assignWorkspaceChangeRevisions(previous, { ...previous, tables: [prepared.table] }), mutation);
+    const history = api.history.pushWorkspaceTableHistory(api.history.createEmptyWorkspaceTableHistory(table.id), mutation);
+    api.instrument();
+    await api.db.saveWorkspace(api.data, { mutation, history: { replace: [history] } });
+    return { disk: await api.readDisk(), writes: api.writes, columnId: column.id };
+  });
+  expect(converted.disk.cells[0].map(cell => cell.value)).toEqual(['Common', 'Common', 'Rare']);
+  expect(converted.disk.states[0].columnState[converted.columnId].dynamicOptions.counts.map((item: { count: number }) => item.count)).toEqual([400, 200]);
+  expect(converted.writes.filter(write => write.store === 'rowChunks')).toHaveLength(3);
+  expect(converted.writes.filter(write => write.store === 'historyEntries')).toHaveLength(1);
+  expect(new Set(converted.writes.map(write => write.transaction)).size).toBe(1);
+
+  await page.reload();
+  const reopened = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    api.data = (await api.db.loadWorkspaceInitial()).data;
+    const table = api.data.tables[0];
+    const histories = await api.db.loadWorkspaceHistories();
+    const action = histories.get(table.id)!.past.at(-1)!.action;
+    if (action.type !== 'update-column') throw new Error('Missing column conversion history');
+    const loaded = { values: table.rows.map(row => row.values[table.columns[0].id]), options: api.dynamicOptionsCache.getOptions(table, table.columns[0].id) };
+    const previous = api.data;
+    const undo = api.history.applyWorkspaceTableHistoryAction(previous, table.id, action, 'undo');
+    api.data = api.dynamicOptionsCache.prepare(previous, api.assignWorkspaceChangeRevisions(previous, undo), { tableId: table.id, action }, 'undo');
+    await api.db.saveWorkspace(api.data, { mutation: { tableId: table.id, action } });
+    return { loaded, undoneDisk: await api.readDisk() };
+  });
+  expect(reopened.loaded.values.filter(value => value === 'Common')).toHaveLength(400);
+  expect(reopened.loaded.values.filter(value => value === 'Rare')).toHaveLength(200);
+  expect(reopened.loaded.options).toEqual(['Common', 'Rare']);
+  expect(reopened.undoneDisk.cells[0].map(cell => cell.value)).toEqual([
+    { url: 'http://example.com/game/0', label: 'Common' },
+    { url: 'http://example.com/game/256', label: 'Common' },
+    { url: 'http://example.com/game/599', label: 'Rare' },
+  ]);
+  await page.reload();
+  expect(await page.evaluate(async () => {
+    const table = (await window.workspaceStorageFixture.db.loadWorkspaceInitial()).data.tables[0];
+    return { inputType: table.columns[0].inputType, value: table.rows[0].values[table.columns[0].id] };
+  })).toEqual({ inputType: 'link', value: { url: 'http://example.com/game/0', label: 'Common' } });
+});
+
 test('dynamic attributes persist activation and incremental counts across browser reloads', async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async () => {

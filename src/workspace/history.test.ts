@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyWorkspaceTableHistoryAction, createEmptyWorkspaceTableHistory, hydrateWorkspaceHistories, inferWorkspaceTableMutation, pruneWorkspaceTableHistory, pushWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs } from './history';
-import { emptyWorkspace } from './model';
+import { emptyWorkspace, normalizeWorkspace } from './model';
+import { prepareWorkspaceColumnSave } from './columnConversion';
 import type { WorkspaceData, WorkspaceTable } from './types';
 
 const table = (): WorkspaceTable => ({
@@ -132,6 +133,77 @@ describe('workspace table history', () => {
     expect(redone.tables[0].rows.map((row) => row.values['column-1'])).toEqual(['同一值', '同一值']);
     const undone = applyWorkspaceTableHistoryAction(redone, 'table-1', action, 'undo');
     expect(undone.tables[0].rows.map((row) => row.values['column-1'])).toEqual([null, '舊值']);
+  });
+
+  it('restores link objects when a persisted column conversion is undone and reapplied', () => {
+    const linkColumn = { ...table().columns[0], inputType: 'link' as const, name: '網站' };
+    const beforeTable: WorkspaceTable = {
+      ...table(),
+      columns: [linkColumn],
+      rows: [
+        { id: 'row-1', name: '第一筆', values: { [linkColumn.id]: { url: 'https://example.com/game', label: '遊戲官網' } } },
+        { id: 'row-2', name: '第二筆', values: { [linkColumn.id]: { url: 'https://example.com/rules', label: '' } } },
+      ],
+    };
+    const before = data(beforeTable);
+    const prepared = prepareWorkspaceColumnSave(beforeTable, { ...linkColumn, inputType: 'text' });
+    const after = normalizeWorkspace(data(prepared.table));
+    const action = {
+      type: 'update-column' as const,
+      before: linkColumn,
+      after: prepared.table.columns[0],
+      changes: prepared.changes,
+    };
+    const stored = pushWorkspaceTableHistory(createEmptyWorkspaceTableHistory(beforeTable.id), { tableId: beforeTable.id, label: '設定屬性', action });
+    const persistedAction = JSON.parse(JSON.stringify(stored.past[0].action)) as typeof action;
+
+    const undone = applyWorkspaceTableHistoryAction(after, beforeTable.id, persistedAction, 'undo');
+    expect(undone.tables[0].columns[0].inputType).toBe('link');
+    expect(undone.tables[0].rows.map((row) => row.values[linkColumn.id])).toEqual([
+      { url: 'https://example.com/game', label: '遊戲官網' },
+      { url: 'https://example.com/rules', label: '' },
+    ]);
+
+    const redone = applyWorkspaceTableHistoryAction(undone, beforeTable.id, persistedAction, 'redo');
+    expect(redone.tables[0].columns[0].inputType).toBe('text');
+    expect(redone.tables[0].rows.map((row) => row.values[linkColumn.id])).toEqual(['遊戲官網', 'https://example.com/rules']);
+    expect(before.tables[0].rows.map((row) => row.values[linkColumn.id])).toEqual([
+      { url: 'https://example.com/game', label: '遊戲官網' },
+      { url: 'https://example.com/rules', label: '' },
+    ]);
+  });
+
+  it('undoes and redoes a persisted row-header conversion with its original link values', () => {
+    const rowHeader = { ...table().rowHeader!, inputType: 'link' as const, name: '來源' };
+    const beforeTable: WorkspaceTable = {
+      ...table(),
+      rowHeaderName: '來源',
+      rowHeader,
+      rows: [
+        { id: 'row-1', name: { url: 'https://example.com/a', label: '甲網站' }, values: { 'column-1': null } },
+        { id: 'row-2', name: { url: 'https://example.com/b', label: '' }, values: { 'column-1': null } },
+      ],
+    };
+    const prepared = prepareWorkspaceColumnSave(beforeTable, { ...rowHeader, inputType: 'text' });
+    const action = {
+      type: 'update-row-header' as const,
+      before: rowHeader,
+      after: prepared.table.rowHeader,
+      beforeName: beforeTable.rowHeaderName,
+      afterName: prepared.table.rowHeaderName,
+      changes: prepared.changes,
+    };
+    const stored = pushWorkspaceTableHistory(createEmptyWorkspaceTableHistory(beforeTable.id), { tableId: beforeTable.id, label: '設定物件屬性', action });
+    const persistedAction = JSON.parse(JSON.stringify(stored.past[0].action)) as typeof action;
+    const after = normalizeWorkspace(data(prepared.table));
+
+    const undone = applyWorkspaceTableHistoryAction(after, beforeTable.id, persistedAction, 'undo');
+    expect(undone.tables[0].rows.map((row) => row.name)).toEqual([
+      { url: 'https://example.com/a', label: '甲網站' },
+      { url: 'https://example.com/b', label: '' },
+    ]);
+    const redone = applyWorkspaceTableHistoryAction(undone, beforeTable.id, persistedAction, 'redo');
+    expect(redone.tables[0].rows.map((row) => row.name)).toEqual(['甲網站', 'https://example.com/b']);
   });
 
   it('undoes and redoes a pasted range including appended rows and columns', () => {

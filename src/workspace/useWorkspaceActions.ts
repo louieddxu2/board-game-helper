@@ -3,6 +3,7 @@ import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode,
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
+import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import type { NameDialogState } from './workspaceShared';
 import { download, fileBaseName, updateTable } from './workspaceShared';
 
@@ -193,9 +194,19 @@ export function useWorkspaceActions({
   
   const saveColumn = (column: WorkspaceColumn) => {
     if (!data || !table || !configuring) return;
-    commit(updateTable(data, table.id, (current) => configuring.isRowHeader
-      ? { ...current, updatedAt: Date.now(), rowHeaderName: column.name, rowHeader: column }
-      : { ...current, updatedAt: Date.now(), columns: current.columns.map((item) => item.id === column.id ? column : item) }));
+    let prepared: ReturnType<typeof prepareWorkspaceColumnSave>;
+    try { prepared = prepareWorkspaceColumnSave(table, column); }
+    catch (error) {
+      if (!(error instanceof WorkspaceColumnConversionError)) throw error;
+      return error.message;
+    }
+    const changes = prepared.changes.length ? prepared.changes : undefined;
+    const action: WorkspaceTableMutation['action'] = configuring.isRowHeader
+      ? { type: 'update-row-header', before: table.rowHeader, after: prepared.table.rowHeader, beforeName: table.rowHeaderName, afterName: prepared.table.rowHeaderName, changes }
+      : { type: 'update-column', before: table.columns.find(item => item.id === column.id)!, after: prepared.table.columns.find(item => item.id === column.id)!, changes };
+    commit(updateTable(data, table.id, () => ({ ...prepared.table, updatedAt: Date.now() })), changes ? {
+      tableId: table.id, label: configuring.isRowHeader ? '設定物件屬性' : '設定屬性', action,
+    } : undefined);
     setConfiguring(undefined);
   };
 

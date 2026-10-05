@@ -115,6 +115,53 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('textbox', { name: '屬性名稱' })).toHaveValue('數量');
   });
 
+  it('does not save a type conversion when the column settings draft is cancelled by browser back', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('columnheader', { name: '數量' }));
+    await user.click(screen.getByRole('button', { name: '選單' }));
+    await user.click(screen.getByRole('button', { name: '動態列表' }));
+    expect(saveWorkspace).not.toHaveBeenCalled();
+    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
+
+    fireEvent(window, new PopStateEvent('popstate'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(saveWorkspace).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('columnheader', { name: '數量' }));
+    expect(screen.getByRole('button', { name: '數字' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
+  });
+
+  it('keeps an invalid conversion open without saving, then retries after choosing a valid type', async () => {
+    const user = userEvent.setup();
+    render(<WorkspacePage />);
+    await user.click(await screen.findByRole('cell', { name: '花火，名稱：空白' }));
+    await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), '不是數字');
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await waitFor(() => expect(saveWorkspace).toHaveBeenCalledTimes(1));
+    vi.mocked(saveWorkspace).mockClear();
+
+    await user.click(screen.getByRole('columnheader', { name: '名稱' }));
+    await user.click(screen.getByRole('button', { name: '數字' }));
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+
+    expect(screen.getByRole('dialog', { name: '屬性設定' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('無法轉換成數字');
+    expect(saveWorkspace).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '選單' }));
+    await user.click(screen.getByRole('button', { name: '動態列表' }));
+    await user.click(screen.getByRole('button', { name: '關閉' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(saveWorkspace).toHaveBeenCalledTimes(1);
+    const saved = vi.mocked(saveWorkspace).mock.calls[0][0].tables[0];
+    expect(saved.columns.find(column => column.id === 'column-text')?.inputType).toBe('dynamic-select');
+    expect(saved).toMatchObject({
+      rows: [expect.objectContaining({ values: expect.objectContaining({ 'column-text': '不是數字' }) })],
+    });
+  });
+
   const longPress = async (target: Element) => {
     const dispatchPointer = (type: string) => {
       const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 20 });

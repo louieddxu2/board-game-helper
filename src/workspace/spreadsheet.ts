@@ -413,7 +413,7 @@ const parseCellValue = (raw: SheetCell | undefined, column: WorkspaceColumn): Wo
   if (column.inputType === 'link') {
     const parts = text.split(/\r?\n/);
     const possibleUrl = parts.at(-1)?.trim() ?? '';
-    if (parts.length > 1 && /^https?:\/\//i.test(possibleUrl)) return { url: possibleUrl, label: parts.slice(0, -1).join('\n').trim() };
+    if (parts.length > 1 && (!possibleUrl || /^https?:\/\//i.test(possibleUrl) || isWorkspaceUrlText(possibleUrl))) return { url: possibleUrl, label: parts.slice(0, -1).join('\n').trim() };
     return { url: text, label: '' };
   }
   if (column.inputType === 'datetime') return normalizeWorkspaceDateTime(raw instanceof Date ? raw.toISOString() : text);

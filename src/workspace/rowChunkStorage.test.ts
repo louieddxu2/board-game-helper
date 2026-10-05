@@ -9,6 +9,7 @@ import {
   WorkspaceStorageIntegrityError,
 } from './rowChunkStorage';
 import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from './model';
+import { prepareWorkspaceColumnSave } from './columnConversion';
 import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
 import { assignWorkspaceChangeRevisions } from './changeRevisions';
 import type { WorkspaceTable } from './types';
@@ -125,6 +126,28 @@ describe('workspace row chunk storage contracts', () => {
     expect(plan.deletes).toEqual([]);
     expect(next.chunks.get(saved.record.chunkIds[0])).toBe(saved.chunks.get(saved.record.chunkIds[0]));
     expect(next.chunks.get(saved.record.chunkIds[2])).toBe(saved.chunks.get(saved.record.chunkIds[2]));
+  });
+
+  it('writes converted cell values into every affected row chunk on a saved column conversion', () => {
+    const source = makeTable(513);
+    const linkColumn = { ...source.columns[0], inputType: 'link' as const };
+    const linkTable: WorkspaceTable = {
+      ...source,
+      columns: [linkColumn],
+      rows: source.rows.map((row, index) => ({
+        ...row,
+        values: { [linkColumn.id]: { url: `https://example.com/${index}`, label: index % 2 ? '' : `項目 ${index}` } },
+      })),
+    };
+    const saved = createWorkspaceTableStorageSnapshot(linkTable);
+    const prepared = prepareWorkspaceColumnSave(linkTable, { ...linkColumn, inputType: 'text' });
+    const action = { type: 'update-column' as const, before: linkColumn, after: prepared.table.columns[0], changes: prepared.changes };
+    const next = updateWorkspaceTableStorageSnapshot(saved, prepared.table, action);
+    const plan = planWorkspaceTableStorageWrite(next, saved);
+
+    expect(plan.upserts.map((chunk) => chunk.chunkId)).toEqual(saved.record.chunkIds);
+    expect(plan.upserts.flatMap((chunk) => chunk.rows).every((row) => typeof row.values[linkColumn.id] === 'string')).toBe(true);
+    expect(plan.upserts.flatMap((chunk) => chunk.rows).slice(0, 3).map((row) => row.values[linkColumn.id])).toEqual(['項目 0', 'https://example.com/1', '項目 2']);
   });
 
   it('changes only the manifest on row reorder and writes no chunks', () => {
