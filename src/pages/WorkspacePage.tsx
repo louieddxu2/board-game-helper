@@ -358,7 +358,8 @@ const WorkspacePage = () => {
       cancelHistoryLoad = afterWorkspacePaint(() => {
         if (initial.progressive) {
           // A legacy table gets its read projection once, after it is already visible.
-          const active = getTableForNode(loaded, loaded.activeNodeId);
+          const visible = dataRef.current;
+          const active = visible && getTableForNode(visible, visible.activeNodeId);
           if (active) void loadWorkspace({ expectCurrentRevision: true, tableIds: [active.id] }).then(remaining => {
             if (cancelled) return;
             const current = dataRef.current;
@@ -411,7 +412,7 @@ const WorkspacePage = () => {
             finish(new Map());
           }
         });
-      });
+      }, Boolean(initial.progressive));
     };
     void reload().catch(() => { if (!cancelled) setLoadError(true); });
     return () => {
@@ -531,14 +532,14 @@ const WorkspacePage = () => {
     if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
     setNotice('資料讀取失敗，請重新開啟此頁面');
   }, []);
-  const hydrateWorkspace = useCallback((tableIds?: readonly string[], withHistory = false): Promise<void> => {
+  const hydrateWorkspace = useCallback((tableIds?: readonly string[], withHistory = false, isCurrent?: () => boolean): Promise<void> => {
     const work = readQueueRef.current.catch(() => undefined).then(async () => {
       const current = dataRef.current;
-      if (!current || !mountedRef.current) return;
+      if (!current || !mountedRef.current || (isCurrent && !isCurrent())) return;
       const needed = !tableIds || tableIds.some(id => !current.tables.some(table => table.id === id));
       if (needed) {
         const loaded = await loadWorkspace({ expectCurrentRevision: true, tableIds });
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || (isCurrent && !isCurrent())) return;
         const latest = dataRef.current!;
         const merged = mergeLoadedWorkspaceTables(latest, loaded);
         const anchor = captureWindowAnchorRef.current?.();
@@ -571,6 +572,19 @@ const WorkspacePage = () => {
     readQueueRef.current = work;
     return work;
   }, []);
+  useEffect(() => {
+    const tableId = activeWindow?.head.definition.id;
+    const nodeId = data?.activeNodeId;
+    if (!tableId || !nodeId || storageConflict) return;
+    let cancelled = false;
+    const isCurrent = () => !cancelled && dataRef.current?.activeNodeId === nodeId && !pendingOpenNodeIdRef.current;
+    const cancel = afterWorkspacePaint(() => {
+      if (isCurrent()) void hydrateWorkspace([tableId], false, isCurrent).catch(error => {
+        if (isCurrent()) reportReadError(error);
+      });
+    }, true);
+    return () => { cancelled = true; cancel(); };
+  }, [activeWindow?.head.definition.id, data?.activeNodeId, hydrateWorkspace, reportReadError, storageConflict]);
   const readiness = useMemo<WorkspaceReadiness>(() => ({
     isReady: (scope) => scope === 'all' ? allTablesReadyRef.current : Boolean(dataRef.current && getTableForNode(dataRef.current, dataRef.current.activeNodeId)) && (scope !== 'history' || historyReadyRef.current || !progressiveRef.current),
     ensure: (scope) => {

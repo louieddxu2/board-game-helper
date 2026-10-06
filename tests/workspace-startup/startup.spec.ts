@@ -87,6 +87,35 @@ const readTableCell = (page: Page, tableId: string, rowId: string, columnId: str
 }, { tableId, rowId, columnId });
 
 const visibleVirtualRowIds = (page: Page) => page.locator('.workspace-table tbody tr[data-virtual-row-id]').evaluateAll((items) => items.map((item) => item.getAttribute('data-virtual-row-id')));
+// Simulate a busy browser so foreground fallback/paging tests cannot rely on background completion.
+const holdIdleWork = (page: Page) => page.addInitScript(() => {
+  const callbacks = new Map<number, IdleRequestCallback>();
+  let next = 0;
+  window.requestIdleCallback = callback => { callbacks.set(++next, callback); return next; };
+  window.cancelIdleCallback = id => { callbacks.delete(id); };
+  (window as any).releaseWorkspaceIdleWork = () => {
+    const pending = [...callbacks.values()]; callbacks.clear();
+    for (const callback of pending) callback({ didTimeout: false, timeRemaining: () => 20 });
+  };
+});
+const trackWorkspaceReads = (page: Page) => page.addInitScript(() => {
+  const painted = new Set<string>();
+  const frame = () => {
+    const title = document.querySelector('[aria-label="重新命名表格"]')?.textContent;
+    if (title && document.querySelector('tr[data-virtual-row-id]')) painted.add(title);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  (window as any).workspaceReads = [];
+  for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
+    const original = IDBObjectStore.prototype[method];
+    IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
+      const key = args[0] instanceof IDBKeyRange ? (args[0].lower as unknown[])[0] : args[0];
+      (window as any).workspaceReads.push({ store: this.name, method, key, painted: [...painted] });
+      return Reflect.apply(original, this, args);
+    } as typeof original;
+  }
+});
 const waitForProjection = (page: Page, count: number) => expect.poll(() => page.evaluate(async () => {
   const request = indexedDB.open('board-game-helper-workspace');
   const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
@@ -109,16 +138,8 @@ test('a migrated 10k-row table opens without full reads, fills the latest scroll
   await page.goto(`${site.origin}/workspace`);
   await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
   await waitForProjection(page, 10000);
-  await page.addInitScript(() => {
-    (window as any).workspaceReads = [];
-    for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
-      const original = IDBObjectStore.prototype[method];
-      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
-        (window as any).workspaceReads.push({ store: this.name, method });
-        return Reflect.apply(original, this, args);
-      } as typeof original;
-    }
-  });
+  await holdIdleWork(page);
+  await trackWorkspaceReads(page);
   await page.reload();
   const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
   await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
@@ -155,6 +176,109 @@ test('a migrated 10k-row table opens without full reads, fills the latest scroll
   expect(errors).toEqual([]);
 });
 
+test('the visible table hydrates automatically after paint without reading other tables or history', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 3, 10000, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 10000);
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
+  await downloaded;
+  await trackWorkspaceReads(page);
+  await page.reload();
+  await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(1);
+  const reads = await page.evaluate(() => (window as any).workspaceReads as { store: string; method: string; key: string; painted: string[] }[]);
+  expect(reads.filter(read => ['tables', 'tableState', 'rowChunks'].includes(read.store) && read.method !== 'getAllKeys').every(read => read.key === 'table-0' && read.painted.includes('測試表 0'))).toBe(true);
+  expect(reads.some(read => ['history', 'historyEntries'].includes(read.store))).toBe(false);
+  await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
+  await page.getByRole('textbox').first().press('Escape');
+  await page.getByRole('button', { name: '搜尋', exact: true }).click();
+  await expect(page.getByRole('searchbox', { name: '搜尋此表' })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(1);
+  await page.getByRole('button', { name: '搜尋', exact: true }).click();
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name').click();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(2);
+  const later = await page.evaluate(() => (window as any).workspaceReads as { store: string; method: string; key: string; painted: string[] }[]);
+  const next = later.filter(read => ['tables', 'tableState', 'rowChunks'].includes(read.store) && read.method !== 'getAllKeys' && read.key === 'table-1');
+  expect(next.length).toBeGreaterThan(0);
+  expect(next.every(read => read.painted.includes('測試表 1'))).toBe(true);
+  expect(later.some(read => ['tables', 'tableState', 'rowChunks'].includes(read.store) && read.key === 'table-2')).toBe(false);
+  expect(later.some(read => ['history', 'historyEntries'].includes(read.store))).toBe(false);
+});
+
+test('background completion keeps the visible variable-height row after a rapid deep scroll', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 2, 10000, 2, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace');
+    const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+    const transaction = connection.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const get = store.get('table-0');
+    const table = await new Promise<any>(resolve => { get.onsuccess = () => resolve(get.result); });
+    table.columns[0] = { ...table.columns[0], overflowMode: 'wrap', widthLimitChars: 8, lineLimit: 4 };
+    for (let index = 0; index < table.rows.length; index += 7) table.rows[index].values['column-0'] = '多行內容 '.repeat(24);
+    store.put(table, 'table-0');
+    await new Promise<void>(resolve => { transaction.oncomplete = () => resolve(); }); connection.close();
+  });
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 10000);
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
+  await downloaded;
+  await holdIdleWork(page); await trackWorkspaceReads(page); await page.reload();
+  const viewport = page.locator('.workspace-table-viewport');
+  await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
+  await viewport.evaluate(element => { element.scrollTop = 1000 * 36; element.scrollTop = 9000 * 36; });
+  await expect.poll(async () => (await visibleVirtualRowIds(page)).some(id => Number(id!.slice(4)) >= 8990)).toBe(true);
+  const anchor = await viewport.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const contentTop = element.querySelector('thead')!.getBoundingClientRect().bottom;
+    return [...element.querySelectorAll<HTMLTableRowElement>('tr[data-virtual-row-id]')].find(row => row.getBoundingClientRect().top >= contentTop && row.getBoundingClientRect().bottom <= rect.bottom)!.dataset.virtualRowId!;
+  });
+  await page.evaluate(() => { (window as any).releaseWorkspaceIdleWork(); });
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').map((read: any) => read.key))).toEqual(['table-0']);
+  // Fixed controls wait for hydration without scrolling the target row into view.
+  await page.getByRole('button', { name: '設定', exact: true }).click();
+  await expect(page.locator('[aria-label="表格工具列"]')).toBeVisible();
+  await expect.poll(() => viewport.evaluate((element, id) => {
+    const row = element.querySelector<HTMLTableRowElement>(`tr[data-virtual-row-id="${id}"]`);
+    if (!row) return false;
+    const rect = row.getBoundingClientRect();
+    return rect.bottom > element.querySelector('thead')!.getBoundingClientRect().bottom && rect.top < element.getBoundingClientRect().bottom;
+  }, anchor)).toBe(true);
+  expect(await page.locator('tr[data-virtual-row-id]').count()).toBeLessThan(80);
+});
+
+test('navigation cancels a pending background read for the previous table', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 3, 600, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 600);
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
+  await downloaded;
+  await holdIdleWork(page); await trackWorkspaceReads(page);
+  await page.reload();
+  await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name').click();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  await page.evaluate(async () => {
+    await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    (window as any).releaseWorkspaceIdleWork();
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').map((read: any) => read.key))).toEqual(['table-1']);
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+});
+
 for (const mode of ['loaded', 'paged'] as const) test(`switching to a ${mode} table cancels the previous column draft`, async ({ page }) => {
   await page.goto(`${site.origin}/privacy`);
   await seed(page, 2, 600, 2, 0);
@@ -164,7 +288,7 @@ for (const mode of ['loaded', 'paged'] as const) test(`switching to a ${mode} ta
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
   await downloaded;
-  if (mode === 'paged') await page.reload();
+  if (mode === 'paged') { await holdIdleWork(page); await page.reload(); }
   await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
   await page.getByRole('textbox', { name: '屬性名稱' }).fill('尚未儲存的舊表設定');
   // Exercise navigation arriving while a draft dialog is already open.
@@ -184,6 +308,7 @@ test('failed saves survive loading another table and retry without losing unload
   await seed(page, 2, 600, 2, 0);
   await page.goto(`${site.origin}/workspace`);
   await waitForProjection(page, 600);
+  await holdIdleWork(page);
   await page.reload();
   await page.evaluate(() => {
     (window as any).workspaceFailWrites = true;
@@ -221,6 +346,7 @@ test('the first long press on a paged table resumes bulk selection and preserves
   await seed(page, 2, 600, 2, 0);
   await page.goto(`${site.origin}/workspace`);
   await waitForProjection(page, 600);
+  await holdIdleWork(page);
   await page.reload();
   const cell = page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]');
   await expect(cell).toBeVisible();
