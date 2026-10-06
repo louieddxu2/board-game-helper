@@ -3,6 +3,15 @@ import { createColumn, createRow, createTable, displayWorkspaceCellValue, displa
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
+  it('defers missing dynamic statistics until optional work requests them', () => {
+    const table = createTable('首屏');
+    table.columns[0].inputType = 'dynamic-select';
+    table.rows[0].values[table.columns[0].id] = 'Actual';
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }, { deferDynamicOptions: true });
+    expect(normalized.tables[0].columns[0].dynamicOptions).toBeUndefined();
+    expect(ensureTableDynamicOptions(normalized.tables[0]).columns[0].dynamicOptions?.counts).toMatchObject([{ key: 'actual', count: 1 }]);
+  });
+
   it.each(['missing', 'stale', 'invalid'] as const)('reconstructs %s persisted dynamic statistics from actual cells', (kind) => {
     const original = createTable('統計修復');
     original.columns[0] = { ...original.columns[0], inputType: 'dynamic-select' };

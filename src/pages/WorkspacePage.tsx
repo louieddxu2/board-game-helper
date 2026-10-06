@@ -29,6 +29,7 @@ import { hydrateWorkspaceHistories } from '../workspace/history';
 import { useWorkspaceRowWindow } from '../workspace/useWorkspaceRowWindow';
 import { useWorkspaceColumnWindow } from '../workspace/useWorkspaceColumnWindow';
 import { createWorkspaceTextWidthCache } from '../workspace/workspaceTextWidthCache';
+import { measureVisibleColumnWidths, preserveColumnScrollPosition } from '../workspace/visibleColumnWidths';
 
 declare const __APP_VERSION__: string;
 const workspaceAppVersion = typeof __APP_VERSION__ === 'undefined' ? '開發版' : __APP_VERSION__;
@@ -142,6 +143,7 @@ const WorkspacePage = () => {
   const pendingOpenNodeIdRef = useRef<string | undefined>(undefined);
   const lastUserScrollAtRef = useRef(0);
   const programmaticTableScrollRef = useRef(false);
+  const viewInteractionRef = useRef<string | undefined>(undefined);
 
   // Only allow full saves after the render using the complete table set has committed.
   useLayoutEffect(() => { allTablesReadyRef.current = allTablesReady; }, [allTablesReady]);
@@ -330,21 +332,24 @@ const WorkspacePage = () => {
       setExpanded(restored);
       cancelHistoryLoad = afterWorkspacePaint(() => {
         const finishTables = async () => {
-          if (initial.complete) {
-            // Full-load fallbacks can also have rebuilt column statistics to persist.
-            await loadWorkspace({ expectCurrentRevision: true });
-            return;
-          }
           const mergeLoaded = (remaining: WorkspaceData) => {
             if (cancelled) return;
             const current = dataRef.current;
             const currentTables = new Map(current?.tables.map((table) => [table.id, table]));
             const merged = current
-              ? { ...current, bottomNavigationTableIds: remaining.bottomNavigationTableIds, tables: remaining.tables.map((table) => currentTables.get(table.id) ?? table) }
+              ? { ...current, bottomNavigationTableIds: remaining.bottomNavigationTableIds, tables: remaining.tables.map((table) => {
+                const existing = currentTables.get(table.id);
+                return existing && existing.rows !== table.rows ? existing : table;
+              }) }
               : remaining;
             dataRef.current = merged;
             setData(merged);
           };
+          if (initial.complete) {
+            // Full-load fallbacks also defer statistics; share the rebuilt column objects.
+            mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
+            return;
+          }
           // Measured 10k-row reads exceed the requested 0.5 ms threshold. Preload pins first.
           const pins = (loaded.bottomNavigationTableIds ?? []).filter(id => !loaded.tables.some(table => table.id === id) && loaded.nodes.some(node => node.tableId === id));
           if (pins.length) mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, tableIds: pins }));
@@ -586,20 +591,12 @@ const WorkspacePage = () => {
   }, [data, expanded]);
 
   const textWidthCache = useMemo(() => createWorkspaceTextWidthCache(), []);
-  const columnTextWidths = useMemo(() => {
+  const [mountedTextWidths, setMountedTextWidths] = useState<{ tableId: string; widths: number[] }>();
+  const columnHeaderWidths = useMemo(() => table && rowHeader
+    ? measureVisibleColumnWidths([], rowHeader, displayedColumns, textWidthCache) : [], [table?.id, rowHeader, displayedColumns, textWidthCache]);
+  const transposedTextWidths = useMemo(() => {
     if (!table || !rowHeader) return [];
-    const widthFor = (column: WorkspaceColumn, headerValue = column.name, valueForRow?: (row: WorkspaceRow) => WorkspaceCellValue) => {
-      const shouldMeasureValues = column.overflowMode === 'expand' || Boolean(column.widthLimitChars);
-      let valueWidth = 0;
-      if (shouldMeasureValues && valueForRow) {
-        for (const row of table.rows) valueWidth = Math.max(valueWidth, textWidthCache.measure(row, column, valueForRow(row)));
-      }
-      const limitedValueWidth = column.overflowMode !== 'expand' && column.widthLimitChars
-        ? Math.min(valueWidth, column.widthLimitChars * 20)
-        : column.overflowMode === 'expand' ? valueWidth : 0;
-      return Math.max(measureWorkspaceText(headerValue, 20, 600), limitedValueWidth) + (column.inputType === 'link' && column.overflowMode === 'expand' ? 46 : 0);
-    };
-    if (!table.transposed) return [widthFor(rowHeader, rowHeader.name, (row) => row.name), ...displayedColumns.map((column) => widthFor(column, column.name, (row) => row.values[column.id] ?? null))];
+    if (!table.transposed) return [];
     const properties = [rowHeader, ...displayedColumns];
     const propertyWidth = properties.reduce((width, column) => Math.max(width, measureWorkspaceText(column.name, 20, 600)), 0);
     const rowWidths = filteredRows.map((row) => Math.max(
@@ -613,6 +610,8 @@ const WorkspacePage = () => {
     ));
     return [propertyWidth, ...rowWidths];
   }, [displayedColumns, filteredRows, rowHeader, table?.rows, table?.transposed, textWidthCache]);
+  const columnTextWidths = table?.transposed ? transposedTextWidths
+    : mountedTextWidths && mountedTextWidths.tableId === table?.id && mountedTextWidths.widths.length === columnHeaderWidths.length ? mountedTextWidths.widths : columnHeaderWidths;
 
   const [localMinTextScale, setLocalMinTextScale] = useState(0.35);
 
@@ -953,10 +952,31 @@ const WorkspacePage = () => {
     .map(([key, state]) => JSON.stringify([key, state.includedKeys, state.query, state.min, state.max, state.datePrecision, state.sort]))
     .join('\u0001')}`, [headerFilters, searchQuery]);
   const renderedRowScopeRef = useRef(table?.id);
-  useLayoutEffect(() => { renderedRowScopeRef.current = table?.id; }, [table?.id]);
+  useLayoutEffect(() => { renderedRowScopeRef.current = table?.id; viewInteractionRef.current = undefined; }, [table?.id]);
   const rowWindowAtBottom = Boolean(renderedRowScopeRef.current === table?.id && viewportRef.current && viewportRef.current.scrollTop >= viewportRef.current.scrollHeight - viewportRef.current.clientHeight - 2);
-  const rowWindow = useWorkspaceRowWindow(filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table && !table.transposed), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom);
+  const rowWindow = useWorkspaceRowWindow(filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table && !table.transposed), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true);
   const columnWindow = useWorkspaceColumnWindow(filteredRows, renderedColumnWidths, virtualScrollLeft, viewportWidth || window.innerWidth, Boolean(table?.transposed));
+  useLayoutEffect(() => {
+    if (!table || table.transposed || !rowHeader) return;
+    const widths = measureVisibleColumnWidths(rowWindow.visibleRows, rowHeader, displayedColumns, textWidthCache);
+    setMountedTextWidths(previous => previous?.tableId === table.id && previous.widths.length === widths.length && previous.widths.every((width, index) => width === widths[index]) ? previous : { tableId: table.id, widths });
+  }, [table?.id, table?.transposed, rowHeader, displayedColumns, rowWindow.visibleRows, textWidthCache]);
+  const horizontalLayoutRef = useRef<{ tableId?: string; widths: number[]; textWidths: number[]; left: number }>({ widths: [], textWidths: [], left: 0 });
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const previous = horizontalLayoutRef.current;
+    const changed = previous.textWidths.length === columnTextWidths.length && previous.textWidths.some((width, index) => width !== columnTextWidths[index]);
+    if (viewport && !table?.transposed && previous.tableId === table?.id && previous.widths.length && changed) {
+      const left = preserveColumnScrollPosition(previous.widths, renderedColumnWidths, previous.left);
+      if (Math.abs(viewport.scrollLeft - left) > 0.5) {
+        programmaticTableScrollRef.current = true;
+        viewport.scrollLeft = left;
+        setVirtualScrollLeft(viewport.scrollLeft);
+        requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
+      }
+    }
+    horizontalLayoutRef.current = { tableId: table?.id, widths: renderedColumnWidths, textWidths: columnTextWidths, left: viewport?.scrollLeft ?? 0 };
+  }, [columnTextWidths, renderedColumnWidths, table?.id, table?.transposed]);
   const appliedRowWindowOrderKeyRef = useRef({ scope: table?.id ?? '', key: rowWindowOrderKey });
   useLayoutEffect(() => {
     const scope = table?.id ?? '';
@@ -1190,6 +1210,7 @@ const WorkspacePage = () => {
   const scrollSaveTimerRef = useRef<number | undefined>(undefined);
   const virtualScrollFrameRef = useRef<number | undefined>(undefined);
   const handleTableViewportScroll = useCallback((source: HTMLDivElement) => {
+    horizontalLayoutRef.current.left = source.scrollLeft;
     syncFilterbarScroll(source);
     if (!programmaticTableScrollRef.current) lastUserScrollAtRef.current = performance.now();
     if (virtualScrollFrameRef.current === undefined) virtualScrollFrameRef.current = window.requestAnimationFrame(() => {
@@ -1213,7 +1234,7 @@ const WorkspacePage = () => {
     if (!table?.id || !viewStateReady) return;
     const frame = window.requestAnimationFrame(() => {
       const viewport = viewportRef.current;
-      if (!viewport) return;
+      if (!viewport || viewInteractionRef.current === table.id) return;
       viewport.scrollLeft = scrollPosition.left;
       viewport.scrollTop = scrollPosition.top;
       syncFilterbarScroll(viewport);
@@ -1280,7 +1301,7 @@ const WorkspacePage = () => {
   const workspaceTableView = useMemo(() => {
     if (!table || !tableNode) return null;
     return <>
-      <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={stableBeginTablePan} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (consumeSuppressedTableClick(event)) { event.preventDefault(); event.stopPropagation(); } }}>
+      <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={(event) => { viewInteractionRef.current = table.id; stableBeginTablePan(event); }} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (consumeSuppressedTableClick(event)) { event.preventDefault(); event.stopPropagation(); } }}>
         <table className={`workspace-table ${table.transposed ? 'is-transposed' : ''}`} style={{ '--workspace-text-scale': textScale, '--workspace-table-body-offset': topRowRevealCount ? `calc(var(--workspace-toolbar-row-height) * ${topRowRevealCount})` : '0px', width: `${renderedTableWidth}px` } as React.CSSProperties}>
           <colgroup>{table.transposed && columnWindow.virtual ? <>
             <col style={{ width: `${renderedColumnWidths[0]}px` }} />

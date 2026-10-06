@@ -146,9 +146,11 @@ for (const activeTable of [true, false]) test(`legacy dynamic attributes rebuild
     api.instrument();
     await api.db.loadWorkspace({ expectCurrentRevision: true });
     await api.db.flushWorkspaceSaves();
-    return { disk: await api.readDisk(), writes: api.writes, columnId: api.data.tables[0].columns[0].id, complete: initial.complete };
+    return { disk: await api.readDisk(), writes: api.writes, columnId: api.data.tables[0].columns[0].id, complete: initial.complete, initialStatistics: initial.data.tables[0].columns[0].dynamicOptions };
   });
   expect(repaired.complete).toBe(!activeTable);
+  // The first visible active table must not wait for a full-column statistics rebuild.
+  expect(repaired.initialStatistics).toBeUndefined();
   expect(repaired.disk.states[0].columnState[repaired.columnId].dynamicOptions.counts).toHaveLength(600);
   expect(repaired.writes.filter(write => write.store === 'rowChunks' || write.store === 'tables')).toEqual([]);
   expect(repaired.writes.filter(write => write.store === 'tableState')).toHaveLength(1);

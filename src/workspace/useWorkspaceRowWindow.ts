@@ -58,6 +58,7 @@ export const useWorkspaceRowWindow = (
   scope = measurementKey,
   orderKey = '',
   stickToBottom?: boolean,
+  dynamicWidths = false,
 ) => {
   const heightsRef = useRef(new Map<string, number>());
   const measurementKeyRef = useRef(measurementKey);
@@ -69,6 +70,7 @@ export const useWorkspaceRowWindow = (
   const measurementFrameRef = useRef<number | undefined>(undefined);
   const measurementGenerationRef = useRef(0);
   const [revision, setRevision] = useState(0);
+  const rangeRef = useRef<{ rows: readonly WorkspaceRow[]; scope: string; orderKey: string; first: number; last: number } | undefined>(undefined);
 
   if (measurementKeyRef.current !== measurementKey) {
     const previous = snapshotRef.current;
@@ -76,7 +78,9 @@ export const useWorkspaceRowWindow = (
       pendingAnchorRef.current ??= captureAnchor(previous);
     }
     measurementKeyRef.current = measurementKey;
-    heightsRef.current = new Map();
+    // With viewport-based widths, old heights remain estimates until the mounted rows
+    // are measured again. Clearing every offscreen estimate makes deep scrolling jump.
+    if (!dynamicWidths) heightsRef.current = new Map();
     pendingMeasurementsRef.current.clear();
     measurementGenerationRef.current += 1;
     if (measurementFrameRef.current !== undefined) {
@@ -86,6 +90,7 @@ export const useWorkspaceRowWindow = (
   }
 
   if (scopeRef.current !== scope || orderKeyRef.current !== orderKey) {
+    if (scopeRef.current !== scope) heightsRef.current = new Map();
     scopeRef.current = scope;
     orderKeyRef.current = orderKey;
     pendingAnchorRef.current = undefined;
@@ -107,7 +112,15 @@ export const useWorkspaceRowWindow = (
   }, [rows, revision, measurementKey]);
   const virtual = enabled && rows.length > 80;
   const first = virtual ? Math.max(0, rowAtOffset(offsets, Math.max(0, scrollTop)) - OVERSCAN) : 0;
-  const last = virtual ? Math.min(rows.length, rowAtOffset(offsets, scrollTop + Math.max(1, viewportHeight)) + OVERSCAN + 1) : rows.length;
+  let last = virtual ? Math.min(rows.length, rowAtOffset(offsets, scrollTop + Math.max(1, viewportHeight)) + OVERSCAN + 1) : rows.length;
+  const previousRange = rangeRef.current;
+  // A resize can reduce the number of rows that fit. Keep the already rendered
+  // buffer until the leading row changes, so its longest cell cannot oscillate
+  // in and out of the very window that determines the width.
+  if (dynamicWidths && virtual && previousRange?.rows === rows && previousRange.scope === scope && previousRange.orderKey === orderKey && previousRange.first === first) {
+    last = Math.min(rows.length, Math.max(last, previousRange.last));
+  }
+  rangeRef.current = { rows, scope, orderKey, first, last };
 
   if (pendingAnchorRef.current && previousSnapshot && previousSnapshot.scope === scope && previousSnapshot.orderKey === orderKey && previousSnapshot.scrollTop !== scrollTop) {
     pendingAnchorRef.current = captureAnchor({ rows, offsets, scrollTop, viewportHeight, scope, orderKey, stickToBottom });

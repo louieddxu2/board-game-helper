@@ -196,7 +196,7 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
   return value ?? null;
 };
 
-export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => {
+export const normalizeWorkspace = (data: WorkspaceData, options?: { deferDynamicOptions?: boolean }): WorkspaceData => {
   const tableIds = new Set(data.tables.map((table) => table.id));
   const bottomNavigationTableIds = [...new Set(Array.isArray(data.bottomNavigationTableIds) ? data.bottomNavigationTableIds : [])]
     .filter((tableId): tableId is string => typeof tableId === 'string' && tableIds.has(tableId))
@@ -230,7 +230,7 @@ export const normalizeWorkspace = (data: WorkspaceData): WorkspaceData => {
       };
     }),
   };
-  return ensureWorkspaceDynamicOptions(normalized);
+  return options?.deferDynamicOptions ? normalized : ensureWorkspaceDynamicOptions(normalized);
 };
 
 export const createNode = (type: WorkspaceNode['type'], name: string, parentId: string | null, order: number, tableId?: string): WorkspaceNode => ({

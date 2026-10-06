@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPTransaction } from 'idb';
-import { emptyWorkspace, normalizeWorkspace } from './model';
+import { emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from './model';
 import { pruneWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
 import { assembleChunkedWorkspaceTable, createWorkspaceTableStorageSnapshot, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
@@ -55,6 +55,8 @@ let savedTables = new Map<string, { snapshot: WorkspaceTableStorageSnapshot; leg
 let workingTables = new Map<string, WorkspaceTableStorageSnapshot>();
 let tableSnapshots = new WeakMap<WorkspaceTable, WorkspaceTableStorageSnapshot>();
 let savedHistories = new Map<string, WorkspaceTableHistory>();
+type PendingTableSnapshot = { table: WorkspaceTable; stored?: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[]; state?: StoredWorkspaceTableState } };
+let pendingTableSnapshots = new Map<string, PendingTableSnapshot>();
 
 export class WorkspaceStorageConflictError extends Error {
   constructor() { super('Workspace data was changed in another tab'); this.name = 'WorkspaceStorageConflictError'; }
@@ -87,12 +89,23 @@ const enqueueSave = (work: () => Promise<void>) => {
 const assertRevision = (state: WorkspaceStorageState | undefined) => {
   if ((state?.storageRevision ?? null) !== savedStorageRevision) throw new WorkspaceStorageConflictError();
 };
-const resetSnapshots = () => { savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); savedHistories = new Map(); };
+const resetSnapshots = () => { savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); savedHistories = new Map(); pendingTableSnapshots = new Map(); };
+const materializeTableSnapshot = (id: string) => {
+  const pending = pendingTableSnapshots.get(id);
+  if (pending) {
+    const snapshot = createWorkspaceTableStorageSnapshot(pending.table, pending.stored);
+    savedTables.set(id, { snapshot, legacy: !pending.stored, columnStatePending: Boolean(pending.stored && !hasCurrentWorkspaceColumnState(pending.table, pending.stored.state)) });
+    workingTables.set(id, snapshot); tableSnapshots.set(pending.table, snapshot);
+    pendingTableSnapshots.delete(id);
+  }
+  return workingTables.get(id);
+};
 
-export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean; tableIds?: readonly string[] }): Promise<WorkspaceData> => {
+export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean; tableIds?: readonly string[]; deferStartupWork?: boolean }): Promise<WorkspaceData> => {
   if (!database) return emptyWorkspace();
   const pending = saveQueue;
   await pending.catch(() => undefined);
+  if (options?.expectCurrentRevision) for (const id of pendingTableSnapshots.keys()) materializeTableSnapshot(id);
   const db = await database;
   const transaction = db.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'state'], 'readonly');
   const [metaValue, stateValue, keys] = await Promise.all([transaction.objectStore('meta').get(META_KEY), transaction.objectStore('meta').get(STORAGE_KEY), transaction.objectStore('tables').getAllKeys()]);
@@ -104,7 +117,7 @@ export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean;
     if (saveQueue !== pending) return loadWorkspace(options);
     if (options?.expectCurrentRevision) assertRevision(state);
     resetSnapshots(); savedMetadata = undefined; savedStorageRevision = state?.storageRevision ?? null;
-    const loaded = normalizeWorkspace(legacy ?? emptyWorkspace());
+    const loaded = normalizeWorkspace(legacy ?? emptyWorkspace(), { deferDynamicOptions: options?.deferStartupWork });
     await saveWorkspace(loaded);
     await db.delete('state', META_KEY);
     return loaded;
@@ -125,17 +138,29 @@ export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean;
   if (options?.expectCurrentRevision) assertRevision(state);
   if (!options?.expectCurrentRevision) resetSnapshots();
   // Only new tables are normalized. Active table objects/baselines survive background hydration.
-  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: loadedRecords.map(item => item.table) });
+  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: loadedRecords.map(item => item.table) }, { deferDynamicOptions: options?.deferStartupWork });
   normalized.tables.forEach((table, index) => {
     const item = loadedRecords[index];
+    if (options?.deferStartupWork) {
+      pendingTableSnapshots.set(table.id, { table, stored: item.stored });
+      return;
+    }
     const snapshot = createWorkspaceTableStorageSnapshot(table, item.stored);
     savedTables.set(table.id, { snapshot, legacy: !item.stored, columnStatePending: Boolean(item.stored && !hasCurrentWorkspaceColumnState(table, item.stored.state)) });
     workingTables.set(table.id, snapshot); tableSnapshots.set(table, snapshot);
   });
+  if (options?.expectCurrentRevision) for (const [id, snapshot] of workingTables) {
+    const prepared = ensureTableDynamicOptions(snapshot.table);
+    if (prepared === snapshot.table) continue;
+    const next = updateWorkspaceTableStorageSnapshot(snapshot, prepared);
+    workingTables.set(id, next); tableSnapshots.set(prepared, next);
+    const saved = savedTables.get(id);
+    if (saved) savedTables.set(id, { ...saved, columnStatePending: true });
+  }
   savedStorageRevision = state?.storageRevision ?? null;
   savedUpdatedAt = state?.updatedAt;
   if (!options?.expectCurrentRevision || !savedMetadata) savedMetadata = metadataOf({ ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] });
-  const result: WorkspaceData = { ...savedMetadata, updatedAt: savedUpdatedAt, tables: keys.flatMap(id => workingTables.get(id)?.table ?? []) };
+  const result: WorkspaceData = { ...savedMetadata, updatedAt: savedUpdatedAt, tables: keys.flatMap(id => workingTables.get(id)?.table ?? pendingTableSnapshots.get(id)?.table ?? []) };
   if (!options?.tableIds) result.bottomNavigationTableIds = [...new Set(meta.bottomNavigationTableIds ?? [])].filter(id => available.has(id));
   // This read is used after first paint; legacy tables migrate independently through the same queue.
   if (options?.expectCurrentRevision) scheduleLegacyTableMigrations(result);
@@ -165,13 +190,12 @@ export const loadWorkspaceInitial = async (): Promise<{ data: WorkspaceData; com
   }
   await transaction.done;
   if (saveQueue !== pending) return loadWorkspaceInitial();
-  if (!meta || !table) return { data: await loadWorkspace(), complete: true, storageVersion: db.version };
-  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: [table] });
+  if (!meta || !table) return { data: await loadWorkspace({ deferStartupWork: true }), complete: true, storageVersion: db.version };
+  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: [table] }, { deferDynamicOptions: true });
   const data = { ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
   resetSnapshots();
-  const snapshot = createWorkspaceTableStorageSnapshot(data.tables[0], stored);
-  savedTables.set(table.id, { snapshot, legacy: !stored, columnStatePending: Boolean(stored && !hasCurrentWorkspaceColumnState(data.tables[0], stored.state)) });
-  workingTables.set(table.id, snapshot); tableSnapshots.set(snapshot.table, snapshot);
+  // Indexes and chunk snapshots are needed by a save or background work, not first paint.
+  pendingTableSnapshots.set(table.id, { table: data.tables[0], stored });
   savedMetadata = metadataOf(data); savedStorageRevision = state?.storageRevision ?? null; savedUpdatedAt = state?.updatedAt;
   return { data, complete: false, storageVersion: db.version };
 };
@@ -220,9 +244,10 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
   // Capture immutable layouts when called, so queued snapshots and migration share stable chunk IDs.
   let snapshots: WorkspaceTableStorageSnapshot[];
   try { snapshots = data.tables.map(table => {
+    if (options?.replaceTableIds?.includes(table.id)) pendingTableSnapshots.delete(table.id);
     let snapshot = options?.replaceTableIds?.includes(table.id) ? undefined : tableSnapshots.get(table);
     if (!snapshot) {
-      const previous = options?.replaceTableIds?.includes(table.id) ? undefined : workingTables.get(table.id);
+      const previous = options?.replaceTableIds?.includes(table.id) ? undefined : materializeTableSnapshot(table.id);
       snapshot = previous ? updateWorkspaceTableStorageSnapshot(previous, table, options?.mutation?.tableId === table.id ? options.mutation.action : undefined) : createWorkspaceTableStorageSnapshot(table);
       tableSnapshots.set(table, snapshot);
     }
@@ -259,6 +284,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
       for (const snapshot of snapshots) savedTables.set(snapshot.table.id, { snapshot, legacy: false });
       for (const id of removed) {
         savedTables.delete(id);
+        pendingTableSnapshots.delete(id);
         if (workingTables.get(id) === removedSnapshots.get(id)) workingTables.delete(id);
       }
     } catch (error) {

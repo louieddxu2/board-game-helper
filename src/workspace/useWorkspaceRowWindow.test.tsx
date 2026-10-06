@@ -40,6 +40,22 @@ const animationFrames = () => {
 };
 
 describe('workspace visible row window', () => {
+  it('keeps offscreen height estimates and the mounted buffer while dynamic widths settle', () => {
+    const frames = animationFrames();
+    try {
+      const { result, rerender } = renderHook(({ key, top }) => useWorkspaceRowWindow(rows, key, top, 180, true, 'table', 'order', false, true), { initialProps: { key: 'narrow', top: 0 } });
+      const last = result.current.last;
+      act(() => { result.current.measureRow('row-0', 100); result.current.measureRow('row-1', 100); });
+      act(() => frames.flush());
+      expect(result.current.last).toBe(last);
+      rerender({ key: 'wide', top: 0 });
+      expect(result.current.offsetForRow('row-2')).toBe(200);
+      expect(result.current.last).toBe(last);
+      rerender({ key: 'wide', top: 1500 });
+      expect(result.current.first).toBeGreaterThan(0);
+    } finally { frames.restore(); }
+  });
+
   it('keeps disabled and empty tables unvirtualized without pending anchors', () => {
     const disabled = renderHook(() => useWorkspaceRowWindow(rows, 'table', 0, 600, false));
     expect(disabled.result.current.virtual).toBe(false);

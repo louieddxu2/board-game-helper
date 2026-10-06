@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspacePage } from './WorkspacePage';
 import { loadWorkspace, loadWorkspaceInitial } from '../workspace/db';
 import type { WorkspaceTableHistory, WorkspaceTableHistoryEntry } from '../workspace/history';
+import * as workspaceModel from '../workspace/model';
+import type { WorkspaceData } from '../workspace/types';
 
 const db = vi.hoisted(() => ({
   loadWorkspaceHistories: vi.fn(), saveWorkspace: vi.fn(async (_data: unknown, _options?: unknown) => undefined),
@@ -42,6 +44,26 @@ const editBeforeHistoryLoads = async () => {
 };
 
 describe('workspace startup', () => {
+  it.each([false, true])('uses the background rebuilt statistics when opening a dynamic list (full fallback: %s)', async (complete) => {
+    const base = await loadWorkspace();
+    const table = { ...base.tables[0], columns: [{ ...base.tables[0].columns[0], inputType: 'dynamic-select' as const }] };
+    const initial = { ...base, tables: [table] };
+    const prepared = workspaceModel.ensureTableDynamicOptions(table);
+    vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: initial, complete, storageVersion: 4 });
+    let finishLoad!: (value: WorkspaceData) => void;
+    vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise(resolve => { finishLoad = resolve; }));
+    render(<WorkspacePage />);
+    expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
+    await act(async () => finishLoad({ ...initial, tables: [prepared] }));
+    await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
+    const collect = vi.spyOn(workspaceModel, 'collectDynamicOptionCounts');
+    try {
+      fireEvent.click(screen.getByRole('cell', { name: '物件，名稱：原值' }));
+      expect(screen.getByRole('option', { name: '原值' })).toBeInTheDocument();
+      expect(collect).not.toHaveBeenCalled();
+    } finally { collect.mockRestore(); }
+  });
+
   it('flushes rebuilt statistics after paint even when the initial fallback loaded all tables', async () => {
     const base = await loadWorkspace();
     vi.mocked(loadWorkspace).mockClear();

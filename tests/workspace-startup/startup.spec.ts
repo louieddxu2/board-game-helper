@@ -617,6 +617,46 @@ test('a large transposed table draws only the visible object columns', async ({ 
   await expect(page.locator('td[data-bulk-row-id="row-249"][data-bulk-column-id="column-0"]')).toContainText('橫向修改');
 });
 
+test('normal column widths follow every rendered row and exclude unrendered long values', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 1, 10000, 2, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace');
+    const db = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+    const transaction = db.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const get = store.get('table-0');
+    get.onsuccess = () => {
+      const table = get.result;
+      table.rows[150].values['column-0'] = 'W'.repeat(200);
+      store.put(table, 'table-0');
+    };
+    await new Promise<void>(resolve => { transaction.oncomplete = () => resolve(); });
+    db.close();
+  });
+  await page.addInitScript(() => {
+    const original = CanvasRenderingContext2D.prototype.measureText;
+    (window as unknown as { measuredBeforeRows: number }).measuredBeforeRows = 0;
+    CanvasRenderingContext2D.prototype.measureText = function (text) {
+      if (!document.querySelector('tr[data-virtual-row-id]')) (window as unknown as { measuredBeforeRows: number }).measuredBeforeRows++;
+      return original.call(this, text);
+    };
+  });
+  await page.goto(`${site.origin}/workspace`);
+  const firstColumn = page.locator('.workspace-table colgroup col').nth(1);
+  await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
+  await expect.poll(() => firstColumn.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(400);
+  expect(await page.evaluate(() => (window as unknown as { measuredBeforeRows: number }).measuredBeforeRows)).toBeLessThan(150);
+  const viewport = page.locator('.workspace-table-viewport');
+  await viewport.evaluate(element => { element.scrollTop = 36 * 150; });
+  await expect(page.locator('tr[data-virtual-row-id="row-150"]')).toBeAttached();
+  await expect.poll(() => firstColumn.evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(1500);
+  await viewport.evaluate(element => { element.scrollTop = 0; });
+  await expect(page.locator('tr[data-virtual-row-id="row-150"]')).toHaveCount(0);
+  await expect.poll(() => firstColumn.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(400);
+  expect(await page.locator('tr[data-virtual-row-id]').count()).toBeLessThan(80);
+});
+
 test('cached navigation does not request a slow document or load unrelated site code', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
   await waitForOfflineShell(page);
