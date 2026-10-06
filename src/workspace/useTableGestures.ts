@@ -66,6 +66,9 @@ interface UseTableGesturesProps {
   onOpenSearch?: () => void;
   onRevealTopRow?: () => void;
   searchOpen?: boolean;
+  ensureTableReady?: () => Promise<void>;
+  onReadError?: (error: unknown) => void;
+  onPersistTextScale?: (tableId: string, scale: number) => void;
 }
 
 export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
@@ -83,12 +86,14 @@ export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0
 export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
 export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
 
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false, ensureTableReady, onReadError, onPersistTextScale }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
 
   const dataRef = useRef<WorkspaceData | undefined>(data);
-  useEffect(() => { dataRef.current = data; }, [data]);
+  dataRef.current = data;
+  const latest = useRef({ tableId: table?.id, onCellLongPress });
+  latest.current = { tableId: table?.id, onCellLongPress };
 
   const {
     textScale,
@@ -97,7 +102,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     applyTextScale,
     pendingScaleSave,
     flushPendingTextScale,
-  } = useTableZoom({ table, data, commit, workspacePageRef, minTextScale });
+  } = useTableZoom({ table, data, commit, workspacePageRef, minTextScale, onPersistTextScale });
 
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | undefined>(undefined);
@@ -113,9 +118,20 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
   const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
+  const reorderOwner = useRef<string | undefined>(undefined);
   const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
 
   const momentumScroll = useMomentumScroll();
+  useEffect(() => {
+    if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
+    if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
+    if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
+    cellHold.current = undefined; tableReorderSession.current = undefined;
+    tableReorderPointer.current = undefined; boundarySearchHold.current = undefined;
+    pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined; drawerSwipe.current = undefined;
+    panMetrics.current = undefined; panAxis.current = undefined;
+    momentumScroll.stop(); setPanning(false); setTableReorderVisual(undefined);
+  }, [table?.id, momentumScroll.stop]);
 
   const clearBoundarySearchHold = () => {
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
@@ -200,18 +216,24 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const session: TableReorderSession = { kind, sourceId, targetId: sourceId, after: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
+    const owner = table?.id;
+    reorderOwner.current = owner;
     session.timer = window.setTimeout(() => {
-      if (tableReorderSession.current !== session) return;
-      session.active = true;
-      pointers.current.clear();
-      panStart.current = undefined;
-      pinchStart.current = undefined;
-      setPanning(false);
-      setTableReorderVisual({ kind, sourceId, targetId: sourceId, after: false });
-      const viewport = viewportRef.current;
-      if (viewport && 'setPointerCapture' in viewport) {
-        try { viewport.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
-      }
+      const activate = () => {
+        if (tableReorderSession.current !== session || latest.current.tableId !== owner) return;
+        session.active = true;
+        pointers.current.clear();
+        panStart.current = undefined;
+        pinchStart.current = undefined;
+        setPanning(false);
+        setTableReorderVisual({ kind, sourceId, targetId: sourceId, after: false });
+        const viewport = viewportRef.current;
+        if (viewport && 'setPointerCapture' in viewport) {
+          try { viewport.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
+        }
+      };
+      if (ensureTableReady) void ensureTableReady().then(activate).catch(onReadError);
+      else activate();
     }, tableReorderHoldMs);
     tableReorderSession.current = session;
   };
@@ -248,7 +270,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     setTableReorderVisual(undefined);
     if (!session.active) return false;
     const currentData = dataRef.current;
-    if (currentData && table && session.sourceId !== session.targetId) {
+    if (currentData && table && reorderOwner.current === table.id && session.sourceId !== session.targetId) {
       commit(updateTable(currentData, table.id, (current) => ({
         ...current,
         updatedAt: Date.now(),
@@ -302,16 +324,21 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
           mode: 'pending',
         };
         if (!bulkTouch) {
+          const owner = table?.id;
           hold.timer = window.setTimeout(() => {
-            if (cellHold.current !== hold) return;
-            hold.active = true;
-            pointers.current.clear();
-            panStart.current = undefined;
-            pinchStart.current = undefined;
-            setPanning(false);
-            suppressNextTableClick(500, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
-            try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may have ended. */ }
-            hold.canSweep = onCellLongPress(rowId, columnId) !== false;
+            const activate = () => {
+              if (cellHold.current !== hold || latest.current.tableId !== owner) return;
+              hold.active = true;
+              pointers.current.clear();
+              panStart.current = undefined;
+              pinchStart.current = undefined;
+              setPanning(false);
+              suppressNextTableClick(500, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
+              try { viewport.setPointerCapture(event.pointerId); } catch { /* The pointer may have ended. */ }
+              hold.canSweep = latest.current.onCellLongPress?.(rowId, columnId) !== false;
+            };
+            if (ensureTableReady) void ensureTableReady().then(activate).catch(onReadError);
+            else activate();
           }, tableReorderHoldMs);
         }
         cellHold.current = hold;
@@ -587,7 +614,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         suppressNextTableClick(event.pointerType === 'touch' ? 500 : 0, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
       }
       if (event.pointerType === 'touch') {
-        pendingScaleSave.current = table ? { tableId: table.id, scale: textScaleRef.current } : undefined;
+        pendingScaleSave.current = latest.current.tableId ? { tableId: latest.current.tableId, scale: textScaleRef.current } : undefined;
         flushPendingTextScale();
       }
     }
@@ -599,6 +626,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
     momentumScroll.stop();
+    cellHold.current = undefined;
+    tableReorderSession.current = undefined;
   }, [momentumScroll.stop]);
 
   return {

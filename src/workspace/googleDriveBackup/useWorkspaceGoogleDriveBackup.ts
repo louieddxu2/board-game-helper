@@ -333,10 +333,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (manuallyDisconnected) return 'disconnected';
     if (!online) return 'offline' as const;
     if (!record.lastBackupAt) return 'never' as const;
-    if (!inspectBackup) return 'checking' as const;
+    if (!inspectBackup || !data) return 'checking' as const;
     if (structureDirty || dirtyTables.length > 0) return 'dirty' as const;
     return 'saved' as const;
-  }, [dirtyTables.length, inspectBackup, manuallyDisconnected, online, record.lastBackupAt, structureDirty]);
+  }, [data, dirtyTables.length, inspectBackup, manuallyDisconnected, online, record.lastBackupAt, structureDirty]);
 
   const hasPendingBackup = status === 'never' || status === 'dirty';
   useEffect(() => {

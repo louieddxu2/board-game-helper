@@ -23,6 +23,98 @@ let errors: string[];
 test.beforeEach(async ({ page }) => { errors = []; page.on('pageerror', error => errors.push(error.message)); });
 test.afterEach(() => expect(errors).toEqual([]));
 
+test('ten thousand rows open from a bounded display projection and cannot be saved or exported as a complete table', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  await page.evaluate(async () => { await window.workspaceStorageFixture.initialize(10000, 12, 2); });
+  await page.reload();
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    api.instrument();
+    const initial = await api.db.loadWorkspaceInitial({ paged: true });
+    const reads = [...api.reads];
+    const display = api.rowPages.workspaceWindowDisplayTable(initial.window!);
+    let saveRejected = false, exportRejected = false, missingRejected = false;
+    try { await api.db.saveWorkspace({ ...initial.data, tables: [{ ...display }] }, { partial: true }); } catch { saveRejected = true; }
+    try { api.spreadsheet.exportWorkspaceXlsx(initial.data, { ...display }); } catch { exportRejected = true; }
+    try { api.spreadsheet.exportWorkspaceXlsx(initial.data); } catch { missingRejected = true; }
+    const tail = await api.db.loadWorkspaceTableWindow(display.id, [78]);
+    const full = await api.db.loadWorkspace({ expectCurrentRevision: true, tableIds: [display.id] });
+    return { reads, loadedTables: initial.data.tables.length, rowCount: initial.window!.head.rowCount, first: display.rows[0].name, count: display.rows.length, last: tail!.pages[0].rows.at(-1)!.name,
+      completeCount: full.tables[0].rows.length, saveRejected, exportRejected, missingRejected };
+  });
+  expect(result.loadedTables).toBe(0);
+  expect(result.rowCount).toBe(10000);
+  expect(result.count).toBe(128);
+  expect(result.first).toBe('項目 0'); expect(result.last).toBe('項目 9999');
+  expect(result.completeCount).toBe(10000);
+  expect(result.saveRejected && result.exportRejected && result.missingRejected).toBe(true);
+  expect(result.reads.filter(read => read.store === 'rowPages')).toHaveLength(1);
+  expect(result.reads.every(read => ['meta', 'tableHeads', 'rowPages'].includes(read.store))).toBe(true);
+});
+
+test('display pages follow manual ordering and single-cell edits update only the affected page atomically', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10000);
+    const source = api.data.tables[0];
+    api.data = { ...api.data, tables: [{ ...source, rows: [...source.rows].reverse() }] };
+    await api.db.saveWorkspace(api.data);
+    api.instrument();
+    await api.edit(256, '只更改這格');
+    const writes = [...api.writes];
+    const projection = await api.db.loadWorkspaceTableWindow(source.id, [0, 2, 78]);
+    return { writes, first: projection!.pages[0].rows[0].name, value: projection!.pages[1].rows[0].values[source.columns[0].id], last: projection!.pages[2].rows.at(-1)!.name };
+  });
+  expect(result.first).toBe('項目 9999'); expect(result.last).toBe('項目 0');
+  expect(result.value).toBe('只更改這格');
+  expect(result.writes.filter(write => write.store === 'rowPages' && write.method === 'put')).toHaveLength(1);
+  expect(result.writes.filter(write => write.store === 'rowChunks' && write.method === 'put')).toHaveLength(1);
+  expect(new Set(result.writes.map(write => write.transaction)).size).toBe(1);
+});
+
+test('missing display pages and cross-tab stale reads fail without returning a partial table', async ({ page, context }) => {
+  await page.goto(`${site.origin}/probe`);
+  const id = await page.evaluate(async () => { const api = window.workspaceStorageFixture; await api.initialize(600); return api.data.tables[0].id; });
+  const other = await context.newPage();
+  await other.goto(`${site.origin}/probe`);
+  await other.evaluate(async () => { await window.workspaceStorageFixture.db.loadWorkspaceInitial({ paged: true }); });
+  await page.evaluate(async () => { await window.workspaceStorageFixture.edit(0, '另一頁更新'); });
+  const conflict = await other.evaluate(async id => {
+    try { await window.workspaceStorageFixture.db.loadWorkspaceTableWindow(id, [0]); return ''; } catch (error) { return (error as Error).name; }
+  }, id);
+  expect(conflict).toBe('WorkspaceStorageConflictError');
+  await other.close();
+  await page.evaluate(async id => {
+    const request = indexedDB.open('board-game-helper-workspace');
+    const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+    const transaction = connection.transaction('rowPages', 'readwrite');
+    transaction.objectStore('rowPages').delete([id, 0]);
+    await new Promise<void>(resolve => { transaction.oncomplete = () => resolve(); }); connection.close();
+  }, id);
+  expect(await page.evaluate(async () => {
+    try { await window.workspaceStorageFixture.db.loadWorkspaceInitial({ paged: true }); return ''; } catch (error) { return (error as Error).name; }
+  })).toBe('WorkspaceStorageIntegrityError');
+});
+
+test('restored search and sorting request complete data and never evaluate only the loaded page', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  await page.evaluate(async () => { await window.workspaceStorageFixture.initialize(600); });
+  await page.reload();
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    const initial = await api.db.loadWorkspaceInitial({ paged: true });
+    const head = initial.window!.head;
+    const view = { searchOpen: true, searchQuery: '', headerFilters: {}, scrollTop: 0, scrollLeft: 0 };
+    localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({ tables: { [head.definition.id]: view } }));
+    const searched = await api.db.loadWorkspaceInitial({ paged: true });
+    localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({ tables: { [head.definition.id]: { ...view, searchOpen: false, headerFilters: { [`column:${head.definition.columns[0].id}`]: { includedKeys: null, sort: 'desc' } } } } }));
+    const sorted = await api.db.loadWorkspaceInitial({ paged: true });
+    return { searched: searched.data.tables[0].rows.length, sorted: sorted.data.tables[0].rows.length, noWindow: !searched.window && !sorted.window };
+  });
+  expect(result).toEqual({ searched: 600, sorted: 600, noWindow: true });
+});
+
 test('saved column conversions persist rows, counts and original values for undo across reloads', async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const converted = await page.evaluate(async () => {
@@ -220,22 +312,30 @@ test('10k-row cell commits write one chunk and a new history entry in the same t
   expect(result.disk.tables[0]).not.toHaveProperty('rows');
 });
 
-for (const failureMode of ['abort', 'quota'] as const) test(`${failureMode} failure leaves data/history unchanged and the next edit saves A and B`, async ({ page }) => {
+for (const failureMode of ['abort', 'quota'] as const) test(`${failureMode} failure leaves data/history unchanged, hydration retains edits and the next edit saves A and B`, async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async failureMode => {
     const api = window.workspaceStorageFixture;
-    await api.initialize(600);
+    await api.initialize(600, 2, 2);
+    const [firstId, secondId] = api.data.tables.map(table => table.id);
+    api.data = (await api.db.loadWorkspaceInitial()).data;
     const original = await api.readDisk();
     api.instrument(); api.failNextChunk = true; api.failureMode = failureMode;
     let failure = '';
     try { await api.edit(0, 'A'); } catch (error) { failure = (error as Error).name; }
     const aborted = await api.readDisk();
+    const hydrated = await api.db.loadWorkspace({ expectCurrentRevision: true, tableIds: [secondId] });
+    const retained = hydrated.tables.find(table => table.id === firstId)!;
+    const retainedValue = retained.rows[0].values[retained.columns[0].id];
+    const otherCount = hydrated.tables.find(table => table.id === secondId)!.rows.length;
+    api.data = { ...api.data, tables: [retained, ...hydrated.tables.filter(table => table.id !== firstId)] };
     api.writes = [];
     await api.edit(256, 'B');
-    return { failure, original, aborted, recovered: await api.readDisk(), writes: api.writes };
+    return { failure, original, aborted, retainedValue, otherCount, recovered: await api.readDisk(), writes: api.writes };
   }, failureMode);
   expect(result.failure).toBe(failureMode === 'quota' ? 'QuotaExceededError' : 'AbortError');
   expect(result.aborted).toEqual(result.original);
+  expect(result.retainedValue).toBe('A'); expect(result.otherCount).toBe(600);
   expect(result.writes.filter(write => write.store === 'rowChunks' && write.method === 'put')).toHaveLength(2);
   expect(result.recovered.cells[0].map(cell => cell.value)).toEqual(['A', 'B', '資料 599-0']);
   expect(result.recovered.entryIds).toHaveLength(2);

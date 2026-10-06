@@ -8,9 +8,10 @@ interface UseTableZoomProps {
   commit: (next: WorkspaceData) => void;
   workspacePageRef: React.RefObject<HTMLElement | null>;
   minTextScale: number;
+  onPersistTextScale?: (tableId: string, scale: number) => void;
 }
 
-export function useTableZoom({ table, data, commit, workspacePageRef, minTextScale }: UseTableZoomProps) {
+export function useTableZoom({ table, data, commit, workspacePageRef, minTextScale, onPersistTextScale }: UseTableZoomProps) {
   const [textScale, setTextScale] = useState(1);
   const textScaleRef = useRef(1);
   const applyTextScaleRef = useRef<((scale: number, persist?: boolean) => void) | undefined>(undefined);
@@ -27,6 +28,7 @@ export function useTableZoom({ table, data, commit, workspacePageRef, minTextSca
   }, []);
 
   useEffect(() => {
+    if (pendingScaleSave.current && pendingScaleSave.current.tableId !== table?.id) flushPendingTextScale();
     const nextScale = table?.textScale ?? 1;
     textScaleRef.current = nextScale;
     setTextScale(nextScale);
@@ -47,12 +49,16 @@ export function useTableZoom({ table, data, commit, workspacePageRef, minTextSca
     pendingScaleSave.current = undefined;
     if (!currentData || !tableId) return;
     const currentTable = currentData.tables.find((item) => item.id === tableId);
+    const previousScale = currentTable?.textScale ?? (table?.id === tableId ? table.textScale ?? 1 : undefined);
+    if (previousScale !== undefined && Math.abs(previousScale - scale) < 0.001) return;
+    if (onPersistTextScale) { onPersistTextScale(tableId, scale); return; }
     if (!currentTable || Math.abs((currentTable.textScale ?? 1) - scale) < 0.001) return;
     commit(updateTable(currentData, tableId, (current) => ({ ...current, textScale: scale, updatedAt: Date.now() })));
   };
 
   const scheduleTextScaleSave = (scale: number) => {
     if (!table) return;
+    if (pendingScaleSave.current && pendingScaleSave.current.tableId !== table.id) persistTextScale(pendingScaleSave.current.scale);
     pendingScaleSave.current = { tableId: table.id, scale };
     if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
     scaleSaveTimer.current = window.setTimeout(() => {

@@ -2,6 +2,7 @@ import * as db from '../../src/workspace/db';
 import * as model from '../../src/workspace/model';
 import * as history from '../../src/workspace/history';
 import * as spreadsheet from '../../src/workspace/spreadsheet';
+import * as rowPages from '../../src/workspace/rowPages';
 import { assignWorkspaceChangeRevisions } from '../../src/workspace/changeRevisions';
 import { WorkspaceDynamicOptionsCache } from '../../src/workspace/dynamicOptionsCache';
 import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion';
@@ -9,11 +10,12 @@ import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
 const fixture = {
-  db, model, history, spreadsheet, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
+  db, model, history, spreadsheet, rowPages, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
   dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),
   writes: [] as Write[],
+  reads: [] as { store: string; method: string; key: unknown }[],
   failNextChunk: false,
   failureMode: 'abort' as 'abort' | 'quota',
   async initialize(rows = 600, columns = 2, tables = 1) {
@@ -51,6 +53,13 @@ const fixture = {
     await db.saveWorkspace(command.data, command.options);
   },
   instrument() {
+    for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
+      const original = IDBObjectStore.prototype[method];
+      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
+        fixture.reads.push({ store: this.name, method, key: args[0] });
+        return Reflect.apply(original, this, args);
+      } as typeof IDBObjectStore.prototype[typeof method];
+    }
     const transactions = new WeakMap<IDBTransaction, number>();
     let nextId = 0;
     const getTransactionId = (transaction: IDBTransaction) => {
@@ -78,12 +87,12 @@ const fixture = {
   async readDisk() {
     const request = indexedDB.open('board-game-helper-workspace');
     const connection = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    const transaction = connection.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries']);
+    const transaction = connection.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries', 'tableHeads', 'rowPages']);
     const readAll = (store: string) => new Promise<any[]>((resolve, reject) => { const request = transaction.objectStore(store).getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    const [meta, tables, states, chunks, heads, entries] = await Promise.all(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries'].map(readAll));
+    const [meta, tables, states, chunks, heads, entries, tableHeads, pages] = await Promise.all(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries', 'tableHeads', 'rowPages'].map(readAll));
     connection.close();
     return {
-      meta, tables, states, heads, entryIds: entries.map(entry => entry.id),
+      meta, tables, states, heads, tableHeads, pages, entryIds: entries.map(entry => entry.id),
       chunks: chunks.map(chunk => ({ tableId: chunk.tableId, chunkId: chunk.chunkId, count: chunk.rows.length })),
       cells: this.data.tables.map(table => {
         const rows = new Map<string, any>(chunks.filter(chunk => chunk.tableId === table.id).flatMap(chunk => chunk.rows.map((row: any) => [row.id, row])));

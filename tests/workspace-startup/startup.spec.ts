@@ -87,12 +87,158 @@ const readTableCell = (page: Page, tableId: string, rowId: string, columnId: str
 }, { tableId, rowId, columnId });
 
 const visibleVirtualRowIds = (page: Page) => page.locator('.workspace-table tbody tr[data-virtual-row-id]').evaluateAll((items) => items.map((item) => item.getAttribute('data-virtual-row-id')));
+const waitForProjection = (page: Page, count: number) => expect.poll(() => page.evaluate(async () => {
+  const request = indexedDB.open('board-game-helper-workspace');
+  const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+  const get = connection.transaction('tableHeads').objectStore('tableHeads').get('table-0');
+  const head = await new Promise<any>(resolve => { get.onsuccess = () => resolve(get.result); }); connection.close();
+  return head?.rowCount;
+})).toBe(count);
 
 const transposedLabels = async (page: Page) => {
   const headers = await page.locator('.workspace-table thead th[data-row-id] button.workspace-column-name').evaluateAll((items) => items.map((item) => item.textContent?.trim() || ''));
   const filters = await page.locator('.workspace-filterbar-button').evaluateAll((items) => items.map((item) => (item.getAttribute('aria-label') || '').replace(/^篩選\s*/, '')));
   return { headers, filters };
 };
+
+test('a migrated 10k-row table opens without full reads, fills the latest scroll window and resumes the first edit', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 2, 10000, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
+  await waitForProjection(page, 10000);
+  await page.addInitScript(() => {
+    (window as any).workspaceReads = [];
+    for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
+      const original = IDBObjectStore.prototype[method];
+      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
+        (window as any).workspaceReads.push({ store: this.name, method });
+        return Reflect.apply(original, this, args);
+      } as typeof original;
+    }
+  });
+  await page.reload();
+  const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
+  await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await expect(page.getByRole('button', { name: /測試表 1/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: '關閉目錄', exact: true }).last().click();
+  expect(await page.evaluate(() => (window as any).workspaceReads.filter((read: any) => ['tables', 'rowChunks', 'tableState', 'history', 'historyEntries'].includes(read.store)))).toEqual([]);
+  const viewport = page.locator('.workspace-table-viewport');
+  await viewport.evaluate(element => { element.scrollTop = 1000 * 36; element.scrollTop = 9000 * 36; });
+  await expect.poll(async () => (await visibleVirtualRowIds(page)).some(id => Number(id!.slice(4)) >= 8990)).toBe(true);
+  expect(await rows.count()).toBeLessThan(80);
+  await viewport.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await expect(rows.last()).toHaveAttribute('data-virtual-row-id', 'row-9999');
+  const cell = page.locator('td[data-bulk-row-id="row-9999"][data-bulk-column-id="column-0"]');
+  await cell.click();
+  const editor = page.getByRole('textbox').first();
+  await editor.fill('按需載入後的第一次編輯'); await editor.press('Escape');
+  await expect(cell).toContainText('按需載入後的第一次編輯');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('按需載入後的第一次編輯');
+  await expect.poll(() => readTableCell(page, 'table-1', 'row-9999', 'column-0')).toBe('資料 9999-0');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('board-game-helper-workspace-view-state') ?? '{}').tables?.['table-0']?.scrollTop ?? 0)).toBeGreaterThan(9900 * 36);
+  await page.reload();
+  await expect(cell).toContainText('按需載入後的第一次編輯');
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
+  const download = await downloaded;
+  const stream = await download.createReadStream();
+  const parts: Buffer[] = [];
+  for await (const part of stream!) parts.push(Buffer.from(part));
+  const archive = Buffer.concat(parts).toString('utf8');
+  expect(archive).toContain('測試表 1'); expect(archive).toContain('資料 9999-0');
+  expect(archive).toContain('按需載入後的第一次編輯');
+  expect(errors).toEqual([]);
+});
+
+for (const mode of ['loaded', 'paged'] as const) test(`switching to a ${mode} table cancels the previous column draft`, async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 2, 600, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 600);
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: '匯出全部資料', exact: true }).click();
+  await downloaded;
+  if (mode === 'paged') await page.reload();
+  await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
+  await page.getByRole('textbox', { name: '屬性名稱' }).fill('尚未儲存的舊表設定');
+  // Exercise navigation arriving while a draft dialog is already open.
+  await page.getByRole('button', { name: '開啟目錄' }).evaluate(element => (element as HTMLButtonElement).click());
+  await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name').evaluate(element => (element as HTMLElement).click());
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  await expect(page.getByRole('dialog', { name: '屬性設定' })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: '欄位 0', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-0"] .workspace-tree-name').click();
+  await expect(page.getByRole('columnheader', { name: '欄位 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('failed saves survive loading another table and retry without losing unloaded rows', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 2, 600, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 600);
+  await page.reload();
+  await page.evaluate(() => {
+    (window as any).workspaceFailWrites = true;
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<typeof original>) {
+      if (this.name === 'rowChunks' && (window as any).workspaceFailWrites) throw new DOMException('Simulated quota', 'QuotaExceededError');
+      return Reflect.apply(original, this, args);
+    };
+  });
+  const cell = page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]');
+  await cell.click();
+  const editor = page.getByRole('textbox').first();
+  await editor.fill('尚未寫入但保留於記憶體'); await editor.press('Escape');
+  await expect(cell).toContainText('尚未寫入但保留於記憶體');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe('資料 0-0');
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name').click();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.locator('.workspace-tree-row[data-node-id="node-0"] .workspace-tree-name').click();
+  await expect(cell).toContainText('尚未寫入但保留於記憶體');
+  await page.evaluate(() => { (window as any).workspaceFailWrites = false; });
+  await page.locator('td[data-bulk-row-id="row-1"][data-bulk-column-id="column-0"]').click();
+  await editor.fill('重試成功'); await editor.press('Escape');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe('尚未寫入但保留於記憶體');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-1', 'column-0')).toBe('重試成功');
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-599', 'column-0')).toBe('資料 599-0');
+  await expect.poll(() => readTableCell(page, 'table-1', 'row-599', 'column-0')).toBe('資料 599-0');
+});
+
+test('the first long press on a paged table resumes bulk selection and preserves unloaded rows', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 2, 600, 2, 0);
+  await page.goto(`${site.origin}/workspace`);
+  await waitForProjection(page, 600);
+  await page.reload();
+  const cell = page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]');
+  await expect(cell).toBeVisible();
+  const box = await cell.boundingBox();
+  const client = await page.context().newCDPSession(page);
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box!.x + box!.width / 2, y: box!.y + box!.height / 2, id: 1 }] });
+  await expect(page.getByRole('toolbar', { name: '批次編輯 欄位 0' })).toContainText('已選 1 格');
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.getByRole('button', { name: '開啟 欄位 0 批次輸入' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox').fill('長按後的批次修改');
+  await dialog.getByRole('button', { name: '確認', exact: true }).click();
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe('長按後的批次修改');
+  expect(await readTableCell(page, 'table-0', 'row-599', 'column-0')).toBe('資料 599-0');
+  expect(await readTableCell(page, 'table-1', 'row-599', 'column-0')).toBe('資料 599-0');
+  expect(errors).toEqual([]);
+  await client.detach();
+});
 
 test('a previously unvisited workspace opens offline and edits, undo, and saves remain local', async ({ page, context }, info) => {
   const errors: string[] = [];
@@ -458,7 +604,7 @@ test('stored scroll restoration is scoped per table and does not carry one table
   await expect.poll(() => visibleVirtualRowIds(page)).toContain('row-2');
 });
 
-test('an edit during active-table-only loading cannot delete the tables still on disk', async ({ page }) => {
+test('an on-demand table failure cannot prevent editing or delete other tables on disk', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 8);
@@ -474,7 +620,10 @@ test('an edit during active-table-only loading cannot delete the tables still on
   });
   await page.reload();
   await expect(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]')).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText('其他表格讀取失敗');
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.getByRole('button', { name: /測試表 1/ }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: '資料讀取失敗' })).toBeVisible();
+  await page.getByRole('button', { name: '關閉目錄', exact: true }).last().click();
   await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
   const editor = page.getByRole('textbox').first();
   await editor.fill('先改目前表格');
@@ -493,7 +642,7 @@ test('an edit during active-table-only loading cannot delete the tables still on
   await expect(page.getByRole('button', { name: /測試表 7/ }).first()).toBeVisible();
 });
 
-test('pinned tables are usable at the mobile bottom edge even if later background reads fail', async ({ page }) => {
+test('pinned tables load on demand at the mobile bottom edge without reading unrelated tables', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${site.origin}/workspace`);
@@ -519,7 +668,7 @@ test('pinned tables are usable at the mobile bottom edge even if later backgroun
     };
   });
   await page.reload();
-  await expect(page.getByRole('alert')).toContainText('其他表格讀取失敗');
+  await expect(page.getByRole('alert')).toHaveCount(0);
   const bar = page.getByRole('navigation', { name: '常用表格' });
   await expect(bar).toBeVisible();
   const geometry = await bar.evaluate(element => ({ bottom: element.getBoundingClientRect().bottom, top: element.getBoundingClientRect().top, height: window.innerHeight, tableBottom: document.querySelector('.workspace-table-viewport')!.getBoundingClientRect().bottom }));
@@ -533,6 +682,11 @@ test('pinned tables are usable at the mobile bottom edge even if later backgroun
   await editor.fill('常用表格先編輯');
   await editor.press('Escape');
   await expect.poll(() => readTableCell(page, 'table-1', 'row-0', 'column-0')).toBe('常用表格先編輯');
+  expect(await page.evaluate(() => sessionStorage.getItem('workspace-test-after-pins-failed'))).toBeNull();
+  await page.getByRole('button', { name: '開啟目錄' }).click();
+  await page.getByRole('button', { name: /測試表 2/ }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: '資料讀取失敗' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
   await page.reload();
   await expect(cell).toContainText('常用表格先編輯');
   await expect(page.getByRole('alert')).toHaveCount(0);

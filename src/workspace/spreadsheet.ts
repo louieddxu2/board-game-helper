@@ -3,6 +3,7 @@ import { createColumn, createNode, createRow, createTable, ensureTableDynamicOpt
 import { workspaceTableChangeRevision } from './changeRevisions';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 import { WORKSPACE_FORMAT } from './types';
+import { assertWorkspaceTableComplete } from './rowPages';
 
 const readXlsxFile = async (file: File | Blob) => (await import('read-excel-file/browser')).default(file);
 
@@ -275,6 +276,8 @@ export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: 
 
 export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable) => {
   const tables = table ? [table] : data.tables;
+  if (!table && data.nodes.some(node => node.type === 'table' && !tables.some(table => table.id === node.tableId))) throw new Error('工作區表格尚未完整載入，無法匯出');
+  tables.forEach(assertWorkspaceTableComplete);
   const sheets: Array<{ name: string; rows: unknown[][] }> = [];
   const usedNames = new Set<string>();
   if (!table) {
