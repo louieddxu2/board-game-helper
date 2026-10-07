@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { saveWorkspace, type WorkspaceSaveOptions } from './db';
-import { createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from './history';
-import { getTableForNode } from './model';
-import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
 import { assignWorkspaceChangeRevisions } from './changeRevisions';
-import type { WorkspaceData, WorkspaceTable } from './types';
+import { saveWorkspace, type WorkspaceSaveOptions } from './db';
+import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
+import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from './history';
+import { getTableForNode } from './model';
 import type { WorkspaceTableWindow } from './rowPages';
+import type { WorkspaceData, WorkspaceTable } from './types';
 
 /** Owns the in-memory workspace, history and save state shared by loading and editing. */
 export const useWorkspaceStorage = (setNotice: (message: string) => void) => {
@@ -50,6 +50,43 @@ export const useWorkspaceStorage = (setNotice: (message: string) => void) => {
     return () => window.removeEventListener('workspace-storage-error', failed);
   }, [reportSaveError]);
 
+  /** Publish data and history together; only the latest save may update the UI status. */
+  const publish = useCallback((next: WorkspaceData, histories: Map<string, WorkspaceTableHistory>, options: Pick<WorkspaceSaveOptions, 'mutation' | 'deletedTableIds'> & Pick<WorkspaceCommitOptions, 'clearAllHistory' | 'clearTableHistoryIds'> & { direction?: 'undo' | 'redo' }) => {
+    const previous = dataRef.current;
+    const committed = dynamicOptionsCacheRef.current.prepare(previous, assignWorkspaceChangeRevisions(previous, next), options.mutation, options.direction);
+    if (options.clearAllHistory) {
+      historyResetRef.current.all = true;
+      pendingHistoryResetRef.current = { all: true, ids: new Set() };
+    } else if (options.clearTableHistoryIds?.length) {
+      options.clearTableHistoryIds.forEach(id => historyResetRef.current.ids.add(id));
+      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...options.clearTableHistoryIds]) };
+    }
+    dataRef.current = committed;
+    setData(committed);
+    historyRef.current = histories;
+    setHistoryByTable(histories);
+    const saveRevision = ++saveRevisionRef.current;
+    setSaveState('saving');
+    const reset = pendingHistoryResetRef.current;
+    void saveWorkspace(committed, {
+      partial: !allTablesReadyRef.current,
+      mutation: options.mutation,
+      deletedTableIds: options.deletedTableIds,
+      replaceTableIds: options.clearAllHistory ? committed.tables.filter(table => previous?.tables.find(item => item.id === table.id) !== table).map(table => table.id) : undefined,
+      history: {
+        clearAll: reset.all, deleteTableIds: [...reset.ids],
+        ...(historyReadyRef.current ? { replace: [...histories.values()] } : { append: [...histories.values()].flatMap(history => history.past) }),
+      },
+    }).then(() => {
+      if (pendingHistoryResetRef.current === reset) pendingHistoryResetRef.current = { all: false, ids: new Set() };
+      if (saveRevision !== saveRevisionRef.current) return;
+      setSaveState('saved');
+      setLastSavedAt(Date.now());
+    }).catch((error: unknown) => {
+      if (saveRevision === saveRevisionRef.current) reportSaveError(error);
+    });
+  }, [reportSaveError]);
+
   const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
     const previous = dataRef.current;
     if (!allTablesReadyRef.current && previous && (
@@ -66,72 +103,51 @@ export const useWorkspaceStorage = (setNotice: (message: string) => void) => {
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
     if (options?.importedTableIds) dynamicOptionsCacheRef.current.primeImportedTables(next, options.importedTableIds);
-    const revised = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
-    const committed = dynamicOptionsCacheRef.current.prepare(previous, revised, mutation);
     const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
-    setData(committed);
-    dataRef.current = committed;
+    const cleared = options?.clearTableHistoryIds?.length ? options.clearTableHistoryIds : removedTableIds;
+    let histories = historyRef.current;
     if (options?.clearAllHistory) {
-      historyResetRef.current.all = true;
-      pendingHistoryResetRef.current = { all: true, ids: new Set() };
-      historyRef.current = new Map();
-      setHistoryByTable(new Map());
-    } else if (options?.clearTableHistoryIds?.length) {
-      options.clearTableHistoryIds.forEach((id) => historyResetRef.current.ids.add(id));
-      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...options.clearTableHistoryIds]) };
-      const nextHistories = new Map(historyRef.current);
-      options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
-    } else if (removedTableIds.length) {
-      removedTableIds.forEach((id) => historyResetRef.current.ids.add(id));
-      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...removedTableIds]) };
-      const nextHistories = new Map(historyRef.current);
-      removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
+      histories = new Map();
+    } else if (cleared.length) {
+      histories = new Map(histories);
+      cleared.forEach(id => histories.delete(id));
     }
     if (mutation) {
-      const currentHistory = historyRef.current.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
-      const nextHistory = pushWorkspaceTableHistory(currentHistory, mutation);
-      const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
+      const currentHistory = histories.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
+      histories = new Map(histories).set(mutation.tableId, pushWorkspaceTableHistory(currentHistory, mutation));
     }
-    const saveRevision = ++saveRevisionRef.current;
-    setSaveState('saving');
-    const reset = pendingHistoryResetRef.current;
-    const histories = [...historyRef.current.values()];
-    const saveOptions: WorkspaceSaveOptions = {
-      partial: !allTablesReadyRef.current,
+    publish(meaningfulChange ? { ...next, updatedAt: Date.now() } : next, histories, {
       deletedTableIds: removedTableIds,
       mutation,
-      replaceTableIds: options?.clearAllHistory ? committed.tables.filter(table => previous?.tables.find(item => item.id === table.id) !== table).map(table => table.id) : undefined,
-      history: {
-        clearAll: reset.all, deleteTableIds: [...reset.ids],
-        ...(historyReadyRef.current ? { replace: histories } : { append: histories.flatMap(history => history.past) }),
-      },
-    };
-    const save = saveWorkspace(committed, saveOptions);
-    void save.then(() => {
-      if (pendingHistoryResetRef.current === reset) pendingHistoryResetRef.current = { all: false, ids: new Set() };
-      if (saveRevision !== saveRevisionRef.current) return;
-      setSaveState('saved');
-      setLastSavedAt(Date.now());
-    }).catch((error: unknown) => {
-      if (saveRevision !== saveRevisionRef.current) return;
-      reportSaveError(error);
+      clearAllHistory: options?.clearAllHistory,
+      clearTableHistoryIds: cleared,
     });
-  }, [reportSaveError]);
+  }, [publish]);
+
+  const moveTableHistory = useCallback((tableId: string, direction: 'undo' | 'redo') => {
+    const current = dataRef.current;
+    if (!current || !current.tables.some(table => table.id === tableId) || !historyReadyRef.current) return false;
+    const history = historyRef.current.get(tableId) ?? createEmptyWorkspaceTableHistory(tableId);
+    const source = direction === 'undo' ? history.past : history.future;
+    const entry = source.at(-1);
+    if (!entry) return false;
+    const moved: WorkspaceTableHistory = direction === 'undo'
+      ? { tableId, past: history.past.slice(0, -1), future: [...history.future, entry] }
+      : { tableId, past: [...history.past, entry], future: history.future.slice(0, -1) };
+    publish(applyWorkspaceTableHistoryActionWithNode(current, tableId, entry.action, direction), new Map(historyRef.current).set(tableId, moved), {
+      mutation: { tableId, action: entry.action }, direction,
+    });
+    setNotice(direction === 'undo' ? `已復原：${entry.label}` : `已重做：${entry.label}`);
+    return true;
+  }, [publish]);
 
   return {
     data, setData, dataRef, tableWindow, setTableWindow, progressiveRef, mountedRef,
     historyByTable, setHistoryByTable, historyRef, historyReady, setHistoryReady, historyReadyRef,
     allTablesReady, setAllTablesReady, allTablesReadyRef, storageVersion, setStorageVersion,
     remainingLoadError, setRemainingLoadError, storageConflict, setStorageConflict, loadError, setLoadError,
-    storageUpgradeBlocked, setStorageUpgradeBlocked, historyResetRef, pendingHistoryResetRef,
-    saveState, setSaveState, lastSavedAt, setLastSavedAt, saveRevisionRef,
-    dynamicOptionsCacheRef, getDynamicOptions, reportSaveError, commit,
+    storageUpgradeBlocked, setStorageUpgradeBlocked, historyResetRef,
+    saveState, lastSavedAt, setLastSavedAt, getDynamicOptions, commit, moveTableHistory,
   };
 };
 

@@ -1,19 +1,21 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { RefObject } from 'react';
 import { useCallback, useRef } from 'react';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import { displayWorkspaceColumnValue, getTableForNode } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow } from './types';
+import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { updateTable } from './workspaceShared';
 
 interface WorkspaceHiddenFieldsOptions {
   dataRef: RefObject<WorkspaceData | undefined>;
   commit: (next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => void;
   withActiveTable: (work: () => void) => void;
-  setHiddenFieldsEditor: Dispatch<SetStateAction<{ rowId: string; title: string; } | undefined>>;
   rowHeader: WorkspaceColumn | undefined;
+  dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
 }
 
-export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, setHiddenFieldsEditor, rowHeader }: WorkspaceHiddenFieldsOptions) => {
+export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, rowHeader, dialogs }: WorkspaceHiddenFieldsOptions) => {
+  const { set: setDialog, close: closeDialogs } = dialogs;
   const toggleColumnVisibility = (columnId: string) => {
     const currentData = dataRef.current;
     const currentTable = currentData ? getTableForNode(currentData, currentData.activeNodeId) : undefined;
@@ -25,7 +27,7 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, set
     })));
   };
 
-  const openHiddenFields = (row: WorkspaceRow) => withActiveTable(() => setHiddenFieldsEditor({ rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' }));
+  const openHiddenFields = (row: WorkspaceRow) => withActiveTable(() => setDialog('hiddenFieldsEditor', { rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' }));
 
   const openHiddenFieldsRef = useRef(openHiddenFields);
 
@@ -52,7 +54,7 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, set
       commit(currentData);
       currentTable = getTableForNode(currentData, currentData.activeNodeId);
     }
-    setHiddenFieldsEditor(undefined);
+    closeDialogs('hiddenFieldsEditor');
   };
 
   return { stableOpenHiddenFields, toggleColumnVisibility, saveHiddenFields };

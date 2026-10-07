@@ -5,22 +5,23 @@ import { displayWorkspaceColumnValue, getTableForNode } from './model';
 import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import type { WorkspaceReadiness } from './useReadyWorkspaceActions';
 import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
+import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { applyWorkspaceMatrixPaste, parseWorkspaceClipboard } from './workspacePaste';
 import { updateTable } from './workspaceShared';
 
 interface WorkspaceClipboardOptions {
   table: WorkspaceTable | undefined;
   rowHeader: WorkspaceColumn | undefined;
-  lastPasteTarget: { rowId: string; columnId: string; } | undefined;
-  focusTarget: { rowId: string; columnId: string; } | undefined;
   dataRef: RefObject<WorkspaceData | undefined>;
   setNotice: Dispatch<SetStateAction<string>>;
-  setPasteDialogOpen: Dispatch<SetStateAction<boolean>>;
   commit: (next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => void;
   readiness: WorkspaceReadiness;
+  dialogs: Pick<WorkspaceDialogController, 'set' | 'close' | 'state'>;
 }
 
-export const useWorkspaceClipboard = ({ table, rowHeader, lastPasteTarget, focusTarget, dataRef, setNotice, setPasteDialogOpen, commit, readiness }: WorkspaceClipboardOptions) => {
+export const useWorkspaceClipboard = ({ table, rowHeader, dataRef, setNotice, commit, readiness, dialogs }: WorkspaceClipboardOptions) => {
+  const { close: closeDialogs } = dialogs;
+  const { lastPasteTarget, focusTarget } = dialogs.state;
   const pasteTarget = useMemo(() => {
     if (!table || !rowHeader || !table.rows.length) return undefined;
     const requested = lastPasteTarget ?? focusTarget;
@@ -48,7 +49,7 @@ export const useWorkspaceClipboard = ({ table, rowHeader, lastPasteTarget, focus
     }
     if (!result.changes.length && !result.addedRows.length && !result.addedColumns.length) {
       setNotice('貼上的內容沒有造成變更');
-      setPasteDialogOpen(false);
+      closeDialogs('pasteDialogOpen');
       return;
     }
     const height = matrix.length;
@@ -58,9 +59,9 @@ export const useWorkspaceClipboard = ({ table, rowHeader, lastPasteTarget, focus
       label: `貼上 ${height} × ${width} 格`,
       action: { type: 'paste-range', changes: result.changes, addedRows: result.addedRows, addedColumns: result.addedColumns },
     });
-    setPasteDialogOpen(false);
+    closeDialogs('pasteDialogOpen');
     setNotice(`已貼上 ${height} × ${width} 格`);
-  }, [commit, pasteTarget]);
+  }, [commit, pasteTarget, closeDialogs]);
 
   const { pasteMatrix } = useReadyWorkspaceActions({ pasteMatrix: rawPasteMatrix }, { pasteMatrix: 'active' }, readiness);
 

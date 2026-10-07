@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { clearSearchCache } from '../components/GameSearch';
 import { api } from './api';
 import { localDb } from './localDb';
 import { flushPendingSubmissions } from './pendingSync';
-
-vi.mock('../components/GameSearch', () => ({ clearSearchCache: vi.fn() }));
 
 const payload = (id: string, statement: string) => ({ gameId: 'game-1', idempotencyKey: id, rules: [{ statement }] });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.mocked(clearSearchCache).mockClear();
 });
 
 describe('offline submission synchronization', () => {
@@ -26,6 +22,7 @@ describe('offline submission synchronization', () => {
     vi.spyOn(localDb, 'getDraft').mockResolvedValue(undefined);
     const invalidateGame = vi.spyOn(localDb, 'invalidateGame').mockResolvedValue(undefined);
     const invalidateHome = vi.spyOn(localDb, 'invalidateHome').mockResolvedValue(undefined);
+    const invalidateSearch = vi.spyOn(api, 'invalidateSearchCache').mockResolvedValue(undefined);
 
     await expect(flushPendingSubmissions('user-1')).resolves.toBe(1);
 
@@ -34,7 +31,7 @@ describe('offline submission synchronization', () => {
     expect(remove).toHaveBeenCalledWith('ok-key-1');
     expect(invalidateGame).toHaveBeenCalledWith('game-1');
     expect(invalidateHome).toHaveBeenCalledOnce();
-    expect(clearSearchCache).toHaveBeenCalledOnce();
+    expect(invalidateSearch).toHaveBeenCalledOnce();
   });
 
   test('deduplicates simultaneous flushes for one account', async () => {

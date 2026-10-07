@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { assertWorkspaceStorageCurrent } from './db';
 import { useWorkspaceGoogleDriveBackup } from './googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import type { WorkspaceData } from './types';
+import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 
 const workspaceLastExportStorageKey = 'board-game-helper-workspace-last-export';
 
@@ -16,11 +17,12 @@ interface WorkspaceBackupStatusOptions {
   drawerOpen: boolean;
   storageConflict: boolean;
   saveState: "saved" | "saving" | "error";
-  setWorkspaceImport: Dispatch<SetStateAction<WorkspaceData | undefined>>;
   setNotice: Dispatch<SetStateAction<string>>;
+  dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
 }
 
-export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, allTablesReady, data, drawerOpen, storageConflict, saveState, setWorkspaceImport, setNotice }: WorkspaceBackupStatusOptions) => {
+export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, allTablesReady, data, drawerOpen, storageConflict, saveState, setNotice, dialogs }: WorkspaceBackupStatusOptions) => {
+  const { set: setDialog } = dialogs;
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
 
   const [googleDriveClientId, setGoogleDriveClientId] = useState<string | null | undefined>(undefined);
@@ -62,7 +64,7 @@ export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, allTable
     isCurrentData: isCurrentWorkspaceData,
     onStorageConflict: noteStorageConflict,
     loadGoogleClientId: loadGoogleDriveClientId,
-    onRestored: (next) => setWorkspaceImport(next),
+    onRestored: (next) => setDialog('workspaceImport', next),
     setNotice,
   });
 

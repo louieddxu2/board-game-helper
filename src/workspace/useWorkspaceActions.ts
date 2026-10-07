@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
+import { useEffect, useRef } from 'react';
+import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
+import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
-import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
+import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import type { NameDialogState } from './workspaceShared';
 import { download, fileBaseName, updateTable } from './workspaceShared';
 
@@ -16,23 +17,9 @@ interface UseWorkspaceActionsProps {
   setNotice: (msg: string) => void;
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
   setDrawerOpen: (open: boolean) => void;
-  setEditing: (editing: { rowId: string; columnId: string } | undefined) => void;
-  setFocusTarget: (target: { rowId: string; columnId: string } | undefined) => void;
-  setSelectionEditor: (editor: { rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean } | undefined) => void;
-  setConfiguring: (config: { column: WorkspaceColumn; isRowHeader: boolean } | undefined) => void;
-  setNodeMenu: (node: WorkspaceNode | undefined) => void;
-  setMovingNode: (node: WorkspaceNode | undefined) => void;
   setTableActionsOpen: (open: boolean) => void;
-  setTableCreateParentId: (id: string | null | undefined) => void;
-  setNameDialog: (state: NameDialogState | undefined) => void;
-  setConfirmDialog: (dialog: { title: string; message: string; onConfirm(): void } | undefined) => void;
-  setWorkspaceImport: (data: WorkspaceData | undefined) => void;
-  setTableImportPreview: (preview: WorkspaceTableImportPreview | undefined) => void;
   onExported: () => void;
-  nameDialog: NameDialogState | undefined;
-  selectionEditor: { rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean } | undefined;
-  configuring: { column: WorkspaceColumn; isRowHeader: boolean } | undefined;
-  workspaceImport: WorkspaceData | undefined;
+  dialogs: WorkspaceDialogController;
 }
 
 export type WorkspaceTableImportPreview = {
@@ -41,12 +28,8 @@ export type WorkspaceTableImportPreview = {
   parentId: string | null;
 };
 
-export function useWorkspaceActions({
-  data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
-  setEditing, setFocusTarget, setSelectionEditor, setConfiguring, setNodeMenu, setMovingNode,
-  setTableActionsOpen, setTableCreateParentId, setNameDialog,
-  setConfirmDialog, setWorkspaceImport, setTableImportPreview, onExported, nameDialog, selectionEditor, configuring, workspaceImport
-}: UseWorkspaceActionsProps) {
+export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen, setTableActionsOpen, onExported, dialogs }: UseWorkspaceActionsProps) {
+  const { nameDialog, selectionEditor, configuring, workspaceImport } = dialogs.state;
 
   const importTableInputRef = useRef<HTMLInputElement>(null);
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
@@ -62,12 +45,12 @@ export function useWorkspaceActions({
     };
   }, []);
 
-  const openNameDialog = (mode: NameDialogState['mode'], initialValue: string, parentId?: string | null, node?: WorkspaceNode) => setNameDialog({ mode, initialValue, parentId, node });
+  const openNameDialog = (mode: NameDialogState['mode'], initialValue: string, parentId?: string | null, node?: WorkspaceNode) => dialogs.set('nameDialog', { mode, initialValue, parentId, node });
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
   const addTable = (parentId: string | null) => openNameDialog('table', '', parentId);
   const renameNode = (node: WorkspaceNode) => openNameDialog('rename', node.name, undefined, node);
-  const renameRow = (row: WorkspaceRow) => setNameDialog({ mode: 'row', initialValue: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name), row });
-  const renameRowHeader = (currentTable: WorkspaceTable) => setNameDialog({ mode: 'axis', initialValue: getRowHeaderColumn(currentTable).name, table: currentTable });
+  const renameRow = (row: WorkspaceRow) => dialogs.set('nameDialog', { mode: 'row', initialValue: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name), row });
+  const renameRowHeader = (currentTable: WorkspaceTable) => dialogs.set('nameDialog', { mode: 'axis', initialValue: getRowHeaderColumn(currentTable).name, table: currentTable });
 
   const submitName = (name: string) => {
     if (!data || !nameDialog) return;
@@ -94,12 +77,12 @@ export function useWorkspaceActions({
       const next = { ...data, nodes: data.nodes.map((item) => item.id === node.id ? { ...item, name } : item), tables: node.tableId ? data.tables.map((item) => item.id === node.tableId ? { ...item, name, updatedAt: Date.now() } : item) : data.tables };
       commit(next);
     }
-    setNameDialog(undefined);
+    dialogs.close('nameDialog');
   };
 
   const askDeleteNode = (node: WorkspaceNode) => {
-    setNodeMenu(undefined);
-    setConfirmDialog({ title: '確認刪除', message: `確定要刪除「${node.name}」嗎？${node.type === 'folder' ? '資料夾內的內容也會一併刪除。' : ''}`, onConfirm: () => { if (data) commit(removeNodeAndDescendants(data, node.id)); setConfirmDialog(undefined); } });
+    dialogs.close('nodeMenu');
+    dialogs.set('confirmDialog', { title: '確認刪除', message: `確定要刪除「${node.name}」嗎？${node.type === 'folder' ? '資料夾內的內容也會一併刪除。' : ''}`, onConfirm: () => { if (data) commit(removeNodeAndDescendants(data, node.id)); dialogs.close('confirmDialog'); } });
   };
 
   const relocateNode = (node: WorkspaceNode, parentId: string | null) => {
@@ -110,8 +93,8 @@ export function useWorkspaceActions({
       if (parentId) setExpanded((current) => new Set(current).add(parentId));
       setNotice(`已移動「${node.name}」`);
     }
-    setMovingNode(undefined);
-    setNodeMenu(undefined);
+    dialogs.close('movingNode');
+    dialogs.close('nodeMenu');
   };
 
   const openNode = (node: WorkspaceNode) => {
@@ -121,20 +104,18 @@ export function useWorkspaceActions({
       return;
     }
     commit({ ...data, activeNodeId: node.id });
-    setEditing(undefined);
-    setFocusTarget(undefined);
-    setSelectionEditor(undefined);
+    dialogs.close('editing', 'focusTarget', 'selectionEditor');
     setDrawerOpen(false);
-    setNodeMenu(undefined);
+    dialogs.close('nodeMenu');
   };
 
   const saveCellValue = (rowId: string, column: WorkspaceColumn, value: WorkspaceCellValue) => {
     if (!data || !table) return;
     const isRowHeader = rowHeader?.id === column.id;
     const row = table.rows.find((item) => item.id === rowId);
-    if (!row) { setEditing(undefined); return; }
+    if (!row) { dialogs.close('editing'); return; }
     const before = isRowHeader ? row.name : row.values[column.id] ?? null;
-    if (JSON.stringify(before) === JSON.stringify(value)) { setEditing(undefined); return; }
+    if (JSON.stringify(before) === JSON.stringify(value)) { dialogs.close('editing'); return; }
     commit(updateTable(data, table.id, (current) => ({
       ...current,
       updatedAt: Date.now(),
@@ -144,7 +125,7 @@ export function useWorkspaceActions({
       label: isRowHeader ? '編輯物件' : '編輯儲存格',
       action: { type: 'set-cell', rowId, columnId: column.id, before, after: value },
     });
-    setEditing(undefined);
+    dialogs.close('editing');
   };
 
   const updateCell = (rowId: string, column: WorkspaceColumn, raw: string) => {
@@ -158,39 +139,39 @@ export function useWorkspaceActions({
 
   const openCell = (row: WorkspaceRow, column: WorkspaceColumn) => {
     if (!table) return;
-    setFocusTarget(undefined);
+    dialogs.close('focusTarget');
     const isRowHeader = rowHeader?.id === column.id;
     const value = isRowHeader ? row.name : row.values[column.id];
     if (column.inputType === 'select' || column.inputType === 'dynamic-select') {
-      setEditing(undefined);
-      setSelectionEditor({ rowId: row.id, column, value, options: column.inputType === 'dynamic-select' ? getDynamicOptions(table, column.id) : column.options, isRowHeader });
+      dialogs.close('editing');
+      dialogs.set('selectionEditor', { rowId: row.id, column, value, options: column.inputType === 'dynamic-select' ? getDynamicOptions(table, column.id) : column.options, isRowHeader });
       return;
     }
-    setEditing({ rowId: row.id, columnId: column.id });
+    dialogs.set('editing', { rowId: row.id, columnId: column.id });
   };
 
   const selectCellValue = (value: string) => {
     if (!selectionEditor) return;
     updateCell(selectionEditor.rowId, selectionEditor.column, value);
-    if (!selectionEditor.column.isMultiple) setSelectionEditor(undefined);
+    if (!selectionEditor.column.isMultiple) dialogs.close('selectionEditor');
   };
 
   const addRow = () => {
     if (!data || !table || !rowHeader) return;
     const row = createRow(table.columns, `物件 ${table.rows.length + 1}`);
     commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, row] })));
-    setFocusTarget({ rowId: row.id, columnId: table.transposed ? table.columns[0]?.id ?? rowHeader.id : rowHeader.id });
+    dialogs.set('focusTarget', { rowId: row.id, columnId: table.transposed ? table.columns[0]?.id ?? rowHeader.id : rowHeader.id });
     setNotice('已新增物件');
   };
-  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => setConfirmDialog({ title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); setConfirmDialog(undefined); } });
+  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => dialogs.set('confirmDialog', { title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); dialogs.close('confirmDialog'); } });
   const addColumn = () => {
     if (!data || !table || !table.rows.length) return;
     const column = createColumn(`屬性 ${table.columns.length + 1}`);
     commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) })));
-    setFocusTarget({ rowId: table.rows[0].id, columnId: column.id });
+    dialogs.set('focusTarget', { rowId: table.rows[0].id, columnId: column.id });
     setNotice('已新增屬性');
   };
-  const askDeleteColumn = (column: WorkspaceColumn) => setConfirmDialog({ title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); setConfirmDialog(undefined); } });
+  const askDeleteColumn = (column: WorkspaceColumn) => dialogs.set('confirmDialog', { title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); dialogs.close('confirmDialog'); } });
   
   const saveColumn = (column: WorkspaceColumn) => {
     if (!data || !table || !configuring) return;
@@ -207,7 +188,7 @@ export function useWorkspaceActions({
     commit(updateTable(data, table.id, () => ({ ...prepared.table, updatedAt: Date.now() })), changes ? {
       tableId: table.id, label: configuring.isRowHeader ? '設定物件屬性' : '設定屬性', action,
     } : undefined);
-    setConfiguring(undefined);
+    dialogs.close('configuring');
   };
 
   const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); onExported(); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
@@ -232,12 +213,12 @@ export function useWorkspaceActions({
       if (typeof input.showPicker === 'function') input.showPicker();
       else input.click();
       setTableActionsOpen(false);
-      setTableCreateParentId(undefined);
+      dialogs.close('tableCreateParentId');
       if (kind === 'workspace') setDrawerOpen(false);
     } catch {
       input.click();
       setTableActionsOpen(false);
-      setTableCreateParentId(undefined);
+      dialogs.close('tableCreateParentId');
       if (kind === 'workspace') setDrawerOpen(false);
     }
   };
@@ -256,11 +237,11 @@ export function useWorkspaceActions({
       if (!isCurrentImport()) return;
       if (kind === 'table') {
         if (imported.isWorkspace || !imported.table || !data) throw new Error('請選擇單張表格檔案');
-        setTableImportPreview({ table: imported.table, source: imported.source, parentId });
+        dialogs.set('tableImportPreview', { table: imported.table, source: imported.source, parentId });
         setNotice('檔案已讀取，請檢查匯入內容');
       } else {
         if (!imported.isWorkspace || !imported.data || !data) throw new Error('請選擇整個資料庫檔案');
-        setWorkspaceImport(imported.data);
+        dialogs.set('workspaceImport', imported.data);
       }
     } catch (error) {
       if (!isCurrentImport()) return;
@@ -273,7 +254,7 @@ export function useWorkspaceActions({
     if (!data) return;
     const node = createNode('table', tableCopy.name, parentId, getChildren(data, parentId).length, tableCopy.id);
     commit({ ...data, tables: [...data.tables, tableCopy], nodes: [...data.nodes, node], activeNodeId: node.id }, undefined, { importedTableIds: [tableCopy.id] });
-    setTableImportPreview(undefined);
+    dialogs.close('tableImportPreview');
     setDrawerOpen(false);
     setNotice(`已匯入「${tableCopy.name}」`);
   };
@@ -294,7 +275,7 @@ export function useWorkspaceActions({
       })();
     const importedTableIds = next.tables.filter(table => mode === 'replace' || !data.tables.includes(table)).map(table => table.id);
     commit(next, undefined, { clearAllHistory: true, importedTableIds });
-    setWorkspaceImport(undefined);
+    dialogs.close('workspaceImport');
     setNotice(mode === 'replace' ? '資料庫已取代' : '資料庫已合併');
   };
 

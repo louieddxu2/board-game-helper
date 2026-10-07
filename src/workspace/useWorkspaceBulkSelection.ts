@@ -2,7 +2,8 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceCellValue, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
+import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { numericWorkspaceValue, updateTable } from './workspaceShared';
 
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
@@ -16,19 +17,17 @@ interface WorkspaceBulkSelectionOptions {
   table: WorkspaceTable | undefined;
   tableRowsById: Map<string, WorkspaceRow>;
   setNotice: Dispatch<SetStateAction<string>>;
-  setEditing: Dispatch<SetStateAction<{ rowId: string; columnId: string; } | undefined>>;
-  setSelectionEditor: Dispatch<SetStateAction<{ rowId: string; column: WorkspaceColumn; value: WorkspaceCellValue; options: string[]; isRowHeader: boolean; } | undefined>>;
-  setConfiguring: Dispatch<SetStateAction<{ column: WorkspaceColumn; isRowHeader: boolean; } | undefined>>;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
   setEditBarOpen: Dispatch<SetStateAction<boolean>>;
   setTableActionsOpen: Dispatch<SetStateAction<boolean>>;
   filteredRows: WorkspaceRow[];
-  setLastPasteTarget: Dispatch<SetStateAction<{ rowId: string; columnId: string; } | undefined>>;
   dataRef: RefObject<WorkspaceData | undefined>;
   commit: (next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => void;
+  dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
 }
 
-export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, setEditing, setSelectionEditor, setConfiguring, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, setLastPasteTarget, dataRef, commit }: WorkspaceBulkSelectionOptions) => {
+export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, dataRef, commit, dialogs }: WorkspaceBulkSelectionOptions) => {
+  const { close: closeDialogs, set: setDialog } = dialogs;
   const [bulkSelection, setBulkSelection] = useState<WorkspaceBulkSelection>();
 
   const [bulkTopRowRevealed, setBulkTopRowRevealed] = useState(false);
@@ -60,9 +59,7 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
       setBulkSelection((current) => current && !current.rowIds.includes(rowId) ? { ...current, rowIds: [...current.rowIds, rowId] } : current);
       return true;
     }
-    setEditing(undefined);
-    setSelectionEditor(undefined);
-    setConfiguring(undefined);
+    closeDialogs('editing', 'selectionEditor', 'configuring');
     setSearchOpen(false);
     setEditBarOpen(false);
     setTableActionsOpen(false);
@@ -70,7 +67,7 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
     setBulkSelection({ tableId: table.id, columnId, rowIds: [rowId] });
     setNotice('已進入批次選取');
     return true;
-  }, [bulkSelection, table, setSearchOpen]);
+  }, [bulkSelection, table, setSearchOpen, closeDialogs]);
 
   const sweepBulkSelection = useCallback((fromRowId: string, toRowId: string, columnId: string) => {
     const fromIndex = filteredRows.findIndex((row) => row.id === fromRowId);
@@ -96,14 +93,14 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
 
   const toggleBulkCell = useCallback((rowId: string, columnId: string) => {
     if (!bulkSelection || bulkSelection.tableId !== table?.id) return;
-    setLastPasteTarget({ rowId, columnId });
+    setDialog('lastPasteTarget', { rowId, columnId });
     if (bulkSelection.columnId !== columnId) {
       setNotice('批次編輯只能選取同一屬性的格子');
       return;
     }
     setBulkSelection((current) => current?.tableId === table.id && current.columnId === columnId
       ? toggleBulkSelectionRow(current, rowId) : current);
-  }, [bulkSelection, table]);
+  }, [bulkSelection, table, setDialog]);
 
   const closeBulkSelection = useCallback(() => {
     setBulkSelection(undefined);

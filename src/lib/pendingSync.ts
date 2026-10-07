@@ -1,4 +1,3 @@
-import { clearSearchCache } from '../components/GameSearch';
 import { api } from './api';
 import { localDb } from './localDb';
 
@@ -37,7 +36,7 @@ export const flushPendingSubmissions = (userId: string): Promise<number> => {
         // Keep failed items for a later online/login event; continue with independent submissions.
       }
     }
-    if (synchronized) clearSearchCache();
+    if (synchronized) void api.invalidateSearchCache();
     return synchronized;
   })().finally(() => { activeFlushes.delete(userId); });
   activeFlushes.set(userId, request);

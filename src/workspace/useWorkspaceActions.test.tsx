@@ -6,6 +6,7 @@ import { getDynamicOptions } from './model';
 import { importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
 import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from './useWorkspaceActions';
+import { useWorkspaceDialogs } from './useWorkspaceDialogs';
 
 vi.mock('./spreadsheet', async (importOriginal) => ({
   ...await importOriginal<typeof import('./spreadsheet')>(),
@@ -28,10 +29,8 @@ const deferred = () => {
 const makeProps = (): Parameters<typeof useWorkspaceActions>[0] => ({
   data, table: undefined, rowHeader: undefined,
   commit: vi.fn(), getDynamicOptions, setNotice: vi.fn(), setExpanded: vi.fn(), setDrawerOpen: vi.fn(),
-  setEditing: vi.fn(), setFocusTarget: vi.fn(), setSelectionEditor: vi.fn(), setConfiguring: vi.fn(),
-  setNodeMenu: vi.fn(), setMovingNode: vi.fn(), setTableActionsOpen: vi.fn(), setTableCreateParentId: vi.fn(),
-  setNameDialog: vi.fn(), setConfirmDialog: vi.fn(), setWorkspaceImport: vi.fn(), setTableImportPreview: vi.fn(),
-  onExported: vi.fn(), nameDialog: undefined, selectionEditor: undefined, configuring: undefined, workspaceImport: undefined,
+  setTableActionsOpen: vi.fn(), onExported: vi.fn(),
+  dialogs: { state: { columnVisibilityOpen: false, pasteDialogOpen: false }, set: vi.fn(), update: vi.fn(), close: vi.fn(), closeCellEditors: vi.fn() },
 });
 
 const editableRowHeader: WorkspaceColumn = { id: 'row-header-table-1', name: '物件', inputType: 'text', options: [] };
@@ -60,7 +59,7 @@ describe('Workspace import ownership', () => {
     result.current.importTableParentId.current = 'B';
     await act(async () => { pending.resolve(parsedTable('first')); await reading; });
 
-    const preview = vi.mocked(props.setTableImportPreview).mock.calls[0][0]!;
+    const preview = vi.mocked(props.dialogs.set).mock.calls[0][1]! as WorkspaceTableImportPreview;
     expect(preview.parentId).toBe('A');
     act(() => result.current.finishTableImport(preview.table, preview.parentId));
     expect(props.commit).toHaveBeenCalledWith(expect.objectContaining({
@@ -69,7 +68,8 @@ describe('Workspace import ownership', () => {
   });
 
   it.each(['replace', 'merge'] as const)('marks only incoming tables for statistics reuse during %s', (mode) => {
-    const props = { ...makeEditableProps(), workspaceImport: { ...data, tables: [table] } };
+    const props = makeEditableProps();
+    props.dialogs.state.workspaceImport = { ...data, tables: [table] };
     const { result } = renderHook(() => useWorkspaceActions(props));
     act(() => result.current.finishWorkspaceImport(mode));
     const [next, , options] = vi.mocked(props.commit).mock.calls[0];
@@ -88,7 +88,7 @@ describe('Workspace import ownership', () => {
     const readingFirst = result.current.readImport(new File([], 'first.xlsx'), 'table');
     const readingSecond = result.current.readImport(new File([], 'second.xlsx'), 'table');
     await act(async () => { second.resolve(parsedTable('second')); await readingSecond; });
-    vi.mocked(props.setTableImportPreview).mockClear();
+    vi.mocked(props.dialogs.set).mockClear();
     vi.mocked(props.setNotice).mockClear();
 
     await act(async () => {
@@ -96,7 +96,7 @@ describe('Workspace import ownership', () => {
       else first.reject(new Error('older parser failed'));
       await readingFirst;
     });
-    expect(props.setTableImportPreview).not.toHaveBeenCalled();
+    expect(props.dialogs.set).not.toHaveBeenCalled();
     expect(props.setNotice).not.toHaveBeenCalled();
   });
 
@@ -111,8 +111,8 @@ describe('Workspace import ownership', () => {
     const readingSecond = result.current.readImport(new File([], 'second.zip'), 'workspace');
     await act(async () => { second.resolve({ isWorkspace: true, source: 'workspace', data }); await readingSecond; });
     await act(async () => { first.resolve(parsedTable('first')); await readingFirst; });
-    expect(props.setWorkspaceImport).toHaveBeenCalledWith(data);
-    expect(props.setTableImportPreview).not.toHaveBeenCalled();
+    expect(props.dialogs.set).toHaveBeenCalledWith('workspaceImport', data);
+    expect(props.dialogs.set).not.toHaveBeenCalledWith('tableImportPreview', expect.anything());
   });
 
   it.each(['success', 'failure'] as const)('does not publish a late %s into the surviving host after the import owner unmounts', async (outcome) => {
@@ -120,14 +120,14 @@ describe('Workspace import ownership', () => {
     vi.mocked(importWorkspaceXlsx).mockReturnValueOnce(pending.promise);
     let actions!: ReturnType<typeof useWorkspaceActions>;
     const props = makeProps();
-    const ImportOwner = ({ setNotice, setTableImportPreview }: Pick<typeof props, 'setNotice' | 'setTableImportPreview'>) => {
-      actions = useWorkspaceActions({ ...props, setNotice, setTableImportPreview });
+    const ImportOwner = ({ setNotice, dialogs }: Pick<typeof props, 'setNotice' | 'dialogs'>) => {
+      actions = useWorkspaceActions({ ...props, setNotice, dialogs });
       return null;
     };
     const Host = ({ showOwner }: { showOwner: boolean }) => {
       const [notice, setNotice] = useState('');
-      const [preview, setTableImportPreview] = useState<WorkspaceTableImportPreview>();
-      return <>{showOwner && <ImportOwner setNotice={setNotice} setTableImportPreview={setTableImportPreview} />}<output data-testid="notice">{notice}</output><output data-testid="preview">{preview?.table.name ?? 'none'}</output></>;
+      const dialogs = useWorkspaceDialogs(null);
+      return <>{showOwner && <ImportOwner setNotice={setNotice} dialogs={dialogs} />}<output data-testid="notice">{notice}</output><output data-testid="preview">{dialogs.state.tableImportPreview?.table.name ?? 'none'}</output></>;
     };
     const view = render(<Host showOwner />);
     let reading!: Promise<void>;
@@ -158,7 +158,7 @@ describe('Workspace single-cell editing', () => {
       action: { type: 'set-cell', rowId: 'row-1', columnId: editableColumn.id, before: null, after: '新的內容' },
     });
     expect(nextData.tables[0].rows[0].values[editableColumn.id]).toBe('新的內容');
-    expect(props.setEditing).toHaveBeenCalledWith(undefined);
+    expect(props.dialogs.close).toHaveBeenCalledWith('editing');
 
     const undo = applyWorkspaceTableHistoryAction(nextData, editableTable.id, mutation!.action, 'undo');
     expect(undo.tables[0].rows[0].values[editableColumn.id]).toBeNull();
@@ -196,7 +196,7 @@ describe('Workspace single-cell editing', () => {
     act(() => result.current.saveCellValue('row-1', column, value));
 
     expect(props.commit).not.toHaveBeenCalled();
-    expect(props.setEditing).toHaveBeenCalledWith(undefined);
+    expect(props.dialogs.close).toHaveBeenCalledWith('editing');
   });
 
   it('closes an editor for a missing row without inventing a history entry', () => {
@@ -206,6 +206,6 @@ describe('Workspace single-cell editing', () => {
     act(() => result.current.saveCellValue('missing-row', editableColumn, '內容'));
 
     expect(props.commit).not.toHaveBeenCalled();
-    expect(props.setEditing).toHaveBeenCalledWith(undefined);
+    expect(props.dialogs.close).toHaveBeenCalledWith('editing');
   });
 });
