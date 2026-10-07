@@ -199,6 +199,20 @@ describe('Workspace single-cell editing', () => {
     expect(props.dialogs.close).toHaveBeenCalledWith('editing');
   });
 
+  it('does not commit an edited link whose URL and label are unchanged', () => {
+    const linkColumn = { ...editableColumn, inputType: 'link' as const };
+    const link = { url: 'https://example.com/game', label: '官網' };
+    const linkTable = { ...editableTable, columns: [linkColumn], rows: [{ ...editableTable.rows[0], values: { [linkColumn.id]: link } }] };
+    const linkData = { ...editableData, tables: [linkTable] };
+    const props = { ...makeEditableProps(), data: linkData, table: linkTable };
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => result.current.saveCellValue('row-1', linkColumn, { label: '官網', url: 'https://example.com/game' }));
+
+    expect(props.commit).not.toHaveBeenCalled();
+    expect(props.dialogs.close).toHaveBeenCalledWith('editing');
+  });
+
   it('closes an editor for a missing row without inventing a history entry', () => {
     const props = makeEditableProps();
     const { result } = renderHook(() => useWorkspaceActions(props));

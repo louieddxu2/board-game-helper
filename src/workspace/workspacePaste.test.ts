@@ -25,6 +25,18 @@ describe('workspace rectangular paste', () => {
     expect(result.table.rows[0].name).toBe('新名稱');
   });
 
+  it('does not report an unchanged link paste as a cell change', () => {
+    const table = createTable('測試');
+    const linkColumn = { ...table.columns[0], inputType: 'link' as const };
+    const link = { url: 'https://example.com/game', label: '' };
+    const linkTable = { ...table, columns: [linkColumn], rows: [{ ...table.rows[0], values: { [linkColumn.id]: link } }] };
+    const result = applyWorkspaceMatrixPaste(linkTable, linkTable.rows[0].id, linkColumn.id, [[link.url]]);
+
+    expect(result.changes).toEqual([]);
+    expect(result.addedRows).toEqual([]);
+    expect(result.addedColumns).toEqual([]);
+  });
+
   it('rejects invalid typed cells without partially changing the table', () => {
     const table = createTable('測試');
     const numberColumn = createColumn('數量', 'number');

@@ -37,6 +37,36 @@ test('ten thousand rows open from a bounded display projection and cannot be sav
   expect(result.reads.every(read => ['meta', 'tableHeads', 'rowPages'].includes(read.store))).toBe(true);
 });
 
+test('a legacy transposed row head still opens from a bounded paged projection', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10000, 12);
+    const tableId = api.data.tables[0].id;
+    const request = indexedDB.open('board-game-helper-workspace');
+    const connection = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    const transaction = connection.transaction('tableHeads', 'readwrite');
+    const store = transaction.objectStore('tableHeads');
+    const head = await new Promise<any>((resolve, reject) => { const get = store.get(tableId); get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error); });
+    store.put({ ...head, definition: { ...head.definition, transposed: true } }, tableId);
+    await new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
+    connection.close();
+
+    api.instrument();
+    const initial = await api.db.loadWorkspaceInitial({ paged: true });
+    return { loadedTables: initial.data.tables.length, complete: initial.complete, progressive: initial.progressive, transposed: initial.window?.head.definition.transposed, rowCount: initial.window?.head.rowCount, reads: api.reads };
+  });
+
+  expect(result.loadedTables).toBe(0);
+  expect(result.complete).toBe(false);
+  expect(result.progressive).toBe(true);
+  expect(result.transposed).toBe(true);
+  expect(result.rowCount).toBe(10000);
+  expect(result.reads.filter(read => read.store === 'rowPages')).toHaveLength(1);
+  expect(result.reads.some(read => read.store === 'tables' || read.store === 'rowChunks')).toBe(false);
+  expect(result.reads.every(read => ['meta', 'tableHeads', 'rowPages'].includes(read.store))).toBe(true);
+});
+
 test('display pages follow manual ordering and single-cell edits update only the affected page atomically', async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async () => {

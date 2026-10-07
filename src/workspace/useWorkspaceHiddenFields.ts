@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { useStableCallback } from '../hooks/useStableCallback';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import { displayWorkspaceColumnValue, getTableForNode } from './model';
+import { displayWorkspaceColumnValue, getTableForNode, sameWorkspaceCellValue } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { updateTable } from './workspaceShared';
@@ -39,7 +39,7 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, row
     for (const column of currentTable.columns.filter((item) => item.hidden)) {
       const before = row.values[column.id] ?? null;
       const after = values[column.id] ?? null;
-      if (JSON.stringify(before) === JSON.stringify(after)) continue;
+      if (sameWorkspaceCellValue(before, after)) continue;
       currentData = updateTable(currentData, tableId, (current) => ({
         ...current,
         updatedAt: Date.now(),

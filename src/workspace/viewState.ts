@@ -47,6 +47,7 @@ const normalizeViewState = (value: unknown): WorkspaceTableViewState => {
   const candidate = value as Partial<WorkspaceTableViewState>;
   const headerFilters = candidate.headerFilters && typeof candidate.headerFilters === 'object' && !Array.isArray(candidate.headerFilters)
     ? Object.fromEntries(Object.entries(candidate.headerFilters).flatMap(([key, filter]) => {
+      if (key.startsWith('row:')) return [];
       const normalized = normalizeFilterState(filter);
       return normalized ? [[key, normalized]] : [];
     }))

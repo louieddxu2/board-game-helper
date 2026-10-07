@@ -192,7 +192,7 @@ export const loadWorkspaceInitial = async (options?: { paged?: boolean }): Promi
     let window: WorkspaceTableWindow | undefined;
     const view = activeId ? loadWorkspaceTableViewState(activeId) : undefined;
     const needsFullView = Boolean(view?.searchOpen || view?.searchQuery.trim() || Object.values(view?.headerFilters ?? {}).some(filter => filter.sort || filter.includedKeys !== null || filter.query?.trim() || filter.min?.trim() || filter.max?.trim()));
-    if (head && !head.definition.transposed && !needsFullView) {
+    if (head && !needsFullView) {
       const indices = initialWorkspaceRowPages(head, view?.scrollTop ?? 0, globalThis.innerHeight || 844);
       window = { head, pages: await Promise.all(indices.map(async index => validateWorkspaceRowPage(head, index, await transaction.objectStore('rowPages').get([activeId!, index])))) };
     }

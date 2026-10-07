@@ -120,9 +120,3 @@ export const waitForProjection = (page: Page, count: number) => expect.poll(() =
   const head = await new Promise<any>(resolve => { get.onsuccess = () => resolve(get.result); }); connection.close();
   return head?.rowCount;
 })).toBe(count);
-
-export const transposedLabels = async (page: Page) => {
-  const headers = await page.locator('.workspace-table thead th[data-row-id] button.workspace-column-name').evaluateAll((items) => items.map((item) => item.textContent?.trim() || ''));
-  const filters = await page.locator('.workspace-filterbar-button').evaluateAll((items) => items.map((item) => (item.getAttribute('aria-label') || '').replace(/^篩選\s*/, '')));
-  return { headers, filters };
-};

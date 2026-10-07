@@ -1,4 +1,4 @@
-import { coerceCellValue, createColumn, createRow, getRowHeaderColumn } from './model';
+import { coerceCellValue, createColumn, createRow, getRowHeaderColumn, sameWorkspaceCellValue } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 
 export type WorkspacePasteCellChange = {
@@ -39,8 +39,6 @@ export const parseWorkspaceClipboard = (text: string): string[][] => {
   rows.at(-1)!.push(value);
   return rows;
 };
-
-const sameValue = (left: WorkspaceCellValue, right: WorkspaceCellValue) => JSON.stringify(left) === JSON.stringify(right);
 
 export const applyWorkspaceMatrixPaste = (
   table: WorkspaceTable,
@@ -84,7 +82,7 @@ export const applyWorkspaceMatrixPaste = (
       return;
     }
     const before = column.id === rowHeader.id ? row.name : row.values[column.id] ?? null;
-    if (sameValue(before, after)) return;
+    if (sameWorkspaceCellValue(before, after)) return;
     changes.push({ rowId: row.id, columnId: column.id, before, after });
     if (column.id === rowHeader.id) row.name = after;
     else row.values[column.id] = after;

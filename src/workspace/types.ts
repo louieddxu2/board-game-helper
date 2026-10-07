@@ -56,6 +56,7 @@ export interface WorkspaceTable {
   rowHeaderName: string;
   rowHeader?: WorkspaceColumn;
   textScale?: number;
+  /** Legacy view preference retained for backup compatibility; currently ignored by the UI. */
   transposed?: boolean;
   columns: WorkspaceColumn[];
   rows: WorkspaceRow[];

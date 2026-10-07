@@ -1,12 +1,10 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspaceTableWindow } from './db';
-import { displayWorkspaceColumnValue } from './model';
 import type { WorkspaceTableWindow } from './rowPages';
 import { isPendingWorkspaceRow } from './rowPages';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
-import { useWorkspaceColumnWindow } from './useWorkspaceColumnWindow';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
 import { loadWorkspaceTableViewState } from './viewState';
 import { measureVisibleColumnWidths, preserveColumnScrollPosition } from './visibleColumnWidths';
@@ -33,12 +31,10 @@ interface WorkspaceTableWindowOptions {
   dataRef: RefObject<WorkspaceData | undefined>;
   setTableWindow: Dispatch<SetStateAction<WorkspaceTableWindow | undefined>>;
   reportReadError: (error: unknown) => void;
-  virtualScrollLeft: number;
   rowHeader: WorkspaceColumn | undefined;
   textWidthCache: { measure(row: WorkspaceRow, column: WorkspaceColumn, value: WorkspaceCellValue, fontWeight?: 400 | 600): number; };
   setMountedTextWidths: Dispatch<SetStateAction<{ tableId: string; widths: number[]; } | undefined>>;
   programmaticTableScrollRef: RefObject<boolean>;
-  setVirtualScrollLeft: Dispatch<SetStateAction<number>>;
   setVirtualScrollTop: Dispatch<SetStateAction<number>>;
   lastUserScrollAtRef: RefObject<number>;
   focusTarget: { rowId: string; columnId: string; } | undefined;
@@ -49,19 +45,17 @@ interface WorkspaceTableWindowOptions {
   searchOpen: boolean;
 }
 
-export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, virtualScrollLeft, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollLeft, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
-  const layoutViewportWidth = table?.transposed || !hasHiddenColumns ? viewportWidth : Math.max(0, viewportWidth - 44);
+export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
+  const layoutViewportWidth = !hasHiddenColumns ? viewportWidth : Math.max(0, viewportWidth - 44);
 
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
 
-  const renderedColumnWidths = useMemo(() => table?.transposed || !hasHiddenColumns ? columnWidths : [...columnWidths, 44], [columnWidths, hasHiddenColumns, table?.transposed]);
+  const renderedColumnWidths = useMemo(() => !hasHiddenColumns ? columnWidths : [...columnWidths, 44], [columnWidths, hasHiddenColumns]);
 
-  const renderedTableWidth = useMemo(() => table?.transposed || !hasHiddenColumns ? tableWidth : tableWidth + 44, [hasHiddenColumns, table?.transposed, tableWidth]);
+  const renderedTableWidth = useMemo(() => !hasHiddenColumns ? tableWidth : tableWidth + 44, [hasHiddenColumns, tableWidth]);
 
-  const rowMeasurementKey = useMemo(() => table?.transposed
-    ? `${table.id}:transposed`
-    : `${table?.id ?? ''}:${textScale}:${renderedColumnWidths.join(',')}:${displayedColumns.map((column) => `${column.id}:${column.lineLimit ?? ''}:${column.overflowMode}`).join(',')}`,
-  [displayedColumns, renderedColumnWidths, table?.id, table?.transposed, textScale]);
+  const rowMeasurementKey = useMemo(() => `${table?.id ?? ''}:${textScale}:${renderedColumnWidths.join(',')}:${displayedColumns.map((column) => `${column.id}:${column.lineLimit ?? ''}:${column.overflowMode}`).join(',')}`,
+  [displayedColumns, renderedColumnWidths, table?.id, textScale]);
 
   const rowWindowOrderKey = useMemo(() => `${searchQuery}\u0000${Object.entries(headerFilters)
     .filter(([key]) => key.startsWith('column:'))
@@ -74,7 +68,7 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
 
   const rowWindowAtBottom = Boolean(renderedRowScopeRef.current === table?.id && viewportRef.current && viewportRef.current.scrollTop >= viewportRef.current.scrollHeight - viewportRef.current.clientHeight - 2);
 
-  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? [] : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table && !table.transposed), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true);
+  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? [] : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true);
 
   const pagedRowWindow = usePagedWorkspaceRows(activeWindow, rowMeasurementKey, virtualScrollTop, viewportHeight, rowWindowAtBottom);
 
@@ -123,13 +117,11 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     return () => { cancelled = true; };
   }, [activeWindow, rowWindow.first, rowWindow.last, reportReadError, virtualScrollTop]);
 
-  const columnWindow = useWorkspaceColumnWindow(filteredRows, renderedColumnWidths, virtualScrollLeft, viewportWidth || window.innerWidth, Boolean(table?.transposed));
-
   useLayoutEffect(() => {
-    if (!table || table.transposed || !rowHeader) return;
+    if (!table || !rowHeader) return;
     const widths = measureVisibleColumnWidths(rowWindow.visibleRows, rowHeader, displayedColumns, textWidthCache);
     setMountedTextWidths(previous => previous?.tableId === table.id && previous.widths.length === widths.length && previous.widths.every((width, index) => width === widths[index]) ? previous : { tableId: table.id, widths });
-  }, [table?.id, table?.transposed, rowHeader, displayedColumns, rowWindow.visibleRows, textWidthCache]);
+  }, [table?.id, rowHeader, displayedColumns, rowWindow.visibleRows, textWidthCache]);
 
   const horizontalLayoutRef = useRef<{ tableId?: string; widths: number[]; textWidths: number[]; left: number }>({ widths: [], textWidths: [], left: 0 });
 
@@ -137,17 +129,16 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     const viewport = viewportRef.current;
     const previous = horizontalLayoutRef.current;
     const changed = previous.textWidths.length === columnTextWidths.length && previous.textWidths.some((width, index) => width !== columnTextWidths[index]);
-    if (viewport && !table?.transposed && previous.tableId === table?.id && previous.widths.length && changed) {
+    if (viewport && previous.tableId === table?.id && previous.widths.length && changed) {
       const left = preserveColumnScrollPosition(previous.widths, renderedColumnWidths, previous.left);
       if (Math.abs(viewport.scrollLeft - left) > 0.5) {
         programmaticTableScrollRef.current = true;
         viewport.scrollLeft = left;
-        setVirtualScrollLeft(viewport.scrollLeft);
         requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
       }
     }
     horizontalLayoutRef.current = { tableId: table?.id, widths: renderedColumnWidths, textWidths: columnTextWidths, left: viewport?.scrollLeft ?? 0 };
-  }, [columnTextWidths, renderedColumnWidths, table?.id, table?.transposed]);
+  }, [columnTextWidths, renderedColumnWidths, table?.id]);
 
   const appliedRowWindowOrderKeyRef = useRef({ scope: table?.id ?? '', key: rowWindowOrderKey });
 
@@ -189,7 +180,7 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     if (activeWindow && restoredViewTableRef.current !== table?.id) return;
     // The native scroll event may arrive after a measurement frame. Respect a new
     // DOM position before applying the anchor captured for the previous window.
-    if (activeWindow && Math.abs(viewport.scrollTop - virtualScrollTop) >= 1) {
+    if (Math.abs(viewport.scrollTop - virtualScrollTop) >= 1) {
       lastUserScrollAtRef.current = performance.now();
       setVirtualScrollTop(viewport.scrollTop);
       return;
@@ -233,44 +224,17 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
         viewport.scrollTop = offset;
         setVirtualScrollTop(viewport.scrollTop);
       }
-    } else if (columnWindow.virtual && (index < columnWindow.first || index >= columnWindow.last)) {
-      const offset = columnWindow.offsetForRow(focusTarget.rowId);
-      const viewport = viewportRef.current;
-      if (offset !== undefined && viewport) {
-        viewport.scrollLeft = offset;
-        setVirtualScrollLeft(viewport.scrollLeft);
-      }
     }
-  }, [columnWindow, filteredRowIndexes, focusTarget, rowWindow, table?.id]);
-
-  const transposedFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
-    if (!table?.transposed || !rowHeader) return [];
-    return columnWindow.visibleRows.map((row) => ({
-      axis: 'row',
-      id: row.id,
-      label: displayWorkspaceColumnValue(row.name, rowHeader) || '未命名物件',
-    }));
-  }, [columnWindow.visibleRows, rowHeader, table?.transposed]);
+  }, [filteredRowIndexes, focusTarget, rowWindow, table?.id]);
 
   const filterbarSlots = useMemo<Array<HeaderFilterTarget | undefined>>(() => {
     if (!table) return [];
-    const slots: Array<HeaderFilterTarget | undefined> = table.transposed ? [undefined, ...transposedFilterTargets] : [...searchFilterTargets];
-    if (!table.transposed && hasHiddenColumns) slots.push(undefined);
-    return slots;
-  }, [hasHiddenColumns, searchFilterTargets, table, transposedFilterTargets]);
+    return hasHiddenColumns ? [...searchFilterTargets, undefined] : searchFilterTargets;
+  }, [hasHiddenColumns, searchFilterTargets, table?.id]);
 
-  const filterbarTrackStyle = useMemo(() => {
-    if (table?.transposed && columnWindow.virtual) {
-      const widths = [
-        renderedColumnWidths[0] ?? 0,
-        ...(columnWindow.leftPadding > 0 ? [columnWindow.leftPadding] : []),
-        ...columnWindow.visibleWidths,
-        ...(columnWindow.rightPadding > 0 ? [columnWindow.rightPadding] : []),
-      ];
-      return { gridTemplateColumns: widths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` };
-    }
-    return { gridTemplateColumns: renderedColumnWidths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px` };
-  }, [columnWindow.leftPadding, columnWindow.rightPadding, columnWindow.virtual, columnWindow.visibleWidths, renderedColumnWidths, renderedTableWidth, table?.transposed]);
+  const filterbarTrackStyle = useMemo(() => ({
+    gridTemplateColumns: renderedColumnWidths.map((width) => `${width}px`).join(' '), width: `${renderedTableWidth}px`,
+  }), [renderedColumnWidths, renderedTableWidth]);
 
   const syncFilterbarScroll = useCallback((source: HTMLDivElement) => {
     const viewport = viewportRef.current;
@@ -294,7 +258,6 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     if (virtualScrollFrameRef.current === undefined) virtualScrollFrameRef.current = window.requestAnimationFrame(() => {
       virtualScrollFrameRef.current = undefined;
       setVirtualScrollTop(source.scrollTop);
-      setVirtualScrollLeft(source.scrollLeft);
     });
     if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
     scrollSaveTimerRef.current = window.setTimeout(() => {
@@ -317,7 +280,7 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
       const saved = loadWorkspaceTableViewState(table.id);
       programmaticTableScrollRef.current = true;
       viewport.scrollLeft = saved.scrollLeft; viewport.scrollTop = saved.scrollTop;
-      setVirtualScrollTop(viewport.scrollTop); setVirtualScrollLeft(viewport.scrollLeft);
+      setVirtualScrollTop(viewport.scrollTop);
       requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
     }
     restoredViewTableRef.current = table.id;
@@ -330,5 +293,5 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     filterbarRef.current.scrollLeft = viewportRef.current.scrollLeft;
   }, [renderedTableWidth, searchOpen]);
 
-  return { handleTableViewportScroll, renderedTableWidth, columnWindow, renderedColumnWidths, rowWindow, syncFilterbarScroll, filterbarTrackStyle, transposedFilterTargets, filterbarSlots };
+  return { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, pagedRowIndexes: pagedRowWindow.indexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots };
 };

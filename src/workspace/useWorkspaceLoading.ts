@@ -47,6 +47,12 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
   const fullTable = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const activeWindow = !fullTable && data?.nodes.some(node => node.id === data.activeNodeId && node.tableId === tableWindow?.head.definition.id) ? tableWindow : undefined;
 
+  const publishHistories = useCallback((stored: Map<string, WorkspaceTableHistory>, validIds: Set<string>) => {
+    const histories = hydrateWorkspaceHistories(stored, historyRef.current, validIds, historyResetRef.current);
+    historyRef.current = histories; historyReadyRef.current = true;
+    setHistoryByTable(histories); setHistoryReady(true);
+  }, [historyReadyRef, historyRef, historyResetRef, setHistoryByTable, setHistoryReady]);
+
   useEffect(() => {
     let cancelled = false;
     let cancelHistoryLoad: (() => void) | undefined;
@@ -122,12 +128,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
         };
         const finish = (stored: Map<string, WorkspaceTableHistory>) => {
           if (cancelled) return;
-          const pending = historyRef.current;
-          const histories = hydrateWorkspaceHistories(stored, pending, new Set(dataRef.current?.tables.map((table) => table.id)), historyResetRef.current);
-          historyRef.current = histories;
-          historyReadyRef.current = true;
-          setHistoryByTable(histories);
-          setHistoryReady(true);
+          publishHistories(stored, new Set(dataRef.current?.tables.map((table) => table.id)));
         };
         void finishTables().then(loadWorkspaceHistories).then(finish).catch((error: unknown) => {
           if (cancelled) return;
@@ -146,7 +147,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
       window.removeEventListener('workspace-storage-blocked', blocked);
       window.removeEventListener('workspace-storage-versionchange', changedVersion);
     };
-  }, []);
+  }, [publishHistories]);
 
   const reportReadError = useCallback((error: unknown) => {
     if (!mountedRef.current) return;
@@ -183,16 +184,12 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
         const stored = await loadWorkspaceHistories();
         if (!mountedRef.current) return;
         const ids = new Set(dataRef.current?.nodes.flatMap(node => node.tableId ?? []));
-        const histories = hydrateWorkspaceHistories(stored, historyRef.current, ids, historyResetRef.current);
-        flushSync(() => {
-          historyRef.current = histories; historyReadyRef.current = true;
-          setHistoryByTable(histories); setHistoryReady(true);
-        });
+        flushSync(() => publishHistories(stored, ids));
       }
     });
     readQueueRef.current = work;
     return work;
-  }, []);
+  }, [publishHistories]);
   useEffect(() => {
     const tableId = activeWindow?.head.definition.id;
     const nodeId = data?.activeNodeId;

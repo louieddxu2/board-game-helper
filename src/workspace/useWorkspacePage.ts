@@ -38,7 +38,6 @@ export const useWorkspacePage = () => {
   const [notice, setNotice] = useState('');
 
   const [virtualScrollTop, setVirtualScrollTop] = useState(0);
-  const [virtualScrollLeft, setVirtualScrollLeft] = useState(0);
   const virtualKeyboardOpen = useWorkspaceVirtualKeyboardOpen();
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -79,19 +78,15 @@ export const useWorkspacePage = () => {
   const bottomNavigationItems = useMemo(() => (data?.bottomNavigationTableIds ?? []).flatMap((tableId) => navigationTableById.get(tableId) ?? []), [data?.bottomNavigationTableIds, navigationTableById]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table?.id, table?.rowHeader, table?.rowHeaderName]);
   const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table?.rows]);
-  const tableRowIndexes = useMemo(() => activeWindow
-    ? new Map(activeWindow.pages.flatMap(page => page.rows.map((row, slot) => [row.id, page.index * activeWindow.head.pageSize + slot] as const)))
-    : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, table?.rows]);
-  const filter = useWorkspaceFilter({ table, rowHeader, tableRowsById });
+  const filter = useWorkspaceFilter({ table, rowHeader });
 
-  const { searchQuery, setSearchQuery, searchOpen, setSearchOpen, headerFilters, setFilterTarget, clearFilters, filteredRows, visibleColumns, setScrollPosition } = filter;
+  const { searchQuery, setSearchQuery, searchOpen, setSearchOpen, headerFilters, setFilterTarget, clearFilters, filteredRows, setScrollPosition } = filter;
 
   const hiddenColumns = useMemo(() => table?.columns.filter((column) => column.hidden) ?? [], [table?.columns]);
-  const displayedColumns = useMemo(() => visibleColumns.filter((column) => !column.hidden), [visibleColumns]);
+  const displayedColumns = useMemo(() => table?.columns.filter((column) => !column.hidden) ?? [], [table?.columns]);
   const filteredRowIndexes = useMemo(() => new Map(filteredRows.map((row, index) => [row.id, index])), [filteredRows]);
   const searchFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
     if (!table || !rowHeader) return [];
-    if (table.transposed) return [];
     return [
       { axis: 'column', id: rowHeader.id, label: rowHeader.name || '未命名欄位' },
       ...displayedColumns.map((column) => ({ axis: 'column' as const, id: column.id, label: column.name || '未命名欄位' })),
@@ -156,14 +151,14 @@ export const useWorkspacePage = () => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = viewport.scrollHeight;
-  }, [quickActionsExpanded, table?.columns.length, table?.id, table?.rows.length, table?.transposed]);
+  }, [quickActionsExpanded, table?.columns.length, table?.id, table?.rows.length]);
 
   useEffect(() => {
     if (!data) return;
     window.localStorage.setItem(expandedFoldersStorageKey, JSON.stringify([...expanded]));
   }, [data, expanded]);
 
-  const { localMinTextScale, viewportWidth, columnTextWidths, viewportHeight, textWidthCache, setMountedTextWidths } = useWorkspaceColumnSizing({ table, rowHeader, displayedColumns, filteredRows, viewportRef });
+  const { localMinTextScale, viewportWidth, columnTextWidths, viewportHeight, textWidthCache, setMountedTextWidths } = useWorkspaceColumnSizing({ table, rowHeader, displayedColumns, viewportRef });
 
   const openSearchFromGesture = useCallback(() => withActiveTable(() => {
     setSearchOpen(true);
@@ -221,7 +216,7 @@ export const useWorkspacePage = () => {
             if (indices.some(index => !nextWindow!.pages.some(page => page.index === index))) nextWindow = await loadWorkspaceTableWindow(node.tableId!, indices);
           }
           const needsFullView = Boolean(view?.searchOpen || view?.searchQuery.trim() || Object.values(view?.headerFilters ?? {}).some(filter => hasWorkspaceFilterCriteria(filter) || filter.sort));
-          if (!nextWindow || nextWindow.head.definition.transposed || needsFullView) {
+          if (!nextWindow || needsFullView) {
             await hydrateWorkspace([node.tableId!]); nextWindow = undefined;
           }
           if (!mountedRef.current || pendingOpenNodeIdRef.current !== node.id) return;
@@ -281,7 +276,10 @@ export const useWorkspacePage = () => {
     quickActions: () => setQuickActionsExpanded(true),
   }, { configure: 'active', filter: 'active', search: 'active', edit: 'history', settings: 'active', createTable: 'all', context: 'all', drive: 'all', bottomNavigation: 'all', quickActions: 'history' }, readiness);
 
-  const { handleTableViewportScroll, renderedTableWidth, columnWindow, renderedColumnWidths, rowWindow, syncFilterbarScroll, filterbarTrackStyle, transposedFilterTargets, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, virtualScrollLeft, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollLeft, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
+  const { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, pagedRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
+
+  const tableRowIndexes = useMemo(() => activeWindow ? pagedRowIndexes
+    : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, pagedRowIndexes, table?.rows]);
 
   const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
   const activeEditingRowIndex = activeEditingRow && table ? table.rows.findIndex((item) => item.id === activeEditingRow.id) : -1;
@@ -302,7 +300,7 @@ export const useWorkspacePage = () => {
   // Keep the expensive table subtree out of drawer-only state updates. Real workspaces can
   // contain hundreds of rows; opening the drawer must not block the first click while React
   // reconstructs every cell.
-  const { workspaceTableView } = useWorkspaceTableView({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, columnWindow, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, activeHeaderFilterKeys, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs: dialogs.update, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, filteredRowIndexes, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale, filteredRows, stableAddTable });
+  const { workspaceTableView } = useWorkspaceTableView({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, activeHeaderFilterKeys, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs: dialogs.update, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale });
 
   return {
     data,
@@ -317,7 +315,6 @@ export const useWorkspacePage = () => {
     viewportRef,
     table,
     setVirtualScrollTop,
-    setVirtualScrollLeft,
     tableNode,
     hasActiveSearchState,
     readyControls,
@@ -330,8 +327,6 @@ export const useWorkspacePage = () => {
     filterbarRef,
     syncFilterbarScroll,
     filterbarTrackStyle,
-    columnWindow,
-    transposedFilterTargets,
     filterbarSlots,
     pasteTarget,
     stableAddTable,

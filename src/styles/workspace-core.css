@@ -113,7 +113,6 @@
 .workspace-table.is-bouncing.is-bounce-y tbody th[scope="row"], .workspace-table.is-bouncing.is-bounce-y tbody td { transform: translate3d(0, calc(var(--workspace-bounce-y, 0px) + var(--workspace-table-body-offset, 0px)), 0); }
 .workspace-table th, .workspace-table td { min-width: 0; max-width: none; padding: 2px 3px; border-right: 1px solid var(--workspace-grid-line); border-bottom: 1px solid var(--workspace-grid-line); vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
 .workspace-table .workspace-virtual-spacer td { padding: 0; border: 0; line-height: 0; pointer-events: none; }
-.workspace-table .workspace-virtual-column-spacer { padding: 0; border: 0; pointer-events: none; }
 .workspace-load-error button { margin-left: 4px; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; }
 .workspace-table thead th { position: sticky; top: 0; z-index: 6; cursor: pointer; background: var(--cream); color: var(--green); font-size: inherit; font-weight: 700; }
 .workspace-toolbar-layer .workspace-table { --workspace-table-header-offset: calc(var(--workspace-toolbar-row-height) * var(--workspace-toolbar-row-count)); }
@@ -137,14 +136,11 @@
 .workspace-table th.is-editing, .workspace-table td.is-editing { background: #fff7dc; box-shadow: inset 0 0 0 3px var(--orange); }
 .workspace-table td.is-bulk-selected { position: relative; background: rgba(233,180,76,.22); box-shadow: inset 0 0 0 3px var(--orange); }
 .workspace-table th.is-bulk-column, .workspace-table td.is-bulk-column { --workspace-bulk-lane-inset: max(0px, min(12px, 15%, calc(50% - 16px))); background-image: linear-gradient(90deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)), linear-gradient(270deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)); background-repeat: no-repeat; }
-.workspace-table.is-transposed th.is-bulk-column, .workspace-table.is-transposed td.is-bulk-column { background-image: linear-gradient(180deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)), linear-gradient(0deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)); }
 .workspace-cell-layout { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; width: 100%; }
 .workspace-hidden-columns-heading { width: 44px; min-width: 44px !important; padding: 0 !important; color: var(--muted) !important; cursor: default !important; text-align: center; }
 .workspace-hidden-columns-cell { width: 44px; min-width: 44px !important; padding: 0 !important; background: var(--paper) !important; cursor: default !important; text-align: center; }
 .workspace-hidden-fields-trigger { display: grid; place-items: center; width: 34px; height: 34px; margin: auto; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--green); cursor: pointer; }
 .workspace-hidden-fields-trigger:hover { background: var(--cream); color: var(--orange); }
-.workspace-transposed-object-heading { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.workspace-transposed-object-heading > .workspace-header-layout { flex: 1 1 auto; min-width: 0; }
 .workspace-cell-value { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .workspace-overflow-expand .workspace-cell-value { white-space: pre; overflow: visible; text-overflow: clip; }
 .workspace-overflow-ellipsis .workspace-cell-value { white-space: nowrap; text-overflow: ellipsis; }

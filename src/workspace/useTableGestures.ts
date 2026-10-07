@@ -119,7 +119,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
     if (!target || !targetId) return;
     const rect = target.getBoundingClientRect();
-    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    const horizontal = session.kind === 'column';
     session.targetId = targetId;
     session.after = horizontal ? clientX > rect.left + rect.width / 2 : clientY > rect.top + rect.height / 2;
     setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
@@ -172,7 +172,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     }
     tableReorderPointer.current = { session, x: event.clientX, y: event.clientY };
     updateTableReorderTarget(session, event.clientX, event.clientY);
-    const horizontal = table?.transposed ? session.kind === 'row' : session.kind === 'column';
+    const horizontal = session.kind === 'column';
     const axisDistance = Math.abs(horizontal ? event.clientX - session.startX : event.clientY - session.startY);
     if (axisDistance >= DRAG_SCROLL_INTENT_DISTANCE) session.dragIntentConfirmed = true;
     tableReorderAutoScroll.update({ x: event.clientX, y: event.clientY, axis: horizontal ? 'x' : 'y' }, Boolean(session.dragIntentConfirmed));
@@ -233,7 +233,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       const rowId = cell?.dataset.bulkRowId;
       const columnId = cell?.dataset.bulkColumnId;
       if (rowId && columnId) {
-        const startedInLane = isInCellSweepLane(cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed));
+        const startedInLane = isInCellSweepLane(cell.getBoundingClientRect(), event.clientX);
         const bulkTouch = event.pointerType === 'touch' && Boolean(bulkSelectionColumnId);
         const immediate = bulkTouch && columnId === bulkSelectionColumnId && startedInLane;
         const hold: CellHoldSession = {
@@ -345,18 +345,17 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       } else if (hold.active) {
         hold.x = event.clientX;
         hold.y = event.clientY;
-        const transposed = Boolean(table?.transposed);
-        const inLane = hold.startedInLane && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX, event.clientY, transposed);
+        const inLane = hold.startedInLane && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX);
         const deltaX = event.clientX - hold.startX;
         const deltaY = event.clientY - hold.startY;
         if (hold.mode === 'pending') {
-          const cross = Math.abs(transposed ? deltaY : deltaX);
+          const cross = Math.abs(deltaX);
           const resolved = !hold.canSweep || !inLane || cross >= CELL_SWEEP_CROSS_AXIS_DISTANCE || Math.hypot(deltaX, deltaY) >= CELL_SWEEP_INTENT_DISTANCE;
           if (!resolved) {
             event.preventDefault();
             return;
           }
-          const sweepDirection = hold.canSweep && inLane && isCellSweepDirection(deltaX, deltaY, transposed);
+          const sweepDirection = hold.canSweep && inLane && isCellSweepDirection(deltaX, deltaY);
           if (sweepDirection && (!hold.immediate || onCellLongPress?.(hold.lastRowId, hold.columnId) !== false)) {
             hold.mode = 'selecting';
             hold.directionX = event.clientX;
@@ -373,9 +372,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
           }
           const segmentX = event.clientX - hold.directionX;
           const segmentY = event.clientY - hold.directionY;
-          const segmentCross = Math.abs(transposed ? segmentY : segmentX);
+          const segmentCross = Math.abs(segmentX);
           if (segmentCross >= CELL_SWEEP_CROSS_AXIS_DISTANCE || Math.hypot(segmentX, segmentY) >= CELL_SWEEP_INTENT_DISTANCE) {
-            if (!isCellSweepDirection(segmentX, segmentY, transposed)) {
+            if (!isCellSweepDirection(segmentX, segmentY)) {
               resumeTablePanFromHold(hold, event.currentTarget, event.clientX, event.clientY, false);
               event.preventDefault();
               return;
@@ -492,7 +491,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         }
         if (hold.immediate && hold.mode === 'pending' && event.type !== 'pointercancel'
           && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) <= 10
-          && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX, event.clientY, Boolean(table?.transposed))) {
+          && isInCellSweepLane(hold.cell.getBoundingClientRect(), event.clientX)) {
           onCellTap?.(hold.lastRowId, hold.columnId);
         }
         pointers.current.delete(event.pointerId);

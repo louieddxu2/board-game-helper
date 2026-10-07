@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
-import { closeServer, readTableCell, seed, startServer, transposedLabels, visibleVirtualRowIds, waitForOfflineShell } from './startupSupport';
+import { closeServer, readTableCell, seed, startServer, visibleVirtualRowIds, waitForOfflineShell } from './startupSupport';
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
 test.afterAll(async () => { await closeServer(site.server); });
@@ -162,7 +162,7 @@ test('10,000 variable-height rows keep the mid-scroll row identity after zoom me
   expect(await rows.count()).toBeLessThan(80);
 });
 
-test('a transposed 10,000-row table bounds its filter toolbar and tracks visible object labels during search and horizontal scroll', async ({ page }) => {
+test('a legacy transposed flag keeps the normal column filter toolbar bounded and synchronized with horizontal scrolling', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 10_000, 12, 0);
@@ -176,7 +176,7 @@ test('a transposed 10,000-row table bounds its filter toolbar and tracks visible
     await new Promise<void>((done, reject) => { transaction.oncomplete = () => done(); transaction.onerror = () => reject(transaction.error); });
     db.close();
     localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({ version: 1, tables: {
-      'table-0': { searchQuery: '', searchOpen: true, headerFilters: { 'row:row-0': { includedKeys: null, sort: 'asc' } }, scrollLeft: 0, scrollTop: 0 },
+      'table-0': { searchQuery: '', searchOpen: true, headerFilters: { 'column:column-0': { includedKeys: null, sort: 'asc' }, 'row:row-0': { includedKeys: [], sort: 'asc' } }, scrollLeft: 0, scrollTop: 0 },
     } }));
   });
   await page.reload();
@@ -184,19 +184,19 @@ test('a transposed 10,000-row table bounds its filter toolbar and tracks visible
   const viewport = page.locator('.workspace-table-viewport');
   const toolbar = page.locator('.workspace-filterbar');
   await expect(toolbar).toBeVisible();
-  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
-  await expect.poll(async () => (await transposedLabels(page)).filters).toEqual(expect.arrayContaining(['項目 0']));
-  const initialLabels = await transposedLabels(page);
-  expect(initialLabels.filters).toEqual(initialLabels.headers);
+  await expect(page.locator('.workspace-table')).not.toHaveClass(/is-transposed/);
+  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBe(13);
+  await expect(page.getByRole('button', { name: '篩選 欄位 0' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '篩選 欄位 11' })).toBeVisible();
 
   const search = page.getByRole('searchbox', { name: '搜尋此表' });
   await search.fill('資料 9999-0');
-  await expect.poll(async () => (await transposedLabels(page)).headers).toEqual(['項目 9999']);
-  await expect.poll(async () => (await transposedLabels(page)).filters).toEqual(['項目 9999']);
+  await expect(page.locator('.workspace-table tbody th[data-row-id]')).toHaveCount(1);
+  await expect(page.locator('.workspace-table tbody th[data-row-id="row-9999"]')).toBeVisible();
 
   await search.fill('');
   await expect(page.locator('.workspace-appbar-search-count')).toHaveText('10000 / 10000');
-  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
+  await expect.poll(() => page.locator('.workspace-filterbar-button').count()).toBe(13);
   await toolbar.evaluate((element) => { element.scrollLeft = element.scrollWidth; element.dispatchEvent(new Event('scroll', { bubbles: true })); });
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => {
@@ -204,10 +204,7 @@ test('a transposed 10,000-row table bounds its filter toolbar and tracks visible
     const toolbar = document.querySelector<HTMLElement>('.workspace-filterbar');
     return viewport && toolbar ? Math.abs(viewport.scrollLeft - toolbar.scrollLeft) : Number.POSITIVE_INFINITY;
   })).toBeLessThan(1);
-  await expect.poll(async () => (await transposedLabels(page)).headers).toEqual(expect.arrayContaining(['項目 9999']));
-  const endLabels = await transposedLabels(page);
-  expect(endLabels.filters).toEqual(endLabels.headers);
-  expect(await page.locator('.workspace-filterbar-button').count()).toBeLessThan(40);
+  expect(await page.locator('.workspace-filterbar-button').count()).toBe(13);
 });
 
 test('stored scroll restoration is scoped per table and does not carry one table bottom to another', async ({ page }) => {
@@ -374,7 +371,7 @@ test('an older offline tab cannot overwrite a newer table, and explicit deletion
   expect((await readStorage()).names).toEqual(['測試表 0']);
 });
 
-test('a large transposed table draws only the visible object columns', async ({ page }) => {
+test('a legacy transposed flag still uses row virtualization for deep-row editing', async ({ page }) => {
   await page.goto(`${site.origin}/workspace`);
   await expect(page.getByRole('button', { name: '建立表格', exact: true })).toBeVisible();
   await seed(page, 1, 250, 12);
@@ -384,18 +381,20 @@ test('a large transposed table draws only the visible object columns', async ({ 
     const transaction = db.transaction('tables', 'readwrite');
     const store = transaction.objectStore('tables');
     const table = await new Promise<any>((done) => { const get = store.get('table-0'); get.onsuccess = () => done(get.result); });
-    await new Promise<void>((done) => { const put = store.put({ ...table, transposed: true }, 'table-0'); put.onsuccess = () => done(); });
+    store.put({ ...table, transposed: true }, 'table-0');
+    await new Promise<void>((done, reject) => { transaction.oncomplete = () => done(); transaction.onerror = () => reject(transaction.error); });
     db.close();
   });
   await page.reload();
-  const headers = page.locator('.workspace-table thead th[data-row-id]');
-  await expect(headers.first()).toHaveAttribute('data-row-id', 'row-0');
-  expect(await headers.count()).toBeLessThan(40);
+  await expect(page.locator('.workspace-table')).not.toHaveClass(/is-transposed/);
+  const rows = page.locator('.workspace-table tbody tr[data-virtual-row-id]');
+  await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
+  expect(await rows.count()).toBeLessThan(40);
   const viewport = page.locator('.workspace-table-viewport');
-  await viewport.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
-  await expect(headers.last()).toHaveAttribute('data-row-id', 'row-249');
-  await expect(headers.last()).toBeInViewport();
-  expect(await headers.count()).toBeLessThan(40);
+  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(rows.last()).toHaveAttribute('data-virtual-row-id', 'row-249');
+  await expect(rows.last()).toBeInViewport();
+  expect(await rows.count()).toBeLessThan(40);
   await page.locator('td[data-bulk-row-id="row-249"][data-bulk-column-id="column-0"]').click();
   const editor = page.getByRole('textbox').first();
   await editor.fill('橫向修改');

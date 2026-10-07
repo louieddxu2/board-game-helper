@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { createColumn, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, emptyWorkspace, ensureTableDynamicOptions, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
+import { createColumn, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, emptyWorkspace, ensureTableDynamicOptions, formatMultiSelectValues, formatWorkspaceDate, formatWorkspaceDateMonth, formatWorkspaceDateTime, getDynamicOptions, isWorkspaceUrlText, moveNode, normalizeWorkspace, normalizeWorkspaceDateTime, parseMultiSelectValues, removeNodeAndDescendants, sameWorkspaceCellValue, workspaceCellColor, workspaceDateMonthKey, workspaceDateTimeFromParts, workspaceDateTimeParts, workspaceNumberRangeColor, workspaceOptionColor } from './model';
 import type { WorkspaceData } from './types';
 
 describe('workspace model', () => {
+  it('compares cell values by type and link fields', () => {
+    expect(sameWorkspaceCellValue(null, null)).toBe(true);
+    expect(sameWorkspaceCellValue('', '')).toBe(true);
+    expect(sameWorkspaceCellValue(null, '')).toBe(false);
+    expect(sameWorkspaceCellValue(1, '1')).toBe(false);
+    expect(sameWorkspaceCellValue({ label: '官網', url: 'https://example.com' }, { url: 'https://example.com', label: '官網' })).toBe(true);
+    expect(sameWorkspaceCellValue({ url: 'https://example.com', label: '官網' }, { url: 'https://example.com/other', label: '官網' })).toBe(false);
+    expect(sameWorkspaceCellValue({ url: 'https://example.com', label: '官網' }, { url: 'https://example.com', label: '規則' })).toBe(false);
+  });
+
   it('defers missing dynamic statistics until optional work requests them', () => {
     const table = createTable('首屏');
     table.columns[0].inputType = 'dynamic-select';

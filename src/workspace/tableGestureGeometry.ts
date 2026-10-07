@@ -12,20 +12,14 @@ export const CELL_SWEEP_CROSS_AXIS_DISTANCE = 10;
 
 export const cellSweepGuardSize = (extent: number) => Math.max(0, Math.min(12, extent * 0.15, (extent - 32) / 2));
 
-export const isInCellSweepLane = (rect: DOMRect, x: number, y: number, transposed: boolean) => {
-  const extent = transposed ? rect.height : rect.width;
-  if (extent < 32) return false;
-  const inset = cellSweepGuardSize(extent);
-  const coordinate = transposed ? y : x;
-  const start = transposed ? rect.top : rect.left;
-  return coordinate >= start + inset && coordinate <= start + extent - inset;
+export const isInCellSweepLane = (rect: DOMRect, x: number) => {
+  if (rect.width < 32) return false;
+  const inset = cellSweepGuardSize(rect.width);
+  return x >= rect.left + inset && x <= rect.right - inset;
 };
 
-export const isCellSweepDirection = (deltaX: number, deltaY: number, transposed: boolean) => {
-  const primary = Math.abs(transposed ? deltaX : deltaY);
-  const cross = Math.abs(transposed ? deltaY : deltaX);
-  return primary >= CELL_SWEEP_INTENT_DISTANCE && primary >= CELL_SWEEP_DIRECTION_RATIO * cross;
-};
+export const isCellSweepDirection = (deltaX: number, deltaY: number) =>
+  Math.abs(deltaY) >= CELL_SWEEP_INTENT_DISTANCE && Math.abs(deltaY) >= CELL_SWEEP_DIRECTION_RATIO * Math.abs(deltaX);
 
 export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
   if (axis !== 'y' || maxTop <= 0) return undefined;

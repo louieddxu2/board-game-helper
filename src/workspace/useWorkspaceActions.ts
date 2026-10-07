@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId } from './model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
@@ -115,7 +115,7 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
     const row = table.rows.find((item) => item.id === rowId);
     if (!row) { dialogs.close('editing'); return; }
     const before = isRowHeader ? row.name : row.values[column.id] ?? null;
-    if (JSON.stringify(before) === JSON.stringify(value)) { dialogs.close('editing'); return; }
+    if (sameWorkspaceCellValue(before, value)) { dialogs.close('editing'); return; }
     commit(updateTable(data, table.id, (current) => ({
       ...current,
       updatedAt: Date.now(),
@@ -160,7 +160,7 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
     if (!data || !table || !rowHeader) return;
     const row = createRow(table.columns, `物件 ${table.rows.length + 1}`);
     commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, row] })));
-    dialogs.set('focusTarget', { rowId: row.id, columnId: table.transposed ? table.columns[0]?.id ?? rowHeader.id : rowHeader.id });
+    dialogs.set('focusTarget', { rowId: row.id, columnId: rowHeader.id });
     setNotice('已新增物件');
   };
   const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => dialogs.set('confirmDialog', { title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); dialogs.close('confirmDialog'); } });

@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
+import { sameWorkspaceCellValue } from './model';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { WorkspaceCellValue, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
@@ -115,7 +116,7 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
       if (!valuesByRowId.has(row.id)) return [];
       const before = row.values[bulkColumn.id] ?? null;
       const after = valuesByRowId.get(row.id)!;
-      return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ rowId: row.id, before, after }];
+      return sameWorkspaceCellValue(before, after) ? [] : [{ rowId: row.id, before, after }];
     });
     if (changes.length === 0) {
       setNotice('選取的格子沒有變更');

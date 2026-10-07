@@ -1,4 +1,4 @@
-import { getRowHeaderColumn } from './model';
+import { getRowHeaderColumn, sameWorkspaceCellValue } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
@@ -347,8 +347,8 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
       const afterRow = nextTable.rows.find((row) => row.id === beforeRow.id);
       if (!afterRow) return undefined;
       const changedValues = new Set<string>();
-      if (!same(beforeRow.name, afterRow.name)) changedValues.add(getRowHeaderColumn(beforeTable).id);
-      for (const column of beforeTable.columns) if (!same(beforeRow.values[column.id] ?? null, afterRow.values[column.id] ?? null)) changedValues.add(column.id);
+      if (!sameWorkspaceCellValue(beforeRow.name, afterRow.name)) changedValues.add(getRowHeaderColumn(beforeTable).id);
+      for (const column of beforeTable.columns) if (!sameWorkspaceCellValue(beforeRow.values[column.id] ?? null, afterRow.values[column.id] ?? null)) changedValues.add(column.id);
       if (changedValues.size === 1) {
         const columnId = [...changedValues][0];
         const beforeValue = columnId === getRowHeaderColumn(beforeTable).id ? beforeRow.name : beforeRow.values[columnId] ?? null;

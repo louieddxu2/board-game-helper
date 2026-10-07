@@ -36,6 +36,20 @@ describe('workspace table view state', () => {
     });
   });
 
+  it('drops legacy row-axis filters while preserving column filters', () => {
+    localStorage.setItem('board-game-helper-workspace-view-state', JSON.stringify({
+      version: 1,
+      tables: { table: { headerFilters: {
+        'row:row-0': { includedKeys: [], sort: 'asc' },
+        'column:column-0': { includedKeys: ['text:保留'], sort: 'desc' },
+      } } },
+    }));
+
+    expect(loadWorkspaceTableViewState('table').headerFilters).toEqual({
+      'column:column-0': { includedKeys: ['text:保留'], sort: 'desc' },
+    });
+  });
+
   it('restores the chosen date filter precision', () => {
     saveWorkspaceTableViewState('dates', {
       searchQuery: '', searchOpen: true,

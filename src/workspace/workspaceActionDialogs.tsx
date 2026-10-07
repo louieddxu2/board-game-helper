@@ -19,12 +19,6 @@ export const MoveNodeDialog = ({ node, data, onClose, onMove }: { node: Workspac
   const folders = data.nodes.filter((item) => item.type === 'folder' && !invalidFolders.has(item.id));
   return <WorkspaceModal owner="move-node" title={`移動「${node.name}」`} onRequestClose={onClose} className="workspace-action-dialog"><div className="workspace-action-list workspace-move-list"><button type="button" onClick={() => onMove(null)}><WorkspaceIcon name="home" size={21} />最外層</button>{folders.map((folder) => <button type="button" key={folder.id} onClick={() => onMove(folder.id)}><WorkspaceIcon name="folder" size={21} />{folder.name}</button>)}</div></WorkspaceModal>;
 };
-export const TableActionsDialog = ({ tableName, transposed, onClose, onExport, onTranspose }: { tableName: string; transposed: boolean; onClose(): void; onExport(): void; onTranspose(): void }) => <WorkspaceModal owner="table-actions" title={tableName} onRequestClose={onClose} className="workspace-action-dialog">
-  <div className="workspace-action-list">
-    <button type="button" onClick={onTranspose}><WorkspaceIcon name="refresh" size={21} />{transposed ? '恢復正常顯示' : '轉置顯示'}</button>
-    <button type="button" onClick={onExport}><WorkspaceIcon name="download" size={21} />匯出此表</button>
-  </div>
-</WorkspaceModal>;
 export const TableAddDialog = ({ onClose, onAddRow, onAddColumn }: { onClose(): void; onAddRow(): void; onAddColumn(): void }) => <WorkspaceModal title="新增" onRequestClose={onClose} className="workspace-action-dialog">
   <div className="workspace-action-list">
     <button type="button" onClick={onAddRow}><WorkspaceIcon name="rows" size={21} />物件</button>

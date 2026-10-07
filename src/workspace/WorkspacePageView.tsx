@@ -57,7 +57,6 @@ export const WorkspacePageView = ({
   viewportRef,
   table,
   setVirtualScrollTop,
-  setVirtualScrollLeft,
   tableNode,
   hasActiveSearchState,
   readyControls,
@@ -70,8 +69,6 @@ export const WorkspacePageView = ({
   filterbarRef,
   syncFilterbarScroll,
   filterbarTrackStyle,
-  columnWindow,
-  transposedFilterTargets,
   filterbarSlots,
   pasteTarget,
   stableAddTable,
@@ -120,7 +117,7 @@ export const WorkspacePageView = ({
     <header className="workspace-appbar">
       <div className="workspace-appbar-leading">
         <button type="button" className="workspace-appbar-button workspace-menu-button" aria-label={filter.searchOpen ? '清除搜尋與篩選' : '開啟目錄'} onClick={filter.searchOpen ? clearSearchAndFilters : drawer.openDrawer}><WorkspaceIcon name={filter.searchOpen ? 'filter-off' : 'menu'} size={29} /></button>
-        {filter.searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulk.bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulk.bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={filter.searchQuery} onChange={(event) => { if (viewportRef.current) { viewportRef.current.scrollTop = 0; if (table?.transposed) viewportRef.current.scrollLeft = 0; } setVirtualScrollTop(0); if (table?.transposed) setVirtualScrollLeft(0); filter.setSearchQuery(event.target.value); }} autoFocus /><span className="workspace-appbar-search-count">{filter.filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && actions.renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
+        {filter.searchOpen ? <div className="workspace-appbar-search" role="search"><input type="text" role="searchbox" aria-label={bulk.bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} placeholder={bulk.bulkSelection ? '搜尋後繼續選取' : '搜尋此表'} inputMode="search" value={filter.searchQuery} onChange={(event) => { if (viewportRef.current) { viewportRef.current.scrollTop = 0; } setVirtualScrollTop(0); filter.setSearchQuery(event.target.value); }} autoFocus /><span className="workspace-appbar-search-count">{filter.filteredRows.length} / {table?.rows.length ?? 0}</span></div> : <button type="button" className={`workspace-appbar-title ${nameDialog?.node?.id === tableNode?.id ? 'is-editing' : ''}`} onClick={() => tableNode && actions.renameNode(tableNode)} disabled={!tableNode} aria-label="重新命名表格"><span>{table?.name ?? '動態表格'}</span></button>}
       </div>
       <div className="workspace-appbar-actions">
         <button type="button" className={`workspace-appbar-button ${filter.searchOpen ? 'active' : ''} ${hasActiveSearchState ? 'has-active-filter' : ''}`} aria-label={bulk.bulkSelection ? '搜尋並繼續批次選取' : '搜尋'} onClick={readyControls.search} disabled={!table}><WorkspaceIcon name="search" size={29} /></button>
@@ -134,17 +131,7 @@ export const WorkspacePageView = ({
     </header>
     <div className="workspace-toolbar-layer" style={{ '--workspace-toolbar-row-count': workspaceToolbarRowCount } as React.CSSProperties}>
     {bulk.bulkSelection && bulkColumn && <WorkspaceBulkEditToolbar column={bulkColumn} count={bulk.bulkSelection.rowIds.length} numericValues={bulk.bulkNumericValues} onCancel={bulk.closeBulkSelection} onOpenEditor={() => bulk.setBulkEditorOpen(true)} />}
-    {filter.searchOpen && table && <div ref={filterbarRef} className={`workspace-filterbar${bulk.bulkSelection && bulkColumn ? ' has-bulk-toolbar' : ''}`} aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{table.transposed && columnWindow.virtual ? <>
-      <span className="workspace-filterbar-spacer is-frozen" aria-hidden="true" />
-      {columnWindow.leftPadding > 0 && <span className="workspace-filterbar-spacer" aria-hidden="true" />}
-      {transposedFilterTargets.map((target) => {
-        const state = filter.headerFilters[`${target.axis}:${target.id}`];
-        const active = filter.isHeaderFilterActive(target.axis, target.id);
-        const summary = workspaceFilterSummary(state);
-        return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => readyControls.filter(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>;
-      })}
-      {columnWindow.rightPadding > 0 && <span className="workspace-filterbar-spacer" aria-hidden="true" />}
-    </> : filterbarSlots.map((target, index) => target ? (() => { const state = filter.headerFilters[`${target.axis}:${target.id}`]; const active = filter.isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${index === 0 ? 'is-frozen' : ''} ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => readyControls.filter(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className={`workspace-filterbar-spacer ${index === 0 ? 'is-frozen' : ''}`} aria-hidden="true" />)}</div></div>}
+    {filter.searchOpen && table && <div ref={filterbarRef} className={`workspace-filterbar${bulk.bulkSelection && bulkColumn ? ' has-bulk-toolbar' : ''}`} aria-label="欄位篩選工具列" onScroll={(event) => syncFilterbarScroll(event.currentTarget)}><div className="workspace-filterbar-scroll" style={filterbarTrackStyle}>{filterbarSlots.map((target, index) => target ? (() => { const state = filter.headerFilters[`${target.axis}:${target.id}`]; const active = filter.isHeaderFilterActive(target.axis, target.id); const summary = workspaceFilterSummary(state); return <button key={`${target.axis}:${target.id}`} type="button" className={`workspace-filterbar-button ${index === 0 ? 'is-frozen' : ''} ${active ? 'is-filtered' : ''}`} aria-label={`篩選 ${target.label}`} aria-pressed={active} onClick={() => readyControls.filter(target)}><WorkspaceIcon name="filter" size={15} />{summary && <small>{summary}</small>}</button>; })() : <span key={`filterbar-spacer-${index}`} className={`workspace-filterbar-spacer ${index === 0 ? 'is-frozen' : ''}`} aria-hidden="true" />)}</div></div>}
     {editBarOpen && table && <div className="workspace-editbar" aria-label="編輯工具列">
       <div className="workspace-editbar-group workspace-editbar-history">
         <button type="button" className="workspace-editbar-button" aria-label="復原" title={history.currentTableHistory?.past.at(-1) ? `復原：${history.currentTableHistory.past.at(-1)!.label}` : '沒有可復原的操作'} onClick={history.undoTable} disabled={!history.currentTableHistory?.past.length}><WorkspaceIcon name="undo" size={22} /></button>
