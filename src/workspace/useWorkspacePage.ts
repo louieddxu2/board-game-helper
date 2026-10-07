@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useStableCallback } from '../hooks/useStableCallback';
 import { loadWorkspaceTableWindow } from './db';
 import { displayWorkspaceColumnValue, getRowHeaderColumn, parseMultiSelectValues } from './model';
 import { initialWorkspaceRowPages, workspaceWindowDisplayTable } from './rowPages';
@@ -10,6 +11,7 @@ import { useWorkspaceBackupStatus } from './useWorkspaceBackupStatus';
 import { useWorkspaceVirtualKeyboardOpen } from './useWorkspaceBrowserBack';
 import { useWorkspaceBulkSelection } from './useWorkspaceBulkSelection';
 import { useWorkspaceClipboard } from './useWorkspaceClipboard';
+import { useWorkspaceCellFocus } from './useWorkspaceCellFocus';
 import { useWorkspaceColumnSizing } from './useWorkspaceColumnSizing';
 import { useWorkspaceDialogs } from './useWorkspaceDialogs';
 import { useWorkspaceDrawer } from './useWorkspaceDrawer';
@@ -23,7 +25,7 @@ import { useWorkspaceTableView } from './useWorkspaceTableView';
 import { useWorkspaceTableWindow } from './useWorkspaceTableWindow';
 import { loadWorkspaceTableViewState } from './viewState';
 import { type WorkspaceBottomNavigationItem } from './WorkspaceBottomNavigation';
-import { ensureWorkspaceCellVisible, expandedFoldersStorageKey, findTableNode, hasWorkspaceFilterCriteria, updateTable, useWorkspaceInputModality, type HeaderFilterTarget } from './workspaceShared';
+import { expandedFoldersStorageKey, findTableNode, hasWorkspaceFilterCriteria, updateTable, useWorkspaceInputModality, type HeaderFilterTarget } from './workspaceShared';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 export const useWorkspacePage = () => {
@@ -37,13 +39,11 @@ export const useWorkspacePage = () => {
 
   const [virtualScrollTop, setVirtualScrollTop] = useState(0);
   const [virtualScrollLeft, setVirtualScrollLeft] = useState(0);
-  const [visualViewportHeight, setVisualViewportHeight] = useState<number>();
   const virtualKeyboardOpen = useWorkspaceVirtualKeyboardOpen();
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const filterbarRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
-  const activeCellElementRef = useRef<HTMLElement | null>(null);
 
   const pendingOpenNodeIdRef = useRef<string | undefined>(undefined);
   const lastUserScrollAtRef = useRef(0);
@@ -187,23 +187,13 @@ export const useWorkspacePage = () => {
     beginTablePan, moveTablePan, endTablePan,
   } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: toggleBulkCell, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen, ensureTableReady: activeWindow ? () => readiness.ensure('active') : undefined, onReadError: reportReadError, onPersistTextScale: persistWindowTextScale });
 
-  const tableGestureHandlersRef = useRef({
-    beginTableReorder, moveTableReorder, endTableReorder,
-    beginTablePan, moveTablePan, endTablePan,
-  });
-  tableGestureHandlersRef.current = {
-    beginTableReorder, moveTableReorder, endTableReorder,
-    beginTablePan, moveTablePan, endTablePan,
-  };
-  const stableBeginTableReorder = useCallback((...args: Parameters<typeof beginTableReorder>) => tableGestureHandlersRef.current.beginTableReorder(...args), []);
-  const stableMoveTableReorder = useCallback((...args: Parameters<typeof moveTableReorder>) => tableGestureHandlersRef.current.moveTableReorder(...args), []);
-  const stableEndTableReorder = useCallback((...args: Parameters<typeof endTableReorder>) => tableGestureHandlersRef.current.endTableReorder(...args), []);
-  const stableBeginTablePan = useCallback((...args: Parameters<typeof beginTablePan>) => tableGestureHandlersRef.current.beginTablePan(...args), []);
-  const stableMoveTablePan = useCallback((...args: Parameters<typeof moveTablePan>) => tableGestureHandlersRef.current.moveTablePan(...args), []);
-  const stableEndTablePan = useCallback((...args: Parameters<typeof endTablePan>) => tableGestureHandlersRef.current.endTablePan(...args), []);
-  const applyTextScaleRef = useRef(applyTextScale);
-  applyTextScaleRef.current = applyTextScale;
-  const stableApplyTextScale = useCallback((scale: number, persist?: boolean) => applyTextScaleRef.current(scale, persist), []);
+  const stableBeginTableReorder = useStableCallback(beginTableReorder);
+  const stableMoveTableReorder = useStableCallback(moveTableReorder);
+  const stableEndTableReorder = useStableCallback(endTableReorder);
+  const stableBeginTablePan = useStableCallback(beginTablePan);
+  const stableMoveTablePan = useStableCallback(moveTablePan);
+  const stableEndTablePan = useStableCallback(endTablePan);
+  const stableApplyTextScale = useStableCallback(applyTextScale);
 
   const rawActions = useWorkspaceActions({
     data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
@@ -214,7 +204,7 @@ export const useWorkspacePage = () => {
     saveCellValue: 'active', updateCell: 'active', openCell: 'active', selectCellValue: 'active', addRow: 'active', askDeleteRow: 'active', addColumn: 'active', askDeleteColumn: 'active', saveColumn: 'active',
     exportCurrent: 'active', exportAll: 'all', finishTableImport: 'all', finishWorkspaceImport: 'all',
   }, readiness);
-  const { addTable, openNode, openCell, addRow, addColumn } = actions;
+  const { addTable: stableAddTable, openNode, openCell: stableOpenCell, addRow, addColumn } = actions;
 
   const openDrawerNode = useCallback((node: WorkspaceNode) => {
     if (node.id === dataRef.current?.activeNodeId) { pendingOpenNodeIdRef.current = undefined; setDrawerOpen(false); return; }
@@ -257,13 +247,6 @@ export const useWorkspacePage = () => {
     if (node?.type === 'table' && node.tableId && data.tables.some((item) => item.id === node.tableId)) openNode(node);
     else if (node?.type === 'table') setNotice('無法開啟表格，請確認本機資料');
   }, [allTablesReady, data, openNode]);
-
-  const openCellRef = useRef(openCell);
-  openCellRef.current = openCell;
-  const stableOpenCell = useCallback((row: WorkspaceRow, column: WorkspaceColumn) => openCellRef.current(row, column), []);
-  const addTableRef = useRef(addTable);
-  addTableRef.current = addTable;
-  const stableAddTable = useCallback((parentId: string | null) => addTableRef.current(parentId), []);
 
   const handleDataCellClick = useCallback((row: WorkspaceRow, column: WorkspaceColumn) => {
     if (!bulkSelection) {
@@ -312,60 +295,7 @@ export const useWorkspacePage = () => {
 
   const { requestClose, closeBottomNavigationDialog } = useWorkspaceModalNavigation({ data, commit, setNotice, dialogs, driveBackup, filter, bulk, drawer, editBarOpen, setEditBarOpen, tableActionsOpen, setTableActionsOpen, searchActive: searchOpen || hasActiveSearchState, clearSearchAndFilters });
 
-  const keepActiveCellVisible = useCallback(() => {
-    const element = activeCellElementRef.current;
-    const viewport = viewportRef.current;
-    if (element && viewport) ensureWorkspaceCellVisible(element, viewport);
-  }, []);
-  const setActiveCellElement = useCallback((element: HTMLElement | null) => {
-    activeCellElementRef.current = element;
-  }, []);
-
-  useEffect(() => {
-    if (!activeCellKey) return;
-    let animationFrame: number | undefined;
-    let delayedFrame: number | undefined;
-    const visualViewport = window.visualViewport;
-    const updateVisualViewportHeight = () => {
-      if (visualViewport && Number.isFinite(visualViewport.height) && visualViewport.height > 0) setVisualViewportHeight(visualViewport.height);
-    };
-    const schedule = () => {
-      updateVisualViewportHeight();
-      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
-      if (delayedFrame !== undefined) window.clearTimeout(delayedFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        keepActiveCellVisible();
-        delayedFrame = window.setTimeout(keepActiveCellVisible, 160);
-      });
-    };
-    schedule();
-    visualViewport?.addEventListener('resize', schedule);
-    visualViewport?.addEventListener('scroll', schedule);
-    window.addEventListener('resize', schedule);
-    return () => {
-      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
-      if (delayedFrame !== undefined) window.clearTimeout(delayedFrame);
-      visualViewport?.removeEventListener('resize', schedule);
-      visualViewport?.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-    };
-  }, [activeCellKey, keepActiveCellVisible]);
-
-  useEffect(() => {
-    if (!activeCellKey) return;
-    const frame = window.requestAnimationFrame(keepActiveCellVisible);
-    const timer = window.setTimeout(keepActiveCellVisible, 160);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
-    };
-  }, [activeCellKey, keepActiveCellVisible, virtualKeyboardOpen]);
-
-  const workspacePageStyle = activeCellKey && visualViewportHeight ? {
-    height: `${visualViewportHeight}px`,
-    minHeight: `${visualViewportHeight}px`,
-    maxHeight: `${visualViewportHeight}px`,
-  } as React.CSSProperties : undefined;
+  const { setActiveCellElement, workspacePageStyle } = useWorkspaceCellFocus(viewportRef, activeCellKey, virtualKeyboardOpen);
   const workspaceToolbarRowCount = Number(Boolean(bulkSelection && bulkColumn)) + Number(searchOpen) + Number(editBarOpen || tableActionsOpen);
   const topRowRevealCount = topRowRevealActive ? Number(Boolean(bulkSelection && bulkColumn)) + Number(searchOpen) : 0;
 

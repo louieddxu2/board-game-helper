@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { useCallback, useRef } from 'react';
+import { useStableCallback } from '../hooks/useStableCallback';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import { displayWorkspaceColumnValue, getTableForNode } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow } from './types';
@@ -27,13 +27,7 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, row
     })));
   };
 
-  const openHiddenFields = (row: WorkspaceRow) => withActiveTable(() => setDialog('hiddenFieldsEditor', { rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' }));
-
-  const openHiddenFieldsRef = useRef(openHiddenFields);
-
-  openHiddenFieldsRef.current = openHiddenFields;
-
-  const stableOpenHiddenFields = useCallback((row: WorkspaceRow) => openHiddenFieldsRef.current(row), []);
+  const stableOpenHiddenFields = useStableCallback((row: WorkspaceRow) => withActiveTable(() => setDialog('hiddenFieldsEditor', { rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' })));
 
   const saveHiddenFields = (rowId: string, values: Record<string, WorkspaceCellValue>) => {
     let currentData = dataRef.current;
