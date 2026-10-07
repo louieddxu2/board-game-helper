@@ -1,0 +1,130 @@
+@keyframes attribute-feedback-arrive {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 5px)) scale(.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes attribute-suggestion-arrive {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes attribute-activity-arrive {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes attribute-answer-press {
+  0% { transform: scale(1); }
+  45% { transform: scale(.975); }
+  100% { transform: scale(1); }
+}
+
+@keyframes attribute-rating-confirm {
+  0%, 100% { filter: brightness(1); }
+  45% { filter: brightness(1.12); }
+}
+
+@keyframes attribute-question-leave {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-14px); }
+}
+
+@keyframes attribute-question-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes attribute-card-leave {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-10px); }
+}
+
+@keyframes attribute-card-enter {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.attribute-vote-page .attribute-rating-track {
+  margin-top: 0;
+}
+
+.attribute-vote-page .attribute-rating-marker.is-left {
+  border-color: var(--attribute-left);
+}
+
+.attribute-vote-page .attribute-rating-marker.is-left::after {
+  border-top-color: var(--attribute-left);
+}
+
+.attribute-vote-page .attribute-rating-marker.is-right {
+  border-color: var(--attribute-right);
+}
+
+.attribute-vote-page .attribute-rating-marker.is-right::after {
+  border-bottom-color: var(--attribute-right);
+}
+
+.attribute-vote-page .attributes-response-error {
+  margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+  .attribute-vote-page .attribute-score-axis {
+    width: 100vw;
+    margin-left: calc((100% - 100vw) / 2);
+  }
+}
+
+@media (max-height: 620px) {
+  .attribute-vote-page {
+    min-height: 100dvh;
+  }
+
+  .attribute-vote-page .attributes-question-card {
+    display: grid;
+    min-height: 500px;
+    gap: 8px;
+  }
+
+  .attribute-vote-page .attributes-question-examples,
+  .attribute-vote-page .attributes-question-center,
+  .attribute-vote-page .attributes-rating-zone {
+    position: static;
+    transform: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .attribute-vote-page .attributes-question-card {
+    padding-top: 2px;
+  }
+
+  .attribute-vote-page .attribute-game-card {
+    min-height: 76px;
+    padding-inline: 6px;
+  }
+
+  .attribute-vote-page .attributes-pair-actions {
+    grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr);
+    gap-inline: 3px;
+  }
+
+  .attribute-vote-page .attributes-pair-actions button {
+    padding-inline: 3px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attribute-vote-page .attribute-game-card,
+  .attribute-vote-page .attributes-pair-actions button,
+  .attribute-vote-page .attributes-vote-feedback,
+  .attribute-vote-page .attributes-rating-suggestion,
+  .attribute-vote-page .attributes-inline-activity li:first-child,
+  .attribute-vote-page .attributes-question-card,
+  .attribute-vote-page .attributes-question-side,
+  .attribute-vote-page .attribute-rating-marker {
+    transition: none;
+    animation: none;
+  }
+}

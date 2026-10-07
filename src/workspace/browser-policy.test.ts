@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-
+import { readCssSource } from '../../scripts/read-css-source';
 describe('workspace browser policies', () => {
   it('allows the blob worker used to unzip larger Excel workbooks', () => {
     const headers = readFileSync('public/_headers', 'utf8');
@@ -27,14 +27,14 @@ describe('workspace browser policies', () => {
   });
 
   it('constrains the workspace to the viewport so the table owns vertical scrolling', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
 
     expect(workspacePageRule).toMatch(/(?:^|;)\s*height:\s*100dvh/);
   });
 
   it('reserves horizontal drawer swipes across the independently scrolling tree', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const drawerRule = styles.match(/\.workspace-drawer\s*\{([^}]*)\}/)?.[1];
     const treeRule = styles.match(/\.workspace-tree\s*\{([^}]*)\}/)?.[1];
 
@@ -43,7 +43,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps both table axes sticky while their headings support reordering', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const columnReorderRule = styles.match(/\.workspace-table:not\(\.is-transposed\) thead th\[data-column-id\][^{]*\{([^}]*)\}/)?.[1];
     const rowReorderRule = styles.match(/\.workspace-table:not\(\.is-transposed\) \.workspace-row-heading\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
     const transposedRowRule = styles.match(/\.workspace-table\.is-transposed thead th\[data-row-id\][^{]*\{([^}]*)\}/)?.[1];
@@ -60,7 +60,7 @@ describe('workspace browser policies', () => {
   });
 
   it('gives the frozen first column a distinct surface color', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const rowHeadingRule = styles.match(/\.workspace-row-heading\s*\{([^}]*)\}/)?.[1];
     const dataCellRule = styles.match(/(?:^|\n)\.workspace-table td\s*\{([^}]*)\}/)?.[1];
 
@@ -69,7 +69,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps table cells visually dense without removing their clickable area', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const tableCellRule = styles.match(/\.workspace-table th, \.workspace-table td\s*\{([^}]*)\}/)?.[1];
     const rowHeadingRule = styles.match(/\.workspace-row-heading\s*\{([^}]*)\}/)?.[1];
 
@@ -78,7 +78,7 @@ describe('workspace browser policies', () => {
   });
 
   it('overlays every second-row toolbar without changing the table position', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const toolbarLayerRule = styles.match(/\.workspace-toolbar-layer\s*\{([^}]*)\}/)?.[1];
     const editbarRule = styles.match(/\.workspace-editbar\s*\{([^}]*)\}/)?.[1];
     const filterbarRule = styles.match(/\.workspace-filterbar\s*\{([^}]*)\}/)?.[1];
@@ -103,7 +103,7 @@ describe('workspace browser policies', () => {
   });
 
   it('anchors workspace toasts to the app bar instead of the first table row', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const noticeRule = styles.match(/\.workspace-appbar-notice\s*\{([^}]*)\}/)?.[1];
 
     expect(noticeRule).toMatch(/top:\s*50%/);
@@ -112,7 +112,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps the Google Drive action and automatic-backup toggle on one compact drawer row', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const footerRule = styles.match(/\.workspace-drawer-footer\s*\{([^}]*)\}/)?.[1];
     const driveButtonRule = styles.match(/\.workspace-drive-status-card\s*\{([^}]*)\}/)?.[1];
     const autoBackupRule = styles.match(/\.workspace-auto-backup-toggle\s*\{([^}]*)\}/)?.[1];
@@ -125,7 +125,7 @@ describe('workspace browser policies', () => {
   });
 
   it('uses the mobile bottom scroll room for the collapsible table action panel', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const mobileStyles = styles.match(/@media \(max-width: 820px\)\s*\{([\s\S]*?)\n\}/)?.[1];
     const viewportRule = mobileStyles?.match(/\.workspace-table-viewport\s*\{([^}]*)\}/)?.[1];
     const panelRule = mobileStyles?.match(/\.workspace-quick-actions\s*\{([^}]*)\}/)?.[1];
@@ -152,7 +152,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps the frozen header layer above body content during automatic scrolling', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const tableRule = styles.match(/\.workspace-table\s*\{([^}]*)\}/)?.[1];
     const theadRule = styles.match(/\.workspace-table thead\s*\{([^}]*)\}/)?.[1];
     const tbodyRule = styles.match(/\.workspace-table tbody\s*\{([^}]*)\}/)?.[1];
@@ -165,14 +165,14 @@ describe('workspace browser policies', () => {
   });
 
   it('drives table rebound from one shared frame clock instead of per-cell transitions', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const bounceTransitionRule = styles.match(/\.workspace-table\.is-bounce-settling[^\n]*\{([^}]*)\}/)?.[1];
 
     expect(bounceTransitionRule).toBeUndefined();
   });
 
   it('centers value editors independently from table text scaling', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const numberInputShellRule = styles.match(/\.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
@@ -258,7 +258,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps every workspace dialog and input surface translucent without background blur', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const overlayRule = styles.match(/\.workspace-overlay\s*\{([^}]*)\}/)?.[1];
     const dialogRule = styles.match(/\.workspace-dialog\s*\{([^}]*)\}/)?.[1];
     const inputRule = styles.match(/\.workspace-dialog textarea, \.workspace-dialog input, \.workspace-dialog select\s*\{([^}]*)\}/)?.[1];
@@ -280,7 +280,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps value dialogs at their original floor while sizing numeric content independently', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const valueDialogRule = styles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const valueInputRule = styles.match(/\.workspace-value-dialog \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const numericDialogRule = styles.match(/\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
@@ -308,7 +308,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps mobile value dialogs at their original floor and cap', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 820px)'));
     const mobileValueDialogRule = mobileStyles.match(/\.workspace-value-dialog\s*\{([^}]*)\}/)?.[1];
     const mobileNumericDialogRule = mobileStyles.match(/\.workspace-dialog\.workspace-number-value-dialog\s*\{([^}]*)\}/)?.[1];
@@ -324,7 +324,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps the original stepper proportions and centers its number', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const stepRule = styles.match(/\.workspace-number-editor\[data-mode="step"\]\s*\{([^}]*)\}/)?.[1];
     const stepOperationRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-number-operation\s*\{([^}]*)\}/)?.[1];
     const stepInputRule = styles.match(/\.workspace-number-editor\[data-mode="step"\] \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
@@ -336,7 +336,7 @@ describe('workspace browser policies', () => {
   });
 
   it('preserves the original numeric editor layout while keeping values readable', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const editorRule = styles.match(/\.workspace-number-editor\s*\{([^}]*)\}/)?.[1];
     const operatorsRule = styles.match(/\.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
     const directOperatorsRule = styles.match(/\.workspace-number-editor\[data-mode="direct"\] \.workspace-number-operators\s*\{([^}]*)\}/)?.[1];
@@ -362,7 +362,7 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps numeric editors readable without adding an empty control column', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const numberInputRule = styles.match(/\.workspace-number-editor \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const plainEditorRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\]\s*\{([^}]*)\}/)?.[1];
     const plainInputRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\] \.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
@@ -373,7 +373,7 @@ describe('workspace browser policies', () => {
   });
 
   it('applies compact spacing to every visible workspace number input', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const numberInputRule = styles.match(/\.workspace-dialog input\[type="number"\]\s*\{([^}]*)\}/)?.[1];
     const numberSpinnerRule = styles.match(/\.workspace-dialog input\[type="number"\]::\-webkit-inner-spin-button, \.workspace-dialog input\[type="number"\]::\-webkit-outer-spin-button\s*\{([^}]*)\}/)?.[1];
 
@@ -383,7 +383,7 @@ describe('workspace browser policies', () => {
   });
 
   it('restricts horizontal overscroll navigation while preserving standalone pull-to-refresh', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const htmlRule = styles.match(/(?:^|\n)html\s*\{([^}]*)\}/)?.[1];
     const bodyRule = styles.match(/(?:^|\n)body\s*\{([^}]*)\}/)?.[1];
     const standaloneRule = styles.match(/html\[data-standalone='true'\],\s*html\[data-standalone='true'\] body\s*\{([^}]*)\}/)?.[1];
@@ -398,7 +398,7 @@ describe('workspace browser policies', () => {
   });
 
   it('uses only the real top safe area for standalone app bars', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const standaloneAppbarRule = styles.match(/html\[data-standalone='true'\] \.site-header,\s*html\[data-standalone='true'\] \.workspace-appbar\s*\{([^}]*)\}/)?.[1];
 
     expect(standaloneAppbarRule).toMatch(/padding-top:\s*env\(safe-area-inset-top,\s*0px\)/);
@@ -406,10 +406,10 @@ describe('workspace browser policies', () => {
   });
 
   it('keeps bottom navigation in the Workspace layout, inside the iOS safe area, and removes it for a virtual keyboard', () => {
-    const styles = readFileSync('src/styles.css', 'utf8');
+    const styles = readCssSource('src/styles.css');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
     const navigationRule = styles.match(/\.workspace-bottom-navigation\s*\{([^}]*)\}/)?.[1];
-    const pageSource = readFileSync('src/pages/WorkspacePage.tsx', 'utf8');
+    const pageSource = readFileSync('src/workspace/WorkspacePageView.tsx', 'utf8');
 
     expect(workspacePageRule).toMatch(/height:\s*100dvh/);
     expect(navigationRule).toMatch(/flex:\s*0 0 auto/);

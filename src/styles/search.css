@@ -1,0 +1,93 @@
+/* ===== Search Modal ===== */
+.search-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: min(20dvh, 120px);
+  animation: fadeIn 150ms ease-out;
+}
+
+.search-modal {
+  background: var(--paper);
+  border-radius: 12px;
+  width: min(90vw, 560px);
+  padding: 1.5rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+  animation: slideUp 200ms ease-out;
+}
+
+.search-modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.search-modal-heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.search-modal-heading button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.search-modal-heading button:hover {
+  color: var(--ink);
+}
+
+.search-modal .game-search {
+  margin: 0;
+}
+
+.search-modal .game-search label {
+  /* 隱藏原本的 label 文字，因為 modal 標題已說明 */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.search-modal .search-results {
+  max-height: min(50vh, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.search-modal-shortcut {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .search-modal-shortcut {
+    display: inline;
+    font-size: 0.75rem;
+    color: var(--muted);
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.125rem 0.375rem;
+    margin-left: 0.5rem;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}

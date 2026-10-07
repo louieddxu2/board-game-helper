@@ -1,0 +1,112 @@
+/* ===== Skeleton Loading ===== */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-card {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem;
+  min-height: 140px;
+}
+
+.skeleton-line {
+  height: 0.875rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--line) 25%, var(--cream) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-line.short {
+  width: 40%;
+}
+
+.skeleton-line.medium {
+  width: 70%;
+}
+
+.skeleton-line.title {
+  height: 1.25rem;
+  width: 60%;
+  margin-bottom: 1rem;
+}
+
+/* ===== Toast Notifications ===== */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  animation: toastSlideIn 250ms ease-out;
+  max-width: 360px;
+}
+
+.toast-item button {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  opacity: 0.6;
+  line-height: 1;
+  padding: 0;
+  color: inherit;
+}
+
+.toast-item button:hover {
+  opacity: 1;
+}
+
+.toast-success {
+  background: var(--green);
+  color: var(--white);
+}
+
+.toast-error {
+  background: var(--orange);
+  color: var(--white);
+}
+
+.toast-info {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 480px) {
+  .toast-container {
+    top: auto;
+    bottom: calc(var(--mobile-nav-height, 56px) + 0.5rem);
+    right: 0.5rem;
+    left: 0.5rem;
+  }
+  .toast-item {
+    max-width: 100%;
+  }
+}

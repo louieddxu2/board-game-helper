@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run check:protected-copy && cross-env XDG_CONFIG_HOME=.wrangler/xdg vite",
-    "build": "npm run check:protected-copy && npm run check:d1-boundary && cross-env NODE_OPTIONS=--disable-warning=DEP0040 XDG_CONFIG_HOME=.wrangler/xdg vite build",
+    "build": "npm run check:protected-copy && npm run check:d1-boundary && npm run check:file-size && cross-env NODE_OPTIONS=--disable-warning=DEP0040 XDG_CONFIG_HOME=.wrangler/xdg vite build",
     "preview": "cross-env XDG_CONFIG_HOME=.wrangler/xdg vite preview",
     "test": "npm run check:protected-copy && npm run check:d1-boundary && cross-env TZ=Asia/Taipei vitest run",
     "test:watch": "npm run check:protected-copy && cross-env TZ=Asia/Taipei vitest",
@@ -16,7 +16,8 @@
     "test:core:e2e": "node scripts/run-core-e2e.mjs",
     "test:release": "npm run check:d1-fanout && npm test && npm run typecheck && npm run test:core:e2e",
     "smoke:production": "node scripts/production-smoke.mjs",
-    "typecheck": "npm run check:protected-copy && npm run check:d1-boundary && tsc --noEmit",
+    "typecheck": "npm run check:protected-copy && npm run check:d1-boundary && npm run check:file-size && tsc --noEmit",
+    "check:file-size": "node scripts/check-file-size.mjs",
     "check:protected-copy": "node scripts/check-protected-copy.mjs",
     "check:d1-boundary": "node scripts/check-d1-boundary.mjs",
     "check:d1-fanout": "node --disable-warning=ExperimentalWarning scripts/check-d1-trigger-fanout.mjs",

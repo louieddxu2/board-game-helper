@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { readCssSource } from '../../scripts/read-css-source';
 
-const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+const styles = readCssSource(resolve(process.cwd(), 'src/styles.css'));
 
 const declarationsFor = (selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

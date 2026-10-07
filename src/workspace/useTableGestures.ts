@@ -1,91 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { WorkspaceData, WorkspaceTable } from './types';
+import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
+import type { CellHoldSession, UseTableGesturesProps } from './tableGestureTypes';
+import type { WorkspaceData } from './types';
+import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
+import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
+import { useTableZoom } from './useTableZoom';
 import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
-import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, useMomentumScroll, TablePanAxis } from './useMomentumScroll';
-import { useTableZoom } from './useTableZoom';
-import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
-
-export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
-const TABLE_BOUNDARY_SCROLL_TOLERANCE = 2;
-export const CELL_SWEEP_INTENT_DISTANCE = 20;
-export const CELL_SWEEP_DIRECTION_RATIO = 3;
-const CELL_SWEEP_CROSS_AXIS_DISTANCE = 10;
-
-type CellHoldSession = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  x: number;
-  y: number;
-  cell: HTMLTableCellElement;
-  columnId: string;
-  lastRowId: string;
-  directionX: number;
-  directionY: number;
-  timer?: number;
-  active: boolean;
-  canSweep: boolean;
-  startedInLane: boolean;
-  immediate: boolean;
-  blockTap: boolean;
-  mode: 'pending' | 'selecting';
-};
-
-export const cellSweepGuardSize = (extent: number) => Math.max(0, Math.min(12, extent * 0.15, (extent - 32) / 2));
-
-export const isInCellSweepLane = (rect: DOMRect, x: number, y: number, transposed: boolean) => {
-  const extent = transposed ? rect.height : rect.width;
-  if (extent < 32) return false;
-  const inset = cellSweepGuardSize(extent);
-  const coordinate = transposed ? y : x;
-  const start = transposed ? rect.top : rect.left;
-  return coordinate >= start + inset && coordinate <= start + extent - inset;
-};
-
-export const isCellSweepDirection = (deltaX: number, deltaY: number, transposed: boolean) => {
-  const primary = Math.abs(transposed ? deltaX : deltaY);
-  const cross = Math.abs(transposed ? deltaY : deltaX);
-  return primary >= CELL_SWEEP_INTENT_DISTANCE && primary >= CELL_SWEEP_DIRECTION_RATIO * cross;
-};
-
-interface UseTableGesturesProps {
-  table: WorkspaceTable | undefined;
-  data: WorkspaceData | undefined;
-  commit: (next: WorkspaceData) => void;
-  viewportRef: React.RefObject<HTMLDivElement | null>;
-  workspacePageRef: React.RefObject<HTMLElement | null>;
-  setNotice: (msg: string) => void;
-  minTextScale: number;
-  onCellLongPress?: (rowId: string, columnId: string) => boolean | void;
-  onCellSweep?: (fromRowId: string, toRowId: string, columnId: string) => void;
-  onCellTap?: (rowId: string, columnId: string) => void;
-  bulkSelectionColumnId?: string;
-  onDrawerSwipeProgress?: (deltaX: number) => void;
-  onDrawerSwipeEnd?: (deltaX: number) => void;
-  onOpenSearch?: () => void;
-  onRevealTopRow?: () => void;
-  searchOpen?: boolean;
-  ensureTableReady?: () => Promise<void>;
-  onReadError?: (error: unknown) => void;
-  onPersistTextScale?: (tableId: string, scale: number) => void;
-}
-
-export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
-  if (axis !== 'y' || maxTop <= 0) return undefined;
-  if (startScrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop < 0 && deltaY > 0) return 'top';
-  if (startScrollTop >= maxTop - TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop > maxTop && deltaY < 0) return 'bottom';
-  return undefined;
-};
-
-export const clampDrawerOffset = (offset: number, width: number) => Math.max(0, Math.min(Math.max(0, width), offset));
-export const getDrawerOpenSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(deltaX, width);
-export const getDrawerCloseSwipeOffset = (deltaX: number, width: number) => clampDrawerOffset(width + deltaX, width);
-export const shouldOpenDrawer = (offset: number, width: number) => width > 0 && offset >= width * 0.35;
-export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0 && offset / width > 0.7;
-export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
-export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
-
 export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false, ensureTableReady, onReadError, onPersistTextScale }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
@@ -637,3 +558,5 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     beginTablePan, moveTablePan, endTablePan,
   };
 }
+
+export { canInitiateDrawerSwipe, CELL_SWEEP_DIRECTION_RATIO, CELL_SWEEP_INTENT_DISTANCE, cellSweepGuardSize, clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, isWorkspaceStandaloneMode, shouldKeepDrawerOpen, shouldOpenDrawer, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';

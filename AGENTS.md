@@ -6,6 +6,7 @@ Classify layout separately from interaction. Use browser evidence only when it a
 
 # Contracts
 
+- Keep maintained source, styles, tests, and scripts within 600 lines per file. Split by responsibility; data, historical migrations, dependency locks, and generated artifacts retain their formats. Run `npm run check:file-size` to verify.
 - Preserve `src/content/zh-TW.json` `author` and `terms` entries unless requested. For an approved change, show its diff, update `scripts/protected-copy.sha256` from the canonical JSON, and run the relevant checks.
 - Read `docs/rule-list-import.md` before record-page JSON work; preserve its separate draft, submission, and admin-export formats.
 - Release with `npm run deploy` in an elevated PTY and verify its URL. Use `--no-use-keyring --browser=false`; open a fresh active-process OAuth URL in the Windows default browser.
