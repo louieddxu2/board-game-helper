@@ -1,4 +1,5 @@
-import { getRowHeaderColumn, sameWorkspaceCellValue } from './model';
+import { getRowHeaderColumn, makeId, sameWorkspaceCellValue } from './model';
+import { applyWorkspaceCellChanges } from './cellChanges';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
@@ -79,11 +80,6 @@ export const hydrateWorkspaceHistories = (
   return merged;
 };
 
-const historyEntryId = () => {
-  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-  return `history-${random}`;
-};
-
 const columnConfiguration = (column: WorkspaceColumn | undefined) => {
   if (!column || !('dynamicOptions' in column)) return column;
   const { dynamicOptions: _statistics, ...configuration } = column;
@@ -104,7 +100,7 @@ const historyAction = (action: WorkspaceTableHistoryAction): WorkspaceTableHisto
 
 export const pushWorkspaceTableHistory = (history: WorkspaceTableHistory, mutation: WorkspaceTableMutation, now = Date.now()) => pruneWorkspaceTableHistory({
   tableId: mutation.tableId,
-  past: [...history.past, { id: historyEntryId(), tableId: mutation.tableId, label: mutation.label, createdAt: now, action: historyAction(mutation.action) }],
+  past: [...history.past, { id: makeId('history'), tableId: mutation.tableId, label: mutation.label, createdAt: now, action: historyAction(mutation.action) }],
   future: [],
 }, now);
 
@@ -138,54 +134,34 @@ export const applyWorkspaceTableHistoryAction = (
   direction: 'undo' | 'redo',
 ) => {
   const forward = direction === 'redo';
+  const side = forward ? 'after' : 'before';
   return updateHistoryTable(data, tableId, (current) => {
+    const rowHeaderId = getRowHeaderColumn(current).id;
     switch (action.type) {
       case 'set-cell':
         return tableWithUpdatedAt({
           ...current,
-          rows: current.rows.map((row) => row.id !== action.rowId ? row : action.columnId === getRowHeaderColumn(current).id
-            ? { ...row, name: forward ? action.after : action.before }
-            : { ...row, values: { ...row.values, [action.columnId]: forward ? action.after : action.before } }),
+          rows: applyWorkspaceCellChanges(current.rows, rowHeaderId, [action], side),
         });
-      case 'set-cells': {
-        const changes = new Map(action.changes.map((change) => [change.rowId, change]));
+      case 'set-cells':
         return tableWithUpdatedAt({
           ...current,
-          rows: current.rows.map((row) => {
-            const change = changes.get(row.id);
-            if (!change) return row;
-            return { ...row, values: { ...row.values, [action.columnId]: forward ? change.after : change.before } };
-          }),
+          rows: applyWorkspaceCellChanges(current.rows, undefined, action.changes.map(change => ({ ...change, columnId: action.columnId })), side),
         });
-      }
       case 'paste-range': {
         const addedRowIds = new Set(action.addedRows.map((row) => row.id));
         const addedColumnIds = new Set(action.addedColumns.map((column) => column.id));
-        const baseRows = forward
+        const baseRows = forward && action.addedRows.length
           ? [...current.rows, ...action.addedRows.filter((row) => !current.rows.some((item) => item.id === row.id))]
           : current.rows;
-        const baseColumns = forward
+        const baseColumns = forward && action.addedColumns.length
           ? [...current.columns, ...action.addedColumns.filter((column) => !current.columns.some((item) => item.id === column.id))]
           : current.columns;
-        const changesByRow = new Map<string, WorkspacePasteCellChange[]>();
-        for (const change of action.changes) changesByRow.set(change.rowId, [...(changesByRow.get(change.rowId) ?? []), change]);
-        const rowHeaderId = getRowHeaderColumn(current).id;
-        const changedRows = baseRows.map((row) => {
-          const changes = changesByRow.get(row.id);
-          if (!changes) return row;
-          let name = row.name;
-          const values = { ...row.values };
-          for (const change of changes) {
-            const value = forward ? change.after : change.before;
-            if (change.columnId === rowHeaderId) name = value;
-            else values[change.columnId] = value;
-          }
-          return { ...row, name, values };
-        });
+        const changedRows = applyWorkspaceCellChanges(baseRows, rowHeaderId, action.changes, side);
         return tableWithUpdatedAt({
           ...current,
-          columns: forward ? baseColumns : baseColumns.filter((column) => !addedColumnIds.has(column.id)),
-          rows: forward ? changedRows : changedRows.filter((row) => !addedRowIds.has(row.id)).map((row) => {
+          columns: forward || !addedColumnIds.size ? baseColumns : baseColumns.filter((column) => !addedColumnIds.has(column.id)),
+          rows: forward || (!addedRowIds.size && !addedColumnIds.size) ? changedRows : changedRows.filter((row) => !addedRowIds.has(row.id)).map((row) => {
             if (!addedColumnIds.size) return row;
             const values = { ...row.values };
             addedColumnIds.forEach((columnId) => delete values[columnId]);
@@ -230,16 +206,8 @@ export const applyWorkspaceTableHistoryAction = (
           ...(action.type === 'update-column'
             ? { columns: current.columns.map(column => column.id === action.after.id ? (forward ? action.after : action.before) : column) }
             : { rowHeader: forward ? action.after : action.before, rowHeaderName: forward ? action.afterName : action.beforeName }),
-          rows: action.changes?.length ? (() => {
-            const changes = new Map(action.changes.map(change => [change.rowId, change]));
-            return current.rows.map(row => {
-              const change = changes.get(row.id);
-              if (!change) return row;
-              const value = forward ? change.after : change.before;
-              return action.type === 'update-row-header' ? { ...row, name: value }
-                : { ...row, values: { ...row.values, [action.after.id]: value } };
-            });
-          })() : current.rows,
+          rows: applyWorkspaceCellChanges(current.rows, rowHeaderId,
+            (action.changes ?? []).map(change => ({ ...change, columnId: action.type === 'update-row-header' ? rowHeaderId : action.after.id })), side),
         });
       case 'rename-table':
         return tableWithUpdatedAt({ ...current, name: forward ? action.after : action.before });

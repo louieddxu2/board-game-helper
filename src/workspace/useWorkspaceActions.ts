@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { applyWorkspaceCellChanges, getWorkspaceCellValue } from './cellChanges';
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, getRowHeaderColumn, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
+import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
@@ -49,8 +50,6 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
   const addFolder = (parentId: string | null) => openNameDialog('folder', '', parentId);
   const addTable = (parentId: string | null) => openNameDialog('table', '', parentId);
   const renameNode = (node: WorkspaceNode) => openNameDialog('rename', node.name, undefined, node);
-  const renameRow = (row: WorkspaceRow) => dialogs.set('nameDialog', { mode: 'row', initialValue: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name), row });
-  const renameRowHeader = (currentTable: WorkspaceTable) => dialogs.set('nameDialog', { mode: 'axis', initialValue: getRowHeaderColumn(currentTable).name, table: currentTable });
 
   const submitName = (name: string) => {
     if (!data || !nameDialog) return;
@@ -67,11 +66,6 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
         if (parentId) setExpanded((current) => new Set(current).add(parentId));
         setDrawerOpen(false);
       }
-    } else if (nameDialog.row && table) {
-      const rowId = nameDialog.row.id;
-      commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.map((row) => row.id === rowId ? { ...row, name } : row) })));
-    } else if (nameDialog.table && table) {
-      commit(updateTable(data, table.id, (current) => ({ ...current, rowHeaderName: name, updatedAt: Date.now() })));
     } else if (nameDialog.node) {
       const node = nameDialog.node;
       const next = { ...data, nodes: data.nodes.map((item) => item.id === node.id ? { ...item, name } : item), tables: node.tableId ? data.tables.map((item) => item.id === node.tableId ? { ...item, name, updatedAt: Date.now() } : item) : data.tables };
@@ -114,16 +108,17 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
     const isRowHeader = rowHeader?.id === column.id;
     const row = table.rows.find((item) => item.id === rowId);
     if (!row) { dialogs.close('editing'); return; }
-    const before = isRowHeader ? row.name : row.values[column.id] ?? null;
+    const before = getWorkspaceCellValue(row, column.id, rowHeader?.id);
     if (sameWorkspaceCellValue(before, value)) { dialogs.close('editing'); return; }
+    const change = { rowId, columnId: column.id, before, after: value };
     commit(updateTable(data, table.id, (current) => ({
       ...current,
       updatedAt: Date.now(),
-      rows: current.rows.map((row) => row.id === rowId ? isRowHeader ? { ...row, name: value } : { ...row, values: { ...row.values, [column.id]: value } } : row),
+      rows: applyWorkspaceCellChanges(current.rows, rowHeader?.id, [change]),
     })), {
       tableId: table.id,
       label: isRowHeader ? '編輯物件' : '編輯儲存格',
-      action: { type: 'set-cell', rowId, columnId: column.id, before, after: value },
+      action: { type: 'set-cell', ...change },
     });
     dialogs.close('editing');
   };
@@ -287,8 +282,6 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
     addFolder,
     addTable,
     renameNode,
-    renameRow,
-    renameRowHeader,
     submitName,
     askDeleteNode,
     relocateNode,

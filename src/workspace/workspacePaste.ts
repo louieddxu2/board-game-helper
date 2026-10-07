@@ -1,12 +1,8 @@
 import { coerceCellValue, createColumn, createRow, getRowHeaderColumn, sameWorkspaceCellValue } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
+import { applyWorkspaceCellChanges, getWorkspaceCellValue, type WorkspaceCellChange } from './cellChanges';
+import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 
-export type WorkspacePasteCellChange = {
-  rowId: string;
-  columnId: string;
-  before: WorkspaceCellValue;
-  after: WorkspaceCellValue;
-};
+export type WorkspacePasteCellChange = WorkspaceCellChange;
 
 export type WorkspacePasteResult = {
   table: WorkspaceTable;
@@ -62,12 +58,10 @@ export const applyWorkspaceMatrixPaste = (
     addedColumns.push(column);
   }
   const allColumns = [rowHeader, ...columns];
-  const addedRows: WorkspaceRow[] = [];
-  const rows = table.rows.map((row) => ({ ...row, values: { ...row.values } }));
+  const rows = table.rows.slice();
   while (startRowIndex + matrix.length > rows.length) {
     const row = createRow(columns, `物件 ${rows.length + 1}`);
     rows.push(row);
-    addedRows.push(row);
   }
 
   const invalidCells: WorkspacePasteResult['invalidCells'] = [];
@@ -81,16 +75,16 @@ export const applyWorkspaceMatrixPaste = (
       invalidCells.push({ row: rowOffset + 1, column: columnOffset + 1, value: raw });
       return;
     }
-    const before = column.id === rowHeader.id ? row.name : row.values[column.id] ?? null;
+    const before = getWorkspaceCellValue(row, column.id, rowHeader.id);
     if (sameWorkspaceCellValue(before, after)) return;
     changes.push({ rowId: row.id, columnId: column.id, before, after });
-    if (column.id === rowHeader.id) row.name = after;
-    else row.values[column.id] = after;
   }));
 
   if (invalidCells.length) return { table, changes: [], addedRows: [], addedColumns: [], invalidCells };
+  const nextRows = applyWorkspaceCellChanges(rows, rowHeader.id, changes);
+  const addedRows = nextRows.slice(table.rows.length);
   return {
-    table: { ...table, columns, rows, updatedAt: Date.now() },
+    table: changes.length || addedRows.length || addedColumns.length ? { ...table, columns, rows: nextRows, updatedAt: Date.now() } : table,
     changes,
     addedRows,
     addedColumns,

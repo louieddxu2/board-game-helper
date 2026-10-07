@@ -17,6 +17,8 @@ describe('workspace rectangular paste', () => {
     expect(result.addedColumns).toHaveLength(1);
     expect(result.table.rows[0].values[firstColumn.id]).toBe('1');
     expect(result.table.rows[1].values[result.table.columns[1].id]).toBe('乙');
+    expect(result.addedRows[0]).toBe(result.table.rows[1]);
+    expect(result.addedRows[0].values[firstColumn.id]).toBe('2');
   });
 
   it('can paste object names from the first column', () => {
@@ -42,8 +44,13 @@ describe('workspace rectangular paste', () => {
     const numberColumn = createColumn('數量', 'number');
     table.columns = [numberColumn];
     table.rows = [createRow(table.columns, '甲')];
-    const result = applyWorkspaceMatrixPaste(table, table.rows[0].id, numberColumn.id, [['不是數字']]);
+    const result = applyWorkspaceMatrixPaste(table, table.rows[0].id, numberColumn.id, [['12'], ['不是數字']]);
     expect(result.table).toBe(table);
-    expect(result.invalidCells).toEqual([{ row: 1, column: 1, value: '不是數字' }]);
+    expect(table.rows).toHaveLength(1);
+    expect(table.rows[0].values[numberColumn.id]).toBeNull();
+    expect(result.changes).toEqual([]);
+    expect(result.addedRows).toEqual([]);
+    expect(result.addedColumns).toEqual([]);
+    expect(result.invalidCells).toEqual([{ row: 2, column: 1, value: '不是數字' }]);
   });
 });

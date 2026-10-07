@@ -1,11 +1,8 @@
 import { coerceCellValue, displayWorkspaceColumnValue, getRowHeaderColumn, isWorkspaceLinkValue } from './model';
-import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceTable } from './types';
+import { getWorkspaceCellValue, type WorkspaceCellChange } from './cellChanges';
+import type { WorkspaceColumn, WorkspaceTable } from './types';
 
-export interface WorkspaceColumnValueChange {
-  rowId: string;
-  before: WorkspaceCellValue;
-  after: WorkspaceCellValue;
-}
+export type WorkspaceColumnValueChange = Omit<WorkspaceCellChange, 'columnId'>;
 
 export class WorkspaceColumnConversionError extends Error {
   constructor(column: WorkspaceColumn, count: number) {
@@ -23,7 +20,7 @@ export const prepareWorkspaceColumnSave = (table: WorkspaceTable, column: Worksp
   const changes: WorkspaceColumnValueChange[] = [];
   let invalidCount = 0;
   const rows = previous.inputType === column.inputType ? table.rows : table.rows.map(row => {
-    const before = (isRowHeader ? row.name : row.values[column.id]) ?? null;
+    const before = getWorkspaceCellValue(row, column.id, rowHeader.id);
     // Labels become text; an unnamed link keeps its complete address, including its protocol.
     const raw = isWorkspaceLinkValue(before)
       ? before.label.trim() || before.url.trim()

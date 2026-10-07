@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
+import { applyWorkspaceCellChanges } from './cellChanges';
 import { sameWorkspaceCellValue } from './model';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { WorkspaceCellValue, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
@@ -123,11 +124,10 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
       closeBulkSelection();
       return;
     }
-    const values = new Map(changes.map((change) => [change.rowId, change.after]));
     const next = updateTable(currentData, table.id, (current) => ({
       ...current,
       updatedAt: Date.now(),
-      rows: current.rows.map((row) => values.has(row.id) ? { ...row, values: { ...row.values, [bulkColumn.id]: values.get(row.id)! } } : row),
+      rows: applyWorkspaceCellChanges(current.rows, undefined, changes.map(change => ({ ...change, columnId: bulkColumn.id }))),
     }));
     commit(next, { tableId: table.id, label: `批次編輯 ${bulkColumn.name}`, action: { type: 'set-cells', columnId: bulkColumn.id, changes } });
     setNotice(`已更新 ${changes.length} 格`);

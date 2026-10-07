@@ -3,7 +3,7 @@ import { createContext, forwardRef, useCallback, useContext, useEffect, useId, u
 import type { WorkspaceNumberInputMode } from './types';
 import type { DateFilterPrecision } from './dateFilter';
 import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isWorkspaceUrlText, normalizeWorkspaceDateTime, parseMultiSelectValues, workspaceDateMonthKey } from "./model";
-import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from "./types";
+import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'filter-off' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'bottom-navigation' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'clipboard' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
 export type WorkspaceInputCategory = 'text' | 'select' | 'other';
@@ -14,7 +14,7 @@ export type HeaderFilterTarget = { axis: 'column'; id: string; label: string };
 export type HeaderFilterAggregate = 'sum' | 'average';
 export type HeaderFilterState = { includedKeys: string[] | null; sort: 'asc' | 'desc' | null; query?: string; min?: string; max?: string; datePrecision?: DateFilterPrecision; aggregate?: HeaderFilterAggregate };
 export type HeaderFilterOption = { key: string; label: string; count: number; color?: string };
-export type NameDialogState = { mode: 'folder' | 'table' | 'row' | 'axis' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode; row?: WorkspaceRow; table?: WorkspaceTable };
+export type NameDialogState = { mode: 'folder' | 'table' | 'rename'; initialValue: string; parentId?: string | null; node?: WorkspaceNode };
 export const workspaceColorPalette = [
   { value: '', label: '預設' },
   { value: '#2F6F5E', label: '綠色' },

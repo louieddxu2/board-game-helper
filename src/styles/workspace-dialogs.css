@@ -33,13 +33,6 @@
 .workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
 .workspace-name-dialog { background: rgba(255,253,248,.84); }
 .workspace-name-dialog-overlay { background: transparent; }
-.workspace-cell-name-dialog { width: min(360px, 50vw); border: 3px solid var(--green); border-radius: 12px; background: rgba(255,253,248,.84); }
-.workspace-cell-name-dialog-overlay { background: transparent; }
-.workspace-cell-name-dialog.has-leading-action .workspace-dialog-content { padding-top: 16px; }
-.workspace-cell-name-dialog .workspace-dialog-content { padding: 16px 16px 8px; }
-.workspace-cell-name-dialog .workspace-form-field { font-size: 0; }
-.workspace-cell-name-dialog textarea { min-height: 42px; max-height: min(42dvh, 280px); overflow: auto; border: 0; background: transparent; font-size: 24px; font-weight: 700; line-height: 1.35; text-align: center; resize: none; }
-.workspace-cell-name-dialog .workspace-dialog-actions { padding-top: 8px; }
 .workspace-value-dialog { width: min(360px, 50vw); min-width: min(360px, 50vw); max-width: min(360px, calc(100vw - 24px)); overflow: visible; border: 3px solid var(--green); border-radius: 12px; background: rgba(236,230,216,.78); }
 .workspace-value-dialog-overlay { place-items: center; align-content: center; background: transparent; }
 .workspace-value-dialog .workspace-dialog-content { display: block; width: 100%; min-width: 0; max-width: 100%; margin-inline: 0; overflow: visible; padding: 0; }

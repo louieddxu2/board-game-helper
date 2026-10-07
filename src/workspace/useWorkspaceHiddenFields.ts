@@ -1,7 +1,8 @@
 import type { RefObject } from 'react';
 import { useStableCallback } from '../hooks/useStableCallback';
+import { applyWorkspaceCellChanges, sameWorkspaceCellValue } from './cellChanges';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
-import { displayWorkspaceColumnValue, getTableForNode, sameWorkspaceCellValue } from './model';
+import { displayWorkspaceColumnValue, getRowHeaderColumn, getTableForNode } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { updateTable } from './workspaceShared';
@@ -30,24 +31,21 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, row
   const stableOpenHiddenFields = useStableCallback((row: WorkspaceRow) => withActiveTable(() => setDialog('hiddenFieldsEditor', { rowId: row.id, title: rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : '' })));
 
   const saveHiddenFields = (rowId: string, values: Record<string, WorkspaceCellValue>) => {
-    let currentData = dataRef.current;
+    const currentData = dataRef.current;
     if (!currentData) return;
-    let currentTable = getTableForNode(currentData, currentData.activeNodeId);
+    const currentTable = getTableForNode(currentData, currentData.activeNodeId);
     const row = currentTable?.rows.find((item) => item.id === rowId);
     if (!currentTable || !row) return;
-    const tableId = currentTable.id;
-    for (const column of currentTable.columns.filter((item) => item.hidden)) {
+    const changes = currentTable.columns.flatMap(column => {
+      if (!column.hidden) return [];
       const before = row.values[column.id] ?? null;
       const after = values[column.id] ?? null;
-      if (sameWorkspaceCellValue(before, after)) continue;
-      currentData = updateTable(currentData, tableId, (current) => ({
-        ...current,
-        updatedAt: Date.now(),
-        rows: current.rows.map((item) => item.id === rowId ? { ...item, values: { ...item.values, [column.id]: after } } : item),
-      }));
-      commit(currentData);
-      currentTable = getTableForNode(currentData, currentData.activeNodeId);
-    }
+      return sameWorkspaceCellValue(before, after) ? [] : [{ rowId, columnId: column.id, before, after }];
+    });
+    if (changes.length) commit(updateTable(currentData, currentTable.id, current => ({
+      ...current, updatedAt: Date.now(),
+      rows: applyWorkspaceCellChanges(current.rows, getRowHeaderColumn(current).id, changes),
+    })), { tableId: currentTable.id, label: '編輯隱藏欄位', action: { type: 'paste-range', changes, addedRows: [], addedColumns: [] } });
     closeDialogs('hiddenFieldsEditor');
   };
 

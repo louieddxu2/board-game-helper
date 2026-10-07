@@ -12,6 +12,7 @@ import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, n
 import { prepareWorkspaceColumnSave } from './columnConversion';
 import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
 import { assignWorkspaceChangeRevisions } from './changeRevisions';
+import { applyWorkspaceMatrixPaste } from './workspacePaste';
 import type { WorkspaceTable } from './types';
 
 const makeTable = (rowCount: number): WorkspaceTable => {
@@ -126,6 +127,24 @@ describe('workspace row chunk storage contracts', () => {
     expect(plan.deletes).toEqual([]);
     expect(next.chunks.get(saved.record.chunkIds[0])).toBe(saved.chunks.get(saved.record.chunkIds[0]));
     expect(next.chunks.get(saved.record.chunkIds[2])).toBe(saved.chunks.get(saved.record.chunkIds[2]));
+  });
+
+  it('keeps a 10,000-row paste edit to one row and one chunk', () => {
+    const table = makeTable(10_000);
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const target = table.rows[5_000];
+    const columnId = table.columns[0].id;
+    const pasted = applyWorkspaceMatrixPaste(table, target.id, columnId, [['只改一格']]);
+
+    expect(pasted.table.rows[5_000]).not.toBe(table.rows[5_000]);
+    expect(pasted.table.rows.filter((row, index) => index !== 5_000 && row !== table.rows[index])).toEqual([]);
+    const next = updateWorkspaceTableStorageSnapshot(saved, pasted.table, {
+      type: 'paste-range', changes: pasted.changes, addedRows: pasted.addedRows, addedColumns: pasted.addedColumns,
+    });
+    const plan = planWorkspaceTableStorageWrite(next, saved);
+
+    expect(plan.upserts.map((chunk) => chunk.chunkId)).toEqual([saved.record.chunkIds[19]]);
+    expect(plan.deletes).toEqual([]);
   });
 
   it('writes converted cell values into every affected row chunk on a saved column conversion', () => {

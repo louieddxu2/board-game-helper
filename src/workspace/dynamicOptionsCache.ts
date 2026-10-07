@@ -1,5 +1,6 @@
 import { adjustDynamicOptionCounts, collectDynamicOptionCounts, getRowHeaderColumn, readDynamicOptions, sortDynamicOptionCounts, writeDynamicOptions, type WorkspaceDynamicOptionCounts } from './model';
 import { workspaceTableChangeRevision } from './changeRevisions';
+import { getWorkspaceCellValue } from './cellChanges';
 import type { WorkspaceTableHistoryAction, WorkspaceTableMutation } from './history';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynamicOptions, WorkspaceRow, WorkspaceTable } from './types';
 
@@ -14,6 +15,7 @@ interface ColumnCache {
 /** In-memory index for the statistics persisted on each dynamic-list column. */
 export class WorkspaceDynamicOptionsCache {
   private tables = new Map<string, Map<string, ColumnCache>>();
+  private preparedTables = new WeakSet<WorkspaceTable>();
 
   getOptions(table: WorkspaceTable, columnId: string): string[] {
     const cache = this.getColumnCache(table, columnId);
@@ -50,8 +52,9 @@ export class WorkspaceDynamicOptionsCache {
 
   /** Build on activation and keep immutable column snapshots for queued DB saves. */
   prepare(previous: WorkspaceData | undefined, next: WorkspaceData, mutation?: Pick<WorkspaceTableMutation, 'tableId' | 'action'>, direction: 'undo' | 'redo' = 'redo'): WorkspaceData {
+    const previousTables = new Map(previous?.tables.map(table => [table.id, table]));
     for (const after of next.tables) {
-      const before = previous?.tables.find(table => table.id === after.id);
+      const before = previousTables.get(after.id);
       if (!before || before === after) continue;
       for (const column of [getRowHeaderColumn(before), ...before.columns]) {
         if (this.tables.get(after.id)?.get(column.id)?.rows === after.rows) continue;
@@ -60,6 +63,7 @@ export class WorkspaceDynamicOptionsCache {
     }
     this.update(previous, next, mutation, direction);
     const tables = next.tables.map(table => {
+      if (previousTables.get(table.id) === table && this.preparedTables.has(table)) return table;
       const sourceRevision = workspaceTableChangeRevision(table);
       const prepareColumn = (column: WorkspaceColumn): WorkspaceColumn => {
         if (column.inputType !== 'dynamic-select') return column.dynamicOptions ? { ...column, dynamicOptions: undefined } : column;
@@ -70,7 +74,9 @@ export class WorkspaceDynamicOptionsCache {
       };
       const rowHeader = table.rowHeader ? prepareColumn(table.rowHeader) : undefined;
       const columns = table.columns.map(prepareColumn);
-      return rowHeader === table.rowHeader && columns.every((column, index) => column === table.columns[index]) ? table : { ...table, rowHeader, columns };
+      const prepared = rowHeader === table.rowHeader && columns.every((column, index) => column === table.columns[index]) ? table : { ...table, rowHeader, columns };
+      this.preparedTables.add(prepared);
+      return prepared;
     });
     return tables.every((table, index) => table === next.tables[index]) ? next : { ...next, tables };
   }
@@ -112,7 +118,7 @@ export class WorkspaceDynamicOptionsCache {
     };
     const change = (before: WorkspaceCellValue, after: WorkspaceCellValue) =>
       adjust(direction === 'redo' ? before : after, -1) && adjust(direction === 'redo' ? after : before, 1);
-    const rowValue = (row: WorkspaceRow) => columnId === rowHeaderId ? row.name : row.values[columnId] ?? null;
+    const rowValue = (row: WorkspaceRow) => getWorkspaceCellValue(row, columnId, rowHeaderId);
     switch (action.type) {
       case 'set-cell':
         return action.columnId !== columnId || change(action.before, action.after);

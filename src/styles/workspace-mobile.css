@@ -53,9 +53,7 @@
   .workspace-ratio-field-label { display: inline; color: var(--muted); font-size: 11px; font-weight: 600; }
   .workspace-ratio-row input { min-height: 36px; font-size: 16px; }
   .workspace-ratio-result output { min-width: 0; }
-  .workspace-name-dialog, .workspace-confirm-dialog, .workspace-cell-name-dialog { width: min(360px, 50vw); }
-  .workspace-cell-name-dialog .workspace-dialog-content { padding: 10px 12px 4px; }
-  .workspace-cell-name-dialog.has-leading-action .workspace-dialog-content { padding-top: 10px; }
+  .workspace-name-dialog, .workspace-confirm-dialog { width: min(360px, 50vw); }
   .workspace-datetime-dialog { width: min(340px, 75vw); min-width: min(340px, 75vw); max-width: min(360px, calc(100vw - 24px)); }
   .workspace-value-dialog .workspace-value-input { min-height: 42px; padding: 4px 10px; }
   .workspace-value-dialog .workspace-value-textarea { min-height: 42px; }

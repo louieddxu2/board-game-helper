@@ -5,16 +5,13 @@ import { DateTimeWheelEditor } from './workspaceCellDialogs';
 import type { WorkspaceModalOwner } from './workspaceModalClose';
 import { AutoGrowTextarea, NameDialogState, WorkspaceIcon, WorkspaceModal } from './workspaceShared';
 
-export const NameDialog = ({ state, onClose, onSubmit, onDelete }: { state: NameDialogState; onClose(): void; onSubmit(name: string): void; onDelete?(): void }) => {
+export const NameDialog = ({ state, onClose, onSubmit }: { state: NameDialogState; onClose(): void; onSubmit(name: string): void }) => {
   const [name, setName] = useState(state.initialValue);
-  const isMultiline = state.mode === 'row' || state.mode === 'axis';
-  const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : state.mode === 'row' ? '物件名稱' : state.mode === 'axis' ? '物件軸名稱' : '名稱';
-  const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : state.mode === 'row' ? '編輯物件名稱' : state.mode === 'axis' ? '編輯物件軸' : '重新命名';
+  const label = state.mode === 'folder' ? '資料夾名稱' : state.mode === 'table' ? '表格名稱' : '名稱';
+  const title = state.mode === 'folder' ? '新增資料夾' : state.mode === 'table' ? '新增表格' : '重新命名';
   const finish = () => { const value = name.trim(); if (value) onSubmit(value); else onClose(); };
-  return <WorkspaceModal owner="name-editor" title={title} dialogKind="editor" onRequestClose={finish} className={isMultiline ? 'workspace-cell-name-dialog' : 'workspace-name-dialog'} leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除"><WorkspaceIcon name="trash" size={20} /></button>}>
-    <label className="workspace-form-field">{label}{isMultiline
-      ? <AutoGrowTextarea autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(); } }} />
-      : <input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finish(); } }} />}</label>
+  return <WorkspaceModal owner="name-editor" title={title} dialogKind="editor" onRequestClose={finish} className="workspace-name-dialog">
+    <label className="workspace-form-field">{label}<input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); finish(); } }} /></label>
   </WorkspaceModal>;
 };
 

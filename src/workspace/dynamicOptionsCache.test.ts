@@ -29,6 +29,25 @@ describe('dynamic option frequency cache', () => {
     return cache.prepare(data, next, { tableId, action }, direction);
   };
 
+  it('fills missing statistics on the first same-object prepare and reuses the prepared table', () => {
+    const { table, column, data } = fixture(['A', 'B']);
+    const cache = new WorkspaceDynamicOptionsCache();
+
+    const prepared = cache.prepare(data, data);
+    expect(prepared.tables[0]).not.toBe(table);
+    expect(prepared.tables[0].columns[0].dynamicOptions?.counts.map(item => item.count)).toEqual([1, 1]);
+
+    const preparedTable = prepared.tables[0];
+    const preparedColumns = preparedTable.columns;
+    let columnReads = 0;
+    Object.defineProperty(preparedTable, 'columns', { configurable: true, get: () => { columnReads += 1; return preparedColumns; } });
+    const repeated = cache.prepare(prepared, prepared);
+    expect(repeated).toBe(prepared);
+    expect(repeated.tables[0]).toBe(prepared.tables[0]);
+    expect(columnReads).toBe(0);
+    expect(cache.getOptions(repeated.tables[0], column.id)).toEqual(['A', 'B']);
+  });
+
   it('builds statistics when the attribute becomes dynamic without opening its menu', () => {
     const { table, column, data } = fixture(['Rare', 'Common', 'Common']);
     const before = { ...column, inputType: 'text' as const };

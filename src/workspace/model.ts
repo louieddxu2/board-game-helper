@@ -1,12 +1,9 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynamicOptions, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 import { workspaceTableChangeRevision } from './changeRevisions';
+export { sameWorkspaceCellValue } from './cellChanges';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
 export const MAX_BOTTOM_NAVIGATION_TABLES = 5;
-
-export const sameWorkspaceCellValue = (left: WorkspaceCellValue, right: WorkspaceCellValue) => left === right
-  || (left !== null && right !== null && typeof left === 'object' && typeof right === 'object'
-    && left.url === right.url && left.label === right.label);
 
 export const makeId = (prefix: string) => {
   const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
