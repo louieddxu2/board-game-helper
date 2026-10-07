@@ -8,7 +8,7 @@ import type { WorkspaceColumn, WorkspaceNode, WorkspaceRow, WorkspaceTable } fro
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { WorkspaceQuickActionPanel } from './WorkspaceQuickActionPanel';
 import type { TableReorderKind, TableReorderVisual } from './workspaceShared';
-import { ExternalLinkAction, overflowClassName, WorkspaceHeaderContent, WorkspaceIcon, type HeaderFilterTarget } from './workspaceShared';
+import { ExternalLinkAction, overflowClassName, WorkspaceHeaderContent, WorkspaceIcon } from './workspaceShared';
 
 const workspaceCellKey = (rowId: string, columnId: string) => `${rowId}:${columnId}`;
 
@@ -34,8 +34,7 @@ interface WorkspaceTableViewOptions {
   rowHeader: WorkspaceColumn | undefined;
   configuring: { column: WorkspaceColumn; isRowHeader: boolean; } | undefined;
   activeCellColumnId: string | undefined;
-  readyControls: { configure: (column: WorkspaceColumn, isRowHeader: boolean) => void; filter: (target: HeaderFilterTarget) => void; search: () => void; edit: () => void; settings: () => void; createTable: (parentId: string | null) => void; context: (node: WorkspaceNode) => void; drive: () => void; bottomNavigation: () => void; quickActions: () => void; };
-  activeHeaderFilterKeys: Set<string>;
+  readyControls: { configure: (column: WorkspaceColumn, isRowHeader: boolean) => void; quickActions: () => void; };
   displayedColumns: WorkspaceColumn[];
   tableReorderVisual: TableReorderVisual | undefined;
   bulkSelection: WorkspaceBulkSelection | undefined;
@@ -62,7 +61,7 @@ interface WorkspaceTableViewOptions {
   localMinTextScale: number;
 }
 
-export const useWorkspaceTableView = ({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, activeHeaderFilterKeys, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale }: WorkspaceTableViewOptions) => {
+export const useWorkspaceTableView = ({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale }: WorkspaceTableViewOptions) => {
   const workspaceTableView = useMemo(() => {
     if (!table || !tableNode) return null;
     return <>
@@ -70,11 +69,11 @@ export const useWorkspaceTableView = ({ table, tableNode, viewportRef, panning, 
         <table className="workspace-table" style={{ '--workspace-text-scale': textScale, '--workspace-table-body-offset': topRowRevealCount ? `calc(var(--workspace-toolbar-row-height) * ${topRowRevealCount})` : '0px', width: `${renderedTableWidth}px` } as React.CSSProperties}>
           <colgroup>{renderedColumnWidths.map((width, index) => <col key={index} style={{ width: `${width}px` }} />)}</colgroup>
           <thead><tr>
-            {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}${activeCellColumnId === rowHeader.id ? ' workspace-context-active' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(rowHeader) }} onClick={() => readyControls.configure(rowHeader, true)}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" filterActive={activeHeaderFilterKeys.has(`column:${rowHeader.id}`)} onFilter={() => readyControls.filter({ axis: 'column', id: rowHeader.id, label: rowHeader.name })} /></th>}
+            {rowHeader && <th className={`workspace-row-corner ${overflowClassName(rowHeader)} ${configuring?.isRowHeader ? 'is-editing' : ''}${activeCellColumnId === rowHeader.id ? ' workspace-context-active' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(rowHeader) }} onClick={() => readyControls.configure(rowHeader, true)}><WorkspaceHeaderContent label={rowHeader.name} nameClass="workspace-row-axis-name" /></th>}
             {displayedColumns.map((column) => {
               const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
               const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
-              return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => readyControls.configure(column, false)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" filterActive={activeHeaderFilterKeys.has(`column:${column.id}`)} onFilter={() => readyControls.filter({ axis: 'column', id: column.id, label: column.name })} /></th>;
+              return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => readyControls.configure(column, false)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" /></th>;
             })}
             {hasHiddenColumns && <th className="workspace-hidden-columns-heading" aria-label="隱藏欄位"><WorkspaceIcon name="eye-off" size={17} /></th>}
           </tr></thead>
@@ -132,7 +131,7 @@ export const useWorkspaceTableView = ({ table, tableNode, viewportRef, panning, 
       </div>
       <div className="workspace-zoom-indicator"><button type="button" onClick={() => stableApplyTextScale(textScale - 0.1)} aria-label="縮小文字">−</button><span>{Math.round(textScale * 100)}%</span><button type="button" onClick={() => stableApplyTextScale(textScale + 0.1)} aria-label="放大文字">＋</button><button type="button" onClick={() => stableApplyTextScale(localMinTextScale)} aria-label="縮到可完整顯示屬性">適合寬度</button></div>
     </>;
-  }, [activeCellColumnId, activeCellKey, activeCellRowId, activeHeaderFilterKeys, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, readyControls, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable, updateDialogs, viewportRef, viewInteractionRef]);
+  }, [activeCellColumnId, activeCellKey, activeCellRowId, addColumn, addRow, bulkSelectedRowIds, bulkSelection, configuring, consumeSuppressedTableClick, currentTableHistory, displayedColumns, handleDataCellClick, handleTableViewportScroll, hasHiddenColumns, localMinTextScale, panning, quickActionsExpanded, redoTable, renderedColumnWidths, renderedTableWidth, rowHeader, rowWindow.visibleRows, rowWindow.topPadding, rowWindow.bottomPadding, setActiveCellElement, readyControls, stableApplyTextScale, stableBeginTablePan, stableBeginTableReorder, stableEndTablePan, stableEndTableReorder, stableMoveTablePan, stableMoveTableReorder, stableOpenCell, stableOpenHiddenFields, table, tableNode, tableRowIndexes, tableReorderVisual, textScale, topRowRevealCount, undoTable, updateDialogs, viewportRef, viewInteractionRef]);
 
   return { workspaceTableView };
 };

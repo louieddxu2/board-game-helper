@@ -84,7 +84,6 @@ export const useWorkspacePage = () => {
 
   const hiddenColumns = useMemo(() => table?.columns.filter((column) => column.hidden) ?? [], [table?.columns]);
   const displayedColumns = useMemo(() => table?.columns.filter((column) => !column.hidden) ?? [], [table?.columns]);
-  const filteredRowIndexes = useMemo(() => new Map(filteredRows.map((row, index) => [row.id, index])), [filteredRows]);
   const searchFilterTargets = useMemo<HeaderFilterTarget[]>(() => {
     if (!table || !rowHeader) return [];
     return [
@@ -104,20 +103,15 @@ export const useWorkspacePage = () => {
     clearFilters();
     setSearchOpen(false);
   }, [clearFilters, setSearchOpen, setSearchQuery]);
-  const activeHeaderFilterKeys = useMemo(() => new Set(
-    Object.entries(headerFilters)
-      .filter(([, state]) => hasWorkspaceFilterCriteria(state) || Boolean(state.sort))
-      .map(([key]) => key),
-  ), [headerFilters]);
   const hasHiddenColumns = hiddenColumns.length > 0;
   const hiddenOptionsByColumn = useMemo(() => hiddenFieldsEditor ? Object.fromEntries(hiddenColumns.map((column) => [column.id, column.inputType === 'dynamic-select' && table ? getDynamicOptions(table, column.id) : column.options])) : {}, [hiddenColumns, hiddenFieldsEditor, table]);
 
   const fixedListSuggestions = useMemo(() => {
     if (!configuring || !table || !rowHeader) return [];
-    const values = table.rows.map((row) => configuring.isRowHeader ? row.name : row.values[configuring.column.id] ?? null);
     const seen = new Set<string>();
     const options: string[] = [];
-    for (const value of values) {
+    for (const row of table.rows) {
+      const value = configuring.isRowHeader ? row.name : row.values[configuring.column.id] ?? null;
       const items = configuring.column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [displayWorkspaceColumnValue(value, configuring.column)];
       for (const item of items) {
         const option = item.trim();
@@ -276,16 +270,13 @@ export const useWorkspacePage = () => {
     quickActions: () => setQuickActionsExpanded(true),
   }, { configure: 'active', filter: 'active', search: 'active', edit: 'history', settings: 'active', createTable: 'all', context: 'all', drive: 'all', bottomNavigation: 'all', quickActions: 'history' }, readiness);
 
-  const { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, pagedRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
+  const { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, tableRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
 
-  const tableRowIndexes = useMemo(() => activeWindow ? pagedRowIndexes
-    : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, pagedRowIndexes, table?.rows]);
-
-  const activeEditingRow = editing && table ? table.rows.find((item) => item.id === editing.rowId) : undefined;
-  const activeEditingRowIndex = activeEditingRow && table ? table.rows.findIndex((item) => item.id === activeEditingRow.id) : -1;
+  const activeEditingRow = editing ? tableRowsById.get(editing.rowId) : undefined;
+  const activeEditingRowIndex = activeEditingRow ? tableRowIndexes.get(activeEditingRow.id) ?? -1 : -1;
   const activeEditingColumn = editing && table ? editing.columnId === rowHeader?.id ? rowHeader : table.columns.find((item) => item.id === editing.columnId) : undefined;
   const activeEditingValue = activeEditingRow && activeEditingColumn ? activeEditingColumn.id === rowHeader?.id ? activeEditingRow.name : activeEditingRow.values[activeEditingColumn.id] : null;
-  const hiddenEditorRow = hiddenFieldsEditor && table ? table.rows.find((row) => row.id === hiddenFieldsEditor.rowId) : undefined;
+  const hiddenEditorRow = hiddenFieldsEditor ? tableRowsById.get(hiddenFieldsEditor.rowId) : undefined;
   const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined) ?? (bulkSelection?.rowIds[0] ? { rowId: bulkSelection.rowIds[0], columnId: bulkSelection.columnId } : focusTarget);
   const activeCellKey = activeCell ? workspaceCellKey(activeCell.rowId, activeCell.columnId) : undefined;
   const activeCellRowId = activeCell?.rowId;
@@ -300,7 +291,7 @@ export const useWorkspacePage = () => {
   // Keep the expensive table subtree out of drawer-only state updates. Real workspaces can
   // contain hundreds of rows; opening the drawer must not block the first click while React
   // reconstructs every cell.
-  const { workspaceTableView } = useWorkspaceTableView({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, activeHeaderFilterKeys, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs: dialogs.update, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale });
+  const { workspaceTableView } = useWorkspaceTableView({ table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs: dialogs.update, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale });
 
   return {
     data,

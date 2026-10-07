@@ -38,14 +38,13 @@ interface WorkspaceTableWindowOptions {
   setVirtualScrollTop: Dispatch<SetStateAction<number>>;
   lastUserScrollAtRef: RefObject<number>;
   focusTarget: { rowId: string; columnId: string; } | undefined;
-  filteredRowIndexes: Map<string, number>;
   searchFilterTargets: HeaderFilterTarget[];
   filterbarRef: RefObject<HTMLDivElement | null>;
   setScrollPosition: Dispatch<SetStateAction<{ left: number; top: number; }>>;
   searchOpen: boolean;
 }
 
-export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, filteredRowIndexes, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
+export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
   const layoutViewportWidth = !hasHiddenColumns ? viewportWidth : Math.max(0, viewportWidth - 44);
 
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
@@ -68,9 +67,11 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
 
   const rowWindowAtBottom = Boolean(renderedRowScopeRef.current === table?.id && viewportRef.current && viewportRef.current.scrollTop >= viewportRef.current.scrollHeight - viewportRef.current.clientHeight - 2);
 
-  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? [] : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true);
-
   const pagedRowWindow = usePagedWorkspaceRows(activeWindow, rowMeasurementKey, virtualScrollTop, viewportHeight, rowWindowAtBottom);
+
+  const tableRowIndexes = useMemo(() => activeWindow ? pagedRowWindow.indexes
+    : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, pagedRowWindow.indexes, table?.rows]);
+  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? [] : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true, filteredRows === table?.rows ? tableRowIndexes : undefined);
 
   const rowWindow = activeWindow ? pagedRowWindow : fullRowWindow;
 
@@ -216,7 +217,7 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     if (focusKey === focusScrollHandledRef.current) return;
     focusScrollHandledRef.current = focusKey;
     if (!focusTarget) return;
-    const index = filteredRowIndexes.get(focusTarget.rowId) ?? -1;
+    const index = rowWindow.indexes.get(focusTarget.rowId) ?? -1;
     if (rowWindow.virtual && (index < rowWindow.first || index >= rowWindow.last)) {
       const offset = rowWindow.offsetForRow(focusTarget.rowId);
       const viewport = viewportRef.current;
@@ -225,7 +226,7 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
         setVirtualScrollTop(viewport.scrollTop);
       }
     }
-  }, [filteredRowIndexes, focusTarget, rowWindow, table?.id]);
+  }, [focusTarget, rowWindow, table?.id]);
 
   const filterbarSlots = useMemo<Array<HeaderFilterTarget | undefined>>(() => {
     if (!table) return [];
@@ -293,5 +294,5 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     filterbarRef.current.scrollLeft = viewportRef.current.scrollLeft;
   }, [renderedTableWidth, searchOpen]);
 
-  return { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, pagedRowIndexes: pagedRowWindow.indexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots };
+  return { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, tableRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots };
 };

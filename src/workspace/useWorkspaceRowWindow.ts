@@ -59,6 +59,7 @@ export const useWorkspaceRowWindow = (
   orderKey = '',
   stickToBottom?: boolean,
   dynamicWidths = false,
+  providedIndexes?: Map<string, number>,
 ) => {
   const heightsRef = useRef(new Map<string, number>());
   const measurementKeyRef = useRef(measurementKey);
@@ -104,7 +105,7 @@ export const useWorkspaceRowWindow = (
 
   const previousSnapshot = snapshotRef.current;
 
-  const rowIndexes = useMemo(() => new Map(rows.map((row, index) => [row.id, index])), [rows]);
+  const rowIndexes = useMemo(() => providedIndexes ?? new Map(rows.map((row, index) => [row.id, index])), [providedIndexes, rows]);
   const offsets = useMemo(() => {
     const result = [0];
     for (const row of rows) result.push(result[result.length - 1] + (heightsRef.current.get(row.id) ?? ESTIMATED_ROW_HEIGHT));
@@ -185,6 +186,7 @@ export const useWorkspaceRowWindow = (
 
   return {
     virtual,
+    indexes: rowIndexes,
     first,
     last,
     visibleRows: useMemo(() => virtual ? rows.slice(first, last) : rows, [first, last, rows, virtual]),

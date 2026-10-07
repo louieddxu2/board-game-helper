@@ -49,10 +49,9 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
     if (!table) return [];
     const query = deferredSearchQuery.trim().toLocaleLowerCase();
     if (!query) return table.rows;
-    return table.rows.filter((row) => [
-      { value: row.name, inputType: rowHeader?.inputType, dateOnly: rowHeader?.dateOnly },
-      ...table.columns.map((column) => ({ value: row.values[column.id] ?? null, inputType: column.inputType, dateOnly: column.dateOnly })),
-    ].some(({ value, inputType, dateOnly }) => searchableWorkspaceCellValue(value, inputType, dateOnly).toLocaleLowerCase().includes(query)));
+    return table.rows.filter((row) =>
+      searchableWorkspaceCellValue(row.name, rowHeader?.inputType, rowHeader?.dateOnly).toLocaleLowerCase().includes(query)
+      || table.columns.some((column) => searchableWorkspaceCellValue(row.values[column.id] ?? null, column.inputType, column.dateOnly).toLocaleLowerCase().includes(query)));
   }, [deferredSearchQuery, rowHeader, table?.columns, table?.rows]);
 
   const filteredRows = useMemo(() => {
@@ -72,24 +71,29 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
     const columnId = key.slice(7);
     const column = columnsById.get(columnId)!;
     const direction = state.sort === 'desc' ? -1 : 1;
-    return rows.map((row, index) => ({ row, index })).sort((left, right) => {
-      const leftValue = columnId === rowHeader.id ? left.row.name : left.row.values[columnId] ?? null;
-      const rightValue = columnId === rowHeader.id ? right.row.name : right.row.values[columnId] ?? null;
-      return compareWorkspaceCellValues(leftValue, rightValue, column?.inputType, column?.dateOnly) * direction || left.index - right.index;
-    }).map(({ row }) => row);
+    return [...rows].sort((left, right) => {
+      const leftValue = columnId === rowHeader.id ? left.name : left.values[columnId] ?? null;
+      const rightValue = columnId === rowHeader.id ? right.name : right.values[columnId] ?? null;
+      return compareWorkspaceCellValues(leftValue, rightValue, column.inputType, column.dateOnly) * direction;
+    });
   }, [headerFilters, rowHeader, searchedRows, table?.columns]);
 
   const activeFilterKey = filterTarget ? `${filterTarget.axis}:${filterTarget.id}` : '';
   const activeFilterState = headerFilters[activeFilterKey] ?? { includedKeys: null, sort: null };
+  const activeFilterColumn = useMemo(() => {
+    if (!table || !rowHeader || !filterTarget) return undefined;
+    return filterTarget.id === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === filterTarget.id);
+  }, [filterTarget, rowHeader, table?.columns]);
+  const activeFilterInputType = activeFilterColumn?.inputType;
 
   const activeFilterOptions = useMemo(() => {
     if (!table || !rowHeader || !filterTarget) return [];
-    const targetColumn = filterTarget.id === rowHeader.id ? rowHeader : table.columns.find((column) => column.id === filterTarget.id);
-    const values = table.rows.map((row) => ({ value: filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null, column: targetColumn }));
+    const column = activeFilterColumn;
+    const inputType = column?.inputType;
+    const isMultiple = column?.isMultiple;
     const unique = new Map<string, { key: string; label: string; count: number; color?: string }>();
-    for (const { value, column } of values) {
-      const inputType = column?.inputType;
-      const isMultiple = column?.isMultiple;
+    for (const row of table.rows) {
+      const value = filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null;
       if (inputType === 'datetime') {
         const monthKey = workspaceDateMonthKey(value);
         const key = monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null);
@@ -114,17 +118,12 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
       }
     }
     return [...unique.values()].sort((left, right) => left.key.startsWith('date-month:') && right.key.startsWith('date-month:') ? left.key.localeCompare(right.key) : workspaceValueCollator.compare(left.label, right.label));
-  }, [filterTarget, rowHeader, table]);
-
-  const activeFilterInputType = useMemo(() => {
-    if (!table || !rowHeader || !filterTarget) return undefined;
-    return filterTarget.id === rowHeader.id ? rowHeader.inputType : table.columns.find((column) => column.id === filterTarget.id)?.inputType;
-  }, [filterTarget, rowHeader, table]);
+  }, [activeFilterColumn, filterTarget, rowHeader, table?.rows]);
 
   const activeNumericValues = useMemo(() => {
     if (activeFilterInputType !== 'number' || !filterTarget) return [];
-    const values = filteredRows.map((row) => filterTarget.id === rowHeader?.id ? row.name : row.values[filterTarget.id] ?? null);
-    return values.map(numericWorkspaceValue).filter((value): value is number => value !== undefined);
+    return filteredRows.map((row) => numericWorkspaceValue(filterTarget.id === rowHeader?.id ? row.name : row.values[filterTarget.id] ?? null))
+      .filter((value): value is number => value !== undefined);
   }, [activeFilterInputType, filterTarget, filteredRows, rowHeader]);
 
   const updateActiveFilter = (updater: (state: HeaderFilterState) => HeaderFilterState) => {

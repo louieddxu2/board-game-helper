@@ -197,7 +197,6 @@ describe('workspace browser policies', () => {
     expect(overlayRule).toMatch(/font-size:\s*16px/);
     expect(overlayRule).toMatch(/--workspace-text-scale:\s*1/);
 
-    const filterRule = styles.match(/\.workspace-header-filter\s*\{([^}]*)\}/)?.[1];
     const filterbarRule = styles.match(/\.workspace-filterbar\s*\{([^}]*)\}/)?.[1];
     const filterbarTrackRule = styles.match(/\.workspace-filterbar-scroll\s*\{([^}]*)\}/)?.[1];
     const filterbarButtonRule = styles.match(/\.workspace-filterbar-button\s*\{([^}]*)\}/)?.[1];
@@ -234,10 +233,6 @@ describe('workspace browser policies', () => {
     expect(dragSurfaceRule).toMatch(/user-select:\s*none/);
     expect(dragSurfaceRule).toMatch(/-webkit-touch-callout:\s*none/);
     expect(editableSurfaceRule).toMatch(/user-select:\s*text/);
-    expect(filterRule).toMatch(/position:\s*absolute/);
-    expect(filterRule).toMatch(/min-height:\s*20px/);
-    expect(filterRule).toMatch(/opacity:\s*\.42/);
-    expect(filterRule).not.toMatch(/flex:\s*0 0/);
     expect(filterbarRule).toMatch(/overflow-x:\s*auto/);
     expect(filterbarTrackRule).toMatch(/display:\s*grid/);
     expect(filterbarTrackRule).toMatch(/touch-action:\s*pan-x/);

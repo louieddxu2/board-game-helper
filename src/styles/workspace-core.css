@@ -126,13 +126,10 @@
 .workspace-column-name:hover { color: var(--orange); }
 .workspace-header-layout { position: relative; display: block; width: 100%; min-width: 0; }
 .workspace-header-layout > .workspace-row-axis-name, .workspace-header-layout > .workspace-column-name { display: block; width: 100%; min-width: 0; }
-.workspace-header-filter { position: absolute; top: -2px; right: -3px; z-index: 1; display: grid; place-items: center; width: 20px; min-width: 20px; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; opacity: .42; }
-.workspace-header-filter:hover, .workspace-header-filter.active { background: transparent; color: var(--orange); box-shadow: none; opacity: 1; }
 .workspace-row-heading { position: sticky; left: 0; z-index: 2; min-width: 0 !important; padding: 2px 3px !important; cursor: pointer; background: var(--cream); color: var(--ink); text-align: left; }
 .workspace-table td { background: var(--white); cursor: text; font-size: inherit; }
 .workspace-table td:hover, .workspace-table td:focus-within { background: rgba(236,230,216,.72); }
 .workspace-table .workspace-context-active { background: #fff4d6; color: var(--orange); box-shadow: inset 0 0 0 2px var(--orange); font-weight: 700; }
-.workspace-table th.workspace-context-active .workspace-header-filter { color: var(--orange); opacity: .9; }
 .workspace-table th.is-editing, .workspace-table td.is-editing { background: #fff7dc; box-shadow: inset 0 0 0 3px var(--orange); }
 .workspace-table td.is-bulk-selected { position: relative; background: rgba(233,180,76,.22); box-shadow: inset 0 0 0 3px var(--orange); }
 .workspace-table th.is-bulk-column, .workspace-table td.is-bulk-column { --workspace-bulk-lane-inset: max(0px, min(12px, 15%, calc(50% - 16px))); background-image: linear-gradient(90deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)), linear-gradient(270deg, rgba(229,115,0,.05), transparent var(--workspace-bulk-lane-inset)); background-repeat: no-repeat; }

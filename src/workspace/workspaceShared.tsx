@@ -486,9 +486,8 @@ export const WorkspaceModal = ({ title, children, actions, leadingAction, owner,
     </section>
   </div>;
 };
-export const WorkspaceHeaderContent = ({ label, labelColor, nameClass, editLabel, accessibleLabel = label || '未命名屬性', filterActive, onFilter, showFilter = false }: { label: string; labelColor?: string; nameClass: string; editLabel?: string; accessibleLabel?: string; filterActive: boolean; onFilter(): void; showFilter?: boolean }) => <div className="workspace-header-layout">
-  <button type="button" className={nameClass} style={{ color: labelColor }} aria-label={editLabel ?? accessibleLabel}>{label}</button>
-  {showFilter && <button type="button" className={`workspace-header-filter ${filterActive ? 'active' : ''}`} aria-label={`篩選 ${accessibleLabel}`} aria-pressed={filterActive} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onFilter(); }}><WorkspaceIcon name="filter" size={14} /></button>}
+export const WorkspaceHeaderContent = ({ label, nameClass }: { label: string; nameClass: string }) => <div className="workspace-header-layout">
+  <button type="button" className={nameClass} aria-label={label || '未命名屬性'}>{label}</button>
 </div>;
 export const ExternalLinkAction = ({ value, pushWidth = false }: { value: WorkspaceCellValue; pushWidth?: boolean }) => {
   const rawUrl = isWorkspaceLinkValue(value) ? value.url : isWorkspaceUrlText(value) ? value : '';
