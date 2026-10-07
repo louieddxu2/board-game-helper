@@ -1,16 +1,14 @@
 import { WorkspaceModalCloseContext, type WorkspaceRequestClose } from '../workspace/workspaceModalClose';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { assertWorkspaceStorageCurrent, loadWorkspaceHistories, loadWorkspace, loadWorkspaceInitial, loadWorkspaceTableWindow, saveWorkspace, type WorkspaceSaveOptions } from '../workspace/db';
-import { flushSync } from 'react-dom';
-import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, inferWorkspaceTableMutation, pushWorkspaceTableHistory, type WorkspaceCommitOptions, type WorkspaceTableHistory, type WorkspaceTableMutation } from '../workspace/history';
+import { assertWorkspaceStorageCurrent, loadWorkspaceTableWindow, saveWorkspace } from '../workspace/db';
+import { applyWorkspaceTableHistoryActionWithNode, createEmptyWorkspaceTableHistory, type WorkspaceTableHistory } from '../workspace/history';
 import { coerceCellValue, displayWorkspaceCellValue, displayWorkspaceColumnValue, getRowHeaderColumn, getTableForNode, MAX_BOTTOM_NAVIGATION_TABLES, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from '../workspace/model';
-import { WorkspaceDynamicOptionsCache } from '../workspace/dynamicOptionsCache';
 import { calculateWorkspaceTableLayout, ensureWorkspaceCellVisible, ExternalLinkAction, findTableNode, hasWorkspaceFilterCriteria, measureWorkspaceText, NameDialogState, numericWorkspaceValue, overflowClassName, updateTable, useWorkspaceInputModality, workspaceCellPadding, WorkspaceHeaderContent, WorkspaceIcon, WorkspaceInputModalityContext, workspaceMinColumnWidth, WorkspaceModal, expandedFoldersStorageKey, type HeaderFilterState, type HeaderFilterTarget } from "../workspace/workspaceShared";
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from '../workspace/types';
 import { MoveNodeDialog, NodeActionsDialog, TableCreateDialog } from "../workspace/workspaceActionDialogs";
 import { CellInputDialog, ColumnConfig, ColumnVisibilityDialog, ConfirmDialog, HeaderFilterDialog, HiddenFieldsDialog, LinkInputDialog, NameDialog, WorkspaceSelectionDialog } from "../workspace/workspaceDialogs";
 import { Tree } from "../workspace/workspaceSidebar";
-import { clampDrawerOffset, getDrawerCloseSwipeOffset, getDrawerOpenSwipeOffset, shouldKeepDrawerOpen, shouldOpenDrawer, useTableGestures } from "../workspace/useTableGestures";
+import { useTableGestures } from "../workspace/useTableGestures";
 import { useWorkspaceFilter } from "../workspace/useWorkspaceFilter";
 import { useWorkspaceBrowserBack, useWorkspaceVirtualKeyboardOpen } from "../workspace/useWorkspaceBrowserBack";
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from "../workspace/useWorkspaceActions";
@@ -25,16 +23,17 @@ import { assignWorkspaceChangeRevisions } from '../workspace/changeRevisions';
 import { WorkspaceBottomNavigation, WorkspaceBottomNavigationDialog, type WorkspaceBottomNavigationItem } from '../workspace/WorkspaceBottomNavigation';
 import { WorkspaceQuickActionPanel } from '../workspace/WorkspaceQuickActionPanel';
 import { formatDateFilterBound } from '../workspace/dateFilter';
-import { afterWorkspacePaint } from '../workspace/backgroundWork';
-import { hydrateWorkspaceHistories } from '../workspace/history';
 import { useWorkspaceRowWindow } from '../workspace/useWorkspaceRowWindow';
 import { useWorkspaceColumnWindow } from '../workspace/useWorkspaceColumnWindow';
 import { createWorkspaceTextWidthCache } from '../workspace/workspaceTextWidthCache';
 import { measureVisibleColumnWidths, preserveColumnScrollPosition } from '../workspace/visibleColumnWidths';
-import { initialWorkspaceRowPages, isPendingWorkspaceRow, workspaceWindowDisplayTable, type WorkspaceTableWindow } from '../workspace/rowPages';
+import { initialWorkspaceRowPages, isPendingWorkspaceRow, workspaceWindowDisplayTable } from '../workspace/rowPages';
 import { usePagedWorkspaceRows } from '../workspace/usePagedWorkspaceRows';
-import { useReadyWorkspaceActions, type WorkspaceReadiness } from '../workspace/useReadyWorkspaceActions';
+import { useReadyWorkspaceActions } from '../workspace/useReadyWorkspaceActions';
 import { loadWorkspaceTableViewState } from '../workspace/viewState';
+import { useWorkspaceStorage } from '../workspace/useWorkspaceStorage';
+import { useWorkspaceLoading } from '../workspace/useWorkspaceLoading';
+import { useWorkspaceDrawer, workspaceDrawerWidth } from '../workspace/useWorkspaceDrawer';
 
 declare const __APP_VERSION__: string;
 const workspaceAppVersion = typeof __APP_VERSION__ === 'undefined' ? '開發版' : __APP_VERSION__;
@@ -66,37 +65,15 @@ const workspaceFilterSummary = (state?: HeaderFilterState) => {
 };
 const workspaceLastExportStorageKey = 'board-game-helper-workspace-last-export';
 const workspaceBackupReminderMs = 7 * 24 * 60 * 60 * 1000;
-const workspaceDrawerWidth = () => Math.min(360, window.innerWidth * 0.88);
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
   const selected = selection.rowIds.includes(rowId);
   const rowIds = selected ? selection.rowIds.filter((id) => id !== rowId) : [...selection.rowIds, rowId];
   if (rowIds.length === 0) return undefined;
   return { ...selection, rowIds };
 };
-const mergeLoadedWorkspaceTables = (current: WorkspaceData, loaded: WorkspaceData): WorkspaceData => {
-  const tables = new Map(current.tables.map(table => [table.id, table]));
-  const present = new Set(current.nodes.flatMap(node => node.type === 'table' && node.tableId ? [node.tableId] : []));
-  for (const table of loaded.tables) {
-    if (!present.has(table.id)) continue;
-    const existing = tables.get(table.id);
-    // Keep unsaved edits, including tables outside this read request.
-    if (!existing || existing.rows === table.rows) tables.set(table.id, table);
-  }
-  return { ...current, tables: [...tables.values()] };
-};
-
 const WorkspacePage = () => {
   const inputModality = useWorkspaceInputModality();
-  const [data, setData] = useState<WorkspaceData>();
-  const [tableWindow, setTableWindow] = useState<WorkspaceTableWindow>();
-  const progressiveRef = useRef(false);
-  const readQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const mountedRef = useRef(true);
   const captureWindowAnchorRef = useRef<(() => { rowId: string; within: number } | undefined) | undefined>(undefined);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerOffset, setDrawerOffset] = useState(0);
-  const [drawerDragging, setDrawerDragging] = useState(false);
-  const [drawerQuery, setDrawerQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<{ rowId: string; columnId: string }>();
   const [focusTarget, setFocusTarget] = useState<{ rowId: string; columnId: string }>();
@@ -107,14 +84,6 @@ const WorkspacePage = () => {
   const [movingNode, setMovingNode] = useState<WorkspaceNode>();
   const [editBarOpen, setEditBarOpen] = useState(false);
   const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
-  const [historyByTable, setHistoryByTable] = useState<Map<string, WorkspaceTableHistory>>(new Map());
-  const [historyReady, setHistoryReady] = useState(false);
-  const [allTablesReady, setAllTablesReady] = useState(false);
-  const [storageVersion, setStorageVersion] = useState<number | null>(null);
-  const [remainingLoadError, setRemainingLoadError] = useState(false);
-  const [storageConflict, setStorageConflict] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [storageUpgradeBlocked, setStorageUpgradeBlocked] = useState(() => document.documentElement.hasAttribute('data-workspace-storage-blocked'));
   const [tableActionsOpen, setTableActionsOpen] = useState(false);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [bottomNavigationDraft, setBottomNavigationDraft] = useState<string[]>();
@@ -134,8 +103,6 @@ const WorkspacePage = () => {
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [lastPasteTarget, setLastPasteTarget] = useState<{ rowId: string; columnId: string }>();
   const [tableImportPreview, setTableImportPreview] = useState<WorkspaceTableImportPreview>();
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
-  const [lastSavedAt, setLastSavedAt] = useState<number>();
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
   const [googleDriveClientId, setGoogleDriveClientId] = useState<string | null | undefined>(undefined);
   const virtualKeyboardOpen = useWorkspaceVirtualKeyboardOpen();
@@ -143,162 +110,31 @@ const WorkspacePage = () => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const filterbarRef = useRef<HTMLDivElement>(null);
   const workspacePageRef = useRef<HTMLElement>(null);
-  const drawerElementRef = useRef<HTMLElement>(null);
   const activeCellElementRef = useRef<HTMLElement | null>(null);
-  const dataRef = useRef<WorkspaceData | undefined>(undefined);
-  const dynamicOptionsCacheRef = useRef(new WorkspaceDynamicOptionsCache());
-  const getDynamicOptions = useCallback((table: WorkspaceTable, columnId: string) => dynamicOptionsCacheRef.current.getOptions(table, columnId), []);
-  const historyRef = useRef(new Map<string, WorkspaceTableHistory>());
-  const historyReadyRef = useRef(false);
-  const allTablesReadyRef = useRef(false);
-  const historyResetRef = useRef({ all: false, ids: new Set<string>() });
-  const pendingHistoryResetRef = useRef({ all: false, ids: new Set<string>() });
-  const saveRevisionRef = useRef(0);
   const googleDriveClientIdPromiseRef = useRef<Promise<string | null> | undefined>(undefined);
-  const drawerCloseTimerRef = useRef<number | undefined>(undefined);
-  const drawerClickResetTimerRef = useRef<number | undefined>(undefined);
-  const suppressNextDrawerClickRef = useRef(false);
-  const drawerSwipeClickTargetRef = useRef<Element | null>(null);
-  const drawerItemDraggingRef = useRef(false);
-  const drawerSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; offset: number } | undefined>(undefined);
   const pendingOpenNodeIdRef = useRef<string | undefined>(undefined);
   const lastUserScrollAtRef = useRef(0);
   const programmaticTableScrollRef = useRef(false);
   const viewInteractionRef = useRef<string | undefined>(undefined);
   const restoredViewTableRef = useRef<string | undefined>(undefined);
 
-  // Only allow full saves after the render using the complete table set has committed.
-  useLayoutEffect(() => { allTablesReadyRef.current = allTablesReady; }, [allTablesReady]);
-
-  const openDrawer = useCallback(() => {
-    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
-    drawerCloseTimerRef.current = undefined;
-    if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-    drawerClickResetTimerRef.current = undefined;
-    suppressNextDrawerClickRef.current = false;
-    drawerSwipeClickTargetRef.current = null;
-    setDrawerOpen(true);
-    setDrawerDragging(false);
-    setDrawerOffset(workspaceDrawerWidth());
-  }, []);
-  const closeDrawer = useCallback(() => {
-    pendingOpenNodeIdRef.current = undefined;
-    setDrawerDragging(false);
-    setDrawerOffset(0);
-    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
-    drawerCloseTimerRef.current = window.setTimeout(() => {
-      setDrawerOpen(false);
-      drawerCloseTimerRef.current = undefined;
-    }, 180);
-  }, []);
-  const updateDrawerFromOpenSwipe = useCallback((deltaX: number) => {
-    if (!allTablesReadyRef.current && !progressiveRef.current) return;
-    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
-    drawerCloseTimerRef.current = undefined;
-    if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-    drawerClickResetTimerRef.current = undefined;
-    suppressNextDrawerClickRef.current = false;
-    drawerSwipeClickTargetRef.current = null;
-    const width = workspaceDrawerWidth();
-    setDrawerOpen(true);
-    setDrawerDragging(true);
-    setDrawerOffset(getDrawerOpenSwipeOffset(deltaX, width));
-  }, []);
-  const settleDrawerFromOpenSwipe = useCallback((deltaX: number) => {
-    if (!allTablesReadyRef.current && !progressiveRef.current) return;
-    const width = workspaceDrawerWidth();
-    const offset = getDrawerOpenSwipeOffset(deltaX, width);
-    setDrawerDragging(false);
-    if (shouldOpenDrawer(offset, width)) {
-      if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-      drawerClickResetTimerRef.current = undefined;
-      suppressNextDrawerClickRef.current = false;
-      drawerSwipeClickTargetRef.current = null;
-      setDrawerOpen(true);
-      setDrawerOffset(width);
-    } else {
-      closeDrawer();
-    }
-  }, [closeDrawer]);
-  const beginDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (drawerItemDraggingRef.current) return;
-    drawerSwipeRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, offset: drawerOffset };
-  }, [drawerOffset]);
-  const moveDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (drawerItemDraggingRef.current) {
-      drawerSwipeRef.current = undefined;
-      return;
-    }
-    const gesture = drawerSwipeRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    if (!gesture.active) {
-      if (Math.hypot(deltaX, deltaY) <= 8) return;
-      if (deltaX >= -8 || Math.abs(deltaY) >= Math.abs(deltaX)) {
-        drawerSwipeRef.current = undefined;
-        return;
-      }
-      gesture.active = true;
-      suppressNextDrawerClickRef.current = true;
-      drawerSwipeClickTargetRef.current = event.target instanceof Element ? event.target : null;
-      setDrawerDragging(true);
-      try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* The pointer may already have been cancelled. */ }
-    }
-    gesture.offset = getDrawerCloseSwipeOffset(deltaX, workspaceDrawerWidth());
-    setDrawerOffset(gesture.offset);
-    event.preventDefault();
-  }, []);
-  const endDrawerSwipe = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const gesture = drawerSwipeRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    drawerSwipeRef.current = undefined;
-    if (!gesture.active) return;
-    const width = workspaceDrawerWidth();
-    const offset = clampDrawerOffset(gesture.offset, width);
-    setDrawerDragging(false);
-    if (shouldKeepDrawerOpen(offset, width)) setDrawerOffset(width);
-    else closeDrawer();
-    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* The pointer may already have been released. */ }
-    event.preventDefault();
-    if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-    drawerClickResetTimerRef.current = window.setTimeout(() => {
-      suppressNextDrawerClickRef.current = false;
-      drawerSwipeClickTargetRef.current = null;
-      drawerClickResetTimerRef.current = undefined;
-    }, 0);
-  }, [closeDrawer]);
-  const suppressDrawerSwipeClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    if (!suppressNextDrawerClickRef.current) return;
-    const swipeTarget = drawerSwipeClickTargetRef.current;
-    if (!swipeTarget || !(event.target instanceof Node) || !swipeTarget.contains(event.target)) return;
-    suppressNextDrawerClickRef.current = false;
-    drawerSwipeClickTargetRef.current = null;
-    event.preventDefault();
-    event.stopPropagation();
-  }, []);
-  const handleDrawerItemDragStateChange = useCallback((active: boolean) => {
-    drawerItemDraggingRef.current = active;
-    if (!active) return;
-    drawerSwipeRef.current = undefined;
-    suppressNextDrawerClickRef.current = false;
-    drawerSwipeClickTargetRef.current = null;
-    setDrawerDragging(false);
-    setDrawerOffset(workspaceDrawerWidth());
-  }, []);
-
-  useEffect(() => {
-    if (!drawerOpen) {
-      setDrawerOffset(0);
-      setDrawerDragging(false);
-    }
-  }, [drawerOpen]);
-  useEffect(() => () => {
-    if (drawerCloseTimerRef.current !== undefined) window.clearTimeout(drawerCloseTimerRef.current);
-    if (drawerClickResetTimerRef.current !== undefined) window.clearTimeout(drawerClickResetTimerRef.current);
-    drawerSwipeClickTargetRef.current = null;
-  }, []);
+  const storage = useWorkspaceStorage(setNotice);
+  const {
+    data, setData, dataRef, setTableWindow, progressiveRef, mountedRef,
+    historyByTable, setHistoryByTable, historyRef, historyReady, historyReadyRef,
+    allTablesReady, allTablesReadyRef, storageVersion, remainingLoadError, storageConflict, setStorageConflict,
+    loadError, storageUpgradeBlocked, pendingHistoryResetRef, saveState, setSaveState,
+    lastSavedAt, setLastSavedAt, saveRevisionRef, dynamicOptionsCacheRef, getDynamicOptions, reportSaveError, commit,
+  } = storage;
+  const {
+    drawerOpen, setDrawerOpen, drawerOffset, drawerDragging, drawerQuery, setDrawerQuery, drawerElementRef,
+    openDrawer, closeDrawer, updateDrawerFromOpenSwipe, settleDrawerFromOpenSwipe,
+    beginDrawerSwipe, moveDrawerSwipe, endDrawerSwipe, suppressDrawerSwipeClick, handleDrawerItemDragStateChange,
+  } = useWorkspaceDrawer({ allTablesReadyRef, progressiveRef, pendingOpenNodeIdRef });
+  const { fullTable, activeWindow, reportReadError, hydrateWorkspace, readiness, withActiveTable } = useWorkspaceLoading(storage, {
+    setNotice, setExpanded, setVirtualScrollTop, viewportRef, programmaticTableScrollRef,
+    pendingOpenNodeIdRef, captureWindowAnchorRef,
+  });
 
   const loadGoogleDriveClientId = useCallback(async () => {
     if (googleDriveClientId !== undefined) return googleDriveClientId;
@@ -321,197 +157,6 @@ const WorkspacePage = () => {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let cancelHistoryLoad: (() => void) | undefined;
-    const blocked = () => setStorageUpgradeBlocked(true);
-    const changedVersion = () => { setStorageConflict(true); setNotice('本機儲存格式已更新，請重新開啟此頁面'); };
-    window.addEventListener('workspace-storage-blocked', blocked);
-    window.addEventListener('workspace-storage-versionchange', changedVersion);
-    const reload = async () => {
-      const initial = await loadWorkspaceInitial({ paged: true });
-      const loaded = initial.data;
-      if (cancelled) return;
-      setData(loaded);
-      progressiveRef.current = Boolean(initial.progressive);
-      setTableWindow(initial.window);
-      if (initial.window) setVirtualScrollTop(loadWorkspaceTableViewState(initial.window.head.definition.id).scrollTop);
-      setStorageVersion(initial.storageVersion);
-      document.documentElement.removeAttribute('data-workspace-storage-blocked');
-      setStorageUpgradeBlocked(false);
-      dataRef.current = loaded;
-      allTablesReadyRef.current = initial.complete;
-      setAllTablesReady(initial.complete);
-      setLastSavedAt(initial.window?.head.updatedAt ?? (Math.max(0, ...loaded.tables.map((table) => table.updatedAt)) || undefined));
-      const folderIds = new Set(loaded.nodes.filter((node) => node.type === 'folder').map((node) => node.id));
-      let restored = new Set(folderIds);
-      try {
-        const stored = window.localStorage.getItem(expandedFoldersStorageKey);
-        if (stored !== null) restored = new Set((JSON.parse(stored) as unknown[]).filter((id): id is string => typeof id === 'string' && folderIds.has(id)));
-      } catch { /* Ignore damaged UI preferences. */ }
-      let current = loaded.nodes.find((node) => node.id === loaded.activeNodeId);
-      while (current?.parentId) {
-        restored.add(current.parentId);
-        current = loaded.nodes.find((node) => node.id === current?.parentId);
-      }
-      setExpanded(restored);
-      cancelHistoryLoad = afterWorkspacePaint(() => {
-        if (initial.progressive) {
-          // A legacy table gets its read projection once, after it is already visible.
-          const visible = dataRef.current;
-          const active = visible && getTableForNode(visible, visible.activeNodeId);
-          if (active) void loadWorkspace({ expectCurrentRevision: true, tableIds: [active.id] }).then(remaining => {
-            if (cancelled) return;
-            const current = dataRef.current;
-            const merged = current ? mergeLoadedWorkspaceTables(current, remaining) : remaining;
-            dataRef.current = merged; setData(merged);
-            const complete = merged.nodes.filter(node => node.type === 'table').every(node => merged.tables.some(table => table.id === node.tableId));
-            allTablesReadyRef.current = complete; setAllTablesReady(complete);
-          }).catch(error => { if (!cancelled) { setRemainingLoadError(true); console.error('[workspace-migration]', error); } });
-          return;
-        }
-        const finishTables = async () => {
-          const mergeLoaded = (remaining: WorkspaceData) => {
-            if (cancelled) return;
-            const current = dataRef.current;
-            const merged = current
-              ? { ...mergeLoadedWorkspaceTables(current, remaining), bottomNavigationTableIds: remaining.bottomNavigationTableIds }
-              : remaining;
-            dataRef.current = merged;
-            setData(merged);
-          };
-          if (initial.complete) {
-            // Full-load fallbacks also defer statistics; share the rebuilt column objects.
-            mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
-            return;
-          }
-          // Measured 10k-row reads exceed the requested 0.5 ms threshold. Preload pins first.
-          const pins = (loaded.bottomNavigationTableIds ?? []).filter(id => !loaded.tables.some(table => table.id === id) && loaded.nodes.some(node => node.tableId === id));
-          if (pins.length) mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, tableIds: pins }));
-          if (cancelled) return;
-          mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
-          if (cancelled) return;
-          allTablesReadyRef.current = true;
-          setAllTablesReady(true);
-        };
-        const finish = (stored: Map<string, WorkspaceTableHistory>) => {
-          if (cancelled) return;
-          const pending = historyRef.current;
-          const histories = hydrateWorkspaceHistories(stored, pending, new Set(dataRef.current?.tables.map((table) => table.id)), historyResetRef.current);
-          historyRef.current = histories;
-          historyReadyRef.current = true;
-          setHistoryByTable(histories);
-          setHistoryReady(true);
-        };
-        void finishTables().then(loadWorkspaceHistories).then(finish).catch((error: unknown) => {
-          if (cancelled) return;
-          if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
-          else if (!allTablesReadyRef.current) setRemainingLoadError(true);
-          else {
-            setNotice('先前的復原紀錄讀取失敗，表格仍可使用');
-            finish(new Map());
-          }
-        });
-      }, Boolean(initial.progressive));
-    };
-    void reload().catch(() => { if (!cancelled) setLoadError(true); });
-    return () => {
-      cancelled = true; cancelHistoryLoad?.();
-      window.removeEventListener('workspace-storage-blocked', blocked);
-      window.removeEventListener('workspace-storage-versionchange', changedVersion);
-    };
-  }, []);
-
-  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
-
-  const reportSaveError = useCallback((error: unknown) => {
-    setSaveState('error');
-    if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
-    else setNotice('本機儲存失敗，請先匯出資料備份');
-  }, []);
-
-  useEffect(() => {
-    const failed = (event: Event) => reportSaveError((event as CustomEvent<unknown>).detail);
-    window.addEventListener('workspace-storage-error', failed);
-    return () => window.removeEventListener('workspace-storage-error', failed);
-  }, [reportSaveError]);
-
-  const commit = useCallback((next: WorkspaceData, explicitMutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => {
-    const previous = dataRef.current;
-    if (!allTablesReadyRef.current && previous && (
-      (!progressiveRef.current && next.activeNodeId !== previous.activeNodeId && !getTableForNode(next, next.activeNodeId))
-      || next.tables.length !== previous.tables.length
-      || next.tables.some((table, index) => table.id !== previous.tables[index]?.id)
-    )) {
-      setNotice('正在讀取其他表格，請稍候');
-      return;
-    }
-    const mutation = explicitMutation ?? (previous && !options?.clearAllHistory ? inferWorkspaceTableMutation(previous, next) : undefined);
-    const meaningfulChange = !previous
-      || previous.nodes !== next.nodes
-      || previous.tables !== next.tables
-      || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
-    if (options?.importedTableIds) dynamicOptionsCacheRef.current.primeImportedTables(next, options.importedTableIds);
-    const revised = assignWorkspaceChangeRevisions(previous, meaningfulChange ? { ...next, updatedAt: Date.now() } : next);
-    const committed = dynamicOptionsCacheRef.current.prepare(previous, revised, mutation);
-    const removedTableIds = previous?.tables.filter((table) => !next.tables.some((item) => item.id === table.id)).map((table) => table.id) ?? [];
-    setData(committed);
-    dataRef.current = committed;
-    if (options?.clearAllHistory) {
-      historyResetRef.current.all = true;
-      pendingHistoryResetRef.current = { all: true, ids: new Set() };
-      historyRef.current = new Map();
-      setHistoryByTable(new Map());
-    } else if (options?.clearTableHistoryIds?.length) {
-      options.clearTableHistoryIds.forEach((id) => historyResetRef.current.ids.add(id));
-      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...options.clearTableHistoryIds]) };
-      const nextHistories = new Map(historyRef.current);
-      options.clearTableHistoryIds.forEach((tableId) => nextHistories.delete(tableId));
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
-    } else if (removedTableIds.length) {
-      removedTableIds.forEach((id) => historyResetRef.current.ids.add(id));
-      pendingHistoryResetRef.current = { ...pendingHistoryResetRef.current, ids: new Set([...pendingHistoryResetRef.current.ids, ...removedTableIds]) };
-      const nextHistories = new Map(historyRef.current);
-      removedTableIds.forEach((tableId) => nextHistories.delete(tableId));
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
-    }
-    if (mutation) {
-      const currentHistory = historyRef.current.get(mutation.tableId) ?? createEmptyWorkspaceTableHistory(mutation.tableId);
-      const nextHistory = pushWorkspaceTableHistory(currentHistory, mutation);
-      const nextHistories = new Map(historyRef.current).set(mutation.tableId, nextHistory);
-      historyRef.current = nextHistories;
-      setHistoryByTable(nextHistories);
-    }
-    const saveRevision = ++saveRevisionRef.current;
-    setSaveState('saving');
-    const reset = pendingHistoryResetRef.current;
-    const histories = [...historyRef.current.values()];
-    const saveOptions: WorkspaceSaveOptions = {
-      partial: !allTablesReadyRef.current,
-      deletedTableIds: removedTableIds,
-      mutation,
-      replaceTableIds: options?.clearAllHistory ? committed.tables.filter(table => previous?.tables.find(item => item.id === table.id) !== table).map(table => table.id) : undefined,
-      history: {
-        clearAll: reset.all, deleteTableIds: [...reset.ids],
-        ...(historyReadyRef.current ? { replace: histories } : { append: histories.flatMap(history => history.past) }),
-      },
-    };
-    const save = saveWorkspace(committed, saveOptions);
-    void save.then(() => {
-      if (pendingHistoryResetRef.current === reset) pendingHistoryResetRef.current = { all: false, ids: new Set() };
-      if (saveRevision !== saveRevisionRef.current) return;
-      setSaveState('saved');
-      setLastSavedAt(Date.now());
-    }).catch((error: unknown) => {
-      if (saveRevision !== saveRevisionRef.current) return;
-      reportSaveError(error);
-    });
-  }, [reportSaveError]);
-
-  const fullTable = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
-  const activeWindow = !fullTable && data?.nodes.some(node => node.id === data.activeNodeId && node.tableId === tableWindow?.head.definition.id) ? tableWindow : undefined;
   const table = useMemo(() => fullTable ?? (activeWindow ? workspaceWindowDisplayTable(activeWindow) : undefined), [fullTable, activeWindow]);
   const tableNode = useMemo(() => table && data ? findTableNode(data, table.id) : undefined, [data, table]);
   const navigationTables = useMemo<WorkspaceBottomNavigationItem[]>(() => data?.nodes.flatMap((node) => {
@@ -526,80 +171,6 @@ const WorkspacePage = () => {
   const tableRowIndexes = useMemo(() => activeWindow
     ? new Map(activeWindow.pages.flatMap(page => page.rows.map((row, slot) => [row.id, page.index * activeWindow.head.pageSize + slot] as const)))
     : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, table?.rows]);
-
-  const reportReadError = useCallback((error: unknown) => {
-    if (!mountedRef.current) return;
-    if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
-    setNotice('資料讀取失敗，請重新開啟此頁面');
-  }, []);
-  const hydrateWorkspace = useCallback((tableIds?: readonly string[], withHistory = false, isCurrent?: () => boolean): Promise<void> => {
-    const work = readQueueRef.current.catch(() => undefined).then(async () => {
-      const current = dataRef.current;
-      if (!current || !mountedRef.current || (isCurrent && !isCurrent())) return;
-      const needed = !tableIds || tableIds.some(id => !current.tables.some(table => table.id === id));
-      if (needed) {
-        const loaded = await loadWorkspace({ expectCurrentRevision: true, tableIds });
-        if (!mountedRef.current || (isCurrent && !isCurrent())) return;
-        const latest = dataRef.current!;
-        const merged = mergeLoadedWorkspaceTables(latest, loaded);
-        const anchor = captureWindowAnchorRef.current?.();
-        const active = getTableForNode(merged, merged.activeNodeId);
-        const index = active && anchor ? active.rows.findIndex(row => row.id === anchor.rowId) : -1;
-        const top = index >= 0 && anchor ? index * 36 + anchor.within : undefined;
-        const complete = merged.nodes.filter(node => node.type === 'table').every(node => merged.tables.some(table => table.id === node.tableId));
-        flushSync(() => {
-          dataRef.current = merged; setData(merged);
-          allTablesReadyRef.current = complete; setAllTablesReady(complete);
-          if (top !== undefined) setVirtualScrollTop(top);
-        });
-        if (top !== undefined && viewportRef.current) {
-          programmaticTableScrollRef.current = true;
-          viewportRef.current.scrollTop = top;
-          requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
-        }
-      }
-      if (withHistory && !historyReadyRef.current) {
-        const stored = await loadWorkspaceHistories();
-        if (!mountedRef.current) return;
-        const ids = new Set(dataRef.current?.nodes.flatMap(node => node.tableId ?? []));
-        const histories = hydrateWorkspaceHistories(stored, historyRef.current, ids, historyResetRef.current);
-        flushSync(() => {
-          historyRef.current = histories; historyReadyRef.current = true;
-          setHistoryByTable(histories); setHistoryReady(true);
-        });
-      }
-    });
-    readQueueRef.current = work;
-    return work;
-  }, []);
-  useEffect(() => {
-    const tableId = activeWindow?.head.definition.id;
-    const nodeId = data?.activeNodeId;
-    if (!tableId || !nodeId || storageConflict) return;
-    let cancelled = false;
-    const isCurrent = () => !cancelled && dataRef.current?.activeNodeId === nodeId && !pendingOpenNodeIdRef.current;
-    const cancel = afterWorkspacePaint(() => {
-      if (isCurrent()) void hydrateWorkspace([tableId], false, isCurrent).catch(error => {
-        if (isCurrent()) reportReadError(error);
-      });
-    }, true);
-    return () => { cancelled = true; cancel(); };
-  }, [activeWindow?.head.definition.id, data?.activeNodeId, hydrateWorkspace, reportReadError, storageConflict]);
-  const readiness = useMemo<WorkspaceReadiness>(() => ({
-    isReady: (scope) => scope === 'all' ? allTablesReadyRef.current : Boolean(dataRef.current && getTableForNode(dataRef.current, dataRef.current.activeNodeId)) && (scope !== 'history' || historyReadyRef.current || !progressiveRef.current),
-    ensure: (scope) => {
-      const id = dataRef.current?.nodes.find(node => node.id === dataRef.current?.activeNodeId)?.tableId;
-      return hydrateWorkspace(scope === 'all' ? undefined : id ? [id] : [], scope === 'history');
-    },
-    onError: reportReadError, ownerKey: () => dataRef.current?.activeNodeId ?? undefined,
-  }), [hydrateWorkspace, reportReadError]);
-  const withActiveTable = useCallback((work: () => void) => {
-    if (readiness.isReady('active')) { work(); return; }
-    const owner = readiness.ownerKey?.();
-    void readiness.ensure('active').then(() => {
-      if (mountedRef.current && readiness.ownerKey?.() === owner) work();
-    }).catch(reportReadError);
-  }, [readiness, reportReadError]);
 
   const {
     searchQuery, setSearchQuery, searchOpen, setSearchOpen,

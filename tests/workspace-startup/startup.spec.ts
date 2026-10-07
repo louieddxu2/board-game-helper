@@ -236,21 +236,39 @@ test('background completion keeps the visible variable-height row after a rapid 
   await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
   await viewport.evaluate(element => { element.scrollTop = 1000 * 36; element.scrollTop = 9000 * 36; });
   await expect.poll(async () => (await visibleVirtualRowIds(page)).some(id => Number(id!.slice(4)) >= 8990)).toBe(true);
-  const anchor = await viewport.evaluate(element => {
-    const rect = element.getBoundingClientRect();
-    const contentTop = element.querySelector('thead')!.getBoundingClientRect().bottom;
-    return [...element.querySelectorAll<HTMLTableRowElement>('tr[data-virtual-row-id]')].find(row => row.getBoundingClientRect().top >= contentTop && row.getBoundingClientRect().bottom <= rect.bottom)!.dataset.virtualRowId!;
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.getAll;
+    IDBObjectStore.prototype.getAll = function (this: IDBObjectStore, ...args: Parameters<typeof original>) {
+      const request = Reflect.apply(original, this, args) as IDBRequest;
+      if (this.name === 'rowChunks') {
+        // Capture the visible row when data arrives, just before the full read commits.
+        request.addEventListener('success', () => {
+          const element = document.querySelector('.workspace-table-viewport')!;
+          const rect = element.getBoundingClientRect();
+          // Header cells are sticky; the thead box itself scrolls above the viewport.
+          const contentTop = Math.max(rect.top, ...[...element.querySelectorAll('thead th')].map(cell => cell.getBoundingClientRect().bottom));
+          (window as any).workspaceHydrationAnchor = [...element.querySelectorAll<HTMLTableRowElement>('tr[data-virtual-row-id]')].find(row => row.getBoundingClientRect().top >= contentTop && row.getBoundingClientRect().bottom <= rect.bottom)?.dataset.virtualRowId;
+        }, { once: true });
+        // Allow the completed read to reach React and paint without opening a toolbar.
+        this.transaction.addEventListener('complete', () => {
+          requestAnimationFrame(() => requestAnimationFrame(() => { (window as any).workspaceHydrationPainted = true; }));
+        }, { once: true });
+      }
+      return request;
+    } as typeof original;
   });
   await page.evaluate(() => { (window as any).releaseWorkspaceIdleWork(); });
   await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').map((read: any) => read.key))).toEqual(['table-0']);
-  // Fixed controls wait for hydration without scrolling the target row into view.
-  await page.getByRole('button', { name: '設定', exact: true }).click();
-  await expect(page.locator('[aria-label="表格工具列"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceHydrationPainted)).toBe(true);
+  const anchor = await page.evaluate(() => (window as any).workspaceHydrationAnchor as string | undefined);
+  expect(anchor).toBeDefined();
   await expect.poll(() => viewport.evaluate((element, id) => {
     const row = element.querySelector<HTMLTableRowElement>(`tr[data-virtual-row-id="${id}"]`);
     if (!row) return false;
     const rect = row.getBoundingClientRect();
-    return rect.bottom > element.querySelector('thead')!.getBoundingClientRect().bottom && rect.top < element.getBoundingClientRect().bottom;
+    const viewportRect = element.getBoundingClientRect();
+    const contentTop = Math.max(viewportRect.top, ...[...element.querySelectorAll('thead th')].map(cell => cell.getBoundingClientRect().bottom));
+    return rect.bottom > contentTop && rect.top < viewportRect.bottom;
   }, anchor)).toBe(true);
   expect(await page.locator('tr[data-virtual-row-id]').count()).toBeLessThan(80);
 });
@@ -517,7 +535,14 @@ test('a large offline table renders a bounded row window and retains the other t
   await expect(rows.first()).toHaveAttribute('data-virtual-row-id', 'row-0');
   expect(await rows.count()).toBeLessThan(80);
   const viewport = page.locator('.workspace-table-viewport');
-  await viewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  // Use a native touch scroll so input, scroll events and measurement frames stay ordered.
+  const bounds = (await viewport.boundingBox())!;
+  const session = await context.newCDPSession(page);
+  await session.send('Input.synthesizeScrollGesture', {
+    x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + bounds.height / 2),
+    yDistance: -10000, speed: 20000, gestureSourceType: 'touch',
+  });
+  await session.detach();
   await expect(rows.last()).toHaveAttribute('data-virtual-row-id', 'row-249');
   await expect(rows.last()).toBeInViewport();
   expect(await rows.count()).toBeLessThan(80);
