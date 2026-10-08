@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
 import type { CellHoldSession, UseTableGesturesProps } from './tableGestureTypes';
-import type { WorkspaceData } from './types';
-import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
-import type { TableReorderKind, TableReorderSession, TableReorderVisual } from './workspaceShared';
-import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable } from './workspaceShared';
+import { useTableReorder } from './useTableReorder';
+import { tableReorderHoldMs } from './workspaceShared';
 export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false, ensureTableReady, onReadError, onPersistTextScale }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
-  const [tableReorderVisual, setTableReorderVisual] = useState<TableReorderVisual>();
-
-  const dataRef = useRef<WorkspaceData | undefined>(data);
-  dataRef.current = data;
   const latest = useRef({ tableId: table?.id, onCellLongPress });
   latest.current = { tableId: table?.id, onCellLongPress };
 
@@ -38,20 +32,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
-  const tableReorderSession = useRef<TableReorderSession | undefined>(undefined);
-  const reorderOwner = useRef<string | undefined>(undefined);
-  const tableReorderPointer = useRef<{ session: TableReorderSession; x: number; y: number } | undefined>(undefined);
-
   const momentumScroll = useMomentumScroll();
   useEffect(() => {
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
-    if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
-    cellHold.current = undefined; tableReorderSession.current = undefined;
-    tableReorderPointer.current = undefined; boundarySearchHold.current = undefined;
+    cellHold.current = undefined; boundarySearchHold.current = undefined;
     pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined; drawerSwipe.current = undefined;
     panMetrics.current = undefined; panAxis.current = undefined;
-    momentumScroll.stop(); setPanning(false); setTableReorderVisual(undefined);
+    momentumScroll.stop(); setPanning(false);
   }, [table?.id, momentumScroll.stop]);
 
   const clearBoundarySearchHold = () => {
@@ -113,104 +101,18 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     boundarySearchHold.current = hold;
   };
 
-  const updateTableReorderTarget = (session: TableReorderSession, clientX: number, clientY: number) => {
-    const selector = session.kind === 'row' ? '[data-row-id]' : '[data-column-id]';
-    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>(selector);
-    const targetId = target?.dataset[session.kind === 'row' ? 'rowId' : 'columnId'];
-    if (!target || !targetId) return;
-    const rect = target.getBoundingClientRect();
-    const horizontal = session.kind === 'column';
-    session.targetId = targetId;
-    session.after = horizontal ? clientX > rect.left + rect.width / 2 : clientY > rect.top + rect.height / 2;
-    setTableReorderVisual({ kind: session.kind, sourceId: session.sourceId, targetId, after: session.after });
-  };
-
-  const tableReorderAutoScroll = useDragEdgeAutoScroll({
-    getContainer: () => viewportRef.current,
-    onScroll: () => {
-      const pointer = tableReorderPointer.current;
-      const session = tableReorderSession.current;
-      if (pointer && session && pointer.session === session) updateTableReorderTarget(session, pointer.x, pointer.y);
+  const { tableReorderVisual, beginTableReorder, moveTableReorder, endTableReorder: finishTableReorder } = useTableReorder({
+    tableId: table?.id, data, commit, viewportRef, setNotice, ensureTableReady, onReadError,
+    onActivate: () => {
+      pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined;
+      setPanning(false);
     },
+    onFinish: () => { drawerSwipe.current = undefined; },
   });
-
-  const beginTableReorder = (kind: TableReorderKind, sourceId: string, event: React.PointerEvent<HTMLElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    const session: TableReorderSession = { kind, sourceId, targetId: sourceId, after: false, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false };
-    const owner = table?.id;
-    reorderOwner.current = owner;
-    session.timer = window.setTimeout(() => {
-      const activate = () => {
-        if (tableReorderSession.current !== session || latest.current.tableId !== owner) return;
-        session.active = true;
-        pointers.current.clear();
-        panStart.current = undefined;
-        pinchStart.current = undefined;
-        setPanning(false);
-        setTableReorderVisual({ kind, sourceId, targetId: sourceId, after: false });
-        const viewport = viewportRef.current;
-        if (viewport && 'setPointerCapture' in viewport) {
-          try { viewport.setPointerCapture(event.pointerId); } catch { /* Pointer capture is optional. */ }
-        }
-      };
-      if (ensureTableReady) void ensureTableReady().then(activate).catch(onReadError);
-      else activate();
-    }, tableReorderHoldMs);
-    tableReorderSession.current = session;
-  };
-
-  const moveTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
-    const session = tableReorderSession.current;
-    if (!session || session.pointerId !== event.pointerId) return false;
-    if (!session.active) {
-      if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > 8) {
-        if (session.timer) window.clearTimeout(session.timer);
-        tableReorderSession.current = undefined;
-        tableReorderPointer.current = undefined;
-      }
-      return false;
-    }
-    tableReorderPointer.current = { session, x: event.clientX, y: event.clientY };
-    updateTableReorderTarget(session, event.clientX, event.clientY);
-    const horizontal = session.kind === 'column';
-    const axisDistance = Math.abs(horizontal ? event.clientX - session.startX : event.clientY - session.startY);
-    if (axisDistance >= DRAG_SCROLL_INTENT_DISTANCE) session.dragIntentConfirmed = true;
-    tableReorderAutoScroll.update({ x: event.clientX, y: event.clientY, axis: horizontal ? 'x' : 'y' }, Boolean(session.dragIntentConfirmed));
-    event.preventDefault();
-    return true;
-  };
-
   const endTableReorder = (event: React.PointerEvent<HTMLDivElement>) => {
-    const session = tableReorderSession.current;
-    if (!session || session.pointerId !== event.pointerId) return false;
-    if (session.timer) window.clearTimeout(session.timer);
-    tableReorderAutoScroll.stop();
-    tableReorderPointer.current = undefined;
-    tableReorderSession.current = undefined;
-    drawerSwipe.current = undefined;
-    setTableReorderVisual(undefined);
-    if (!session.active) return false;
-    const currentData = dataRef.current;
-    if (currentData && table && reorderOwner.current === table.id && session.sourceId !== session.targetId) {
-      const current = currentData.tables.find(item => item.id === table.id);
-      if (current) {
-        const next = { ...current, updatedAt: Date.now(), ...(session.kind === 'row'
-          ? { rows: reorderBeforeOrAfter(current.rows, session.sourceId, session.targetId, session.after) }
-          : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }) };
-        const before = session.kind === 'row' ? current.rows : current.columns;
-        const after = session.kind === 'row' ? next.rows : next.columns;
-        if (before.some((item, index) => item !== after[index])) {
-          commit(updateTable(currentData, table.id, () => next), {
-            tableId: table.id, label: session.kind === 'row' ? '重新排列物件' : '重新排列屬性',
-            action: { type: session.kind === 'row' ? 'reorder-rows' : 'reorder-columns', beforeIds: before.map(item => item.id), afterIds: after.map(item => item.id) },
-          });
-          setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
-        }
-      }
-    }
-    suppressNextTableClick(120);
-    event.preventDefault();
-    return true;
+    const handled = finishTableReorder(event);
+    if (handled) suppressNextTableClick(120);
+    return handled;
   };
 
   const beginTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -549,12 +451,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
 
   useEffect(() => () => {
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
-    if (tableReorderSession.current?.timer) window.clearTimeout(tableReorderSession.current.timer);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
     momentumScroll.stop();
     cellHold.current = undefined;
-    tableReorderSession.current = undefined;
   }, [momentumScroll.stop]);
 
   return {
