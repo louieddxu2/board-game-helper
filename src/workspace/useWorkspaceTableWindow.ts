@@ -6,7 +6,7 @@ import { isPendingWorkspaceRow, workspaceRowPageAt, workspaceRowPageCount, works
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
-import { loadWorkspaceTableViewState } from './viewState';
+import { flushWorkspaceTableScrollPosition, loadWorkspaceTableViewState, queueWorkspaceTableScrollPosition } from './viewState';
 import { measureVisibleColumnWidths, preserveColumnScrollPosition } from './visibleColumnWidths';
 import { calculateWorkspaceTableLayout, type HeaderFilterState, type HeaderFilterTarget } from './workspaceShared';
 
@@ -256,6 +256,8 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
   const virtualScrollFrameRef = useRef<number | undefined>(undefined);
 
   const handleTableViewportScroll = useCallback((source: HTMLDivElement) => {
+    const position = { left: source.scrollLeft, top: source.scrollTop };
+    if (table?.id) queueWorkspaceTableScrollPosition(table.id, position.left, position.top);
     horizontalLayoutRef.current.left = source.scrollLeft;
     syncFilterbarScroll(source);
     if (!programmaticTableScrollRef.current) lastUserScrollAtRef.current = performance.now();
@@ -266,12 +268,21 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
     scrollSaveTimerRef.current = window.setTimeout(() => {
       scrollSaveTimerRef.current = undefined;
-      setScrollPosition({ left: source.scrollLeft, top: source.scrollTop });
+      if (table?.id) flushWorkspaceTableScrollPosition(table.id);
+      setScrollPosition(position);
     }, 120);
-  }, [setScrollPosition, syncFilterbarScroll]);
+  }, [setScrollPosition, syncFilterbarScroll, table?.id]);
+
+  useLayoutEffect(() => {
+    const id = table?.id;
+    return () => {
+      if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = undefined;
+      if (id) flushWorkspaceTableScrollPosition(id);
+    };
+  }, [table?.id]);
 
   useEffect(() => () => {
-    if (scrollSaveTimerRef.current !== undefined) window.clearTimeout(scrollSaveTimerRef.current);
     if (virtualScrollFrameRef.current !== undefined) window.cancelAnimationFrame(virtualScrollFrameRef.current);
   }, []);
 

@@ -30,6 +30,21 @@ const retainedRowIds = (rows: readonly WorkspaceRow[], previous: WorkspaceTableS
 const changedGroups = (snapshot: WorkspaceTableStorageSnapshot, previous: WorkspaceTableStorageSnapshot, head: WorkspaceBlockTableHead) => {
   const groups = new Map<number, WorkspaceRow[]>();
   const delta = snapshot.table.rows.length - previous.table.rows.length;
+  const move = snapshot.rowOrderChange;
+  if (move?.beforeRows === previous.table.rows && delta === 0 && move.to !== undefined && head.blocks.length) {
+    const source = workspaceRowPageAt(head, move.from);
+    const target = workspaceRowPageAt(head, move.to);
+    if (source === target) {
+      const start = workspaceRowPageOffset(head, source);
+      groups.set(source, snapshot.table.rows.slice(start, start + head.blocks[source].count));
+    } else {
+      const sourceStart = workspaceRowPageOffset(head, source) + (source > target ? 1 : 0);
+      const targetStart = workspaceRowPageOffset(head, target) - (source < target ? 1 : 0);
+      groups.set(source, snapshot.table.rows.slice(sourceStart, sourceStart + head.blocks[source].count - 1));
+      groups.set(target, snapshot.table.rows.slice(targetStart, targetStart + head.blocks[target].count + 1));
+    }
+    return groups;
+  }
   if (snapshot.rowOrderChange?.beforeRows === previous.table.rows && (delta === 1 || delta === -1) && head.blocks.length) {
     const index = snapshot.rowOrderChange.from;
     const block = workspaceRowPageAt(head, Math.min(index, previous.table.rows.length - 1));

@@ -36,7 +36,7 @@ test('a migrated 10k-row table opens without full reads, fills the latest scroll
   await expect(cell).toContainText('按需載入後的第一次編輯');
   await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('按需載入後的第一次編輯');
   await expect.poll(() => readTableCell(page, 'table-1', 'row-9999', 'column-0')).toBe('資料 9999-0');
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('board-game-helper-workspace-view-state') ?? '{}').tables?.['table-0']?.scrollTop ?? 0)).toBeGreaterThan(9900 * 36);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('board-game-helper-workspace-view-state:scroll:table-0') ?? '{}').scrollTop ?? 0)).toBeGreaterThan(9900 * 36);
   await page.reload();
   await expect(cell).toContainText('按需載入後的第一次編輯');
   await page.getByRole('button', { name: '開啟目錄' }).click();

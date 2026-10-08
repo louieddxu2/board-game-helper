@@ -73,3 +73,19 @@ export const reconcileWorkspaceRowOrder = (previous: WorkspaceRowOrderSnapshot, 
   while (oldEnd > start && newEnd > start && before[oldEnd - 1] === rowIds[newEnd - 1]) { oldEnd--; newEnd--; }
   return spliceWorkspaceRowOrder(previous, tableId, start, oldEnd - start, rowIds.slice(start, newEnd));
 };
+
+/** Removing and inserting separately preserves pages between the two endpoints. */
+export const moveWorkspaceRowOrder = (previous: WorkspaceRowOrderSnapshot, tableId: string, from: number, to: number): WorkspaceRowOrderSnapshot => {
+  const total = previous.pageIds.reduce((sum, id) => sum + previous.pages.get(id)!.rowIds.length, 0);
+  if (![from, to].every(index => Number.isSafeInteger(index) && index >= 0 && index < total)) throw new Error('Invalid row order move');
+  if (from === to) return previous;
+  let offset = 0;
+  let rowId: string | undefined;
+  for (const id of previous.pageIds) {
+    const rows = previous.pages.get(id)!.rowIds;
+    if (from < offset + rows.length) { rowId = rows[from - offset]; break; }
+    offset += rows.length;
+  }
+  const removed = spliceWorkspaceRowOrder(previous, tableId, from, 1, []);
+  return spliceWorkspaceRowOrder(removed, tableId, to, 0, [rowId!]);
+};

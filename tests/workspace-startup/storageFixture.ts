@@ -3,6 +3,7 @@ import * as model from '../../src/workspace/model';
 import * as history from '../../src/workspace/history';
 import * as spreadsheet from '../../src/workspace/spreadsheet';
 import * as rowPages from '../../src/workspace/rowPages';
+import * as viewState from '../../src/workspace/viewState';
 import { assignWorkspaceChangeRevisions } from '../../src/workspace/changeRevisions';
 import { WorkspaceDynamicOptionsCache } from '../../src/workspace/dynamicOptionsCache';
 import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion';
@@ -11,7 +12,7 @@ import type { WorkspaceData } from '../../src/workspace/types';
 type Write = { store: string; method: string; key: unknown; transaction: number };
 type StoredOrderPage = { tableId: string; pageId: string; rowIds: string[] };
 const fixture = {
-  db, model, history, spreadsheet, rowPages, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
+  db, model, history, spreadsheet, rowPages, viewState, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
   dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),

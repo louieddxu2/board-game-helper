@@ -1,8 +1,9 @@
 import { cleanup, renderHook, waitFor, act } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import { useWorkspaceFilter } from './useWorkspaceFilter';
 import type { HeaderFilterState } from './workspaceShared';
+import { loadWorkspaceTableViewState, saveWorkspaceTableViewState, workspaceTableViewStateKeys } from './viewState';
 
 const rowHeader: WorkspaceColumn = { id: 'row-header', name: '項目', inputType: 'text', options: [] };
 const hiddenColumn: WorkspaceColumn = { id: 'hidden', name: '隱藏欄位', inputType: 'text', options: [], hidden: true };
@@ -59,5 +60,34 @@ describe('workspace filtering', () => {
     expect(table.rows).toBe(sourceRows);
     expect(table.rows.map((item) => item.id)).toEqual(['first', 'second', 'third', 'fourth']);
     expect(result.current.filteredRows).not.toBe(sourceRows);
+  });
+
+  it('does not save view state when a table object rerenders with the same ID', async () => {
+    const table = tableWith([scoreColumn], [row('same', '同一張表', { score: 1 })]);
+    saveWorkspaceTableViewState(table.id, { searchQuery: '', searchOpen: false, headerFilters: {}, scrollLeft: 0, scrollTop: 0 });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const { result, rerender } = renderHook(({ current }) => useWorkspaceFilter({ table: current, rowHeader }), { initialProps: { current: table } });
+    await waitFor(() => expect(result.current.viewStateReady).toBe(true));
+    setItem.mockClear();
+    rerender({ current: { ...table, name: '同 ID 重新渲染' } });
+    await act(async () => Promise.resolve());
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('keeps pending settings visible, coalesces input, flushes on unmount, and survives storage errors', async () => {
+    const table = tableWith([scoreColumn], [row('pending', '待測試', { score: 1 })]);
+    const initial = { searchQuery: '', searchOpen: false, headerFilters: {}, scrollLeft: 0, scrollTop: 0 };
+    saveWorkspaceTableViewState(table.id, initial);
+    const { result, unmount } = renderHook(() => useWorkspaceFilter({ table, rowHeader }));
+    await waitFor(() => expect(result.current.viewStateReady).toBe(true));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage unavailable'); });
+    act(() => { result.current.setSearchQuery('第 1 次'); result.current.setSearchQuery('最後一次'); });
+    await waitFor(() => expect(result.current.searchQuery).toBe('最後一次'));
+    expect(loadWorkspaceTableViewState(table.id).searchQuery).toBe('最後一次');
+    expect(result.current.searchQuery).toBe('最後一次');
+    expect(() => unmount()).not.toThrow();
+    expect(setItem).toHaveBeenCalled();
+    expect(loadWorkspaceTableViewState(table.id).searchQuery).toBe('');
+    expect(workspaceTableViewStateKeys(table.id).settings).toContain(encodeURIComponent(table.id));
   });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UseTableGesturesProps } from './tableGestureTypes';
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 import { reorderBeforeOrAfter, tableReorderHoldMs, updateTable, type TableReorderKind, type TableReorderVisual } from './workspaceShared';
+import { rememberWorkspaceRowMove } from './rowStructureChanges';
 
 type UseTableReorderOptions = Pick<UseTableGesturesProps, 'data' | 'commit' | 'viewportRef' | 'setNotice' | 'ensureTableReady' | 'onReadError'> & {
   tableId: string | undefined;
@@ -121,6 +122,7 @@ export function useTableReorder(options: UseTableReorderOptions) {
     const beforeIndex = before.findIndex(item => item.id === session.sourceId);
     const afterIndex = after.findIndex(item => item.id === session.sourceId);
     if (beforeIndex < 0 || afterIndex < 0 || beforeIndex === afterIndex) return;
+    if (session.kind === 'row') rememberWorkspaceRowMove(current.rows, next.rows, session.sourceId, beforeIndex, afterIndex);
     commit(updateTable(data, session.tableId, () => next), {
       tableId: session.tableId, label: session.kind === 'row' ? '重新排列物件' : '重新排列屬性',
       action: session.kind === 'row'

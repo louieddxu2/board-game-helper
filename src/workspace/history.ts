@@ -3,7 +3,7 @@ import { applyWorkspaceCellChanges, removeWorkspaceColumnValues } from './cellCh
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
-import { rememberWorkspaceSingleRowChange } from './rowStructureChanges';
+import { rememberWorkspaceRowMove, rememberWorkspaceSingleRowChange } from './rowStructureChanges';
 
 export const workspaceHistoryRetentionMs = 6 * 60 * 60 * 1000;
 export const workspaceHistoryLimit = 50;
@@ -192,8 +192,12 @@ export const applyWorkspaceTableHistoryAction = (
       }
       case 'reorder-rows':
         return tableWithUpdatedAt({ ...current, rows: reorderByIds(current.rows, forward ? action.afterIds : action.beforeIds) });
-      case 'move-row':
-        return tableWithUpdatedAt({ ...current, rows: moveById(current.rows, action.rowId, forward ? action.afterIndex : action.beforeIndex) });
+      case 'move-row': {
+        const index = forward ? action.afterIndex : action.beforeIndex;
+        const rows = moveById(current.rows, action.rowId, index);
+        rememberWorkspaceRowMove(current.rows, rows, action.rowId, current.rows.findIndex(row => row.id === action.rowId), Math.max(0, Math.min(index, rows.length - 1)));
+        return tableWithUpdatedAt({ ...current, rows });
+      }
       case 'add-column':
         return tableWithUpdatedAt({
           ...current,

@@ -1,4 +1,4 @@
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadWorkspaceTableWindow } from './db';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
@@ -81,7 +81,9 @@ const deferred = <T,>() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe('workspace table scroll anchor application', () => {
@@ -100,6 +102,46 @@ describe('workspace table scroll anchor application', () => {
     expect(viewport.scrollTop).toBe(5000);
     expect(options.setVirtualScrollTop).toHaveBeenLastCalledWith(5000);
     expect(staleWindow.consumePendingScrollTop).not.toHaveBeenCalled();
+  });
+
+  it('flushes the final raw position on unmount and keeps table timers isolated', () => {
+    vi.useFakeTimers();
+    const options = makeOptions();
+    const viewport = options.viewportRef.current!;
+    configureWindows(makeRowWindow(undefined));
+    const view = renderHook(() => useWorkspaceTableWindow(options));
+    const firstKey = 'board-game-helper-workspace-view-state:scroll:table-1';
+
+    act(() => {
+      viewport.scrollLeft = 11;
+      viewport.scrollTop = 111;
+      view.result.current.handleTableViewportScroll(viewport);
+      viewport.scrollLeft = 12;
+      viewport.scrollTop = 112;
+      view.result.current.handleTableViewportScroll(viewport);
+    });
+
+    options.table = { ...table, id: 'table-2' };
+    options.viewInteractionRef.current = 'table-2';
+    view.rerender();
+    vi.advanceTimersByTime(120);
+
+    expect(JSON.parse(localStorage.getItem(firstKey)!)).toEqual({ scrollLeft: 12, scrollTop: 112 });
+    expect(localStorage.getItem('board-game-helper-workspace-view-state:scroll:table-2')).toBeNull();
+
+    act(() => {
+      viewport.scrollLeft = 22;
+      viewport.scrollTop = 222;
+      view.result.current.handleTableViewportScroll(viewport);
+      viewport.scrollLeft = 23;
+      viewport.scrollTop = 223;
+      view.result.current.handleTableViewportScroll(viewport);
+    });
+    view.unmount();
+
+    expect(JSON.parse(localStorage.getItem('board-game-helper-workspace-view-state:scroll:table-2')!)).toEqual({ scrollLeft: 23, scrollTop: 223 });
+    vi.advanceTimersByTime(120);
+    expect(JSON.parse(localStorage.getItem(firstKey)!)).toEqual({ scrollLeft: 12, scrollTop: 112 });
   });
 
   it('applies a pending anchor when the full-table DOM still matches the virtual scroll position', () => {

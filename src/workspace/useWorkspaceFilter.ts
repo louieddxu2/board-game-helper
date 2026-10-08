@@ -4,7 +4,7 @@ import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } fro
 import type { DateFilterPrecision } from './dateFilter';
 import { displayWorkspaceCellValue, formatWorkspaceDateMonth, parseMultiSelectValues, workspaceCellColor, workspaceDateMonthKey, workspaceOptionColor } from './model';
 import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspaceFilter, numericWorkspaceValue, searchableWorkspaceCellValue, workspaceFilterValueKey, workspaceValueCollator } from './workspaceShared';
-import { loadWorkspaceTableViewState, saveWorkspaceTableViewState } from './viewState';
+import { flushWorkspaceTableViewState, loadWorkspaceTableViewState, scheduleWorkspaceTableViewStateSave } from './viewState';
 
 interface UseWorkspaceFilterProps {
   table: WorkspaceTable | undefined;
@@ -40,8 +40,12 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
 
   useEffect(() => {
     if (!table || viewTableId !== table.id) return;
-    saveWorkspaceTableViewState(table.id, { searchQuery, searchOpen, headerFilters, scrollLeft: scrollPosition.left, scrollTop: scrollPosition.top });
-  }, [headerFilters, searchOpen, searchQuery, scrollPosition.left, scrollPosition.top, table, viewTableId]);
+    scheduleWorkspaceTableViewStateSave(table.id, { searchQuery, searchOpen, headerFilters, scrollLeft: scrollPosition.left, scrollTop: scrollPosition.top });
+  }, [headerFilters, searchOpen, searchQuery, scrollPosition.left, scrollPosition.top, table?.id, viewTableId]);
+  useEffect(() => {
+    const id = table?.id;
+    return () => { if (id) flushWorkspaceTableViewState(id); };
+  }, [table?.id]);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 

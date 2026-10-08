@@ -3,6 +3,7 @@ import type { WorkspaceTableHistoryAction } from './history';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
 import { createWorkspaceRowOrder, reconcileWorkspaceRowOrder, workspaceRowOrderCapacity, type StoredWorkspaceRowOrderPage, type WorkspaceRowOrderSnapshot } from './rowOrderStorage';
 import { updateWorkspaceSingleRowStorage } from './singleRowStorage';
+import { updateWorkspaceRowMoveStorage } from './rowMoveStorage';
 
 export const defaultRowChunkCapacity = 256;
 export type RowChunkCapacity = 128 | 256;
@@ -32,7 +33,7 @@ export interface WorkspaceTableStorageSnapshot {
   chunks: ReadonlyMap<string, StoredWorkspaceRowChunk>;
   locations: ReadonlyMap<string, WorkspaceRowLocation>;
   rowIndexes: ReadonlyMap<string, number>;
-  rowOrderChange?: { beforeRows: readonly WorkspaceRow[]; from: number };
+  rowOrderChange?: { beforeRows: readonly WorkspaceRow[]; from: number; to?: number };
 }
 
 export class WorkspaceStorageIntegrityError extends Error {
@@ -211,6 +212,8 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
 
   const singleRow = sameColumnIds ? updateWorkspaceSingleRowStorage(previous, table, action, definition) : undefined;
   if (singleRow) return singleRow;
+  const movedRow = sameColumnIds ? updateWorkspaceRowMoveStorage(previous, table, action, definition) : undefined;
+  if (movedRow) return movedRow;
 
   const seen = new Set<string>();
   const added: WorkspaceRow[] = [];
