@@ -192,14 +192,21 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (!session.active) return false;
     const currentData = dataRef.current;
     if (currentData && table && reorderOwner.current === table.id && session.sourceId !== session.targetId) {
-      commit(updateTable(currentData, table.id, (current) => ({
-        ...current,
-        updatedAt: Date.now(),
-        ...(session.kind === 'row'
+      const current = currentData.tables.find(item => item.id === table.id);
+      if (current) {
+        const next = { ...current, updatedAt: Date.now(), ...(session.kind === 'row'
           ? { rows: reorderBeforeOrAfter(current.rows, session.sourceId, session.targetId, session.after) }
-          : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }),
-      })));
-      setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
+          : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }) };
+        const before = session.kind === 'row' ? current.rows : current.columns;
+        const after = session.kind === 'row' ? next.rows : next.columns;
+        if (before.some((item, index) => item !== after[index])) {
+          commit(updateTable(currentData, table.id, () => next), {
+            tableId: table.id, label: session.kind === 'row' ? '重新排列物件' : '重新排列屬性',
+            action: { type: session.kind === 'row' ? 'reorder-rows' : 'reorder-columns', beforeIds: before.map(item => item.id), afterIds: after.map(item => item.id) },
+          });
+          setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
+        }
+      }
     }
     suppressNextTableClick(120);
     event.preventDefault();

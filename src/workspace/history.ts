@@ -121,10 +121,16 @@ const reorderByIds = <Item extends { id: string }>(items: Item[], ids: string[])
   return [...ordered, ...byId.values()];
 };
 
-const insertAt = <Item>(items: Item[], item: Item, index: number) => {
-  const next = items.slice();
+const insertById = <Item extends { id: string }>(items: Item[], item: Item, index: number) => {
+  const next = items.filter(current => current.id !== item.id);
   next.splice(Math.max(0, Math.min(index, next.length)), 0, item);
   return next;
+};
+
+const appendMissing = <Item extends { id: string }>(items: Item[], additions: Item[]) => {
+  if (!additions.length) return items;
+  const ids = new Set(items.map(item => item.id));
+  return [...items, ...additions.filter(item => !ids.has(item.id))];
 };
 
 export const applyWorkspaceTableHistoryAction = (
@@ -151,12 +157,8 @@ export const applyWorkspaceTableHistoryAction = (
       case 'paste-range': {
         const addedRowIds = new Set(action.addedRows.map((row) => row.id));
         const addedColumnIds = new Set(action.addedColumns.map((column) => column.id));
-        const baseRows = forward && action.addedRows.length
-          ? [...current.rows, ...action.addedRows.filter((row) => !current.rows.some((item) => item.id === row.id))]
-          : current.rows;
-        const baseColumns = forward && action.addedColumns.length
-          ? [...current.columns, ...action.addedColumns.filter((column) => !current.columns.some((item) => item.id === column.id))]
-          : current.columns;
+        const baseRows = forward ? appendMissing(current.rows, action.addedRows) : current.rows;
+        const baseColumns = forward ? appendMissing(current.columns, action.addedColumns) : current.columns;
         const changedRows = applyWorkspaceCellChanges(baseRows, rowHeaderId, action.changes, side);
         return tableWithUpdatedAt({
           ...current,
@@ -170,15 +172,15 @@ export const applyWorkspaceTableHistoryAction = (
         });
       }
       case 'add-row':
-        return tableWithUpdatedAt({ ...current, rows: forward ? insertAt(current.rows.filter((row) => row.id !== action.row.id), action.row, action.index) : current.rows.filter((row) => row.id !== action.row.id) });
+        return tableWithUpdatedAt({ ...current, rows: forward ? insertById(current.rows, action.row, action.index) : current.rows.filter((row) => row.id !== action.row.id) });
       case 'remove-row':
-        return tableWithUpdatedAt({ ...current, rows: forward ? current.rows.filter((row) => row.id !== action.row.id) : insertAt(current.rows.filter((row) => row.id !== action.row.id), action.row, action.index) });
+        return tableWithUpdatedAt({ ...current, rows: forward ? current.rows.filter((row) => row.id !== action.row.id) : insertById(current.rows, action.row, action.index) });
       case 'reorder-rows':
         return tableWithUpdatedAt({ ...current, rows: reorderByIds(current.rows, forward ? action.afterIds : action.beforeIds) });
       case 'add-column':
         return tableWithUpdatedAt({
           ...current,
-          columns: forward ? insertAt(current.columns.filter((column) => column.id !== action.column.id), action.column, action.index) : current.columns.filter((column) => column.id !== action.column.id),
+          columns: forward ? insertById(current.columns, action.column, action.index) : current.columns.filter((column) => column.id !== action.column.id),
           rows: current.rows.map((row) => {
             const values = { ...row.values };
             if (forward) values[action.column.id] ??= null;
@@ -189,7 +191,7 @@ export const applyWorkspaceTableHistoryAction = (
       case 'remove-column':
         return tableWithUpdatedAt({
           ...current,
-          columns: forward ? current.columns.filter((column) => column.id !== action.column.id) : insertAt(current.columns.filter((column) => column.id !== action.column.id), action.column, action.index),
+          columns: forward ? current.columns.filter((column) => column.id !== action.column.id) : insertById(current.columns, action.column, action.index),
           rows: current.rows.map((row) => {
             const values = { ...row.values };
             if (forward) delete values[action.column.id];

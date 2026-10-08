@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import type { WorkspaceTableMutation } from './history';
 import type { WorkspaceData, WorkspaceTable } from './types';
 
 export type CellHoldSession = {
@@ -24,7 +25,7 @@ export type CellHoldSession = {
 export interface UseTableGesturesProps {
   table: WorkspaceTable | undefined;
   data: WorkspaceData | undefined;
-  commit: (next: WorkspaceData) => void;
+  commit: (next: WorkspaceData, mutation?: WorkspaceTableMutation) => void;
   viewportRef: RefObject<HTMLDivElement | null>;
   workspacePageRef: RefObject<HTMLElement | null>;
   setNotice: (msg: string) => void;

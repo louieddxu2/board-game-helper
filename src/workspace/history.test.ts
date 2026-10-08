@@ -227,4 +227,73 @@ describe('workspace table history', () => {
     expect(undone.tables[0].rows).toHaveLength(1);
     expect(undone.tables[0].rows[0].values['column-1']).toBe(null);
   });
+
+  it('appends a large paste linearly, preserves row references, and does not duplicate redo additions', () => {
+    let rowIdReads = 0;
+    const column = { id: 'column-1', name: '名稱', inputType: 'text' as const, options: [] };
+    const addedColumn = { id: 'column-2', name: '網址', inputType: 'link' as const, options: [], hidden: true };
+    const countedRow = (id: string, name: string, value: string, includeAddedColumn = false) => {
+      const row = { id, name, values: { [column.id]: value, ...(includeAddedColumn ? { [addedColumn.id]: null } : {}) } };
+      Object.defineProperty(row, 'id', { configurable: true, enumerable: true, get: () => { rowIdReads += 1; return id; } });
+      return row;
+    };
+    const existingRows = Array.from({ length: 10_000 }, (_, index) => countedRow(`row-${index}`, `既有 ${index}`, '既有'));
+    const addedRows = Array.from({ length: 10_000 }, (_, index) => countedRow(`added-${index}`, `新增 ${index}`, `值 ${index}`, true));
+    const currentTable: WorkspaceTable = {
+      id: 'table-1', name: '大型貼上', rowHeaderName: '物件',
+      rowHeader: { id: 'row-header-table-1', name: '物件', inputType: 'text', options: [] },
+      columns: [column], rows: existingRows, updatedAt: 1,
+    };
+    const source = data(currentTable);
+    const action = { type: 'paste-range' as const, changes: [], addedRows, addedColumns: [addedColumn] };
+    const rowBudget = (existingRows.length + addedRows.length) * 4;
+
+    rowIdReads = 0;
+    const redone = applyWorkspaceTableHistoryAction(source, currentTable.id, action, 'redo');
+    expect(rowIdReads).toBeLessThanOrEqual(rowBudget);
+    expect(redone.tables[0].rows).toHaveLength(20_000);
+    expect(redone.tables[0].rows.slice(0, existingRows.length).every((row, index) => row === existingRows[index])).toBe(true);
+    expect(redone.tables[0].rows.slice(existingRows.length).every((row, index) => row === addedRows[index])).toBe(true);
+    expect(redone.tables[0].columns).toEqual([column, addedColumn]);
+    expect(source.tables[0].rows).toBe(existingRows);
+    expect(source.tables[0].rows[0].values[column.id]).toBe('既有');
+    expect(source.tables[0].columns).toEqual([column]);
+
+    rowIdReads = 0;
+    const repeated = applyWorkspaceTableHistoryAction(redone, currentTable.id, action, 'redo');
+    expect(rowIdReads).toBeLessThanOrEqual(rowBudget);
+    expect(repeated.tables[0].rows).toHaveLength(20_000);
+    expect(repeated.tables[0].rows.slice(0, existingRows.length).every((row, index) => row === existingRows[index])).toBe(true);
+    expect(repeated.tables[0].rows.slice(existingRows.length).every((row, index) => row === addedRows[index])).toBe(true);
+    expect(repeated.tables[0].columns).toEqual([column, addedColumn]);
+    expect(repeated.tables[0].rows[existingRows.length].values[addedColumn.id]).toBe(null);
+
+    const undone = applyWorkspaceTableHistoryAction(repeated, currentTable.id, action, 'undo');
+    expect(undone.tables[0].rows).toEqual(existingRows);
+    expect(undone.tables[0].rows.every((row) => !(addedColumn.id in row.values))).toBe(true);
+    expect(undone.tables[0].columns).toEqual([column]);
+    const redoneAgain = applyWorkspaceTableHistoryAction(undone, currentTable.id, action, 'redo');
+    expect(redoneAgain.tables[0].rows.slice(existingRows.length).every((row, index) => row === addedRows[index])).toBe(true);
+    expect(redoneAgain.tables[0].columns[1]).toBe(addedColumn);
+  });
+
+  it('repositions duplicate insertions and clamps their indexes', () => {
+    const current = table();
+    const secondColumn = { id: 'column-2', name: '第二欄', inputType: 'text' as const, options: [] };
+    current.columns = [...current.columns, secondColumn];
+    current.rows[0].values[secondColumn.id] = null;
+    const currentData = data(current);
+    const duplicateRow = { ...current.rows[0], name: '重放列' };
+    const movedRow = applyWorkspaceTableHistoryAction(currentData, current.id, { type: 'add-row', row: duplicateRow, index: 99 }, 'redo').tables[0];
+    expect(movedRow.rows).toEqual([duplicateRow]);
+
+    const duplicateColumn = { ...current.columns[0], name: '重放欄' };
+    const movedColumn = applyWorkspaceTableHistoryAction(currentData, current.id, { type: 'add-column', column: duplicateColumn, index: 99 }, 'redo').tables[0];
+    expect(movedColumn.columns).toEqual([secondColumn, duplicateColumn]);
+
+    const insertedRow = { id: 'row-new', name: '最前列', values: { 'column-1': null, 'column-2': null } };
+    const clamped = applyWorkspaceTableHistoryAction(currentData, current.id, { type: 'add-row', row: insertedRow, index: -5 }, 'redo').tables[0];
+    expect(clamped.rows[0]).toBe(insertedRow);
+    expect(clamped.rows[1]).toBe(current.rows[0]);
+  });
 });
