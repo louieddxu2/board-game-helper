@@ -208,6 +208,26 @@ describe('dynamic option frequency cache', () => {
     expect(reads).toBe(beforeUpdate);
   });
 
+  it('does not rescan rows for compact row or column moves', () => {
+    const { table, column, data } = fixture([]);
+    let reads = 0;
+    table.rows = Array.from({ length: 10_000 }, (_, index) => {
+      const values = { [column.id]: index < 6_000 ? 'Common' : 'Rare' };
+      return { id: `r${index}`, name: `項目 ${index}`, get values() { reads += 1; return values; } };
+    });
+    const cache = new WorkspaceDynamicOptionsCache();
+    expect(cache.getOptions(table, column.id)).toEqual(['Common', 'Rare']);
+    const initialReads = reads;
+    const rowAction: WorkspaceTableHistoryAction = { type: 'move-row', rowId: 'r0', beforeIndex: 0, afterIndex: 9_999 };
+    const movedRows = applyWorkspaceTableHistoryAction(data, table.id, rowAction, 'redo');
+    cache.update(data, movedRows, { tableId: table.id, action: rowAction });
+    expect(cache.getOptions(movedRows.tables[0], column.id)).toEqual(['Common', 'Rare']);
+    const columnAction: WorkspaceTableHistoryAction = { type: 'move-column', columnId: column.id, beforeIndex: 0, afterIndex: 1 };
+    const movedColumns = applyWorkspaceTableHistoryAction(movedRows, table.id, columnAction, 'redo');
+    cache.update(movedRows, movedColumns, { tableId: table.id, action: columnAction });
+    expect(reads).toBe(initialReads);
+  });
+
   it('updates the ranking for batch changes, undo, and redo', () => {
     const { table, column, data } = fixture(['A', 'A', 'B']);
     const cache = new WorkspaceDynamicOptionsCache();

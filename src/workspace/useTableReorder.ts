@@ -118,10 +118,14 @@ export function useTableReorder(options: UseTableReorderOptions) {
       : { columns: reorderBeforeOrAfter(current.columns, session.sourceId, session.targetId, session.after) }) };
     const before = session.kind === 'row' ? current.rows : current.columns;
     const after = session.kind === 'row' ? next.rows : next.columns;
-    if (before.every((item, index) => item === after[index])) return;
+    const beforeIndex = before.findIndex(item => item.id === session.sourceId);
+    const afterIndex = after.findIndex(item => item.id === session.sourceId);
+    if (beforeIndex < 0 || afterIndex < 0 || beforeIndex === afterIndex) return;
     commit(updateTable(data, session.tableId, () => next), {
       tableId: session.tableId, label: session.kind === 'row' ? '重新排列物件' : '重新排列屬性',
-      action: { type: session.kind === 'row' ? 'reorder-rows' : 'reorder-columns', beforeIds: before.map(item => item.id), afterIds: after.map(item => item.id) },
+      action: session.kind === 'row'
+        ? { type: 'move-row', rowId: session.sourceId, beforeIndex, afterIndex }
+        : { type: 'move-column', columnId: session.sourceId, beforeIndex, afterIndex },
     });
     setNotice(session.kind === 'row' ? '已調整物件順序' : '已調整屬性順序');
   };

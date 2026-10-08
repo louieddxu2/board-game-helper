@@ -30,7 +30,7 @@ const STORAGE_KEY = 'storage';
 const stores = ['state', 'meta', 'tables', 'tableState', 'rowChunks', 'tableHeads', 'rowPages', 'history', 'historyEntries'] as const;
 type WriteTransaction = IDBPTransaction<WorkspaceDb, typeof stores[number][], 'readwrite'>;
 const notifyStorageError = (error: unknown) => window.dispatchEvent(new CustomEvent('workspace-storage-error', { detail: error }));
-const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(DATABASE_NAME, 5, {
+const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(DATABASE_NAME, 6, {
   upgrade(db, oldVersion, _newVersion, transaction) {
     for (const name of stores) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
     // Only the small metadata record is migrated during the version upgrade.
@@ -337,6 +337,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
         for (const chunkId of plan.deletes) writes.push(transaction.objectStore('rowChunks').delete([id, chunkId]));
         writes.push(transaction.objectStore('tableHeads').put(pages.head, id));
         if (pages.rebuild) writes.push(transaction.objectStore('rowPages').delete(pageRange(id)));
+        for (const index of pages.deletes) writes.push(transaction.objectStore('rowPages').delete([id, index]));
         for (const page of pages.pages) writes.push(transaction.objectStore('rowPages').put(page, [id, page.index]));
       }
       for (const id of removed) writes.push(transaction.objectStore('tables').delete(id), transaction.objectStore('tableState').delete(id), transaction.objectStore('rowChunks').delete(tableRange(id)), transaction.objectStore('tableHeads').delete(id), transaction.objectStore('rowPages').delete(pageRange(id)));

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPendingWorkspaceRow, type WorkspaceTableWindow } from './rowPages';
+import { createPendingWorkspaceRow, workspaceRowPageMatchesHead, type WorkspaceTableWindow } from './rowPages';
 import type { WorkspaceRow } from './types';
 
 export class SparseWorkspaceRowHeights {
@@ -32,7 +32,7 @@ export class SparseWorkspaceRowHeights {
 
 /** No complete row array or row index is needed for the display window. */
 export const usePagedWorkspaceRows = (window: WorkspaceTableWindow | undefined, measurementKey: string, scrollTop: number, viewportHeight: number, stickToBottom: boolean) => {
-  const scope = window ? `${window.head.definition.id}:${window.head.layoutRevision}` : '';
+  const scope = window ? `${window.head.definition.id}:${window.head.layoutRevision}:${window.head.rowCount}` : '';
   const count = window?.head.rowCount ?? 0;
   const state = useRef({ scope, key: measurementKey, heights: new SparseWorkspaceRowHeights(count) });
   const snapshot = useRef<{ scope: string; top: number; height: number; bottom: boolean } | undefined>(undefined);
@@ -51,8 +51,10 @@ export const usePagedWorkspaceRows = (window: WorkspaceTableWindow | undefined, 
     frame.current = undefined;
   }
   const heights = state.current.heights;
-  const indexes = useMemo(() => new Map(window?.pages.flatMap(page => page.rows.map((row, slot) => [row.id, page.index * window.head.pageSize + slot] as const)) ?? []), [window]);
-  const rows = useMemo(() => new Map(window?.pages.flatMap(page => page.rows.map((row, slot) => [page.index * window.head.pageSize + slot, row] as const)) ?? []), [window]);
+  const entries = useMemo(() => window?.pages.filter(page => workspaceRowPageMatchesHead(window.head, page.index, page))
+    .flatMap(page => page.rows.map((row, slot) => [page.index * window.head.pageSize + slot, row] as const)) ?? [], [window]);
+  const indexes = useMemo(() => new Map(entries.map(([index, row]) => [row.id, index])), [entries]);
+  const rows = useMemo(() => new Map(entries), [entries]);
   const virtual = Boolean(window && count > 80);
   const first = virtual ? Math.max(0, heights.indexAt(Math.max(0, scrollTop)) - 6) : 0;
   let last = virtual ? Math.min(count, heights.indexAt(scrollTop + Math.max(1, viewportHeight)) + 7) : count;

@@ -36,6 +36,15 @@ const makeFixture = () => {
   return { table, data };
 };
 
+const makeLargeFixture = () => {
+  const { table, data } = makeFixture();
+  const rows = Array.from({ length: 10_000 }, (_, index) => ({
+    id: `row-${index}`, name: `物件 ${index}`, values: { 'column-1': `甲-${index}`, 'column-2': `一-${index}` },
+  }));
+  const largeTable = { ...table, rows };
+  return { table: largeTable, data: { ...data, tables: [largeTable] } };
+};
+
 const makeEvent = (viewport: HTMLDivElement, clientX: number, clientY: number) => ({
   pointerType: 'touch', button: 0, pointerId: 7, clientX, clientY,
   currentTarget: viewport, target: viewport, preventDefault: vi.fn(),
@@ -158,11 +167,9 @@ describe('live table reorder gestures', () => {
     expect(commit).toHaveBeenCalledTimes(1);
     const [nextData, mutation] = commit.mock.calls[0] as [WorkspaceData, WorkspaceTableMutation];
     expect(mutation).toMatchObject({ tableId: table.id, label: scenario.label });
-    expect(mutation.action).toEqual({
-      type: scenario.kind === 'row' ? 'reorder-rows' : 'reorder-columns',
-      beforeIds: scenario.kind === 'row' ? ['row-1', 'row-2', 'row-3'] : ['column-1', 'column-2', 'column-3'],
-      afterIds: scenario.expectedIds,
-    });
+    expect(mutation.action).toEqual(scenario.kind === 'row'
+      ? { type: 'move-row', rowId: scenario.sourceId, beforeIndex: 0, afterIndex: 2 }
+      : { type: 'move-column', columnId: scenario.sourceId, beforeIndex: 0, afterIndex: 2 });
     const nextTable = nextData.tables[0];
     const nextItems = scenario.kind === 'row' ? nextTable.rows : nextTable.columns;
     expect(nextItems.map(item => item.id)).toEqual(scenario.expectedIds);
@@ -184,6 +191,20 @@ describe('live table reorder gestures', () => {
     expect((scenario.kind === 'row' ? undone.rows : undone.columns).map(item => item.id)).toEqual(scenario.kind === 'row' ? ['row-1', 'row-2', 'row-3'] : ['column-1', 'column-2', 'column-3']);
     expect((scenario.kind === 'row' ? redone.rows : redone.columns).map(item => item.id)).toEqual(scenario.expectedIds);
     if (scenario.kind === 'row') expect(redone.rows[2].values).toBe(table.rows[0].values);
+  });
+
+  it('emits a bounded compact action for a 10,000-row drag', () => {
+    vi.useFakeTimers();
+    const { table, data } = makeLargeFixture();
+    const commit = vi.fn<Commit>();
+    const { view, viewport } = renderGestures(table, data, commit);
+
+    drag(view, viewport, 'row', 'row-0', makeTarget('row', 'row-9999'));
+
+    const [, mutation] = commit.mock.calls[0] as [WorkspaceData, WorkspaceTableMutation];
+    expect(mutation.action).toEqual({ type: 'move-row', rowId: 'row-0', beforeIndex: 0, afterIndex: 9_999 });
+    expect(Object.keys(mutation.action)).toEqual(['type', 'rowId', 'beforeIndex', 'afterIndex']);
+    expect(JSON.stringify(mutation.action).length).toBeLessThan(128);
   });
 
   it.each([

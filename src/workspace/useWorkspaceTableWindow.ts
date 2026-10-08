@@ -2,7 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspaceTableWindow } from './db';
 import type { WorkspaceTableWindow } from './rowPages';
-import { isPendingWorkspaceRow } from './rowPages';
+import { isPendingWorkspaceRow, workspaceRowPageMatchesHead, workspaceRowPageRevision } from './rowPages';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
@@ -97,19 +97,22 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
     const next = pageDirection.current.direction > 0 ? Math.min(Math.ceil(head.rowCount / head.pageSize) - 1, last + 1) : Math.max(0, first - 1);
     const needed = Array.from({ length: last - first + 1 }, (_, offset) => first + offset);
     if (!needed.includes(next)) needed.push(next);
-    const cached = new Map(activeWindow.pages.map(page => [page.index, page]));
+    const cached = new Map(activeWindow.pages.filter(page => workspaceRowPageMatchesHead(head, page.index, page)).map(page => [page.index, page]));
     const missing = needed.filter(index => !cached.has(index));
     if (!missing.length) return;
-    const key = `${head.definition.id}:${head.layoutRevision}:${missing.join(',')}`;
+    const key = `${head.definition.id}:${head.layoutRevision}:${head.changeRevision ?? ''}:${missing.map(index => `${index}:${workspaceRowPageRevision(head, index)}`).join(',')}`;
     const request = pageRequest.current?.key === key ? pageRequest.current.promise : loadWorkspaceTableWindow(head.definition.id, missing);
     pageRequest.current = { key, promise: request };
     let cancelled = false;
     void request.then(loaded => {
-      if (cancelled || !mountedRef.current || !loaded || loaded.head.layoutRevision !== head.layoutRevision) return;
+      if (cancelled || !mountedRef.current || !loaded || loaded.head.layoutRevision !== head.layoutRevision
+        || loaded.head.changeRevision !== head.changeRevision
+        || missing.some(index => workspaceRowPageRevision(loaded.head, index) !== workspaceRowPageRevision(head, index))) return;
       const activeId = dataRef.current?.nodes.find(node => node.id === dataRef.current?.activeNodeId)?.tableId;
       if (activeId !== head.definition.id || dataRef.current?.tables.some(table => table.id === activeId)) return;
       loaded.pages.forEach(page => cached.set(page.index, page));
-      const pages = [...cached.values()].sort((a, b) => Math.abs(a.index - first) - Math.abs(b.index - first)).slice(0, Math.max(4, needed.length));
+      const pages = [...cached.values()].filter(page => workspaceRowPageMatchesHead(loaded.head, page.index, page))
+        .sort((a, b) => Math.abs(a.index - first) - Math.abs(b.index - first)).slice(0, Math.max(4, needed.length));
       const nextWindow = { head: loaded.head, pages };
       setTableWindow(nextWindow);
     }).catch(error => { if (!cancelled) reportReadError(error); }).finally(() => {

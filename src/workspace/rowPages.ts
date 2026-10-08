@@ -9,12 +9,15 @@ export interface WorkspaceTableHead {
   rowCount: number;
   pageSize: typeof workspaceRowPageSize;
   layoutRevision: string;
+  /** Expected content version for each page; omitted by legacy v5 heads. */
+  pageRevisions?: string[];
   updatedAt: number;
   changeRevision?: string;
 }
 export interface WorkspaceRowPage {
   tableId: string;
   index: number;
+  /** Legacy field name, now the version of this page's content. */
   layoutRevision: string;
   rows: WorkspaceRow[];
 }
@@ -37,6 +40,14 @@ export const validateWorkspaceTableHead = (tableId: string, head: WorkspaceTable
     || !head.layoutRevision || !Array.isArray(head.definition.columns)) {
     throw new WorkspaceStorageIntegrityError(`Invalid table head: ${tableId}`);
   }
+  if (head.pageRevisions !== undefined) {
+    if (!Array.isArray(head.pageRevisions) || head.pageRevisions.length !== Math.ceil(head.rowCount / head.pageSize)) {
+      throw new WorkspaceStorageIntegrityError(`Invalid page versions: ${tableId}`);
+    }
+    for (const revision of head.pageRevisions) if (typeof revision !== 'string' || !revision) {
+      throw new WorkspaceStorageIntegrityError(`Invalid page version: ${tableId}`);
+    }
+  }
   return head;
 };
 const readOnlyProjection = Symbol('workspace-read-only-window');
@@ -48,18 +59,34 @@ export const planWorkspaceRowPages = (
   snapshot: WorkspaceTableStorageSnapshot,
   previous: WorkspaceTableStorageSnapshot | undefined,
   savedHead: WorkspaceTableHead | undefined,
-  layoutRevision: string,
+  revision: string,
 ) => {
-  const rebuild = !savedHead || !previous || previous.record.rowOrder !== snapshot.record.rowOrder;
+  if (savedHead) validateWorkspaceTableHead(snapshot.table.id, savedHead);
+  const rebuild = !savedHead || !previous || previous.table.id !== snapshot.table.id || savedHead.rowCount !== previous.table.rows.length;
+  const orderChanged = rebuild || (previous.record.rowOrder !== snapshot.record.rowOrder
+    && (previous.record.rowOrder.length !== snapshot.record.rowOrder.length
+      || previous.record.rowOrder.some((id, index) => id !== snapshot.record.rowOrder[index])));
+  const pageCount = Math.ceil(snapshot.table.rows.length / workspaceRowPageSize);
   const head: WorkspaceTableHead = {
     format: 'row-pages-v1', definition: snapshot.record.definition,
     rowCount: snapshot.table.rows.length, pageSize: workspaceRowPageSize,
-    layoutRevision: rebuild ? layoutRevision : savedHead.layoutRevision,
+    layoutRevision: orderChanged ? revision : savedHead.layoutRevision,
     updatedAt: snapshot.table.updatedAt, changeRevision: snapshot.table.changeRevision,
   };
   const indices = new Set<number>();
   if (rebuild) {
-    for (let index = 0; index < Math.ceil(head.rowCount / workspaceRowPageSize); index++) indices.add(index);
+    for (let index = 0; index < pageCount; index++) indices.add(index);
+  } else if (orderChanged) {
+    // Compare row references at display positions, without copying or inspecting cells.
+    for (let index = 0; index < pageCount; index++) {
+      const start = index * workspaceRowPageSize;
+      const end = Math.min(start + workspaceRowPageSize, head.rowCount);
+      if (Math.min(start + workspaceRowPageSize, previous.table.rows.length) !== end) indices.add(index);
+      else for (let slot = start; slot < end; slot++) if (snapshot.table.rows[slot] !== previous.table.rows[slot]) {
+        indices.add(index);
+        break;
+      }
+    }
   } else {
     for (const [chunkId, chunk] of snapshot.chunks) {
       const before = previous.chunks.get(chunkId);
@@ -71,17 +98,25 @@ export const planWorkspaceRowPages = (
       });
     }
   }
+  head.pageRevisions = Array.from({ length: pageCount }, (_, index) => indices.has(index)
+    ? revision : workspaceRowPageRevision(savedHead!, index));
   const pages: WorkspaceRowPage[] = [...indices].map(index => ({
-    tableId: snapshot.table.id, index, layoutRevision: head.layoutRevision,
+    tableId: snapshot.table.id, index, layoutRevision: head.pageRevisions![index],
     rows: snapshot.table.rows.slice(index * workspaceRowPageSize, (index + 1) * workspaceRowPageSize),
   }));
-  return { head, pages, rebuild };
+  const deletes = rebuild ? [] : Array.from({ length: Math.max(0, Math.ceil(savedHead.rowCount / workspaceRowPageSize) - pageCount) }, (_, offset) => pageCount + offset);
+  return { head, pages, deletes, rebuild };
+};
+
+export const workspaceRowPageRevision = (head: WorkspaceTableHead, index: number) => head.pageRevisions?.[index] ?? head.layoutRevision;
+export const workspaceRowPageMatchesHead = (head: WorkspaceTableHead, index: number, page: WorkspaceRowPage | undefined): page is WorkspaceRowPage => {
+  const expected = Math.min(head.pageSize, head.rowCount - index * head.pageSize);
+  return Number.isSafeInteger(index) && index >= 0 && Boolean(page && page.tableId === head.definition.id && page.index === index
+    && page.layoutRevision === workspaceRowPageRevision(head, index) && expected > 0 && Array.isArray(page.rows) && page.rows.length === expected);
 };
 
 export const validateWorkspaceRowPage = (head: WorkspaceTableHead, index: number, page: WorkspaceRowPage | undefined) => {
-  const expected = Math.min(head.pageSize, head.rowCount - index * head.pageSize);
-  if (!page || page.tableId !== head.definition.id || page.index !== index
-    || page.layoutRevision !== head.layoutRevision || expected <= 0 || !Array.isArray(page.rows) || page.rows.length !== expected
+  if (!workspaceRowPageMatchesHead(head, index, page)
     || new Set(page.rows.map(row => row.id)).size !== page.rows.length
     || page.rows.some(row => !row.id || !row.values || typeof row.values !== 'object')) {
     throw new WorkspaceStorageIntegrityError(`Invalid row page: ${head.definition.id}/${index}`);

@@ -1,5 +1,6 @@
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadWorkspaceTableWindow } from './db';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
 import { useWorkspaceTableWindow } from './useWorkspaceTableWindow';
@@ -8,6 +9,7 @@ import type { WorkspaceColumn, WorkspaceTable } from './types';
 
 vi.mock('./usePagedWorkspaceRows', () => ({ usePagedWorkspaceRows: vi.fn() }));
 vi.mock('./useWorkspaceRowWindow', () => ({ useWorkspaceRowWindow: vi.fn() }));
+vi.mock('./db', () => ({ loadWorkspaceTableWindow: vi.fn() }));
 
 type RowWindow = ReturnType<typeof useWorkspaceRowWindow>;
 type PagedRowWindow = ReturnType<typeof usePagedWorkspaceRows>;
@@ -65,10 +67,17 @@ const makePagedWindow = (): WorkspaceTableWindow => ({
     rowCount: 1024,
     pageSize: 128,
     layoutRevision: 'layout-1',
+    pageRevisions: Array.from({ length: 8 }, () => 'layout-1'),
     updatedAt: 1,
   },
-  pages: [2, 3].map((index) => ({ tableId: table.id, index, layoutRevision: 'layout-1', rows: [] })),
+  pages: [2, 3].map((index) => ({ tableId: table.id, index, layoutRevision: 'layout-1', rows: Array.from({ length: 128 }, (_, slot) => ({ id: `row-${index * 128 + slot}`, name: `物件 ${index * 128 + slot}`, values: {} })) })),
 });
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+};
 
 afterEach(() => {
   cleanup();
@@ -182,5 +191,32 @@ describe('workspace table focus scrolling', () => {
     expect(offsetForRow).toHaveBeenCalledWith('row-outside');
     expect(viewport.scrollTop).toBe(1234);
     expect(options.setVirtualScrollTop).toHaveBeenLastCalledWith(1234);
+  });
+});
+
+describe('workspace table page request guards', () => {
+  it.each(['page-version', 'change-revision'] as const)('ignores a delayed response with a mismatched $0', async mismatch => {
+    const options = makeOptions();
+    const cachedWindow = makePagedWindow();
+    options.activeWindow = { ...cachedWindow, pages: [cachedWindow.pages[0]] };
+    options.dataRef.current = { version: 1, activeNodeId: 'node-1', nodes: [{ id: 'node-1', type: 'table', tableId: table.id, name: table.name, parentId: null, order: 0 }], tables: [] };
+    const pagedWindow = makePagedRowWindow({ first: 256, last: 384, indexes: new Map(), visibleRows: [] });
+    const pending = deferred<WorkspaceTableWindow | undefined>();
+    vi.mocked(loadWorkspaceTableWindow).mockReturnValueOnce(pending.promise);
+    configureWindows(makeRowWindow(undefined), pagedWindow);
+    renderHook(() => useWorkspaceTableWindow(options));
+    expect(loadWorkspaceTableWindow).toHaveBeenCalledWith(table.id, [3]);
+
+    const head = options.activeWindow.head;
+    const loadedHead = {
+      ...head,
+      changeRevision: mismatch === 'change-revision' ? 'stale-change' : head.changeRevision,
+      pageRevisions: [...head.pageRevisions!],
+    };
+    if (mismatch === 'page-version') loadedHead.pageRevisions![3] = 'stale-page';
+    pending.resolve({ head: loadedHead, pages: [{ tableId: table.id, index: 3, layoutRevision: loadedHead.pageRevisions![3], rows: Array.from({ length: 128 }, (_, slot) => ({ id: `row-${384 + slot}`, name: `物件 ${384 + slot}`, values: {} })) }] });
+    await pending.promise;
+    await Promise.resolve();
+    expect(options.setTableWindow).not.toHaveBeenCalled();
   });
 });

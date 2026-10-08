@@ -139,9 +139,11 @@ export class WorkspaceDynamicOptionsCache {
       case 'remove-row':
         return adjust(rowValue(action.row), sign === 1 ? -1 : 1);
       case 'reorder-rows':
+      case 'move-row':
       case 'add-column':
       case 'remove-column':
       case 'reorder-columns':
+      case 'move-column':
       case 'rename-table':
       case 'set-transposed':
         return true;

@@ -14,9 +14,11 @@ export type WorkspaceTableHistoryAction =
   | { type: 'add-row'; row: WorkspaceRow; index: number }
   | { type: 'remove-row'; row: WorkspaceRow; index: number }
   | { type: 'reorder-rows'; beforeIds: string[]; afterIds: string[] }
+  | { type: 'move-row'; rowId: string; beforeIndex: number; afterIndex: number }
   | { type: 'add-column'; column: WorkspaceColumn; index: number }
   | { type: 'remove-column'; column: WorkspaceColumn; index: number; values: Record<string, WorkspaceCellValue> }
   | { type: 'reorder-columns'; beforeIds: string[]; afterIds: string[] }
+  | { type: 'move-column'; columnId: string; beforeIndex: number; afterIndex: number }
   | { type: 'update-column'; before: WorkspaceColumn; after: WorkspaceColumn; changes?: WorkspaceColumnValueChange[] }
   | { type: 'update-row-header'; before?: WorkspaceColumn; after?: WorkspaceColumn; beforeName: string; afterName: string; changes?: WorkspaceColumnValueChange[] }
   | { type: 'rename-table'; before: string; after: string }
@@ -127,6 +129,17 @@ const insertById = <Item extends { id: string }>(items: Item[], item: Item, inde
   return next;
 };
 
+const moveById = <Item extends { id: string }>(items: Item[], id: string, index: number) => {
+  const from = items.findIndex(item => item.id === id);
+  if (from < 0 || !Number.isSafeInteger(index)) return items;
+  const to = Math.max(0, Math.min(index, items.length - 1));
+  if (from === to) return items;
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+};
+
 const appendMissing = <Item extends { id: string }>(items: Item[], additions: Item[]) => {
   if (!additions.length) return items;
   const ids = new Set(items.map(item => item.id));
@@ -174,6 +187,8 @@ export const applyWorkspaceTableHistoryAction = (
         return tableWithUpdatedAt({ ...current, rows: forward ? current.rows.filter((row) => row.id !== action.row.id) : insertById(current.rows, action.row, action.index) });
       case 'reorder-rows':
         return tableWithUpdatedAt({ ...current, rows: reorderByIds(current.rows, forward ? action.afterIds : action.beforeIds) });
+      case 'move-row':
+        return tableWithUpdatedAt({ ...current, rows: moveById(current.rows, action.rowId, forward ? action.afterIndex : action.beforeIndex) });
       case 'add-column':
         return tableWithUpdatedAt({
           ...current,
@@ -194,6 +209,8 @@ export const applyWorkspaceTableHistoryAction = (
         });
       case 'reorder-columns':
         return tableWithUpdatedAt({ ...current, columns: reorderByIds(current.columns, forward ? action.afterIds : action.beforeIds) });
+      case 'move-column':
+        return tableWithUpdatedAt({ ...current, columns: moveById(current.columns, action.columnId, forward ? action.afterIndex : action.beforeIndex) });
       case 'update-column':
       case 'update-row-header':
         return tableWithUpdatedAt({

@@ -17,10 +17,13 @@ const fixture = {
   writes: [] as Write[],
   reads: [] as { store: string; method: string; key: unknown }[],
   failNextChunk: false,
+  failNextPage: false,
   failureMode: 'abort' as 'abort' | 'quota',
   async initialize(rows = 600, columns = 2, tables = 1) {
     await db.loadWorkspace();
     await db.clearWorkspace();
+    this.failNextChunk = false;
+    this.failNextPage = false;
     const tableList = Array.from({ length: tables }, (_, tableIndex) => {
       const table = model.createTable(`表格 ${tableIndex}`);
       table.columns = Array.from({ length: columns }, (_, index) => model.createColumn(`欄位 ${index}`));
@@ -70,13 +73,19 @@ const fixture = {
       const original = IDBObjectStore.prototype[method];
       IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
         fixture.writes.push({ store: this.name, method, key: method === 'put' ? args[1] : args[0], transaction: getTransactionId(this.transaction) });
-        if (method === 'put' && this.name === 'rowChunks' && fixture.failNextChunk && fixture.failureMode === 'quota') {
-          fixture.failNextChunk = false;
+        if (method === 'put' && ((this.name === 'rowChunks' && fixture.failNextChunk) || (this.name === 'rowPages' && fixture.failNextPage)) && fixture.failureMode === 'quota') {
+          if (this.name === 'rowChunks') fixture.failNextChunk = false;
+          if (this.name === 'rowPages') fixture.failNextPage = false;
           throw new DOMException('Simulated storage quota exhausted', 'QuotaExceededError');
         }
         const request = Reflect.apply(original, this, args) as IDBRequest;
         if (method === 'put' && this.name === 'rowChunks' && fixture.failNextChunk) {
           fixture.failNextChunk = false;
+          const transaction = this.transaction;
+          request.addEventListener('success', () => transaction.abort(), { once: true });
+        }
+        if (method === 'put' && this.name === 'rowPages' && fixture.failNextPage) {
+          fixture.failNextPage = false;
           const transaction = this.transaction;
           request.addEventListener('success', () => transaction.abort(), { once: true });
         }
