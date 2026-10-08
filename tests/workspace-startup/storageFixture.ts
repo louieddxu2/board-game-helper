@@ -9,6 +9,7 @@ import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion
 import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
+type StoredOrderPage = { tableId: string; pageId: string; rowIds: string[] };
 const fixture = {
   db, model, history, spreadsheet, rowPages, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
   dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
@@ -18,12 +19,14 @@ const fixture = {
   reads: [] as { store: string; method: string; key: unknown }[],
   failNextChunk: false,
   failNextPage: false,
+  failNextOrder: false,
   failureMode: 'abort' as 'abort' | 'quota',
   async initialize(rows = 600, columns = 2, tables = 1) {
     await db.loadWorkspace();
     await db.clearWorkspace();
     this.failNextChunk = false;
     this.failNextPage = false;
+    this.failNextOrder = false;
     const tableList = Array.from({ length: tables }, (_, tableIndex) => {
       const table = model.createTable(`表格 ${tableIndex}`);
       table.columns = Array.from({ length: columns }, (_, index) => model.createColumn(`欄位 ${index}`));
@@ -73,9 +76,10 @@ const fixture = {
       const original = IDBObjectStore.prototype[method];
       IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
         fixture.writes.push({ store: this.name, method, key: method === 'put' ? args[1] : args[0], transaction: getTransactionId(this.transaction) });
-        if (method === 'put' && ((this.name === 'rowChunks' && fixture.failNextChunk) || (this.name === 'rowPages' && fixture.failNextPage)) && fixture.failureMode === 'quota') {
+        if (method === 'put' && ((this.name === 'rowChunks' && fixture.failNextChunk) || (this.name === 'rowPages' && fixture.failNextPage) || (this.name === 'rowOrderPages' && fixture.failNextOrder)) && fixture.failureMode === 'quota') {
           if (this.name === 'rowChunks') fixture.failNextChunk = false;
           if (this.name === 'rowPages') fixture.failNextPage = false;
+          if (this.name === 'rowOrderPages') fixture.failNextOrder = false;
           throw new DOMException('Simulated storage quota exhausted', 'QuotaExceededError');
         }
         const request = Reflect.apply(original, this, args) as IDBRequest;
@@ -89,6 +93,11 @@ const fixture = {
           const transaction = this.transaction;
           request.addEventListener('success', () => transaction.abort(), { once: true });
         }
+        if (method === 'put' && this.name === 'rowOrderPages' && fixture.failNextOrder) {
+          fixture.failNextOrder = false;
+          const transaction = this.transaction;
+          request.addEventListener('success', () => transaction.abort(), { once: true });
+        }
         return request;
       } as typeof IDBObjectStore.prototype[typeof method];
     }
@@ -96,18 +105,27 @@ const fixture = {
   async readDisk() {
     const request = indexedDB.open('board-game-helper-workspace');
     const connection = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    const transaction = connection.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries', 'tableHeads', 'rowPages']);
+    const transaction = connection.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'history', 'historyEntries', 'tableHeads', 'rowPages']);
     const readAll = (store: string) => new Promise<any[]>((resolve, reject) => { const request = transaction.objectStore(store).getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    const [meta, tables, states, chunks, heads, entries, tableHeads, pages] = await Promise.all(['meta', 'tables', 'tableState', 'rowChunks', 'history', 'historyEntries', 'tableHeads', 'rowPages'].map(readAll));
+    const [meta, tables, states, chunks, orders, heads, entries, tableHeads, pages] = await Promise.all(['meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'history', 'historyEntries', 'tableHeads', 'rowPages'].map(readAll));
     connection.close();
+    const orderedRowIds = this.data.tables.map(table => {
+      const record = tables.find(item => (item.definition?.id ?? item.id) === table.id) as { storageFormat?: string; rowOrder?: string[]; orderPageIds?: string[]; rows?: Array<{ id: string }> } | undefined;
+      if (record?.storageFormat === 'row-chunks-v2') {
+        const pagesById = new Map((orders as StoredOrderPage[]).filter(page => page.tableId === table.id).map(page => [page.pageId, page]));
+        return (record.orderPageIds ?? []).flatMap(pageId => pagesById.get(pageId)?.rowIds ?? []);
+      }
+      return record?.rowOrder ?? record?.rows?.map(row => row.id) ?? [];
+    });
     return {
-      meta, tables, states, heads, tableHeads, pages, entryIds: entries.map(entry => entry.id),
+      meta, tables, states, orders, heads, tableHeads, pages, orderedRowIds, entryIds: entries.map(entry => entry.id),
       chunks: chunks.map(chunk => ({ tableId: chunk.tableId, chunkId: chunk.chunkId, count: chunk.rows.length })),
-      cells: this.data.tables.map(table => {
+      cells: this.data.tables.map((table, index) => {
         const rows = new Map<string, any>(chunks.filter(chunk => chunk.tableId === table.id).flatMap(chunk => chunk.rows.map((row: any) => [row.id, row])));
         const record = tables.find(item => (item.definition?.id ?? item.id) === table.id);
         if (record?.rows) for (const row of record.rows) rows.set(row.id, row);
-        return [table.rows[0], table.rows[256], table.rows.at(-1)].filter(Boolean).map(row => ({ rowId: row!.id, value: rows.get(row!.id)?.values[table.columns[0].id] }));
+        const ids = orderedRowIds[index];
+        return [ids[0], ids[256], ids.at(-1)].filter(Boolean).map(rowId => ({ rowId, value: rows.get(rowId!)?.values[table.columns[0].id] }));
       }),
     };
   },

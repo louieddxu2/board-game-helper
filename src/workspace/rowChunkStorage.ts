@@ -1,17 +1,22 @@
 import { makeId } from './model';
 import type { WorkspaceTableHistoryAction } from './history';
 import type { WorkspaceColumn, WorkspaceRow, WorkspaceTable } from './types';
+import { createWorkspaceRowOrder, reconcileWorkspaceRowOrder, workspaceRowOrderCapacity, type StoredWorkspaceRowOrderPage, type WorkspaceRowOrderSnapshot } from './rowOrderStorage';
+import { updateWorkspaceSingleRowStorage } from './singleRowStorage';
 
 export const defaultRowChunkCapacity = 256;
 export type RowChunkCapacity = 128 | 256;
 export type WorkspaceTableDefinition = Omit<WorkspaceTable, 'rows' | 'updatedAt' | 'changeRevision'>;
-export interface StoredWorkspaceTable {
-  storageFormat: 'row-chunks-v1';
+interface StoredWorkspaceTableBase {
   definition: WorkspaceTableDefinition;
   chunkCapacity: RowChunkCapacity;
   chunkIds: string[];
-  rowOrder: string[];
 }
+export type StoredWorkspaceTable = StoredWorkspaceTableBase & (
+  { storageFormat: 'row-chunks-v1'; rowOrder: string[] }
+  | { storageFormat: 'row-chunks-v2'; orderPageIds: string[] }
+);
+export type CurrentStoredWorkspaceTable = Extract<StoredWorkspaceTable, { storageFormat: 'row-chunks-v2' }>;
 export interface StoredWorkspaceRowChunk { tableId: string; chunkId: string; rows: WorkspaceRow[] }
 export interface StoredWorkspaceTableState {
   updatedAt: number;
@@ -22,10 +27,12 @@ export interface StoredWorkspaceTableState {
 export interface WorkspaceRowLocation { chunkId: string; slot: number }
 export interface WorkspaceTableStorageSnapshot {
   table: WorkspaceTable;
-  record: StoredWorkspaceTable;
+  record: CurrentStoredWorkspaceTable;
+  order: WorkspaceRowOrderSnapshot;
   chunks: ReadonlyMap<string, StoredWorkspaceRowChunk>;
   locations: ReadonlyMap<string, WorkspaceRowLocation>;
   rowIndexes: ReadonlyMap<string, number>;
+  rowOrderChange?: { beforeRows: readonly WorkspaceRow[]; from: number };
 }
 
 export class WorkspaceStorageIntegrityError extends Error {
@@ -72,10 +79,25 @@ export const hasCurrentWorkspaceColumnState = (table: WorkspaceTable, state?: St
 };
 
 export const isChunkedWorkspaceTable = (value: WorkspaceTable | StoredWorkspaceTable): value is StoredWorkspaceTable =>
-  'storageFormat' in value && value.storageFormat === 'row-chunks-v1';
+  'storageFormat' in value && (value.storageFormat === 'row-chunks-v1' || value.storageFormat === 'row-chunks-v2');
+
+const restoreRowOrder = (tableId: string, record: StoredWorkspaceTable, orderPages: StoredWorkspaceRowOrderPage[]) => {
+  const validIds = (ids: unknown): ids is string[] => Array.isArray(ids) && Array.from(ids).every(id => typeof id === 'string' && Boolean(id));
+  if (record.storageFormat === 'row-chunks-v1') {
+    if (!validIds(record.rowOrder)) invalid(`Invalid row order: ${tableId}`);
+    return record.rowOrder;
+  }
+  const pages = new Map<string, StoredWorkspaceRowOrderPage>();
+  for (const page of orderPages) {
+    if (page.tableId !== tableId || !page.pageId || pages.has(page.pageId) || !validIds(page.rowIds) || !page.rowIds.length || page.rowIds.length > workspaceRowOrderCapacity) invalid(`Invalid row order page: ${tableId}`);
+    pages.set(page.pageId, page);
+  }
+  if (!validIds(record.orderPageIds) || new Set(record.orderPageIds).size !== record.orderPageIds.length || pages.size !== record.orderPageIds.length) invalid(`Missing or duplicate row order pages: ${tableId}`);
+  return record.orderPageIds.flatMap(id => pages.get(id)?.rowIds ?? invalid(`Missing row order page: ${tableId}`));
+};
 
 /** Validate the complete manifest before normalization can change cell representations. */
-export const assembleChunkedWorkspaceTable = (tableId: string, record: StoredWorkspaceTable, state: StoredWorkspaceTableState | undefined, chunks: StoredWorkspaceRowChunk[]): WorkspaceTable => {
+export const assembleChunkedWorkspaceTable = (tableId: string, record: StoredWorkspaceTable, state: StoredWorkspaceTableState | undefined, chunks: StoredWorkspaceRowChunk[], orderPages: StoredWorkspaceRowOrderPage[] = []): WorkspaceTable => {
   if (record.definition.id !== tableId || !state || !Number.isFinite(state.updatedAt) || ![128, 256].includes(record.chunkCapacity)) return invalid(`Invalid table manifest: ${tableId}`);
   const chunkIds = new Set(record.chunkIds);
   if (chunkIds.size !== record.chunkIds.length || chunks.length !== chunkIds.size) invalid(`Missing or duplicate row chunks: ${tableId}`);
@@ -87,9 +109,10 @@ export const assembleChunkedWorkspaceTable = (tableId: string, record: StoredWor
       rows.set(row.id, row);
     }
   }
-  if (chunkIds.size || rows.size !== record.rowOrder.length) invalid(`Incomplete row order: ${tableId}`);
+  const rowOrder = restoreRowOrder(tableId, record, orderPages);
+  if (chunkIds.size || rows.size !== rowOrder.length) invalid(`Incomplete row order: ${tableId}`);
   const seen = new Set<string>();
-  const ordered = record.rowOrder.map(id => {
+  const ordered = rowOrder.map(id => {
     const row = rows.get(id);
     if (!row || seen.has(id)) return invalid(`Missing or duplicate ordered row: ${tableId}`);
     seen.add(id);
@@ -108,7 +131,7 @@ export const assembleChunkedWorkspaceTable = (tableId: string, record: StoredWor
 };
 
 /** Chunks and the UI share the normalized row objects, including on mixed-format reads. */
-export const createWorkspaceTableStorageSnapshot = (table: WorkspaceTable, stored?: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[] }, capacity: RowChunkCapacity = defaultRowChunkCapacity): WorkspaceTableStorageSnapshot => {
+export const createWorkspaceTableStorageSnapshot = (table: WorkspaceTable, stored?: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[]; orderPages?: StoredWorkspaceRowOrderPage[] }, capacity: RowChunkCapacity = defaultRowChunkCapacity): WorkspaceTableStorageSnapshot => {
   const chunks = new Map<string, StoredWorkspaceRowChunk>();
   const locations = new Map<string, WorkspaceRowLocation>();
   const rowIndexes = new Map<string, number>();
@@ -138,9 +161,13 @@ export const createWorkspaceTableStorageSnapshot = (table: WorkspaceTable, store
     }
   }
   if (locations.size !== table.rows.length) invalid(`Incomplete normalized chunks: ${table.id}`);
+  if (stored?.record.storageFormat === 'row-chunks-v2' && !stored.orderPages) invalid(`Missing row order pages: ${table.id}`);
+  const order = stored?.record.storageFormat === 'row-chunks-v2'
+    ? { pageIds: stored.record.orderPageIds, pages: new Map((stored.orderPages ?? []).map(page => [page.pageId, page])) }
+    : createWorkspaceRowOrder(table.id, table.rows.map(row => row.id));
   return {
-    table, chunks, locations, rowIndexes,
-    record: { storageFormat: 'row-chunks-v1', definition: definitionOf(table), chunkCapacity: capacity, chunkIds: stored?.record.chunkIds ?? [...chunks.keys()], rowOrder: table.rows.map(row => row.id) },
+    table, chunks, locations, rowIndexes, order,
+    record: { storageFormat: 'row-chunks-v2', definition: definitionOf(table), chunkCapacity: capacity, chunkIds: stored?.record.chunkIds ?? [...chunks.keys()], orderPageIds: order.pageIds },
   };
 };
 
@@ -179,8 +206,11 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
     }
     const chunks = new Map(previous.chunks);
     for (const [chunkId, rows] of touched) chunks.set(chunkId, { tableId: table.id, chunkId, rows });
-    return { ...previous, table, chunks, record: definition === previous.record.definition ? previous.record : { ...previous.record, definition } };
+    return { ...previous, table, chunks, rowOrderChange: undefined, record: definition === previous.record.definition ? previous.record : { ...previous.record, definition } };
   }
+
+  const singleRow = sameColumnIds ? updateWorkspaceSingleRowStorage(previous, table, action, definition) : undefined;
+  if (singleRow) return singleRow;
 
   const seen = new Set<string>();
   const added: WorkspaceRow[] = [];
@@ -188,7 +218,7 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
   table.rows.forEach((row, index) => {
     if (!row.id || seen.has(row.id)) invalid(`Duplicate row identity: ${table.id}`);
     seen.add(row.id);
-    if (previous.record.rowOrder[index] !== row.id) orderChanged = true;
+    if (previous.table.rows[index]?.id !== row.id) orderChanged = true;
     const location = previous.locations.get(row.id);
     if (location) replaceRow(row, location); else added.push(row);
   });
@@ -227,16 +257,18 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
   }
   const chunkIds = [...chunks.keys()];
   const sameChunkIds = chunkIds.length === previous.record.chunkIds.length && chunkIds.every((id, index) => id === previous.record.chunkIds[index]);
-  const rowOrder = orderChanged ? table.rows.map(row => row.id) : previous.record.rowOrder;
-  const record = definition === previous.record.definition && sameChunkIds && !orderChanged ? previous.record : {
-    ...previous.record, definition, chunkIds: sameChunkIds ? previous.record.chunkIds : chunkIds, rowOrder,
+  const order = orderChanged ? reconcileWorkspaceRowOrder(previous.order, table.id, table.rows.map(row => row.id)) : previous.order;
+  const record = definition === previous.record.definition && sameChunkIds && order.pageIds === previous.record.orderPageIds ? previous.record : {
+    ...previous.record, definition, chunkIds: sameChunkIds ? previous.record.chunkIds : chunkIds, orderPageIds: order.pageIds,
   };
-  return { table, chunks, locations, record, rowIndexes: orderChanged ? new Map(rowOrder.map((id, index) => [id, index])) : previous.rowIndexes };
+  return { table, chunks, locations, record, order, rowIndexes: orderChanged ? new Map(table.rows.map((row, index) => [row.id, index])) : previous.rowIndexes };
 };
 
-export const planWorkspaceTableStorageWrite = (snapshot: WorkspaceTableStorageSnapshot, saved?: WorkspaceTableStorageSnapshot, legacy = false) => ({
-  definition: legacy || !saved || snapshot.record !== saved.record ? snapshot.record : undefined,
+export const planWorkspaceTableStorageWrite = (snapshot: WorkspaceTableStorageSnapshot, saved?: WorkspaceTableStorageSnapshot, legacy = false, migrateOrder = false) => ({
+  definition: legacy || migrateOrder || !saved || snapshot.record !== saved.record ? snapshot.record : undefined,
   upserts: [...snapshot.chunks.values()].filter(chunk => legacy || saved?.chunks.get(chunk.chunkId) !== chunk),
   deletes: legacy ? [] : [...(saved?.chunks.keys() ?? [])].filter(id => !snapshot.chunks.has(id)),
+  orderUpserts: [...snapshot.order.pages.values()].filter(page => legacy || migrateOrder || saved?.order.pages.get(page.pageId) !== page),
+  orderDeletes: legacy ? [] : [...(saved?.order.pages.keys() ?? [])].filter(id => !snapshot.order.pages.has(id)),
   state: { updatedAt: snapshot.table.updatedAt, changeRevision: snapshot.table.changeRevision, columnState: columnStateOf(snapshot.table) } satisfies StoredWorkspaceTableState,
 });

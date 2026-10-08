@@ -77,7 +77,8 @@ test('format-only background migration preserves semantic revisions and timestam
     await api.db.flushWorkspaceSaves();
     return api.readDisk();
   });
-  expect(result.tables[0].storageFormat).toBe('row-chunks-v1');
+  expect(result.tables[0].storageFormat).toBe('row-chunks-v2');
+  expect(result.orders).toHaveLength(1);
   expect(result.states[0]).toEqual({ updatedAt: 100, changeRevision: 'original-content', columnState: {} });
   expect(result.meta).toContainEqual(expect.objectContaining({ structureRevision: 'original-structure' }));
   const storage = result.meta.find(item => 'storageRevision' in item);
@@ -105,7 +106,7 @@ test('v3 upgrade waits for an old connection, migrates only metadata initially a
     const api = window.workspaceStorageFixture;
     const initial = await api.db.loadWorkspaceInitial(); api.data = initial.data;
     const before = await api.readDisk();
-    api.instrument(); api.failNextChunk = true;
+    api.instrument(); api.failNextOrder = true;
     let failure = '';
     try { await api.db.saveWorkspace(api.data, { partial: true }); } catch (error) { failure = (error as Error).name; }
     const aborted = await api.readDisk();
@@ -120,6 +121,8 @@ test('v3 upgrade waits for an old connection, migrates only metadata initially a
   expect(result.failure).toBe('AbortError');
   expect(result.aborted).toEqual(result.before);
   expect(result.migrated.chunks).toHaveLength(3);
+  expect(result.migrated.orders).toHaveLength(3);
+  expect(result.migrated.tables[0].storageFormat).toBe('row-chunks-v2');
   expect(result.version).toBe(1);
   expect(result.structure).toBe('legacy-structure');
   expect(result.count).toBe(600);

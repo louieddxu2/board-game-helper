@@ -106,11 +106,11 @@ test('reordering writes no chunks; top insert/delete keeps all other chunk ident
     return { before, reordered, inserted, deleted: await api.readDisk(), reorderWrites, insertWrites, deleteWrites: api.writes };
   });
   expect(result.reorderWrites.filter(write => write.store === 'rowChunks')).toHaveLength(0);
-  expect(result.reordered.tables[0].rowOrder).toEqual([...result.before.tables[0].rowOrder].reverse());
+  expect(result.reordered.orderedRowIds[0]).toEqual([...result.before.orderedRowIds[0]].reverse());
   expect(result.insertWrites.filter(write => write.store === 'rowChunks')).toHaveLength(1);
   expect(result.deleteWrites.filter(write => write.store === 'rowChunks')).toHaveLength(1);
   expect(result.inserted.tables[0].chunkIds).toEqual(result.before.tables[0].chunkIds);
-  expect(result.deleted.tables[0].rowOrder).toEqual(result.reordered.tables[0].rowOrder);
+  expect(result.deleted.orderedRowIds[0]).toEqual(result.reordered.orderedRowIds[0]);
 });
 
 test('partial pinned-table reads skip the active table and preserve an edit before remaining hydration', async ({ page }) => {
@@ -229,10 +229,10 @@ test('cross-chunk paste allocates a full-table overflow chunk and undo removes t
     const undone = await api.readDisk(); const undoWrites = [...api.writes];
     return { before, pasted, undone, pasteWrites, undoWrites };
   });
-  expect(result.pasted.tables[0].rowOrder).toHaveLength(513);
+  expect(result.pasted.orderedRowIds[0]).toHaveLength(513);
   expect(result.pasted.chunks).toHaveLength(3);
   expect(result.pasteWrites.filter(write => write.store === 'rowChunks' && write.method === 'put')).toHaveLength(3);
-  expect(result.undone.tables[0].rowOrder).toEqual(result.before.tables[0].rowOrder);
+  expect(result.undone.orderedRowIds[0]).toEqual(result.before.orderedRowIds[0]);
   expect(result.undone.chunks).toHaveLength(2);
   expect(result.undoWrites.filter(write => write.store === 'rowChunks' && write.method === 'delete')).toHaveLength(1);
   expect(result.undoWrites.filter(write => write.store === 'historyEntries')).toHaveLength(0);

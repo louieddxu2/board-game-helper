@@ -44,7 +44,7 @@ describe('workspace storage save snapshots', () => {
 
     expect(secondSnapshot.record.chunkIds).toEqual(saved.record.chunkIds);
     expect([...secondSnapshot.chunks.keys()]).toEqual([...saved.chunks.keys()]);
-    expect(secondSnapshot.record.rowOrder).toEqual(saved.record.rowOrder);
+    expect(secondSnapshot.record.orderPageIds).toEqual(saved.record.orderPageIds);
   });
 
   it('keeps both changed chunks dirty when the first queued save did not advance its baseline', () => {

@@ -3,6 +3,7 @@ import { applyWorkspaceCellChanges, removeWorkspaceColumnValues } from './cellCh
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
+import { rememberWorkspaceSingleRowChange } from './rowStructureChanges';
 
 export const workspaceHistoryRetentionMs = 6 * 60 * 60 * 1000;
 export const workspaceHistoryLimit = 50;
@@ -182,9 +183,13 @@ export const applyWorkspaceTableHistoryAction = (
         });
       }
       case 'add-row':
-        return tableWithUpdatedAt({ ...current, rows: forward ? insertById(current.rows, action.row, action.index) : current.rows.filter((row) => row.id !== action.row.id) });
-      case 'remove-row':
-        return tableWithUpdatedAt({ ...current, rows: forward ? current.rows.filter((row) => row.id !== action.row.id) : insertById(current.rows, action.row, action.index) });
+      case 'remove-row': {
+        const adding = (action.type === 'add-row') === forward;
+        const rows = adding ? insertById(current.rows, action.row, action.index) : current.rows.filter(row => row.id !== action.row.id);
+        const index = adding ? Math.max(0, Math.min(action.index, rows.length - 1)) : action.index;
+        rememberWorkspaceSingleRowChange(current.rows, rows, action.row.id, index);
+        return tableWithUpdatedAt({ ...current, rows });
+      }
       case 'reorder-rows':
         return tableWithUpdatedAt({ ...current, rows: reorderByIds(current.rows, forward ? action.afterIds : action.beforeIds) });
       case 'move-row':
@@ -311,11 +316,13 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
   const removedRowIds = beforeRowIds.filter((id) => !nextRowIdSet.has(id));
   if (addedRowIds.length === 1 && removedRowIds.length === 0 && sameColumns(beforeTable, nextTable)) {
     const row = nextTable.rows.find((item) => item.id === addedRowIds[0]);
-    if (row) return mutation('新增物件', { type: 'add-row', row, index: nextRowIds.indexOf(row.id) });
+    const index = row ? nextRowIds.indexOf(row.id) : -1;
+    if (row && beforeTable.rows.every((item, position) => same(item, nextTable.rows[position < index ? position : position + 1]))) return mutation('新增物件', { type: 'add-row', row, index });
   }
   if (removedRowIds.length === 1 && addedRowIds.length === 0 && sameColumns(beforeTable, nextTable)) {
     const row = beforeTable.rows.find((item) => item.id === removedRowIds[0]);
-    if (row) return mutation('刪除物件', { type: 'remove-row', row, index: beforeRowIds.indexOf(row.id) });
+    const index = row ? beforeRowIds.indexOf(row.id) : -1;
+    if (row && nextTable.rows.every((item, position) => same(item, beforeTable.rows[position < index ? position : position + 1]))) return mutation('刪除物件', { type: 'remove-row', row, index });
   }
   if (addedRowIds.length === 0 && removedRowIds.length === 0 && !same(beforeRowIds, nextRowIds) && sameColumns(beforeTable, nextTable)) {
     return mutation('重新排列物件', { type: 'reorder-rows', beforeIds: beforeRowIds, afterIds: nextRowIds });

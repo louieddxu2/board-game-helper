@@ -346,7 +346,7 @@ test('an older offline tab cannot overwrite a newer table, and explicit deletion
     const read = <T>(store: IDBObjectStore, key: string) => new Promise<T>((done) => { const get = store.get(key); get.onsuccess = () => done(get.result); });
     const meta = await read<{ nodes: Array<{ name: string }> }>(transaction.objectStore('meta'), 'workspace');
     const storage = await read<{ storageRevision: string }>(transaction.objectStore('meta'), 'storage');
-    const table = await read<{ rows?: Array<{ id: string; values: Record<string, string> }>; rowOrder?: string[] }>(transaction.objectStore('tables'), 'table-0');
+    const table = await read<{ rows?: Array<{ id: string; values: Record<string, string> }> }>(transaction.objectStore('tables'), 'table-0');
     const rows = table.rows ?? await new Promise<any[]>((done) => { const get = transaction.objectStore('rowChunks').getAll(IDBKeyRange.bound(['table-0', ''], ['table-0', '\uffff'])); get.onsuccess = () => done(get.result.flatMap((chunk) => chunk.rows)); });
     const history = await read<{ past: unknown[] }>(transaction.objectStore('history'), 'table-0');
     const keys = await new Promise<IDBValidKey[]>((done) => { const get = transaction.objectStore('tables').getAllKeys(); get.onsuccess = () => done(get.result); });

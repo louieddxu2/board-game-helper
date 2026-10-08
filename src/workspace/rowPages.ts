@@ -63,9 +63,7 @@ export const planWorkspaceRowPages = (
 ) => {
   if (savedHead) validateWorkspaceTableHead(snapshot.table.id, savedHead);
   const rebuild = !savedHead || !previous || previous.table.id !== snapshot.table.id || savedHead.rowCount !== previous.table.rows.length;
-  const orderChanged = rebuild || (previous.record.rowOrder !== snapshot.record.rowOrder
-    && (previous.record.rowOrder.length !== snapshot.record.rowOrder.length
-      || previous.record.rowOrder.some((id, index) => id !== snapshot.record.rowOrder[index])));
+  const orderChanged = rebuild || previous.order !== snapshot.order;
   const pageCount = Math.ceil(snapshot.table.rows.length / workspaceRowPageSize);
   const head: WorkspaceTableHead = {
     format: 'row-pages-v1', definition: snapshot.record.definition,
@@ -78,7 +76,9 @@ export const planWorkspaceRowPages = (
     for (let index = 0; index < pageCount; index++) indices.add(index);
   } else if (orderChanged) {
     // Compare row references at display positions, without copying or inspecting cells.
-    for (let index = 0; index < pageCount; index++) {
+    const first = snapshot.rowOrderChange?.beforeRows === previous.table.rows
+      ? Math.floor(snapshot.rowOrderChange.from / workspaceRowPageSize) : 0;
+    for (let index = first; index < pageCount; index++) {
       const start = index * workspaceRowPageSize;
       const end = Math.min(start + workspaceRowPageSize, head.rowCount);
       if (Math.min(start + workspaceRowPageSize, previous.table.rows.length) !== end) indices.add(index);

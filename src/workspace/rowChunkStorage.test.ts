@@ -63,13 +63,13 @@ describe('workspace row chunk storage contracts', () => {
     const plan = planWorkspaceTableStorageWrite(next, saved);
 
     expect(plan.definition).toBeUndefined();
-    expect(next.record.rowOrder).toBe(saved.record.rowOrder);
+    expect(next.record.orderPageIds).toBe(saved.record.orderPageIds);
     expect(plan.upserts).toHaveLength(1);
     expect(plan.state.columnState?.[columnId].dynamicOptions).toMatchObject({ counts: [{ count: 6_001 }, { count: 3_999 }] });
     expect(next.record.definition.columns[0].dynamicOptions).toBeUndefined();
 
-    const persisted = structuredClone({ record: next.record, state: plan.state, chunks: [...next.chunks.values()] });
-    const reopened = assembleChunkedWorkspaceTable(table.id, persisted.record, persisted.state, persisted.chunks);
+    const persisted = structuredClone({ record: next.record, state: plan.state, chunks: [...next.chunks.values()], orderPages: [...next.order.pages.values()] });
+    const reopened = assembleChunkedWorkspaceTable(table.id, persisted.record, persisted.state, persisted.chunks, persisted.orderPages);
     const normalized = normalizeWorkspace({ ...data, tables: [reopened] }).tables[0];
     expect(hasCurrentWorkspaceColumnState(normalized, persisted.state)).toBe(true);
     expect(new WorkspaceDynamicOptionsCache().getOptions(normalized, columnId)).toEqual(['Common', 'Rare']);
@@ -81,10 +81,10 @@ describe('workspace row chunk storage contracts', () => {
     table.columns[0] = { ...table.columns[0], inputType: 'dynamic-select' };
     const saved = createWorkspaceTableStorageSnapshot(table);
     const state = { updatedAt: table.updatedAt };
-    const assembled = assembleChunkedWorkspaceTable(table.id, saved.record, state, [...saved.chunks.values()]);
+    const assembled = assembleChunkedWorkspaceTable(table.id, saved.record, state, [...saved.chunks.values()], [...saved.order.pages.values()]);
     const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [assembled] }).tables[0];
     expect(hasCurrentWorkspaceColumnState(normalized, state)).toBe(false);
-    const baseline = createWorkspaceTableStorageSnapshot(normalized, { record: saved.record, chunks: [...saved.chunks.values()] });
+    const baseline = createWorkspaceTableStorageSnapshot(normalized, { record: saved.record, chunks: [...saved.chunks.values()], orderPages: [...saved.order.pages.values()] });
     const plan = planWorkspaceTableStorageWrite(baseline, baseline);
     expect(plan.definition).toBeUndefined();
     expect(plan.upserts).toEqual([]);
@@ -205,7 +205,7 @@ describe('workspace row chunk storage contracts', () => {
     expect(plan.upserts.flatMap((chunk) => chunk.rows).slice(0, 3).map((row) => row.values[linkColumn.id])).toEqual(['項目 0', 'https://example.com/1', '項目 2']);
   });
 
-  it('changes only the manifest on row reorder and writes no chunks', () => {
+  it('changes only order pages on row reorder and writes no chunks', () => {
     const table = makeTable(513);
     const saved = createWorkspaceTableStorageSnapshot(table);
     const reordered = { ...table, rows: [table.rows[512], ...table.rows.slice(0, 512)] };
@@ -215,10 +215,11 @@ describe('workspace row chunk storage contracts', () => {
 
     const plan = planWorkspaceTableStorageWrite(next, saved);
 
-    expect(next.record.rowOrder[0]).toBe('row-512');
-    expect(plan.definition).toEqual(next.record);
+    expect(next.order.pages.get(next.order.pageIds[0])?.rowIds[0]).toBe('row-512');
+    expect(plan.definition).toBeUndefined();
     expect(plan.upserts).toEqual([]);
     expect(plan.deletes).toEqual([]);
+    expect(plan.orderUpserts.length).toBeGreaterThan(0);
   });
 
   it('keeps existing chunk IDs when adding or removing at the top', () => {
