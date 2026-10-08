@@ -9,6 +9,7 @@ import type { WorkspaceData } from '../workspace/types';
 
 const db = vi.hoisted(() => ({
   loadWorkspaceHistories: vi.fn(), saveWorkspace: vi.fn(async (_data: unknown, _options?: unknown) => undefined),
+  maintainWorkspaceRowPages: vi.fn(async (_tableId: string, _options?: unknown) => undefined),
 }));
 vi.mock('../workspace/backgroundWork', () => ({ afterWorkspacePaint: (work: () => void) => { work(); return () => undefined; } }));
 vi.mock('../workspace/db', () => {

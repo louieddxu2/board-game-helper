@@ -28,6 +28,7 @@ vi.mock('../workspace/db', () => {
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
+  maintainWorkspaceRowPages: vi.fn(async () => undefined),
 };
 });
 

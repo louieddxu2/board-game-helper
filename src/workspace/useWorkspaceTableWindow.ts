@@ -2,7 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspaceTableWindow } from './db';
 import type { WorkspaceTableWindow } from './rowPages';
-import { isPendingWorkspaceRow, workspaceRowPageMatchesHead, workspaceRowPageRevision } from './rowPages';
+import { isPendingWorkspaceRow, workspaceRowPageAt, workspaceRowPageCount, workspaceRowPageIndex, workspaceRowPageMatchesHead, workspaceRowPageRevision } from './rowPages';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
@@ -90,14 +90,14 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
   useEffect(() => {
     if (!activeWindow || !activeWindow.head.rowCount) return;
     const { head } = activeWindow;
-    const first = Math.floor(rowWindow.first / head.pageSize);
-    const last = Math.floor(Math.max(rowWindow.first, rowWindow.last - 1) / head.pageSize);
+    const first = workspaceRowPageAt(head, rowWindow.first);
+    const last = workspaceRowPageAt(head, Math.max(rowWindow.first, rowWindow.last - 1));
     if (virtualScrollTop !== pageDirection.current.top) pageDirection.current.direction = virtualScrollTop < pageDirection.current.top ? -1 : 1;
     pageDirection.current.top = virtualScrollTop;
-    const next = pageDirection.current.direction > 0 ? Math.min(Math.ceil(head.rowCount / head.pageSize) - 1, last + 1) : Math.max(0, first - 1);
+    const next = pageDirection.current.direction > 0 ? Math.min(workspaceRowPageCount(head) - 1, last + 1) : Math.max(0, first - 1);
     const needed = Array.from({ length: last - first + 1 }, (_, offset) => first + offset);
     if (!needed.includes(next)) needed.push(next);
-    const cached = new Map(activeWindow.pages.filter(page => workspaceRowPageMatchesHead(head, page.index, page)).map(page => [page.index, page]));
+    const cached = new Map(activeWindow.pages.map(page => [workspaceRowPageIndex(head, page), page] as const).filter(([index, page]) => workspaceRowPageMatchesHead(head, index, page)));
     const missing = needed.filter(index => !cached.has(index));
     if (!missing.length) return;
     const key = `${head.definition.id}:${head.layoutRevision}:${head.changeRevision ?? ''}:${missing.map(index => `${index}:${workspaceRowPageRevision(head, index)}`).join(',')}`;
@@ -110,9 +110,9 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
         || missing.some(index => workspaceRowPageRevision(loaded.head, index) !== workspaceRowPageRevision(head, index))) return;
       const activeId = dataRef.current?.nodes.find(node => node.id === dataRef.current?.activeNodeId)?.tableId;
       if (activeId !== head.definition.id || dataRef.current?.tables.some(table => table.id === activeId)) return;
-      loaded.pages.forEach(page => cached.set(page.index, page));
-      const pages = [...cached.values()].filter(page => workspaceRowPageMatchesHead(loaded.head, page.index, page))
-        .sort((a, b) => Math.abs(a.index - first) - Math.abs(b.index - first)).slice(0, Math.max(4, needed.length));
+      loaded.pages.forEach(page => cached.set(workspaceRowPageIndex(loaded.head, page), page));
+      const pages = [...cached].filter(([index, page]) => workspaceRowPageMatchesHead(loaded.head, index, page))
+        .sort(([a], [b]) => Math.abs(a - first) - Math.abs(b - first)).slice(0, Math.max(4, needed.length)).map(([, page]) => page);
       const nextWindow = { head: loaded.head, pages };
       setTableWindow(nextWindow);
     }).catch(error => { if (!cancelled) reportReadError(error); }).finally(() => {

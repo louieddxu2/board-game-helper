@@ -208,6 +208,7 @@ describe('workspace table page request guards', () => {
     expect(loadWorkspaceTableWindow).toHaveBeenCalledWith(table.id, [3]);
 
     const head = options.activeWindow.head;
+    if (head.format !== 'row-pages-v1') throw new Error('expected legacy page head in this guard fixture');
     const loadedHead = {
       ...head,
       changeRevision: mismatch === 'change-revision' ? 'stale-change' : head.changeRevision,

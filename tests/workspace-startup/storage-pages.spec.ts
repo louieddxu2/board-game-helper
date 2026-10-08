@@ -23,11 +23,13 @@ test('appending one row writes one tail page and keeps preceding pages byte-for-
     api.instrument();
     await api.db.saveWorkspace(api.data, { mutation: { tableId: table.id, action }, history: { replace: [history] } });
     const after = await api.readDisk();
+    const initialHead = before.tableHeads[0];
+    const tailId = initialHead.blocks.at(-1).id;
     return {
       pagePuts: api.writes.filter(write => write.store === 'rowPages' && write.method === 'put').length,
       chunkPuts: api.writes.filter(write => write.store === 'rowChunks' && write.method === 'put').length,
-      oldPagesSame: before.pages.filter(page => page.index < 78).every(page => JSON.stringify(page) === JSON.stringify(after.pages.find(next => next.index === page.index))),
-      tail: after.pages.find(page => page.index === 78)?.rows.at(-1)?.id,
+      oldPagesSame: before.pages.filter(page => page.id !== tailId).every(page => JSON.stringify(page) === JSON.stringify(after.pages.find(next => next.id === page.id))),
+      tail: after.pages.find(page => page.id === tailId)?.rows.at(-1)?.id,
       rowCount: after.tableHeads[0].rowCount,
     };
   });
@@ -83,7 +85,7 @@ test('same-page, cross-page, and full-span moves write only affected projection 
   });
   expect(result.same).toEqual({ pages: 1, chunks: 0 });
   expect(result.cross).toEqual({ pages: 2, chunks: 0 });
-  expect(result.full).toEqual({ pages: 4, chunks: 0 });
+  expect(result.full).toEqual({ pages: 2, chunks: 0 });
   expect(result.historyType).toBe('move-row');
   expect(result.historyKeys).toEqual(['type', 'rowId', 'beforeIndex', 'afterIndex']);
   expect(result.undoFirst).not.toBe(result.persistedFirst);

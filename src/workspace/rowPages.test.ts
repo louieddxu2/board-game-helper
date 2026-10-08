@@ -3,7 +3,17 @@ import {
   planWorkspaceRowPages,
   validateWorkspaceRowPage,
   validateWorkspaceTableHead,
+  workspaceRowPageIndex,
   workspaceRowPageMatchesHead,
+  workspaceRowPageOffset,
+  workspaceRowPageRevision,
+  workspaceRowPageStorageKey,
+  workspaceRowPageKey,
+  workspaceRowBlockCapacity,
+  workspaceRowPageSize,
+  type LegacyWorkspaceTableHead,
+  type WorkspaceBlockTableHead,
+  type WorkspaceRowBlock,
   type WorkspaceTableHead,
 } from './rowPages';
 import { applyWorkspaceTableHistoryAction, type WorkspaceTableHistoryAction } from './history';
@@ -37,12 +47,6 @@ const dataOf = (table: WorkspaceTable): WorkspaceData => ({
   tables: [table],
 });
 
-const firstPlan = (table: WorkspaceTable) => {
-  const snapshot = createWorkspaceTableStorageSnapshot(table);
-  const plan = planWorkspaceRowPages(snapshot, undefined, undefined, 'layout-0');
-  return { snapshot, head: plan.head };
-};
-
 const apply = (table: WorkspaceTable, action: WorkspaceTableHistoryAction, direction: 'undo' | 'redo' = 'redo') =>
   applyWorkspaceTableHistoryAction(dataOf(table), table.id, action, direction).tables[0];
 
@@ -52,101 +56,174 @@ const snapshotAfter = (
   action?: WorkspaceTableHistoryAction,
 ) => updateWorkspaceTableStorageSnapshot(previous, table, action);
 
-const pageIndices = (plan: ReturnType<typeof planWorkspaceRowPages>) => plan.pages.map(page => page.index);
+const firstPlan = (table: WorkspaceTable) => {
+  const snapshot = createWorkspaceTableStorageSnapshot(table);
+  const plan = planWorkspaceRowPages(snapshot, undefined, undefined, 'layout-0');
+  return { snapshot, plan, head: plan.head };
+};
 
-describe('workspace row page write planning', () => {
-  it('writes only the tail page for a 10,000-row append', () => {
+const blockIds = (plan: ReturnType<typeof planWorkspaceRowPages>) => plan.pages.map(page => page.id);
+const blockCounts = (head: WorkspaceTableHead) => head.format === 'row-blocks-v1' ? head.blocks.map(block => block.count) : [];
+
+const legacyHeadOf = (table: WorkspaceTable, revision = 'legacy-layout', pageRevisions?: string[]): LegacyWorkspaceTableHead => ({
+  format: 'row-pages-v1',
+  definition: {
+    id: table.id,
+    name: table.name,
+    rowHeaderName: table.rowHeaderName,
+    rowHeader: table.rowHeader,
+    columns: table.columns,
+    textScale: table.textScale,
+    transposed: table.transposed,
+  },
+  rowCount: table.rows.length,
+  pageSize: workspaceRowPageSize,
+  layoutRevision: revision,
+  pageRevisions,
+  updatedAt: table.updatedAt,
+});
+
+const overlayPages = (
+  base: WorkspaceRowBlock[],
+  plan: ReturnType<typeof planWorkspaceRowPages>,
+): WorkspaceRow[] => {
+  const changed = new Map(plan.pages.map(page => [page.id, page]));
+  return plan.head.blocks.flatMap(block => changed.get(block.id)?.rows ?? base.find(page => page.id === block.id)?.rows ?? []);
+};
+
+describe('workspace row block write planning', () => {
+  it('seeds 128-row blocks with stable IDs and per-block revisions', () => {
+    const { plan, head } = firstPlan(makeTable(300));
+
+    expect(head.format).toBe('row-blocks-v1');
+    expect(blockCounts(head)).toEqual([128, 128, 44]);
+    expect(plan.pages.map(page => page.id)).toEqual(head.blocks.map(block => block.id));
+    expect(plan.pages.map(page => page.rows.length)).toEqual(blockCounts(head));
+    expect(plan.pages.every((page, index) => page.layoutRevision === head.blocks[index].revision)).toBe(true);
+    expect(plan.rebuild).toBe(true);
+    expect(plan.deletes).toEqual([]);
+  });
+
+  it('writes only the tail block for a 10,000-row append', () => {
     const before = makeTable(10_000);
     const initial = firstPlan(before);
-    const action: WorkspaceTableHistoryAction = { type: 'add-row', row: { id: 'row-new', name: '新增', values: {} }, index: 10_000 };
+    const row: WorkspaceRow = { id: 'row-new', name: '新增', values: {} };
+    const action: WorkspaceTableHistoryAction = { type: 'add-row', row, index: before.rows.length };
     const after = apply(before, action);
-    const snapshot = snapshotAfter(initial.snapshot, after, action);
-    const plan = planWorkspaceRowPages(snapshot, initial.snapshot, initial.head, 'layout-1');
+    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'layout-1');
 
-    expect(pageIndices(plan)).toEqual([78]);
+    expect(blockIds(plan)).toEqual([initial.head.blocks.at(-1)!.id]);
     expect(plan.deletes).toEqual([]);
     expect(plan.rebuild).toBe(false);
-    expect(plan.head.pageRevisions).toHaveLength(79);
-    expect(plan.head.pageRevisions!.slice(0, 78)).toEqual(initial.head.pageRevisions!.slice(0, 78));
-    expect(plan.pages[0].rows.at(-1)?.id).toBe('row-new');
+    expect(plan.head.blocks.slice(0, -1)).toEqual(initial.head.blocks.slice(0, -1));
+    expect(plan.head.blocks.at(-1)).toMatchObject({ id: initial.head.blocks.at(-1)!.id, count: 17, revision: 'layout-1' });
+    expect(plan.pages[0].rows.at(-1)?.id).toBe(row.id);
   });
 
-  it('creates only the new page when an append crosses a page boundary', () => {
+  it('keeps a 129-row block together instead of splitting at the target size', () => {
     const before = makeTable(128);
     const initial = firstPlan(before);
-    const action: WorkspaceTableHistoryAction = { type: 'add-row', row: { id: 'row-new', name: '新增', values: {} }, index: 128 };
+    const row: WorkspaceRow = { id: 'row-new', name: '新增', values: {} };
+    const action: WorkspaceTableHistoryAction = { type: 'add-row', row, index: 128 };
     const after = apply(before, action);
     const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'layout-1');
 
-    expect(pageIndices(plan)).toEqual([1]);
-    expect(plan.pages[0].rows).toHaveLength(1);
-    expect(plan.pages[0].rows[0].id).toBe('row-new');
-    expect(plan.head.pageRevisions).toEqual(['layout-0', 'layout-1']);
+    expect(blockIds(plan)).toEqual([initial.head.blocks[0].id]);
+    expect(blockCounts(plan.head)).toEqual([129]);
+    expect(plan.pages[0].rows).toHaveLength(129);
+    expect(plan.pages[0].rows.at(-1)?.id).toBe(row.id);
   });
 
-  it('writes each page touched by multiple appended rows', () => {
-    const before = makeTable(127);
+  it('preserves a full 256-row tail block and appends a new one-row block', () => {
+    const before = makeTable(256);
     const initial = firstPlan(before);
-    const additions = [128, 129, 130].map(index => ({ id: `row-new-${index}`, name: '新增', values: {} }));
-    const after: WorkspaceTable = { ...before, rows: [...before.rows, ...additions] };
-    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after), initial.snapshot, initial.head, 'layout-1');
+    const fullBlockId = 'full-tail-block';
+    const savedHead: WorkspaceBlockTableHead = {
+      ...initial.head,
+      blocks: [{ id: fullBlockId, count: 256, revision: 'layout-0' }],
+    };
+    const row: WorkspaceRow = { id: 'row-new', name: '新增', values: {} };
+    const action: WorkspaceTableHistoryAction = { type: 'add-row', row, index: 256 };
+    const after = apply(before, action);
+    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, savedHead, 'layout-1');
 
-    expect(pageIndices(plan)).toEqual([0, 1]);
-    expect(plan.pages.find(page => page.index === 0)?.rows).toHaveLength(128);
-    expect(plan.pages.find(page => page.index === 1)?.rows).toHaveLength(2);
+    expect(blockIds(plan)).toHaveLength(1);
+    expect(plan.pages[0].rows).toEqual([row]);
+    expect(plan.pages[0].id).not.toBe(fullBlockId);
+    expect(plan.head.blocks[0]).toEqual({ id: fullBlockId, count: 256, revision: 'layout-0' });
+    expect(plan.head.blocks[1]).toMatchObject({ count: 1, revision: 'layout-1' });
+    expect(plan.deletes).toEqual([]);
   });
 
-  it.each([
-    { name: 'same-page reorder', count: 512, source: 2, target: 10, expected: [0] },
-    { name: 'cross-page reorder', count: 512, source: 2, target: 130, expected: [0, 1] },
-    { name: 'head-to-tail reorder', count: 512, source: 0, target: 511, expected: [0, 1, 2, 3] },
-  ])('$name writes the pages whose row references moved', ({ count, source, target, expected }) => {
-    const before = makeTable(count);
+  it('splits a generic 257-row growth into 129 and 128 at the hard cap', () => {
+    const before = makeTable(256);
     const initial = firstPlan(before);
-    const row = before.rows[source];
-    const action: WorkspaceTableHistoryAction = { type: 'move-row', rowId: row.id, beforeIndex: source, afterIndex: target };
+    const fullBlockId = 'full-growth-block';
+    const savedHead: WorkspaceBlockTableHead = {
+      ...initial.head,
+      blocks: [{ id: fullBlockId, count: workspaceRowBlockCapacity, revision: 'layout-0' }],
+    };
+    const inserted = { id: 'row-new', name: '新增', values: {} };
+    const after = { ...before, rows: [...before.rows.slice(0, 128), inserted, ...before.rows.slice(128)] };
+    const next = snapshotAfter(initial.snapshot, after);
+    const plan = planWorkspaceRowPages(next, initial.snapshot, savedHead, 'layout-1');
+
+    expect(plan.pages.map(page => page.rows.length)).toEqual([129, 128]);
+    expect(plan.pages[0].id).toBe(fullBlockId);
+    expect(plan.head.blocks.map(block => block.count)).toEqual([129, 128]);
+    expect(plan.head.blocks[0].revision).toBe('layout-1');
+    expect(plan.head.blocks[1].revision).toBe('layout-1');
+    expect(plan.pages.flatMap(page => page.rows).map(row => row.id)).toEqual(after.rows.map(row => row.id));
+  });
+
+  it('touches one block for a single tail deletion and removes no block record', () => {
+    const before = makeTable(10_000);
+    const initial = firstPlan(before);
+    const remove = before.rows.at(-1)!;
+    const action: WorkspaceTableHistoryAction = { type: 'remove-row', row: remove, index: before.rows.length - 1 };
     const after = apply(before, action);
     const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'layout-1');
 
-    expect(pageIndices(plan)).toEqual(expected);
-    expect(plan.pages.every(page => page.rows.length > 0)).toBe(true);
+    expect(blockIds(plan)).toEqual([initial.head.blocks.at(-1)!.id]);
+    expect(plan.pages[0].rows).toHaveLength(15);
+    expect(plan.pages[0].rows.some(row => row.id === remove.id)).toBe(false);
+    expect(plan.deletes).toEqual([]);
+    expect(blockCounts(plan.head)).toEqual([...blockCounts(initial.head).slice(0, -1), 15]);
   });
 
-  it.each([
-    { name: 'tail', count: 257, remove: 256, expected: [], deletes: [2] },
-    { name: 'page boundary', count: 256, remove: 128, expected: [1], deletes: [] },
-    { name: 'middle', count: 512, remove: 200, expected: [1, 2, 3], deletes: [] },
-  ])('$name deletion updates shifted pages and deletes obsolete pages', ({ count, remove, expected, deletes }) => {
-    const before = makeTable(count);
+  it('touches one block for a 10,000-row middle deletion', () => {
+    const before = makeTable(10_000);
     const initial = firstPlan(before);
-    const row = before.rows[remove];
-    const action: WorkspaceTableHistoryAction = { type: 'remove-row', row, index: remove };
+    const index = 5_000;
+    const remove = before.rows[index];
+    const action: WorkspaceTableHistoryAction = { type: 'remove-row', row: remove, index };
     const after = apply(before, action);
     const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'layout-1');
+    const block = initial.head.blocks[Math.floor(index / workspaceRowPageSize)];
 
-    expect(pageIndices(plan)).toEqual(expected);
-    expect(plan.deletes).toEqual(deletes);
+    expect(blockIds(plan)).toEqual([block.id]);
+    expect(plan.pages[0].rows.some(row => row.id === remove.id)).toBe(false);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.head.rowCount).toBe(9_999);
   });
 
-  it('keeps unchanged page versions valid when the layout revision changes', () => {
+  it('retains stable block IDs and old content revisions for an isolated cell edit', () => {
     const before = makeTable(300);
     const initial = firstPlan(before);
-    const row = before.rows[0];
-    const action: WorkspaceTableHistoryAction = { type: 'move-row', rowId: row.id, beforeIndex: 0, afterIndex: 1 };
+    const columnId = before.columns[0].id;
+    const action: WorkspaceTableHistoryAction = { type: 'set-cell', rowId: before.rows[0].id, columnId, before: '值 0-column-0', after: '後續編輯' };
     const after = apply(before, action);
-    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'layout-1');
-    const page0 = plan.pages.find(page => page.index === 0);
-    const oldPage1 = { ...initial.head, pageRevisions: [...initial.head.pageRevisions!] };
-    const unchangedPage = { tableId: before.id, index: 1, layoutRevision: oldPage1.pageRevisions![1], rows: before.rows.slice(128, 256) };
+    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'cell-layout');
 
-    expect(plan.head.layoutRevision).toBe('layout-1');
-    expect(plan.head.pageRevisions![1]).toBe('layout-0');
-    expect(workspaceRowPageMatchesHead(plan.head, 1, unchangedPage)).toBe(true);
-    expect(page0 && workspaceRowPageMatchesHead(plan.head, 0, page0)).toBe(true);
-    expect(() => validateWorkspaceRowPage(plan.head, 1, unchangedPage)).not.toThrow();
+    expect(blockIds(plan)).toEqual([initial.head.blocks[0].id]);
+    expect(plan.head.blocks.slice(1)).toEqual(initial.head.blocks.slice(1));
+    expect(plan.head.layoutRevision).toBe(initial.head.layoutRevision);
+    expect(plan.head.blocks[0].revision).toBe('cell-layout');
+    expect(plan.pages[0].layoutRevision).toBe('cell-layout');
+    expect(plan.pages[0].rows[0].values[columnId]).toBe('後續編輯');
   });
 
-  it('plans append and an existing-cell edit together from an unchanged failed-save baseline', () => {
+  it('writes an appended tail and an earlier cell edit from the unchanged saved baseline', () => {
     const before = makeTable(10_000);
     const initial = firstPlan(before);
     const add: WorkspaceTableHistoryAction = { type: 'add-row', row: { id: 'row-new', name: '新增', values: {} }, index: before.rows.length };
@@ -158,51 +235,116 @@ describe('workspace row page write planning', () => {
     const current = snapshotAfter(appendedSnapshot, edited, edit);
     const retry = planWorkspaceRowPages(current, initial.snapshot, initial.head, 'retry-layout');
 
-    expect(pageIndices(retry)).toEqual([0, 78]);
-    expect(retry.head.pageRevisions![0]).toBe('retry-layout');
-    expect(retry.head.pageRevisions![78]).toBe('retry-layout');
-    expect(retry.head.pageRevisions!.slice(1, 78)).toEqual(initial.head.pageRevisions!.slice(1, 78));
+    expect(blockIds(retry)).toEqual([initial.head.blocks[0].id, initial.head.blocks.at(-1)!.id]);
+    expect(retry.head.blocks[0].revision).toBe('retry-layout');
+    expect(retry.head.blocks.at(-1)!.revision).toBe('retry-layout');
+    expect(retry.head.blocks.slice(1, -1)).toEqual(initial.head.blocks.slice(1, -1));
+    expect(retry.pages[0].rows[0].values[columnId]).toBe('後續編輯');
+    expect(retry.pages[1].rows.at(-1)?.id).toBe('row-new');
   });
 
-  it('rejects malformed version vectors and page mismatches', () => {
-    const before = makeTable(129);
+  it('updates source and destination blocks for a distant one-row move', () => {
+    const before = makeTable(1_024);
     const initial = firstPlan(before);
-    const malformed = [
-      { ...initial.head, pageRevisions: ['only-one'] },
-      { ...initial.head, pageRevisions: ['ok', ''] },
-      { ...initial.head, pageRevisions: Object.assign(['ok', 'ok'], { 1: undefined }) },
-    ];
-    for (const head of malformed) expect(() => validateWorkspaceTableHead(before.id, head)).toThrow();
+    const source = 2;
+    const target = 900;
+    const moved = before.rows[source];
+    const action: WorkspaceTableHistoryAction = { type: 'move-row', rowId: moved.id, beforeIndex: source, afterIndex: target };
+    const after = apply(before, action);
+    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, after, action), initial.snapshot, initial.head, 'move-layout');
+    const expected = [initial.head.blocks[Math.floor(source / workspaceRowPageSize)].id, initial.head.blocks[Math.floor(target / workspaceRowPageSize)].id];
 
-    const page = { tableId: before.id, index: 0, layoutRevision: initial.head.pageRevisions![0], rows: before.rows.slice(0, 128) };
-    expect(workspaceRowPageMatchesHead({ ...initial.head, pageRevisions: ['wrong', initial.head.pageRevisions![1]] }, 0, page)).toBe(false);
-    expect(() => validateWorkspaceRowPage(initial.head, 1, page)).toThrow();
+    expect(blockIds(plan)).toEqual(expected);
+    expect(plan.pages.flatMap(page => page.rows).some(row => row.id === moved.id)).toBe(true);
   });
 
-  it('emits no row pages for a column-only edit and upgrades a legacy head without rewriting old pages', () => {
+  it('preserves the complete row order through generic reorder planning', () => {
+    const before = makeTable(513);
+    const initial = firstPlan(before);
+    const after = { ...before, rows: [before.rows[512], ...before.rows.slice(0, 512)] };
+    const next = snapshotAfter(initial.snapshot, after);
+    const plan = planWorkspaceRowPages(next, initial.snapshot, initial.head, 'reorder-layout');
+
+    expect(overlayPages(initial.plan.pages, plan).map(row => row.id)).toEqual(after.rows.map(row => row.id));
+    expect(plan.head.blocks.reduce((sum, block) => sum + block.count, 0)).toBe(after.rows.length);
+    expect(plan.pages.length).toBeGreaterThan(0);
+  });
+
+  it('rebuilds atomically from a readable legacy head', () => {
+    const table = makeTable(300);
+    const snapshot = createWorkspaceTableStorageSnapshot(table);
+    const legacy = legacyHeadOf(table, 'legacy-layout', ['legacy-0', 'legacy-1', 'legacy-2']);
+    const plan = planWorkspaceRowPages(snapshot, snapshot, legacy, 'migrated-layout');
+
+    expect(plan.rebuild).toBe(true);
+    expect(plan.head.format).toBe('row-blocks-v1');
+    expect(blockCounts(plan.head)).toEqual([128, 128, 44]);
+    expect(plan.pages.map(page => page.rows).flat()).toEqual(table.rows);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.pages.every(page => typeof page.id === 'string')).toBe(true);
+  });
+
+  it('writes no row blocks for a metadata-only edit', () => {
     const before = makeTable(300);
     const initial = firstPlan(before);
-    const changed: WorkspaceTable = { ...before, columns: [{ ...before.columns[0], name: '改名' }] };
-    const columnPlan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, changed), initial.snapshot, initial.head, 'layout-1');
-    expect(columnPlan.pages).toEqual([]);
-    expect(columnPlan.head.pageRevisions).toEqual(initial.head.pageRevisions);
+    const changed: WorkspaceTable = { ...before, name: '改名', columns: [{ ...before.columns[0], name: '改名欄位' }] };
+    const plan = planWorkspaceRowPages(snapshotAfter(initial.snapshot, changed), initial.snapshot, initial.head, 'metadata-layout');
 
-    const legacyHead: WorkspaceTableHead = { ...initial.head, pageRevisions: undefined };
-    const legacyPlan = planWorkspaceRowPages(initial.snapshot, initial.snapshot, legacyHead, 'layout-2');
-    expect(legacyPlan.pages).toEqual([]);
-    expect(legacyPlan.head.pageRevisions).toEqual(['layout-0', 'layout-0', 'layout-0']);
-    expect(workspaceRowPageMatchesHead(legacyPlan.head, 0, { tableId: before.id, index: 0, layoutRevision: 'layout-0', rows: before.rows.slice(0, 128) })).toBe(true);
+    expect(plan.pages).toEqual([]);
+    expect(plan.deletes).toEqual([]);
+    expect(plan.head.blocks).toEqual(initial.head.blocks);
+    expect(plan.head.definition.name).toBe('改名');
+    expect(plan.head.definition.columns[0].name).toBe('改名欄位');
   });
 });
 
-describe('workspace row page validation', () => {
-  it('accepts legacy heads and rejects sparse vectors', () => {
-    const table = makeTable(1);
+describe('workspace row block validation', () => {
+  it('validates block IDs, counts, revisions, and total row count', () => {
+    const table = makeTable(300);
     const { head } = firstPlan(table);
-    const legacy = { ...head, pageRevisions: undefined };
+    if (head.format !== 'row-blocks-v1') throw new Error('expected block head');
+    const malformed: WorkspaceTableHead[] = [
+      { ...head, blocks: [{ ...head.blocks[0], id: '' }, ...head.blocks.slice(1)] },
+      { ...head, blocks: [{ ...head.blocks[0], id: head.blocks[1].id }, ...head.blocks.slice(1)] },
+      { ...head, blocks: [{ ...head.blocks[0], count: 0 }, ...head.blocks.slice(1)] },
+      { ...head, blocks: [{ ...head.blocks[0], count: workspaceRowBlockCapacity + 1 }, ...head.blocks.slice(1)] },
+      { ...head, blocks: [{ ...head.blocks[0], count: 1.5 }, ...head.blocks.slice(1)] },
+      { ...head, blocks: [{ ...head.blocks[0], revision: '' }, ...head.blocks.slice(1)] },
+      { ...head, rowCount: head.rowCount + 1 },
+    ];
+    for (const malformedHead of malformed) expect(() => validateWorkspaceTableHead(table.id, malformedHead)).toThrow();
+    expect(() => validateWorkspaceTableHead(table.id, { ...head, blocks: [{ ...head.blocks[0], count: 127 }, ...head.blocks.slice(1)] })).toThrow();
+  });
+
+  it('matches block storage IDs and content versions through the union helpers', () => {
+    const table = makeTable(129);
+    const initial = firstPlan(table);
+    const { head } = initial;
+    const page = initial.plan.pages[0];
+    const index = workspaceRowPageIndex(head, page);
+
+    expect(index).toBe(0);
+    expect(workspaceRowPageKey(head, index)).toBe(page.id);
+    expect(workspaceRowPageStorageKey(page)).toBe(page.id);
+    expect(workspaceRowPageOffset(head, 0)).toBe(0);
+    expect(workspaceRowPageOffset(head, 1)).toBe(128);
+    expect(workspaceRowPageRevision(head, index)).toBe(page.layoutRevision);
+    expect(workspaceRowPageMatchesHead(head, index, page)).toBe(true);
+    expect(workspaceRowPageMatchesHead(head, index, { ...page, layoutRevision: 'stale-version' })).toBe(false);
+    expect(workspaceRowPageMatchesHead(head, index, { ...page, id: 'unknown-block' })).toBe(false);
+    expect(() => validateWorkspaceRowPage(head, index, { ...page, rows: page.rows.slice(0, -1) })).toThrow();
+    expect(() => validateWorkspaceRowPage(head, index, { ...page, rows: [page.rows[0], page.rows[0], ...page.rows.slice(2)] })).toThrow();
+  });
+
+  it('accepts readable legacy heads and rejects sparse page revision vectors', () => {
+    const table = makeTable(129);
+    const legacy = legacyHeadOf(table, 'legacy-layout', ['legacy-0', 'legacy-1']);
     expect(() => validateWorkspaceTableHead(table.id, legacy)).not.toThrow();
-    const sparse = [] as string[];
-    sparse.length = 1;
-    expect(() => validateWorkspaceTableHead(table.id, { ...head, pageRevisions: sparse })).toThrow();
+    const sparse = ['legacy-0'] as string[];
+    sparse.length = 2;
+    expect(() => validateWorkspaceTableHead(table.id, { ...legacy, pageRevisions: sparse })).toThrow();
+    expect(() => validateWorkspaceTableHead(table.id, { ...legacy, pageRevisions: ['legacy-0', ''] })).toThrow();
+    expect(() => validateWorkspaceTableHead(table.id, { ...legacy, pageRevisions: ['legacy-0'] })).toThrow();
+    expect(() => validateWorkspaceTableHead(table.id, { ...legacy, pageSize: 64 as typeof workspaceRowPageSize })).toThrow();
   });
 });

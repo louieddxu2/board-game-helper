@@ -22,7 +22,8 @@ test('ten thousand rows open from a bounded display projection and cannot be sav
     try { await api.db.saveWorkspace({ ...initial.data, tables: [{ ...display }] }, { partial: true }); } catch { saveRejected = true; }
     try { api.spreadsheet.exportWorkspaceXlsx(initial.data, { ...display }); } catch { exportRejected = true; }
     try { api.spreadsheet.exportWorkspaceXlsx(initial.data); } catch { missingRejected = true; }
-    const tail = await api.db.loadWorkspaceTableWindow(display.id, [78]);
+    const tailIndex = api.rowPages.workspaceRowPageAt(initial.window!.head, initial.window!.head.rowCount - 1);
+    const tail = await api.db.loadWorkspaceTableWindow(display.id, [tailIndex]);
     const full = await api.db.loadWorkspace({ expectCurrentRevision: true, tableIds: [display.id] });
     return { reads, loadedTables: initial.data.tables.length, rowCount: initial.window!.head.rowCount, first: display.rows[0].name, count: display.rows.length, last: tail!.pages[0].rows.at(-1)!.name,
       completeCount: full.tables[0].rows.length, saveRejected, exportRejected, missingRejected };
@@ -78,8 +79,13 @@ test('display pages follow manual ordering and single-cell edits update only the
     api.instrument();
     await api.edit(256, '只更改這格');
     const writes = [...api.writes];
-    const projection = await api.db.loadWorkspaceTableWindow(source.id, [0, 2, 78]);
-    return { writes, first: projection!.pages[0].rows[0].name, value: projection!.pages[1].rows[0].values[source.columns[0].id], last: projection!.pages[2].rows.at(-1)!.name };
+    const diskHead = (await api.readDisk()).tableHeads.find(head => head.definition.id === source.id)!;
+    const middleIndex = api.rowPages.workspaceRowPageAt(diskHead, 256);
+    const lastIndex = api.rowPages.workspaceRowPageAt(diskHead, diskHead.rowCount - 1);
+    const projection = await api.db.loadWorkspaceTableWindow(source.id, [0, middleIndex, lastIndex]);
+    const editedRowId = api.data.tables[0].rows[256].id;
+    const editedRow = projection!.pages.flatMap(page => page.rows).find(row => row.id === editedRowId)!;
+    return { writes, first: projection!.pages[0].rows[0].name, value: editedRow.values[source.columns[0].id], last: projection!.pages.at(-1)!.rows.at(-1)!.name };
   });
   expect(result.first).toBe('項目 9999'); expect(result.last).toBe('項目 0');
   expect(result.value).toBe('只更改這格');
@@ -101,10 +107,13 @@ test('missing display pages and cross-tab stale reads fail without returning a p
   expect(conflict).toBe('WorkspaceStorageConflictError');
   await other.close();
   await page.evaluate(async id => {
+    const initial = await window.workspaceStorageFixture.db.loadWorkspaceInitial({ paged: true });
+    const head = initial.window!.head;
+    const pageKey = head.format === 'row-blocks-v1' ? head.blocks[0].id : 0;
     const request = indexedDB.open('board-game-helper-workspace');
     const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
     const transaction = connection.transaction('rowPages', 'readwrite');
-    transaction.objectStore('rowPages').delete([id, 0]);
+    transaction.objectStore('rowPages').delete([id, pageKey]);
     await new Promise<void>(resolve => { transaction.oncomplete = () => resolve(); }); connection.close();
   }, id);
   expect(await page.evaluate(async () => {

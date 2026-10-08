@@ -9,6 +9,7 @@ import { expandedFoldersStorageKey } from './workspaceShared';
 import type { WorkspaceData } from './types';
 import type { WorkspaceReadiness } from './useReadyWorkspaceActions';
 import type { WorkspaceStorageController } from './useWorkspaceStorage';
+import { useWorkspaceRowMaintenance } from './useWorkspaceRowMaintenance';
 
 interface WorkspaceLoadingOptions {
   setNotice: (message: string) => void;
@@ -46,6 +47,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
   const readQueueRef = useRef<Promise<void>>(Promise.resolve());
   const fullTable = useMemo(() => data ? getTableForNode(data, data.activeNodeId) : undefined, [data]);
   const activeWindow = !fullTable && data?.nodes.some(node => node.id === data.activeNodeId && node.tableId === tableWindow?.head.definition.id) ? tableWindow : undefined;
+  useWorkspaceRowMaintenance(fullTable?.id, dataRef, storageConflict);
 
   const publishHistories = useCallback((stored: Map<string, WorkspaceTableHistory>, validIds: Set<string>) => {
     const histories = hydrateWorkspaceHistories(stored, historyRef.current, validIds, historyResetRef.current);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPendingWorkspaceRow, workspaceRowPageMatchesHead, type WorkspaceTableWindow } from './rowPages';
+import { createPendingWorkspaceRow, workspaceRowPageIndex, workspaceRowPageMatchesHead, workspaceRowPageOffset, type WorkspaceTableWindow } from './rowPages';
 import type { WorkspaceRow } from './types';
 
 export class SparseWorkspaceRowHeights {
@@ -51,8 +51,11 @@ export const usePagedWorkspaceRows = (window: WorkspaceTableWindow | undefined, 
     frame.current = undefined;
   }
   const heights = state.current.heights;
-  const entries = useMemo(() => window?.pages.filter(page => workspaceRowPageMatchesHead(window.head, page.index, page))
-    .flatMap(page => page.rows.map((row, slot) => [page.index * window.head.pageSize + slot, row] as const)) ?? [], [window]);
+  const entries = useMemo(() => window?.pages.flatMap(page => {
+    const index = workspaceRowPageIndex(window.head, page);
+    return workspaceRowPageMatchesHead(window.head, index, page)
+      ? page.rows.map((row, slot) => [workspaceRowPageOffset(window.head, index) + slot, row] as const) : [];
+  }) ?? [], [window]);
   const indexes = useMemo(() => new Map(entries.map(([index, row]) => [row.id, index])), [entries]);
   const rows = useMemo(() => new Map(entries), [entries]);
   const virtual = Boolean(window && count > 80);

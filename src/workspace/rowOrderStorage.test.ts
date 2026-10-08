@@ -75,7 +75,7 @@ describe('workspace row order pages', () => {
     const next = updateWorkspaceTableStorageSnapshot(saved, nextTable, action);
     const pages = planWorkspaceRowPages(next, saved, head, 'after');
     expect(reads).toBeLessThan(20);
-    expect(pages.pages.map(page => page.index)).toEqual([78]);
+    expect(pages.pages.map(page => page.id)).toEqual([head.blocks.at(-1)!.id]);
   });
 
   it('preserves earlier cell edits when an external add/remove hint describes only part of the change', () => {
@@ -94,7 +94,8 @@ describe('workspace row order pages', () => {
       expect(reopened.rows[0].values[table.columns[0].id]).toBe('同時修改');
       expect(reopened.rows).toEqual(changed.rows);
       expect(plan.upserts).toHaveLength(2);
-      expect(planWorkspaceRowPages(next, saved, head, 'after').pages.map(page => page.index)).toEqual([0, adding ? 4 : 3]);
+      const rowPagePlan = planWorkspaceRowPages(next, saved, head, 'after');
+      expect(rowPagePlan.pages.map(page => page.id)).toEqual([head.blocks[0].id, adding ? rowPagePlan.head.blocks.at(-1)!.id : head.blocks[3].id]);
     }
   });
 

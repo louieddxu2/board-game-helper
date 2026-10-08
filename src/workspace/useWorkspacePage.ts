@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useStableCallback } from '../hooks/useStableCallback';
 import { loadWorkspaceTableWindow } from './db';
 import { displayWorkspaceColumnValue, getRowHeaderColumn, parseMultiSelectValues } from './model';
-import { initialWorkspaceRowPages, workspaceWindowDisplayTable } from './rowPages';
+import { workspaceWindowDisplayTable } from './rowPages';
 import type { WorkspaceColumn, WorkspaceNode, WorkspaceRow } from './types';
 import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
 import { useTableGestures } from './useTableGestures';
@@ -202,14 +202,8 @@ export const useWorkspacePage = () => {
       if (progressiveRef.current && node.tableId) {
         void (async () => {
           const view = loadWorkspaceTableViewState(node.tableId!);
-          const first = Math.max(0, Math.floor((view?.scrollTop ?? 0) / 36) - 6);
-          const last = first + Math.ceil(window.innerHeight / 36) + 13;
-          let nextWindow = await loadWorkspaceTableWindow(node.tableId!, [Math.floor(first / 128), Math.floor(last / 128)]);
-          if (nextWindow) {
-            const indices = initialWorkspaceRowPages(nextWindow.head, view.scrollTop, window.innerHeight);
-            if (indices.some(index => !nextWindow!.pages.some(page => page.index === index))) nextWindow = await loadWorkspaceTableWindow(node.tableId!, indices);
-          }
           const needsFullView = Boolean(view?.searchOpen || view?.searchQuery.trim() || Object.values(view?.headerFilters ?? {}).some(filter => hasWorkspaceFilterCriteria(filter) || filter.sort));
+          let nextWindow = needsFullView ? undefined : await loadWorkspaceTableWindow(node.tableId!, { scrollTop: view.scrollTop, viewportHeight: window.innerHeight });
           if (!nextWindow || needsFullView) {
             await hydrateWorkspace([node.tableId!]); nextWindow = undefined;
           }

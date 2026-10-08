@@ -18,6 +18,27 @@ const windowOf = (rowCount: number, pageRevisions = Array.from({ length: Math.ce
   })),
 });
 
+const variableBlockWindow = (): WorkspaceTableWindow => {
+  const counts = [128, 96, 64];
+  const starts = counts.map((_, index) => counts.slice(0, index).reduce((sum, count) => sum + count, 0));
+  return {
+    head: {
+      format: 'row-blocks-v1',
+      definition: { id: 'table-1', name: '表格', rowHeaderName: '物件', columns: [] },
+      rowCount: counts.reduce((sum, count) => sum + count, 0),
+      layoutRevision: 'layout-1',
+      updatedAt: 1,
+      blocks: counts.map((count, index) => ({ id: `block-${index}`, count, revision: 'layout-1' })),
+    },
+    pages: counts.map((count, index) => ({
+      tableId: 'table-1', id: `block-${index}`, layoutRevision: 'layout-1',
+      rows: Array.from({ length: count }, (_, slot) => ({
+        id: `row-${starts[index] + slot}`, name: `物件 ${starts[index] + slot}`, values: {},
+      })),
+    })),
+  };
+};
+
 describe('sparse row height estimates', () => {
   it('locates deep rows and retains measured offsets without allocating every row', () => {
     const heights = new SparseWorkspaceRowHeights(10000);
@@ -35,6 +56,18 @@ describe('sparse row height estimates', () => {
 });
 
 describe('paged row window validation', () => {
+  it('keeps absolute indexes and offsets when block counts vary', () => {
+    const view = renderHook(() => usePagedWorkspaceRows(variableBlockWindow(), 'measure-1', 0, 600, false));
+
+    expect(view.result.current.indexes.size).toBe(288);
+    expect(view.result.current.indexes.get('row-0')).toBe(0);
+    expect(view.result.current.indexes.get('row-127')).toBe(127);
+    expect(view.result.current.indexes.get('row-128')).toBe(128);
+    expect(view.result.current.indexes.get('row-223')).toBe(223);
+    expect(view.result.current.indexes.get('row-224')).toBe(224);
+    expect(view.result.current.offsetForRow('row-224')).toBe(224 * 36);
+  });
+
   it('filters a page whose content version no longer matches the head', () => {
     const window = windowOf(256, ['layout-1', 'layout-2']);
     window.pages[1].layoutRevision = 'stale-layout';

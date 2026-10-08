@@ -3,9 +3,11 @@ import { emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from '.
 import { pruneWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
 import { assembleChunkedWorkspaceTable, createWorkspaceTableStorageSnapshot, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
-import { assertWorkspaceTableComplete, initialWorkspaceRowPages, planWorkspaceRowPages, validateWorkspaceRowPage, validateWorkspaceTableHead, type WorkspaceRowPage, type WorkspaceTableHead, type WorkspaceTableWindow } from './rowPages';
+import { assertWorkspaceTableComplete, initialWorkspaceRowPages, planWorkspaceRowPages, validateWorkspaceRowPage, validateWorkspaceTableHead, workspaceRowPageCount, workspaceRowPageKey, workspaceRowPageStorageKey, type WorkspaceRowPage, type WorkspaceTableHead, type WorkspaceTableWindow } from './rowPages';
 import { loadWorkspaceTableViewState } from './viewState';
 import type { StoredWorkspaceRowOrderPage } from './rowOrderStorage';
+import { planWorkspaceRowBlockMaintenance } from './rowBlockMaintenance';
+import { runWorkspaceIdleSteps, type WorkspaceIdleOptions } from './workspaceIdleSteps';
 
 type WorkspaceMetadata = {
   version: WorkspaceData['version']; structureRevision?: string; nodes: WorkspaceNode[];
@@ -22,7 +24,7 @@ interface WorkspaceDb extends DBSchema {
   rowChunks: { key: [string, string]; value: StoredWorkspaceRowChunk };
   rowOrderPages: { key: [string, string]; value: StoredWorkspaceRowOrderPage };
   tableHeads: { key: string; value: WorkspaceTableHead };
-  rowPages: { key: [string, number]; value: WorkspaceRowPage };
+  rowPages: { key: [string, number | string]; value: WorkspaceRowPage };
   history: { key: string; value: WorkspaceTableHistory | StoredHistoryHead };
   historyEntries: { key: [string, string]; value: WorkspaceTableHistoryEntry };
 }
@@ -32,7 +34,7 @@ const STORAGE_KEY = 'storage';
 const stores = ['state', 'meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'tableHeads', 'rowPages', 'history', 'historyEntries'] as const;
 type WriteTransaction = IDBPTransaction<WorkspaceDb, typeof stores[number][], 'readwrite'>;
 const notifyStorageError = (error: unknown) => window.dispatchEvent(new CustomEvent('workspace-storage-error', { detail: error }));
-const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(DATABASE_NAME, 7, {
+const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(DATABASE_NAME, 8, {
   upgrade(db, oldVersion, _newVersion, transaction) {
     for (const name of stores) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
     // Only the small metadata record is migrated during the version upgrade.
@@ -84,7 +86,7 @@ export interface WorkspaceSaveOptions {
 }
 const nextStorageRevision = () => typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const tableRange = (id: string) => IDBKeyRange.bound([id, ''], [id, '\uffff']);
-const pageRange = (id: string) => IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
+const pageRange = (id: string) => IDBKeyRange.bound([id, 0], [id, '\uffff']);
 const asMetadata = (value: WorkspaceMetadata | WorkspaceStorageState | undefined) => value && 'nodes' in value ? value : undefined;
 const asStorageState = (value: WorkspaceMetadata | WorkspaceStorageState | undefined) => value && 'storageRevision' in value ? value : undefined;
 const metadataOf = (data: WorkspaceData): WorkspaceMetadata => ({ version: data.version, structureRevision: data.structureRevision, nodes: data.nodes, activeNodeId: data.activeNodeId, bottomNavigationTableIds: data.bottomNavigationTableIds ?? [] });
@@ -196,7 +198,7 @@ export const loadWorkspaceInitial = async (options?: { paged?: boolean }): Promi
     const needsFullView = Boolean(view?.searchOpen || view?.searchQuery.trim() || Object.values(view?.headerFilters ?? {}).some(filter => filter.sort || filter.includedKeys !== null || filter.query?.trim() || filter.min?.trim() || filter.max?.trim()));
     if (head && !needsFullView) {
       const indices = initialWorkspaceRowPages(head, view?.scrollTop ?? 0, globalThis.innerHeight || 844);
-      window = { head, pages: await Promise.all(indices.map(async index => validateWorkspaceRowPage(head, index, await transaction.objectStore('rowPages').get([activeId!, index])))) };
+      window = { head, pages: await Promise.all(indices.map(async index => validateWorkspaceRowPage(head, index, await transaction.objectStore('rowPages').get([activeId!, workspaceRowPageKey(head, index)])))) };
     }
     await transaction.done;
     if (saveQueue !== pending) return loadWorkspaceInitial(options);
@@ -242,7 +244,7 @@ export const loadWorkspaceInitial = async (options?: { paged?: boolean }): Promi
 };
 
 /** A bounded read of display-order pages, checked against the current storage revision. */
-export const loadWorkspaceTableWindow = async (tableId: string, indices: readonly number[]): Promise<WorkspaceTableWindow | undefined> => {
+export const loadWorkspaceTableWindow = async (tableId: string, selection: readonly number[] | { scrollTop: number; viewportHeight: number }): Promise<WorkspaceTableWindow | undefined> => {
   if (!database) return undefined;
   const pending = saveQueue;
   await pending.catch(() => undefined);
@@ -250,11 +252,13 @@ export const loadWorkspaceTableWindow = async (tableId: string, indices: readonl
   const transaction = db.transaction(['meta', 'tableHeads', 'rowPages'], 'readonly');
   const [state, head] = await Promise.all([transaction.objectStore('meta').get(STORAGE_KEY), transaction.objectStore('tableHeads').get(tableId)]);
   if (head) validateWorkspaceTableHead(tableId, head);
-  const pages = head ? await Promise.all([...new Set(indices)].filter(index => Number.isSafeInteger(index) && index >= 0 && index * head.pageSize < head.rowCount).map(async index =>
-    validateWorkspaceRowPage(head, index, await transaction.objectStore('rowPages').get([tableId, index])),
+  const indices = head && 'scrollTop' in selection ? initialWorkspaceRowPages(head, selection.scrollTop, selection.viewportHeight)
+    : 'scrollTop' in selection ? [] : selection;
+  const pages = head ? await Promise.all([...new Set(indices)].filter(index => Number.isSafeInteger(index) && index >= 0 && index < workspaceRowPageCount(head)).map(async index =>
+    validateWorkspaceRowPage(head, index, await transaction.objectStore('rowPages').get([tableId, workspaceRowPageKey(head, index)])),
   )) : [];
   await transaction.done;
-  if (saveQueue !== pending) return loadWorkspaceTableWindow(tableId, indices);
+  if (saveQueue !== pending) return loadWorkspaceTableWindow(tableId, selection);
   assertRevision(asStorageState(state));
   return head ? { head, pages } : undefined;
 };
@@ -320,7 +324,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
   const removedSnapshots = new Map(removed.map(id => [id, workingTables.get(id)]));
   return enqueueSave(async () => {
     const db = await database;
-    const plans = snapshots.filter(snapshot => savedTables.get(snapshot.table.id)?.snapshot !== snapshot || savedTables.get(snapshot.table.id)?.legacy || savedTables.get(snapshot.table.id)?.orderPending || savedTables.get(snapshot.table.id)?.columnStatePending || !savedTableHeads.has(snapshot.table.id)).map(snapshot => ({
+    const plans = snapshots.filter(snapshot => savedTables.get(snapshot.table.id)?.snapshot !== snapshot || savedTables.get(snapshot.table.id)?.legacy || savedTables.get(snapshot.table.id)?.orderPending || savedTables.get(snapshot.table.id)?.columnStatePending || savedTableHeads.get(snapshot.table.id)?.format !== 'row-blocks-v1').map(snapshot => ({
       snapshot, plan: planWorkspaceTableStorageWrite(snapshot, savedTables.get(snapshot.table.id)?.snapshot, savedTables.get(snapshot.table.id)?.legacy, savedTables.get(snapshot.table.id)?.orderPending),
       pages: planWorkspaceRowPages(snapshot, savedTables.get(snapshot.table.id)?.snapshot, savedTableHeads.get(snapshot.table.id), nextStorageRevision()),
     }));
@@ -342,7 +346,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
         writes.push(transaction.objectStore('tableHeads').put(pages.head, id));
         if (pages.rebuild) writes.push(transaction.objectStore('rowPages').delete(pageRange(id)));
         for (const index of pages.deletes) writes.push(transaction.objectStore('rowPages').delete([id, index]));
-        for (const page of pages.pages) writes.push(transaction.objectStore('rowPages').put(page, [id, page.index]));
+        for (const page of pages.pages) writes.push(transaction.objectStore('rowPages').put(page, [id, workspaceRowPageStorageKey(page)]));
       }
       for (const id of removed) writes.push(transaction.objectStore('tables').delete(id), transaction.objectStore('tableState').delete(id), transaction.objectStore('rowChunks').delete(tableRange(id)), transaction.objectStore('rowOrderPages').delete(tableRange(id)), transaction.objectStore('tableHeads').delete(id), transaction.objectStore('rowPages').delete(pageRange(id)));
       await Promise.all([...writes, writeHistoryChanges(transaction, options?.history, removed)]);
@@ -368,7 +372,56 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
 };
 
 const scheduleLegacyTableMigrations = (data: WorkspaceData) => {
-  for (const table of data.tables) if (savedTables.get(table.id)?.legacy || savedTables.get(table.id)?.orderPending || savedTables.get(table.id)?.columnStatePending || !savedTableHeads.has(table.id)) void saveWorkspace({ ...data, tables: [table] }, { partial: true }).catch(notifyStorageError);
+  for (const table of data.tables) if (savedTables.get(table.id)?.legacy || savedTables.get(table.id)?.orderPending || savedTables.get(table.id)?.columnStatePending || savedTableHeads.get(table.id)?.format !== 'row-blocks-v1') void saveWorkspace({ ...data, tables: [table] }, { partial: true }).catch(notifyStorageError);
+};
+/** Layout-only maintenance shares the save queue without changing data/history/backup revisions. */
+export const maintainWorkspaceRowPages = async (tableId: string, options: WorkspaceIdleOptions): Promise<void> => {
+  if (!database) return;
+  while (!options.signal.aborted && options.isCurrent()) {
+    await saveQueue.catch(() => undefined);
+    materializeTableSnapshot(tableId);
+    const snapshot = savedTables.get(tableId)?.snapshot;
+    const head = savedTableHeads.get(tableId);
+    if (!snapshot || head?.format !== 'row-blocks-v1' || workingTables.get(tableId) !== snapshot) return;
+    const isCurrent = () => !options.signal.aborted && options.isCurrent() && workingTables.get(tableId) === snapshot
+      && savedTables.get(tableId)?.snapshot === snapshot && savedTableHeads.get(tableId) === head;
+    const plan = await runWorkspaceIdleSteps(planWorkspaceRowBlockMaintenance(snapshot.table, head, nextStorageRevision()), { ...options, isCurrent });
+    if (!isCurrent()) continue;
+    if (!plan) return;
+    let committed = false;
+    await enqueueSave(async () => {
+      if (!isCurrent() || !options.canRun()) return;
+      const db = await database;
+      if (!isCurrent()) return;
+      const transaction = db.transaction(['meta', 'tableHeads', 'rowPages'], 'readwrite');
+      const writes: Promise<unknown>[] = [];
+      try {
+        const state = asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY));
+        assertRevision(state);
+        if (!isCurrent() || !options.canRun()) {
+          transaction.abort();
+          await transaction.done.catch(() => undefined);
+          return;
+        }
+        const revision = nextStorageRevision();
+        writes.push(transaction.objectStore('meta').put({ storageRevision: revision, updatedAt: state?.updatedAt }, STORAGE_KEY));
+        writes.push(transaction.objectStore('tableHeads').put(plan.head, tableId));
+        for (const page of plan.pages) writes.push(transaction.objectStore('rowPages').put(page, [tableId, page.id]));
+        for (const id of plan.deletes) writes.push(transaction.objectStore('rowPages').delete([tableId, id]));
+        await Promise.all(writes);
+        await transaction.done;
+        savedStorageRevision = revision;
+        savedTableHeads.set(tableId, plan.head);
+        committed = true;
+      } catch (error) {
+        try { transaction.abort(); } catch { /* Already aborted. */ }
+        await Promise.allSettled(writes);
+        await transaction.done.catch(() => undefined);
+        throw error;
+      }
+    });
+    if (committed) return;
+  }
 };
 export const flushWorkspaceSaves = () => saveQueue;
 export const flushWorkspaceHistorySaves = () => saveQueue;
