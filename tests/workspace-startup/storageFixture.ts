@@ -10,6 +10,7 @@ import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion
 import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
+type Read = { store: string; method: string; key: unknown; transaction: number };
 type StoredOrderPage = { tableId: string; pageId: string; rowIds: string[] };
 const fixture = {
   db, model, history, spreadsheet, rowPages, viewState, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
@@ -17,7 +18,7 @@ const fixture = {
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),
   writes: [] as Write[],
-  reads: [] as { store: string; method: string; key: unknown }[],
+  reads: [] as Read[],
   failNextChunk: false,
   failNextPage: false,
   failNextOrder: false,
@@ -60,19 +61,19 @@ const fixture = {
     await db.saveWorkspace(command.data, command.options);
   },
   instrument() {
-    for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
-      const original = IDBObjectStore.prototype[method];
-      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
-        fixture.reads.push({ store: this.name, method, key: args[0] });
-        return Reflect.apply(original, this, args);
-      } as typeof IDBObjectStore.prototype[typeof method];
-    }
     const transactions = new WeakMap<IDBTransaction, number>();
     let nextId = 0;
     const getTransactionId = (transaction: IDBTransaction) => {
       if (!transactions.has(transaction)) transactions.set(transaction, ++nextId);
       return transactions.get(transaction)!;
     };
+    for (const method of ['get', 'getAll', 'getAllKeys', 'count'] as const) {
+      const original = IDBObjectStore.prototype[method];
+      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
+        fixture.reads.push({ store: this.name, method, key: args[0], transaction: getTransactionId(this.transaction) });
+        return Reflect.apply(original, this, args);
+      } as typeof IDBObjectStore.prototype[typeof method];
+    }
     for (const method of ['put', 'delete', 'clear'] as const) {
       const original = IDBObjectStore.prototype[method];
       IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {

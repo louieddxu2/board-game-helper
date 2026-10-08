@@ -94,19 +94,21 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
           // A legacy table gets its read projection once, after it is already visible.
           const visible = dataRef.current;
           const active = visible && getTableForNode(visible, visible.activeNodeId);
-          if (active) void loadWorkspace({ expectCurrentRevision: true, tableIds: [active.id] }).then(remaining => {
-            if (cancelled) return;
+          const isCurrent = () => !cancelled && mountedRef.current && dataRef.current?.activeNodeId === visible?.activeNodeId && !pendingOpenNodeIdRef.current;
+          if (active) void loadWorkspace({ expectCurrentRevision: true, tableIds: [active.id], isCurrent }).then(remaining => {
+            if (!isCurrent()) return;
             const current = dataRef.current;
             const merged = current ? mergeLoadedWorkspaceTables(current, remaining) : remaining;
             dataRef.current = merged; setData(merged);
             const complete = merged.nodes.filter(node => node.type === 'table').every(node => merged.tables.some(table => table.id === node.tableId));
             allTablesReadyRef.current = complete; setAllTablesReady(complete);
-          }).catch(error => { if (!cancelled) { setRemainingLoadError(true); console.error('[workspace-migration]', error); } });
+          }).catch(error => { if (isCurrent()) { setRemainingLoadError(true); console.error('[workspace-migration]', error); } });
           return;
         }
         const finishTables = async () => {
+          const isCurrent = () => !cancelled && mountedRef.current;
           const mergeLoaded = (remaining: WorkspaceData) => {
-            if (cancelled) return;
+            if (!isCurrent()) return;
             const current = dataRef.current;
             const merged = current
               ? { ...mergeLoadedWorkspaceTables(current, remaining), bottomNavigationTableIds: remaining.bottomNavigationTableIds }
@@ -116,14 +118,14 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
           };
           if (initial.complete) {
             // Full-load fallbacks also defer statistics; share the rebuilt column objects.
-            mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
+            mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, isCurrent }));
             return;
           }
           // Measured 10k-row reads exceed the requested 0.5 ms threshold. Preload pins first.
           const pins = (loaded.bottomNavigationTableIds ?? []).filter(id => !loaded.tables.some(table => table.id === id) && loaded.nodes.some(node => node.tableId === id));
-          if (pins.length) mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, tableIds: pins }));
+          if (pins.length) mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, tableIds: pins, isCurrent }));
           if (cancelled) return;
-          mergeLoaded(await loadWorkspace({ expectCurrentRevision: true }));
+          mergeLoaded(await loadWorkspace({ expectCurrentRevision: true, isCurrent }));
           if (cancelled) return;
           allTablesReadyRef.current = true;
           setAllTablesReady(true);
@@ -162,7 +164,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
       if (!current || !mountedRef.current || (isCurrent && !isCurrent())) return;
       const needed = !tableIds || tableIds.some(id => !current.tables.some(table => table.id === id));
       if (needed) {
-        const loaded = await loadWorkspace({ expectCurrentRevision: true, tableIds });
+        const loaded = await loadWorkspace({ expectCurrentRevision: true, tableIds, isCurrent: () => mountedRef.current && (!isCurrent || isCurrent()) });
         if (!mountedRef.current || (isCurrent && !isCurrent())) return;
         const latest = dataRef.current!;
         const merged = mergeLoadedWorkspaceTables(latest, loaded);

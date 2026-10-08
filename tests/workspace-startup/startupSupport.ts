@@ -103,10 +103,11 @@ export const trackWorkspaceReads = (page: Page) => page.addInitScript(() => {
   };
   requestAnimationFrame(frame);
   (window as any).workspaceReads = [];
-  for (const method of ['get', 'getAll', 'getAllKeys'] as const) {
+  for (const method of ['get', 'getAll', 'getAllKeys', 'count'] as const) {
     const original = IDBObjectStore.prototype[method];
     IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
-      const key = args[0] instanceof IDBKeyRange ? (args[0].lower as unknown[])[0] : args[0];
+      const raw = args[0];
+      const key = raw instanceof IDBKeyRange ? (raw.lower as unknown[])[0] : Array.isArray(raw) ? raw[0] : raw;
       (window as any).workspaceReads.push({ store: this.name, method, key, painted: [...painted] });
       return Reflect.apply(original, this, args);
     } as typeof original;

@@ -1,5 +1,6 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynamicOptions, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 import { workspaceTableChangeRevision } from './changeRevisions';
+import { finishWorkspaceSteps } from './workspaceCooperativeWork';
 export { sameWorkspaceCellValue } from './cellChanges';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
@@ -197,6 +198,34 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
   return value ?? null;
 };
 
+export function* normalizeWorkspaceTableSteps(table: WorkspaceTable, options?: { deferDynamicOptions?: boolean }): Generator<void, WorkspaceTable> {
+  const rowHeader = getRowHeaderColumn(table);
+  const columns = table.columns.map(column => normalizeColumn(column));
+  const changedDynamicColumns = new Set<string>();
+  const rows: WorkspaceRow[] = [];
+  for (const [index, row] of table.rows.entries()) {
+    const name = row.name === undefined ? `項目 ${index + 1}` : normalizeCellValue(row.name, rowHeader.inputType);
+    if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
+    const values = Object.fromEntries(columns.map(column => {
+      const before = row.values[column.id] ?? null;
+      const after = normalizeCellValue(before, column.inputType);
+      if (column.inputType === 'dynamic-select' && before !== after) changedDynamicColumns.add(column.id);
+      return [column.id, after];
+    }));
+    rows.push({ ...row, name, values });
+    if (index % 16 === 15) yield;
+  }
+  const normalized: WorkspaceTable = {
+    ...table,
+    rowHeaderName: rowHeader.name,
+    rowHeader: changedDynamicColumns.has(rowHeader.id) ? { ...rowHeader, dynamicOptions: undefined } : rowHeader,
+    textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
+    transposed: Boolean(table.transposed),
+    columns: columns.map(column => changedDynamicColumns.has(column.id) ? { ...column, dynamicOptions: undefined } : column), rows,
+  };
+  return options?.deferDynamicOptions ? normalized : yield* ensureTableDynamicOptionsSteps(normalized);
+}
+
 export const normalizeWorkspace = (data: WorkspaceData, options?: { deferDynamicOptions?: boolean }): WorkspaceData => {
   const tableIds = new Set(data.tables.map((table) => table.id));
   const bottomNavigationTableIds = [...new Set(Array.isArray(data.bottomNavigationTableIds) ? data.bottomNavigationTableIds : [])]
@@ -205,31 +234,7 @@ export const normalizeWorkspace = (data: WorkspaceData, options?: { deferDynamic
   const normalized: WorkspaceData = {
     ...data,
     bottomNavigationTableIds,
-    tables: data.tables.map((table) => {
-      const rowHeader = getRowHeaderColumn(table);
-      const columns = table.columns.map((column) => normalizeColumn(column));
-      const changedDynamicColumns = new Set<string>();
-      const rows = table.rows.map((row, index) => {
-        const name = row.name === undefined ? `項目 ${index + 1}` : normalizeCellValue(row.name, rowHeader.inputType);
-        if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
-        const values = Object.fromEntries(columns.map((column) => {
-          const before = row.values[column.id] ?? null;
-          const after = normalizeCellValue(before, column.inputType);
-          if (column.inputType === 'dynamic-select' && before !== after) changedDynamicColumns.add(column.id);
-          return [column.id, after];
-        }));
-        return { ...row, name, values };
-      });
-      return {
-        ...table,
-        rowHeaderName: rowHeader.name,
-        rowHeader: changedDynamicColumns.has(rowHeader.id) ? { ...rowHeader, dynamicOptions: undefined } : rowHeader,
-        textScale: typeof table.textScale === 'number' && Number.isFinite(table.textScale) ? Math.max(0.1, Math.min(2.5, table.textScale)) : 1,
-        transposed: Boolean(table.transposed),
-        columns: columns.map(column => changedDynamicColumns.has(column.id) ? { ...column, dynamicOptions: undefined } : column),
-        rows,
-      };
-    }),
+    tables: data.tables.map(table => finishWorkspaceSteps(normalizeWorkspaceTableSteps(table, { deferDynamicOptions: true }))),
   };
   return options?.deferDynamicOptions ? normalized : ensureWorkspaceDynamicOptions(normalized);
 };
@@ -323,17 +328,25 @@ export const writeDynamicOptions = (counts: WorkspaceDynamicOptionCounts, source
 });
 
 /** Old tables and imported text acquire their column statistics once, before use. */
-export const ensureTableDynamicOptions = (table: WorkspaceTable): WorkspaceTable => {
+export const ensureTableDynamicOptions = (table: WorkspaceTable): WorkspaceTable => finishWorkspaceSteps(ensureTableDynamicOptionsSteps(table));
+export function* ensureTableDynamicOptionsSteps(table: WorkspaceTable): Generator<void, WorkspaceTable> {
   const sourceRevision = workspaceTableChangeRevision(table);
-  const prepare = (column: WorkspaceColumn) => {
+  const rowHeaderId = getRowHeaderColumn(table).id;
+  function* prepare(column: WorkspaceColumn): Generator<void, WorkspaceColumn> {
     if (column.inputType !== 'dynamic-select') return column.dynamicOptions ? { ...column, dynamicOptions: undefined } : column;
     if (readDynamicOptions(column, sourceRevision)) return column;
-    return { ...column, dynamicOptions: writeDynamicOptions(collectDynamicOptionCounts(table, column.id), sourceRevision, Boolean(column.isMultiple)) };
-  };
-  const rowHeader = table.rowHeader ? prepare(table.rowHeader) : undefined;
-  const columns = table.columns.map(prepare);
+    const counts: WorkspaceDynamicOptionCounts = new Map();
+    for (const [index, row] of table.rows.entries()) {
+      adjustDynamicOptionCounts(counts, column.id === rowHeaderId ? row.name : row.values[column.id], column.isMultiple, 1);
+      if (index % 16 === 15) yield;
+    }
+    return { ...column, dynamicOptions: writeDynamicOptions(counts, sourceRevision, Boolean(column.isMultiple)) };
+  }
+  const rowHeader = table.rowHeader ? yield* prepare(table.rowHeader) : undefined;
+  const columns: WorkspaceColumn[] = [];
+  for (const column of table.columns) columns.push(yield* prepare(column));
   return rowHeader === table.rowHeader && columns.every((column, index) => column === table.columns[index]) ? table : { ...table, rowHeader, columns };
-};
+}
 
 export const ensureWorkspaceDynamicOptions = (data: WorkspaceData): WorkspaceData => {
   const tables = data.tables.map(ensureTableDynamicOptions);

@@ -64,7 +64,7 @@ test('the visible table hydrates automatically after paint without reading other
   await trackWorkspaceReads(page);
   await page.reload();
   await expect(page.locator('tr[data-virtual-row-id="row-0"]')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').length)).toBe(40);
   const reads = await page.evaluate(() => (window as any).workspaceReads as { store: string; method: string; key: string; painted: string[] }[]);
   expect(reads.filter(read => ['tables', 'tableState', 'rowChunks'].includes(read.store) && read.method !== 'getAllKeys').every(read => read.key === 'table-0' && read.painted.includes('測試表 0'))).toBe(true);
   expect(reads.some(read => ['history', 'historyEntries'].includes(read.store))).toBe(false);
@@ -72,12 +72,12 @@ test('the visible table hydrates automatically after paint without reading other
   await page.getByRole('textbox').first().press('Escape');
   await page.getByRole('button', { name: '搜尋', exact: true }).click();
   await expect(page.getByRole('searchbox', { name: '搜尋此表' })).toBeVisible();
-  expect(await page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').length)).toBe(40);
   await page.getByRole('button', { name: '搜尋', exact: true }).click();
   await page.getByRole('button', { name: '開啟目錄' }).click();
   await page.locator('.workspace-tree-row[data-node-id="node-1"] .workspace-tree-name').click();
   await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
-  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').length)).toBe(2);
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').length)).toBe(80);
   const later = await page.evaluate(() => (window as any).workspaceReads as { store: string; method: string; key: string; painted: string[] }[]);
   const next = later.filter(read => ['tables', 'tableState', 'rowChunks'].includes(read.store) && read.method !== 'getAllKeys' && read.key === 'table-1');
   expect(next.length).toBeGreaterThan(0);
@@ -113,11 +113,14 @@ test('background completion keeps the visible variable-height row after a rapid 
   await viewport.evaluate(element => { element.scrollTop = 1000 * 36; element.scrollTop = 9000 * 36; });
   await expect.poll(async () => (await visibleVirtualRowIds(page)).some(id => Number(id!.slice(4)) >= 8990)).toBe(true);
   await page.evaluate(() => {
-    const original = IDBObjectStore.prototype.getAll;
-    IDBObjectStore.prototype.getAll = function (this: IDBObjectStore, ...args: Parameters<typeof original>) {
+    const original = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (this: IDBObjectStore, ...args: Parameters<typeof original>) {
       const request = Reflect.apply(original, this, args) as IDBRequest;
-      if (this.name === 'rowChunks') {
-        // Capture the visible row when data arrives, just before the full read commits.
+      const stores = this.transaction.objectStoreNames;
+      const isFinalMetadataCheck = this.name === 'meta' && args[0] === 'storage' && stores.length === 1 && stores[0] === 'meta';
+      if (isFinalMetadataCheck) {
+        // The one-store metadata read is the final revision check after all canonical batches,
+        // normalization, and snapshot work have completed.
         request.addEventListener('success', () => {
           const element = document.querySelector('.workspace-table-viewport')!;
           const rect = element.getBoundingClientRect();
@@ -125,7 +128,6 @@ test('background completion keeps the visible variable-height row after a rapid 
           const contentTop = Math.max(rect.top, ...[...element.querySelectorAll('thead th')].map(cell => cell.getBoundingClientRect().bottom));
           (window as any).workspaceHydrationAnchor = [...element.querySelectorAll<HTMLTableRowElement>('tr[data-virtual-row-id]')].find(row => row.getBoundingClientRect().top >= contentTop && row.getBoundingClientRect().bottom <= rect.bottom)?.dataset.virtualRowId;
         }, { once: true });
-        // Allow the completed read to reach React and paint without opening a toolbar.
         this.transaction.addEventListener('complete', () => {
           requestAnimationFrame(() => requestAnimationFrame(() => { (window as any).workspaceHydrationPainted = true; }));
         }, { once: true });
@@ -134,7 +136,8 @@ test('background completion keeps the visible variable-height row after a rapid 
     } as typeof original;
   });
   await page.evaluate(() => { (window as any).releaseWorkspaceIdleWork(); });
-  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').map((read: any) => read.key))).toEqual(['table-0']);
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').map((read: any) => read.key))).toHaveLength(40);
+  expect(await page.evaluate(() => [...new Set((window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').map((read: any) => read.key))])).toEqual(['table-0']);
   await expect.poll(() => page.evaluate(() => (window as any).workspaceHydrationPainted)).toBe(true);
   const anchor = await page.evaluate(() => (window as any).workspaceHydrationAnchor as string | undefined);
   expect(anchor).toBeDefined();
@@ -169,7 +172,8 @@ test('navigation cancels a pending background read for the previous table', asyn
     await new Promise(resolve => setTimeout(resolve, 0));
     (window as any).releaseWorkspaceIdleWork();
   });
-  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'getAll').map((read: any) => read.key))).toEqual(['table-1']);
+  await expect.poll(() => page.evaluate(() => (window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').map((read: any) => read.key))).toHaveLength(3);
+  expect(await page.evaluate(() => [...new Set((window as any).workspaceReads.filter((read: any) => read.store === 'rowChunks' && read.method === 'get').map((read: any) => read.key))])).toEqual(['table-1']);
   await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
 });
 

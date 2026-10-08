@@ -1,4 +1,5 @@
 import { makeId } from './model';
+import { finishWorkspaceSteps } from './workspaceCooperativeWork';
 
 export const workspaceRowOrderCapacity = 256;
 export interface StoredWorkspaceRowOrderPage { tableId: string; pageId: string; rowIds: string[] }
@@ -7,14 +8,17 @@ export interface WorkspaceRowOrderSnapshot {
   pages: ReadonlyMap<string, StoredWorkspaceRowOrderPage>;
 }
 
-export const createWorkspaceRowOrder = (tableId: string, rowIds: readonly string[]): WorkspaceRowOrderSnapshot => {
+export const createWorkspaceRowOrder = (tableId: string, rowIds: readonly string[]): WorkspaceRowOrderSnapshot =>
+  finishWorkspaceSteps(createWorkspaceRowOrderSteps(tableId, rowIds));
+export function* createWorkspaceRowOrderSteps(tableId: string, rowIds: readonly string[]): Generator<void, WorkspaceRowOrderSnapshot> {
   const pages = new Map<string, StoredWorkspaceRowOrderPage>();
   for (let start = 0; start < rowIds.length; start += workspaceRowOrderCapacity) {
     const pageId = makeId('order');
     pages.set(pageId, { tableId, pageId, rowIds: rowIds.slice(start, start + workspaceRowOrderCapacity) });
+    yield;
   }
   return { pageIds: [...pages.keys()], pages };
-};
+}
 
 /** Stable page identities let an insertion/deletion leave subsequent order pages untouched. */
 export const spliceWorkspaceRowOrder = (previous: WorkspaceRowOrderSnapshot, tableId: string, index: number, deleteCount: number, addedIds: readonly string[]): WorkspaceRowOrderSnapshot => {

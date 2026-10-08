@@ -72,7 +72,7 @@ describe('workspace startup', () => {
     render(<WorkspacePage />);
     expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
     await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
-    expect(loadWorkspace).toHaveBeenCalledExactlyOnceWith({ expectCurrentRevision: true });
+    expect(loadWorkspace).toHaveBeenCalledExactlyOnceWith({ expectCurrentRevision: true, isCurrent: expect.any(Function) });
   });
 
   it('retains search focus when the directory finishes loading', async () => {
@@ -143,7 +143,7 @@ describe('workspace startup', () => {
     let resolvePinned!: (value: typeof full) => void;
     let resolveFull!: (value: typeof full) => void;
     vi.mocked(loadWorkspace)
-      .mockImplementationOnce((options?: { tableIds?: readonly string[] }) => {
+      .mockImplementationOnce((options?: { tableIds?: readonly string[]; isCurrent?: () => boolean }) => {
         expect(options?.tableIds).toEqual(['table-2']);
         return new Promise((resolve) => { resolvePinned = resolve; });
       })
@@ -153,7 +153,7 @@ describe('workspace startup', () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
-    await waitFor(() => expect(loadWorkspace).toHaveBeenCalledWith({ expectCurrentRevision: true, tableIds: ['table-2'] }));
+    await waitFor(() => expect(loadWorkspace).toHaveBeenCalledWith({ expectCurrentRevision: true, tableIds: ['table-2'], isCurrent: expect.any(Function) }));
 
     fireEvent.click(screen.getByRole('cell', { name: '物件，名稱：原值' }));
     fireEvent.change(screen.getByRole('textbox', { name: '名稱輸入' }), { target: { value: '早期修改' } });
@@ -189,9 +189,13 @@ describe('workspace startup', () => {
     };
     vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: { ...full, tables: base.tables }, complete: false, storageVersion: 4 });
     let finishTableLoad!: (value: typeof full) => void;
-    vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise((resolve) => { finishTableLoad = resolve; }));
+    let readOptions!: { isCurrent?: () => boolean };
+    vi.mocked(loadWorkspace).mockImplementationOnce((options?: { isCurrent?: () => boolean }) => {
+      readOptions = options ?? {};
+      return new Promise((resolve) => { finishTableLoad = resolve; });
+    });
 
-    render(<WorkspacePage />);
+    const view = render(<WorkspacePage />);
     fireEvent.click(await screen.findByRole('button', { name: '開啟目錄' }));
     fireEvent.click(screen.getByText('其他表格'));
     fireEvent.click(within(screen.getByRole('complementary', { name: 'Workspace 目錄' })).getByRole('button', { name: '關閉目錄' }));
@@ -199,6 +203,9 @@ describe('workspace startup', () => {
     await act(async () => finishTableLoad(full));
     expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('本機表格');
     expect(db.saveWorkspace).not.toHaveBeenCalled();
+    expect(readOptions.isCurrent).toEqual(expect.any(Function));
+    view.unmount();
+    expect(readOptions.isCurrent?.()).toBe(false);
   });
 
   it('shows editable data before history resolves and reconciles an already persisted early edit exactly once', async () => {

@@ -162,7 +162,7 @@ test('selects a variable block after full startup and maintains its pending snap
   });
   expect(result.rowCount).toBe(336);
   expect(result.selected).toEqual(['maintenance-block-2']);
-  expect(result.selectionPageReads).toEqual([{ store: 'rowPages', method: 'get', key: [expect.any(String), 'maintenance-block-2'] }]);
+  expect(result.selectionPageReads).toEqual([{ store: 'rowPages', method: 'get', key: [expect.any(String), 'maintenance-block-2'], transaction: expect.any(Number) }]);
   expect(result.selectionLargeReads).toEqual([]);
   expect(result.maintenanceLargeReads).toEqual([]);
   expect(result.maintenanceWrites.filter(write => write.store === 'rowPages' && write.method === 'put')).toHaveLength(1);

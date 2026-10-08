@@ -1,13 +1,15 @@
 import { openDB, type DBSchema, type IDBPTransaction } from 'idb';
-import { emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from './model';
+import { emptyWorkspace, ensureTableDynamicOptionsSteps, normalizeWorkspace } from './model';
 import { pruneWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
-import { assembleChunkedWorkspaceTable, createWorkspaceTableStorageSnapshot, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
+import { createWorkspaceTableStorageSnapshot, createWorkspaceTableStorageSnapshotSteps, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
 import { assertWorkspaceTableComplete, initialWorkspaceRowPages, planWorkspaceRowPages, validateWorkspaceRowPage, validateWorkspaceTableHead, workspaceRowPageCount, workspaceRowPageKey, workspaceRowPageStorageKey, type WorkspaceRowPage, type WorkspaceTableHead, type WorkspaceTableWindow } from './rowPages';
 import { loadWorkspaceTableViewState } from './viewState';
 import type { StoredWorkspaceRowOrderPage } from './rowOrderStorage';
 import { planWorkspaceRowBlockMaintenance } from './rowBlockMaintenance';
 import { runWorkspaceIdleSteps, type WorkspaceIdleOptions } from './workspaceIdleSteps';
+import { runWorkspaceCooperativeSteps, yieldWorkspaceTask } from './workspaceCooperativeWork';
+import { hydrateWorkspaceTable } from './workspaceTableHydration';
 
 type WorkspaceMetadata = {
   version: WorkspaceData['version']; structureRevision?: string; nodes: WorkspaceNode[];
@@ -111,72 +113,121 @@ const materializeTableSnapshot = (id: string) => {
   return workingTables.get(id);
 };
 
-export const loadWorkspace = async (options?: { expectCurrentRevision?: boolean; tableIds?: readonly string[]; deferStartupWork?: boolean }): Promise<WorkspaceData> => {
-  if (!database) return emptyWorkspace();
+type WorkspaceLoadOptions = { expectCurrentRevision?: boolean; tableIds?: readonly string[]; deferStartupWork?: boolean; isCurrent?: () => boolean; activeOnly?: boolean };
+class WorkspaceReadRestart extends Error {}
+export const loadWorkspace = async (options?: WorkspaceLoadOptions): Promise<WorkspaceData> => (await readWorkspace(options)).data;
+const readWorkspace = async (options?: WorkspaceLoadOptions): Promise<{ data: WorkspaceData; complete: boolean }> => {
+  for (;;) {
+    try { return await loadWorkspaceVersion(options); }
+    catch (error) { if (!(error instanceof WorkspaceReadRestart)) throw error; }
+  }
+};
+const loadWorkspaceVersion = async (options?: WorkspaceLoadOptions): Promise<{ data: WorkspaceData; complete: boolean }> => {
+  if (!database) return { data: emptyWorkspace(), complete: true };
   const pending = saveQueue;
   await pending.catch(() => undefined);
-  if (options?.expectCurrentRevision) for (const id of pendingTableSnapshots.keys()) materializeTableSnapshot(id);
+  const checkCurrent = () => {
+    if (options?.isCurrent && !options.isCurrent()) throw new DOMException('Workspace read cancelled', 'AbortError');
+    if (saveQueue !== pending) throw new WorkspaceReadRestart();
+  };
   const db = await database;
-  const transaction = db.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'tableHeads', 'state'], 'readonly');
+  const transaction = db.transaction(['meta', 'tables', 'state'], 'readonly');
   const [metaValue, stateValue, keys] = await Promise.all([transaction.objectStore('meta').get(META_KEY), transaction.objectStore('meta').get(STORAGE_KEY), transaction.objectStore('tables').getAllKeys()]);
   const meta = asMetadata(metaValue);
   const state = asStorageState(stateValue);
   if (!meta) {
     const legacy = await transaction.objectStore('state').get(META_KEY);
     await transaction.done;
-    if (saveQueue !== pending) return loadWorkspace(options);
+    checkCurrent();
     if (options?.expectCurrentRevision) assertRevision(state);
     resetSnapshots(); savedMetadata = undefined; savedStorageRevision = state?.storageRevision ?? null;
     const loaded = normalizeWorkspace(legacy ?? emptyWorkspace(), { deferDynamicOptions: options?.deferStartupWork });
     await saveWorkspace(loaded);
     await db.delete('state', META_KEY);
-    return loaded;
+    return { data: loaded, complete: true };
   }
-  const available = new Set(keys);
-  const ids = options?.tableIds ? [...new Set(options.tableIds)] : keys;
-  if (!options?.tableIds) for (const node of meta.nodes) if (node.type === 'table' && node.tableId && !available.has(node.tableId)) throw new WorkspaceStorageIntegrityError(`Missing table: ${node.tableId}`);
-  const readIds = ids.filter(id => !options?.expectCurrentRevision || !workingTables.has(id));
-  const loadedRecords = await Promise.all(readIds.map(async id => {
-    const record = await transaction.objectStore('tables').get(id);
-    const head = await transaction.objectStore('tableHeads').get(id);
-    if (!record) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
-    if (!isChunkedWorkspaceTable(record)) return { id, table: record, stored: undefined, head };
-    const [tableState, chunks, orderPages] = await Promise.all([transaction.objectStore('tableState').get(id), transaction.objectStore('rowChunks').getAll(tableRange(id)), record.storageFormat === 'row-chunks-v2' ? transaction.objectStore('rowOrderPages').getAll(tableRange(id)) : Promise.resolve([])]);
-    return { id, table: assembleChunkedWorkspaceTable(id, record, tableState, chunks, orderPages), stored: { record, chunks, orderPages, state: tableState }, head };
-  }));
   await transaction.done;
-  if (saveQueue !== pending) return loadWorkspace(options);
+  checkCurrent();
   if (options?.expectCurrentRevision) assertRevision(state);
-  if (!options?.expectCurrentRevision) resetSnapshots();
-  // Only new tables are normalized. Active table objects/baselines survive background hydration.
-  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: loadedRecords.map(item => item.table) }, { deferDynamicOptions: options?.deferStartupWork });
-  normalized.tables.forEach((table, index) => {
-    const item = loadedRecords[index];
-    if (item.head) savedTableHeads.set(table.id, item.head);
-    if (options?.deferStartupWork) {
-      pendingTableSnapshots.set(table.id, { table, stored: item.stored });
-      return;
+  const checkVersion = (value: WorkspaceMetadata | WorkspaceStorageState | undefined) => {
+    checkCurrent();
+    if ((asStorageState(value)?.storageRevision ?? null) !== (state?.storageRevision ?? null)) {
+      if (options?.expectCurrentRevision) throw new WorkspaceStorageConflictError();
+      throw new WorkspaceReadRestart();
     }
-    const snapshot = createWorkspaceTableStorageSnapshot(table, item.stored);
+  };
+  const available = new Set(keys);
+  const activeId = options?.activeOnly ? meta.nodes.find(node => node.id === meta.activeNodeId && node.type === 'table')?.tableId : undefined;
+  const ids = options?.tableIds ? [...new Set(options.tableIds)] : activeId ? [activeId] : keys;
+  if (!options?.tableIds && !activeId) for (const node of meta.nodes) if (node.type === 'table' && node.tableId && !available.has(node.tableId)) throw new WorkspaceStorageIntegrityError(`Missing table: ${node.tableId}`);
+  const preparedPending = new Map<string, { snapshot: WorkspaceTableStorageSnapshot; pending: PendingTableSnapshot }>();
+  if (options?.expectCurrentRevision && !options.deferStartupWork) for (const [id, item] of pendingTableSnapshots) {
+    const snapshot = await runWorkspaceCooperativeSteps(createWorkspaceTableStorageSnapshotSteps(item.table, item.stored), checkCurrent);
+    preparedPending.set(id, { snapshot, pending: item });
+  }
+  const readIds = ids.filter(id => !options?.expectCurrentRevision || (!workingTables.has(id) && !pendingTableSnapshots.has(id)));
+  const loadedRecords = [];
+  for (const id of readIds) {
+    checkCurrent();
+    const manifest = db.transaction(['meta', 'tables', 'tableState', 'tableHeads', 'rowChunks', 'rowOrderPages'], 'readonly');
+    const [version, record, tableState, head] = await Promise.all([manifest.objectStore('meta').get(STORAGE_KEY), manifest.objectStore('tables').get(id), manifest.objectStore('tableState').get(id), manifest.objectStore('tableHeads').get(id)]);
+    const counts = record && isChunkedWorkspaceTable(record) ? await Promise.all([
+      manifest.objectStore('rowChunks').count(tableRange(id)),
+      record.storageFormat === 'row-chunks-v2' ? manifest.objectStore('rowOrderPages').count(tableRange(id)) : undefined,
+    ]) : undefined;
+    await manifest.done;
+    checkVersion(version);
+    if (!record) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
+    if (counts && isChunkedWorkspaceTable(record) && (counts[0] !== record.chunkIds?.length || (record.storageFormat === 'row-chunks-v2' && counts[1] !== record.orderPageIds?.length))) throw new WorkspaceStorageIntegrityError(`Unexpected table records: ${id}`);
+    const readBatch = async <T>(store: 'rowChunks' | 'rowOrderPages', chunkIds: readonly string[]): Promise<T[]> => {
+      checkCurrent();
+      const batch = db.transaction(['meta', store], 'readonly');
+      const [revision, rows] = await Promise.all([batch.objectStore('meta').get(STORAGE_KEY), Promise.all(chunkIds.map(key => batch.objectStore(store).get([id, key])))]);
+      await batch.done;
+      checkVersion(revision);
+      return rows.map(row => { if (!row) throw new WorkspaceStorageIntegrityError(`Missing ${store}: ${id}`); return row as T; });
+    };
+    loadedRecords.push({ id, head, ...await hydrateWorkspaceTable(id, record, tableState, {
+      chunks: chunkIds => readBatch<StoredWorkspaceRowChunk>('rowChunks', chunkIds),
+      order: pageIds => readBatch<StoredWorkspaceRowOrderPage>('rowOrderPages', pageIds),
+    }, checkCurrent, options?.deferStartupWork) });
+    await yieldWorkspaceTask();
+  }
+  const preparedWorking = new Map<string, WorkspaceTableStorageSnapshot>();
+  if (options?.expectCurrentRevision && !options.deferStartupWork) for (const [id, snapshot] of [...workingTables, ...[...preparedPending].map(([id, item]) => [id, item.snapshot] as const)]) {
+    const table = await runWorkspaceCooperativeSteps(ensureTableDynamicOptionsSteps(snapshot.table), checkCurrent);
+    if (table !== snapshot.table) preparedWorking.set(id, updateWorkspaceTableStorageSnapshot(snapshot, table));
+  }
+  // No global baseline is published until every batch and CPU phase share one version.
+  checkVersion(await db.get('meta', STORAGE_KEY));
+  if (!options?.expectCurrentRevision) resetSnapshots();
+  for (const [id, { snapshot, pending: item }] of preparedPending) {
+    savedTables.set(id, { snapshot, legacy: !item.stored, orderPending: item.stored?.record.storageFormat === 'row-chunks-v1', columnStatePending: Boolean(item.stored && !hasCurrentWorkspaceColumnState(snapshot.table, item.stored.state)) });
+    workingTables.set(id, snapshot); tableSnapshots.set(snapshot.table, snapshot); pendingTableSnapshots.delete(id);
+  }
+  for (const item of loadedRecords) {
+    const { table, snapshot } = item;
+    if (item.head) savedTableHeads.set(table.id, item.head);
+    if (!snapshot) {
+      pendingTableSnapshots.set(table.id, { table, stored: item.stored });
+      continue;
+    }
     savedTables.set(table.id, { snapshot, legacy: !item.stored, orderPending: item.stored?.record.storageFormat === 'row-chunks-v1', columnStatePending: Boolean(item.stored && !hasCurrentWorkspaceColumnState(table, item.stored.state)) });
     workingTables.set(table.id, snapshot); tableSnapshots.set(table, snapshot);
-  });
-  if (options?.expectCurrentRevision) for (const [id, snapshot] of workingTables) {
-    const prepared = ensureTableDynamicOptions(snapshot.table);
-    if (prepared === snapshot.table) continue;
-    const next = updateWorkspaceTableStorageSnapshot(snapshot, prepared);
-    workingTables.set(id, next); tableSnapshots.set(prepared, next);
+  }
+  for (const [id, next] of preparedWorking) {
+    workingTables.set(id, next); tableSnapshots.set(next.table, next);
     const saved = savedTables.get(id);
     if (saved) savedTables.set(id, { ...saved, columnStatePending: true });
   }
   savedStorageRevision = state?.storageRevision ?? null;
   savedUpdatedAt = state?.updatedAt;
-  if (!options?.expectCurrentRevision || !savedMetadata) savedMetadata = metadataOf({ ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] });
-  const result: WorkspaceData = { ...savedMetadata, updatedAt: savedUpdatedAt, tables: keys.flatMap(id => workingTables.get(id)?.table ?? pendingTableSnapshots.get(id)?.table ?? []) };
-  if (!options?.tableIds) result.bottomNavigationTableIds = [...new Set(meta.bottomNavigationTableIds ?? [])].filter(id => available.has(id));
+  if (!options?.expectCurrentRevision || !savedMetadata) savedMetadata = { ...meta, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
+  const result: WorkspaceData = { ...savedMetadata, updatedAt: savedUpdatedAt, tables: (activeId ? ids : keys).flatMap(id => workingTables.get(id)?.table ?? pendingTableSnapshots.get(id)?.table ?? []) };
+  if (!options?.tableIds && !activeId) result.bottomNavigationTableIds = [...new Set(meta.bottomNavigationTableIds ?? [])].filter(id => available.has(id));
   // This read is used after first paint; legacy tables migrate independently through the same queue.
-  if (options?.expectCurrentRevision) scheduleLegacyTableMigrations(result);
-  return result;
+  if (options?.expectCurrentRevision && !options.deferStartupWork) scheduleLegacyTableMigrations(result);
+  return { data: result, complete: !activeId && !options?.tableIds };
 };
 
 /** Read the active display window, or fall back to the complete legacy/filtered table. */
@@ -214,33 +265,8 @@ export const loadWorkspaceInitial = async (options?: { paged?: boolean }): Promi
     const fallback = await loadWorkspaceInitial();
     return { ...fallback, progressive: true };
   }
-  const transaction = db.transaction(['meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'tableHeads'], 'readonly');
-  const [metaValue, stateValue] = await Promise.all([transaction.objectStore('meta').get(META_KEY), transaction.objectStore('meta').get(STORAGE_KEY)]);
-  const meta = asMetadata(metaValue);
-  const state = asStorageState(stateValue);
-  const active = meta?.nodes.find(node => node.id === meta.activeNodeId && node.type === 'table');
-  const record = active?.tableId ? await transaction.objectStore('tables').get(active.tableId) : undefined;
-  const savedHead = active?.tableId ? await transaction.objectStore('tableHeads').get(active.tableId) : undefined;
-  let stored: PendingTableSnapshot['stored'];
-  let table: WorkspaceTable | undefined;
-  if (record && active?.tableId) {
-    if (isChunkedWorkspaceTable(record)) {
-      const [tableState, chunks, orderPages] = await Promise.all([transaction.objectStore('tableState').get(active.tableId), transaction.objectStore('rowChunks').getAll(tableRange(active.tableId)), record.storageFormat === 'row-chunks-v2' ? transaction.objectStore('rowOrderPages').getAll(tableRange(active.tableId)) : Promise.resolve([])]);
-      table = assembleChunkedWorkspaceTable(active.tableId, record, tableState, chunks, orderPages);
-      stored = { record, chunks, orderPages, state: tableState };
-    } else table = record;
-  }
-  await transaction.done;
-  if (saveQueue !== pending) return loadWorkspaceInitial();
-  if (!meta || !table) return { data: await loadWorkspace({ deferStartupWork: true }), complete: true, storageVersion: db.version };
-  const normalized = normalizeWorkspace({ ...meta, updatedAt: state?.updatedAt, tables: [table] }, { deferDynamicOptions: true });
-  const data = { ...normalized, bottomNavigationTableIds: meta.bottomNavigationTableIds ?? [] };
-  resetSnapshots();
-  if (savedHead) savedTableHeads.set(table.id, savedHead);
-  // Indexes and chunk snapshots are needed by a save or background work, not first paint.
-  pendingTableSnapshots.set(table.id, { table: data.tables[0], stored });
-  savedMetadata = metadataOf(data); savedStorageRevision = state?.storageRevision ?? null; savedUpdatedAt = state?.updatedAt;
-  return { data, complete: false, storageVersion: db.version };
+  // Legacy/filtered views need the full active table, but share the bounded reader.
+  return { ...await readWorkspace({ activeOnly: true, deferStartupWork: true }), storageVersion: db.version };
 };
 
 /** A bounded read of display-order pages, checked against the current storage revision. */

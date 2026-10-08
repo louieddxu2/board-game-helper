@@ -133,7 +133,8 @@ for (const version of [5, 6, 7]) test(`opens a v${version} legacy order, keeps f
   expect(result.initialVersion).toEqual(version === 5 ? undefined : ['legacy-page-0', 'legacy-page-1']);
   expect(result.initialRows).toBe(128);
   expect(result.firstPaintOrderReads).toEqual([]);
-  expect(result.migrationOrderReads).toHaveLength(version === 7 ? 1 : 0);
+  expect(result.migrationOrderReads.filter(read => read.method === 'get')).toHaveLength(version === 7 ? 2 : 0);
+  expect(result.migrationOrderReads.filter(read => read.method === 'count')).toHaveLength(version === 7 ? 1 : 0);
   expect(result.upgradeWrites).toEqual([]);
   if (version === 7) {
     expect(result.migrationWrites.filter(write => ['rowChunks', 'rowOrderPages'].includes(write.store))).toEqual([]);
