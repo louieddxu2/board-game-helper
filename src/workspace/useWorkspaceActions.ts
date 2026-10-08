@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { applyWorkspaceCellChanges, getWorkspaceCellValue } from './cellChanges';
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
-import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
+import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
@@ -11,6 +11,7 @@ import { download, fileBaseName, updateTable } from './workspaceShared';
 
 interface UseWorkspaceActionsProps {
   data: WorkspaceData | undefined;
+  dataRef: React.RefObject<WorkspaceData | undefined>;
   table: WorkspaceTable | undefined;
   rowHeader: WorkspaceColumn | undefined;
   commit: (next: WorkspaceData, mutation?: WorkspaceTableMutation, options?: WorkspaceCommitOptions) => void;
@@ -29,7 +30,7 @@ export type WorkspaceTableImportPreview = {
   parentId: string | null;
 };
 
-export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen, setTableActionsOpen, onExported, dialogs }: UseWorkspaceActionsProps) {
+export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen, setTableActionsOpen, onExported, dialogs }: UseWorkspaceActionsProps) {
   const { nameDialog, selectionEditor, configuring, workspaceImport } = dialogs.state;
 
   const importTableInputRef = useRef<HTMLInputElement>(null);
@@ -151,22 +152,54 @@ export function useWorkspaceActions({ data, table, rowHeader, commit, getDynamic
     if (!selectionEditor.column.isMultiple) dialogs.close('selectionEditor');
   };
 
+  const ownerTableId = table?.id;
+  const ownerNodeId = data?.activeNodeId;
+  const getCurrentTable = () => {
+    const currentData = dataRef.current;
+    if (!ownerTableId || !currentData || currentData.activeNodeId !== ownerNodeId) return;
+    const currentTable = currentData.tables.find(item => item.id === ownerTableId);
+    return currentTable ? { data: currentData, table: currentTable } : undefined;
+  };
+  const commitTableAction = (current: { data: WorkspaceData; table: WorkspaceTable }, label: string, action: WorkspaceTableHistoryAction) => {
+    commit(applyWorkspaceTableHistoryAction(current.data, current.table.id, action, 'redo'), { tableId: current.table.id, label, action });
+  };
   const addRow = () => {
-    if (!data || !table || !rowHeader) return;
-    const row = createRow(table.columns, `物件 ${table.rows.length + 1}`);
-    commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: [...current.rows, row] })));
+    const current = getCurrentTable();
+    if (!current || !rowHeader) return;
+    const row = createRow(current.table.columns, `物件 ${current.table.rows.length + 1}`);
+    commitTableAction(current, '新增物件', { type: 'add-row', row, index: current.table.rows.length });
     dialogs.set('focusTarget', { rowId: row.id, columnId: rowHeader.id });
     setNotice('已新增物件');
   };
-  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => dialogs.set('confirmDialog', { title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), rows: current.rows.filter((item) => item.id !== row.id) }))); dialogs.close('confirmDialog'); } });
+  const askDeleteRow = (row: WorkspaceRow, rowIndex: number) => dialogs.set('confirmDialog', {
+    title: '刪除物件', message: `確定要刪除「${(rowHeader ? displayWorkspaceColumnValue(row.name, rowHeader) : displayWorkspaceCellValue(row.name)) || `第 ${rowIndex + 1} 個物件`}」嗎？`,
+    onConfirm: () => {
+      const current = getCurrentTable();
+      const index = current?.table.rows.findIndex(item => item.id === row.id) ?? -1;
+      if (current && index >= 0) commitTableAction(current, '刪除物件', { type: 'remove-row', row: current.table.rows[index], index });
+      dialogs.close('confirmDialog');
+    },
+  });
   const addColumn = () => {
-    if (!data || !table || !table.rows.length) return;
-    const column = createColumn(`屬性 ${table.columns.length + 1}`);
-    commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: [...current.columns, column], rows: current.rows.map((row) => ({ ...row, values: { ...row.values, [column.id]: null } })) })));
-    dialogs.set('focusTarget', { rowId: table.rows[0].id, columnId: column.id });
+    const current = getCurrentTable();
+    if (!current || !current.table.rows.length) return;
+    const column = createColumn(`屬性 ${current.table.columns.length + 1}`);
+    commitTableAction(current, '新增屬性', { type: 'add-column', column, index: current.table.columns.length });
+    dialogs.set('focusTarget', { rowId: current.table.rows[0].id, columnId: column.id });
     setNotice('已新增屬性');
   };
-  const askDeleteColumn = (column: WorkspaceColumn) => dialogs.set('confirmDialog', { title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`, onConfirm: () => { if (data && table) commit(updateTable(data, table.id, (current) => ({ ...current, updatedAt: Date.now(), columns: current.columns.filter((item) => item.id !== column.id), rows: current.rows.map((row) => { const values = { ...row.values }; delete values[column.id]; return { ...row, values }; }) }))); dialogs.close('confirmDialog'); } });
+  const askDeleteColumn = (column: WorkspaceColumn) => dialogs.set('confirmDialog', {
+    title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`,
+    onConfirm: () => {
+      const current = getCurrentTable();
+      const index = current?.table.columns.findIndex(item => item.id === column.id) ?? -1;
+      if (current && index >= 0) commitTableAction(current, '刪除屬性', {
+        type: 'remove-column', column: current.table.columns[index], index,
+        values: Object.fromEntries(current.table.rows.map(row => [row.id, row.values[column.id] ?? null])),
+      });
+      dialogs.close('confirmDialog');
+    },
+  });
   
   const saveColumn = (column: WorkspaceColumn) => {
     if (!data || !table || !configuring) return;

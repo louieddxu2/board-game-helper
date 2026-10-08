@@ -185,7 +185,7 @@ export const useWorkspacePage = () => {
   const stableApplyTextScale = useStableCallback(applyTextScale);
 
   const rawActions = useWorkspaceActions({
-    data, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
+    data, dataRef, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
     setTableActionsOpen, onExported: markExported, dialogs,
   });
   const actions = useReadyWorkspaceActions(rawActions, {

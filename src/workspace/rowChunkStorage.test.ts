@@ -9,10 +9,12 @@ import {
   WorkspaceStorageIntegrityError,
 } from './rowChunkStorage';
 import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, normalizeWorkspace } from './model';
+import { applyWorkspaceTableHistoryAction } from './history';
 import { prepareWorkspaceColumnSave } from './columnConversion';
 import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
 import { assignWorkspaceChangeRevisions } from './changeRevisions';
 import { applyWorkspaceMatrixPaste } from './workspacePaste';
+import { planWorkspaceRowPages, workspaceRowPageSize, type WorkspaceTableHead } from './rowPages';
 import type { WorkspaceTable } from './types';
 
 const makeTable = (rowCount: number): WorkspaceTable => {
@@ -127,6 +129,40 @@ describe('workspace row chunk storage contracts', () => {
     expect(plan.deletes).toEqual([]);
     expect(next.chunks.get(saved.record.chunkIds[0])).toBe(saved.chunks.get(saved.record.chunkIds[0]));
     expect(next.chunks.get(saved.record.chunkIds[2])).toBe(saved.chunks.get(saved.record.chunkIds[2]));
+  });
+
+  it('deletes a sparse column through only its owning chunk and row page', () => {
+    const base = makeTable(512);
+    const deletedColumn = createColumn('稀疏欄');
+    const table: WorkspaceTable = {
+      ...base,
+      columns: [...base.columns, deletedColumn],
+      rows: base.rows.map((row, index) => index === 300
+        ? { ...row, values: { ...row.values, [deletedColumn.id]: null } }
+        : row),
+    };
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const action = {
+      type: 'remove-column' as const, column: deletedColumn, index: 1,
+      values: Object.fromEntries(table.rows.map(row => [row.id, row.values[deletedColumn.id] ?? null])),
+    };
+    const removed = applyWorkspaceTableHistoryAction({ ...emptyWorkspace(), tables: [table] }, table.id, action, 'redo').tables[0];
+    const next = updateWorkspaceTableStorageSnapshot(saved, removed, action);
+    const plan = planWorkspaceTableStorageWrite(next, saved);
+
+    expect(plan.definition).toEqual(next.record);
+    expect(plan.upserts.map(chunk => chunk.chunkId)).toEqual([saved.record.chunkIds[1]]);
+    expect(next.chunks.get(saved.record.chunkIds[0])).toBe(saved.chunks.get(saved.record.chunkIds[0]));
+
+    const savedHead: WorkspaceTableHead = {
+      format: 'row-pages-v1' as const, definition: saved.record.definition, rowCount: 512,
+      pageSize: workspaceRowPageSize, layoutRevision: 'layout-1', updatedAt: saved.table.updatedAt,
+    };
+    const pagePlan = planWorkspaceRowPages(next, saved, savedHead, 'layout-2');
+    expect(pagePlan.rebuild).toBe(false);
+    expect(pagePlan.pages.map(page => page.index)).toEqual([2]);
+    expect(pagePlan.pages[0].rows[44]).toBe(removed.rows[300]);
+    expect(pagePlan.pages[0].rows[44].values[deletedColumn.id]).toBeUndefined();
   });
 
   it('keeps a 10,000-row paste edit to one row and one chunk', () => {

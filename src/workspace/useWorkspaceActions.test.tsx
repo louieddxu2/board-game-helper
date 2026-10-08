@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyWorkspaceTableHistoryAction } from './history';
@@ -27,7 +27,7 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const makeProps = (): Parameters<typeof useWorkspaceActions>[0] => ({
-  data, table: undefined, rowHeader: undefined,
+  data, dataRef: { current: data } as RefObject<WorkspaceData | undefined>, table: undefined, rowHeader: undefined,
   commit: vi.fn(), getDynamicOptions, setNotice: vi.fn(), setExpanded: vi.fn(), setDrawerOpen: vi.fn(),
   setTableActionsOpen: vi.fn(), onExported: vi.fn(),
   dialogs: { state: { columnVisibilityOpen: false, pasteDialogOpen: false }, set: vi.fn(), update: vi.fn(), close: vi.fn(), closeCellEditors: vi.fn() },
@@ -43,7 +43,27 @@ const editableData: WorkspaceData = {
   version: 1, activeNodeId: 'node-1', tables: [editableTable],
   nodes: [{ id: 'node-1', type: 'table', name: editableTable.name, parentId: null, order: 0, tableId: editableTable.id }],
 };
-const makeEditableProps = () => ({ ...makeProps(), data: editableData, table: editableTable, rowHeader: editableRowHeader });
+const makeEditableProps = () => ({ ...makeProps(), data: editableData, dataRef: { current: editableData } as RefObject<WorkspaceData | undefined>, table: editableTable, rowHeader: editableRowHeader });
+
+const actionColumn = { id: 'column-2', name: '備註', inputType: 'text' as const, options: [] };
+const actionTable: WorkspaceTable = {
+  ...editableTable,
+  columns: [editableColumn, actionColumn],
+  rows: [
+    { id: 'row-1', name: '第一筆', values: { [editableColumn.id]: null, [actionColumn.id]: '保留' } },
+    { id: 'row-2', name: '第二筆', values: { [editableColumn.id]: '乙', [actionColumn.id]: null } },
+  ],
+};
+const otherTable: WorkspaceTable = {
+  ...editableTable,
+  id: 'table-2', name: '另一張表',
+  rows: [{ id: 'other-row', name: '其他', values: { [editableColumn.id]: '外部值' } }],
+};
+const actionData: WorkspaceData = { ...editableData, tables: [actionTable, otherTable] };
+const makeActionProps = () => ({
+  ...makeProps(), data: actionData, dataRef: { current: actionData } as RefObject<WorkspaceData | undefined>,
+  table: actionTable, rowHeader: editableRowHeader,
+});
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
@@ -204,7 +224,7 @@ describe('Workspace single-cell editing', () => {
     const link = { url: 'https://example.com/game', label: '官網' };
     const linkTable = { ...editableTable, columns: [linkColumn], rows: [{ ...editableTable.rows[0], values: { [linkColumn.id]: link } }] };
     const linkData = { ...editableData, tables: [linkTable] };
-    const props = { ...makeEditableProps(), data: linkData, table: linkTable };
+    const props = { ...makeEditableProps(), data: linkData, dataRef: { current: linkData } as RefObject<WorkspaceData | undefined>, table: linkTable };
     const { result } = renderHook(() => useWorkspaceActions(props));
 
     act(() => result.current.saveCellValue('row-1', linkColumn, { label: '官網', url: 'https://example.com/game' }));
@@ -221,5 +241,97 @@ describe('Workspace single-cell editing', () => {
 
     expect(props.commit).not.toHaveBeenCalled();
     expect(props.dialogs.close).toHaveBeenCalledWith('editing');
+  });
+});
+
+describe('Workspace structural actions', () => {
+  it.each(['row', 'column'] as const)('adds a %s with an explicit history action and keeps other-table references', (kind) => {
+    const props = makeActionProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    act(() => { if (kind === 'row') result.current.addRow(); else result.current.addColumn(); });
+
+    const [next, mutation] = vi.mocked(props.commit).mock.calls[0];
+    expect(next.tables[1]).toBe(actionData.tables[1]);
+    expect(mutation?.action.type).toBe(kind === 'row' ? 'add-row' : 'add-column');
+    if (kind === 'row') {
+      const addedRow = next.tables[0].rows.at(-1)!;
+      expect(next.tables[0].rows).toHaveLength(3);
+      expect(addedRow.values).toEqual({ [editableColumn.id]: null, [actionColumn.id]: null });
+      expect(props.dialogs.set).toHaveBeenCalledWith('focusTarget', { rowId: addedRow.id, columnId: editableRowHeader.id });
+      const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
+      const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
+      expect(undone.tables[0].rows).toHaveLength(2);
+      expect(redone.tables[0].rows.at(-1)).toBe(addedRow);
+    } else {
+      const addedColumn = next.tables[0].columns.at(-1)!;
+      expect(next.tables[0].columns).toHaveLength(3);
+      expect(next.tables[0].rows.every(row => row.values[addedColumn.id] === null)).toBe(true);
+      expect(props.dialogs.set).toHaveBeenCalledWith('focusTarget', { rowId: actionTable.rows[0].id, columnId: addedColumn.id });
+      const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
+      const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
+      expect(undone.tables[0].columns).toHaveLength(2);
+      expect(redone.tables[0].columns.at(-1)).toBe(addedColumn);
+    }
+  });
+
+  it.each(['row', 'column'] as const)('takes the latest %s and index when confirming deletion', (kind) => {
+    const props = makeActionProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    act(() => {
+      if (kind === 'row') result.current.askDeleteRow(actionTable.rows[0], 0);
+      else result.current.askDeleteColumn(editableColumn);
+    });
+    const confirmation = vi.mocked(props.dialogs.set).mock.calls.at(-1)?.[1] as { onConfirm: () => void };
+    const latestRow = { ...actionTable.rows[0], name: '確認時名稱', values: { ...actionTable.rows[0].values, [editableColumn.id]: '確認時刪除值', [actionColumn.id]: '確認時值' } };
+    const latestColumn = { ...editableColumn, name: '確認時欄位' };
+    const latestTable = kind === 'row'
+      ? { ...actionTable, rows: [actionTable.rows[1], latestRow] }
+      : { ...actionTable, columns: [actionColumn, latestColumn], rows: actionTable.rows.map(row => row.id === latestRow.id ? latestRow : row) };
+    const latestOtherTable = { ...otherTable, rows: [{ ...otherTable.rows[0], name: '外部更新' }] };
+    props.dataRef.current = { ...actionData, tables: [latestTable, latestOtherTable] };
+
+    act(() => confirmation.onConfirm());
+    const [next, mutation] = vi.mocked(props.commit).mock.calls[0];
+    expect(next.tables[1]).toBe(latestOtherTable);
+    if (kind === 'row') {
+      expect(mutation?.action).toMatchObject({ type: 'remove-row', index: 1, row: latestRow });
+      expect(next.tables[0].rows).toEqual([actionTable.rows[1]]);
+      const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
+      const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
+      expect(undone.tables[0].rows[1]).toBe(latestRow);
+      expect(redone.tables[0].rows).toEqual([actionTable.rows[1]]);
+    } else {
+      expect(mutation?.action).toMatchObject({ type: 'remove-column', index: 1, column: latestColumn });
+      expect((mutation?.action as { values: Record<string, unknown> }).values['row-1']).toBe('確認時刪除值');
+      expect(next.tables[0].columns).toEqual([actionColumn]);
+      expect(next.tables[0].rows.every(row => !(editableColumn.id in row.values))).toBe(true);
+      const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
+      const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
+      expect(undone.tables[0].rows.every(row => editableColumn.id in row.values)).toBe(true);
+      expect(undone.tables[0].rows[0].values[editableColumn.id]).toBe('確認時刪除值');
+      expect(redone.tables[0].rows.every(row => !(editableColumn.id in row.values))).toBe(true);
+    }
+    expect(props.dialogs.close).toHaveBeenCalledWith('confirmDialog');
+  });
+
+  it('skips a row deletion when its target disappeared before confirmation', () => {
+    const props = makeActionProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    act(() => result.current.askDeleteRow(actionTable.rows[0], 0));
+    const confirmation = vi.mocked(props.dialogs.set).mock.calls.at(-1)?.[1] as { onConfirm: () => void };
+    props.dataRef.current = { ...actionData, tables: [{ ...actionTable, rows: [actionTable.rows[1]] }, otherTable] };
+    act(() => confirmation.onConfirm());
+    expect(props.commit).not.toHaveBeenCalled();
+  });
+
+  it('skips a column deletion after the active node switches', () => {
+    const props = makeActionProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    act(() => result.current.askDeleteColumn(actionColumn));
+    const confirmation = vi.mocked(props.dialogs.set).mock.calls.at(-1)?.[1] as { onConfirm: () => void };
+    props.dataRef.current = { ...actionData, activeNodeId: 'node-2' };
+    act(() => confirmation.onConfirm());
+    expect(props.commit).not.toHaveBeenCalled();
   });
 });

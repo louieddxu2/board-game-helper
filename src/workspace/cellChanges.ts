@@ -15,6 +15,24 @@ export const sameWorkspaceCellValue = (left: WorkspaceCellValue, right: Workspac
 export const getWorkspaceCellValue = (row: WorkspaceRow, columnId: string, rowHeaderId: string | undefined): WorkspaceCellValue =>
   (columnId === rowHeaderId ? row.name : row.values[columnId]) ?? null;
 
+/** Remove column keys rather than assigning null; untouched rows retain their identity. */
+export const removeWorkspaceColumnValues = (rows: WorkspaceRow[], columnIds: ReadonlySet<string>): WorkspaceRow[] => {
+  if (!columnIds.size) return rows;
+  let changed = false;
+  const nextRows = rows.map(row => {
+    let values = row.values;
+    for (const columnId of columnIds) {
+      if (!Object.hasOwn(values, columnId)) continue;
+      if (values === row.values) values = { ...values };
+      delete values[columnId];
+    }
+    if (values === row.values) return row;
+    changed = true;
+    return { ...row, values };
+  });
+  return changed ? nextRows : rows;
+};
+
 /** Apply a whole operation, copying each affected row and value object at most once. */
 export const applyWorkspaceCellChanges = (
   rows: WorkspaceRow[],

@@ -228,6 +228,82 @@ describe('workspace table history', () => {
     expect(undone.tables[0].rows[0].values['column-1']).toBe(null);
   });
 
+  it('preserves existing values and references across repeated add-column redo', () => {
+    const addedColumn = { id: 'column-2', name: '備註', inputType: 'text' as const, options: [] };
+    const currentTable: WorkspaceTable = {
+      ...table(),
+      rows: [
+        { id: 'row-1', name: '第一筆', values: { 'column-1': null, [addedColumn.id]: '既有值' } },
+        { id: 'row-2', name: '第二筆', values: { 'column-1': '乙' } },
+      ],
+    };
+    const action = { type: 'add-column' as const, column: addedColumn, index: 1 };
+    const redone = applyWorkspaceTableHistoryAction(data(currentTable), currentTable.id, action, 'redo');
+    expect(redone.tables[0].rows[0]).toBe(currentTable.rows[0]);
+    expect(redone.tables[0].rows[0].values[addedColumn.id]).toBe('既有值');
+    expect(redone.tables[0].rows[1].values[addedColumn.id]).toBeNull();
+
+    const repeated = applyWorkspaceTableHistoryAction(redone, currentTable.id, action, 'redo');
+    expect(repeated.tables[0].rows[0]).toBe(redone.tables[0].rows[0]);
+    expect(repeated.tables[0].rows[1]).toBe(redone.tables[0].rows[1]);
+    expect(repeated.tables[0].columns).toEqual([currentTable.columns[0], addedColumn]);
+  });
+
+  it('removes sparse column values on redo and restores explicit nulls on undo', () => {
+    const removedColumn = { id: 'column-2', name: '備註', inputType: 'link' as const, options: [] };
+    const link = { url: 'https://example.com/rules', label: '規則' };
+    const currentTable: WorkspaceTable = {
+      ...table(),
+      columns: [...table().columns, removedColumn],
+      rows: [
+        { id: 'row-1', name: '第一筆', values: { 'column-1': null, [removedColumn.id]: null } },
+        { id: 'row-2', name: '第二筆', values: { 'column-1': '乙' } },
+        { id: 'row-3', name: '第三筆', values: { 'column-1': '丙', [removedColumn.id]: link } },
+      ],
+    };
+    const action = {
+      type: 'remove-column' as const, column: removedColumn, index: 1,
+      values: { 'row-1': null, 'row-2': null, 'row-3': link },
+    };
+    const redone = applyWorkspaceTableHistoryAction(data(currentTable), currentTable.id, action, 'redo');
+    expect(redone.tables[0].rows[0]).not.toBe(currentTable.rows[0]);
+    expect(redone.tables[0].rows[1]).toBe(currentTable.rows[1]);
+    expect(redone.tables[0].rows[2]).not.toBe(currentTable.rows[2]);
+    expect(redone.tables[0].rows.every(row => !(removedColumn.id in row.values))).toBe(true);
+
+    const undone = applyWorkspaceTableHistoryAction(redone, currentTable.id, action, 'undo');
+    expect(undone.tables[0].rows.every(row => removedColumn.id in row.values)).toBe(true);
+    expect(undone.tables[0].rows[0].values[removedColumn.id]).toBeNull();
+    expect(undone.tables[0].rows[1].values[removedColumn.id]).toBeNull();
+    expect(undone.tables[0].rows[2].values[removedColumn.id]).toEqual(link);
+  });
+
+  it('keeps unaffected sparse rows through pasted-column undo', () => {
+    const addedColumn = { id: 'column-2', name: '備註', inputType: 'text' as const, options: [] };
+    const addedRow = { id: 'row-4', name: '新增', values: { 'column-1': null, [addedColumn.id]: null } };
+    const currentTable: WorkspaceTable = {
+      ...table(),
+      rows: [
+        { id: 'row-1', name: '第一筆', values: { 'column-1': null } },
+        { id: 'row-2', name: '第二筆', values: { 'column-1': '乙' } },
+        { id: 'row-3', name: '第三筆', values: { 'column-1': '丙', [addedColumn.id]: '外部值' } },
+      ],
+    };
+    const action = {
+      type: 'paste-range' as const,
+      addedColumns: [addedColumn], addedRows: [addedRow],
+      changes: [{ rowId: 'row-1', columnId: 'column-1', before: null, after: '甲' }, { rowId: addedRow.id, columnId: addedColumn.id, before: null, after: '新增值' }],
+    };
+    const redone = applyWorkspaceTableHistoryAction(data(currentTable), currentTable.id, action, 'redo');
+    expect(redone.tables[0].rows[1]).toBe(currentTable.rows[1]);
+    expect(redone.tables[0].rows[2]).toBe(currentTable.rows[2]);
+    expect(redone.tables[0].rows[3].values[addedColumn.id]).toBe('新增值');
+    const undone = applyWorkspaceTableHistoryAction(redone, currentTable.id, action, 'undo');
+    expect(undone.tables[0].rows[1]).toBe(currentTable.rows[1]);
+    expect(undone.tables[0].rows[2]).not.toBe(currentTable.rows[2]);
+    expect(undone.tables[0].rows[2].values[addedColumn.id]).toBeUndefined();
+  });
+
   it('appends a large paste linearly, preserves row references, and does not duplicate redo additions', () => {
     let rowIdReads = 0;
     const column = { id: 'column-1', name: '名稱', inputType: 'text' as const, options: [] };

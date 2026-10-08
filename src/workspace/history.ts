@@ -1,5 +1,5 @@
 import { getRowHeaderColumn, makeId, sameWorkspaceCellValue } from './model';
-import { applyWorkspaceCellChanges } from './cellChanges';
+import { applyWorkspaceCellChanges, removeWorkspaceColumnValues } from './cellChanges';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
@@ -163,12 +163,9 @@ export const applyWorkspaceTableHistoryAction = (
         return tableWithUpdatedAt({
           ...current,
           columns: forward || !addedColumnIds.size ? baseColumns : baseColumns.filter((column) => !addedColumnIds.has(column.id)),
-          rows: forward || (!addedRowIds.size && !addedColumnIds.size) ? changedRows : changedRows.filter((row) => !addedRowIds.has(row.id)).map((row) => {
-            if (!addedColumnIds.size) return row;
-            const values = { ...row.values };
-            addedColumnIds.forEach((columnId) => delete values[columnId]);
-            return { ...row, values };
-          }),
+          rows: forward ? changedRows : removeWorkspaceColumnValues(
+            addedRowIds.size ? changedRows.filter(row => !addedRowIds.has(row.id)) : changedRows, addedColumnIds,
+          ),
         });
       }
       case 'add-row':
@@ -181,23 +178,19 @@ export const applyWorkspaceTableHistoryAction = (
         return tableWithUpdatedAt({
           ...current,
           columns: forward ? insertById(current.columns, action.column, action.index) : current.columns.filter((column) => column.id !== action.column.id),
-          rows: current.rows.map((row) => {
+          rows: forward ? current.rows.map((row) => {
+            if (Object.hasOwn(row.values, action.column.id)) return row;
             const values = { ...row.values };
-            if (forward) values[action.column.id] ??= null;
-            else delete values[action.column.id];
+            values[action.column.id] = null;
             return { ...row, values };
-          }),
+          }) : removeWorkspaceColumnValues(current.rows, new Set([action.column.id])),
         });
       case 'remove-column':
         return tableWithUpdatedAt({
           ...current,
           columns: forward ? current.columns.filter((column) => column.id !== action.column.id) : insertById(current.columns, action.column, action.index),
-          rows: current.rows.map((row) => {
-            const values = { ...row.values };
-            if (forward) delete values[action.column.id];
-            else values[action.column.id] = action.values[row.id] ?? null;
-            return { ...row, values };
-          }),
+          rows: forward ? removeWorkspaceColumnValues(current.rows, new Set([action.column.id]))
+            : current.rows.map(row => ({ ...row, values: { ...row.values, [action.column.id]: action.values[row.id] ?? null } })),
         });
       case 'reorder-columns':
         return tableWithUpdatedAt({ ...current, columns: reorderByIds(current.columns, forward ? action.afterIds : action.beforeIds) });
