@@ -67,7 +67,7 @@ const fixture = {
       if (!transactions.has(transaction)) transactions.set(transaction, ++nextId);
       return transactions.get(transaction)!;
     };
-    for (const method of ['get', 'getAll', 'getAllKeys', 'count'] as const) {
+    for (const method of ['get', 'getAll', 'getAllKeys', 'getKey', 'count'] as const) {
       const original = IDBObjectStore.prototype[method];
       IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
         fixture.reads.push({ store: this.name, method, key: args[0], transaction: getTransactionId(this.transaction) });

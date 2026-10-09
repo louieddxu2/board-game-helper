@@ -3,12 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspacePage } from './WorkspacePage';
 import { loadWorkspace, loadWorkspaceInitial } from '../workspace/db';
-import type { WorkspaceTableHistory, WorkspaceTableHistoryEntry } from '../workspace/history';
+import type { WorkspaceTableHistoryEntry } from '../workspace/history';
 import * as workspaceModel from '../workspace/model';
 import type { WorkspaceData } from '../workspace/types';
 
+type HistoryHead = { tableId: string; past: WorkspaceTableHistoryEntry[]; future: WorkspaceTableHistoryEntry[] };
 const db = vi.hoisted(() => ({
   loadWorkspaceHistories: vi.fn(), saveWorkspace: vi.fn(async (_data: unknown, _options?: unknown) => undefined),
+  loadWorkspaceHistoryHead: vi.fn(async (tableId: string): Promise<HistoryHead> => ({ tableId, past: [], future: [] })),
+  loadWorkspaceHistoryEntry: vi.fn(async () => { throw new Error('history entry not seeded'); }),
   maintainWorkspaceRowPages: vi.fn(async (_tableId: string, _options?: unknown) => undefined),
 }));
 vi.mock('../workspace/backgroundWork', () => ({ afterWorkspacePaint: (work: () => void) => { work(); return () => undefined; } }));
@@ -29,16 +32,16 @@ vi.mock('../workspace/db', () => {
 };
 });
 
-let resolveHistory: (history: Map<string, WorkspaceTableHistory>) => void;
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  db.loadWorkspaceHistories.mockImplementation(() => new Promise((resolve) => { resolveHistory = resolve; }));
 });
 afterEach(cleanup);
 
 const editBeforeHistoryLoads = async () => {
-  fireEvent.click(await screen.findByRole('cell', { name: '物件，名稱：原值' }));
+  const cell = await screen.findByRole('cell', { name: '物件，名稱：原值' });
+  fireEvent.click(screen.getByRole('button', { name: '編輯' }));
+  fireEvent.click(cell);
   fireEvent.change(screen.getByRole('textbox', { name: '名稱輸入' }), { target: { value: '新值' } });
   fireEvent.click(screen.getByRole('button', { name: '關閉' }));
   expect(screen.getByRole('cell', { name: '物件，名稱：新值' })).toBeInTheDocument();
@@ -55,8 +58,10 @@ describe('workspace startup', () => {
     vi.mocked(loadWorkspace).mockImplementationOnce(() => new Promise(resolve => { finishLoad = resolve; }));
     render(<WorkspacePage />);
     expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
+    expect(db.loadWorkspaceHistories).not.toHaveBeenCalled();
     await act(async () => finishLoad({ ...initial, tables: [prepared] }));
-    await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }));
+    await waitFor(() => expect(db.loadWorkspaceHistoryHead).toHaveBeenCalledWith('table-1', expect.objectContaining({ isCurrent: expect.any(Function) })));
     const collect = vi.spyOn(workspaceModel, 'collectDynamicOptionCounts');
     try {
       fireEvent.click(screen.getByRole('cell', { name: '物件，名稱：原值' }));
@@ -71,7 +76,7 @@ describe('workspace startup', () => {
     vi.mocked(loadWorkspaceInitial).mockResolvedValueOnce({ data: base, complete: true, storageVersion: 4 });
     render(<WorkspacePage />);
     expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
-    await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
+    await waitFor(() => expect(loadWorkspace).toHaveBeenCalledWith({ expectCurrentRevision: true, isCurrent: expect.any(Function) }));
     expect(loadWorkspace).toHaveBeenCalledExactlyOnceWith({ expectCurrentRevision: true, isCurrent: expect.any(Function) });
   });
 
@@ -119,7 +124,7 @@ describe('workspace startup', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '重新命名表格' })).toHaveTextContent('其他表格'));
     expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
     expect(db.saveWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({ activeNodeId: 'node-2' }), expect.objectContaining({
-      history: expect.objectContaining({ append: [] }),
+      history: expect.objectContaining({ clearAll: false, deleteTableIds: [] }),
     }));
   });
 
@@ -148,8 +153,6 @@ describe('workspace startup', () => {
         return new Promise((resolve) => { resolvePinned = resolve; });
       })
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFull = resolve; }));
-    db.loadWorkspaceHistories.mockResolvedValue(new Map());
-
     const user = userEvent.setup();
     render(<WorkspacePage />);
     expect(await screen.findByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
@@ -168,7 +171,8 @@ describe('workspace startup', () => {
     expect(screen.queryByText('背景表格')).not.toBeInTheDocument();
 
     await act(async () => resolveFull(full));
-    await waitFor(() => expect(db.loadWorkspaceHistories).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }));
+    await waitFor(() => expect(db.loadWorkspaceHistoryHead).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: '開啟目錄' }));
     const drawer = screen.getByRole('complementary', { name: 'Workspace 目錄' });
     expect(within(drawer).getByText('背景表格')).toBeInTheDocument();
@@ -208,43 +212,44 @@ describe('workspace startup', () => {
     expect(readOptions.isCurrent?.()).toBe(false);
   });
 
-  it('shows editable data before history resolves and reconciles an already persisted early edit exactly once', async () => {
+  it('loads a history head on first edit and merges an already persisted early edit exactly once', async () => {
+    let resolveHead!: (history: HistoryHead) => void;
+    db.loadWorkspaceHistoryHead.mockImplementationOnce(() => new Promise<HistoryHead>(resolve => { resolveHead = resolve; }));
     render(<WorkspacePage />);
     await editBeforeHistoryLoads();
     expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
     const options = db.saveWorkspace.mock.calls[0]?.[1] as { history?: { append?: WorkspaceTableHistoryEntry[] } };
     expect(options.history?.append).toHaveLength(1);
     expect(options.history?.append?.[0]).toEqual(expect.objectContaining({ tableId: 'table-1', action: expect.objectContaining({ type: 'set-cell', rowId: 'row-1', columnId: 'column-1', after: '新值' }) }));
-    fireEvent.click(screen.getByRole('button', { name: '編輯' }));
-    expect(screen.getByRole('button', { name: '復原' })).toBeDisabled();
     const entry = options.history!.append![0];
-    await act(async () => resolveHistory(new Map([['table-1', { tableId: 'table-1', past: [
-      { ...entry, id: 'older', action: { type: 'set-cell', rowId: 'row-1', columnId: 'column-1', before: '更早', after: '原值' } }, entry,
-    ], future: [] }]])));
+    await waitFor(() => expect(db.loadWorkspaceHistoryHead).toHaveBeenCalled());
+    await act(async () => resolveHead({ tableId: 'table-1', past: [entry], future: [] }));
+    expect(screen.getByRole('button', { name: '復原' })).not.toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '復原' }));
-    expect(screen.getByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '復原' }));
-    expect(screen.getByRole('cell', { name: '物件，名稱：更早' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('cell', { name: '物件，名稱：原值' })).toBeInTheDocument());
   });
 
-  it('queues early history for persistence even if the user leaves before hydration completes', async () => {
+  it('queues an early history append even if the user leaves before the head resolves', async () => {
+    let resolveHead!: (history: HistoryHead) => void;
+    db.loadWorkspaceHistoryHead.mockImplementationOnce(() => new Promise<HistoryHead>(resolve => { resolveHead = resolve; }));
     const view = render(<WorkspacePage />);
     await editBeforeHistoryLoads();
     expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
     expect((db.saveWorkspace.mock.calls[0]?.[1] as { history?: { append?: WorkspaceTableHistoryEntry[] } }).history?.append).toHaveLength(1);
+    await waitFor(() => expect(db.loadWorkspaceHistoryHead).toHaveBeenCalled());
     view.unmount();
-    await act(async () => resolveHistory(new Map()));
+    await act(async () => resolveHead({ tableId: 'table-1', past: [], future: [] }));
     expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the table usable when old history cannot be read', async () => {
-    db.loadWorkspaceHistories.mockRejectedValue(new Error('history unavailable'));
+    db.loadWorkspaceHistoryHead.mockRejectedValueOnce(new Error('history unavailable'));
     render(<WorkspacePage />);
-    await waitFor(() => expect(screen.getByText('先前的復原紀錄讀取失敗，表格仍可使用')).toBeInTheDocument());
     await editBeforeHistoryLoads();
+    await waitFor(() => expect(screen.getByText('先前的復原紀錄讀取失敗，表格仍可使用')).toBeInTheDocument());
     expect(db.saveWorkspace).toHaveBeenCalledTimes(1);
     expect(db.saveWorkspace).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({
-      history: expect.objectContaining({ replace: expect.any(Array) }),
+      history: expect.objectContaining({ append: expect.any(Array) }),
     }));
   });
 });

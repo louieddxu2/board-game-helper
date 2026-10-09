@@ -1,7 +1,7 @@
 import type { Dispatch, PointerEvent, RefObject, SetStateAction } from 'react';
 import { useMemo } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
-import type { WorkspaceTableHistory } from './history';
+import type { WorkspaceTableHistoryView } from './history';
 import { displayWorkspaceColumnValue, parseMultiSelectValues, workspaceCellColor, workspaceOptionColor } from './model';
 import { isPendingWorkspaceRow } from './rowPages';
 import type { WorkspaceColumn, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
@@ -51,7 +51,7 @@ interface WorkspaceTableViewOptions {
   handleDataCellClick: (row: WorkspaceRow, column: WorkspaceColumn) => void;
   stableOpenHiddenFields: (row: WorkspaceRow) => void;
   quickActionsExpanded: boolean;
-  currentTableHistory: WorkspaceTableHistory | undefined;
+  currentTableHistory: WorkspaceTableHistoryView | undefined;
   setQuickActionsExpanded: Dispatch<SetStateAction<boolean>>;
   addRow: () => void;
   undoTable: () => void;

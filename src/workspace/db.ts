@@ -1,8 +1,8 @@
-import { openDB, type DBSchema, type IDBPTransaction } from 'idb';
+import { openDB, type IDBPDatabase } from 'idb';
 import { emptyWorkspace, ensureTableDynamicOptionsSteps, normalizeWorkspace } from './model';
-import { pruneWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
+import { type WorkspaceHistoryReference, type WorkspaceTableHistory, type WorkspaceTableHistoryEntry, type WorkspaceTableMutation } from './history';
 import { createWorkspaceTableStorageSnapshot, createWorkspaceTableStorageSnapshotSteps, hasCurrentWorkspaceColumnState, isChunkedWorkspaceTable, planWorkspaceTableStorageWrite, updateWorkspaceTableStorageSnapshot, WorkspaceStorageIntegrityError, type StoredWorkspaceRowChunk, type StoredWorkspaceTable, type StoredWorkspaceTableState, type WorkspaceTableStorageSnapshot } from './rowChunkStorage';
-import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from './types';
+import type { WorkspaceData, WorkspaceTable } from './types';
 import { assertWorkspaceTableComplete, initialWorkspaceRowPages, planWorkspaceRowPages, validateWorkspaceRowPage, validateWorkspaceTableHead, workspaceRowPageCount, workspaceRowPageKey, workspaceRowPageStorageKey, type WorkspaceRowPage, type WorkspaceTableHead, type WorkspaceTableWindow } from './rowPages';
 import { loadWorkspaceTableViewState } from './viewState';
 import type { StoredWorkspaceRowOrderPage } from './rowOrderStorage';
@@ -10,31 +10,14 @@ import { planWorkspaceRowBlockMaintenance } from './rowBlockMaintenance';
 import { runWorkspaceIdleSteps, type WorkspaceIdleOptions } from './workspaceIdleSteps';
 import { runWorkspaceCooperativeSteps, yieldWorkspaceTask } from './workspaceCooperativeWork';
 import { hydrateWorkspaceTable } from './workspaceTableHydration';
+import { workspaceDbStores as stores, type WorkspaceDb, type WorkspaceMetadata, type WorkspaceStorageState } from './workspaceDbSchema';
+import { WorkspaceHistoryStorage, readWorkspaceHistories, readWorkspaceHistoryHead, readWorkspaceHistoryEntry, type WorkspaceHistoryReadContext, type WorkspaceHistoryStorageChanges } from './workspaceHistoryStorage';
+export type { WorkspaceHistoryStorageChanges } from './workspaceHistoryStorage';
 
-type WorkspaceMetadata = {
-  version: WorkspaceData['version']; structureRevision?: string; nodes: WorkspaceNode[];
-  activeNodeId: string | null; bottomNavigationTableIds?: string[];
-};
-type WorkspaceStorageState = { storageRevision: string; updatedAt?: number };
-type HistoryReference = { id: string; createdAt: number };
-interface StoredHistoryHead { storageFormat: 'history-entries-v1'; tableId: string; past: HistoryReference[]; future: HistoryReference[] }
-interface WorkspaceDb extends DBSchema {
-  state: { key: string; value: WorkspaceData };
-  meta: { key: string; value: WorkspaceMetadata | WorkspaceStorageState };
-  tables: { key: string; value: WorkspaceTable | StoredWorkspaceTable };
-  tableState: { key: string; value: StoredWorkspaceTableState };
-  rowChunks: { key: [string, string]; value: StoredWorkspaceRowChunk };
-  rowOrderPages: { key: [string, string]; value: StoredWorkspaceRowOrderPage };
-  tableHeads: { key: string; value: WorkspaceTableHead };
-  rowPages: { key: [string, number | string]; value: WorkspaceRowPage };
-  history: { key: string; value: WorkspaceTableHistory | StoredHistoryHead };
-  historyEntries: { key: [string, string]; value: WorkspaceTableHistoryEntry };
-}
 const DATABASE_NAME = 'board-game-helper-workspace';
 const META_KEY = 'workspace';
 const STORAGE_KEY = 'storage';
-const stores = ['state', 'meta', 'tables', 'tableState', 'rowChunks', 'rowOrderPages', 'tableHeads', 'rowPages', 'history', 'historyEntries'] as const;
-type WriteTransaction = IDBPTransaction<WorkspaceDb, typeof stores[number][], 'readwrite'>;
+
 const notifyStorageError = (error: unknown) => window.dispatchEvent(new CustomEvent('workspace-storage-error', { detail: error }));
 const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(DATABASE_NAME, 8, {
   upgrade(db, oldVersion, _newVersion, transaction) {
@@ -64,20 +47,13 @@ let savedUpdatedAt: number | undefined;
 let savedTables = new Map<string, { snapshot: WorkspaceTableStorageSnapshot; legacy: boolean; orderPending?: boolean; columnStatePending?: boolean }>();
 let workingTables = new Map<string, WorkspaceTableStorageSnapshot>();
 let tableSnapshots = new WeakMap<WorkspaceTable, WorkspaceTableStorageSnapshot>();
-let savedHistories = new Map<string, WorkspaceTableHistory>();
+const historyStorage = new WorkspaceHistoryStorage();
 type PendingTableSnapshot = { table: WorkspaceTable; stored?: { record: StoredWorkspaceTable; chunks: StoredWorkspaceRowChunk[]; orderPages?: StoredWorkspaceRowOrderPage[]; state?: StoredWorkspaceTableState } };
 let pendingTableSnapshots = new Map<string, PendingTableSnapshot>();
 let savedTableHeads = new Map<string, WorkspaceTableHead>();
 
 export class WorkspaceStorageConflictError extends Error {
   constructor() { super('Workspace data was changed in another tab'); this.name = 'WorkspaceStorageConflictError'; }
-}
-export interface WorkspaceHistoryStorageChanges {
-  clearAll?: boolean;
-  deleteTableIds?: readonly string[];
-  replace?: readonly WorkspaceTableHistory[];
-  /** Pending early entries, including earlier failed saves, merged by ID with disk history. */
-  append?: readonly WorkspaceTableHistoryEntry[];
 }
 export interface WorkspaceSaveOptions {
   partial?: boolean;
@@ -101,7 +77,7 @@ const enqueueSave = (work: () => Promise<void>) => {
 const assertRevision = (state: WorkspaceStorageState | undefined) => {
   if ((state?.storageRevision ?? null) !== savedStorageRevision) throw new WorkspaceStorageConflictError();
 };
-const resetSnapshots = () => { savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); savedHistories = new Map(); pendingTableSnapshots = new Map(); savedTableHeads = new Map(); };
+const resetSnapshots = () => { savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); historyStorage.reset(); pendingTableSnapshots = new Map(); savedTableHeads = new Map(); };
 const materializeTableSnapshot = (id: string) => {
   const pending = pendingTableSnapshots.get(id);
   if (pending) {
@@ -289,45 +265,6 @@ export const loadWorkspaceTableWindow = async (tableId: string, selection: reado
   return head ? { head, pages } : undefined;
 };
 
-const isHistoryHead = (history: StoredHistoryHead | WorkspaceTableHistory): history is StoredHistoryHead => 'storageFormat' in history && history.storageFormat === 'history-entries-v1';
-const referenceOf = ({ id, createdAt }: HistoryReference): HistoryReference => ({ id, createdAt });
-const pruneReferences = (entries: HistoryReference[]) => entries.filter(entry => Date.now() - entry.createdAt <= workspaceHistoryRetentionMs).slice(-workspaceHistoryLimit);
-const writeHistory = async (transaction: WriteTransaction, tableId: string, change: { replace?: WorkspaceTableHistory; append?: WorkspaceTableHistoryEntry[] }) => {
-  const store = transaction.objectStore('history');
-  const entries = transaction.objectStore('historyEntries');
-  const previous = await store.get(tableId);
-  const previousPast = previous?.past.map(referenceOf) ?? [];
-  const previousFuture = previous?.future.map(referenceOf) ?? [];
-  const previousIds = new Set([...previousPast, ...previousFuture].map(entry => entry.id));
-  const legacyEntries = previous && !isHistoryHead(previous) ? [...previous.past, ...previous.future] : [];
-  const incoming = change.replace ? [...change.replace.past, ...change.replace.future] : change.append ?? [];
-  if (incoming.some(entry => entry.tableId !== tableId)) throw new WorkspaceStorageIntegrityError(`Invalid history table: ${tableId}`);
-  const past = pruneReferences(change.replace ? change.replace.past.map(referenceOf) : [...new Map([...previousPast, ...incoming.map(referenceOf)].map(entry => [entry.id, entry])).values()]);
-  const future = pruneReferences(change.replace?.future.map(referenceOf) ?? []);
-  const nextIds = new Set([...past, ...future].map(entry => entry.id));
-  if (nextIds.size !== past.length + future.length) throw new WorkspaceStorageIntegrityError(`Duplicate history entry: ${tableId}`);
-  const writes = new Map([...legacyEntries, ...incoming].filter(entry => nextIds.has(entry.id) && (legacyEntries.length || !previousIds.has(entry.id))).map(entry => [entry.id, entry]));
-  await Promise.all([
-    ...[...writes.values()].map(entry => entries.put(entry, [tableId, entry.id])),
-    ...[...previousIds].filter(id => !nextIds.has(id)).map(id => entries.delete([tableId, id])),
-    nextIds.size ? store.put({ storageFormat: 'history-entries-v1', tableId, past, future }, tableId) : store.delete(tableId),
-  ]);
-};
-const writeHistoryChanges = async (transaction: WriteTransaction, changes: WorkspaceHistoryStorageChanges | undefined, removedIds: readonly string[] = []) => {
-  if (changes?.clearAll) await Promise.all([transaction.objectStore('history').clear(), transaction.objectStore('historyEntries').clear()]);
-  for (const id of new Set([...removedIds, ...(changes?.deleteTableIds ?? [])])) await Promise.all([transaction.objectStore('history').delete(id), transaction.objectStore('historyEntries').delete(tableRange(id))]);
-  for (const history of changes?.replace ?? []) if (changes?.clearAll || changes?.deleteTableIds?.includes(history.tableId) || savedHistories.get(history.tableId) !== history) await writeHistory(transaction, history.tableId, { replace: pruneWorkspaceTableHistory(history) });
-  const pending = new Map<string, WorkspaceTableHistoryEntry[]>();
-  for (const entry of changes?.append ?? []) pending.set(entry.tableId, [...(pending.get(entry.tableId) ?? []), entry]);
-  for (const [tableId, append] of pending) await writeHistory(transaction, tableId, { append });
-};
-const rememberSavedHistories = (changes: WorkspaceHistoryStorageChanges | undefined, removedIds: readonly string[] = []) => {
-  if (changes?.clearAll) savedHistories.clear();
-  for (const id of [...removedIds, ...(changes?.deleteTableIds ?? [])]) savedHistories.delete(id);
-  for (const history of changes?.replace ?? []) savedHistories.set(history.tableId, history);
-  for (const entry of changes?.append ?? []) savedHistories.delete(entry.tableId);
-};
-
 export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOptions): Promise<void> => {
   if (!database) return Promise.resolve();
   // Capture immutable layouts when called, so queued snapshots and migration share stable chunk IDs.
@@ -375,11 +312,11 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
         for (const page of pages.pages) writes.push(transaction.objectStore('rowPages').put(page, [id, workspaceRowPageStorageKey(page)]));
       }
       for (const id of removed) writes.push(transaction.objectStore('tables').delete(id), transaction.objectStore('tableState').delete(id), transaction.objectStore('rowChunks').delete(tableRange(id)), transaction.objectStore('rowOrderPages').delete(tableRange(id)), transaction.objectStore('tableHeads').delete(id), transaction.objectStore('rowPages').delete(pageRange(id)));
-      await Promise.all([...writes, writeHistoryChanges(transaction, options?.history, removed)]);
+      await Promise.all([...writes, historyStorage.writeChanges(transaction, options?.history, removed)]);
       await transaction.done;
       // Never move the baseline to a later in-memory edit or after an aborted transaction.
       savedStorageRevision = revision; savedUpdatedAt = data.updatedAt; savedMetadata = meta;
-      rememberSavedHistories(options?.history, removed);
+      historyStorage.rememberSaved(options?.history, removed);
       for (const snapshot of snapshots) savedTables.set(snapshot.table.id, { snapshot, legacy: false });
       for (const { snapshot, pages } of plans) savedTableHeads.set(snapshot.table.id, pages.head);
       for (const id of removed) {
@@ -458,31 +395,43 @@ export const assertWorkspaceStorageCurrent = async () => {
   assertRevision(asStorageState(await db.get('meta', STORAGE_KEY)));
 };
 
+type HistoryLoadOptions = { isCurrent?: () => boolean };
+/** All batches must refer to the same saved version; edits queued during a read restart it. */
+const readHistory = async <Result>(read: (db: IDBPDatabase<WorkspaceDb>, context: WorkspaceHistoryReadContext) => Promise<Result>, options?: HistoryLoadOptions): Promise<Result> => {
+  if (!database) throw new Error('Workspace database is unavailable');
+  for (;;) {
+    const pending = saveQueue;
+    await pending.catch(() => undefined);
+    const checkCurrent = () => {
+      if (options?.isCurrent && !options.isCurrent()) throw new DOMException('Workspace history read cancelled', 'AbortError');
+      if (saveQueue !== pending) throw new WorkspaceReadRestart();
+    };
+    const context: WorkspaceHistoryReadContext = { checkCurrent, checkVersion: state => { checkCurrent(); assertRevision(asStorageState(state)); } };
+    try {
+      checkCurrent();
+      const db = await database;
+      const result = await read(db, context);
+      context.checkVersion(await db.get('meta', STORAGE_KEY));
+      return result;
+    } catch (error) { if (!(error instanceof WorkspaceReadRestart)) throw error; }
+  }
+};
+export const loadWorkspaceHistoryHead = async (tableId: string, options?: HistoryLoadOptions) => {
+  if (!database) return { tableId, past: [], future: [] };
+  const { history, legacy } = await readHistory((db, context) => readWorkspaceHistoryHead(db, tableId, context), options);
+  if (legacy) void saveWorkspaceHistory(history as WorkspaceTableHistory).catch(notifyStorageError);
+  else historyStorage.rememberRead(history);
+  return history;
+};
+export const loadWorkspaceHistoryEntry = (tableId: string, reference: WorkspaceHistoryReference, options?: HistoryLoadOptions) => readHistory((db, context) => readWorkspaceHistoryEntry(db, tableId, reference, context), options);
 export const loadWorkspaceHistories = async (): Promise<Map<string, WorkspaceTableHistory>> => {
   if (!database) return new Map();
-  const pending = saveQueue;
-  await pending.catch(() => undefined);
-  const db = await database;
-  const transaction = db.transaction(['meta', 'history', 'historyEntries'], 'readonly');
-  const [state, histories] = await Promise.all([transaction.objectStore('meta').get(STORAGE_KEY), transaction.objectStore('history').getAll()]);
-  const loaded = await Promise.all(histories.map(async history => {
-    if (!isHistoryHead(history)) return pruneWorkspaceTableHistory(history);
-    const entries = await transaction.objectStore('historyEntries').getAll(tableRange(history.tableId));
-    const byId = new Map(entries.map(entry => [entry.id, entry]));
-    const resolve = (references: HistoryReference[]) => references.map(reference => {
-      const entry = byId.get(reference.id);
-      if (!entry || entry.tableId !== history.tableId || entry.createdAt !== reference.createdAt) throw new WorkspaceStorageIntegrityError(`Missing history entry: ${history.tableId}`);
-      return entry;
-    });
-    return pruneWorkspaceTableHistory({ tableId: history.tableId, past: resolve(history.past), future: resolve(history.future) });
-  }));
-  await transaction.done;
-  if (saveQueue !== pending) return loadWorkspaceHistories();
-  assertRevision(asStorageState(state));
-  const result = new Map(loaded.map(history => [history.tableId, history]));
-  histories.forEach((history, index) => { if (isHistoryHead(history)) savedHistories.set(history.tableId, loaded[index]); });
-  for (const history of histories) if (!isHistoryHead(history)) void saveWorkspaceHistory(result.get(history.tableId)!).catch(notifyStorageError);
-  return result;
+  const { histories, legacyIds } = await readHistory(readWorkspaceHistories);
+  for (const history of histories.values()) {
+    if (legacyIds.includes(history.tableId)) void saveWorkspaceHistory(history).catch(notifyStorageError);
+    else historyStorage.rememberRead(history);
+  }
+  return histories;
 };
 
 const saveHistoryChanges = (changes: WorkspaceHistoryStorageChanges) => enqueueSave(async () => {
@@ -491,12 +440,12 @@ const saveHistoryChanges = (changes: WorkspaceHistoryStorageChanges) => enqueueS
   const transaction = db.transaction([...stores], 'readwrite');
   try {
     assertRevision(asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY)));
-    await writeHistoryChanges(transaction, changes);
+    await historyStorage.writeChanges(transaction, changes);
     const revision = nextStorageRevision();
     await transaction.objectStore('meta').put({ storageRevision: revision, updatedAt: savedUpdatedAt }, STORAGE_KEY);
     await transaction.done;
     savedStorageRevision = revision;
-    rememberSavedHistories(changes);
+    historyStorage.rememberSaved(changes);
   } catch (error) {
     try { transaction.abort(); } catch { /* Already aborted. */ }
     await transaction.done.catch(() => undefined);

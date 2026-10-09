@@ -28,6 +28,8 @@ vi.mock('../workspace/db', () => {
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
   saveWorkspace: vi.fn(async () => undefined),
   loadWorkspaceHistories: vi.fn(async () => new Map()),
+  loadWorkspaceHistoryHead: vi.fn(async (tableId: string) => ({ tableId, past: [], future: [] })),
+  loadWorkspaceHistoryEntry: vi.fn(async () => { throw new Error('history entry not seeded'); }),
   maintainWorkspaceRowPages: vi.fn(async () => undefined),
 };
 });
@@ -77,7 +79,7 @@ it.each(['close-button', 'backdrop', 'escape'] as const)('saves a cell draft on 
       tables: [expect.objectContaining({ rows: [expect.objectContaining({ values: expect.objectContaining({ 'column-text': '已儲存' }) })] })],
     }), expect.objectContaining({
       mutation: expect.objectContaining({ tableId: 'table-1', action: expect.objectContaining({ type: 'set-cell', rowId: 'row-1', columnId: 'column-text', after: '已儲存' }) }),
-      history: expect.objectContaining({ replace: expect.any(Array) }),
+      history: expect.objectContaining({ append: expect.any(Array) }),
     }));
   });
 

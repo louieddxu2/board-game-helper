@@ -25,19 +25,26 @@ export type WorkspaceTableHistoryAction =
   | { type: 'rename-table'; before: string; after: string }
   | { type: 'set-transposed'; before: boolean; after: boolean };
 
-export interface WorkspaceTableHistoryEntry {
+export interface WorkspaceHistoryReference {
   id: string;
-  tableId: string;
   label: string;
   createdAt: number;
+}
+
+export interface WorkspaceTableHistoryEntry extends WorkspaceHistoryReference {
+  tableId: string;
   action: WorkspaceTableHistoryAction;
 }
 
-export interface WorkspaceTableHistory {
+export interface WorkspaceTableHistory<Entry extends WorkspaceHistoryReference = WorkspaceTableHistoryEntry> {
   tableId: string;
-  past: WorkspaceTableHistoryEntry[];
-  future: WorkspaceTableHistoryEntry[];
+  past: Entry[];
+  future: Entry[];
 }
+
+/** A small directory may contain actions already created or read in this session. */
+export type WorkspaceTableHistoryView = WorkspaceTableHistory<WorkspaceHistoryReference>;
+export const isWorkspaceHistoryEntry = (entry: WorkspaceHistoryReference): entry is WorkspaceTableHistoryEntry => 'action' in entry && 'tableId' in entry;
 
 export interface WorkspaceTableMutation {
   tableId: string;
@@ -53,8 +60,8 @@ export interface WorkspaceCommitOptions {
 
 export const createEmptyWorkspaceTableHistory = (tableId: string): WorkspaceTableHistory => ({ tableId, past: [], future: [] });
 
-export const pruneWorkspaceTableHistory = (history: WorkspaceTableHistory, now = Date.now()): WorkspaceTableHistory => {
-  const isFresh = (entry: WorkspaceTableHistoryEntry) => now - entry.createdAt <= workspaceHistoryRetentionMs;
+export const pruneWorkspaceTableHistory = <Entry extends WorkspaceHistoryReference>(history: WorkspaceTableHistory<Entry>, now = Date.now()): WorkspaceTableHistory<Entry> => {
+  const isFresh = (entry: Entry) => now - entry.createdAt <= workspaceHistoryRetentionMs;
   return {
     tableId: history.tableId,
     past: history.past.filter(isFresh).slice(-workspaceHistoryLimit),
@@ -63,13 +70,13 @@ export const pruneWorkspaceTableHistory = (history: WorkspaceTableHistory, now =
 };
 
 /** Edits made while disk history loads take precedence, including imports and deletions. */
-export const hydrateWorkspaceHistories = (
-  stored: Map<string, WorkspaceTableHistory>,
-  pending: Map<string, WorkspaceTableHistory>,
+export const hydrateWorkspaceHistories = <Entry extends WorkspaceHistoryReference>(
+  stored: Map<string, WorkspaceTableHistory<Entry>>,
+  pending: Map<string, WorkspaceTableHistory<Entry>>,
   tableIds: Set<string>,
   reset: { all: boolean; ids: Set<string> },
 ) => {
-  const merged = new Map<string, WorkspaceTableHistory>();
+  const merged = new Map<string, WorkspaceTableHistory<Entry>>();
   for (const tableId of tableIds) {
     const previous = reset.all || reset.ids.has(tableId) ? undefined : stored.get(tableId);
     const current = pending.get(tableId);
@@ -101,7 +108,7 @@ const historyAction = (action: WorkspaceTableHistoryAction): WorkspaceTableHisto
   }
 };
 
-export const pushWorkspaceTableHistory = (history: WorkspaceTableHistory, mutation: WorkspaceTableMutation, now = Date.now()) => pruneWorkspaceTableHistory({
+export const pushWorkspaceTableHistory = <Entry extends WorkspaceHistoryReference>(history: WorkspaceTableHistory<Entry>, mutation: WorkspaceTableMutation, now = Date.now()) => pruneWorkspaceTableHistory({
   tableId: mutation.tableId,
   past: [...history.past, { id: makeId('history'), tableId: mutation.tableId, label: mutation.label, createdAt: now, action: historyAction(mutation.action) }],
   future: [],

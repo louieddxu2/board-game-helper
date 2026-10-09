@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
-import { loadWorkspace, loadWorkspaceInitial, loadWorkspaceHistories } from './db';
+import { loadWorkspace, loadWorkspaceInitial, loadWorkspaceHistoryHead } from './db';
 import { getTableForNode } from './model';
-import { hydrateWorkspaceHistories, type WorkspaceTableHistory } from './history';
+import { hydrateWorkspaceHistories, type WorkspaceTableHistoryView } from './history';
 import { afterWorkspacePaint } from './backgroundWork';
 import { loadWorkspaceTableViewState } from './viewState';
 import { expandedFoldersStorageKey } from './workspaceShared';
@@ -40,7 +40,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
 }: WorkspaceLoadingOptions) => {
   const {
     data, setData, dataRef, tableWindow, setTableWindow, progressiveRef, mountedRef,
-    historyRef, historyReadyRef, setHistoryByTable, setHistoryReady, historyResetRef,
+    historyRef, historyLoadedTableIdsRef, setHistoryByTable, setHistoryLoadedTableIds, historyResetRef,
     allTablesReadyRef, setAllTablesReady, setStorageVersion, setLastSavedAt,
     setStorageUpgradeBlocked, storageConflict, setStorageConflict, setRemainingLoadError, setLoadError,
   } = storage;
@@ -49,11 +49,17 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
   const activeWindow = !fullTable && data?.nodes.some(node => node.id === data.activeNodeId && node.tableId === tableWindow?.head.definition.id) ? tableWindow : undefined;
   useWorkspaceRowMaintenance(fullTable?.id, dataRef, storageConflict);
 
-  const publishHistories = useCallback((stored: Map<string, WorkspaceTableHistory>, validIds: Set<string>) => {
-    const histories = hydrateWorkspaceHistories(stored, historyRef.current, validIds, historyResetRef.current);
-    historyRef.current = histories; historyReadyRef.current = true;
-    setHistoryByTable(histories); setHistoryReady(true);
-  }, [historyReadyRef, historyRef, historyResetRef, setHistoryByTable, setHistoryReady]);
+  const publishHistory = useCallback((stored: WorkspaceTableHistoryView) => {
+    const tableId = stored.tableId;
+    if (historyLoadedTableIdsRef.current.has(tableId) || !dataRef.current?.nodes.some(node => node.tableId === tableId)) return;
+    const selected = hydrateWorkspaceHistories(new Map([[tableId, stored]]), historyRef.current, new Set([tableId]), historyResetRef.current);
+    const histories = new Map(historyRef.current);
+    const history = selected.get(tableId);
+    if (history) histories.set(tableId, history);
+    historyRef.current = histories;
+    historyLoadedTableIdsRef.current = new Set(historyLoadedTableIdsRef.current).add(tableId);
+    setHistoryByTable(histories); setHistoryLoadedTableIds(historyLoadedTableIdsRef.current);
+  }, [historyLoadedTableIdsRef, historyRef, historyResetRef, setHistoryByTable, setHistoryLoadedTableIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,18 +136,10 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
           allTablesReadyRef.current = true;
           setAllTablesReady(true);
         };
-        const finish = (stored: Map<string, WorkspaceTableHistory>) => {
-          if (cancelled) return;
-          publishHistories(stored, new Set(dataRef.current?.tables.map((table) => table.id)));
-        };
-        void finishTables().then(loadWorkspaceHistories).then(finish).catch((error: unknown) => {
+        void finishTables().catch((error: unknown) => {
           if (cancelled) return;
           if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') setStorageConflict(true);
-          else if (!allTablesReadyRef.current) setRemainingLoadError(true);
-          else {
-            setNotice('先前的復原紀錄讀取失敗，表格仍可使用');
-            finish(new Map());
-          }
+          else setRemainingLoadError(true);
         });
       }, Boolean(initial.progressive));
     };
@@ -151,7 +149,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
       window.removeEventListener('workspace-storage-blocked', blocked);
       window.removeEventListener('workspace-storage-versionchange', changedVersion);
     };
-  }, [publishHistories]);
+  }, []);
 
   const reportReadError = useCallback((error: unknown) => {
     if (!mountedRef.current) return;
@@ -184,16 +182,28 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
           requestAnimationFrame(() => { programmaticTableScrollRef.current = false; });
         }
       }
-      if (withHistory && !historyReadyRef.current) {
-        const stored = await loadWorkspaceHistories();
-        if (!mountedRef.current) return;
-        const ids = new Set(dataRef.current?.nodes.flatMap(node => node.tableId ?? []));
-        flushSync(() => publishHistories(stored, ids));
+      if (withHistory) {
+        const owner = dataRef.current?.activeNodeId;
+        const activeId = dataRef.current?.nodes.find(node => node.id === owner)?.tableId;
+        const ids = tableIds ?? (activeId ? [activeId] : []);
+        const isHistoryCurrent = () => mountedRef.current && dataRef.current?.activeNodeId === owner && (!isCurrent || isCurrent());
+        for (const id of ids) {
+          if (!isHistoryCurrent() || historyLoadedTableIdsRef.current.has(id)) continue;
+          try {
+            const stored = await loadWorkspaceHistoryHead(id, { isCurrent: isHistoryCurrent });
+            if (isHistoryCurrent()) flushSync(() => publishHistory(stored));
+          } catch (error) {
+            if (!isHistoryCurrent() || (error instanceof Error && error.name === 'AbortError')) return;
+            if (error instanceof Error && error.name === 'WorkspaceStorageConflictError') throw error;
+            // Editing remains available, but saves must append until a real directory is loaded.
+            setNotice('先前的復原紀錄讀取失敗，表格仍可使用');
+          }
+        }
       }
     });
     readQueueRef.current = work;
     return work;
-  }, [publishHistories]);
+  }, [publishHistory]);
   useEffect(() => {
     const tableId = activeWindow?.head.definition.id;
     const nodeId = data?.activeNodeId;
@@ -208,7 +218,11 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
     return () => { cancelled = true; cancel(); };
   }, [activeWindow?.head.definition.id, data?.activeNodeId, hydrateWorkspace, reportReadError, storageConflict]);
   const readiness = useMemo<WorkspaceReadiness>(() => ({
-    isReady: (scope) => scope === 'all' ? allTablesReadyRef.current : Boolean(dataRef.current && getTableForNode(dataRef.current, dataRef.current.activeNodeId)) && (scope !== 'history' || historyReadyRef.current || !progressiveRef.current),
+    isReady: (scope) => {
+      if (scope === 'all') return allTablesReadyRef.current;
+      const active = dataRef.current && getTableForNode(dataRef.current, dataRef.current.activeNodeId);
+      return Boolean(active && (scope !== 'history' || historyLoadedTableIdsRef.current.has(active.id)));
+    },
     ensure: (scope) => {
       const id = dataRef.current?.nodes.find(node => node.id === dataRef.current?.activeNodeId)?.tableId;
       return hydrateWorkspace(scope === 'all' ? undefined : id ? [id] : [], scope === 'history');
