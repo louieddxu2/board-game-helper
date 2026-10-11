@@ -45,6 +45,39 @@ describe('workspace model', () => {
     expect(normalized.tables[0].columns[0].dynamicOptions).toBe(saved.columns[0].dynamicOptions);
   });
 
+  it('normalizes only present current-column keys while preserving sparse values and dynamic statistics', () => {
+    const text = createColumn('備註');
+    const link = createColumn('網站', 'link');
+    const date = createColumn('日期', 'datetime');
+    const dynamic = createColumn('狀態', 'dynamic-select');
+    const table = createTable('稀疏欄位');
+    table.columns = [text, link, date, dynamic];
+    table.rows = [
+      { id: 'row-1', name: '第一筆', values: {
+        [text.id]: '保留', [link.id]: 'https://example.com/game', [date.id]: '2024-02-03T14:05', [dynamic.id]: '已擁有', unknown: '移除',
+      } },
+      { id: 'row-2', name: '第二筆', values: { [link.id]: null, [date.id]: null, [dynamic.id]: null } },
+      { id: 'row-3', name: '第三筆', values: { [text.id]: null } },
+    ];
+
+    const normalized = normalizeWorkspace({ ...emptyWorkspace(), tables: [table] }).tables[0];
+    const [first, second, third] = normalized.rows;
+    expect(first.values).toEqual({
+      [text.id]: '保留',
+      [link.id]: { url: 'https://example.com/game', label: '' },
+      [date.id]: normalizeWorkspaceDateTime('2024-02-03T14:05'),
+      [dynamic.id]: '已擁有',
+    });
+    expect(second.values).toEqual({ [link.id]: null, [date.id]: null, [dynamic.id]: null });
+    expect(Object.hasOwn(second.values, text.id)).toBe(false);
+    expect(third.values).toEqual({ [text.id]: null });
+    expect(Object.hasOwn(third.values, link.id)).toBe(false);
+    expect(Object.keys(first.values)).not.toContain('unknown');
+    expect(normalized.columns.find(column => column.id === dynamic.id)?.dynamicOptions?.counts).toEqual([
+      { key: '已擁有', count: 1, spellings: [['已擁有', 1]] },
+    ]);
+  });
+
   it('preserves a cleared dynamic row name and its statistics across repeated normalization', () => {
     const table = createTable('空名稱');
     table.rowHeader = { id: `row-header-${table.id}`, name: '物件', inputType: 'dynamic-select', options: [] };

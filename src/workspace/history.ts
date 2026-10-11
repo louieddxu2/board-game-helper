@@ -209,12 +209,7 @@ export const applyWorkspaceTableHistoryAction = (
         return tableWithUpdatedAt({
           ...current,
           columns: forward ? insertById(current.columns, action.column, action.index) : current.columns.filter((column) => column.id !== action.column.id),
-          rows: forward ? current.rows.map((row) => {
-            if (Object.hasOwn(row.values, action.column.id)) return row;
-            const values = { ...row.values };
-            values[action.column.id] = null;
-            return { ...row, values };
-          }) : removeWorkspaceColumnValues(current.rows, new Set([action.column.id])),
+          rows: forward ? current.rows : removeWorkspaceColumnValues(current.rows, new Set([action.column.id])),
         });
       case 'remove-column':
         return tableWithUpdatedAt({

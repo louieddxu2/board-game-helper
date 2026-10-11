@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WorkspaceDynamicOptionsCache } from './dynamicOptionsCache';
 import { applyWorkspaceTableHistoryAction, type WorkspaceTableHistoryAction } from './history';
-import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, getDynamicOptions, getRowHeaderColumn } from './model';
+import { createColumn, createTable, emptyWorkspace, ensureTableDynamicOptions, getDynamicOptions, getRowHeaderColumn, normalizeWorkspace } from './model';
 import { applyWorkspaceMatrixPaste } from './workspacePaste';
 import { assignWorkspaceChangeRevisions, workspaceTableChangeRevision } from './changeRevisions';
 import type { WorkspaceCellValue, WorkspaceData, WorkspaceTable } from './types';
@@ -79,6 +79,28 @@ describe('dynamic option frequency cache', () => {
     const prepared = cache.prepare(data, assignWorkspaceChangeRevisions(data, next), { tableId: table.id, action: { type: 'set-cell', rowId: 'r9999', columnId: column.id, before: 'Rare', after: 'Common' } });
     expect(prepared.tables[0].columns[0].dynamicOptions?.counts.map(item => item.count)).toEqual([6_001, 3_999]);
     expect(reads).toBe(readsBeforePrepare);
+  });
+
+  it('keeps sparse normalized rows out of dynamic options and updates one edited cell', () => {
+    const { table, column, data } = fixture([]);
+    table.rows = [
+      { id: 'r0', name: '空白', values: {} },
+      { id: 'r1', name: '已用', values: { [column.id]: '已擁有' } },
+      { id: 'r2', name: '明確空值', values: { [column.id]: null } },
+    ];
+    const normalized = normalizeWorkspace(data);
+    const reopened = normalized.tables[0];
+    const reopenedData = { ...normalized, tables: [reopened] };
+    const cache = new WorkspaceDynamicOptionsCache();
+
+    expect(Object.hasOwn(reopened.rows[0].values, column.id)).toBe(false);
+    expect(cache.getOptions(reopened, column.id)).toEqual(['已擁有']);
+
+    const action: WorkspaceTableHistoryAction = { type: 'set-cell', rowId: 'r0', columnId: column.id, before: null, after: '想要' };
+    const next = assignWorkspaceChangeRevisions(reopenedData, applyWorkspaceTableHistoryAction(reopenedData, table.id, action, 'redo'));
+    const prepared = cache.prepare(reopenedData, next, { tableId: table.id, action });
+    expect(prepared.tables[0].rows[0].values[column.id]).toBe('想要');
+    expect(cache.getOptions(prepared.tables[0], column.id)).toEqual(['已擁有', '想要']);
   });
 
   it('keeps queued statistics immutable while applying edits and undo/redo', () => {

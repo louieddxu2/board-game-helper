@@ -239,14 +239,42 @@ describe('workspace table history', () => {
     };
     const action = { type: 'add-column' as const, column: addedColumn, index: 1 };
     const redone = applyWorkspaceTableHistoryAction(data(currentTable), currentTable.id, action, 'redo');
+    expect(redone.tables[0].rows).toBe(currentTable.rows);
     expect(redone.tables[0].rows[0]).toBe(currentTable.rows[0]);
     expect(redone.tables[0].rows[0].values[addedColumn.id]).toBe('既有值');
-    expect(redone.tables[0].rows[1].values[addedColumn.id]).toBeNull();
+    expect(Object.hasOwn(redone.tables[0].rows[1].values, addedColumn.id)).toBe(false);
 
     const repeated = applyWorkspaceTableHistoryAction(redone, currentTable.id, action, 'redo');
+    expect(repeated.tables[0].rows).toBe(redone.tables[0].rows);
     expect(repeated.tables[0].rows[0]).toBe(redone.tables[0].rows[0]);
     expect(repeated.tables[0].rows[1]).toBe(redone.tables[0].rows[1]);
+    expect(repeated.tables[0].rows[0].values[addedColumn.id]).toBe('既有值');
+    expect(Object.hasOwn(repeated.tables[0].rows[1].values, addedColumn.id)).toBe(false);
     expect(repeated.tables[0].columns).toEqual([currentTable.columns[0], addedColumn]);
+  });
+
+  it('keeps a missing new-column key through add undo and redo', () => {
+    const addedColumn = { id: 'column-2', name: '備註', inputType: 'text' as const, options: [] };
+    const before = data({
+      ...table(),
+      rows: [
+        { id: 'row-1', name: '第一筆', values: { 'column-1': null } },
+        { id: 'row-2', name: '第二筆', values: { 'column-1': '乙' } },
+      ],
+    });
+    const action = { type: 'add-column' as const, column: addedColumn, index: 1 };
+
+    const added = applyWorkspaceTableHistoryAction(before, before.tables[0].id, action, 'redo');
+    expect(added.tables[0].rows).toBe(before.tables[0].rows);
+    expect(added.tables[0].rows.every(row => !Object.hasOwn(row.values, addedColumn.id))).toBe(true);
+
+    const undone = applyWorkspaceTableHistoryAction(added, before.tables[0].id, action, 'undo');
+    expect(undone.tables[0].rows).toBe(added.tables[0].rows);
+    expect(undone.tables[0].columns).toEqual(before.tables[0].columns);
+
+    const redone = applyWorkspaceTableHistoryAction(undone, before.tables[0].id, action, 'redo');
+    expect(redone.tables[0].rows).toBe(undone.tables[0].rows);
+    expect(redone.tables[0].rows.every(row => !Object.hasOwn(row.values, addedColumn.id))).toBe(true);
   });
 
   it('removes sparse column values on redo and restores explicit nulls on undo', () => {

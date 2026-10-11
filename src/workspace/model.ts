@@ -206,7 +206,8 @@ export function* normalizeWorkspaceTableSteps(table: WorkspaceTable, options?: {
   for (const [index, row] of table.rows.entries()) {
     const name = row.name === undefined ? `項目 ${index + 1}` : normalizeCellValue(row.name, rowHeader.inputType);
     if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
-    const values = Object.fromEntries(columns.map(column => {
+    // Missing keys are empty cells; preserve sparsity when reopening a table.
+    const values = Object.fromEntries(columns.filter(column => Object.hasOwn(row.values, column.id)).map(column => {
       const before = row.values[column.id] ?? null;
       const after = normalizeCellValue(before, column.inputType);
       if (column.inputType === 'dynamic-select' && before !== after) changedDynamicColumns.add(column.id);

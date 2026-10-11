@@ -364,12 +364,16 @@ describe('Workspace structural actions', () => {
     } else {
       const addedColumn = next.tables[0].columns.at(-1)!;
       expect(next.tables[0].columns).toHaveLength(3);
-      expect(next.tables[0].rows.every(row => row.values[addedColumn.id] === null)).toBe(true);
+      expect(next.tables[0].rows).toBe(actionTable.rows);
+      expect(next.tables[0].rows.every(row => !Object.hasOwn(row.values, addedColumn.id))).toBe(true);
       expect(props.dialogs.set).toHaveBeenCalledWith('focusTarget', { rowId: actionTable.rows[0].id, columnId: addedColumn.id });
       const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
       const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
       expect(undone.tables[0].columns).toHaveLength(2);
+      expect(undone.tables[0].rows).toBe(actionTable.rows);
       expect(redone.tables[0].columns.at(-1)).toBe(addedColumn);
+      expect(redone.tables[0].rows).toBe(actionTable.rows);
+      expect(redone.tables[0].rows.every(row => !Object.hasOwn(row.values, addedColumn.id))).toBe(true);
     }
   });
 
