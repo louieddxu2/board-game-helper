@@ -3,6 +3,7 @@ import { workspaceTableChangeRevision } from '../changeRevisions';
 import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, type WorkspaceBackupFolderRef, type WorkspaceBackupTableFileRef } from '../spreadsheet';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from '../types';
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
+import type { WorkspaceBackupPhase, WorkspaceBackupProgress } from './backupProgress';
 import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
 import { BackupNotFoundError } from './singleFileBackup';
 import type { BackupMetadata, BackupReceipt, DriveFile, GoogleDriveApiOptions } from './types';
@@ -65,6 +66,7 @@ export interface GoogleDriveFolderBackup {
 }
 
 export interface FolderBackupRunOptions {
+  onProgress?(progress: WorkspaceBackupProgress): void;
   source?: WorkspaceBackupSource;
   tableIds?: string[];
   complete?: boolean;
@@ -174,17 +176,24 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
   };
 
   // A separate call frame drops the temporary rows and XLSX after this upload finishes.
-  const uploadTable = async (data: WorkspaceData, tableId: string, nodeName: string, parentId: string, source?: WorkspaceBackupSource) => {
+  const uploadTable = async (data: WorkspaceData, tableId: string, nodeName: string, parentId: string, source: WorkspaceBackupSource | undefined, report: (phase: WorkspaceBackupPhase, name?: string) => void) => {
+    report('reading-table', nodeName);
     const table = source ? await source.readTable(tableId) : data.tables.find(item => item.id === tableId);
     if (!table || table.id !== tableId) throw new Error(`找不到表格資料：${nodeName}`);
     const fileName = `${table.name || nodeName || table.id}.xlsx`;
+    report('creating-file', table.name || nodeName);
     const body = await exportWorkspaceXlsxAsync(data, table);
     await source?.verify();
+    report('uploading-table', table.name || nodeName);
     const file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body, appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
     return { id: table.id, name: table.name, updatedAt: table.updatedAt, changeRevision: workspaceTableChangeRevision(table), driveFileId: file.id, fileName };
   };
 
   const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}, runOptions: FolderBackupRunOptions = {}): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }> => {
+    const tableNodes = data.nodes.filter(node => node.type === 'table' && node.tableId);
+    let completedTables = 0;
+    const report = (phase: WorkspaceBackupPhase, name?: string) => runOptions.onProgress?.({ phase, name, completedTables, totalTables: tableNodes.length });
+    report('checking-remote');
     const root = await ensureFolder();
     const remoteState = await findRemoteState();
     const previousFile = remoteState.selected;
@@ -209,6 +218,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       .filter((item) => item.type === 'folder')
       .sort((left, right) => folderDepth(left, nodeMap) - folderDepth(right, nodeMap));
     for (const node of folderNodes) {
+      report('preparing-folders', node.name);
       const parentNode = parentOf(node, nodeMap);
       const parentDriveId = parentNode ? driveFolderIds.get(parentNode.id) : root;
       if (!parentDriveId) throw new Error(`找不到資料夾父層：${node.name}`);
@@ -219,7 +229,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
 
     const tableRefs: DriveWorkspaceTableRef[] = [];
     const selectedTableIds = new Set(runOptions.tableIds ?? tables.map((table) => table.id));
-    for (const node of data.nodes.filter((item) => item.type === 'table')) {
+    for (const node of tableNodes) {
       if (!node.tableId) continue;
       const table = tables.find((item) => item.id === node.tableId);
       if (!table) throw new Error(`找不到表格資料：${node.name}`);
@@ -229,9 +239,12 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       const previousTable = previousTables.get(table.id);
       if (!selectedTableIds.has(table.id) && previousTable) {
         tableRefs.push({ id: previousTable.id, nodeId: node.id, folderId: node.parentId, name: previousTable.name, updatedAt: previousTable.updatedAt, changeRevision: previousTable.changeRevision, driveFileId: previousTable.driveFileId, fileName: previousTable.fileName });
+        completedTables += 1;
+        report('reusing-table', table.name);
         continue;
       }
-      tableRefs.push({ ...await uploadTable(data, table.id, node.name, parentId, runOptions.source), nodeId: node.id, folderId: node.parentId });
+      tableRefs.push({ ...await uploadTable(data, table.id, node.name, parentId, runOptions.source, report), nodeId: node.id, folderId: node.parentId });
+      completedTables += 1;
     }
 
     const manifest: DriveWorkspaceManifest = {
@@ -252,8 +265,10 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION), [DRIVE_PARENT_MANIFEST_IDS_PROPERTY]: JSON.stringify(parentManifestIds) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
+    report('saving-index');
     await runOptions.source?.verify();
     const file = await api.uploadFile({ parentId: root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
+    report('confirming');
     const committedState = await findRemoteState();
     if (committedState.heads.length > 1) throw new RemoteBackupConflictError(committedState.selected);
     return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest };

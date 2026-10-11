@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { WorkspaceIcon, WorkspaceModal } from '../workspaceShared';
 import type { DriveFile } from './types';
 import type { WorkspaceDriveBackupRecord, WorkspaceDriveBackupStatus } from './useWorkspaceGoogleDriveBackup';
+import { workspaceBackupProgressCount, workspaceBackupProgressLabel, workspaceBackupProgressValue, type WorkspaceBackupProgress } from './backupProgress';
 
 type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
 
@@ -25,6 +26,7 @@ const statusDetail = ({ status, authorized, record }: Pick<GoogleDriveBackupDial
 export interface GoogleDriveBackupDialogProps {
   status: WorkspaceDriveBackupStatus;
   busy: BusyState;
+  progress?: WorkspaceBackupProgress;
   message: string;
   error: string;
   record: WorkspaceDriveBackupRecord;
@@ -44,8 +46,9 @@ const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { 
   <button type="button" className={`workspace-dialog-button ${variant}`} onClick={onClick} disabled={disabled}>{children}</button>
 );
 
-export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, remoteFile, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
+export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error, record, remoteFile, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
   const isBusy = Boolean(busy);
+  const backupProgress = busy === 'backing-up' ? progress : undefined;
   const canUseDrive = authorized && status !== 'offline' && status !== 'disconnected';
   const showConnect = !authorized || status === 'disconnected';
   const primaryAction = remoteFile
@@ -56,9 +59,13 @@ export const GoogleDriveBackupDialog = ({ status, busy, message, error, record, 
   return <WorkspaceModal owner="google-drive" title="Google Drive 備份" onRequestClose={onClose} className="workspace-google-drive-dialog">
     <div className="workspace-google-drive-status">
       <WorkspaceIcon name="download" size={22} />
-      <div><strong>{statusLabel(status)}</strong><small>{statusDetail({ status, authorized, record })}</small></div>
+      <div><strong>{busy === 'backing-up' ? '備份進行中' : statusLabel(status)}</strong><small>{statusDetail({ status, authorized, record })}</small></div>
     </div>
-    {busy && <p className="workspace-dialog-message" role="status">{busyLabel(busy)}</p>}
+    {backupProgress ? <div className="workspace-google-drive-progress" role="status" aria-atomic="true">
+      <strong>{workspaceBackupProgressLabel(backupProgress)}</strong>
+      <progress aria-label="表格備份進度" aria-valuetext={`${workspaceBackupProgressLabel(backupProgress)} ${workspaceBackupProgressCount(backupProgress)}`} max={backupProgress.totalTables || 1} value={workspaceBackupProgressValue(backupProgress)} />
+      {backupProgress.totalTables !== undefined && <small>{workspaceBackupProgressCount(backupProgress)}</small>}
+    </div> : busy && <p className="workspace-dialog-message" role="status">{busyLabel(busy)}</p>}
     {message && <p className="workspace-google-drive-message" role="status">{message}</p>}
     {error && <p className="workspace-google-drive-error" role="alert">{error}</p>}
     {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div><div><dt>雲端結構</dt><dd>{record.folderCount} 個資料夾 · {record.tableCount} 張表格</dd></div></dl>}

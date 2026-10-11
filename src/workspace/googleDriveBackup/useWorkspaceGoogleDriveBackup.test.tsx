@@ -5,6 +5,7 @@ import { workspaceBackupTableSummary, type WorkspaceBackupSource } from '../work
 import type { WorkspaceData } from '../types';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import { GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
+import type { FolderBackupRunOptions } from './folderBackup';
 
 const mocks = vi.hoisted(() => ({
   signIn: vi.fn(async () => 'token'),
@@ -73,6 +74,48 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it.each(['manual', 'overwrite', 'automatic'] as const)('shows live progress for %s backup and clears it only after completion', async mode => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const data = createData();
+    let finish!: (value: ReturnType<typeof receiptFor>) => void;
+    const upload = new Promise<ReturnType<typeof receiptFor>>(resolve => { finish = resolve; });
+    mocks.backup.mockImplementationOnce(async (_data: WorkspaceData, _metadata: unknown, options: FolderBackupRunOptions) => {
+      options.onProgress?.({ phase: 'uploading-table', name: data.tables[1].name, completedTables: 1, totalTables: 2 });
+      return upload;
+    });
+    const { result } = renderBackup(data);
+    await act(async () => { await result.current.connect(); });
+    let pending!: Promise<boolean>;
+    await act(async () => { pending = result.current.backup({ automatic: mode === 'automatic', force: mode === 'overwrite' }); });
+    expect(result.current.busy).toBe('backing-up');
+    expect(result.current.progress).toEqual({ phase: 'uploading-table', name: data.tables[1].name, completedTables: 1, totalTables: 2 });
+    expect(result.current.record.lastBackupAt).toBeNull();
+    await act(async () => { finish(receiptFor(data)); expect(await pending).toBe(true); });
+    expect(result.current.progress).toBeUndefined();
+    expect(result.current.busy).toBeNull();
+    expect(result.current.record.lastBackupAt).toBe(now.getTime());
+  });
+
+  it('clears a failed progress display and starts preparation afresh on retry', async () => {
+    const data = createData();
+    mocks.backup.mockImplementationOnce(async (_data: WorkspaceData, _metadata: unknown, options: FolderBackupRunOptions) => {
+      options.onProgress?.({ phase: 'uploading-table', name: data.tables[0].name, completedTables: 0, totalTables: 2 });
+      throw new Error('upload failed');
+    });
+    let finishPrepare!: (source: WorkspaceBackupSource) => void;
+    const prepareBackup = vi.fn().mockResolvedValueOnce({ tables: data.tables.map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() }).mockImplementationOnce(() => new Promise(resolve => { finishPrepare = resolve; }));
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data, prepareBackup, loadGoogleClientId: async () => 'client-id', onRestored: vi.fn(), setNotice: vi.fn() }));
+    await act(async () => { expect(await result.current.backup()).toBe(false); });
+    expect(result.current.progress).toBeUndefined();
+    expect(result.current.error).toBe('upload failed');
+    let retry!: Promise<boolean>;
+    await act(async () => { retry = result.current.backup(); });
+    expect(result.current.progress).toEqual({ phase: 'reading-directory' });
+    expect(result.current.error).toBe('');
+    await act(async () => { finishPrepare({ tables: data.tables.map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() }); expect(await retry).toBe(true); });
+    expect(result.current.progress).toBeUndefined();
+  });
+
   it('backs up unloaded tables without expanding the screen data and records their actual uploaded revisions', async () => {
     const original = createData();
     const partial = { ...original, nodes: original.tables.map((table, index) => createNode('table', table.name, null, index, table.id)), tables: [original.tables[0]] };

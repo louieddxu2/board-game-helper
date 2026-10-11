@@ -255,6 +255,13 @@
 .workspace-google-drive-message, .workspace-google-drive-error { margin: 0; padding: 9px 10px; border-radius: 6px; line-height: 1.5; }
 .workspace-google-drive-message { background: var(--cream); color: var(--green); }
 .workspace-google-drive-error { background: #f8e4df; color: #a52f23; }
+.workspace-google-drive-progress { display: grid; min-width: 0; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); color: var(--green); }
+.workspace-google-drive-progress strong { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.workspace-google-drive-progress small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.workspace-google-drive-progress progress { width: 100%; height: 10px; overflow: hidden; border: 0; border-radius: 6px; accent-color: var(--green); }
+.workspace-google-drive-progress progress::-webkit-progress-bar { background: var(--line); border-radius: 6px; }
+.workspace-google-drive-progress progress::-webkit-progress-value { background: var(--green); border-radius: 6px; }
+.workspace-google-drive-progress progress::-moz-progress-bar { background: var(--green); border-radius: 6px; }
 .workspace-google-drive-meta { display: grid; gap: 6px; margin: 0; }
 .workspace-google-drive-meta div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
 .workspace-google-drive-meta dt { color: var(--muted); font-size: 13px; }
