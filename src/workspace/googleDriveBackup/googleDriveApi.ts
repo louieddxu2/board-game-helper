@@ -19,20 +19,13 @@ const DEFAULT_UPLOAD_BASE_URL = 'https://www.googleapis.com/upload/drive/v3';
 const getDefaultFetch = (): FetchLike => (input, init) => globalThis.fetch(input, init);
 const escapeQueryLiteral = (value: string) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-const toBytes = (body: DriveBody): Promise<Uint8Array> => {
-  if (typeof body === 'string') return Promise.resolve(new TextEncoder().encode(body));
-  if (body instanceof Blob) {
-    if (typeof body.arrayBuffer === 'function') return body.arrayBuffer().then((buffer) => new Uint8Array(buffer));
-    return new Promise<Uint8Array>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-      reader.onerror = () => reject(reader.error ?? new Error('無法讀取試算表備份內容'));
-      reader.readAsArrayBuffer(body);
-    });
+const uploadPart = (body: DriveBody): BlobPart => {
+  if (typeof body === 'string' || body instanceof Blob || body instanceof ArrayBuffer) return body;
+  if (ArrayBuffer.isView(body)) {
+    const buffer = body.buffer;
+    return buffer instanceof ArrayBuffer ? new Uint8Array(buffer, body.byteOffset, body.byteLength) : new Uint8Array(buffer, body.byteOffset, body.byteLength).slice();
   }
-  if (body instanceof ArrayBuffer) return Promise.resolve(new Uint8Array(body));
-  if (ArrayBuffer.isView(body)) return Promise.resolve(new Uint8Array(body.buffer as ArrayBuffer, body.byteOffset, body.byteLength));
-  return Promise.reject(new TypeError('不支援的 Google Drive 上傳內容'));
+  throw new TypeError('不支援的 Google Drive 上傳內容');
 };
 
 export class GoogleDriveApi {
@@ -143,7 +136,6 @@ export class GoogleDriveApi {
 
   async uploadFile(options: { fileId?: string; parentId?: string; name: string; mimeType: string; body: DriveBody; appProperties?: Record<string, string> }): Promise<DriveFile> {
     if (!options.fileId && !options.parentId) throw new Error('建立 Google Drive 檔案需要 parentId');
-    const bytes = await toBytes(options.body);
     const boundary = `drive-backup-${Math.random().toString(16).slice(2)}`;
     const delimiter = `\r\n--${boundary}\r\n`;
     const encoder = new TextEncoder();
@@ -154,8 +146,7 @@ export class GoogleDriveApi {
       ...(options.appProperties ? { appProperties: options.appProperties } : {}),
     })}${delimiter}Content-Type: ${options.mimeType}\r\n\r\n`);
     const suffix = encoder.encode(`\r\n--${boundary}--`);
-    const requestBody = new Uint8Array(prefix.length + bytes.length + suffix.length);
-    requestBody.set(prefix, 0); requestBody.set(bytes, prefix.length); requestBody.set(suffix, prefix.length + bytes.length);
+    const requestBody = new Blob([prefix, uploadPart(options.body), suffix]);
     const filePath = options.fileId ? `/files/${encodeURIComponent(options.fileId)}` : '/files';
     const url = `${this.uploadBaseUrl}${filePath}?uploadType=multipart&fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties`;
     return this.requestJson<DriveFile>(url, {

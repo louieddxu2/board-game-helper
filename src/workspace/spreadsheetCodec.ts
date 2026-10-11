@@ -2,6 +2,7 @@ import type { CellValue, Sheet } from 'read-excel-file/browser';
 import { getRowHeaderColumn, isWorkspaceLinkValue } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import { WORKSPACE_FORMAT } from './types';
+export { safeSheetName, workbookFromRows, workbookFromRowsSteps, zipStoreBytes, zipStoreBytesAsync } from './spreadsheetWorkbook';
 
 export const blobBytes = async (blob: Blob) => new Uint8Array(await (typeof blob.arrayBuffer === 'function'
   ? blob.arrayBuffer()
@@ -69,47 +70,6 @@ const serializeDataCellValue = (value: WorkspaceCellValue) => isWorkspaceLinkVal
   ? value.label.trim() ? `${value.label.trim()}\n${value.url}` : value.url
   : value;
 
-const escapeXml = (value: string) => value
-  .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
-  .replaceAll('>', '&gt;')
-  .replaceAll('"', '&quot;')
-  .replaceAll("'", '&apos;');
-
-const columnName = (index: number) => {
-  let result = '';
-  let current = index + 1;
-  while (current > 0) {
-    const remainder = (current - 1) % 26;
-    result = String.fromCharCode(65 + remainder) + result;
-    current = Math.floor((current - 1) / 26);
-  }
-  return result;
-};
-
-const xmlCell = (row: number, column: number, value: unknown) => {
-  if (value === null || value === undefined || value === '') return '';
-  const reference = `${columnName(column)}${row}`;
-  if (typeof value === 'number' && Number.isFinite(value)) return `<c r="${reference}"><v>${value}</v></c>`;
-  const text = String(value);
-  return `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
-};
-
-const sheetXml = (rows: unknown[][]) => {
-  const maxColumns = Math.max(1, ...rows.map((row) => row.length));
-  const maxRows = Math.max(1, rows.length);
-  const widths = Array.from({ length: maxColumns }, (_, columnIndex) => {
-    const contentWidth = Math.max(0, ...rows.map((row) => String(row[columnIndex] ?? '').split(/\r?\n/).reduce((longest, line) => Math.max(longest, line.length), 0)));
-    return Math.max(8, Math.min(42, contentWidth + 2));
-  });
-  const columns = `<cols>${widths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('')}</cols>`;
-  const cells = rows.map((row, rowIndex) => {
-    const values = row.map((value, columnIndex) => xmlCell(rowIndex + 1, columnIndex, value)).join('');
-    return `<row r="${rowIndex + 1}">${values}</row>`;
-  }).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${columnName(maxColumns - 1)}${maxRows}"/>${columns}<sheetData>${cells}</sheetData></worksheet>`;
-};
-
 const serializeColumnSettings = (kind: 'row_header' | 'column', column: WorkspaceColumn) => [
   kind,
   column.id,
@@ -145,13 +105,11 @@ export const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string):
   ];
 };
 
-export const tableDataRows = (table: WorkspaceTable): unknown[][] => {
-  const rowHeader = getRowHeaderColumn(table);
-  return [
-    [rowHeader.name, ...table.columns.map((column) => column.name)],
-    ...table.rows.map((row) => [serializeDataCellValue(row.name), ...table.columns.map((column) => serializeDataCellValue(row.values[column.id] ?? null))]),
-  ];
-};
+export function* iterateTableDataRows(table: WorkspaceTable): Generator<unknown[]> {
+  yield [getRowHeaderColumn(table).name, ...table.columns.map(column => column.name)];
+  for (const row of table.rows) yield [serializeDataCellValue(row.name), ...table.columns.map(column => serializeDataCellValue(row.values[column.id] ?? null))];
+}
+export const tableDataRows = (table: WorkspaceTable): unknown[][] => [...iterateTableDataRows(table)];
 
 export const workspaceRows = (data: WorkspaceData): unknown[][] => [
   [WORKSPACE_MARKER, CURRENT_XLSX_FORMAT_VERSION],
@@ -162,100 +120,6 @@ export const workspaceRows = (data: WorkspaceData): unknown[][] => [
   ['nodes', 'id', 'type', 'name', 'parentId', 'order', 'tableId'],
   ...data.nodes.map((node) => ['node', node.id, node.type, node.name, node.parentId ?? '', node.order, node.tableId ?? '']),
 ];
-
-const contentTypesXml = (sheetCount: number) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${Array.from({ length: sheetCount }, (_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`;
-
-const workbookXml = (names: string[]) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((name, index) => `<sheet name="${escapeXml(name.slice(0, 31))}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}</sheets></workbook>`;
-
-const workbookRelsXml = (sheetCount: number) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${Array.from({ length: sheetCount }, (_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}</Relationships>`;
-
-const rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
-
-const crcTable = (() => {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < 256; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    table[index] = value >>> 0;
-  }
-  return table;
-})();
-
-const crc32 = (bytes: Uint8Array) => {
-  let value = 0xffffffff;
-  for (const byte of bytes) value = crcTable[(value ^ byte) & 0xff] ^ (value >>> 8);
-  return (value ^ 0xffffffff) >>> 0;
-};
-
-const writeUint16 = (target: Uint8Array, offset: number, value: number) => {
-  target[offset] = value & 0xff;
-  target[offset + 1] = (value >>> 8) & 0xff;
-};
-
-const writeUint32 = (target: Uint8Array, offset: number, value: number) => {
-  target[offset] = value & 0xff;
-  target[offset + 1] = (value >>> 8) & 0xff;
-  target[offset + 2] = (value >>> 16) & 0xff;
-  target[offset + 3] = (value >>> 24) & 0xff;
-};
-
-export const zipStoreBytes = (files: Array<{ name: string; content: Uint8Array }>, mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') => {
-  const encoder = new TextEncoder();
-  const entries = files.map((file) => ({ name: encoder.encode(file.name), content: file.content }));
-  const localParts: Uint8Array[] = [];
-  const centralParts: Uint8Array[] = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const header = new Uint8Array(30 + entry.name.length);
-    writeUint32(header, 0, 0x04034b50); writeUint16(header, 4, 20); writeUint16(header, 6, 0x0800); writeUint16(header, 8, 0);
-    writeUint16(header, 10, 0); writeUint16(header, 12, 0); writeUint32(header, 14, crc32(entry.content));
-    writeUint32(header, 18, entry.content.length); writeUint32(header, 22, entry.content.length); writeUint16(header, 26, entry.name.length); writeUint16(header, 28, 0); header.set(entry.name, 30);
-    localParts.push(header, entry.content);
-
-    const central = new Uint8Array(46 + entry.name.length);
-    writeUint32(central, 0, 0x02014b50); writeUint16(central, 4, 20); writeUint16(central, 6, 20); writeUint16(central, 8, 0x0800); writeUint16(central, 10, 0);
-    writeUint16(central, 12, 0); writeUint16(central, 14, 0); writeUint32(central, 16, crc32(entry.content)); writeUint32(central, 20, entry.content.length); writeUint32(central, 24, entry.content.length);
-    writeUint16(central, 28, entry.name.length); writeUint16(central, 30, 0); writeUint16(central, 32, 0); writeUint16(central, 34, 0); writeUint16(central, 36, 0); writeUint32(central, 38, 0); writeUint32(central, 42, offset); central.set(entry.name, 46);
-    centralParts.push(central);
-    offset += header.length + entry.content.length;
-  }
-  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
-  const end = new Uint8Array(22);
-  writeUint32(end, 0, 0x06054b50); writeUint16(end, 8, entries.length); writeUint16(end, 10, entries.length); writeUint32(end, 12, centralSize); writeUint32(end, 16, offset);
-  const parts = [...localParts, ...centralParts, end];
-  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-  let position = 0;
-  for (const part of parts) { bytes.set(part, position); position += part.length; }
-  return new Blob([bytes.buffer], { type: mimeType });
-};
-
-const zipStore = (files: Array<{ name: string; content: string }>) => zipStoreBytes(files.map((file) => ({ name: file.name, content: new TextEncoder().encode(file.content) })));
-
-export const safeSheetName = (name: string, used: Set<string>) => {
-  const base = name.replace(/[\\/*?:\[\]]/g, ' ').trim().slice(0, 31) || '表格';
-  let candidate = base;
-  let suffix = 2;
-  while (used.has(candidate)) candidate = `${base.slice(0, 31 - String(suffix).length - 1)}-${suffix++}`;
-  used.add(candidate);
-  return candidate;
-};
-
-export const workbookFromRows = (sheets: Array<{ name: string; rows: unknown[][] }>) => {
-  const files: Array<{ name: string; content: string }> = [];
-  const names: string[] = [];
-  const usedNames = new Set<string>();
-  for (const sheet of sheets) {
-    const sheetName = safeSheetName(sheet.name, usedNames);
-    names.push(sheetName);
-    files.push({ name: `xl/worksheets/sheet${files.length + 1}.xml`, content: sheetXml(sheet.rows) });
-  }
-  const sheetCount = names.length;
-  files.push({ name: 'xl/workbook.xml', content: workbookXml(names) });
-  files.push({ name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml(sheetCount) });
-  files.push({ name: '_rels/.rels', content: rootRelsXml });
-  files.push({ name: '[Content_Types].xml', content: contentTypesXml(sheetCount) });
-  return zipStore(files);
-};
 
 const readUint16 = (bytes: Uint8Array, offset: number) => bytes[offset] | (bytes[offset + 1] << 8);
 

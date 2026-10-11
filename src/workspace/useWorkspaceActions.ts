@@ -3,7 +3,7 @@ import { applyWorkspaceCellChanges, getWorkspaceCellValue } from './cellChanges'
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
-import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
+import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsxAsync, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import type { NameDialogState } from './workspaceShared';
@@ -37,13 +37,15 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
   const importTableParentId = useRef<string | null>(null);
   const importGeneration = useRef(0);
-  const importOwnerMounted = useRef(false);
+  const exportGeneration = useRef(0);
+  const ownerMounted = useRef(false);
 
   useEffect(() => {
-    importOwnerMounted.current = true;
+    ownerMounted.current = true;
     return () => {
-      importOwnerMounted.current = false;
+      ownerMounted.current = false;
       importGeneration.current += 1;
+      exportGeneration.current += 1;
     };
   }, []);
 
@@ -219,19 +221,27 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
     dialogs.close('configuring');
   };
 
-  const exportCurrent = () => { if (!data || !table) return; download(exportWorkspaceXlsx(data, table), `${fileBaseName(table.name)}.xlsx`); onExported(); setTableActionsOpen(false); setNotice('已匯出目前表格'); };
-  const exportAll = async () => {
-    if (!data) return;
-    setNotice('正在準備整個資料庫備份…');
+  const exportSnapshot = async (prepare: (isCurrent: () => boolean) => Promise<Blob>, name: string, completeMessage: string) => {
+    const generation = ++exportGeneration.current;
+    const isCurrent = () => ownerMounted.current && exportGeneration.current === generation;
     try {
-      download(await exportWorkspaceArchive(data), WORKSPACE_ARCHIVE_FILE_NAME);
-      onExported();
-      setDrawerOpen(false);
-      setNotice('已匯出整個資料庫備份');
+      const blob = await prepare(isCurrent);
+      if (!isCurrent()) return;
+      download(blob, name); onExported(); setNotice(completeMessage);
     } catch (error) {
-      console.error('[workspace-export] failed', error);
+      if (!isCurrent() || (error instanceof Error && error.name === 'AbortError')) return;
       setNotice(error instanceof Error ? `匯出失敗：${error.message}` : '匯出失敗');
     }
+  };
+  const exportCurrent = () => {
+    if (!data || !table) return;
+    setNotice('正在準備目前表格…'); setTableActionsOpen(false);
+    return exportSnapshot(isCurrent => exportWorkspaceXlsxAsync(data, table, { isCurrent }), `${fileBaseName(table.name)}.xlsx`, '已匯出目前表格');
+  };
+  const exportAll = () => {
+    if (!data) return;
+    setNotice('正在準備整個資料庫備份…'); setDrawerOpen(false);
+    return exportSnapshot(isCurrent => exportWorkspaceArchive(data, { isCurrent }), WORKSPACE_ARCHIVE_FILE_NAME, '已匯出整個資料庫備份');
   };
   
   const chooseImport = (kind: 'table' | 'workspace') => {
@@ -256,7 +266,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
     // replaces the current request; opening and cancelling a picker does not.
     const generation = ++importGeneration.current;
     const parentId = importTableParentId.current;
-    const isCurrentImport = () => importOwnerMounted.current && importGeneration.current === generation;
+    const isCurrentImport = () => ownerMounted.current && importGeneration.current === generation;
     setNotice(`正在匯入「${file.name}」…`);
     try {
       const imported = kind === 'workspace' && (/\.zip$/i.test(file.name) || file.type === 'application/zip')

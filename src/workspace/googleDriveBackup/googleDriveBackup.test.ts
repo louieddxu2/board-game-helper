@@ -6,6 +6,26 @@ import type { WorkspaceData } from '../types';
 
 const jsonResponse = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
 const blobFromBytes = (bytes?: Uint8Array) => new Blob([bytes ? bytes.slice().buffer as ArrayBuffer : new ArrayBuffer(0)]);
+if (typeof Blob.prototype.arrayBuffer !== 'function') Object.defineProperty(Blob.prototype, 'arrayBuffer', {
+  configurable: true,
+  value(this: Blob) {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this);
+    });
+  },
+});
+const blobBytes = async (blob: Blob) => {
+  if (typeof blob.arrayBuffer === 'function') return new Uint8Array(await blob.arrayBuffer());
+  return new Uint8Array(await new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(blob);
+  }));
+};
 
 const createBackup = (fetchImpl: typeof fetch, folderPath: readonly string[] = ['Test App', 'Backups']) => createGoogleDriveSingleFileBackup({
   tokenProvider: { getAccessToken: vi.fn(async () => 'test-token') },
@@ -32,7 +52,8 @@ describe('Google Drive single-file backup boundary', () => {
     const upload = fetchImpl.mock.calls[5];
     expect(upload[1]?.method).toBe('POST');
     expect(new Headers(upload[1]?.headers).get('content-type')).toContain('multipart/related');
-    expect(upload[1]?.body).toBeInstanceOf(Uint8Array);
+    expect(upload[1]?.body).toBeInstanceOf(Blob);
+    expect(new TextDecoder().decode(await blobBytes(upload[1]?.body as Blob))).toContain('xlsx');
   });
 
   it('updates the tagged workbook instead of creating a duplicate', async () => {
@@ -85,7 +106,7 @@ describe('Google Drive folder backup boundary', () => {
         return { ok: true, status: 200, blob: async () => blobFromBytes(files.get(id)?.body) } as unknown as Response;
       }
       if (url.includes('/upload/drive/v3/files')) {
-        const requestBody = init?.body as Uint8Array;
+        const requestBody = await blobBytes(init?.body as Blob);
         const text = new TextDecoder().decode(requestBody);
         const metadataMatch = text.match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{[\s\S]*?\})\r\n--/);
         const metadata = JSON.parse(metadataMatch?.[1] ?? '{}') as { id?: string; name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
@@ -245,6 +266,60 @@ describe('Google Identity token provider', () => {
 });
 
 describe('Google Drive API token recovery', () => {
+  it('preserves multipart bytes, typed-array offsets, and the same Blob on a 401 retry', async () => {
+    const source = new Uint8Array([9, 8, 7, 6, 5, 4]);
+    const payload = source.subarray(2, 5);
+    const originalBlob = new Blob([new Uint8Array([1, 2, 3])]);
+    const arrayBufferSpy = vi.fn(() => { throw new Error('the original Blob must stay streaming'); });
+    Object.defineProperty(originalBlob, 'arrayBuffer', { configurable: true, value: arrayBufferSpy });
+    const bodies: Blob[] = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body as Blob;
+      bodies.push(body);
+      return bodies.length === 1
+        ? new Response(JSON.stringify({ error: { message: 'expired' } }), { status: 401 })
+        : jsonResponse({ id: 'file-1', name: 'payload.bin' });
+    });
+    const getAccessToken = vi.fn()
+      .mockResolvedValueOnce('expired-token')
+      .mockResolvedValueOnce('fresh-token');
+    const api = new GoogleDriveApi({ tokenProvider: { getAccessToken }, fetchImpl });
+
+    await api.uploadFile({ parentId: 'root', name: 'payload.bin', mimeType: 'application/octet-stream', body: payload });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]);
+    const multipart = await blobBytes(bodies[0]);
+    const payloadIndex = multipart.findIndex((byte, index) => byte === 7 && multipart[index + 1] === 6 && multipart[index + 2] === 5);
+    expect(payloadIndex).toBeGreaterThan(0);
+    expect(Array.from(multipart.slice(payloadIndex, payloadIndex + payload.length))).toEqual([7, 6, 5]);
+    expect(getAccessToken).toHaveBeenNthCalledWith(1, {});
+    expect(getAccessToken).toHaveBeenNthCalledWith(2, { forceRefresh: true });
+
+    let blobBody!: Blob;
+    const blobFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      blobBody = init?.body as Blob;
+      return jsonResponse({ id: 'file-2', name: 'blob.bin' });
+    });
+    const blobApi = new GoogleDriveApi({ tokenProvider: { getAccessToken: vi.fn(async () => 'token') }, fetchImpl: blobFetch });
+    await blobApi.uploadFile({ parentId: 'root', name: 'blob.bin', mimeType: 'application/octet-stream', body: originalBlob });
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    const blobMultipart = await blobBytes(blobBody);
+    expect(Array.from(blobMultipart)).toEqual(expect.arrayContaining([1, 2, 3]));
+
+    const viewSource = new Uint8Array([21, 22, 23, 24]);
+    const viewPayload = new DataView(viewSource.buffer, 1, 2);
+    let viewBody!: Blob;
+    const viewFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      viewBody = init?.body as Blob;
+      return jsonResponse({ id: 'file-3', name: 'view.bin' });
+    });
+    const viewApi = new GoogleDriveApi({ tokenProvider: { getAccessToken: vi.fn(async () => 'token') }, fetchImpl: viewFetch });
+    await viewApi.uploadFile({ parentId: 'root', name: 'view.bin', mimeType: 'application/octet-stream', body: viewPayload });
+    const viewMultipart = await blobBytes(viewBody);
+    const viewIndex = viewMultipart.findIndex((byte, index) => byte === 22 && viewMultipart[index + 1] === 23);
+    expect(viewIndex).toBeGreaterThan(0);
+  });
+
   it('silently refreshes once after an expired access token response', async () => {
     const getAccessToken = vi.fn()
       .mockResolvedValueOnce('expired-token')

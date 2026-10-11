@@ -3,7 +3,9 @@ import { workspaceTableChangeRevision } from './changeRevisions';
 import { createColumn, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime, readDynamicOptions } from './model';
 import { assertWorkspaceTableComplete } from './rowPages';
 import type { SheetCell, SheetRows } from './spreadsheetCodec';
-import { BACKUP_MANIFEST_MARKER, CURRENT_XLSX_FORMAT_VERSION, INPUT_TYPES, NUMBER_RANGES_JSON_MARKER, OPTIONS_JSON_MARKER, OPTION_COLORS_JSON_MARKER, TABLE_SETTINGS_MARKER, WORKSPACE_ARCHIVE_ROOT, WORKSPACE_MARKER, blobBytes, readStoredXlsx, readStoredZip, readXlsxFile, safeSheetName, tableDataRows, tableSettingsRows, workbookFromRows, workspaceRows, zipStoreBytes } from './spreadsheetCodec';
+import { BACKUP_MANIFEST_MARKER, CURRENT_XLSX_FORMAT_VERSION, INPUT_TYPES, NUMBER_RANGES_JSON_MARKER, OPTIONS_JSON_MARKER, OPTION_COLORS_JSON_MARKER, TABLE_SETTINGS_MARKER, WORKSPACE_ARCHIVE_ROOT, WORKSPACE_MARKER, blobBytes, readStoredXlsx, readStoredZip, readXlsxFile, safeSheetName, iterateTableDataRows, tableSettingsRows, workbookFromRows, workbookFromRowsSteps, workspaceRows, zipStoreBytesAsync } from './spreadsheetCodec';
+import { finishWorkspaceSteps, runWorkspaceCooperativeSteps } from './workspaceCooperativeWork';
+import type { SpreadsheetSheet } from './spreadsheetWorkbook';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable, WorkspaceTextAlign } from './types';
 
 export interface WorkspaceBackupTableFileRef {
@@ -54,11 +56,11 @@ export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: 
   ],
 }]);
 
-export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable) => {
+function* exportWorkspaceXlsxSteps(data: WorkspaceData, table?: WorkspaceTable): Generator<void, Blob> {
   const tables = table ? [table] : data.tables;
   if (!table && data.nodes.some(node => node.type === 'table' && !tables.some(table => table.id === node.tableId))) throw new Error('工作區表格尚未完整載入，無法匯出');
   tables.forEach(assertWorkspaceTableComplete);
-  const sheets: Array<{ name: string; rows: unknown[][] }> = [];
+  const sheets: SpreadsheetSheet[] = [];
   const usedNames = new Set<string>();
   if (!table) {
     sheets.push({ name: safeSheetName('__workspace', usedNames), rows: workspaceRows(data) });
@@ -66,16 +68,22 @@ export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable)
   for (const currentTable of tables) {
     const dataSheetName = safeSheetName(currentTable.name, usedNames);
     const settingsSheetName = safeSheetName(`${dataSheetName}__設定`, usedNames);
-    sheets.push({ name: dataSheetName, rows: tableDataRows(currentTable) });
+    sheets.push({ name: dataSheetName, rows: () => iterateTableDataRows(currentTable) });
     sheets.push({ name: settingsSheetName, rows: tableSettingsRows(currentTable, dataSheetName) });
   }
-  return workbookFromRows(sheets);
+  return yield* workbookFromRowsSteps(sheets);
+}
+export const exportWorkspaceXlsx = (data: WorkspaceData, table?: WorkspaceTable) => finishWorkspaceSteps(exportWorkspaceXlsxSteps(data, table));
+export interface WorkspaceExportOptions { isCurrent?: () => boolean }
+const checkExportCurrent = (options?: WorkspaceExportOptions) => {
+  if (options?.isCurrent && !options.isCurrent()) throw new DOMException('Workspace export cancelled', 'AbortError');
 };
+export const exportWorkspaceXlsxAsync = (data: WorkspaceData, table?: WorkspaceTable, options?: WorkspaceExportOptions) => runWorkspaceCooperativeSteps(exportWorkspaceXlsxSteps(data, table), () => checkExportCurrent(options));
 
-const archivePathSegment = (name: string) => name
-  .replace(/[\\/:*?"<>|]/g, ' ')
-  .replace(/[\u0000-\u001f]/g, ' ')
-  .trim() || '未命名';
+const archivePathSegment = (name: string) => {
+  const segment = name.replace(/[\\/:*?"<>|]/g, ' ').replace(/[\u0000-\u001f]/g, ' ').trim();
+  return !segment || /^\.+$/.test(segment) ? '未命名' : segment;
+};
 
 const archiveFolderSegments = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>) => {
   const segments: string[] = [];
@@ -95,35 +103,43 @@ const archiveFolderSegments = (node: WorkspaceNode, nodes: Map<string, Workspace
 
 const localBackupRefs = (data: WorkspaceData) => {
   const nodes = new Map(data.nodes.map((node) => [node.id, node]));
+  const tableById = new Map(data.tables.map(table => [table.id, table]));
+  const usedPaths = new Set([`${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`]);
   const folders: WorkspaceBackupFolderRef[] = data.nodes
     .filter((node) => node.type === 'folder')
     .map((node) => ({ id: node.id, name: node.name, parentId: node.parentId, order: node.order, driveFolderId: '' }));
   const tables: WorkspaceBackupTableFileRef[] = data.nodes
     .filter((node) => node.type === 'table' && node.tableId)
     .map((node) => {
-      const table = data.tables.find((item) => item.id === node.tableId);
+      const table = tableById.get(node.tableId!);
       if (!table) throw new Error(`找不到表格資料：${node.name}`);
-      const baseName = (table.name || node.name || table.id).replace(/\.xlsx$/i, '');
-      return { id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, driveFileId: '', fileName: `${archivePathSegment(baseName)}.xlsx` };
+      const baseName = archivePathSegment((table.name || node.name || table.id).replace(/\.xlsx$/i, '')).replace(/\.{2,}/g, ' ').replace(/\.+$/, '').trim() || '未命名';
+      const directory = [WORKSPACE_ARCHIVE_ROOT, ...archiveFolderSegments(node, nodes)].join('/');
+      let fileName = `${baseName}.xlsx`;
+      for (let suffix = 2; usedPaths.has(`${directory}/${fileName}`); suffix += 1) fileName = `${baseName}-${suffix}.xlsx`;
+      usedPaths.add(`${directory}/${fileName}`);
+      return { id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, driveFileId: '', fileName };
     });
   return { nodes, folders, tables };
 };
 const blobFromBytes = (bytes: Uint8Array, type: string) => new Blob([bytes.slice().buffer as ArrayBuffer], { type });
 
-export const exportWorkspaceArchive = async (data: WorkspaceData) => {
+export const exportWorkspaceArchive = async (data: WorkspaceData, options?: WorkspaceExportOptions) => {
+  checkExportCurrent(options);
   const { nodes, folders, tables } = localBackupRefs(data);
   const entries: Array<{ name: string; content: Uint8Array }> = [{
     name: `${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`,
     content: await blobBytes(exportWorkspaceBackupManifestXlsx(data, folders, tables, Date.now())),
   }];
   for (const ref of tables) {
+    checkExportCurrent(options);
     const node = data.nodes.find((item) => item.id === ref.nodeId);
     const table = data.tables.find((item) => item.id === ref.id);
     if (!node || !table) throw new Error(`找不到匯出表格：${ref.name}`);
     const path = [WORKSPACE_ARCHIVE_ROOT, ...archiveFolderSegments(node, nodes), ref.fileName].join('/');
-    entries.push({ name: path, content: await blobBytes(exportWorkspaceXlsx(data, table)) });
+    entries.push({ name: path, content: await blobBytes(await exportWorkspaceXlsxAsync(data, table, options)) });
   }
-  return zipStoreBytes(entries, 'application/zip');
+  return zipStoreBytesAsync(entries, 'application/zip', () => checkExportCurrent(options));
 };
 const stringValue = (value: SheetCell | undefined) => value === null || value === undefined ? '' : String(value);
 

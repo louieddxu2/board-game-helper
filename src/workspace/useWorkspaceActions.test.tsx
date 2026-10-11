@@ -3,15 +3,23 @@ import { act, cleanup, render, renderHook, screen } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyWorkspaceTableHistoryAction } from './history';
 import { getDynamicOptions } from './model';
-import { importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
+import { exportWorkspaceArchive, exportWorkspaceXlsxAsync, importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
 import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from './useWorkspaceActions';
 import { useWorkspaceDialogs } from './useWorkspaceDialogs';
+import { download } from './workspaceShared';
 
 vi.mock('./spreadsheet', async (importOriginal) => ({
   ...await importOriginal<typeof import('./spreadsheet')>(),
+  exportWorkspaceArchive: vi.fn(),
+  exportWorkspaceXlsxAsync: vi.fn(),
   importWorkspaceXlsx: vi.fn(),
   importWorkspaceArchive: vi.fn(),
+}));
+
+vi.mock('./workspaceShared', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./workspaceShared')>(),
+  download: vi.fn(),
 }));
 
 const table: WorkspaceTable = { id: 'imported', name: 'Imported', rowHeaderName: '物件', columns: [], rows: [], updatedAt: 0 };
@@ -24,6 +32,12 @@ const deferred = () => {
   let resolve!: (value: ImportedWorkspace) => void;
   let reject!: (error: Error) => void;
   const promise = new Promise<ImportedWorkspace>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+};
+const deferredBlob = () => {
+  let resolve!: (value: Blob) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<Blob>((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
 };
 const makeProps = (): Parameters<typeof useWorkspaceActions>[0] => ({
@@ -161,6 +175,90 @@ describe('Workspace import ownership', () => {
     });
     expect(screen.getByTestId('preview')).toHaveTextContent('none');
     expect(screen.getByTestId('notice').textContent).toBe(initialNotice);
+  });
+});
+
+describe('Workspace export ownership', () => {
+  it('closes the menu immediately and downloads a completed current-table export', async () => {
+    const blob = new Blob(['xlsx']);
+    vi.mocked(exportWorkspaceXlsxAsync).mockResolvedValueOnce(blob);
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+
+    await act(async () => { await result.current.exportCurrent(); });
+
+    expect(props.setNotice).toHaveBeenCalledWith('正在準備目前表格…');
+    expect(props.setTableActionsOpen).toHaveBeenCalledWith(false);
+    expect(download).toHaveBeenCalledWith(blob, `${editableTable.name}.xlsx`);
+    expect(props.onExported).toHaveBeenCalledOnce();
+    expect(props.setNotice).toHaveBeenCalledWith('已匯出目前表格');
+    expect(exportWorkspaceXlsxAsync).toHaveBeenCalledWith(props.data, props.table, { isCurrent: expect.any(Function) });
+  });
+
+  it('does not publish a late export after the owner unmounts', async () => {
+    const pending = deferredBlob();
+    vi.mocked(exportWorkspaceXlsxAsync).mockReturnValueOnce(pending.promise);
+    const props = makeEditableProps();
+    const { result, unmount } = renderHook(() => useWorkspaceActions(props));
+    let running!: Promise<void>;
+    act(() => { running = result.current.exportCurrent()!; });
+    unmount();
+
+    await act(async () => { pending.resolve(new Blob(['late'])); await running; });
+    expect(download).not.toHaveBeenCalled();
+    expect(props.onExported).not.toHaveBeenCalled();
+  });
+
+  it('keeps an export snapshot alive when a new edit rerenders the host', async () => {
+    const pending = deferredBlob();
+    vi.mocked(exportWorkspaceXlsxAsync).mockReturnValueOnce(pending.promise);
+    const props = makeEditableProps();
+    const { result, rerender } = renderHook((currentProps) => useWorkspaceActions(currentProps), { initialProps: props });
+    let running!: Promise<void>;
+    act(() => { running = result.current.exportCurrent()!; });
+    const changedTable = { ...editableTable, rows: editableTable.rows.map(row => ({ ...row, name: '新編輯' })) };
+    const changedData = { ...editableData, tables: [changedTable] };
+    const changedProps = { ...props, data: changedData, dataRef: { current: changedData } as RefObject<WorkspaceData | undefined>, table: changedTable };
+    rerender(changedProps);
+    await act(async () => { pending.resolve(new Blob(['snapshot'])); await running; });
+
+    expect(exportWorkspaceXlsxAsync).toHaveBeenCalledWith(editableData, editableTable, { isCurrent: expect.any(Function) });
+    expect(download).toHaveBeenCalledOnce();
+    expect(props.onExported).toHaveBeenCalledOnce();
+  });
+
+  it('uses the same ownership rules for a whole-workspace archive', async () => {
+    const pending = deferredBlob();
+    vi.mocked(exportWorkspaceArchive).mockReturnValueOnce(pending.promise);
+    const props = makeEditableProps();
+    const { result, unmount } = renderHook(() => useWorkspaceActions(props));
+    let running!: Promise<void>;
+    act(() => { running = result.current.exportAll()!; });
+    expect(props.setDrawerOpen).toHaveBeenCalledWith(false);
+    unmount();
+    await act(async () => { pending.resolve(new Blob(['late archive'])); await running; });
+    expect(download).not.toHaveBeenCalled();
+    expect(props.onExported).not.toHaveBeenCalled();
+  });
+
+  it.each(['late', 'failed'] as const)('publishes only the newest export when the first one is %s', async (outcome) => {
+    const first = deferredBlob();
+    const second = deferredBlob();
+    vi.mocked(exportWorkspaceXlsxAsync).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const props = makeEditableProps();
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    let firstRun!: Promise<void>, secondRun!: Promise<void>;
+    act(() => { firstRun = result.current.exportCurrent()!; });
+    act(() => { secondRun = result.current.exportCurrent()!; });
+    await act(async () => { second.resolve(new Blob(['second'])); await secondRun; });
+    expect(download).toHaveBeenCalledOnce();
+    expect(props.onExported).toHaveBeenCalledOnce();
+    if (outcome === 'late') first.resolve(new Blob(['first']));
+    else first.reject(new Error('stale export failed'));
+    await act(async () => { await firstRun; });
+    expect(download).toHaveBeenCalledOnce();
+    expect(props.onExported).toHaveBeenCalledOnce();
+    expect(props.setNotice).toHaveBeenCalledWith('已匯出目前表格');
   });
 });
 

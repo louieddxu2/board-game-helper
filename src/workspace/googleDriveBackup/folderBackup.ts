@@ -1,6 +1,6 @@
 import { normalizeWorkspace } from '../model';
 import { workspaceTableChangeRevision } from '../changeRevisions';
-import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsx, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, type WorkspaceBackupFolderRef, type WorkspaceBackupTableFileRef } from '../spreadsheet';
+import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, type WorkspaceBackupFolderRef, type WorkspaceBackupTableFileRef } from '../spreadsheet';
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from '../types';
 import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
 import { BackupNotFoundError } from './singleFileBackup';
@@ -218,7 +218,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
         tableRefs.push({ id: previousTable.id, nodeId: node.id, folderId: node.parentId, name: previousTable.name, updatedAt: previousTable.updatedAt, changeRevision: previousTable.changeRevision, driveFileId: previousTable.driveFileId, fileName: previousTable.fileName });
         continue;
       }
-      const file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceXlsx(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
+      const file = await api.uploadFile({ parentId, name: fileName, mimeType: DRIVE_XLSX_MIME_TYPE, body: await exportWorkspaceXlsxAsync(data, table), appProperties: taggedProperties(DRIVE_TABLE_KIND, table.id) });
       tableRefs.push({ id: table.id, nodeId: node.id, folderId: node.parentId, name: table.name, updatedAt: table.updatedAt, changeRevision: workspaceTableChangeRevision(table), driveFileId: file.id, fileName });
     }
 
