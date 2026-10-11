@@ -1,5 +1,5 @@
 import { getRowHeaderColumn, makeId, sameWorkspaceCellValue } from './model';
-import { applyWorkspaceCellChanges, removeWorkspaceColumnValues } from './cellChanges';
+import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, removeWorkspaceColumnValues, restoreWorkspaceColumnValues } from './cellChanges';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspacePasteCellChange } from './workspacePaste';
 import type { WorkspaceColumnValueChange } from './columnConversion';
@@ -216,7 +216,7 @@ export const applyWorkspaceTableHistoryAction = (
           ...current,
           columns: forward ? current.columns.filter((column) => column.id !== action.column.id) : insertById(current.columns, action.column, action.index),
           rows: forward ? removeWorkspaceColumnValues(current.rows, new Set([action.column.id]))
-            : current.rows.map(row => ({ ...row, values: { ...row.values, [action.column.id]: action.values[row.id] ?? null } })),
+            : restoreWorkspaceColumnValues(current.rows, action.column.id, action.values),
         });
       case 'reorder-columns':
         return tableWithUpdatedAt({ ...current, columns: reorderByIds(current.columns, forward ? action.afterIds : action.beforeIds) });
@@ -300,7 +300,7 @@ export const inferWorkspaceTableMutation = (before: WorkspaceData, after: Worksp
   }
   if (removedColumnIds.length === 1 && addedColumnIds.length === 0) {
     const column = beforeTable.columns.find((item) => item.id === removedColumnIds[0]);
-    if (column) return mutation('刪除屬性', { type: 'remove-column', column, index: beforeColumnIds.indexOf(column.id), values: Object.fromEntries(beforeTable.rows.map((row) => [row.id, row.values[column.id] ?? null])) });
+    if (column) return mutation('刪除屬性', { type: 'remove-column', column, index: beforeColumnIds.indexOf(column.id), values: captureWorkspaceColumnValues(beforeTable.rows, column.id) });
   }
   if (addedColumnIds.length === 0 && removedColumnIds.length === 0 && !same(beforeColumnIds, nextColumnIds) && sameRows(beforeTable, nextTable)) {
     return mutation('重新排列屬性', { type: 'reorder-columns', beforeIds: beforeColumnIds, afterIds: nextColumnIds });

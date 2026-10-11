@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { applyWorkspaceCellChanges, getWorkspaceCellValue } from './cellChanges';
+import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, getWorkspaceCellValue } from './cellChanges';
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
@@ -197,7 +197,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
       const index = current?.table.columns.findIndex(item => item.id === column.id) ?? -1;
       if (current && index >= 0) commitTableAction(current, '刪除屬性', {
         type: 'remove-column', column: current.table.columns[index], index,
-        values: Object.fromEntries(current.table.rows.map(row => [row.id, row.values[column.id] ?? null])),
+        values: captureWorkspaceColumnValues(current.table.rows, column.id),
       });
       dialogs.close('confirmDialog');
     },

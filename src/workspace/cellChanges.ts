@@ -15,6 +15,32 @@ export const sameWorkspaceCellValue = (left: WorkspaceCellValue, right: Workspac
 export const getWorkspaceCellValue = (row: WorkspaceRow, columnId: string, rowHeaderId: string | undefined): WorkspaceCellValue =>
   (columnId === rowHeaderId ? row.name : row.values[columnId]) ?? null;
 
+/** Missing keys stay absent in history; explicitly stored empty values remain restorable. */
+export const captureWorkspaceColumnValues = (rows: readonly WorkspaceRow[], columnId: string): Record<string, WorkspaceCellValue> => {
+  function* entries(): Generator<[string, WorkspaceCellValue]> {
+    for (const row of rows) {
+      if (Object.hasOwn(row.values, columnId)) yield [row.id, row.values[columnId] ?? null];
+    }
+  }
+  return Object.fromEntries(entries());
+};
+
+/** Old dense snapshots still restore every key; sparse snapshots only restore captured rows. */
+export const restoreWorkspaceColumnValues = (
+  rows: WorkspaceRow[], columnId: string, values: Readonly<Record<string, WorkspaceCellValue>>,
+): WorkspaceRow[] => {
+  if (!Object.keys(values).length) return rows;
+  let changed = false;
+  const nextRows = rows.map(row => {
+    if (!Object.hasOwn(values, row.id)) return row;
+    const value = values[row.id] ?? null;
+    if (Object.hasOwn(row.values, columnId) && sameWorkspaceCellValue(row.values[columnId], value)) return row;
+    changed = true;
+    return { ...row, values: { ...row.values, [columnId]: value } };
+  });
+  return changed ? nextRows : rows;
+};
+
 /** Remove column keys rather than assigning null; untouched rows retain their identity. */
 export const removeWorkspaceColumnValues = (rows: WorkspaceRow[], columnIds: ReadonlySet<string>): WorkspaceRow[] => {
   if (!columnIds.size) return rows;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyWorkspaceCellChanges, removeWorkspaceColumnValues } from './cellChanges';
+import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, removeWorkspaceColumnValues, restoreWorkspaceColumnValues } from './cellChanges';
 import type { WorkspaceRow } from './types';
 
 const headerId = 'row-header';
@@ -59,5 +59,34 @@ describe('workspace cell changes', () => {
     expect(next[2].values).toEqual({ [valueId]: '保留' });
     expect(sparseRows[0].values[linkId]).toBeNull();
     expect(sparseRows[2].values[linkId]).toEqual(link);
+  });
+
+  it('captures and restores only present values, including null, empty, zero, links, and a __proto__ row id', () => {
+    const sparseRows: WorkspaceRow[] = [
+      { id: 'missing', name: '缺少', values: { [linkId]: '其他' } },
+      { id: 'null', name: '空值', values: { [valueId]: null } },
+      { id: 'empty', name: '空字串', values: { [valueId]: '' } },
+      { id: 'zero', name: '零', values: { [valueId]: 0 } },
+      { id: 'link', name: '連結', values: { [valueId]: link } },
+      { id: '__proto__', name: '特殊', values: { [valueId]: '特殊值' } },
+    ];
+    const captured = captureWorkspaceColumnValues(sparseRows, valueId);
+
+    expect(Object.keys(captured)).toEqual(['null', 'empty', 'zero', 'link', '__proto__']);
+    expect(Object.hasOwn(captured, 'missing')).toBe(false);
+    expect(Object.hasOwn(captured, '__proto__')).toBe(true);
+    expect(captured.null).toBeNull();
+    expect(captured.empty).toBe('');
+    expect(captured.zero).toBe(0);
+    expect(captured.link).toEqual(link);
+    expect(captured['__proto__']).toBe('特殊值');
+
+    const removed = removeWorkspaceColumnValues(sparseRows, new Set([valueId]));
+    const restored = restoreWorkspaceColumnValues(removed, valueId, captured);
+    expect(Object.hasOwn(restored[0].values, valueId)).toBe(false);
+    expect(restored.slice(1).map(row => row.values[valueId])).toEqual([null, '', 0, link, '特殊值']);
+    expect(restored[5].id).toBe('__proto__');
+
+    expect(restoreWorkspaceColumnValues(removed, valueId, {})).toBe(removed);
   });
 });

@@ -389,7 +389,7 @@ describe('Workspace structural actions', () => {
     const latestColumn = { ...editableColumn, name: '確認時欄位' };
     const latestTable = kind === 'row'
       ? { ...actionTable, rows: [actionTable.rows[1], latestRow] }
-      : { ...actionTable, columns: [actionColumn, latestColumn], rows: actionTable.rows.map(row => row.id === latestRow.id ? latestRow : row) };
+      : { ...actionTable, columns: [actionColumn, latestColumn], rows: actionTable.rows.map(row => row.id === latestRow.id ? latestRow : { ...row, values: { [actionColumn.id]: row.values[actionColumn.id] } }) };
     const latestOtherTable = { ...otherTable, rows: [{ ...otherTable.rows[0], name: '外部更新' }] };
     props.dataRef.current = { ...actionData, tables: [latestTable, latestOtherTable] };
 
@@ -406,12 +406,13 @@ describe('Workspace structural actions', () => {
     } else {
       expect(mutation?.action).toMatchObject({ type: 'remove-column', index: 1, column: latestColumn });
       expect((mutation?.action as { values: Record<string, unknown> }).values['row-1']).toBe('確認時刪除值');
+      expect(Object.hasOwn((mutation?.action as { values: Record<string, unknown> }).values, 'row-2')).toBe(false);
       expect(next.tables[0].columns).toEqual([actionColumn]);
       expect(next.tables[0].rows.every(row => !(editableColumn.id in row.values))).toBe(true);
       const undone = applyWorkspaceTableHistoryAction(next, actionTable.id, mutation!.action, 'undo');
       const redone = applyWorkspaceTableHistoryAction(undone, actionTable.id, mutation!.action, 'redo');
-      expect(undone.tables[0].rows.every(row => editableColumn.id in row.values)).toBe(true);
       expect(undone.tables[0].rows[0].values[editableColumn.id]).toBe('確認時刪除值');
+      expect(Object.hasOwn(undone.tables[0].rows[1].values, editableColumn.id)).toBe(false);
       expect(redone.tables[0].rows.every(row => !(editableColumn.id in row.values))).toBe(true);
     }
     expect(props.dialogs.close).toHaveBeenCalledWith('confirmDialog');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyWorkspaceTableHistoryAction, createEmptyWorkspaceTableHistory, hydrateWorkspaceHistories, inferWorkspaceTableMutation, pruneWorkspaceTableHistory, pushWorkspaceTableHistory, workspaceHistoryLimit, workspaceHistoryRetentionMs } from './history';
+import { removeWorkspaceColumnValues } from './cellChanges';
 import { emptyWorkspace, normalizeWorkspace } from './model';
 import { prepareWorkspaceColumnSave } from './columnConversion';
 import type { WorkspaceData, WorkspaceTable } from './types';
@@ -304,6 +305,49 @@ describe('workspace table history', () => {
     expect(undone.tables[0].rows[0].values[removedColumn.id]).toBeNull();
     expect(undone.tables[0].rows[1].values[removedColumn.id]).toBeNull();
     expect(undone.tables[0].rows[2].values[removedColumn.id]).toEqual(link);
+  });
+
+  it('infers sparse removal values and restores only captured rows through undo and redo', () => {
+    const removedColumn = { id: 'column-2', name: '稀疏欄', inputType: 'link' as const, options: [] };
+    const linkValue = { url: 'https://example.com/rules', label: '規則' };
+    const beforeTable: WorkspaceTable = {
+      ...table(),
+      columns: [...table().columns, removedColumn],
+      rows: [
+        { id: 'row-missing', name: '缺少', values: { 'column-1': 'a' } },
+        { id: 'row-null', name: '空值', values: { 'column-1': 'b', [removedColumn.id]: null } },
+        { id: 'row-empty', name: '空字串', values: { 'column-1': 'c', [removedColumn.id]: '' } },
+        { id: 'row-zero', name: '零', values: { 'column-1': 'd', [removedColumn.id]: 0 } },
+        { id: 'row-link', name: '連結', values: { 'column-1': 'e', [removedColumn.id]: linkValue } },
+        { id: '__proto__', name: '特殊', values: { 'column-1': 'f', [removedColumn.id]: '特殊值' } },
+      ],
+    };
+    const before = data(beforeTable);
+    const afterTable: WorkspaceTable = {
+      ...beforeTable,
+      columns: [beforeTable.columns[0]],
+      rows: removeWorkspaceColumnValues(beforeTable.rows, new Set([removedColumn.id])),
+    };
+    const mutation = inferWorkspaceTableMutation(before, data(afterTable));
+
+    expect(mutation?.action.type).toBe('remove-column');
+    if (!mutation || mutation.action.type !== 'remove-column') throw new Error('Expected sparse remove-column action');
+    expect(Object.keys(mutation.action.values)).toEqual(['row-null', 'row-empty', 'row-zero', 'row-link', '__proto__']);
+    expect(Object.hasOwn(mutation.action.values, 'row-missing')).toBe(false);
+    expect(mutation.action.values['row-null']).toBeNull();
+    expect(mutation.action.values['row-empty']).toBe('');
+    expect(mutation.action.values['row-zero']).toBe(0);
+    expect(mutation.action.values['row-link']).toEqual(linkValue);
+    expect(Object.hasOwn(mutation.action.values, '__proto__')).toBe(true);
+
+    const removed = applyWorkspaceTableHistoryAction(before, beforeTable.id, mutation.action, 'redo');
+    const undone = applyWorkspaceTableHistoryAction(removed, beforeTable.id, mutation.action, 'undo');
+    const redone = applyWorkspaceTableHistoryAction(undone, beforeTable.id, mutation.action, 'redo');
+    expect(removed.tables[0].rows[0]).toBe(beforeTable.rows[0]);
+    expect(undone.tables[0].rows[0]).toBe(removed.tables[0].rows[0]);
+    expect(Object.hasOwn(undone.tables[0].rows[0].values, removedColumn.id)).toBe(false);
+    expect(undone.tables[0].rows.slice(1).map(row => row.values[removedColumn.id])).toEqual([null, '', 0, linkValue, '特殊值']);
+    expect(redone.tables[0].rows.every(row => !Object.hasOwn(row.values, removedColumn.id))).toBe(true);
   });
 
   it('keeps unaffected sparse rows through pasted-column undo', () => {

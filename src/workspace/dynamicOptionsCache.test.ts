@@ -276,6 +276,28 @@ describe('dynamic option frequency cache', () => {
     expect(cache.getOptions(cleared.tables[0], column.id)).toEqual(['B']);
   });
 
+  it('rebuilds sparse dynamic options after removing and undoing a column', () => {
+    const { table, column, text, data } = fixture(['A', 'A', 'B']);
+    table.rows = table.rows.map((row, index) => ({
+      ...row,
+      values: index === 0 ? { [text.id]: null } : { [column.id]: row.values[column.id], [text.id]: null },
+    }));
+    const cache = new WorkspaceDynamicOptionsCache();
+    expect(cache.getOptions(table, column.id)).toEqual(['A', 'B']);
+
+    const action: WorkspaceTableHistoryAction = {
+      type: 'remove-column', column, index: 0, values: { r1: 'A', r2: 'B' },
+    };
+    const removed = transition(cache, data, action);
+    expect(removed.tables[0].columns).toEqual([text]);
+    expect(Object.hasOwn(removed.tables[0].rows[0].values, column.id)).toBe(false);
+
+    const restored = transition(cache, removed, action, 'undo');
+    expect(restored.tables[0].columns[0].id).toBe(column.id);
+    expect(Object.hasOwn(restored.tables[0].rows[0].values, column.id)).toBe(false);
+    expect(cache.getOptions(restored.tables[0], column.id)).toEqual(['A', 'B']);
+  });
+
   it('counts pasted new rows once and reverses their contributions on undo', () => {
     const { table, column, data } = fixture(['A', 'B']);
     const cache = new WorkspaceDynamicOptionsCache();

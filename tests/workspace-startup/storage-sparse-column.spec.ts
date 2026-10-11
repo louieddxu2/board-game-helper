@@ -131,6 +131,181 @@ test('first sparse-column edit writes one chunk and page, survives reload, and e
   expect(result.importedValue).toBe('新欄值');
 });
 
+test('10k-row empty-column removal captures no values and keeps delete undo redo payload-free', async ({ page, context }) => {
+  await page.goto(`${site.origin}/probe`);
+  const removed = await page.evaluate(async columnId => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10_000, 2);
+    const original = api.data.tables[0];
+    const column = { id: columnId, name: '稀疏欄', inputType: 'text' as const, options: [] };
+    const addAction: Parameters<typeof api.history.applyWorkspaceTableHistoryAction>[2] = { type: 'add-column', column, index: original.columns.length };
+    const addHistory = api.history.pushWorkspaceTableHistory(api.history.createEmptyWorkspaceTableHistory(original.id), { tableId: original.id, label: '新增屬性', action: addAction });
+    const added = api.history.applyWorkspaceTableHistoryAction(api.data, original.id, addAction, 'redo');
+    await api.db.saveWorkspace(added, { mutation: { tableId: original.id, action: addAction }, history: { replace: [addHistory] } });
+    const loaded = await api.db.loadWorkspace();
+    const table = loaded.tables[0];
+    const candidate = {
+      ...loaded,
+      tables: loaded.tables.map(item => item.id === table.id ? { ...item, columns: item.columns.filter(item => item.id !== columnId) } : item),
+    };
+    const mutation = api.history.inferWorkspaceTableMutation(loaded, candidate);
+    if (!mutation || mutation.action.type !== 'remove-column') throw new Error('Expected inferred remove-column action');
+    const removedData = api.history.applyWorkspaceTableHistoryAction(loaded, table.id, mutation.action, 'redo');
+    const history = (await api.db.loadWorkspaceHistories()).get(table.id)!;
+    const removalHistory = api.history.pushWorkspaceTableHistory(history, mutation);
+    const beforeDisk = await api.readDisk();
+    api.data = removedData;
+    api.instrument();
+    api.writes = [];
+    await api.db.saveWorkspace(removedData, { mutation, history: { replace: [removalHistory] } });
+    const afterDisk = await api.readDisk();
+    const payloadStores = ['rowChunks', 'rowPages', 'rowOrderPages'];
+    const payload = Object.fromEntries(payloadStores.map(store => [store, api.writes.filter(write => write.store === store).length]));
+    const ids = (disk: typeof beforeDisk) => ({
+      chunks: disk.chunks.filter(chunk => chunk.tableId === table.id).map(chunk => chunk.chunkId),
+      pages: disk.pages.filter(page => page.tableId === table.id).map(page => page.id),
+      orders: disk.orders.filter(page => page.tableId === table.id).map(page => page.pageId),
+    });
+    return { tableId: table.id, values: Object.keys(mutation.action.values), payload, before: ids(beforeDisk), after: ids(afterDisk) };
+  }, sparseColumnId);
+
+  expect(removed.values).toEqual([]);
+  expect(removed.payload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+  expect(removed.after).toEqual(removed.before);
+
+  const fresh = await context.newPage();
+  fresh.on('pageerror', error => errors.push(error.message));
+  await fresh.goto(`${site.origin}/probe`);
+  const reopened = await fresh.evaluate(async ({ columnId, tableId }) => {
+    const api = window.workspaceStorageFixture;
+    const loaded = await api.db.loadWorkspace();
+    const history = (await api.db.loadWorkspaceHistories()).get(tableId)!;
+    const entry = history.past.at(-1)!;
+    const action = entry.action;
+    const payload = () => Object.fromEntries(['rowChunks', 'rowPages', 'rowOrderPages'].map(store => [store, api.writes.filter(write => write.store === store).length]));
+    const save = async (data: typeof loaded, nextHistory: typeof history) => {
+      api.writes = [];
+      await api.db.saveWorkspace(data, { mutation: { tableId, action }, history: { replace: [nextHistory] } });
+      return payload();
+    };
+    api.instrument();
+    const undone = api.history.applyWorkspaceTableHistoryAction(loaded, tableId, action, 'undo');
+    const undoneHistory = { ...history, past: history.past.slice(0, -1), future: [entry, ...history.future] };
+    const undoneTable = undone.tables[0];
+    const undoColumns = undoneTable.columns.map(column => column.id);
+    const undoMissingRows = undoneTable.rows.filter(row => !Object.hasOwn(row.values, columnId)).length;
+    const undoPayload = await save(undone, undoneHistory);
+    const redone = api.history.applyWorkspaceTableHistoryAction(undone, tableId, action, 'redo');
+    const redoneHistory = { ...undoneHistory, past: [...undoneHistory.past, entry], future: undoneHistory.future.slice(1) };
+    const redoPayload = await save(redone, redoneHistory);
+    const final = await api.db.loadWorkspace();
+    return { columns: final.tables[0].columns.map(column => column.id), missingRows: final.tables[0].rows.filter(row => !Object.hasOwn(row.values, columnId)).length, undoColumns, undoMissingRows, undoPayload, redoPayload };
+  }, { columnId: sparseColumnId, tableId: removed.tableId });
+  await fresh.close();
+  expect(reopened.undoColumns).toContain(sparseColumnId);
+  expect(reopened.undoMissingRows).toBe(10_000);
+  expect(reopened.columns).not.toContain(sparseColumnId);
+  expect(reopened.missingRows).toBe(10_000);
+  expect(reopened.undoPayload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+  expect(reopened.redoPayload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+});
+
+test('partially filled sparse-column removal rewrites only touched chunks and pages', async ({ page, context }) => {
+  await page.goto(`${site.origin}/probe`);
+  const removed = await page.evaluate(async columnId => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10_000, 2);
+    const original = api.data.tables[0];
+    const column = { id: columnId, name: '稀疏欄', inputType: 'text' as const, options: [] };
+    const addAction: Parameters<typeof api.history.applyWorkspaceTableHistoryAction>[2] = { type: 'add-column', column, index: original.columns.length };
+    const addHistory = api.history.pushWorkspaceTableHistory(api.history.createEmptyWorkspaceTableHistory(original.id), { tableId: original.id, label: '新增屬性', action: addAction });
+    const added = api.history.applyWorkspaceTableHistoryAction(api.data, original.id, addAction, 'redo');
+    await api.db.saveWorkspace(added, { mutation: { tableId: original.id, action: addAction }, history: { replace: [addHistory] } });
+    const loaded = await api.db.loadWorkspace();
+    const table = loaded.tables[0];
+    const indexes = [17, 5_000, 5_001, 7_777];
+    const values = ['第一筆', '零', '空字串', '最後一筆'] as const;
+    const editAction: Parameters<typeof api.history.applyWorkspaceTableHistoryAction>[2] = {
+      type: 'set-cells', columnId, changes: indexes.map((index, position) => ({ rowId: table.rows[index].id, before: null, after: values[position] })),
+    };
+    const populated = api.history.applyWorkspaceTableHistoryAction(loaded, table.id, editAction, 'redo');
+    const populatedHistory = api.history.pushWorkspaceTableHistory((await api.db.loadWorkspaceHistories()).get(table.id)!, { tableId: table.id, label: '填入稀疏欄', action: editAction });
+    await api.db.saveWorkspace(populated, { mutation: { tableId: table.id, action: editAction }, history: { replace: [populatedHistory] } });
+    const beforeRemoval = await api.db.loadWorkspace();
+    const beforeTable = beforeRemoval.tables[0];
+    const candidate = { ...beforeRemoval, tables: beforeRemoval.tables.map(item => item.id === beforeTable.id ? { ...item, columns: item.columns.filter(item => item.id !== columnId) } : item) };
+    const mutation = api.history.inferWorkspaceTableMutation(beforeRemoval, candidate);
+    if (!mutation || mutation.action.type !== 'remove-column') throw new Error('Expected inferred remove-column action');
+    const removedData = api.history.applyWorkspaceTableHistoryAction(beforeRemoval, beforeTable.id, mutation.action, 'redo');
+    const removalHistory = api.history.pushWorkspaceTableHistory(populatedHistory, mutation);
+    const beforeDisk = await api.readDisk();
+    const request = indexedDB.open('board-game-helper-workspace');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    const chunkTransaction = database.transaction('rowChunks', 'readonly');
+    const storedChunks = await new Promise<any[]>((resolve, reject) => { const get = chunkTransaction.objectStore('rowChunks').getAll(); get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error); });
+    database.close();
+    api.data = removedData;
+    api.instrument();
+    api.writes = [];
+    await api.db.saveWorkspace(removedData, { mutation, history: { replace: [removalHistory] } });
+    const afterDisk = await api.readDisk();
+    const affectedChunkIds = [...new Set(indexes.map(index => storedChunks.find(chunk => chunk.tableId === beforeTable.id && chunk.rows.some((row: { id: string }) => row.id === beforeTable.rows[index].id))?.chunkId).filter(Boolean))].sort();
+    const affectedPageIds = [...new Set(indexes.map(index => beforeDisk.pages.find(page => page.tableId === beforeTable.id && page.rows.some(row => row.id === beforeTable.rows[index].id))?.id).filter(Boolean))].sort();
+    const keys = (store: string) => api.writes.filter(write => write.store === store).map(write => Array.isArray(write.key) ? write.key[1] : write.key).sort();
+    return {
+      tableId: beforeTable.id,
+      indexes,
+      values,
+      historyValues: Object.keys(mutation.action.values),
+      expectedHistoryValues: indexes.map(index => beforeTable.rows[index].id),
+      missingCaptured: Object.hasOwn(mutation.action.values, beforeTable.rows[0].id),
+      before: { chunks: beforeDisk.chunks.filter(chunk => chunk.tableId === beforeTable.id).map(chunk => chunk.chunkId), pages: beforeDisk.pages.filter(page => page.tableId === beforeTable.id).map(page => page.id), orders: beforeDisk.orders.filter(page => page.tableId === beforeTable.id).map(page => page.pageId) },
+      after: { chunks: afterDisk.chunks.filter(chunk => chunk.tableId === beforeTable.id).map(chunk => chunk.chunkId), pages: afterDisk.pages.filter(page => page.tableId === beforeTable.id).map(page => page.id), orders: afterDisk.orders.filter(page => page.tableId === beforeTable.id).map(page => page.pageId) },
+      affectedChunkIds, affectedPageIds, writes: { chunks: keys('rowChunks'), pages: keys('rowPages'), orders: keys('rowOrderPages') },
+    };
+  }, sparseColumnId);
+
+  expect(removed.historyValues).toEqual(removed.expectedHistoryValues);
+  expect(removed.missingCaptured).toBe(false);
+  expect(removed.writes.chunks).toEqual(removed.affectedChunkIds);
+  expect(removed.writes.pages).toEqual(removed.affectedPageIds);
+  expect(removed.writes.orders).toEqual([]);
+  expect(removed.after.chunks).toEqual(removed.before.chunks);
+  expect(removed.after.pages).toEqual(removed.before.pages);
+  expect(removed.after.orders).toEqual(removed.before.orders);
+
+  const fresh = await context.newPage();
+  fresh.on('pageerror', error => errors.push(error.message));
+  await fresh.goto(`${site.origin}/probe`);
+  const restored = await fresh.evaluate(async ({ columnId, tableId, indexes, values }) => {
+    const api = window.workspaceStorageFixture;
+    const loaded = await api.db.loadWorkspace();
+    const history = (await api.db.loadWorkspaceHistories()).get(tableId)!;
+    const entry = history.past.at(-1)!;
+    const action = entry.action;
+    api.instrument();
+    api.writes = [];
+    const undone = api.history.applyWorkspaceTableHistoryAction(loaded, tableId, action, 'undo');
+    const undoneHistory = { ...history, past: history.past.slice(0, -1), future: [entry, ...history.future] };
+    await api.db.saveWorkspace(undone, { mutation: { tableId, action }, history: { replace: [undoneHistory] } });
+    const writes = {
+      chunks: api.writes.filter(write => write.store === 'rowChunks').map(write => Array.isArray(write.key) ? write.key[1] : write.key).sort(),
+      pages: api.writes.filter(write => write.store === 'rowPages').map(write => Array.isArray(write.key) ? write.key[1] : write.key).sort(),
+      orders: api.writes.filter(write => write.store === 'rowOrderPages').map(write => Array.isArray(write.key) ? write.key[1] : write.key).sort(),
+    };
+    const reloaded = await api.db.loadWorkspace();
+    const table = reloaded.tables[0];
+    return { writes, values: indexes.map(index => table.rows[index].values[columnId]), missing: !Object.hasOwn(table.rows[0].values, columnId), columns: table.columns.map(column => column.id) };
+  }, { columnId: sparseColumnId, tableId: removed.tableId, indexes: removed.indexes, values: removed.values });
+  await fresh.close();
+  expect(restored.writes.chunks).toEqual(removed.affectedChunkIds);
+  expect(restored.writes.pages).toEqual(removed.affectedPageIds);
+  expect(restored.writes.orders).toEqual([]);
+  expect(restored.values).toEqual(removed.values);
+  expect(restored.missing).toBe(true);
+  expect(restored.columns).toContain(sparseColumnId);
+});
+
 test('a failed sparse-column save keeps the pending edit for the next save', async ({ page }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async columnId => {
