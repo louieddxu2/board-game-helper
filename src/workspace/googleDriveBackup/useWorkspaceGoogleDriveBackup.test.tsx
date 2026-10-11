@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTable } from '../model';
+import { createNode, createTable } from '../model';
+import { workspaceBackupTableSummary, type WorkspaceBackupSource } from '../workspaceBackupSource';
 import type { WorkspaceData } from '../types';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import { GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
@@ -72,6 +73,55 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('workspace Google Drive automatic backup scheduling', () => {
+  it('backs up unloaded tables without expanding the screen data and records their actual uploaded revisions', async () => {
+    const original = createData();
+    const partial = { ...original, nodes: original.tables.map((table, index) => createNode('table', table.name, null, index, table.id)), tables: [original.tables[0]] };
+    const source: WorkspaceBackupSource = { tables: original.tables.map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() };
+    const prepareBackup = vi.fn(async () => source);
+    mocks.backup.mockImplementationOnce(async (data: WorkspaceData) => { expect(data).toBe(partial); return receiptFor(original); });
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data: partial, prepareBackup, loadTableSummaries: async () => source.tables, loadGoogleClientId: async () => 'client-id', onRestored: vi.fn(), setNotice: vi.fn() }));
+    await act(async () => { expect(await result.current.backup()).toBe(true); });
+    expect(prepareBackup).toHaveBeenCalledExactlyOnceWith(partial);
+    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ source, tableIds: original.tables.map(table => table.id) });
+    expect(result.current.record.tableCount).toBe(2);
+    expect(result.current.record.tableBackups[original.tables[1].id].changeRevision).toBe(original.tables[1].changeRevision);
+    expect(partial.tables).toHaveLength(1);
+    expect(result.current.status).toBe('saved');
+  });
+
+  it('includes an unloaded changed table in automatic selection and skips its unchanged neighbor', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const original = createData();
+    const receipt = receiptFor(original);
+    window.localStorage.setItem(recordKey, JSON.stringify({ fileId: receipt.file.id, fileName: receipt.file.name, lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, remoteModifiedTime: receipt.file.modifiedTime, structureRevision: original.structureRevision, tableBackups: Object.fromEntries(original.tables.map(table => [table.id, { changeRevision: table.changeRevision, lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, driveFileId: `drive-${table.id}` }])) }));
+    mocks.findRemoteFile.mockResolvedValue(receipt.file);
+    const changed = { ...original.tables[1], changeRevision: 'unopened-edit' };
+    const partial = { ...original, nodes: original.tables.map((table, index) => createNode('table', table.name, null, index, table.id)), tables: [original.tables[0]] };
+    const source: WorkspaceBackupSource = { tables: [original.tables[0], changed].map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() };
+    const loadTableSummaries = vi.fn(async () => source.tables);
+    mocks.backup.mockResolvedValueOnce(receiptFor({ ...original, tables: [original.tables[0], changed] }));
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data: partial, prepareBackup: async () => source, loadTableSummaries, loadGoogleClientId: async () => 'client-id', onRestored: vi.fn(), setNotice: vi.fn() }));
+    await act(async () => { await result.current.connect(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
+    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: false, source, tableIds: [changed.id] });
+    expect(result.current.record.tableBackups[changed.id].changeRevision).toBe('unopened-edit');
+    expect(partial.tables).toHaveLength(1);
+  });
+
+  it('rejects duplicate manual clicks while preparing the table source', async () => {
+    let finish!: (source: WorkspaceBackupSource) => void;
+    const prepareBackup = vi.fn(() => new Promise<WorkspaceBackupSource>(resolve => { finish = resolve; }));
+    const data = createData();
+    const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data, prepareBackup, loadGoogleClientId: async () => 'client-id', onRestored: vi.fn(), setNotice: vi.fn() }));
+    let upload!: Promise<boolean>;
+    await act(async () => { upload = result.current.backup({ force: true }); });
+    await act(async () => { expect(await result.current.backup()).toBe(false); });
+    expect(prepareBackup).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ tables: data.tables.map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() }); expect(await upload).toBe(true); });
+    expect(mocks.backup).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks manual and automatic uploads until local data is saved', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({

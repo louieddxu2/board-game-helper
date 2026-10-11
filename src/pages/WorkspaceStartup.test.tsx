@@ -28,6 +28,7 @@ vi.mock('../workspace/db', () => {
   ...db,
   loadWorkspace,
   loadWorkspaceInitial,
+  loadWorkspaceBackupSummaries: vi.fn(async (data: WorkspaceData) => data.nodes.flatMap(node => node.type === 'table' && node.tableId ? [{ id: node.tableId, name: node.name, updatedAt: 1 }] : [])),
   assertWorkspaceStorageCurrent: vi.fn(async () => undefined),
 };
 });

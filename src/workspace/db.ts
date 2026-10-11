@@ -9,7 +9,8 @@ import type { StoredWorkspaceRowOrderPage } from './rowOrderStorage';
 import { planWorkspaceRowBlockMaintenance } from './rowBlockMaintenance';
 import { runWorkspaceIdleSteps, type WorkspaceIdleOptions } from './workspaceIdleSteps';
 import { runWorkspaceCooperativeSteps, yieldWorkspaceTask } from './workspaceCooperativeWork';
-import { hydrateWorkspaceTable } from './workspaceTableHydration';
+import { readWorkspaceStoredTable, workspaceStorageState, type WorkspaceStoredReadContext } from './workspaceStoredTableReader';
+import { workspaceBackupTableSummary, type WorkspaceBackupSource, type WorkspaceBackupTableSummary } from './workspaceBackupSource';
 import { workspaceDbStores as stores, type WorkspaceDb, type WorkspaceMetadata, type WorkspaceStorageState } from './workspaceDbSchema';
 import { WorkspaceHistoryStorage, readWorkspaceHistories, readWorkspaceHistoryHead, readWorkspaceHistoryEntry, type WorkspaceHistoryReadContext, type WorkspaceHistoryStorageChanges } from './workspaceHistoryStorage';
 export type { WorkspaceHistoryStorageChanges } from './workspaceHistoryStorage';
@@ -41,6 +42,7 @@ const database = typeof indexedDB === 'undefined' ? null : openDB<WorkspaceDb>(D
 });
 
 let saveQueue: Promise<void> = Promise.resolve();
+let backupContentEpoch = 0;
 let savedStorageRevision: string | null = null;
 let savedMetadata: WorkspaceMetadata | undefined;
 let savedUpdatedAt: number | undefined;
@@ -69,6 +71,12 @@ const asMetadata = (value: WorkspaceMetadata | WorkspaceStorageState | undefined
 const asStorageState = (value: WorkspaceMetadata | WorkspaceStorageState | undefined) => value && 'storageRevision' in value ? value : undefined;
 const metadataOf = (data: WorkspaceData): WorkspaceMetadata => ({ version: data.version, structureRevision: data.structureRevision, nodes: data.nodes, activeNodeId: data.activeNodeId, bottomNavigationTableIds: data.bottomNavigationTableIds ?? [] });
 const sameMetadata = (left: WorkspaceMetadata | undefined, right: WorkspaceMetadata) => left?.version === right.version && left.structureRevision === right.structureRevision && left.nodes === right.nodes && left.activeNodeId === right.activeNodeId && left.bottomNavigationTableIds === right.bottomNavigationTableIds;
+const backupContentChanged = (data: WorkspaceData, meta: WorkspaceMetadata, snapshots: WorkspaceTableStorageSnapshot[], removed: string[]) => removed.length > 0
+  || meta.structureRevision !== savedMetadata?.structureRevision || meta.nodes !== savedMetadata?.nodes || meta.activeNodeId !== savedMetadata?.activeNodeId
+  || data.updatedAt !== savedUpdatedAt
+  || (meta.bottomNavigationTableIds?.length ?? 0) !== (savedMetadata?.bottomNavigationTableIds?.length ?? 0)
+  || meta.bottomNavigationTableIds?.some((id, index) => id !== savedMetadata?.bottomNavigationTableIds?.[index])
+  || snapshots.some(snapshot => { const prior = savedTables.get(snapshot.table.id)?.snapshot.table; return !prior || prior.changeRevision !== snapshot.table.changeRevision || prior.updatedAt !== snapshot.table.updatedAt; });
 const enqueueSave = (work: () => Promise<void>) => {
   const pending = saveQueue.catch(() => undefined).then(work);
   saveQueue = pending;
@@ -77,7 +85,7 @@ const enqueueSave = (work: () => Promise<void>) => {
 const assertRevision = (state: WorkspaceStorageState | undefined) => {
   if ((state?.storageRevision ?? null) !== savedStorageRevision) throw new WorkspaceStorageConflictError();
 };
-const resetSnapshots = () => { savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); historyStorage.reset(); pendingTableSnapshots = new Map(); savedTableHeads = new Map(); };
+const resetSnapshots = () => { backupContentEpoch += 1; savedTables = new Map(); workingTables = new Map(); tableSnapshots = new WeakMap(); historyStorage.reset(); pendingTableSnapshots = new Map(); savedTableHeads = new Map(); };
 const materializeTableSnapshot = (id: string) => {
   const pending = pendingTableSnapshots.get(id);
   if (pending) {
@@ -144,29 +152,7 @@ const loadWorkspaceVersion = async (options?: WorkspaceLoadOptions): Promise<{ d
   const readIds = ids.filter(id => !options?.expectCurrentRevision || (!workingTables.has(id) && !pendingTableSnapshots.has(id)));
   const loadedRecords = [];
   for (const id of readIds) {
-    checkCurrent();
-    const manifest = db.transaction(['meta', 'tables', 'tableState', 'tableHeads', 'rowChunks', 'rowOrderPages'], 'readonly');
-    const [version, record, tableState, head] = await Promise.all([manifest.objectStore('meta').get(STORAGE_KEY), manifest.objectStore('tables').get(id), manifest.objectStore('tableState').get(id), manifest.objectStore('tableHeads').get(id)]);
-    const counts = record && isChunkedWorkspaceTable(record) ? await Promise.all([
-      manifest.objectStore('rowChunks').count(tableRange(id)),
-      record.storageFormat === 'row-chunks-v2' ? manifest.objectStore('rowOrderPages').count(tableRange(id)) : undefined,
-    ]) : undefined;
-    await manifest.done;
-    checkVersion(version);
-    if (!record) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
-    if (counts && isChunkedWorkspaceTable(record) && (counts[0] !== record.chunkIds?.length || (record.storageFormat === 'row-chunks-v2' && counts[1] !== record.orderPageIds?.length))) throw new WorkspaceStorageIntegrityError(`Unexpected table records: ${id}`);
-    const readBatch = async <T>(store: 'rowChunks' | 'rowOrderPages', chunkIds: readonly string[]): Promise<T[]> => {
-      checkCurrent();
-      const batch = db.transaction(['meta', store], 'readonly');
-      const [revision, rows] = await Promise.all([batch.objectStore('meta').get(STORAGE_KEY), Promise.all(chunkIds.map(key => batch.objectStore(store).get([id, key])))]);
-      await batch.done;
-      checkVersion(revision);
-      return rows.map(row => { if (!row) throw new WorkspaceStorageIntegrityError(`Missing ${store}: ${id}`); return row as T; });
-    };
-    loadedRecords.push({ id, head, ...await hydrateWorkspaceTable(id, record, tableState, {
-      chunks: chunkIds => readBatch<StoredWorkspaceRowChunk>('rowChunks', chunkIds),
-      order: pageIds => readBatch<StoredWorkspaceRowOrderPage>('rowOrderPages', pageIds),
-    }, checkCurrent, options?.deferStartupWork) });
+    loadedRecords.push({ id, ...await readWorkspaceStoredTable(db, id, { checkCurrent, checkVersion }, options?.deferStartupWork) });
     await yieldWorkspaceTask();
   }
   const preparedWorking = new Map<string, WorkspaceTableStorageSnapshot>();
@@ -315,6 +301,7 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
       await Promise.all([...writes, historyStorage.writeChanges(transaction, options?.history, removed)]);
       await transaction.done;
       // Never move the baseline to a later in-memory edit or after an aborted transaction.
+      if (backupContentChanged(data, meta, snapshots, removed)) backupContentEpoch += 1;
       savedStorageRevision = revision; savedUpdatedAt = data.updatedAt; savedMetadata = meta;
       historyStorage.rememberSaved(options?.history, removed);
       for (const snapshot of snapshots) savedTables.set(snapshot.table.id, { snapshot, legacy: false });
@@ -393,6 +380,85 @@ export const assertWorkspaceStorageCurrent = async () => {
   await saveQueue.catch(() => undefined);
   const db = await database;
   assertRevision(asStorageState(await db.get('meta', STORAGE_KEY)));
+};
+
+class WorkspaceBackupReadRestart extends Error {}
+/** Content edits cancel backup; layout/history writes can restart a bounded read. */
+const workspaceBackupReadContext = async (isCurrent?: () => boolean) => {
+  if (!database) throw new Error('Workspace database is unavailable');
+  let pending = saveQueue;
+  await pending;
+  const epoch = backupContentEpoch;
+  let revision = savedStorageRevision;
+  const db = await database;
+  const checkCurrent = () => {
+    if (isCurrent && !isCurrent()) throw new DOMException('Workspace backup cancelled', 'AbortError');
+    if (backupContentEpoch !== epoch) throw new Error('本機資料在備份期間已有變更，請稍後再試');
+    if (saveQueue !== pending) throw new WorkspaceBackupReadRestart();
+  };
+  const context: WorkspaceStoredReadContext = { checkCurrent, checkVersion: value => {
+    checkCurrent();
+    if ((workspaceStorageState(value)?.storageRevision ?? null) !== revision) throw new WorkspaceStorageConflictError();
+  } };
+  const verify = async () => {
+    for (;;) {
+      pending = saveQueue;
+      await pending;
+      revision = savedStorageRevision;
+      try { context.checkCurrent(); context.checkVersion(await db.get('meta', STORAGE_KEY)); return; }
+      catch (error) { if (!(error instanceof WorkspaceBackupReadRestart)) throw error; }
+    }
+  };
+  const read = async <T>(work: () => Promise<T>): Promise<T> => {
+    for (;;) {
+      await verify();
+      try { const value = await work(); await verify(); return value; }
+      catch (error) { if (!(error instanceof WorkspaceBackupReadRestart)) throw error; }
+    }
+  };
+  await verify();
+  return { db, context, verify, read };
+};
+
+const readBackupSummaries = async (data: WorkspaceData, db: IDBPDatabase<WorkspaceDb>, context: WorkspaceStoredReadContext) => {
+  const loaded = new Map(data.tables.map(table => [table.id, table]));
+  const summaries: WorkspaceBackupTableSummary[] = [];
+  for (const id of new Set(data.nodes.flatMap(node => node.type === 'table' && node.tableId ? [node.tableId] : []))) {
+    context.checkCurrent();
+    const resident = loaded.get(id);
+    if (resident) { assertWorkspaceTableComplete(resident); summaries.push(workspaceBackupTableSummary(resident)); continue; }
+    const transaction = db.transaction(['meta', 'tableHeads', 'tables', 'tableState'], 'readonly');
+    const version = await transaction.objectStore('meta').get(STORAGE_KEY);
+    const head = await transaction.objectStore('tableHeads').get(id);
+    if (head) {
+      validateWorkspaceTableHead(id, head);
+      summaries.push(workspaceBackupTableSummary({ ...head.definition, updatedAt: head.updatedAt, changeRevision: head.changeRevision }));
+    } else {
+      // Old table records may contain rows; extract only markers and drop each record.
+      const record = await transaction.objectStore('tables').get(id);
+      if (!record) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
+      const state = isChunkedWorkspaceTable(record) ? await transaction.objectStore('tableState').get(id) : undefined;
+      const definition = isChunkedWorkspaceTable(record) ? record.definition : record;
+      summaries.push(workspaceBackupTableSummary({ ...definition, updatedAt: state?.updatedAt ?? ('updatedAt' in record ? record.updatedAt : 0), changeRevision: state?.changeRevision ?? ('changeRevision' in record ? record.changeRevision : undefined) }));
+    }
+    await transaction.done;
+    context.checkVersion(version);
+    await yieldWorkspaceTask();
+  }
+  return summaries;
+};
+
+export const loadWorkspaceBackupSummaries = async (data: WorkspaceData, options?: { isCurrent?: () => boolean }) => {
+  const { db, context, read } = await workspaceBackupReadContext(options?.isCurrent);
+  return read(() => readBackupSummaries(data, db, context));
+};
+export const prepareWorkspaceBackup = async (data: WorkspaceData, options?: { isCurrent?: () => boolean }): Promise<WorkspaceBackupSource> => {
+  const { db, context, verify, read } = await workspaceBackupReadContext(options?.isCurrent);
+  const tables = await read(() => readBackupSummaries(data, db, context));
+  return { tables, verify, async readTable(id) {
+    if (!tables.some(table => table.id === id)) throw new WorkspaceStorageIntegrityError(`Missing table: ${id}`);
+    return read(async () => data.tables.find(table => table.id === id) ?? (await readWorkspaceStoredTable(db, id, context, true)).table);
+  } };
 };
 
 type HistoryLoadOptions = { isCurrent?: () => boolean };

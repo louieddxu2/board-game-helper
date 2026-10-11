@@ -9,7 +9,6 @@ import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
 import { useTableGestures } from './useTableGestures';
 import { useWorkspaceActions } from './useWorkspaceActions';
 import { useWorkspaceBackupStatus } from './useWorkspaceBackupStatus';
-import { useWorkspaceBackupReadiness } from './useWorkspaceBackupReadiness';
 import { useWorkspaceVirtualKeyboardOpen } from './useWorkspaceBrowserBack';
 import { useWorkspaceBulkSelection } from './useWorkspaceBulkSelection';
 import { useWorkspaceClipboard } from './useWorkspaceClipboard';
@@ -126,7 +125,7 @@ export const useWorkspacePage = () => {
     return options;
   }, [configuring, rowHeader, table]);
   const { markExported, driveBackup, backupNeedsAttention, lastExportAt } = useWorkspaceBackupStatus({
-    setStorageConflict, dataRef, allTablesReady, data, drawerOpen, storageConflict, saveState, setNotice, dialogs,
+    setStorageConflict, dataRef, mountedRef, data, drawerOpen, storageConflict, saveState, setNotice, dialogs,
   });
 
   useEffect(() => {
@@ -255,7 +254,6 @@ export const useWorkspacePage = () => {
   const history = useWorkspaceHistory(storage, table, dialogs.closeCellEditors);
 
   const { currentTableHistory, undoTable, redoTable } = history;
-  const readyDriveBackup = useWorkspaceBackupReadiness(driveBackup, readiness, setNotice);
 
   const readyControls = useReadyWorkspaceActions({
     configure: (column: WorkspaceColumn, isRowHeader: boolean) => dialogs.set('configuring', { column, isRowHeader }),
@@ -336,7 +334,7 @@ export const useWorkspacePage = () => {
     lastSavedAt,
     backupNeedsAttention,
     lastExportAt,
-    driveBackup: { ...driveBackup, backup: readyDriveBackup },
+    driveBackup,
     storageVersion,
     commit,
     toggleColumnVisibility,

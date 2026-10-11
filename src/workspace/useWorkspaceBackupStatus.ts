@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useRef, useState } from 'react';
-import { assertWorkspaceStorageCurrent } from './db';
+import { assertWorkspaceStorageCurrent, loadWorkspaceBackupSummaries, prepareWorkspaceBackup } from './db';
+import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from './changeRevisions';
 import { useWorkspaceGoogleDriveBackup } from './googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import type { WorkspaceData } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
@@ -12,7 +13,7 @@ const workspaceBackupReminderMs = 7 * 24 * 60 * 60 * 1000;
 interface WorkspaceBackupStatusOptions {
   setStorageConflict: Dispatch<SetStateAction<boolean>>;
   dataRef: RefObject<WorkspaceData | undefined>;
-  allTablesReady: boolean;
+  mountedRef: RefObject<boolean>;
   data: WorkspaceData | undefined;
   drawerOpen: boolean;
   storageConflict: boolean;
@@ -21,7 +22,7 @@ interface WorkspaceBackupStatusOptions {
   dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
 }
 
-export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, allTablesReady, data, drawerOpen, storageConflict, saveState, setNotice, dialogs }: WorkspaceBackupStatusOptions) => {
+export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, mountedRef, data, drawerOpen, storageConflict, saveState, setNotice, dialogs }: WorkspaceBackupStatusOptions) => {
   const { set: setDialog } = dialogs;
   const [lastExportAt, setLastExportAt] = useState<number>(() => Number(window.localStorage.getItem(workspaceLastExportStorageKey)) || 0);
 
@@ -54,10 +55,21 @@ export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, allTable
 
   const noteStorageConflict = useCallback(() => setStorageConflict(true), []);
 
-  const isCurrentWorkspaceData = useCallback((snapshot: WorkspaceData) => dataRef.current === snapshot, []);
+  const isCurrentWorkspaceData = useCallback((snapshot: WorkspaceData) => {
+    const current = dataRef.current;
+    return mountedRef.current && Boolean(current && workspaceStructureChangeRevision(current) === workspaceStructureChangeRevision(snapshot)
+      && snapshot.tables.every(table => {
+        const live = current.tables.find(item => item.id === table.id);
+        return live && workspaceTableChangeRevision(live) === workspaceTableChangeRevision(table);
+      }));
+  }, []);
+  const loadTableSummaries = useCallback((snapshot: WorkspaceData) => loadWorkspaceBackupSummaries(snapshot, { isCurrent: () => isCurrentWorkspaceData(snapshot) }), []);
+  const prepareBackup = useCallback((snapshot: WorkspaceData) => prepareWorkspaceBackup(snapshot, { isCurrent: () => isCurrentWorkspaceData(snapshot) }), []);
 
   const driveBackup = useWorkspaceGoogleDriveBackup({
-    data: allTablesReady ? data : undefined,
+    data,
+    loadTableSummaries,
+    prepareBackup,
     inspectChanges: drawerOpen,
     backupBlockedReason: storageConflict ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟' : saveState !== 'saved' ? '本機資料尚未完成儲存，請稍後再備份' : undefined,
     verifyCurrentData: assertWorkspaceStorageCurrent,

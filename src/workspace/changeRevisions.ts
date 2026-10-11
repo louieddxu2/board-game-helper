@@ -5,7 +5,7 @@ const newRevision = () => typeof crypto !== 'undefined' && 'randomUUID' in crypt
   : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 // Legacy data retains its update marker until its next local mutation.
-export const workspaceTableChangeRevision = (table: WorkspaceTable) => table.changeRevision ?? `legacy:${table.updatedAt}`;
+export const workspaceTableChangeRevision = (table: Pick<WorkspaceTable, 'changeRevision' | 'updatedAt'>) => table.changeRevision ?? `legacy:${table.updatedAt}`;
 export const workspaceStructureChangeRevision = (data: WorkspaceData) => data.structureRevision ?? `legacy:${data.updatedAt ?? 0}`;
 
 /** Track immutable mutations without reading or serializing table contents. */
