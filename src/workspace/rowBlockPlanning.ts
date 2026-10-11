@@ -1,6 +1,7 @@
 import { makeId } from './model';
 import type { WorkspaceRow } from './types';
 import type { WorkspaceTableStorageSnapshot } from './rowChunkStorage';
+import { sameWorkspaceStoredRow } from './rowStorageIdentity';
 import {
   validateWorkspaceTableHead, workspaceRowBlockCapacity, workspaceRowPageAt, workspaceRowPageOffset, workspaceRowPageSize,
   type WorkspaceBlockTableHead, type WorkspaceRowBlock, type WorkspaceRowBlockDescriptor, type WorkspaceTableHead,
@@ -57,7 +58,7 @@ const changedGroups = (snapshot: WorkspaceTableStorageSnapshot, previous: Worksp
       const before = previous.chunks.get(id);
       if (before === chunk) continue;
       chunk.rows.forEach((row, slot) => {
-        if (before?.rows[slot] === row) return;
+        if (sameWorkspaceStoredRow(before?.rows[slot], row)) return;
         const position = snapshot.rowIndexes.get(row.id)!;
         const block = workspaceRowPageAt(head, position);
         if (!groups.has(block)) groups.set(block, snapshot.table.rows.slice(workspaceRowPageOffset(head, block), workspaceRowPageOffset(head, block + 1)));

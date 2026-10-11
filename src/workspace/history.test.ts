@@ -332,9 +332,9 @@ describe('workspace table history', () => {
 
     expect(mutation?.action.type).toBe('remove-column');
     if (!mutation || mutation.action.type !== 'remove-column') throw new Error('Expected sparse remove-column action');
-    expect(Object.keys(mutation.action.values)).toEqual(['row-null', 'row-empty', 'row-zero', 'row-link', '__proto__']);
+    expect(Object.keys(mutation.action.values)).toEqual(['row-empty', 'row-zero', 'row-link', '__proto__']);
     expect(Object.hasOwn(mutation.action.values, 'row-missing')).toBe(false);
-    expect(mutation.action.values['row-null']).toBeNull();
+    expect(Object.hasOwn(mutation.action.values, 'row-null')).toBe(false);
     expect(mutation.action.values['row-empty']).toBe('');
     expect(mutation.action.values['row-zero']).toBe(0);
     expect(mutation.action.values['row-link']).toEqual(linkValue);
@@ -346,7 +346,7 @@ describe('workspace table history', () => {
     expect(removed.tables[0].rows[0]).toBe(beforeTable.rows[0]);
     expect(undone.tables[0].rows[0]).toBe(removed.tables[0].rows[0]);
     expect(Object.hasOwn(undone.tables[0].rows[0].values, removedColumn.id)).toBe(false);
-    expect(undone.tables[0].rows.slice(1).map(row => row.values[removedColumn.id])).toEqual([null, '', 0, linkValue, '特殊值']);
+    expect(undone.tables[0].rows.slice(1).map(row => row.values[removedColumn.id])).toEqual([undefined, '', 0, linkValue, '特殊值']);
     expect(redone.tables[0].rows.every(row => !Object.hasOwn(row.values, removedColumn.id))).toBe(true);
   });
 

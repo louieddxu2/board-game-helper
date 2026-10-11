@@ -61,7 +61,7 @@ describe('workspace cell changes', () => {
     expect(sparseRows[2].values[linkId]).toEqual(link);
   });
 
-  it('captures and restores only present values, including null, empty, zero, links, and a __proto__ row id', () => {
+  it('captures stored values while omitting null and safely handles empty, zero, links, and a __proto__ row id', () => {
     const sparseRows: WorkspaceRow[] = [
       { id: 'missing', name: '缺少', values: { [linkId]: '其他' } },
       { id: 'null', name: '空值', values: { [valueId]: null } },
@@ -72,10 +72,10 @@ describe('workspace cell changes', () => {
     ];
     const captured = captureWorkspaceColumnValues(sparseRows, valueId);
 
-    expect(Object.keys(captured)).toEqual(['null', 'empty', 'zero', 'link', '__proto__']);
+    expect(Object.keys(captured)).toEqual(['empty', 'zero', 'link', '__proto__']);
     expect(Object.hasOwn(captured, 'missing')).toBe(false);
     expect(Object.hasOwn(captured, '__proto__')).toBe(true);
-    expect(captured.null).toBeNull();
+    expect(Object.hasOwn(captured, 'null')).toBe(false);
     expect(captured.empty).toBe('');
     expect(captured.zero).toBe(0);
     expect(captured.link).toEqual(link);
@@ -84,8 +84,13 @@ describe('workspace cell changes', () => {
     const removed = removeWorkspaceColumnValues(sparseRows, new Set([valueId]));
     const restored = restoreWorkspaceColumnValues(removed, valueId, captured);
     expect(Object.hasOwn(restored[0].values, valueId)).toBe(false);
-    expect(restored.slice(1).map(row => row.values[valueId])).toEqual([null, '', 0, link, '特殊值']);
+    expect(Object.hasOwn(restored[1].values, valueId)).toBe(false);
+    expect(restored.slice(2).map(row => row.values[valueId])).toEqual(['', 0, link, '特殊值']);
     expect(restored[5].id).toBe('__proto__');
+
+    const legacyDense = restoreWorkspaceColumnValues(removed, valueId, { null: null, ...captured });
+    expect(Object.hasOwn(legacyDense[1].values, valueId)).toBe(true);
+    expect(legacyDense[1].values[valueId]).toBeNull();
 
     expect(restoreWorkspaceColumnValues(removed, valueId, {})).toBe(removed);
   });

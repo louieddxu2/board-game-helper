@@ -5,6 +5,7 @@ import { createWorkspaceRowOrderSteps, reconcileWorkspaceRowOrder, workspaceRowO
 import { updateWorkspaceSingleRowStorage } from './singleRowStorage';
 import { updateWorkspaceRowMoveStorage } from './rowMoveStorage';
 import { finishWorkspaceSteps } from './workspaceCooperativeWork';
+import { sameWorkspaceStoredRows } from './rowStorageIdentity';
 
 export const defaultRowChunkCapacity = 256;
 export type RowChunkCapacity = 128 | 256;
@@ -294,7 +295,8 @@ export const updateWorkspaceTableStorageSnapshot = (previous: WorkspaceTableStor
 
 export const planWorkspaceTableStorageWrite = (snapshot: WorkspaceTableStorageSnapshot, saved?: WorkspaceTableStorageSnapshot, legacy = false, migrateOrder = false) => ({
   definition: legacy || migrateOrder || !saved || snapshot.record !== saved.record ? snapshot.record : undefined,
-  upserts: [...snapshot.chunks.values()].filter(chunk => legacy || saved?.chunks.get(chunk.chunkId) !== chunk),
+  upserts: [...snapshot.chunks.values()].filter(chunk => legacy || (saved?.chunks.get(chunk.chunkId) !== chunk
+    && !sameWorkspaceStoredRows(saved?.chunks.get(chunk.chunkId)?.rows, chunk.rows))),
   deletes: legacy ? [] : [...(saved?.chunks.keys() ?? [])].filter(id => !snapshot.chunks.has(id)),
   orderUpserts: [...snapshot.order.pages.values()].filter(page => legacy || migrateOrder || saved?.order.pages.get(page.pageId) !== page),
   orderDeletes: legacy ? [] : [...(saved?.order.pages.keys() ?? [])].filter(id => !snapshot.order.pages.has(id)),

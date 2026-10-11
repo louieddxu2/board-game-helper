@@ -250,7 +250,7 @@ test('an on-demand table failure cannot prevent editing or delete other tables o
   await page.reload();
   await expect(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]')).toBeVisible();
   await page.getByRole('button', { name: '開啟目錄' }).click();
-  await page.getByRole('button', { name: /測試表 1/ }).first().click();
+  await page.locator('.workspace-tree-row[data-node-id="node-1"]').click();
   await expect(page.getByRole('status').filter({ hasText: '資料讀取失敗' })).toBeVisible();
   await page.getByRole('button', { name: '關閉目錄', exact: true }).last().click();
   await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
@@ -313,7 +313,7 @@ test('pinned tables load on demand at the mobile bottom edge without reading unr
   await expect.poll(() => readTableCell(page, 'table-1', 'row-0', 'column-0')).toBe('常用表格先編輯');
   expect(await page.evaluate(() => sessionStorage.getItem('workspace-test-after-pins-failed'))).toBeNull();
   await page.getByRole('button', { name: '開啟目錄' }).click();
-  await page.getByRole('button', { name: /測試表 2/ }).first().click();
+  await page.locator('.workspace-tree-row[data-node-id="node-2"]').click();
   await expect(page.getByRole('status').filter({ hasText: '資料讀取失敗' })).toBeVisible();
   await expect(page.getByRole('button', { name: '重新命名表格' })).toHaveText('測試表 1');
   await page.reload();

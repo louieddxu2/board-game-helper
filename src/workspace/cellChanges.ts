@@ -1,5 +1,6 @@
 import type { WorkspaceCellValue, WorkspaceRow } from './types';
 import { getWorkspaceRowIndexes, preserveWorkspaceRowIndexes } from './rowIndexes';
+import { preserveWorkspaceEmptyRowStorage } from './rowStorageIdentity';
 
 /** Changes to stored values; derived results are not part of this contract. */
 export interface WorkspaceCellChange {
@@ -16,11 +17,11 @@ export const sameWorkspaceCellValue = (left: WorkspaceCellValue, right: Workspac
 export const getWorkspaceCellValue = (row: WorkspaceRow, columnId: string, rowHeaderId: string | undefined): WorkspaceCellValue =>
   (columnId === rowHeaderId ? row.name : row.values[columnId]) ?? null;
 
-/** Missing keys stay absent in history; explicitly stored empty values remain restorable. */
+/** Null and missing cells both mean blank; history only needs actual stored values. */
 export const captureWorkspaceColumnValues = (rows: readonly WorkspaceRow[], columnId: string): Record<string, WorkspaceCellValue> => {
   function* entries(): Generator<[string, WorkspaceCellValue]> {
     for (const row of rows) {
-      if (Object.hasOwn(row.values, columnId)) yield [row.id, row.values[columnId] ?? null];
+      if (Object.hasOwn(row.values, columnId) && row.values[columnId] != null) yield [row.id, row.values[columnId]];
     }
   }
   return Object.fromEntries(entries());
@@ -37,7 +38,9 @@ export const restoreWorkspaceColumnValues = (
     const value = values[row.id] ?? null;
     if (Object.hasOwn(row.values, columnId) && sameWorkspaceCellValue(row.values[columnId], value)) return row;
     changed = true;
-    return { ...row, values: { ...row.values, [columnId]: value } };
+    const next = { ...row, values: { ...row.values, [columnId]: value } };
+    if (value === null && row.values[columnId] == null) preserveWorkspaceEmptyRowStorage(row, next);
+    return next;
   });
   if (!changed) return rows;
   preserveWorkspaceRowIndexes(rows, nextRows);
@@ -50,14 +53,18 @@ export const removeWorkspaceColumnValues = (rows: WorkspaceRow[], columnIds: Rea
   let changed = false;
   const nextRows = rows.map(row => {
     let values = row.values;
+    let onlyEmpty = true;
     for (const columnId of columnIds) {
       if (!Object.hasOwn(values, columnId)) continue;
+      if (values[columnId] != null) onlyEmpty = false;
       if (values === row.values) values = { ...values };
       delete values[columnId];
     }
     if (values === row.values) return row;
     changed = true;
-    return { ...row, values };
+    const next = { ...row, values };
+    if (onlyEmpty) preserveWorkspaceEmptyRowStorage(row, next);
+    return next;
   });
   if (!changed) return rows;
   preserveWorkspaceRowIndexes(rows, nextRows);

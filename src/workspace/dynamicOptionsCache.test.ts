@@ -138,7 +138,7 @@ describe('dynamic option frequency cache', () => {
     const cache = new WorkspaceDynamicOptionsCache();
     if (mode === 'replace') expect(cache.getOptions(previous.tables[0], column.id)).toEqual(['Old']);
     const next = { ...data, tables: [imported] };
-    cache.primeImportedTables(next, [table.id]);
+    cache.primePreparedTables(next, [table.id]);
     const prepared = cache.prepare(previous, assignWorkspaceChangeRevisions(previous, next));
     expect(reads).toBe(10_000);
     expect(cache.getOptions(prepared.tables[0], column.id)).toEqual(['Common', 'Rare']);
@@ -165,7 +165,7 @@ describe('dynamic option frequency cache', () => {
     })) };
     const next = { ...data, tables: [imported] };
     const cache = new WorkspaceDynamicOptionsCache();
-    cache.primeImportedTables(next, [table.id]);
+    cache.primePreparedTables(next, [table.id]);
     const prepared = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, next));
     expect(reads).toBe(1);
     expect(cache.getOptions(prepared.tables[0], column.id)).toEqual([kind === 'parser' ? 'A' : '["A"]']);

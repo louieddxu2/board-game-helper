@@ -160,7 +160,7 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
     const work = readQueueRef.current.catch(() => undefined).then(async () => {
       const current = dataRef.current;
       if (!current || !mountedRef.current || (isCurrent && !isCurrent())) return;
-      const needed = !tableIds || tableIds.some(id => !current.tables.some(table => table.id === id));
+      const needed = tableIds ? tableIds.some(id => !current.tables.some(table => table.id === id)) : !allTablesReadyRef.current;
       if (needed) {
         const loaded = await loadWorkspace({ expectCurrentRevision: true, tableIds, isCurrent: () => mountedRef.current && (!isCurrent || isCurrent()) });
         if (!mountedRef.current || (isCurrent && !isCurrent())) return;
@@ -219,11 +219,13 @@ export const useWorkspaceLoading = (storage: WorkspaceStorageController, {
   }, [activeWindow?.head.definition.id, data?.activeNodeId, hydrateWorkspace, reportReadError, storageConflict]);
   const readiness = useMemo<WorkspaceReadiness>(() => ({
     isReady: (scope) => {
+      if (typeof scope === 'object') return Boolean(dataRef.current?.tables.some(table => table.id === scope.tableId));
       if (scope === 'all') return allTablesReadyRef.current;
       const active = dataRef.current && getTableForNode(dataRef.current, dataRef.current.activeNodeId);
       return Boolean(active && (scope !== 'history' || historyLoadedTableIdsRef.current.has(active.id)));
     },
     ensure: (scope) => {
+      if (typeof scope === 'object') return hydrateWorkspace([scope.tableId]);
       const id = dataRef.current?.nodes.find(node => node.id === dataRef.current?.activeNodeId)?.tableId;
       return hydrateWorkspace(scope === 'all' ? undefined : id ? [id] : [], scope === 'history');
     },

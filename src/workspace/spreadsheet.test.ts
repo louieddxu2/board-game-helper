@@ -133,7 +133,7 @@ describe('workspace spreadsheet format', () => {
     let reads = 0;
     imported.rows = imported.rows.map(row => ({ ...row, get values() { reads += 1; return row.values; } }));
     const cache = new WorkspaceDynamicOptionsCache();
-    cache.primeImportedTables(copied, [imported.id]);
+    cache.primePreparedTables(copied, [imported.id]);
     const prepared = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, copied));
     expect(cache.getOptions(prepared.tables[0], imported.columns[1].id)).toEqual(['已擁有']);
     expect(reads).toBe(0);

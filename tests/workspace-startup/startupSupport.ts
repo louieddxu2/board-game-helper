@@ -117,6 +117,7 @@ export const trackWorkspaceReads = (page: Page) => page.addInitScript(() => {
 export const waitForProjection = (page: Page, count: number) => expect.poll(() => page.evaluate(async () => {
   const request = indexedDB.open('board-game-helper-workspace');
   const connection = await new Promise<IDBDatabase>(resolve => { request.onsuccess = () => resolve(request.result); });
+  if (!connection.objectStoreNames.contains('tableHeads')) { connection.close(); return undefined; }
   const get = connection.transaction('tableHeads').objectStore('tableHeads').get('table-0');
   const head = await new Promise<any>(resolve => { get.onsuccess = () => resolve(get.result); }); connection.close();
   return head?.rowCount;

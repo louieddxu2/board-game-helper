@@ -1,10 +1,48 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
-import { closeServer, seed, startServer } from './startupSupport';
+import { closeServer, readTableCell, seed, startServer } from './startupSupport';
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
 test.afterAll(async () => { await closeServer(site.server); });
 test.beforeEach(() => { site.state.documentDelay = 0; });
+
+test('a saved 10k-row conversion persists numeric values and rebuilds dynamic choices after reload', async ({ page }) => {
+  await page.goto(`${site.origin}/privacy`);
+  await seed(page, 1, 10_000, 2, 0);
+  await page.evaluate(async () => {
+    const request = indexedDB.open('board-game-helper-workspace');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    const transaction = db.transaction('tables', 'readwrite');
+    const store = transaction.objectStore('tables');
+    const get = store.get('table-0');
+    get.onsuccess = () => {
+      const table = get.result;
+      table.rows.forEach((row: { values: Record<string, string> }, index: number) => { row.values['column-0'] = String(index % 2); });
+      store.put(table, 'table-0');
+    };
+    await new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onabort = () => reject(transaction.error); });
+    db.close();
+  });
+  await page.goto(`${site.origin}/workspace`);
+  await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '屬性設定' });
+  await dialog.getByRole('button', { name: '數字', exact: true }).click();
+  await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe(1);
+  expect(await readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe(0);
+
+  await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
+  await dialog.getByRole('button', { name: '選單', exact: true }).click();
+  await dialog.getByRole('button', { name: '動態列表', exact: true }).click();
+  await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('1');
+  await page.reload();
+  await page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-0"]').click();
+  await expect(page.getByRole('option', { name: '0', exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: '1', exact: true })).toBeVisible();
+});
 
 test('column settings wait for explicit name editing and keep keyboard navigation inside the dialog', async ({ page }, info) => {
   await page.goto(`${site.origin}/privacy`);

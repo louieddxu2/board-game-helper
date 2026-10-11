@@ -210,6 +210,90 @@ test('10k-row empty-column removal captures no values and keeps delete undo redo
   expect(reopened.redoPayload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
 });
 
+test('10k-row explicit-null column removal reopens with zero payload writes on undo and redo', async ({ page, context }) => {
+  await page.goto(`${site.origin}/probe`);
+  const removed = await page.evaluate(async columnId => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10_000, 2);
+    const original = api.data.tables[0];
+    const column = { id: columnId, name: '明確空值欄', inputType: 'text' as const, options: [] };
+    api.data = {
+      ...api.data,
+      tables: api.data.tables.map(table => table.id !== original.id ? table : {
+        ...table,
+        columns: [...table.columns, column],
+        rows: table.rows.map(row => ({ ...row, values: { ...row.values, [columnId]: null } })),
+      }),
+    };
+    await api.db.saveWorkspace(api.data, { history: { clearAll: true } });
+    const loaded = await api.db.loadWorkspace();
+    const table = loaded.tables[0];
+    const candidate = { ...loaded, tables: loaded.tables.map(item => item.id === table.id ? { ...item, columns: item.columns.filter(item => item.id !== columnId) } : item) };
+    const mutation = api.history.inferWorkspaceTableMutation(loaded, candidate);
+    if (!mutation || mutation.action.type !== 'remove-column') throw new Error('Expected inferred explicit-null remove-column action');
+    const removalHistory = api.history.pushWorkspaceTableHistory(api.history.createEmptyWorkspaceTableHistory(table.id), mutation);
+    const removedData = api.history.applyWorkspaceTableHistoryAction(loaded, table.id, mutation.action, 'redo');
+    api.instrument();
+    api.writes = [];
+    await api.db.saveWorkspace(removedData, { mutation, history: { replace: [removalHistory] } });
+    return {
+      values: Object.keys(mutation.action.values),
+      payload: Object.fromEntries(['rowChunks', 'rowPages', 'rowOrderPages'].map(store => [store, api.writes.filter(write => write.store === store).length])),
+    };
+  }, sparseColumnId);
+
+  expect(removed.values).toEqual([]);
+  expect(removed.payload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+
+  const fresh = await context.newPage();
+  fresh.on('pageerror', error => errors.push(error.message));
+  await fresh.goto(`${site.origin}/probe`);
+  const reopened = await fresh.evaluate(async ({ columnId }) => {
+    const api = window.workspaceStorageFixture;
+    api.instrument();
+    api.reads = [];
+    const loaded = await api.db.loadWorkspace();
+    const table = loaded.tables[0];
+    const history = (await api.db.loadWorkspaceHistories()).get(table.id)!;
+    const entry = history.past.at(-1)!;
+    const action = entry.action;
+    const payloadStores = ['rowChunks', 'rowPages', 'rowOrderPages'];
+    const save = async (data: typeof loaded, nextHistory: typeof history) => {
+      api.writes = [];
+      await api.db.saveWorkspace(data, { mutation: { tableId: table.id, action }, history: { replace: [nextHistory] } });
+      return Object.fromEntries(payloadStores.map(store => [store, api.writes.filter(write => write.store === store).length]));
+    };
+    const loadReads = Object.fromEntries(payloadStores.map(store => [store, api.reads.filter(read => read.store === store).length]));
+    const undone = api.history.applyWorkspaceTableHistoryAction(loaded, table.id, action, 'undo');
+    const undoneHistory = { ...history, past: history.past.slice(0, -1), future: [entry, ...history.future] };
+    const undoPayload = await save(undone, undoneHistory);
+    const redone = api.history.applyWorkspaceTableHistoryAction(undone, table.id, action, 'redo');
+    const redoneHistory = { ...undoneHistory, past: [...undoneHistory.past, entry], future: undoneHistory.future.slice(1) };
+    const redoPayload = await save(redone, redoneHistory);
+    const final = await api.db.loadWorkspace();
+    const finalTable = final.tables[0];
+    return {
+      loadReads,
+      undoColumns: undone.tables[0].columns.map(column => column.id),
+      undoMissing: undone.tables[0].rows.filter(row => !Object.hasOwn(row.values, columnId)).length,
+      redoPayload,
+      undoPayload,
+      columns: finalTable.columns.map(column => column.id),
+      missing: finalTable.rows.filter(row => !Object.hasOwn(row.values, columnId)).length,
+    };
+  }, { columnId: sparseColumnId });
+  await fresh.close();
+
+  expect(reopened.loadReads.rowChunks).toBeGreaterThan(0);
+  expect(reopened.loadReads.rowPages).toBe(0);
+  expect(reopened.undoColumns).toContain(sparseColumnId);
+  expect(reopened.undoMissing).toBe(10_000);
+  expect(reopened.undoPayload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+  expect(reopened.redoPayload).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+  expect(reopened.columns).not.toContain(sparseColumnId);
+  expect(reopened.missing).toBe(10_000);
+});
+
 test('partially filled sparse-column removal rewrites only touched chunks and pages', async ({ page, context }) => {
   await page.goto(`${site.origin}/probe`);
   const removed = await page.evaluate(async columnId => {

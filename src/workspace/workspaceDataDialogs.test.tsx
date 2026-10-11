@@ -46,7 +46,7 @@ describe('workspace data dialogs', () => {
     expect(imported.rows[0].values[columnId]).toBe('0012');
     const next = { ...emptyWorkspace(), tables: [imported] };
     const cache = new WorkspaceDynamicOptionsCache();
-    cache.primeImportedTables(next, [imported.id]);
+    cache.primePreparedTables(next, [imported.id]);
     const committed = cache.prepare(undefined, assignWorkspaceChangeRevisions(undefined, next));
     expect(cache.getOptions(committed.tables[0], columnId)).toEqual(['0012']);
     expect(committed.tables[0].columns[0].dynamicOptions?.counts[0].key).toBe('0012');

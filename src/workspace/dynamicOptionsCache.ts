@@ -22,11 +22,11 @@ export class WorkspaceDynamicOptionsCache {
     return cache.options ??= sortDynamicOptionCounts(cache.counts);
   }
 
-  /** Import parsers have already counted these exact rows, before the local revision changes. */
-  primeImportedTables(data: WorkspaceData, tableIds: readonly string[]) {
-    const imported = new Set(tableIds);
+  /** Reuse verified statistics for these exact rows before the local revision changes. */
+  primePreparedTables(data: WorkspaceData, tableIds: readonly string[]) {
+    const prepared = new Set(tableIds);
     for (const table of data.tables) {
-      if (!imported.has(table.id)) continue;
+      if (!prepared.has(table.id)) continue;
       this.tables.delete(table.id);
       for (const column of [getRowHeaderColumn(table), ...table.columns]) {
         if (column.inputType === 'dynamic-select') this.getColumnCache(table, column.id);
@@ -96,7 +96,7 @@ export class WorkspaceDynamicOptionsCache {
           columns.delete(columnId);
           continue;
         }
-        // A primed import already indexes the final rows; applying its mutation would count twice.
+        // Prepared statistics already index the final rows; applying the mutation would count twice.
         if (cache.rows === after.rows) continue;
         if (!before || cache.rows !== before.rows) { columns.delete(columnId); continue; }
         if (before.rows !== after.rows && (!action || !this.applyAction(cache, columnId, rowHeader.id, action, direction))) {

@@ -9,6 +9,7 @@ import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
 import { useTableGestures } from './useTableGestures';
 import { useWorkspaceActions } from './useWorkspaceActions';
 import { useWorkspaceBackupStatus } from './useWorkspaceBackupStatus';
+import { useWorkspaceBackupReadiness } from './useWorkspaceBackupReadiness';
 import { useWorkspaceVirtualKeyboardOpen } from './useWorkspaceBrowserBack';
 import { useWorkspaceBulkSelection } from './useWorkspaceBulkSelection';
 import { useWorkspaceClipboard } from './useWorkspaceClipboard';
@@ -189,7 +190,11 @@ export const useWorkspacePage = () => {
     setTableActionsOpen, onExported: markExported, dialogs,
   });
   const actions = useReadyWorkspaceActions(rawActions, {
-    openNameDialog: 'all', addFolder: 'all', addTable: 'all', renameNode: 'all', submitName: 'all', askDeleteNode: 'all', relocateNode: 'all',
+    submitName: () => {
+      const dialog = dialogs.state.nameDialog;
+      return dialog?.mode === 'table' ? 'all' : dialog?.node?.tableId ? { tableId: dialog.node.tableId, requestKey: dialog } : undefined;
+    },
+    askDeleteNode: 'all',
     saveCellValue: 'active', updateCell: 'active', openCell: 'active', selectCellValue: 'active', addRow: 'active', askDeleteRow: 'active', addColumn: 'active', askDeleteColumn: 'active', saveColumn: 'active',
     exportCurrent: 'active', exportAll: 'all', finishTableImport: 'all', finishWorkspaceImport: 'all',
   }, readiness);
@@ -250,6 +255,7 @@ export const useWorkspacePage = () => {
   const history = useWorkspaceHistory(storage, table, dialogs.closeCellEditors);
 
   const { currentTableHistory, undoTable, redoTable } = history;
+  const readyDriveBackup = useWorkspaceBackupReadiness(driveBackup, readiness, setNotice);
 
   const readyControls = useReadyWorkspaceActions({
     configure: (column: WorkspaceColumn, isRowHeader: boolean) => dialogs.set('configuring', { column, isRowHeader }),
@@ -262,7 +268,7 @@ export const useWorkspacePage = () => {
     drive: () => { setDrawerOpen(false); driveBackup.open(); },
     bottomNavigation: () => { setDrawerOpen(false); dialogs.set('bottomNavigationDraft', [...(dataRef.current?.bottomNavigationTableIds ?? [])]); },
     quickActions: () => setQuickActionsExpanded(true),
-  }, { configure: 'active', filter: 'active', search: 'active', edit: 'history', settings: 'active', createTable: 'all', context: 'all', drive: 'all', bottomNavigation: 'all', quickActions: 'history' }, readiness);
+  }, { configure: 'active', filter: 'active', search: 'active', edit: 'history', settings: 'active', quickActions: 'history' }, readiness);
 
   const { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, tableRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
 
@@ -276,7 +282,7 @@ export const useWorkspacePage = () => {
   const activeCellRowId = activeCell?.rowId;
   const activeCellColumnId = activeCell?.columnId;
 
-  const { requestClose, closeBottomNavigationDialog } = useWorkspaceModalNavigation({ data, commit, setNotice, dialogs, driveBackup, filter, bulk, drawer, editBarOpen, setEditBarOpen, tableActionsOpen, setTableActionsOpen, searchActive: searchOpen || hasActiveSearchState, clearSearchAndFilters });
+  const { requestClose, closeBottomNavigationDialog } = useWorkspaceModalNavigation({ dataRef, commit, setNotice, dialogs, driveBackup, filter, bulk, drawer, editBarOpen, setEditBarOpen, tableActionsOpen, setTableActionsOpen, searchActive: searchOpen || hasActiveSearchState, clearSearchAndFilters });
 
   const { setActiveCellElement, workspacePageStyle } = useWorkspaceCellFocus(viewportRef, activeCellKey, virtualKeyboardOpen);
   const workspaceToolbarRowCount = Number(Boolean(bulkSelection && bulkColumn)) + Number(searchOpen) + Number(editBarOpen || tableActionsOpen);
@@ -330,7 +336,7 @@ export const useWorkspacePage = () => {
     lastSavedAt,
     backupNeedsAttention,
     lastExportAt,
-    driveBackup,
+    driveBackup: { ...driveBackup, backup: readyDriveBackup },
     storageVersion,
     commit,
     toggleColumnVisibility,

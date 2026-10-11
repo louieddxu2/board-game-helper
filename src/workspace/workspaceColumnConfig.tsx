@@ -190,18 +190,30 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   </div>;
 };
 
-export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): string | void; onDelete?(): void }) => {
+export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const pending = useRef(false);
   const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
   const [lineLimitEnabled, setLineLimitEnabled] = useState(() => column.lineLimit !== undefined);
-  const save = () => {
-    const options = draft.options.map((option) => option.trim()).filter(Boolean);
-    const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
-    const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
-    const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
-    const failure = onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
-    setError(failure ?? '');
+  const save = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    setSaving(true);
+    try {
+      const options = draft.options.map((option) => option.trim()).filter(Boolean);
+      const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
+      const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
+      const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
+      const failure = await onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
+      setError(failure ?? '');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '無法儲存屬性設定');
+    } finally {
+      pending.current = false;
+      setSaving(false);
+    }
   };
   const category = inputCategoryFor(draft.inputType);
   const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
@@ -224,8 +236,10 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
     }));
   };
   const currentOverflowMode = draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap');
-  return <WorkspaceModal owner="column-config" title="屬性設定" dialogKind="editor" initialFocus="dialog" onRequestClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
-    <div className="workspace-column-config">
+  return <WorkspaceModal owner="column-config" title="屬性設定" dialogKind="editor" initialFocus="dialog" onRequestClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} disabled={saving} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
+    {saving && <p role="status">正在儲存屬性設定…</p>}
+    <fieldset disabled={saving} style={{ display: 'contents' }}>
+    <div className="workspace-column-config" aria-busy={saving}>
       <div className="workspace-column-config-rail">
         <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} aria-pressed={category === value} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
@@ -253,5 +267,6 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
         </div>}
           </div>
         </div>
+    </fieldset>
   </WorkspaceModal>;
 };

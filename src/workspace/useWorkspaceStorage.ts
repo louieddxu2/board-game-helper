@@ -112,7 +112,8 @@ export const useWorkspaceStorage = (setNotice: (message: string) => void) => {
       || previous.nodes !== next.nodes
       || previous.tables !== next.tables
       || previous.bottomNavigationTableIds !== next.bottomNavigationTableIds;
-    if (options?.importedTableIds) dynamicOptionsCacheRef.current.primeImportedTables(next, options.importedTableIds);
+    const preparedIds = [...(options?.importedTableIds ?? []), ...(options?.preparedTableIds ?? [])];
+    if (preparedIds.length) dynamicOptionsCacheRef.current.primePreparedTables(next, preparedIds);
     const previousTables = new Map(previous?.tables.map(table => [table.id, table]));
     const presentIds = new Set(next.tables.map(table => table.id));
     const removedTableIds = previous?.tables.filter(table => !presentIds.has(table.id)).map(table => table.id) ?? [];

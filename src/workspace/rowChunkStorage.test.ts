@@ -138,7 +138,7 @@ describe('workspace row chunk storage contracts', () => {
       ...base,
       columns: [...base.columns, deletedColumn],
       rows: base.rows.map((row, index) => index === 300
-        ? { ...row, values: { ...row.values, [deletedColumn.id]: null } }
+        ? { ...row, values: { ...row.values, [deletedColumn.id]: '刪除前資料' } }
         : row),
     };
     const saved = createWorkspaceTableStorageSnapshot(table);
@@ -160,6 +160,43 @@ describe('workspace row chunk storage contracts', () => {
     expect(pagePlan.pages.map(page => page.id)).toEqual([savedHead.blocks[2].id]);
     expect(pagePlan.pages[0].rows[44]).toBe(removed.rows[300]);
     expect(pagePlan.pages[0].rows[44].values[deletedColumn.id]).toBeUndefined();
+  });
+
+  it('only skips null-only storage writes for rows certified by the producer', () => {
+    const base = makeTable(512);
+    const deletedColumn = createColumn('稀疏欄');
+    const table: WorkspaceTable = {
+      ...base,
+      columns: [...base.columns, deletedColumn],
+      rows: base.rows.map(row => ({ ...row, values: { ...row.values, [deletedColumn.id]: null } })),
+    };
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const action = { type: 'remove-column' as const, column: deletedColumn, index: 1, values: {} };
+    const removed = applyWorkspaceTableHistoryAction({ ...emptyWorkspace(), tables: [table] }, table.id, action, 'redo').tables[0];
+    const certifiedPlan = planWorkspaceTableStorageWrite(updateWorkspaceTableStorageSnapshot(saved, removed, action), saved);
+
+    expect(certifiedPlan.upserts).toEqual([]);
+
+    const copied = structuredClone(removed);
+    const untrustedPlan = planWorkspaceTableStorageWrite(updateWorkspaceTableStorageSnapshot(saved, copied, action), saved);
+    expect(untrustedPlan.upserts.map(chunk => chunk.chunkId)).toEqual(saved.record.chunkIds);
+  });
+
+  it('retains a failed value edit when a later operation removes only null column keys', () => {
+    const base = makeTable(512);
+    const empty = createColumn('舊空欄');
+    const table = { ...base, columns: [...base.columns, empty], rows: base.rows.map(row => ({ ...row, values: { ...row.values, [empty.id]: null } })) };
+    const saved = createWorkspaceTableStorageSnapshot(table);
+    const data = { ...emptyWorkspace(), tables: [table] };
+    const edited = applyWorkspaceTableHistoryAction(data, table.id, { type: 'set-cell', rowId: table.rows[300].id, columnId: base.columns[0].id, before: table.rows[300].values[base.columns[0].id], after: '未成功保存' }, 'redo');
+    const action = { type: 'remove-column' as const, column: empty, index: 1, values: {} };
+    const removed = applyWorkspaceTableHistoryAction(edited, table.id, action, 'redo').tables[0];
+    const next = updateWorkspaceTableStorageSnapshot(saved, removed, action);
+    const plan = planWorkspaceTableStorageWrite(next, saved);
+    expect(plan.upserts.map(chunk => chunk.chunkId)).toEqual([saved.record.chunkIds[1]]);
+    expect(plan.upserts[0].rows[44].values[base.columns[0].id]).toBe('未成功保存');
+    const head = planWorkspaceRowPages(saved, undefined, undefined, 'before').head;
+    expect(planWorkspaceRowPages(next, saved, head, 'after').pages.map(page => page.id)).toEqual([head.blocks[2].id]);
   });
 
   it('keeps a 10,000-row paste edit to one row and one chunk', () => {

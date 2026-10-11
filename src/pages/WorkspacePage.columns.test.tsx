@@ -61,6 +61,7 @@ it('keeps item names and the item axis separate from attribute columns', async (
     await user.clear(axisName);
     await user.type(axisName, '桌遊收藏');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     expect(screen.getByRole('button', { name: '桌遊收藏' })).toBeInTheDocument();
   });
 
@@ -92,6 +93,7 @@ it('allows intentional line breaks in item and column headers', async () => {
     await user.clear(columnName);
     await user.type(columnName, '桌遊{Enter}名稱');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     expect(screen.getAllByRole('button', { name: /桌遊\s+名稱/ }).find((button) => button.classList.contains('workspace-column-name'))?.textContent).toBe('桌遊\n名稱');
   });
 
@@ -104,6 +106,7 @@ it('preserves fixed options while trying other input types', async () => {
 
     await user.click(screen.getByRole('button', { name: '文字' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
       tables: expect.arrayContaining([expect.objectContaining({
         columns: expect.arrayContaining([expect.objectContaining({ id: 'column-select', inputType: 'text', options: ['合作', '競爭'] })]),
@@ -125,6 +128,7 @@ it('configures and renders fixed option colors', async () => {
     await user.click(within(colorGroup).getByRole('button', { name: '固定選項 1 顏色' }));
     await user.click(screen.getByRole('menuitem', { name: '綠色' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
 
     const cell = screen.getByRole('cell', { name: '花火，類型：合作' });
     expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#2F6F5E' });
@@ -143,6 +147,7 @@ it('configures inclusive open-ended numeric color ranges', async () => {
     await user.click(within(colorGroup).getByRole('button', { name: '第 1 段顏色' }));
     await user.click(screen.getByRole('menuitem', { name: '藍色' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
 
     const cell = screen.getByRole('cell', { name: '花火，數量：2' });
     expect(cell.querySelector('.workspace-cell-value')).toHaveStyle({ color: '#1D4ED8' });

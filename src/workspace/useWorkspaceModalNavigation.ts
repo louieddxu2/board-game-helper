@@ -10,7 +10,7 @@ import type { WorkspaceStorageController } from './useWorkspaceStorage';
 import type { WorkspaceCloseOwner, WorkspaceRequestClose } from './workspaceModalClose';
 
 interface WorkspaceModalNavigationOptions {
-  data: WorkspaceData | undefined;
+  dataRef: React.RefObject<WorkspaceData | undefined>;
   commit: WorkspaceStorageController['commit'];
   setNotice: (message: string) => void;
   dialogs: WorkspaceDialogController;
@@ -26,18 +26,19 @@ interface WorkspaceModalNavigationOptions {
   clearSearchAndFilters: () => void;
 }
 
-export const useWorkspaceModalNavigation = ({ data, commit, setNotice, dialogs, driveBackup, filter, bulk, drawer, editBarOpen, setEditBarOpen, tableActionsOpen, setTableActionsOpen, searchActive, clearSearchAndFilters }: WorkspaceModalNavigationOptions) => {
+export const useWorkspaceModalNavigation = ({ dataRef, commit, setNotice, dialogs, driveBackup, filter, bulk, drawer, editBarOpen, setEditBarOpen, tableActionsOpen, setTableActionsOpen, searchActive, clearSearchAndFilters }: WorkspaceModalNavigationOptions) => {
   const { state, update, close } = dialogs;
   const closeBottomNavigationDialog = useCallback(() => {
+    const data = dataRef.current;
     if (!data || state.bottomNavigationDraft === undefined) return;
-    const validTableIds = new Set(data.tables.map(item => item.id));
+    const validTableIds = new Set(data.nodes.flatMap(node => node.type === 'table' && node.tableId ? [node.tableId] : []));
     const nextIds = [...new Set(state.bottomNavigationDraft)].filter(id => validTableIds.has(id));
     if (JSON.stringify(nextIds) !== JSON.stringify(data.bottomNavigationTableIds ?? [])) {
       commit({ ...data, bottomNavigationTableIds: nextIds });
       setNotice('底部導覽列已更新');
     }
     update({ bottomNavigationDraft: undefined });
-  }, [state.bottomNavigationDraft, commit, data, update, setNotice]);
+  }, [state.bottomNavigationDraft, commit, dataRef, update, setNotice]);
 
   // One ordered list owns both Back priority and the matching cancellation action.
   const layers: [WorkspaceCloseOwner, boolean, () => void][] = [

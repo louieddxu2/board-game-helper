@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, getWorkspaceCellValue } from './cellChanges';
-import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
 import { getWorkspaceRow } from './rowIndexes';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsxAsync, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
+import { useWorkspaceColumnSave } from './useWorkspaceColumnSave';
 import type { NameDialogState } from './workspaceShared';
 import { download, fileBaseName, updateTable } from './workspaceShared';
 
@@ -32,7 +32,7 @@ export type WorkspaceTableImportPreview = {
 };
 
 export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen, setTableActionsOpen, onExported, dialogs }: UseWorkspaceActionsProps) {
-  const { nameDialog, selectionEditor, configuring, workspaceImport } = dialogs.state;
+  const { nameDialog, selectionEditor, workspaceImport } = dialogs.state;
 
   const importTableInputRef = useRef<HTMLInputElement>(null);
   const importWorkspaceInputRef = useRef<HTMLInputElement>(null);
@@ -56,23 +56,25 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
   const renameNode = (node: WorkspaceNode) => openNameDialog('rename', node.name, undefined, node);
 
   const submitName = (name: string) => {
-    if (!data || !nameDialog) return;
+    const currentData = dataRef.current;
+    if (!currentData || !nameDialog) return;
     if (nameDialog.mode === 'folder' || nameDialog.mode === 'table') {
       const parentId = nameDialog.parentId ?? null;
       if (nameDialog.mode === 'folder') {
-        const node = createNode('folder', name, parentId, getChildren(data, parentId).length);
-        commit({ ...data, nodes: [...data.nodes, node] });
+        const node = createNode('folder', name, parentId, getChildren(currentData, parentId).length);
+        commit({ ...currentData, nodes: [...currentData.nodes, node] });
         setExpanded((current) => { const next = new Set(current); if (parentId) next.add(parentId); else next.add(node.id); return next; });
       } else {
         const currentTable = createTable(name);
-        const node = createNode('table', currentTable.name, parentId, getChildren(data, parentId).length, currentTable.id);
-        commit({ ...data, tables: [...data.tables, currentTable], nodes: [...data.nodes, node], activeNodeId: node.id });
+        const node = createNode('table', currentTable.name, parentId, getChildren(currentData, parentId).length, currentTable.id);
+        commit({ ...currentData, tables: [...currentData.tables, currentTable], nodes: [...currentData.nodes, node], activeNodeId: node.id });
         if (parentId) setExpanded((current) => new Set(current).add(parentId));
         setDrawerOpen(false);
       }
     } else if (nameDialog.node) {
-      const node = nameDialog.node;
-      const next = { ...data, nodes: data.nodes.map((item) => item.id === node.id ? { ...item, name } : item), tables: node.tableId ? data.tables.map((item) => item.id === node.tableId ? { ...item, name, updatedAt: Date.now() } : item) : data.tables };
+      const node = currentData.nodes.find(item => item.id === nameDialog.node?.id);
+      if (!node || (node.tableId && !currentData.tables.some(item => item.id === node.tableId))) return;
+      const next = { ...currentData, nodes: currentData.nodes.map((item) => item.id === node.id ? { ...item, name } : item), tables: node.tableId ? currentData.tables.map((item) => item.id === node.tableId ? { ...item, name, updatedAt: Date.now() } : item) : currentData.tables };
       commit(next);
     }
     dialogs.close('nameDialog');
@@ -84,9 +86,10 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
   };
 
   const relocateNode = (node: WorkspaceNode, parentId: string | null) => {
-    if (!data) return;
-    const next = moveNode(data, node.id, parentId);
-    if (next !== data) {
+    const currentData = dataRef.current;
+    if (!currentData) return;
+    const next = moveNode(currentData, node.id, parentId);
+    if (next !== currentData) {
       commit(next);
       if (parentId) setExpanded((current) => new Set(current).add(parentId));
       setNotice(`已移動「${node.name}」`);
@@ -204,23 +207,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
     },
   });
   
-  const saveColumn = (column: WorkspaceColumn) => {
-    if (!data || !table || !configuring) return;
-    let prepared: ReturnType<typeof prepareWorkspaceColumnSave>;
-    try { prepared = prepareWorkspaceColumnSave(table, column); }
-    catch (error) {
-      if (!(error instanceof WorkspaceColumnConversionError)) throw error;
-      return error.message;
-    }
-    const changes = prepared.changes.length ? prepared.changes : undefined;
-    const action: WorkspaceTableMutation['action'] = configuring.isRowHeader
-      ? { type: 'update-row-header', before: table.rowHeader, after: prepared.table.rowHeader, beforeName: table.rowHeaderName, afterName: prepared.table.rowHeaderName, changes }
-      : { type: 'update-column', before: table.columns.find(item => item.id === column.id)!, after: prepared.table.columns.find(item => item.id === column.id)!, changes };
-    commit(updateTable(data, table.id, () => ({ ...prepared.table, updatedAt: Date.now() })), changes ? {
-      tableId: table.id, label: configuring.isRowHeader ? '設定物件屬性' : '設定屬性', action,
-    } : undefined);
-    dialogs.close('configuring');
-  };
+  const saveColumn = useWorkspaceColumnSave({ dataRef, table, dialogs, commit });
 
   const exportSnapshot = async (prepare: (isCurrent: () => boolean) => Promise<Blob>, name: string, completeMessage: string) => {
     const generation = ++exportGeneration.current;

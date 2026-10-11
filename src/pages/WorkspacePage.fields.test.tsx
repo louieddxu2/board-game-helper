@@ -100,6 +100,7 @@ it('edits and renders a link with a preferred display name and external action',
     await user.click(screen.getByRole('button', { name: '超過省略' }));
     await user.click(screen.getByRole('button', { name: '推擠寬度' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     expect(screen.getByRole('link', { name: '外連' })).toHaveClass('is-push-width');
   });
 

@@ -201,6 +201,7 @@ it('saves a column text alignment and applies it to its cells', async () => {
     await user.click(header);
     await user.click(screen.getByRole('button', { name: '置右' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
+    await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     expect(screen.getByRole('columnheader', { name: '名稱' })).toHaveStyle({ textAlign: 'center' });
     expect(screen.getByRole('cell', { name: '花火，名稱：空白' })).toHaveStyle({ textAlign: 'right' });
   });

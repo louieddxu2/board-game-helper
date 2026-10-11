@@ -56,6 +56,8 @@ export interface WorkspaceCommitOptions {
   clearTableHistoryIds?: string[];
   clearAllHistory?: boolean;
   importedTableIds?: string[];
+  /** Exact rows whose dynamic-list statistics have already been prepared. */
+  preparedTableIds?: string[];
 }
 
 export const createEmptyWorkspaceTableHistory = (tableId: string): WorkspaceTableHistory => ({ tableId, past: [], future: [] });
