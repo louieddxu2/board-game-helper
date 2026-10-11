@@ -6,9 +6,12 @@ import { isPendingWorkspaceRow, workspaceRowPageAt, workspaceRowPageCount, works
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
+import { getWorkspaceRowIndexes } from './rowIndexes';
 import { flushWorkspaceTableScrollPosition, loadWorkspaceTableViewState, queueWorkspaceTableScrollPosition } from './viewState';
 import { measureVisibleColumnWidths, preserveColumnScrollPosition } from './visibleColumnWidths';
 import { calculateWorkspaceTableLayout, type HeaderFilterState, type HeaderFilterTarget } from './workspaceShared';
+
+const emptyRows: WorkspaceRow[] = [];
 
 interface WorkspaceTableWindowOptions {
   table: WorkspaceTable | undefined;
@@ -70,8 +73,8 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
   const pagedRowWindow = usePagedWorkspaceRows(activeWindow, rowMeasurementKey, virtualScrollTop, viewportHeight, rowWindowAtBottom);
 
   const tableRowIndexes = useMemo(() => activeWindow ? pagedRowWindow.indexes
-    : new Map(table?.rows.map((row, index) => [row.id, index]) ?? []), [activeWindow, pagedRowWindow.indexes, table?.rows]);
-  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? [] : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true, filteredRows === table?.rows ? tableRowIndexes : undefined);
+    : table ? getWorkspaceRowIndexes(table.rows) : new Map<string, number>(), [activeWindow, pagedRowWindow.indexes, table?.rows]);
+  const fullRowWindow = useWorkspaceRowWindow(activeWindow ? emptyRows : filteredRows, rowMeasurementKey, virtualScrollTop, viewportHeight, Boolean(table), table?.id ?? '', rowWindowOrderKey, rowWindowAtBottom, true, filteredRows === table?.rows ? tableRowIndexes : undefined);
 
   const rowWindow = activeWindow ? pagedRowWindow : fullRowWindow;
 

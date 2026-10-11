@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { applyWorkspaceCellChanges } from './cellChanges';
 import { loadWorkspaceTableWindow } from './db';
 import { usePagedWorkspaceRows } from './usePagedWorkspaceRows';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
@@ -178,6 +179,28 @@ describe('workspace table row indexes', () => {
 
     expect(view.result.current.tableRowIndexes).toBe(originalIndexes);
     expect([...view.result.current.tableRowIndexes.entries()]).toEqual([['row-a', 0], ['row-b', 1], ['row-c', 2]]);
+  });
+
+  it('reuses global indexes for value edits and leaves filtered windows array-local', () => {
+    const options = makeOptions();
+    options.filteredRows = table.rows;
+    configureWindows(makeRowWindow(undefined));
+    const view = renderHook(() => useWorkspaceTableWindow(options));
+    const originalIndexes = view.result.current.tableRowIndexes;
+    const edited = applyWorkspaceCellChanges(table.rows, undefined, [{ rowId: 'row-b', columnId: column.id, before: null, after: '最新' }]);
+
+    options.table = { ...table, rows: edited };
+    options.filteredRows = edited;
+    view.rerender();
+    expect(view.result.current.tableRowIndexes).toBe(originalIndexes);
+    expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[9]).toBe(originalIndexes);
+
+    const filtered = [edited[2], edited[0]];
+    options.filteredRows = filtered;
+    view.rerender();
+    expect(view.result.current.tableRowIndexes).toBe(originalIndexes);
+    expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[0]).toBe(filtered);
+    expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[9]).toBeUndefined();
   });
 });
 

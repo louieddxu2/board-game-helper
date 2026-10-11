@@ -3,6 +3,7 @@ import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, getWorkspaceCe
 import { prepareWorkspaceColumnSave, WorkspaceColumnConversionError } from './columnConversion';
 import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
 import { createColumn, createNode, createRow, createTable, displayWorkspaceCellValue, displayWorkspaceColumnValue, getChildren, MAX_BOTTOM_NAVIGATION_TABLES, moveNode, normalizeWorkspaceDateTime, removeNodeAndDescendants, resolveActiveTableNodeId, sameWorkspaceCellValue } from './model';
+import { getWorkspaceRow } from './rowIndexes';
 import { cloneImportedWorkspace, exportWorkspaceArchive, exportWorkspaceXlsxAsync, importWorkspaceArchive, importWorkspaceXlsx, WORKSPACE_ARCHIVE_FILE_NAME, type WorkspaceImportSource } from './spreadsheet';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
@@ -109,7 +110,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
   const saveCellValue = (rowId: string, column: WorkspaceColumn, value: WorkspaceCellValue) => {
     if (!data || !table) return;
     const isRowHeader = rowHeader?.id === column.id;
-    const row = table.rows.find((item) => item.id === rowId);
+    const row = getWorkspaceRow(table.rows, rowId);
     if (!row) { dialogs.close('editing'); return; }
     const before = getWorkspaceCellValue(row, column.id, rowHeader?.id);
     if (sameWorkspaceCellValue(before, value)) { dialogs.close('editing'); return; }

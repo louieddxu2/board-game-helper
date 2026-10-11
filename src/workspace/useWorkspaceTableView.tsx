@@ -41,7 +41,7 @@ interface WorkspaceTableViewOptions {
   stableBeginTableReorder: (kind: TableReorderKind, sourceId: string, event: PointerEvent<HTMLElement>) => void;
   hasHiddenColumns: boolean;
   rowWindow: { virtual: boolean; first: number; last: number; visibleRows: readonly WorkspaceRow[]; topPadding: number; bottomPadding: number; measureRow: (id: string, height: number) => void; offsetForRow: (id: string) => number | undefined; pendingScrollTop: number | undefined; pendingStickToBottom: boolean; consumePendingScrollTop: () => void; };
-  tableRowIndexes: Map<string, number>;
+  tableRowIndexes: ReadonlyMap<string, number>;
   activeCellRowId: string | undefined;
   bulkSelectedRowIds: Set<string>;
   setActiveCellElement: (element: HTMLElement | null) => void;

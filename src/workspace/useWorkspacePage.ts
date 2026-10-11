@@ -3,6 +3,7 @@ import { useStableCallback } from '../hooks/useStableCallback';
 import { loadWorkspaceTableWindow } from './db';
 import { displayWorkspaceColumnValue, getRowHeaderColumn, parseMultiSelectValues } from './model';
 import { workspaceWindowDisplayTable } from './rowPages';
+import { getWorkspaceRow } from './rowIndexes';
 import type { WorkspaceColumn, WorkspaceNode, WorkspaceRow } from './types';
 import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
 import { useTableGestures } from './useTableGestures';
@@ -77,7 +78,6 @@ export const useWorkspacePage = () => {
   const navigationTableById = useMemo(() => new Map(navigationTables.map((item) => [item.tableId, item])), [navigationTables]);
   const bottomNavigationItems = useMemo(() => (data?.bottomNavigationTableIds ?? []).flatMap((tableId) => navigationTableById.get(tableId) ?? []), [data?.bottomNavigationTableIds, navigationTableById]);
   const rowHeader = useMemo(() => table ? getRowHeaderColumn(table) : undefined, [table?.id, table?.rowHeader, table?.rowHeaderName]);
-  const tableRowsById = useMemo(() => new Map(table?.rows.map((row) => [row.id, row]) ?? []), [table?.rows]);
   const filter = useWorkspaceFilter({ table, rowHeader });
 
   const { searchQuery, setSearchQuery, searchOpen, setSearchOpen, headerFilters, setFilterTarget, clearFilters, filteredRows, setScrollPosition } = filter;
@@ -93,7 +93,7 @@ export const useWorkspacePage = () => {
   }, [displayedColumns, rowHeader, table]);
   const hasActiveSearchState = Boolean(searchQuery.trim()) || Object.values(headerFilters).some((state) => hasWorkspaceFilterCriteria(state) || Boolean(state.sort));
   const bulk = useWorkspaceBulkSelection({
-    table, tableRowsById, setNotice, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, dataRef, commit, dialogs,
+    table, setNotice, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, dataRef, commit, dialogs,
   });
   const { bulkTopRowRevealed, setBulkSelection, setBulkEditorOpen, startBulkSelection, sweepBulkSelection, toggleBulkCell, bulkSelection, setBulkTopRowRevealed, closeBulkSelection, bulkColumn, bulkSelectedRowIds } = bulk;
 
@@ -266,11 +266,11 @@ export const useWorkspacePage = () => {
 
   const { handleTableViewportScroll, renderedTableWidth, renderedColumnWidths, rowWindow, tableRowIndexes, syncFilterbarScroll, filterbarTrackStyle, filterbarSlots } = useWorkspaceTableWindow({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen });
 
-  const activeEditingRow = editing ? tableRowsById.get(editing.rowId) : undefined;
+  const activeEditingRow = editing && table ? getWorkspaceRow(table.rows, editing.rowId) : undefined;
   const activeEditingRowIndex = activeEditingRow ? tableRowIndexes.get(activeEditingRow.id) ?? -1 : -1;
   const activeEditingColumn = editing && table ? editing.columnId === rowHeader?.id ? rowHeader : table.columns.find((item) => item.id === editing.columnId) : undefined;
   const activeEditingValue = activeEditingRow && activeEditingColumn ? activeEditingColumn.id === rowHeader?.id ? activeEditingRow.name : activeEditingRow.values[activeEditingColumn.id] : null;
-  const hiddenEditorRow = hiddenFieldsEditor ? tableRowsById.get(hiddenFieldsEditor.rowId) : undefined;
+  const hiddenEditorRow = hiddenFieldsEditor && table ? getWorkspaceRow(table.rows, hiddenFieldsEditor.rowId) : undefined;
   const activeCell = editing ?? (selectionEditor ? { rowId: selectionEditor.rowId, columnId: selectionEditor.column.id } : undefined) ?? (bulkSelection?.rowIds[0] ? { rowId: bulkSelection.rowIds[0], columnId: bulkSelection.columnId } : focusTarget);
   const activeCellKey = activeCell ? workspaceCellKey(activeCell.rowId, activeCell.columnId) : undefined;
   const activeCellRowId = activeCell?.rowId;

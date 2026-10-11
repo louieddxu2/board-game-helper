@@ -1,34 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPendingWorkspaceRow, workspaceRowPageIndex, workspaceRowPageMatchesHead, workspaceRowPageOffset, type WorkspaceTableWindow } from './rowPages';
 import type { WorkspaceRow } from './types';
-
-export class SparseWorkspaceRowHeights {
-  private heights = new Map<number, number>();
-  private sums = new Map<number, number>();
-  constructor(readonly count: number) {}
-  offset(index: number) {
-    let delta = 0;
-    for (let cursor = index; cursor > 0; cursor -= cursor & -cursor) delta += this.sums.get(cursor) ?? 0;
-    return index * 36 + delta;
-  }
-  measure(index: number, height: number) {
-    if (index < 0 || index >= this.count || !Number.isFinite(height) || height <= 0) return false;
-    const delta = height - (this.heights.get(index) ?? 36);
-    if (Math.abs(delta) < 0.5) return false;
-    this.heights.set(index, height);
-    for (let cursor = index + 1; cursor <= this.count; cursor += cursor & -cursor) this.sums.set(cursor, (this.sums.get(cursor) ?? 0) + delta);
-    return true;
-  }
-  indexAt(position: number) {
-    let low = 0, high = Math.max(0, this.count - 1);
-    while (low < high) {
-      const middle = Math.floor((low + high + 1) / 2);
-      if (this.offset(middle) <= position) low = middle;
-      else high = middle - 1;
-    }
-    return low;
-  }
-}
+import { SparseWorkspaceRowHeights } from './rowHeights';
+export { SparseWorkspaceRowHeights } from './rowHeights';
 
 /** No complete row array or row index is needed for the display window. */
 export const usePagedWorkspaceRows = (window: WorkspaceTableWindow | undefined, measurementKey: string, scrollTop: number, viewportHeight: number, stickToBottom: boolean) => {
@@ -56,7 +30,7 @@ export const usePagedWorkspaceRows = (window: WorkspaceTableWindow | undefined, 
     return workspaceRowPageMatchesHead(window.head, index, page)
       ? page.rows.map((row, slot) => [workspaceRowPageOffset(window.head, index) + slot, row] as const) : [];
   }) ?? [], [window]);
-  const indexes = useMemo(() => new Map(entries.map(([index, row]) => [row.id, index])), [entries]);
+  const indexes = useMemo<ReadonlyMap<string, number>>(() => new Map(entries.map(([index, row]) => [row.id, index])), [entries]);
   const rows = useMemo(() => new Map(entries), [entries]);
   const virtual = Boolean(window && count > 80);
   const first = virtual ? Math.max(0, heights.indexAt(Math.max(0, scrollTop)) - 6) : 0;

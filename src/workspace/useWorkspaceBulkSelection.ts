@@ -3,10 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
 import { applyWorkspaceCellChanges } from './cellChanges';
 import { sameWorkspaceCellValue } from './model';
+import { getWorkspaceRow, getWorkspaceRowIndexes } from './rowIndexes';
 import type { WorkspaceCommitOptions, WorkspaceTableMutation } from './history';
 import type { WorkspaceCellValue, WorkspaceData, WorkspaceRow, WorkspaceTable } from './types';
 import type { WorkspaceDialogController } from './useWorkspaceDialogs';
 import { numericWorkspaceValue, updateTable } from './workspaceShared';
+
+const emptyRows: WorkspaceRow[] = [];
 
 const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string): WorkspaceBulkSelection | undefined => {
   const selected = selection.rowIds.includes(rowId);
@@ -17,7 +20,6 @@ const toggleBulkSelectionRow = (selection: WorkspaceBulkSelection, rowId: string
 
 interface WorkspaceBulkSelectionOptions {
   table: WorkspaceTable | undefined;
-  tableRowsById: Map<string, WorkspaceRow>;
   setNotice: Dispatch<SetStateAction<string>>;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
   setEditBarOpen: Dispatch<SetStateAction<boolean>>;
@@ -28,7 +30,7 @@ interface WorkspaceBulkSelectionOptions {
   dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
 }
 
-export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, dataRef, commit, dialogs }: WorkspaceBulkSelectionOptions) => {
+export const useWorkspaceBulkSelection = ({ table, setNotice, setSearchOpen, setEditBarOpen, setTableActionsOpen, filteredRows, dataRef, commit, dialogs }: WorkspaceBulkSelectionOptions) => {
   const { close: closeDialogs, set: setDialog } = dialogs;
   const [bulkSelection, setBulkSelection] = useState<WorkspaceBulkSelection>();
 
@@ -40,10 +42,10 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
 
   const bulkSelectedRowIds = useMemo(() => new Set(bulkSelection?.rowIds ?? []), [bulkSelection?.rowIds]);
 
-  const bulkRows = useMemo(() => bulkSelection ? bulkSelection.rowIds.flatMap((rowId) => {
-    const row = tableRowsById.get(rowId);
+  const bulkRows = useMemo(() => bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.rowIds.flatMap((rowId) => {
+    const row = getWorkspaceRow(table.rows, rowId);
     return row ? [row] : [];
-  }) : [], [bulkSelection, tableRowsById]);
+  }) : emptyRows, [bulkSelection, table?.id, table?.rows]);
 
   const bulkNumericValues = useMemo(() => bulkColumn?.inputType === 'number'
     ? bulkRows.map((row) => numericWorkspaceValue(row.values[bulkColumn.id] ?? null)).filter((value): value is number => value !== undefined)
@@ -72,8 +74,9 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
   }, [bulkSelection, table, setSearchOpen, closeDialogs]);
 
   const sweepBulkSelection = useCallback((fromRowId: string, toRowId: string, columnId: string) => {
-    const fromIndex = filteredRows.findIndex((row) => row.id === fromRowId);
-    const toIndex = filteredRows.findIndex((row) => row.id === toRowId);
+    const indexes = getWorkspaceRowIndexes(filteredRows);
+    const fromIndex = indexes.get(fromRowId) ?? -1;
+    const toIndex = indexes.get(toRowId) ?? -1;
     if (!table || fromIndex < 0 || toIndex < 0) return;
     const crossedIds = filteredRows.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1).map((row) => row.id);
     setBulkSelection((current) => {
@@ -113,11 +116,11 @@ export const useWorkspaceBulkSelection = ({ table, tableRowsById, setNotice, set
     const currentData = dataRef.current;
     if (!currentData || !table || !bulkSelection || !bulkColumn) return;
     const valuesByRowId = new Map(updates.map((update) => [update.rowId, update.value]));
-    const changes = table.rows.flatMap((row) => {
-      if (!valuesByRowId.has(row.id)) return [];
+    const changes = [...valuesByRowId].flatMap(([rowId, after]) => {
+      const row = getWorkspaceRow(table.rows, rowId);
+      if (!row) return [];
       const before = row.values[bulkColumn.id] ?? null;
-      const after = valuesByRowId.get(row.id)!;
-      return sameWorkspaceCellValue(before, after) ? [] : [{ rowId: row.id, before, after }];
+      return sameWorkspaceCellValue(before, after) ? [] : [{ rowId, before, after }];
     });
     if (changes.length === 0) {
       setNotice('選取的格子沒有變更');

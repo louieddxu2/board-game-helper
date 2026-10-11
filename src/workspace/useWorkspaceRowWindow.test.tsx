@@ -1,6 +1,8 @@
 import { StrictMode, useLayoutEffect } from 'react';
 import { act, render, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { applyWorkspaceCellChanges } from './cellChanges';
+import { getWorkspaceRowIndexes } from './rowIndexes';
 import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
 import type { WorkspaceRow } from './types';
 
@@ -96,6 +98,40 @@ describe('workspace visible row window', () => {
     }
   });
 
+  it('keeps a measured deep anchor and warmed indexes through a value edit without scanning offscreen ids', () => {
+    const frames = animationFrames();
+    const reads: string[] = [];
+    const trackedRows = Array.from({ length: 10_000 }, (_, index) => {
+      const id = `row-${index}`;
+      const row = { name: `項目 ${index}`, values: { value: null } } as unknown as WorkspaceRow;
+      Object.defineProperty(row, 'id', { configurable: true, enumerable: true, get: () => { reads.push(id); return id; } });
+      return row;
+    });
+    const indexes = getWorkspaceRowIndexes(trackedRows);
+    const scrollTop = 9_000 * 36 + 20;
+    try {
+      const { result, rerender } = renderHook(({ currentRows }) => useWorkspaceRowWindow(currentRows, 'table', scrollTop, 180, true), { initialProps: { currentRows: trackedRows } });
+      reads.length = 0;
+      act(() => result.current.measureRow('row-9000', 120));
+      act(() => frames.flush());
+      expect(result.current.indexes).toBe(indexes);
+      expect(result.current.offsetForRow('row-9001')).toBe(9_001 * 36 + 84);
+      expect(result.current.pendingScrollTop).toBe(scrollTop);
+
+      const edited = applyWorkspaceCellChanges(trackedRows, undefined, [{ rowId: 'row-9000', columnId: 'value', before: null, after: 'edited' }]);
+      rerender({ currentRows: edited });
+      expect(result.current.indexes).toBe(indexes);
+      expect(result.current.offsetForRow('row-9001')).toBe(9_001 * 36 + 84);
+      expect(result.current.pendingScrollTop).toBe(scrollTop);
+      expect(edited[0]).toBe(trackedRows[0]);
+      expect(edited[9_000].values.value).toBe('edited');
+      expect(reads.filter(id => id !== 'row-9000')).toEqual([]);
+      expect(reads.length).toBeLessThan(10);
+    } finally {
+      frames.restore();
+    }
+  });
+
   it('batches measured rows and keeps the same row plus its within-row offset after a resize', () => {
     const frames = animationFrames();
     try {
@@ -126,6 +162,22 @@ describe('workspace visible row window', () => {
     // the old numeric index, so the pending scroll follows it to offset 180.
     expect(result.current.pendingScrollTop).toBe(180);
     expect(result.current.visibleRows.some((row) => row.id === 'row-10')).toBe(true);
+  });
+
+  it('retains a fractional measured height by row identity when order changes', () => {
+    const frames = animationFrames();
+    try {
+      const { result, rerender } = renderHook(({ visibleRows }) => useWorkspaceRowWindow(visibleRows, 'table', 0, 180, true, 'table', 'same-order'), { initialProps: { visibleRows: rows } });
+      act(() => result.current.measureRow('row-0', 36.1));
+      act(() => frames.flush());
+      rerender({ visibleRows: [rows[1], rows[0], ...rows.slice(2)] });
+
+      expect(result.current.offsetForRow('row-1')).toBeCloseTo(0);
+      expect(result.current.offsetForRow('row-0')).toBeCloseTo(36);
+      expect(result.current.offsetForRow('row-2')).toBeCloseTo(72.1);
+    } finally {
+      frames.restore();
+    }
   });
 
   it('drops pending anchors when scope or order changes', () => {

@@ -1,4 +1,5 @@
 import type { WorkspaceCellValue, WorkspaceRow } from './types';
+import { getWorkspaceRowIndexes, preserveWorkspaceRowIndexes } from './rowIndexes';
 
 /** Changes to stored values; derived results are not part of this contract. */
 export interface WorkspaceCellChange {
@@ -38,7 +39,9 @@ export const restoreWorkspaceColumnValues = (
     changed = true;
     return { ...row, values: { ...row.values, [columnId]: value } };
   });
-  return changed ? nextRows : rows;
+  if (!changed) return rows;
+  preserveWorkspaceRowIndexes(rows, nextRows);
+  return nextRows;
 };
 
 /** Remove column keys rather than assigning null; untouched rows retain their identity. */
@@ -56,7 +59,9 @@ export const removeWorkspaceColumnValues = (rows: WorkspaceRow[], columnIds: Rea
     changed = true;
     return { ...row, values };
   });
-  return changed ? nextRows : rows;
+  if (!changed) return rows;
+  preserveWorkspaceRowIndexes(rows, nextRows);
+  return nextRows;
 };
 
 /** Apply a whole operation, copying each affected row and value object at most once. */
@@ -73,21 +78,27 @@ export const applyWorkspaceCellChanges = (
     if (!values) { values = new Map(); updates.set(change.rowId, values); }
     values.set(change.columnId, change[side]);
   }
-  let changed = false;
-  const nextRows = rows.map(row => {
-    const values = updates.get(row.id);
-    if (!values) return row;
+  const indexes = getWorkspaceRowIndexes(rows);
+  let nextRows = rows;
+  for (const [id, values] of updates) {
+    const index = indexes.get(id);
+    if (index === undefined) continue;
+    const row = rows[index];
     let next = row;
     for (const [columnId, value] of values) {
       if (sameWorkspaceCellValue(getWorkspaceCellValue(next, columnId, rowHeaderId), value)) continue;
-      if (next === row) { next = { ...row }; changed = true; }
+      if (next === row) next = { ...row };
       if (columnId === rowHeaderId) next.name = value;
       else {
         if (next.values === row.values) next.values = { ...row.values };
         next.values[columnId] = value;
       }
     }
-    return next;
-  });
-  return changed ? nextRows : rows;
+    if (next !== row) {
+      if (nextRows === rows) nextRows = rows.slice();
+      nextRows[index] = next;
+    }
+  }
+  if (nextRows !== rows) preserveWorkspaceRowIndexes(rows, nextRows);
+  return nextRows;
 };

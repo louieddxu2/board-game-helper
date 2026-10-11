@@ -3,6 +3,7 @@ import { act, cleanup, render, renderHook, screen } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyWorkspaceTableHistoryAction } from './history';
 import { getDynamicOptions } from './model';
+import { getWorkspaceRowIndexes } from './rowIndexes';
 import { exportWorkspaceArchive, exportWorkspaceXlsxAsync, importWorkspaceArchive, importWorkspaceXlsx, type ImportedWorkspace } from './spreadsheet';
 import type { WorkspaceColumn, WorkspaceData, WorkspaceTable } from './types';
 import { useWorkspaceActions, type WorkspaceTableImportPreview } from './useWorkspaceActions';
@@ -282,6 +283,30 @@ describe('Workspace single-cell editing', () => {
     expect(undo.tables[0].rows[0].values[editableColumn.id]).toBeNull();
     const redo = applyWorkspaceTableHistoryAction(undo, editableTable.id, mutation!.action, 'redo');
     expect(redo.tables[0].rows[0].values[editableColumn.id]).toBe('新的內容');
+  });
+
+  it('uses warmed row indexes for a deep edit without reading offscreen row ids', () => {
+    const reads: string[] = [];
+    const largeRows = Array.from({ length: 10_000 }, (_, index) => {
+      const id = `row-${index}`;
+      const row = { name: `項目 ${index}`, values: { [editableColumn.id]: null } } as unknown as WorkspaceTable['rows'][number];
+      Object.defineProperty(row, 'id', { configurable: true, enumerable: true, get: () => { reads.push(id); return id; } });
+      return row;
+    });
+    const largeTable = { ...editableTable, rows: largeRows };
+    const largeData = { ...editableData, tables: [largeTable] };
+    const props = { ...makeEditableProps(), data: largeData, dataRef: { current: largeData } as RefObject<WorkspaceData | undefined>, table: largeTable };
+    getWorkspaceRowIndexes(largeRows);
+    const { result } = renderHook(() => useWorkspaceActions(props));
+    reads.length = 0;
+
+    act(() => result.current.saveCellValue('row-9999', editableColumn, '深處內容'));
+
+    expect(reads.filter((id) => id !== 'row-9999')).toEqual([]);
+    expect(reads.length).toBeLessThan(10);
+    const [nextData] = vi.mocked(props.commit).mock.calls[0];
+    expect(nextData.tables[0].rows[0]).toBe(largeRows[0]);
+    expect(nextData.tables[0].rows[9_999].values[editableColumn.id]).toBe('深處內容');
   });
 
   it('uses the row-header column and object label for a row-header edit', () => {
