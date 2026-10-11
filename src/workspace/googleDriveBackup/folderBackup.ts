@@ -270,7 +270,8 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const file = await api.uploadFile({ parentId: root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
     report('confirming');
     const committedState = await findRemoteState();
-    if (committedState.heads.length > 1) throw new RemoteBackupConflictError(committedState.selected);
+    if (committedState.heads.length > 1 || (committedState.selected && committedState.selected.id !== file.id)) throw new RemoteBackupConflictError(committedState.selected);
+    if (!committedState.selected) throw new Error('備份檔已上傳，但無法確認雲端備份，請稍後尋找雲端備份');
     return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest };
   };
 

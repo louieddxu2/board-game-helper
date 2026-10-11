@@ -5,6 +5,7 @@ import type { WorkspaceData } from '../types';
 import { workspaceBackupTableSummary, type WorkspaceBackupSource } from '../workspaceBackupSource';
 import { createGoogleDriveFolderBackup } from './folderBackup';
 import type { WorkspaceBackupProgress } from './backupProgress';
+import type { DriveFile } from './types';
 
 const api = vi.hoisted(() => ({ findFilesByAppProperty: vi.fn(), uploadFile: vi.fn(), downloadBlob: vi.fn() }));
 vi.mock('./googleDriveApi', () => ({ FOLDER_MIME: 'application/vnd.google-apps.folder', GoogleDriveApi: class {
@@ -14,10 +15,16 @@ vi.mock('./googleDriveApi', () => ({ FOLDER_MIME: 'application/vnd.google-apps.f
   downloadBlob = api.downloadBlob;
 } }));
 
+let uploadedManifest: DriveFile | undefined;
 beforeEach(() => {
   vi.clearAllMocks();
-  api.findFilesByAppProperty.mockResolvedValue([]);
-  api.uploadFile.mockImplementation(async ({ name }: { name: string }) => ({ id: `file-${name}`, name }));
+  uploadedManifest = undefined;
+  api.findFilesByAppProperty.mockImplementation(async () => uploadedManifest ? [uploadedManifest] : []);
+  api.uploadFile.mockImplementation(async ({ name, appProperties }: { name: string; appProperties: Record<string, string> }) => {
+    const file = { id: `file-${name}`, name, appProperties };
+    if (appProperties.backupKind === 'manifest') uploadedManifest = file;
+    return file;
+  });
 });
 const fixture = () => {
   const tables = ['第一表', '第二表'].map((name, index) => {
@@ -45,7 +52,9 @@ describe('transient table backups', () => {
       bodies.set(id, body);
       if (id === tables[0].id) await firstUpload;
       events.push(`done:${id}`);
-      return { id: `file-${id}`, name };
+      const file = { id: `file-${id}`, name, appProperties };
+      if (id === 'manifest') uploadedManifest = file;
+      return file;
     });
     const upload = service.backup(data, {}, { source, onProgress: value => progress.push(value) });
     await vi.waitFor(() => expect(events).toContain(`upload:${tables[0].id}`));
@@ -74,7 +83,8 @@ describe('transient table backups', () => {
   it('reuses unselected remote table files without reading their rows', async () => {
     const { tables, data, source, service } = fixture();
     const refs = tables.map((table, index) => ({ ...workspaceBackupTableSummary(table), nodeId: data.nodes[index].id, folderId: null, driveFileId: `old-${table.id}`, fileName: `${table.name}.xlsx` }));
-    api.findFilesByAppProperty.mockResolvedValue([{ id: 'old-manifest', name: 'manifest.xlsx', appProperties: { backupKey: 'test', backupKind: 'manifest' } }]);
+    const previousFile = { id: 'old-manifest', name: 'manifest.xlsx', appProperties: { backupKey: 'test', backupKind: 'manifest' } };
+    api.findFilesByAppProperty.mockImplementation(async () => [uploadedManifest ?? previousFile]);
     api.downloadBlob.mockResolvedValue(exportWorkspaceBackupManifestXlsx(data, [], refs, 42));
     const onProgress = vi.fn();
     const receipt = await service.backup(data, {}, { source, complete: false, tableIds: [tables[0].id], onProgress });
@@ -92,5 +102,16 @@ describe('transient table backups', () => {
     await expect(service.backup(data, {}, { source, onProgress })).rejects.toThrow(`${failure} failed`);
     expect(api.uploadFile.mock.calls.some(([request]) => request.appProperties.backupKind === 'manifest')).toBe(false);
     expect(onProgress.mock.calls.some(([progress]) => progress.phase === 'confirming')).toBe(false);
+  });
+
+  it.each(['missing', 'different', 'multiple'] as const)('does not confirm a backup when the final remote head is %s', async state => {
+    const { data, source, service } = fixture();
+    const other = { id: 'another-manifest', name: 'manifest.xlsx', appProperties: { backupKey: 'test', backupKind: 'manifest', parentManifestIds: '[]' } };
+    api.findFilesByAppProperty.mockImplementation(async () => {
+      if (!uploadedManifest) return [];
+      return state === 'missing' ? [] : state === 'different' ? [other] : [uploadedManifest, other];
+    });
+    await expect(service.backup(data, {}, { source })).rejects.toThrow(state === 'missing' ? '無法確認雲端備份' : '雲端備份已在其他裝置變更');
+    expect(uploadedManifest).toBeDefined();
   });
 });

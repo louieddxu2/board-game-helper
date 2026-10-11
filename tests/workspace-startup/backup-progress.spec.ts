@@ -83,9 +83,9 @@ const setup = async (page: Page) => {
       if (fail) await json(pending.route, { error: { message: '測試上傳失敗' } }, 500);
       else { files.set(pending.file.id, pending.file); await json(pending.route, pending.file); }
     },
-    async finishConfirmation() {
+    async finishConfirmation(missing = false) {
       if (!heldConfirmation) throw new Error('No held remote confirmation');
-      await json(heldConfirmation.route, { files: heldConfirmation.files });
+      await json(heldConfirmation.route, { files: missing ? [] : heldConfirmation.files });
     },
   };
 };
@@ -127,5 +127,20 @@ test('replaces an interrupted upload with its error and re-enables backup', asyn
   await expect(backup.dialog.getByRole('alert')).toHaveText('測試上傳失敗');
   await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
   await expect(backup.dialog.getByRole('button', { name: '立即備份' })).toBeEnabled();
+  expect(backup.errors).toEqual([]);
+});
+
+test('keeps the previous completion record when the uploaded backup cannot be confirmed', async ({ page }) => {
+  const backup = await setup(page);
+  const previousRecord = await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'));
+  await expect.poll(backup.tableId).toBe('table-0');
+  await backup.finishTable();
+  await expect.poll(backup.tableId).toBe('table-1');
+  await backup.finishTable();
+  await expect(backup.dialog.getByRole('status')).toContainText('正在確認雲端備份');
+  await backup.finishConfirmation(true);
+  await expect(backup.dialog.getByRole('alert')).toHaveText('備份檔已上傳，但無法確認雲端備份，請稍後尋找雲端備份');
+  await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'))).toBe(previousRecord);
   expect(backup.errors).toEqual([]);
 });
