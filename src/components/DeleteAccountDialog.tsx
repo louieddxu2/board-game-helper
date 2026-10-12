@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { AccountDeletionSummary } from '../shared/types';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 interface DeleteAccountDialogProps {
   open: boolean;
@@ -20,6 +21,8 @@ export const DeleteAccountDialog = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [deleteRules, setDeleteRules] = useState(false);
   const [confirmation, setConfirmation] = useState('');
+  const navigate = useNavigate();
+  const navigateFromDialog = useWorkspaceBrowserBack({ active: open, onBack: onCancel, canDismiss: !busy });
 
   useEffect(() => {
     if (!open) return;
@@ -30,18 +33,15 @@ export const DeleteAccountDialog = ({
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || busy) return;
       event.preventDefault();
       onCancel();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    document.body.style.overflow = 'hidden';
     window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       window.removeEventListener('keydown', closeOnEscape, true);
-      document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
   }, [busy, onCancel, open]);
@@ -58,7 +58,11 @@ export const DeleteAccountDialog = ({
         <h2 id={titleId}>永久刪除帳號</h2>
         <p id={descriptionId}>這會刪除登入、角色、收藏、投票及其他帳號資料，而且無法復原。</p>
         <p>若不勾選下方選項，只會去除帳號記錄；你建立或修改過的規則仍會保留於此平台資料庫，作者會改為「已刪除帳號」。</p>
-        <p><Link to="/privacy">查看詳細的資料保留方式</Link></p>
+        <p><Link to="/privacy" onClick={event => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          navigateFromDialog(() => navigate('/privacy'));
+        }}>查看詳細的資料保留方式</Link></p>
       </div>
 
       {loading && <p className="muted" role="status">正在確認可刪除的規則…</p>}

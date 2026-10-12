@@ -23,16 +23,7 @@ const RESOURCE_CATEGORY_LABELS: Record<GameExternalResourceCategory, string> = {
 
 export const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: { game: GameDetail; canEdit: boolean; onClose(): void; onChanged(): Promise<void> }) => {
   const [addOpen, setAddOpen] = useState(false);
-  const dismissLayer = () => {
-    if (addOpen) setAddOpen(false);
-    else onClose();
-  };
-  useWorkspaceBrowserBack({ active: true, layerCount: addOpen ? 2 : 1, onBack: dismissLayer });
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, []);
+  useWorkspaceBrowserBack({ active: true, onBack: onClose });
   const resources = game.externalResources ?? [];
   return <>
     <div className="modal-backdrop" role="presentation">
@@ -78,6 +69,7 @@ const ExternalResourceAddDialog = ({ game, onClose, onSaved }: { game: GameDetai
   const [category, setCategory] = useState<GameExternalResourceCategory>('teaching');
   const [url, setUrl] = useState('');
   const [saving, setSaving] = useState(false);
+  useWorkspaceBrowserBack({ active: true, onBack: onClose });
   const add = async () => {
     if (!name.trim() || !url.trim()) return;
     setSaving(true);
@@ -101,6 +93,7 @@ const ExternalResourceAddDialog = ({ game, onClose, onSaved }: { game: GameDetai
 };
 
 export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule: RuleCardType; onClose(): void; onSaved(): Promise<void> }) => {
+  useWorkspaceBrowserBack({ active: true, onBack: onClose });
   const { isAdmin, canEdit, user } = useSession();
   const { confirm } = useConfirm();
   const { showToast } = useToast();
@@ -118,9 +111,9 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const canWithdraw = !canEdit && rule.reviewStatus === 'pending' && rule.createdBy === user?.id;
   const editionOptions = useMemo(() => collectEditionOptions(game.rules), [game.rules]);
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', closeOnEscape); document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', closeOnEscape); document.body.style.overflow = ''; };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); onClose(); } };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('keydown', closeOnEscape); };
   }, [onClose]);
   const save = async () => {
     setSaving(true);
@@ -183,14 +176,15 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
 };
 
 export const GameEditor = ({ game, onClose, onSaved }: { game: GameDetail; onClose(): void; onSaved(): Promise<void> }) => {
+  useWorkspaceBrowserBack({ active: true, onBack: onClose });
   const [displayName, setDisplayName] = useState(game.displayName);
   const [englishName, setEnglishName] = useState(game.englishName ?? '');
   const [aliases, setAliases] = useState(game.aliases.filter((alias) => alias !== game.displayName && alias !== game.englishName).join('\n'));
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', closeOnEscape); document.body.style.overflow = 'hidden';
-    return () => { document.removeEventListener('keydown', closeOnEscape); document.body.style.overflow = ''; };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); onClose(); } };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('keydown', closeOnEscape); };
   }, [onClose]);
   const save = async () => {
     setSaving(true);

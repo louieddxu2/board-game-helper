@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { GamePage } from './GamePage';
+import { uiHistory } from '../workspace/uiHistory';
 
 const mocks = vi.hoisted(() => ({
   game: vi.fn(),
@@ -45,6 +46,8 @@ const game = {
 
 describe('GamePage compact rule view', () => {
   beforeEach(() => {
+    uiHistory.dispose();
+    window.history.pushState({ idx: (window.history.state?.idx ?? 0) + 1 }, '', '/games/test-game');
     vi.clearAllMocks();
     mocks.canEdit = false;
     mocks.game.mockResolvedValue({ game });
@@ -54,7 +57,11 @@ describe('GamePage compact rule view', () => {
     mocks.hydrateRuleTags.mockImplementation(async (rules: typeof game.rules) => rules);
   });
 
-  afterEach(() => cleanup());
+  afterEach(async () => {
+    cleanup();
+    await waitFor(() => expect(window.history.state?.__boardGameHelperWorkspaceUi).toBeUndefined());
+    uiHistory.dispose();
+  });
 
   const renderGamePage = (entry = '/games/test-game') => render(<MemoryRouter initialEntries={[entry]}>
     <Routes>
@@ -136,9 +143,11 @@ describe('GamePage compact rule view', () => {
     fireEvent.pointerDown(addBackdrop);
     expect(screen.getByRole('dialog', { name: '新增外部資源' })).toBeInTheDocument();
 
-    fireEvent(window, new PopStateEvent('popstate'));
+    act(() => window.history.back());
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '新增外部資源' })).not.toBeInTheDocument());
     expect(screen.getByRole('dialog', { name: '外部資源' })).toBeInTheDocument();
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   test('refreshes the rule snapshot before opening an editor', async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { PersonalHomeGame } from '../shared/types';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 interface Props {
   games: PersonalHomeGame[];
@@ -10,6 +11,7 @@ interface Props {
 
 export const FavoriteLimitDialog = ({ games, busyId, onRemove, onClose }: Props) => {
   const closeRef = useRef<HTMLButtonElement>(null);
+  useWorkspaceBrowserBack({ active: true, onBack: onClose, canDismiss: !busyId });
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busyId) onClose(); };
     window.addEventListener('keydown', closeOnEscape);

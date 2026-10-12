@@ -2,6 +2,9 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import { isInstalledPwa, isPwaHomeShortcut, pwaRouteToRestore, readPwaLastRoute, savePwaLastRoute } from './lib/pwaNavigation';
+import { uiHistory } from './workspace/uiHistory';
+import { isWorkspaceVirtualKeyboardOpen } from './workspace/useWorkspaceBrowserBack';
+import { connectUiHistoryRouter } from './workspace/uiHistoryRouter';
 
 const LoadingFallback = () => (
   <section className="narrow-page workspace-loading">
@@ -28,6 +31,7 @@ if (installedPwa) {
   if (restoredRoute) window.history.replaceState(window.history.state, '', restoredRoute);
 }
 
+uiHistory.install(isWorkspaceVirtualKeyboardOpen);
 const router = createBrowserRouter([
   { path: '/workspace', lazy: async () => ({ Component: (await import('./pages/WorkspacePage')).WorkspacePage }), errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback },
   { path: '/', lazy: async () => ({ Component: (await import('./components/SiteLayout')).SiteLayout }), errorElement: <ErrorFallback />, HydrateFallback: LoadingFallback, children: [
@@ -48,6 +52,7 @@ const router = createBrowserRouter([
 
 if (installedPwa) savePwaLastRoute(router.state.location);
 
+connectUiHistoryRouter(router);
 router.subscribe((state) => {
   savePwaLastRoute(state.location);
 });

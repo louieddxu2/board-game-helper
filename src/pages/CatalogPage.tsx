@@ -223,6 +223,7 @@ export const CatalogPage = () => {
   }, [user?.id]);
 
   const toggleGame = async (game: GameSummary) => {
+    setEditingRule(undefined);
     const requestId = ++detailRequestId.current;
     if (expandedGameId === game.id) {
       setExpandedGameId(undefined);

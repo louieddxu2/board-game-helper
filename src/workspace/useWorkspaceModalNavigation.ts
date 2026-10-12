@@ -72,6 +72,15 @@ export const useWorkspaceModalNavigation = ({ dataRef, commit, setNotice, dialog
     else latest.current.find(([id]) => id === owner)?.[2]();
   }, []);
   const active = layers.find(([, open]) => open)?.[0];
-  useWorkspaceBrowserBack({ active: Boolean(active), onBack: () => { if (active) requestClose(active, 'browser-back'); } });
+  useWorkspaceBrowserBack({
+    active: Boolean(active),
+    lockScroll: false,
+    layerCount: layers.filter(([, open]) => open).length,
+    onBack: () => { if (active) requestClose(active, 'browser-back'); },
+    onDismissLayers: count => latest.current.filter(([, open]) => open).slice(0, count).forEach(layer => {
+      layer[1] = false;
+      layer[2]();
+    }),
+  });
   return { requestClose, closeBottomNavigationDialog };
 };

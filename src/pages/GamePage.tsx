@@ -141,6 +141,11 @@ export const GamePage = () => {
   }, [identifier, location.state]);
   useEffect(() => {
     setExpandedRuleId(null);
+    setEditing(undefined);
+    setEditingGame(false);
+    setExternalResourcesOpen(false);
+    setFavoriteLimitGames(undefined);
+    setRemovingFavoriteId(undefined);
   }, [identifier]);
   useEffect(() => {
     let active = true;

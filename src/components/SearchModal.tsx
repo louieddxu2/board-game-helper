@@ -18,7 +18,6 @@ export const SearchModal = ({ open, onClose }: Props) => {
   const navigate = useNavigate();
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
-  const bodyOverflow = useRef('');
   const [searchValue, setSearchValue] = useState('');
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [viewportHeight, setViewportHeight] = useState<number>();
@@ -30,8 +29,6 @@ export const SearchModal = ({ open, onClose }: Props) => {
       return;
     let active = true;
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    bodyOverflow.current = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     setSearchValue('');
     setRecentGames([]);
     void localDb.recentGames()
@@ -64,7 +61,6 @@ export const SearchModal = ({ open, onClose }: Props) => {
     return () => {
       active = false;
       window.clearTimeout(focusTimer);
-      document.body.style.overflow = bodyOverflow.current;
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);
@@ -79,8 +75,7 @@ export const SearchModal = ({ open, onClose }: Props) => {
     '--search-modal-bottom-clearance': `${bottomClearance}px`,
   } as CSSProperties : undefined;
   const navigateFromSearch = (target: string) => {
-    navigate(target, { replace: releaseForNavigation() });
-    onClose();
+    releaseForNavigation(() => navigate(target));
   };
   const openGame = (game: RecentGame) => navigateFromSearch(`/games/${game.slug}`);
   const recents = recentGames.length ? <>

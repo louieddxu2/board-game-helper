@@ -9,6 +9,7 @@ import { localDb } from '../lib/localDb';
 import { clearSearchCache } from '../components/GameSearch';
 import { LoginPage } from './LoginPage';
 import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
+import { uiHistory } from '../workspace/uiHistory';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -78,6 +79,9 @@ export const AccountPage = () => {
   }, [user?.nickname, user?.showNickname]);
 
   useEffect(() => {
+    setDeleteDialogOpen(false);
+    setDeletionSummary(undefined);
+    setAccountDeletionError('');
     setCreatedRules(undefined);
     setCreatedRulesOpen(false);
     setModifiedRules(undefined);
@@ -187,7 +191,7 @@ export const AccountPage = () => {
       ]).catch(() => undefined);
       writeHomeMode('explore');
       await refresh();
-      navigate('/', { replace: true });
+      uiHistory.navigate(() => navigate('/', { replace: true }));
     } catch (caught) {
       setAccountDeletionError(caught instanceof ApiError && caught.code === 'last_admin_account'
         ? '這是目前最後一個管理員帳號，請先授予另一個帳號管理員權限。'
@@ -209,7 +213,7 @@ export const AccountPage = () => {
         <h1>{user?.nickname || user?.displayName || '我的帳號'}</h1>
         <p className="muted">{user?.maskedEmail}</p>
       </div>
-      <button type="button" className="button secondary" onClick={() => void logout().then(() => navigate('/'))}>登出</button>
+      <button type="button" className="button secondary" onClick={() => void logout().then(() => uiHistory.navigate(() => navigate('/')))}>登出</button>
     </header>
 
     {error && <p className="form-error" role="alert">{error}</p>}

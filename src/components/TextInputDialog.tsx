@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 interface TextInputDialogProps {
   open: boolean;
@@ -16,11 +17,11 @@ export const TextInputDialog = ({ open, title, label, value, confirmLabel = '新
   const titleId = useId();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  useWorkspaceBrowserBack({ active: open, onBack: onCancel });
 
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
@@ -28,11 +29,9 @@ export const TextInputDialog = ({ open, title, label, value, confirmLabel = '新
       onCancel();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    document.body.style.overflow = 'hidden';
     window.setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       window.removeEventListener('keydown', closeOnEscape, true);
-      document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
   }, [onCancel, open]);

@@ -13,6 +13,8 @@ import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOption
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import zhTWCopy from '../content/zh-TW.json';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
+import { uiHistory } from '../workspace/uiHistory';
 import type { ContributionQuota, FlowStage, GameDetail, GameSummary, GameVariantSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
 
 type RuleInput = {
@@ -50,6 +52,12 @@ export const AddPage = () => {
   const [quota, setQuota] = useState<ContributionQuota>();
   const [pasteImportOpen, setPasteImportOpen] = useState(false);
   const [pasteImportText, setPasteImportText] = useState('');
+  const closePasteImport = () => {
+    setPasteImportOpen(false);
+    setPasteImportText('');
+    setError('');
+  };
+  useWorkspaceBrowserBack({ active: pasteImportOpen, onBack: closePasteImport });
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const draftSaveTimer = useRef<number | undefined>(undefined);
   const selectedGameId = game?.id;
@@ -134,13 +142,10 @@ export const AddPage = () => {
   useEffect(() => {
     if (!pasteImportOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPasteImportOpen(false);
+      if (event.key === 'Escape') closePasteImport();
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [pasteImportOpen]);
@@ -194,12 +199,6 @@ export const AddPage = () => {
     } catch (caught) { setError(caught instanceof Error ? caught.message : '無法匯入草稿。'); }
   };
 
-  const closePasteImport = () => {
-    setPasteImportOpen(false);
-    setPasteImportText('');
-    setError('');
-  };
-
   const importRuleDraft = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -238,7 +237,7 @@ export const AddPage = () => {
       clearSearchCache();
       if (result.quota) setQuota(result.quota);
       const firstRule = result.ruleIds?.[0];
-      navigate(`/games/${result.gameSlug}${firstRule ? `#rule-${firstRule}` : ''}`, { state: { justAdded: validRules.length, addedRuleIds: result.ruleIds ?? [] } });
+      uiHistory.navigate(() => navigate(`/games/${result.gameSlug}${firstRule ? `#rule-${firstRule}` : ''}`, { state: { justAdded: validRules.length, addedRuleIds: result.ruleIds ?? [] } }));
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'PENDING_RULE_LIMIT_REACHED') setError(quotaLimitMessage);
       else if (caught instanceof ApiError && caught.code === 'PENDING_GAME_LIMIT_REACHED') setError(gameSelectionMessage);
@@ -267,7 +266,7 @@ export const AddPage = () => {
         }
       }
     }
-    navigate('/', { replace: true });
+    uiHistory.navigate(() => navigate('/', { replace: true }));
   };
 
   if (!loading && !user) return <section className="add-page narrow-page">

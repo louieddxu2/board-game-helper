@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 export interface ConfirmDialogOptions {
   title: string;
@@ -20,11 +21,11 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
   const titleId = useId();
   const messageId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
+  useWorkspaceBrowserBack({ active: open, onBack: onCancel });
 
   useEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
@@ -32,11 +33,9 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
       onCancel();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    document.body.style.overflow = 'hidden';
     window.setTimeout(() => confirmRef.current?.focus(), 0);
     return () => {
       window.removeEventListener('keydown', closeOnEscape, true);
-      document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
   }, [onCancel, open]);
