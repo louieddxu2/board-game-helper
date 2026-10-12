@@ -224,7 +224,7 @@ export const localDbContent = {
   recentGames: async () => {
     const db = await getDatabase();
     const all = await db.getAllFromIndex('recentGames', 'viewedAt');
-    const recentRecords = all.reverse().slice(0, 8);
+    const recentRecords = all.reverse().slice(0, 20);
     const resolved = await Promise.all(recentRecords.map(async (r: any) => {
       const game = await findCachedGame(db, r.id);
       if (r.slug && r.displayName) {
