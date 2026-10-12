@@ -131,7 +131,7 @@
 .search-modal-shortcut {
   display: none;
 }
-@media (min-width: 769px) {
+@media (min-width: 801px) {
   .search-modal-shortcut {
     display: inline;
     margin-left: .5rem;
@@ -143,19 +143,25 @@
     font-size: .75rem;
   }
 }
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .search-modal-backdrop {
-    padding-top: 8px;
+    --search-modal-mobile-top-gap: max(24px, env(safe-area-inset-top, 0px));
+    padding-top: var(--search-modal-mobile-top-gap);
     align-items: flex-start;
   }
   .search-modal {
-    width: 100%;
-    height: calc(var(--search-modal-viewport-height, 100dvh) - 8px);
+    width: min(560px, calc(100% - 32px));
+    height: min(560px, 68dvh, calc(var(--search-modal-viewport-height, 100dvh) - var(--search-modal-mobile-top-gap) - var(--search-modal-bottom-clearance, calc(76px + env(safe-area-inset-bottom, 0px)))));
     padding: 1rem max(1rem, env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px;
   }
   .search-modal-heading {
     margin-bottom: .75rem;
+  }
+  .search-modal-heading > button {
+    min-width: 44px;
+    min-height: 44px;
+    margin: -4px;
   }
 }
 @keyframes fadeIn {

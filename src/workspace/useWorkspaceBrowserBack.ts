@@ -1,6 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 const workspaceUiHistoryKey = '__boardGameHelperWorkspaceUi';
+
+type UiHistoryEntry = { owner: string; depth: number };
+const readUiHistoryEntry = (state: unknown): UiHistoryEntry | undefined => {
+  if (!state || typeof state !== 'object') return undefined;
+  const entry = (state as Record<string, unknown>)[workspaceUiHistoryKey];
+  if (!entry || typeof entry !== 'object') return undefined;
+  const { owner, depth } = entry as Partial<UiHistoryEntry>;
+  if (typeof owner !== 'string' || typeof depth !== 'number') return undefined;
+  return { owner, depth };
+};
 
 export const isWorkspaceVirtualKeyboardOpen = () => {
   if (typeof window === 'undefined' || !window.visualViewport) return false;
@@ -96,10 +106,14 @@ interface UseWorkspaceBrowserBackOptions {
  * dismissed; this lets the first back press only hide the keyboard.
  */
 export const useWorkspaceBrowserBack = ({ active, onBack, layerCount = 1 }: UseWorkspaceBrowserBackOptions) => {
+  const owner = useId();
   const onBackRef = useRef(onBack);
   const historyDepthRef = useRef(0);
   const suppressPopRef = useRef(false);
   const keyboardStateRef = useRef({ open: false, recentlyClosedUntil: 0 });
+  const pushUiHistory = useCallback((depth: number) => {
+    window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: { owner, depth } }, '');
+  }, [owner]);
 
   useEffect(() => {
     onBackRef.current = onBack;
@@ -120,18 +134,30 @@ export const useWorkspaceBrowserBack = ({ active, onBack, layerCount = 1 }: UseW
     viewport?.addEventListener('scroll', updateKeyboardState);
     window.addEventListener('resize', updateKeyboardState);
 
-    const handlePopState = () => {
+    const handlePopState = (event: PopStateEvent) => {
       if (suppressPopRef.current) {
         suppressPopRef.current = false;
+        // A close can still be traversing history when the UI is reopened.
+        // Restore the reopened layer on the landing entry instead of letting
+        // the pending Back leave it open without a history entry of its own.
+        const target = readUiHistoryEntry(event.state);
+        if (historyDepthRef.current > 0 && (target?.owner !== owner || target.depth < historyDepthRef.current)) {
+          for (let index = 1; index <= historyDepthRef.current; index += 1) pushUiHistory(index);
+        }
         return;
       }
       if (historyDepthRef.current <= 0) return;
+
+      // A Back from a newer overlay lands on this owner's entry. Leave the
+      // lower overlay open; only the owner of the departed entry dismisses.
+      const target = readUiHistoryEntry(event.state);
+      if (target?.owner === owner && target.depth >= historyDepthRef.current) return;
 
       const keyboardState = keyboardStateRef.current;
       const keyboardWasRecentlyActive = keyboardState.open || keyboardState.recentlyClosedUntil > Date.now();
       if (keyboardWasRecentlyActive) {
         keyboardStateRef.current = { open: false, recentlyClosedUntil: 0 };
-        window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
+        pushUiHistory(historyDepthRef.current);
         return;
       }
 
@@ -146,14 +172,14 @@ export const useWorkspaceBrowserBack = ({ active, onBack, layerCount = 1 }: UseW
       window.removeEventListener('resize', updateKeyboardState);
       window.removeEventListener('popstate', handlePopState);
     };
-  }, []);
+  }, [owner, pushUiHistory]);
 
   useEffect(() => {
     const targetDepth = active ? Math.max(1, Math.floor(layerCount)) : 0;
     const currentDepth = historyDepthRef.current;
     if (targetDepth > currentDepth) {
       for (let index = currentDepth; index < targetDepth; index += 1) {
-        window.history.pushState({ ...(window.history.state ?? {}), [workspaceUiHistoryKey]: true }, '');
+        pushUiHistory(index + 1);
       }
       historyDepthRef.current = targetDepth;
       return;
@@ -162,17 +188,29 @@ export const useWorkspaceBrowserBack = ({ active, onBack, layerCount = 1 }: UseW
     if (targetDepth >= currentDepth) return;
     const distance = currentDepth - targetDepth;
     historyDepthRef.current = targetDepth;
+    if (readUiHistoryEntry(window.history.state)?.owner !== owner) return;
     suppressPopRef.current = true;
     if (distance === 1) window.history.back();
     else window.history.go(-distance);
-  }, [active, layerCount]);
+  }, [active, layerCount, owner, pushUiHistory]);
 
   useEffect(() => () => {
     if (historyDepthRef.current <= 0) return;
     const distance = historyDepthRef.current;
     historyDepthRef.current = 0;
+    if (readUiHistoryEntry(window.history.state)?.owner !== owner) return;
     suppressPopRef.current = true;
     if (distance === 1) window.history.back();
     else window.history.go(-distance);
-  }, []);
+  }, [owner]);
+
+  // Navigation can replace the transient entry with its destination instead
+  // of pushing a route and then accidentally backing out of it during cleanup.
+  return useCallback(() => {
+    const replace = historyDepthRef.current > 0 && readUiHistoryEntry(window.history.state)?.owner === owner;
+    historyDepthRef.current = 0;
+    suppressPopRef.current = false;
+    keyboardStateRef.current = { open: false, recentlyClosedUntil: 0 };
+    return replace;
+  }, [owner]);
 };

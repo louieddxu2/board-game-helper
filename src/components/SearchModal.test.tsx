@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { BrowserRouter, MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useState } from 'react';
 import { SearchModal } from './SearchModal';
@@ -19,6 +19,10 @@ const recentTwo = { id: 'recent-2', slug: 'second-game', displayName: '第二款
 const searchGame = { id: 'search-1', slug: 'search-game', displayName: '搜尋結果遊戲', englishName: 'Search Result', aliases: [], ruleCount: 1, updatedAt: 1 };
 type SearchResponse = { games: typeof searchGame[]; rules: never[] };
 const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+let baselineHistoryState: unknown;
+let baselineHistoryUrl = '';
+let pushStateSpy: ReturnType<typeof vi.spyOn>;
+let backSpy: ReturnType<typeof vi.spyOn>;
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -36,6 +40,12 @@ const Harness = ({ initialOpen = true }: { initialOpen?: boolean }) => {
 
 describe('SearchModal recent games and inline search', () => {
   beforeEach(() => {
+    baselineHistoryState = window.history.state;
+    baselineHistoryUrl = window.location.href;
+    // Unit cases keep pushState real so the hook can inspect ownership, while
+    // back is held still to avoid async jsdom navigation between assertions.
+    pushStateSpy = vi.spyOn(window.history, 'pushState');
+    backSpy = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
     mocks.recentGames.mockReset().mockResolvedValue([recentOne]);
     mocks.search.mockReset().mockImplementation(async (_query: string, onUpdated?: (response: SearchResponse) => void) => {
       const response: SearchResponse = { games: [searchGame], rules: [] };
@@ -47,6 +57,7 @@ describe('SearchModal recent games and inline search', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    window.history.replaceState(baselineHistoryState, '', baselineHistoryUrl);
     if (originalScrollTo) Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo);
     else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo');
   });
@@ -59,6 +70,31 @@ describe('SearchModal recent games and inline search', () => {
     expect(screen.getByText('近期瀏覽')).toBeInTheDocument();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(mocks.recentGames).toHaveBeenCalledTimes(1);
+  });
+
+  test('browser Back closes only the search overlay and keeps the MemoryRouter route', async () => {
+    render(<MemoryRouter><Harness /></MemoryRouter>);
+    await screen.findByRole('button', { name: /第一款遊戲.*First Game/ });
+
+    act(() => window.dispatchEvent(new PopStateEvent('popstate', { state: baselineHistoryState })));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('location')).toHaveTextContent('/');
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  test('close button and backdrop dismiss only the overlay', async () => {
+    render(<MemoryRouter><Harness /></MemoryRouter>);
+    await screen.findByRole('button', { name: /第一款遊戲.*First Game/ });
+
+    fireEvent.click(screen.getByRole('button', { name: '關閉搜尋' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('location')).toHaveTextContent('/');
+
+    fireEvent.click(screen.getByRole('button', { name: '開啟搜尋' }));
+    await screen.findByRole('button', { name: /第一款遊戲.*First Game/ });
+    fireEvent.click(document.querySelector('.search-modal-backdrop') as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('location')).toHaveTextContent('/');
   });
 
   test('refreshes recent games on every opening, traps focus, and restores the opener', async () => {
@@ -182,5 +218,22 @@ describe('SearchModal recent games and inline search', () => {
     expect(screen.getByTestId('location').textContent).toBe('/');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  test('uses real browser history so selecting a game then Back returns to the original route', async () => {
+    // This case intentionally restores the real methods. The preceding cases
+    // use a held Back to make their MemoryRouter assertions deterministic.
+    pushStateSpy.mockRestore();
+    backSpy.mockRestore();
+    window.history.replaceState({ baseline: true }, '', '/browse');
+    render(<BrowserRouter><Harness /></BrowserRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: /第一款遊戲.*First Game/ }));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/games/first-game'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/browse'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

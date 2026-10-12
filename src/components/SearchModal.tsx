@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { localDb } from '../lib/localDb';
+import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 import { GameSearch } from './GameSearch';
 type RecentGame = {
   id: string;
@@ -22,6 +23,8 @@ export const SearchModal = ({ open, onClose }: Props) => {
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [viewportHeight, setViewportHeight] = useState<number>();
   const [viewportTop, setViewportTop] = useState(0);
+  const [bottomClearance, setBottomClearance] = useState(16);
+  const releaseForNavigation = useWorkspaceBrowserBack({ active: open, onBack: onClose });
   useEffect(() => {
     if (!open)
       return;
@@ -42,8 +45,14 @@ export const SearchModal = ({ open, onClose }: Props) => {
       });
     const viewport = window.visualViewport;
     const updateViewport = () => {
-      setViewportHeight(Math.round(viewport?.height ?? window.innerHeight));
-      setViewportTop(Math.round(viewport?.offsetTop ?? 0));
+      const height = Math.round(viewport?.height ?? window.innerHeight);
+      const top = Math.round(viewport?.offsetTop ?? 0);
+      const bottom = top + height;
+      const toolbar = document.querySelector('.mobile-nav')?.getBoundingClientRect();
+      const toolbarVisible = toolbar && toolbar.height > 0 && toolbar.top < bottom && toolbar.bottom > top;
+      setViewportHeight(height);
+      setViewportTop(top);
+      setBottomClearance(toolbarVisible ? Math.ceil(bottom - Math.max(top, toolbar.top)) + 16 : 16);
     };
     updateViewport();
     viewport?.addEventListener('resize', updateViewport);
@@ -64,8 +73,16 @@ export const SearchModal = ({ open, onClose }: Props) => {
   }, [open]);
   if (!open)
     return null;
-  const style = viewportHeight ? { '--search-modal-viewport-height': `${viewportHeight}px`, '--search-modal-viewport-top': `${viewportTop}px` } as CSSProperties : undefined;
-  const openGame = (game: RecentGame) => { navigate(`/games/${game.slug}`); onClose(); };
+  const style = viewportHeight ? {
+    '--search-modal-viewport-height': `${viewportHeight}px`,
+    '--search-modal-viewport-top': `${viewportTop}px`,
+    '--search-modal-bottom-clearance': `${bottomClearance}px`,
+  } as CSSProperties : undefined;
+  const navigateFromSearch = (target: string) => {
+    navigate(target, { replace: releaseForNavigation() });
+    onClose();
+  };
+  const openGame = (game: RecentGame) => navigateFromSearch(`/games/${game.slug}`);
   const recents = recentGames.length ? <>
     <p className="search-modal-list-heading">近期瀏覽</p>
     {recentGames.map((game) => (<button className="search-modal-recent" type="button" key={game.id} onClick={() => openGame(game)}>
@@ -100,7 +117,12 @@ export const SearchModal = ({ open, onClose }: Props) => {
       }
     }}>
       <div className="search-modal-heading"><h2 id="search-modal-title">搜尋遊戲或規則 <span className="search-modal-shortcut">⌘K</span></h2><button type="button" onClick={onClose} aria-label="關閉搜尋">×</button></div>
-      <GameSearch value={searchValue} onChange={setSearchValue} includeRules allowCreate clearable inlineResults emptyResults={recents} onCreate={(name) => { navigate(`/add?name=${encodeURIComponent(name)}`); onClose(); }} onSelect={(game) => { navigate(`/games/${game.slug}`); onClose(); }} onRuleSelect={(rule) => { navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(searchValue)}#rule-${rule.ruleId}`); onClose(); }} />
+      <GameSearch
+        value={searchValue} onChange={setSearchValue} includeRules allowCreate clearable inlineResults emptyResults={recents}
+        onCreate={(name) => navigateFromSearch(`/add?name=${encodeURIComponent(name)}`)}
+        onSelect={(game) => navigateFromSearch(`/games/${game.slug}`)}
+        onRuleSelect={(rule) => navigateFromSearch(`/games/${rule.gameSlug}?find=${encodeURIComponent(searchValue)}#rule-${rule.ruleId}`)}
+      />
     </div>
   </div>;
 };
