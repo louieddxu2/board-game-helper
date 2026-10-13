@@ -12,13 +12,15 @@ INSERT INTO attribute_replay_status VALUES (1, 1, 0, NULL);
 
 -- Ordinary responses update their materialized states in the same transaction.
 -- Imports default to zero, including imports of comparison-only history.
-ALTER TABLE attribute_vote_responses ADD COLUMN recorded_online INTEGER NOT NULL DEFAULT 0
-  CHECK (recorded_online IN (0, 1));
+-- Adding a CHECK here would scan all existing responses during deployment.
+-- Only the server's value 1 certifies an online write; all other values
+-- conservatively require replay through the insertion trigger below.
+ALTER TABLE attribute_vote_responses ADD COLUMN recorded_online INTEGER NOT NULL DEFAULT 0;
 
 CREATE TRIGGER attribute_responses_require_replay_after_insert
 AFTER INSERT ON attribute_vote_responses
 WHEN NEW.rating_a IS NOT NULL OR NEW.rating_b IS NOT NULL
-  OR (NEW.comparison IS NOT NULL AND NEW.recorded_online = 0)
+  OR (NEW.comparison IS NOT NULL AND NEW.recorded_online IS NOT 1)
 BEGIN
   UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1;
 END;

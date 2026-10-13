@@ -250,6 +250,15 @@ test('history corrections mark replay pending while metadata-only and no-op edit
 
     harness.sqlite.prepare(`DELETE FROM attribute_vote_responses WHERE response_id = 'raw-comparison-import'`).run();
     expect(status(harness).required_revision).toBe(afterEdit.required_revision + 1);
+
+    // Only an explicit server value of 1 certifies an already applied answer.
+    harness.sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, comparison,
+         activity_json, session_id, created_at, updated_at, recorded_online)
+      VALUES ('uncertified-comparison', 'attribute_win_method', ?, ?, 'SIMILAR', '[]', 'import-session', ?, ?, 2)
+    `).run(first.id, second.id, timestamp + 2, timestamp + 2);
+    expect(status(harness).required_revision).toBe(afterEdit.required_revision + 2);
   } finally { close(harness); }
 });
 
