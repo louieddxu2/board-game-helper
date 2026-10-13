@@ -1,4 +1,5 @@
 import type { CellValue, Sheet } from 'read-excel-file/browser';
+import { createWorkspaceValueReader } from './formula/values';
 import { getRowHeaderColumn, isWorkspaceLinkValue } from './model';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceRow, WorkspaceTable } from './types';
 import { WORKSPACE_FORMAT } from './types';
@@ -41,7 +42,7 @@ export const INPUT_TYPES: WorkspaceInputType[] = ['text', 'number', 'select', 'd
 
 type AssertNever<T extends never> = T;
 
-type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'numberInputMode' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly';
+type SerializedColumnFields = 'id' | 'name' | 'inputType' | 'numberInputMode' | 'options' | 'optionColors' | 'numberRanges' | 'hidden' | 'isMultiple' | 'alignment' | 'overflowMode' | 'widthLimitChars' | 'lineLimit' | 'dateOnly' | 'formula';
 
 type IntentionallyRegeneratedColumnFields = 'dynamicOptions';
 
@@ -86,12 +87,13 @@ const serializeColumnSettings = (kind: 'row_header' | 'column', column: Workspac
   column.dateOnly ? 'true' : 'false',
   column.lineLimit ?? '',
   column.numberInputMode ?? '',
+  column.formula ? JSON.stringify(column.formula) : '',
 ];
 
 export const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string): unknown[][] => {
   const rowHeader = getRowHeaderColumn(table);
   return [
-  [TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION],
+  [TABLE_SETTINGS_MARKER, table.columns.some(column => column.formula) ? 2 : CURRENT_XLSX_FORMAT_VERSION],
   ['data_sheet', dataSheetName],
   ['table_id', table.id],
   ['change_revision', table.changeRevision ?? ''],
@@ -100,14 +102,18 @@ export const tableSettingsRows = (table: WorkspaceTable, dataSheetName: string):
   ['text_scale', table.textScale ?? 1],
   ['transposed_view', table.transposed ? 'true' : 'false'],
   serializeColumnSettings('row_header', rowHeader),
-  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars', 'dateOnly', 'lineLimit', 'numberInputMode'],
+  ['columns', 'id', 'name', 'inputType', 'options', 'alignment', 'overflowMode', 'optionColors', 'numberRanges', 'hidden', 'isMultiple', 'widthLimitChars', 'dateOnly', 'lineLimit', 'numberInputMode', 'formula'],
   ...table.columns.map((column) => serializeColumnSettings('column', column)),
   ];
 };
 
 export function* iterateTableDataRows(table: WorkspaceTable): Generator<unknown[]> {
+  const reader = createWorkspaceValueReader();
   yield [getRowHeaderColumn(table).name, ...table.columns.map(column => column.name)];
-  for (const row of table.rows) yield [serializeDataCellValue(row.name), ...table.columns.map(column => serializeDataCellValue(row.values[column.id] ?? null))];
+  for (const row of table.rows) {
+    yield [serializeDataCellValue(row.name), ...table.columns.map(column => serializeDataCellValue(reader.read(row, column).value))];
+    reader.releaseRow(row.id);
+  }
 }
 export const tableDataRows = (table: WorkspaceTable): unknown[][] => [...iterateTableDataRows(table)];
 

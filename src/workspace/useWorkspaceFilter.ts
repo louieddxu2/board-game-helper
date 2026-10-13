@@ -1,3 +1,4 @@
+import { getWorkspaceEffectiveCell, type WorkspaceCellReader } from './formula/values';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { WorkspaceColumn, WorkspaceTable } from './types';
 import type { HeaderFilterAggregate, HeaderFilterState, HeaderFilterTarget } from './workspaceShared';
@@ -7,11 +8,12 @@ import { compareWorkspaceCellValues, hasWorkspaceFilterCriteria, matchesWorkspac
 import { flushWorkspaceTableViewState, loadWorkspaceTableViewState, scheduleWorkspaceTableViewStateSave } from './viewState';
 
 interface UseWorkspaceFilterProps {
+  readCell?: WorkspaceCellReader;
   table: WorkspaceTable | undefined;
   rowHeader: WorkspaceColumn | undefined;
 }
 
-export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps) {
+export function useWorkspaceFilter({ table, rowHeader, readCell = getWorkspaceEffectiveCell }: UseWorkspaceFilterProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerFilters, setHeaderFilters] = useState<Record<string, HeaderFilterState>>({});
@@ -55,8 +57,8 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
     if (!query) return table.rows;
     return table.rows.filter((row) =>
       searchableWorkspaceCellValue(row.name, rowHeader?.inputType, rowHeader?.dateOnly).toLocaleLowerCase().includes(query)
-      || table.columns.some((column) => searchableWorkspaceCellValue(row.values[column.id] ?? null, column.inputType, column.dateOnly).toLocaleLowerCase().includes(query)));
-  }, [deferredSearchQuery, rowHeader, table?.columns, table?.rows]);
+      || table.columns.some((column) => searchableWorkspaceCellValue(readCell(row, column).value, column.inputType, column.dateOnly).toLocaleLowerCase().includes(query)));
+  }, [readCell, deferredSearchQuery, rowHeader, table?.columns, table?.rows]);
 
   const filteredRows = useMemo(() => {
     if (!table || !rowHeader) return [];
@@ -66,7 +68,7 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
       .map(([key, state]) => ({ column: columnsById.get(key.slice(7))!, state, includedKeys: state.includedKeys === null ? undefined : new Set(state.includedKeys) }));
     const rows = columnFilters.length ? searchedRows.filter((row) => columnFilters.every(({ column, state, includedKeys }) => {
       const columnId = column.id;
-      const value = columnId === rowHeader.id ? row.name : row.values[columnId] ?? null;
+      const value = readCell(row, column, columnId === rowHeader.id).value;
       return matchesWorkspaceFilter(value, column.inputType, state, column.isMultiple, includedKeys);
     })) : searchedRows;
     const sortedEntry = Object.entries(headerFilters).find(([key, state]) => key.startsWith('column:') && columnsById.has(key.slice(7)) && state.sort);
@@ -76,11 +78,13 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
     const column = columnsById.get(columnId)!;
     const direction = state.sort === 'desc' ? -1 : 1;
     return [...rows].sort((left, right) => {
-      const leftValue = columnId === rowHeader.id ? left.name : left.values[columnId] ?? null;
-      const rightValue = columnId === rowHeader.id ? right.name : right.values[columnId] ?? null;
+      const leftResult = readCell(left, column, columnId === rowHeader.id);
+      const rightResult = readCell(right, column, columnId === rowHeader.id);
+      if (Boolean(leftResult.error) !== Boolean(rightResult.error)) return leftResult.error ? 1 : -1;
+      const leftValue = leftResult.value, rightValue = rightResult.value;
       return compareWorkspaceCellValues(leftValue, rightValue, column.inputType, column.dateOnly) * direction;
     });
-  }, [headerFilters, rowHeader, searchedRows, table?.columns]);
+  }, [readCell, headerFilters, rowHeader, searchedRows, table?.columns]);
 
   const activeFilterKey = filterTarget ? `${filterTarget.axis}:${filterTarget.id}` : '';
   const activeFilterState = headerFilters[activeFilterKey] ?? { includedKeys: null, sort: null };
@@ -91,13 +95,13 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
   const activeFilterInputType = activeFilterColumn?.inputType;
 
   const activeFilterOptions = useMemo(() => {
-    if (!table || !rowHeader || !filterTarget) return [];
+    if (!table || !rowHeader || !filterTarget || !activeFilterColumn) return [];
     const column = activeFilterColumn;
     const inputType = column?.inputType;
     const isMultiple = column?.isMultiple;
     const unique = new Map<string, { key: string; label: string; count: number; color?: string }>();
     for (const row of table.rows) {
-      const value = filterTarget.id === rowHeader.id ? row.name : row.values[filterTarget.id] ?? null;
+      const value = readCell(row, activeFilterColumn!, filterTarget.id === rowHeader.id).value;
       if (inputType === 'datetime') {
         const monthKey = workspaceDateMonthKey(value);
         const key = monthKey ? `date-month:${monthKey}` : workspaceFilterValueKey(null);
@@ -122,13 +126,13 @@ export function useWorkspaceFilter({ table, rowHeader }: UseWorkspaceFilterProps
       }
     }
     return [...unique.values()].sort((left, right) => left.key.startsWith('date-month:') && right.key.startsWith('date-month:') ? left.key.localeCompare(right.key) : workspaceValueCollator.compare(left.label, right.label));
-  }, [activeFilterColumn, filterTarget, rowHeader, table?.rows]);
+  }, [readCell, activeFilterColumn, filterTarget, rowHeader, table?.rows]);
 
   const activeNumericValues = useMemo(() => {
-    if (activeFilterInputType !== 'number' || !filterTarget) return [];
-    return filteredRows.map((row) => numericWorkspaceValue(filterTarget.id === rowHeader?.id ? row.name : row.values[filterTarget.id] ?? null))
+    if (activeFilterInputType !== 'number' || !filterTarget || !activeFilterColumn) return [];
+    return filteredRows.map((row) => numericWorkspaceValue(readCell(row, activeFilterColumn!, filterTarget.id === rowHeader?.id).value))
       .filter((value): value is number => value !== undefined);
-  }, [activeFilterInputType, filterTarget, filteredRows, rowHeader]);
+  }, [readCell, activeFilterColumn, activeFilterInputType, filterTarget, filteredRows, rowHeader]);
 
   const updateActiveFilter = (updater: (state: HeaderFilterState) => HeaderFilterState) => {
     if (!activeFilterKey) return;

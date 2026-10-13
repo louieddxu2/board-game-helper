@@ -1,6 +1,7 @@
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynamicOptions, WorkspaceInputType, WorkspaceLinkValue, WorkspaceNode, WorkspaceNumberInputMode, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceRow, WorkspaceTable } from './types';
 import { workspaceTableChangeRevision } from './changeRevisions';
 import { finishWorkspaceSteps } from './workspaceCooperativeWork';
+import { validateWorkspaceFormulaColumns } from './formula/configuration';
 export { sameWorkspaceCellValue } from './cellChanges';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
@@ -201,13 +202,14 @@ const normalizeCellValue = (value: WorkspaceCellValue, inputType: WorkspaceInput
 export function* normalizeWorkspaceTableSteps(table: WorkspaceTable, options?: { deferDynamicOptions?: boolean }): Generator<void, WorkspaceTable> {
   const rowHeader = getRowHeaderColumn(table);
   const columns = table.columns.map(column => normalizeColumn(column));
+  validateWorkspaceFormulaColumns(columns, rowHeader);
   const changedDynamicColumns = new Set<string>();
   const rows: WorkspaceRow[] = [];
   for (const [index, row] of table.rows.entries()) {
     const name = row.name === undefined ? `項目 ${index + 1}` : normalizeCellValue(row.name, rowHeader.inputType);
     if (rowHeader.inputType === 'dynamic-select' && row.name !== name) changedDynamicColumns.add(rowHeader.id);
     // Missing keys are empty cells; preserve sparsity when reopening a table.
-    const values = Object.fromEntries(columns.filter(column => Object.hasOwn(row.values, column.id)).map(column => {
+    const values = Object.fromEntries(columns.filter(column => !column.formula && Object.hasOwn(row.values, column.id)).map(column => {
       const before = row.values[column.id] ?? null;
       const after = normalizeCellValue(before, column.inputType);
       if (column.inputType === 'dynamic-select' && before !== after) changedDynamicColumns.add(column.id);

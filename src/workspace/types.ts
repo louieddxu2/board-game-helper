@@ -23,10 +23,18 @@ export interface WorkspaceDynamicOptions {
   counts: Array<{ key: string; count: number; spellings: Array<[string, number]> }>;
 }
 
+export interface WorkspaceFormula {
+  version: 1;
+  expression: string;
+  variables: Record<string, { columnId: string }>;
+}
+
 export interface WorkspaceColumn {
   id: string;
   name: string;
   inputType: WorkspaceInputType;
+  /** Same-row arithmetic; results are derived and never stored in row.values. */
+  formula?: WorkspaceFormula;
   numberInputMode?: WorkspaceNumberInputMode;
   options: string[];
   /** Persisted frequency statistics owned by a dynamic-list column. */

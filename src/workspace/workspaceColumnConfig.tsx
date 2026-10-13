@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { getWorkspaceNumberInputMode, isWorkspaceColor } from './model';
-import { WorkspaceColumn, WorkspaceInputType, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceTextAlign } from './types';
+import { WorkspaceColumn, WorkspaceInputType, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceTextAlign, WorkspaceRow } from './types';
+import { emptyWorkspaceFormula, FormulaEditor } from './formula/FormulaEditor';
+import { formulaVariableChoices, normalizeWorkspaceFormula } from './formula/configuration';
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 import { AutoGrowTextarea, defaultInputTypeFor, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from './workspaceShared';
 
@@ -190,8 +192,10 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   </div>;
 };
 
-export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void }) => {
+export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, previewRow, onSave, onDelete, onCancel }: { column: WorkspaceColumn; suggestedOptions?: string[]; sourceColumns?: readonly WorkspaceColumn[]; previewRow?: WorkspaceRow; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void; onCancel?(): void }) => {
   const [draft, setDraft] = useState(column);
+  const [automatic, setAutomatic] = useState(Boolean(column.formula));
+  const [formula, setFormula] = useState(column.formula ?? emptyWorkspaceFormula());
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
@@ -206,7 +210,9 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
       const optionColors = Object.fromEntries(Object.entries(draft.optionColors ?? {}).map(([option, color]) => [option.trim(), color]).filter(([option, color]) => Boolean(option) && isWorkspaceColor(color)));
       const widthLimitChars = typeof draft.widthLimitChars === 'number' && Number.isFinite(draft.widthLimitChars) && draft.widthLimitChars > 0 ? Math.max(1, Math.round(draft.widthLimitChars)) : undefined;
       const lineLimit = typeof draft.lineLimit === 'number' && Number.isFinite(draft.lineLimit) && draft.lineLimit > 0 ? Math.max(1, Math.round(draft.lineLimit)) : undefined;
-      const failure = await onSave({ ...draft, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
+      const variables = { ...formula.variables, ...Object.fromEntries(formulaVariableChoices(sourceColumns ?? [], column.id, formula).map(choice => [choice.alias, choice.binding])) };
+      const savedFormula = draft.inputType === 'number' && automatic ? normalizeWorkspaceFormula({ ...formula, variables }) : undefined;
+      const failure = await onSave({ ...draft, formula: savedFormula, name: draft.name.trim(), options, optionColors, numberRanges: draft.numberRanges ?? [], numberInputMode: draft.inputType === 'number' ? getWorkspaceNumberInputMode(draft) : draft.numberInputMode, overflowMode: draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap'), widthLimitChars, lineLimit });
       setError(failure ?? '');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '無法儲存屬性設定');
@@ -254,7 +260,10 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
             {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
             {draft.inputType === 'datetime' && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.dateOnly)} onChange={(event) => setDraft((current) => ({ ...current, dateOnly: event.target.checked }))} />只顯示年月日</label>}
           </div>
-          {draft.inputType === 'number' && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} aria-pressed={getWorkspaceNumberInputMode(draft) === mode} onClick={() => setDraft((current) => ({ ...current, numberInputMode: mode }))}>{label}</button>)}</div></fieldset>}
+          {draft.inputType === 'number' && sourceColumns && <fieldset className="workspace-form-field"><legend>數字來源</legend><div className="workspace-number-input-mode-options workspace-formula-source-options">{['手動輸入', '自動計算'].map((label, index) => <button type="button" key={label} aria-pressed={automatic === Boolean(index)} className={automatic === Boolean(index) ? 'selected' : ''} onClick={() => { setAutomatic(Boolean(index)); setError(''); }}>{label}</button>)}</div></fieldset>}
+          {draft.inputType === 'number' && automatic && sourceColumns && <><FormulaEditor column={draft} columns={sourceColumns} formula={formula} previewRow={previewRow} onChange={setFormula} />{!column.formula && <p>儲存後會以公式取代這個屬性的原始內容；可用復原恢復。</p>}</>}
+          {column.formula && (!automatic || draft.inputType !== 'number') && <p>儲存後會保留目前計算結果，停止自動計算。</p>}
+          {draft.inputType === 'number' && !automatic && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} aria-pressed={getWorkspaceNumberInputMode(draft) === mode} onClick={() => setDraft((current) => ({ ...current, numberInputMode: mode }))}>{label}</button>)}</div></fieldset>}
           {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
           {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
         </> : <div className="workspace-overflow-panel">
@@ -268,5 +277,6 @@ export const ColumnConfig = ({ column, suggestedOptions = [], onSave, onDelete }
           </div>
         </div>
     </fieldset>
+    <div className="workspace-dialog-actions">{onCancel && <button type="button" className="workspace-dialog-button secondary" disabled={saving} onClick={onCancel}>取消</button>}<button type="button" className="workspace-dialog-button primary" disabled={saving} onClick={save}>儲存</button></div>
   </WorkspaceModal>;
 };

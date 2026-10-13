@@ -1,3 +1,5 @@
+import { normalizeWorkspaceFormula, validateWorkspaceFormulaColumns } from './formula/configuration';
+import type { WorkspaceFormula } from './types';
 import type { Sheet } from 'read-excel-file/browser';
 import { workspaceTableChangeRevision } from './changeRevisions';
 import { createColumn, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime, readDynamicOptions } from './model';
@@ -232,11 +234,17 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   const lineLimit = Number(row?.[13]);
   column.lineLimit = Number.isFinite(lineLimit) && lineLimit > 0 ? Math.max(1, Math.round(lineLimit)) : undefined;
   column.numberInputMode = parseNumberInputMode(stringValue(row?.[14]));
+  const formula = stringValue(row?.[15]);
+  if (formula) {
+    try { column.formula = normalizeWorkspaceFormula(JSON.parse(formula) as WorkspaceFormula); }
+    catch (error) { throw new Error(`公式設定無效：${error instanceof Error ? error.message : '格式錯誤'}`); }
+  }
   return column;
 };
 
 const parseSeparatedTable = (settingsRows: SheetRows, dataRows: SheetRows): WorkspaceTable => {
-  assertSheetVersion(settingsRows, TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION);
+  assertSheetVersion(settingsRows, TABLE_SETTINGS_MARKER, sheetVersion(settingsRows) === 2 ? 2 : CURRENT_XLSX_FORMAT_VERSION);
+  if (sheetVersion(settingsRows) === 1 && settingsRows.some(row => (row[0] === 'column' || row[0] === 'row_header') && stringValue(row[15]))) throw new Error('自動計算屬性需要第 2 版表格設定');
   const tableId = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'table_id')?.[1]) || makeId('table');
   const tableName = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'table_name')?.[1]) || '匯入表格';
   const changeRevision = stringValue(settingsRows.find((row) => stringValue(row[0]) === 'change_revision')?.[1]);
@@ -248,13 +256,14 @@ const parseSeparatedTable = (settingsRows: SheetRows, dataRows: SheetRows): Work
   rowHeader.hidden = false;
   const columns = settingsRows.filter((row) => stringValue(row[0]) === 'column').map((row) => parseColumnSettings(row, '未命名屬性', 'wrap'));
   if (!columns.length) throw new Error('匯入表格沒有欄位設定');
+  validateWorkspaceFormulaColumns(columns, rowHeader);
   const expectedHeaders = [rowHeader.name, ...columns.map((column) => column.name)];
   const actualHeaders = (dataRows[0] ?? []).slice(0, expectedHeaders.length).map((cell) => stringValue(cell));
   if (actualHeaders.length !== expectedHeaders.length || actualHeaders.some((header, index) => header !== expectedHeaders[index])) throw new Error('資料頁欄位與設定頁不一致，請勿重新命名或重新排列欄位');
   const rows = dataRows.slice(1).filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== '')).map((row) => ({
     id: makeId('row'),
     name: parseCellValue(row[0], rowHeader) ?? '',
-    values: Object.fromEntries(columns.map((column, index) => [column.id, parseCellValue(row[index + 1], column)])),
+    values: Object.fromEntries(columns.flatMap((column, index) => column.formula ? [] : [[column.id, parseCellValue(row[index + 1], column)]])),
   }));
   return { id: tableId, ...(changeRevision ? { changeRevision } : {}), name: tableName, rowHeaderName: rowHeader.name, rowHeader, textScale, transposed, columns, rows, updatedAt: Date.now() };
 };
@@ -408,6 +417,7 @@ const remapTable = (table: WorkspaceTable): WorkspaceTable => {
   // ID remapping copies the same values. Legacy timestamp revisions still need retagging.
   const copyColumn = (column: WorkspaceColumn, id: string): WorkspaceColumn => ({
     ...column, id, options: [...column.options],
+    formula: column.formula ? { ...column.formula, variables: Object.fromEntries(Object.entries(column.formula.variables).map(([alias, binding]) => [alias, { columnId: columnMap.get(binding.columnId)! }])) } : undefined,
     dynamicOptions: readDynamicOptions(column, sourceRevision) && column.dynamicOptions
       ? { ...column.dynamicOptions, sourceRevision: targetRevision } : undefined,
   });
@@ -416,7 +426,7 @@ const remapTable = (table: WorkspaceTable): WorkspaceTable => {
   const tableId = makeId('table');
   const rowHeader = copyColumn(getRowHeaderColumn(table), `row-header-${tableId}`);
   const cloneValue = (value: WorkspaceCellValue): WorkspaceCellValue => isWorkspaceLinkValue(value) ? { ...value } : value;
-  return { ...table, id: tableId, name: `${table.name}（匯入）`, rowHeaderName: rowHeader.name, rowHeader, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: cloneValue(row.name), values: Object.fromEntries(table.columns.map((column) => [columnMap.get(column.id)!, cloneValue(row.values[column.id] ?? null)])) })), updatedAt };
+  return { ...table, id: tableId, name: `${table.name}（匯入）`, rowHeaderName: rowHeader.name, rowHeader, columns, rows: table.rows.map((row) => ({ id: makeId('row'), name: cloneValue(row.name), values: Object.fromEntries(table.columns.filter(column => !column.formula).map((column) => [columnMap.get(column.id)!, cloneValue(row.values[column.id] ?? null)])) })), updatedAt };
 };
 
 export interface ImportedWorkspace {
@@ -443,7 +453,7 @@ export const importWorkspaceXlsx = async (file: Blob, options: { preserveIds?: b
   const settingsSheets = sheets.filter((sheet: Sheet<number>) => stringValue(sheet.data[0]?.[0]) === TABLE_SETTINGS_MARKER);
   const unknownReservedSheet = sheets.find((sheet) => markerOf(sheet).startsWith('__workspace') && ![WORKSPACE_MARKER, TABLE_SETTINGS_MARKER].includes(markerOf(sheet)));
   if (unknownReservedSheet) throw new Error(`無法辨識的 Workspace 格式標記：${markerOf(unknownReservedSheet)}`);
-  for (const settingsSheet of settingsSheets) assertSheetVersion(settingsSheet.data, TABLE_SETTINGS_MARKER, CURRENT_XLSX_FORMAT_VERSION);
+  for (const settingsSheet of settingsSheets) assertSheetVersion(settingsSheet.data, TABLE_SETTINGS_MARKER, sheetVersion(settingsSheet.data) === 2 ? 2 : CURRENT_XLSX_FORMAT_VERSION);
   const parseSettingsSheet = (settingsSheet: Sheet<number>) => {
     const dataSheetName = stringValue(settingsSheet.data.find((row) => stringValue(row[0]) === 'data_sheet')?.[1]);
     const matchingDataSheets = sheets.filter((sheet) => sheet.sheet === dataSheetName);

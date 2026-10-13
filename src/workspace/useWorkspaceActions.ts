@@ -1,3 +1,4 @@
+import { workspaceFormulaDependents } from './formula/configuration';
 import { useEffect, useRef } from 'react';
 import { applyWorkspaceCellChanges, captureWorkspaceColumnValues, getWorkspaceCellValue } from './cellChanges';
 import { applyWorkspaceTableHistoryAction, type WorkspaceCommitOptions, type WorkspaceTableHistoryAction, type WorkspaceTableMutation } from './history';
@@ -112,6 +113,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
 
   const saveCellValue = (rowId: string, column: WorkspaceColumn, value: WorkspaceCellValue) => {
     if (!data || !table) return;
+    if (table.columns.find(item => item.id === column.id)?.formula) { setNotice('此屬性由公式自動計算，請編輯來源屬性'); return; }
     const isRowHeader = rowHeader?.id === column.id;
     const row = getWorkspaceRow(table.rows, rowId);
     if (!row) { dialogs.close('editing'); return; }
@@ -141,6 +143,7 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
 
   const openCell = (row: WorkspaceRow, column: WorkspaceColumn) => {
     if (!table) return;
+    if (column.formula) { setNotice('此屬性由公式自動計算，請編輯公式或來源屬性'); return; }
     dialogs.close('focusTarget');
     const isRowHeader = rowHeader?.id === column.id;
     const value = isRowHeader ? row.name : row.values[column.id];
@@ -194,18 +197,23 @@ export function useWorkspaceActions({ data, dataRef, table, rowHeader, commit, g
     dialogs.set('focusTarget', { rowId: current.table.rows[0].id, columnId: column.id });
     setNotice('已新增屬性');
   };
-  const askDeleteColumn = (column: WorkspaceColumn) => dialogs.set('confirmDialog', {
-    title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`,
-    onConfirm: () => {
-      const current = getCurrentTable();
-      const index = current?.table.columns.findIndex(item => item.id === column.id) ?? -1;
-      if (current && index >= 0) commitTableAction(current, '刪除屬性', {
-        type: 'remove-column', column: current.table.columns[index], index,
-        values: captureWorkspaceColumnValues(current.table.rows, column.id),
-      });
-      dialogs.close('confirmDialog');
-    },
-  });
+  const askDeleteColumn = (column: WorkspaceColumn) => {
+    const dependents = workspaceFormulaDependents(getCurrentTable()?.table.columns ?? [], column.id);
+    if (dependents.length) { setNotice(`請先修改引用此屬性的公式：${dependents.map(item => item.name).join('、')}`); return false; }
+    dialogs.set('confirmDialog', {
+      title: '刪除屬性', message: `確定要刪除屬性「${column.name}」嗎？此屬性的資料也會一併刪除。`,
+      onConfirm: () => {
+        const current = getCurrentTable();
+        const index = current?.table.columns.findIndex(item => item.id === column.id) ?? -1;
+        if (current && index >= 0 && !workspaceFormulaDependents(current.table.columns, column.id).length) commitTableAction(current, '刪除屬性', {
+          type: 'remove-column', column: current.table.columns[index], index,
+          values: captureWorkspaceColumnValues(current.table.rows, column.id),
+        });
+        dialogs.close('confirmDialog');
+      },
+    });
+    return true;
+  };
   
   const saveColumn = useWorkspaceColumnSave({ dataRef, table, dialogs, commit });
 

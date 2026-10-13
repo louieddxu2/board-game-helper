@@ -1,3 +1,4 @@
+import { getWorkspaceEffectiveCell, type WorkspaceCellReader } from './formula/values';
 import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceRow } from './types';
 import { measureWorkspaceText } from './workspaceShared';
 import { createWorkspaceTextWidthCache } from './workspaceTextWidthCache';
@@ -5,12 +6,12 @@ import { createWorkspaceTextWidthCache } from './workspaceTextWidthCache';
 /** Only the rows actually mounted by the owner contribute to column width. */
 export const measureVisibleColumnWidths = (
   rows: readonly WorkspaceRow[], rowHeader: WorkspaceColumn, columns: readonly WorkspaceColumn[],
-  cache: ReturnType<typeof createWorkspaceTextWidthCache>, measureHeader = measureWorkspaceText,
+  cache: ReturnType<typeof createWorkspaceTextWidthCache>, measureHeader = measureWorkspaceText, readCell: WorkspaceCellReader = getWorkspaceEffectiveCell,
 ) => [rowHeader, ...columns].map(column => {
   let width = 0;
   if (column.overflowMode === 'expand' || column.widthLimitChars) {
     for (const row of rows) {
-      const value: WorkspaceCellValue = column.id === rowHeader.id ? row.name : row.values[column.id] ?? null;
+      const value: WorkspaceCellValue = readCell(row, column, column.id === rowHeader.id).value;
       width = Math.max(width, cache.measure(row, column, value));
     }
   }

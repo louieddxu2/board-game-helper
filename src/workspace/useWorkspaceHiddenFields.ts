@@ -37,7 +37,7 @@ export const useWorkspaceHiddenFields = ({ dataRef, commit, withActiveTable, row
     const row = currentTable?.rows.find((item) => item.id === rowId);
     if (!currentTable || !row) return;
     const changes = currentTable.columns.flatMap(column => {
-      if (!column.hidden) return [];
+      if (!column.hidden || column.formula) return [];
       const before = row.values[column.id] ?? null;
       const after = values[column.id] ?? null;
       return sameWorkspaceCellValue(before, after) ? [] : [{ rowId, columnId: column.id, before, after }];

@@ -9,7 +9,7 @@ export type WorkspacePasteResult = {
   changes: WorkspacePasteCellChange[];
   addedRows: WorkspaceRow[];
   addedColumns: WorkspaceColumn[];
-  invalidCells: Array<{ row: number; column: number; value: string }>;
+  invalidCells: Array<{ row: number; column: number; value: string; reason?: string }>;
 };
 
 export const parseWorkspaceClipboard = (text: string): string[][] => {
@@ -70,6 +70,7 @@ export const applyWorkspaceMatrixPaste = (
     const row = rows[startRowIndex + rowOffset];
     const column = allColumns[startColumnIndex + columnOffset];
     if (!row || !column) return;
+    if (column.formula) { invalidCells.push({ row: rowOffset + 1, column: columnOffset + 1, value: raw, reason: '自動計算屬性不能貼上資料' }); return; }
     const after = coerceCellValue(column, raw);
     if (raw.trim() && after === null && (column.inputType === 'number' || column.inputType === 'datetime')) {
       invalidCells.push({ row: rowOffset + 1, column: columnOffset + 1, value: raw });

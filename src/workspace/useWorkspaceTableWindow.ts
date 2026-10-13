@@ -1,3 +1,4 @@
+import { getWorkspaceEffectiveCell, type WorkspaceCellReader } from './formula/values';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { loadWorkspaceTableWindow } from './db';
@@ -14,6 +15,7 @@ import { calculateWorkspaceTableLayout, type HeaderFilterState, type HeaderFilte
 const emptyRows: WorkspaceRow[] = [];
 
 interface WorkspaceTableWindowOptions {
+  readCell?: WorkspaceCellReader;
   table: WorkspaceTable | undefined;
   hasHiddenColumns: boolean;
   viewportWidth: number;
@@ -47,7 +49,7 @@ interface WorkspaceTableWindowOptions {
   searchOpen: boolean;
 }
 
-export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
+export const useWorkspaceTableWindow = ({ readCell = getWorkspaceEffectiveCell, table, hasHiddenColumns, viewportWidth, columnTextWidths, textScale, displayedColumns, searchQuery, headerFilters, viewInteractionRef, restoredViewTableRef, viewportRef, activeWindow, filteredRows, virtualScrollTop, viewportHeight, captureWindowAnchorRef, mountedRef, dataRef, setTableWindow, reportReadError, rowHeader, textWidthCache, setMountedTextWidths, programmaticTableScrollRef, setVirtualScrollTop, lastUserScrollAtRef, focusTarget, searchFilterTargets, filterbarRef, setScrollPosition, searchOpen }: WorkspaceTableWindowOptions) => {
   const layoutViewportWidth = !hasHiddenColumns ? viewportWidth : Math.max(0, viewportWidth - 44);
 
   const { columnWidths, tableWidth } = useMemo(() => calculateWorkspaceTableLayout(columnTextWidths, textScale, layoutViewportWidth), [columnTextWidths, layoutViewportWidth, textScale]);
@@ -126,9 +128,9 @@ export const useWorkspaceTableWindow = ({ table, hasHiddenColumns, viewportWidth
 
   useLayoutEffect(() => {
     if (!table || !rowHeader) return;
-    const widths = measureVisibleColumnWidths(rowWindow.visibleRows, rowHeader, displayedColumns, textWidthCache);
+    const widths = measureVisibleColumnWidths(rowWindow.visibleRows, rowHeader, displayedColumns, textWidthCache, undefined, readCell);
     setMountedTextWidths(previous => previous?.tableId === table.id && previous.widths.length === widths.length && previous.widths.every((width, index) => width === widths[index]) ? previous : { tableId: table.id, widths });
-  }, [table?.id, rowHeader, displayedColumns, rowWindow.visibleRows, textWidthCache]);
+  }, [table?.id, rowHeader, displayedColumns, rowWindow.visibleRows, textWidthCache, readCell]);
 
   const horizontalLayoutRef = useRef<{ tableId?: string; widths: number[]; textWidths: number[]; left: number }>({ widths: [], textWidths: [], left: 0 });
 

@@ -1,3 +1,4 @@
+import { getWorkspaceEffectiveCell } from './formula/values';
 import { useMemo, useState } from 'react';
 import { coerceCellValue, displayWorkspaceCellValue, formatMultiSelectValues, isWorkspaceLinkValue, parseMultiSelectValues, workspaceOptionColor } from './model';
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceRow } from './types';
@@ -170,13 +171,13 @@ const HiddenFieldEditor = ({ column, value, options, onChange }: { column: Works
 };
 
 export const HiddenFieldsDialog = ({ title, row, columns, optionsByColumn, onSave }: { title: string; row: WorkspaceRow; columns: WorkspaceColumn[]; optionsByColumn: Record<string, string[]>; onSave(values: Record<string, WorkspaceCellValue>): void }) => {
-  const [draft, setDraft] = useState<Record<string, WorkspaceCellValue>>(() => Object.fromEntries(columns.map((column) => [column.id, row.values[column.id] ?? null])));
+  const [draft, setDraft] = useState<Record<string, WorkspaceCellValue>>(() => Object.fromEntries(columns.filter(column => !column.formula).map((column) => [column.id, row.values[column.id] ?? null])));
   const updateValue = (columnId: string, value: WorkspaceCellValue) => setDraft((current) => ({ ...current, [columnId]: value }));
   return <WorkspaceModal owner="hidden-fields" title={title || '物件'} dialogKind="editor" onRequestClose={() => onSave(draft)} className="workspace-hidden-fields-dialog">
     <div className="workspace-hidden-fields-list">
       {columns.map((column) => <div className="workspace-hidden-field" key={column.id}>
         <span className="workspace-hidden-field-label">{column.name || '未命名屬性'}</span>
-        <HiddenFieldEditor column={column} value={draft[column.id] ?? null} options={optionsByColumn[column.id] ?? []} onChange={(value) => updateValue(column.id, value)} />
+        {column.formula ? <output aria-label={`${column.name}計算結果`}>{String(getWorkspaceEffectiveCell({ ...row, values: { ...row.values, ...draft } }, column).value ?? '空白')}</output> : <HiddenFieldEditor column={column} value={draft[column.id] ?? null} options={optionsByColumn[column.id] ?? []} onChange={(value) => updateValue(column.id, value)} />}
       </div>)}
       {!columns.length && <p className="workspace-hidden-fields-empty">目前沒有隱藏欄位</p>}
     </div>

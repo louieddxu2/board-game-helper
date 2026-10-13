@@ -57,7 +57,7 @@ test('column settings wait for explicit name editing and keep keyboard navigatio
   await expect(dialog.getByRole('button', { name: '置左', pressed: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('column-settings.png') });
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByRole('button', { name: '數字', exact: true })).toBeFocused();
+  await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(dialog.getByRole('button', { name: '刪除屬性' })).toBeFocused();
   await name.click();

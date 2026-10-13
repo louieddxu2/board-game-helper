@@ -7,13 +7,15 @@ import * as viewState from '../../src/workspace/viewState';
 import { assignWorkspaceChangeRevisions } from '../../src/workspace/changeRevisions';
 import { WorkspaceDynamicOptionsCache } from '../../src/workspace/dynamicOptionsCache';
 import { prepareWorkspaceColumnSave } from '../../src/workspace/columnConversion';
+import { createWorkspaceValueReader } from '../../src/workspace/formula/values';
+import { evaluateWorkspaceFormula } from '../../src/workspace/formula/evaluation';
 import type { WorkspaceData } from '../../src/workspace/types';
 
 type Write = { store: string; method: string; key: unknown; transaction: number };
 type Read = { store: string; method: string; key: unknown; transaction: number };
 type StoredOrderPage = { tableId: string; pageId: string; rowIds: string[] };
 const fixture = {
-  db, model, history, spreadsheet, rowPages, viewState, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave,
+  db, model, history, spreadsheet, rowPages, viewState, assignWorkspaceChangeRevisions, WorkspaceDynamicOptionsCache, prepareWorkspaceColumnSave, createWorkspaceValueReader, evaluateWorkspaceFormula,
   dynamicOptionsCache: new WorkspaceDynamicOptionsCache(),
   data: model.emptyWorkspace() as WorkspaceData,
   histories: new Map<string, history.WorkspaceTableHistory>(),

@@ -44,7 +44,7 @@ export const useWorkspaceClipboard = ({ table, rowHeader, dataRef, setNotice, co
     const result = applyWorkspaceMatrixPaste(currentTable, pasteTarget.rowId, pasteTarget.columnId, matrix);
     if (result.invalidCells.length) {
       const first = result.invalidCells[0];
-      setNotice(`第 ${first.row} 列第 ${first.column} 欄的「${first.value}」不符合欄位型態`);
+      setNotice(first.reason ?? `第 ${first.row} 列第 ${first.column} 欄的「${first.value}」不符合欄位型態`);
       return;
     }
     if (!result.changes.length && !result.addedRows.length && !result.addedColumns.length) {

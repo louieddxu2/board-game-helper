@@ -55,6 +55,7 @@ export const useWorkspaceBulkSelection = ({ table, setNotice, setSearchOpen, set
 
   const startBulkSelection = useCallback((rowId: string, columnId: string) => {
     if (!table || !table.columns.some((column) => column.id === columnId)) return false;
+    if (table.columns.find(column => column.id === columnId)?.formula) { setNotice('自動計算屬性不能批次編輯'); return false; }
     if (bulkSelection) {
       if (bulkSelection.columnId !== columnId) {
         setNotice('批次編輯只能選取同一屬性的格子');
@@ -115,6 +116,7 @@ export const useWorkspaceBulkSelection = ({ table, setNotice, setSearchOpen, set
   const commitBulkCellUpdates = useCallback((updates: Array<{ rowId: string; value: WorkspaceCellValue }>) => {
     const currentData = dataRef.current;
     if (!currentData || !table || !bulkSelection || !bulkColumn) return;
+    if (currentData.tables.find(item => item.id === table.id)?.columns.find(column => column.id === bulkColumn.id)?.formula) { setNotice('自動計算屬性不能批次編輯'); return; }
     const valuesByRowId = new Map(updates.map((update) => [update.rowId, update.value]));
     const changes = [...valuesByRowId].flatMap(([rowId, after]) => {
       const row = getWorkspaceRow(table.rows, rowId);
