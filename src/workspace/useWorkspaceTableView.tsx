@@ -1,5 +1,6 @@
 import type { Dispatch, PointerEvent, RefObject, SetStateAction } from 'react';
-import { getWorkspaceEffectiveCell, type WorkspaceCellReader } from './formula/values';
+import { getWorkspaceEffectiveCell, type WorkspaceCellReader, type WorkspaceResolvedCell } from './formula/values';
+import { getWorkspaceFormulaErrors } from './formula/configuration';
 import { useMemo } from 'react';
 import { type WorkspaceBulkSelection } from './bulkEdit';
 import type { WorkspaceTableHistoryView } from './history';
@@ -66,6 +67,15 @@ interface WorkspaceTableViewOptions {
 export const useWorkspaceTableView = ({ readCell = getWorkspaceEffectiveCell, table, tableNode, viewportRef, panning, handleTableViewportScroll, viewInteractionRef, stableBeginTablePan, stableMoveTableReorder, stableMoveTablePan, stableEndTableReorder, stableEndTablePan, consumeSuppressedTableClick, textScale, topRowRevealCount, renderedTableWidth, renderedColumnWidths, rowHeader, configuring, activeCellColumnId, readyControls, displayedColumns, tableReorderVisual, bulkSelection, stableBeginTableReorder, hasHiddenColumns, rowWindow, tableRowIndexes, activeCellRowId, bulkSelectedRowIds, setActiveCellElement, updateDialogs, stableOpenCell, activeCellKey, handleDataCellClick, stableOpenHiddenFields, quickActionsExpanded, currentTableHistory, setQuickActionsExpanded, addRow, undoTable, redoTable, addColumn, stableApplyTextScale, localMinTextScale }: WorkspaceTableViewOptions) => {
   const workspaceTableView = useMemo(() => {
     if (!table || !tableNode) return null;
+    const formulaErrors = getWorkspaceFormulaErrors(table.columns);
+    const visibleCells = new Map<string, WorkspaceResolvedCell[]>();
+    const visibleErrors = new Map<string, string>();
+    for (const row of rowWindow.visibleRows) {
+      if (isPendingWorkspaceRow(row)) continue;
+      const cells = displayedColumns.map(column => readCell(row, column));
+      visibleCells.set(row.id, cells);
+      cells.forEach((cell, index) => { if (cell.error) visibleErrors.set(displayedColumns[index].id, cell.error); });
+    }
     return <>
       <div ref={viewportRef} className={`workspace-table-viewport ${panning ? 'is-panning' : ''}`} onScroll={(event) => handleTableViewportScroll(event.currentTarget)} onPointerDown={(event) => { viewInteractionRef.current = table.id; stableBeginTablePan(event); }} onPointerMove={(event) => { if (!stableMoveTableReorder(event)) stableMoveTablePan(event); }} onPointerUp={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onPointerCancel={(event) => { if (!stableEndTableReorder(event)) stableEndTablePan(event); }} onClickCapture={(event) => { if (consumeSuppressedTableClick(event)) { event.preventDefault(); event.stopPropagation(); } }}>
         <table className="workspace-table" style={{ '--workspace-text-scale': textScale, '--workspace-table-body-offset': topRowRevealCount ? `calc(var(--workspace-toolbar-row-height) * ${topRowRevealCount})` : '0px', width: `${renderedTableWidth}px` } as React.CSSProperties}>
@@ -75,7 +85,8 @@ export const useWorkspaceTableView = ({ readCell = getWorkspaceEffectiveCell, ta
             {displayedColumns.map((column) => {
               const isSource = tableReorderVisual?.kind === 'column' && tableReorderVisual.sourceId === column.id;
               const isTarget = tableReorderVisual?.kind === 'column' && tableReorderVisual.targetId === column.id;
-              return <th key={column.id} data-column-id={column.id} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => readyControls.configure(column, false)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" /></th>;
+              const formulaError = formulaErrors.get(column.id) ?? visibleErrors.get(column.id);
+              return <th key={column.id} data-column-id={column.id} aria-invalid={Boolean(formulaError)} title={formulaError} className={`${formulaError ? "workspace-formula-invalid " : ""}${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${configuring?.column.id === column.id && !configuring.isRowHeader ? 'is-editing ' : ''}${activeCellColumnId === column.id ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: 'center', ...workspaceLineLimitStyle(column) }} onPointerDown={(event) => stableBeginTableReorder('column', column.id, event)} onClick={() => readyControls.configure(column, false)} onContextMenu={(event) => { event.preventDefault(); }}><WorkspaceHeaderContent label={column.name} nameClass="workspace-column-name" />{formulaError && <span className="workspace-formula-warning">{formulaErrors.has(column.id) ? "公式失效" : "計算異常"}</span>}</th>;
             })}
             {hasHiddenColumns && <th className="workspace-hidden-columns-heading" aria-label="隱藏欄位"><WorkspaceIcon name="eye-off" size={17} /></th>}
           </tr></thead>
@@ -92,21 +103,21 @@ export const useWorkspaceTableView = ({ readCell = getWorkspaceEffectiveCell, ta
             const isActiveRow = activeCellRowId === row.id || bulkSelectedRowIds.has(row.id);
             return <tr key={row.id} data-virtual-row-id={row.id}>
               {rowHeader && <th scope="row" data-row-id={row.id} data-cell-id={workspaceCellKey(row.id, rowHeader.id)} ref={isRowHeaderActive ? setActiveCellElement : undefined} className={`workspace-row-heading ${overflowClassName(rowHeader)} ${isRowHeaderActive ? 'is-editing ' : ''}${isActiveRow ? 'workspace-context-active ' : ''}${isSource ? 'is-reorder-source ' : ''}${isTarget ? tableReorderVisual.after ? 'is-drop-after' : 'is-drop-before' : ''}`} style={{ textAlign: rowHeader.alignment ?? 'left', ...workspaceLineLimitStyle(rowHeader) }} onPointerDown={(event) => stableBeginTableReorder('row', row.id, event)} onClick={() => { updateDialogs({ lastPasteTarget: { rowId: row.id, columnId: rowHeader.id } }); stableOpenCell(row, rowHeader); }} onContextMenu={(event) => { event.preventDefault(); }}><div className="workspace-cell-layout"><button type="button" className="workspace-row-name" aria-label={`編輯物件 ${rowAccessibleLabel}`}><span className="workspace-cell-value" style={{ color: workspaceCellColor(rowHeader, row.name) }}>{rowLabel}</span></button><ExternalLinkAction value={row.name} pushWidth={rowHeader.inputType === 'link' && rowHeader.overflowMode === 'expand'} /></div></th>}
-              {displayedColumns.map((column) => {
-                const resolved = readCell(row, column);
+              {displayedColumns.map((column, index) => {
+                const resolved = visibleCells.get(row.id)![index];
                 const value = resolved.value;
                 const displayValue = displayWorkspaceColumnValue(value, column);
                 const isActive = activeCellKey === workspaceCellKey(row.id, column.id);
                 const multiChips = column.isMultiple && typeof value === 'string' ? parseMultiSelectValues(value) : [];
                 const isBulkSelected = bulkSelection?.columnId === column.id && bulkSelectedRowIds.has(row.id);
-                return <td key={column.id} aria-readonly={Boolean(column.formula)} title={resolved.error} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
+                return <td key={column.id} aria-readonly={Boolean(column.formula)} aria-invalid={Boolean(resolved.error)} title={resolved.error} data-bulk-row-id={row.id} data-bulk-column-id={column.id} data-cell-id={workspaceCellKey(row.id, column.id)} ref={isActive ? setActiveCellElement : undefined} className={`${resolved.error ? "workspace-formula-invalid " : ""}${overflowClassName(column)} ${bulkSelection?.columnId === column.id ? 'is-bulk-column ' : ''}${isActive ? 'is-editing ' : ''}${isBulkSelected ? 'is-bulk-selected' : ''}`} style={{ textAlign: column.alignment ?? 'left', ...workspaceLineLimitStyle(column) }} aria-label={`${rowAccessibleLabel}，${column.name || '未命名屬性'}：${displayValue || '空白'}`} aria-selected={isBulkSelected} onClick={() => handleDataCellClick(row, column)}>
                   <div className="workspace-cell-layout">
                     {multiChips.length > 0 ? (
                       <div className="workspace-multi-chip-list workspace-cell-value">
                         {multiChips.map((chip, idx) => <span key={idx} className="workspace-multi-chip" style={{ color: workspaceOptionColor(column, chip) }}>{chip}</span>)}
                       </div>
                     ) : (
-                      <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: workspaceCellColor(column, value) }}>{displayValue}</span>
+                      <span className={`workspace-cell-value ${displayValue ? '' : 'workspace-empty-cell'}`} style={{ color: resolved.error ? undefined : workspaceCellColor(column, value) }}>{displayValue}</span>
                     )}
                     <ExternalLinkAction value={value} pushWidth={column.inputType === 'link' && column.overflowMode === 'expand'} />
                   </div>

@@ -17,8 +17,9 @@ export const evaluateWorkspaceFormula = (plan: CompiledWorkspaceFormula, row: Wo
       const value = evaluate(node.operand);
       return value === null ? null : node.operator === '-' ? -value : value;
     }
-    const left = evaluate(node.left), right = evaluate(node.right);
-    if (node.operator === '/' && right === 0) throw new Error('除數不能為零');
+    const right = evaluate(node.right);
+    if (node.operator === '/' && (right === null || right === 0)) return null;
+    const left = evaluate(node.left);
     if (left === null || right === null) return null;
     const value = node.operator === '+' ? left + right : node.operator === '-' ? left - right : node.operator === '*' ? left * right : left / right;
     if (!Number.isFinite(value)) throw new Error('計算結果不是有限數字');

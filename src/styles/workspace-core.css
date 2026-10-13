@@ -124,6 +124,8 @@
 .workspace-row-axis-name:hover, .workspace-row-name:hover { color: var(--orange); }
 .workspace-column-name { min-width: 0; min-height: 0; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-column-name:hover { color: var(--orange); }
+.workspace-table .workspace-formula-invalid { color: #a52f23; background: #f8e4df; }
+.workspace-formula-warning { display: block; font-size: .7em; font-weight: 600; line-height: 1.4; }
 .workspace-header-layout { position: relative; display: block; width: 100%; min-width: 0; }
 .workspace-header-layout > .workspace-row-axis-name, .workspace-header-layout > .workspace-column-name { display: block; width: 100%; min-width: 0; }
 .workspace-row-heading { position: sticky; left: 0; z-index: 2; min-width: 0 !important; padding: 2px 3px !important; cursor: pointer; background: var(--cream); color: var(--ink); text-align: left; }

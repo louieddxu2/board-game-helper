@@ -71,6 +71,74 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   expect(errors).toEqual([]);
 });
 
+test('mobile formula validation stays live, treats blank division as empty, and clears runtime status after correction', async ({ page }, info) => {
+  const averageHeader = page.locator('th[data-column-id="column-2"]');
+  await averageHeader.tap();
+  const dialog = page.getByRole('dialog', { name: '屬性設定' });
+  await dialog.getByRole('button', { name: '自動計算', exact: true }).tap();
+  const formulaInput = dialog.getByRole('textbox', { name: '計算公式' });
+
+  await formulaInput.fill('[價格] +');
+  await expect(formulaInput).toHaveAttribute('aria-invalid', 'true');
+  await expect(dialog.locator('.workspace-formula-editor .form-error')).toContainText('需要');
+  await expect(dialog.locator('.workspace-formula-editor .form-error')).toBeInViewport();
+  await page.screenshot({ path: info.outputPath('formula-invalid-mobile.png') });
+
+  await formulaInput.fill('[價格] / [次數]');
+  await expect(formulaInput).toHaveAttribute('aria-invalid', 'false');
+  await expect(dialog.getByRole('status')).toContainText('預覽');
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+
+  const calculated = page.locator('[data-cell-id="row-0:column-2"]');
+  await expect(calculated).toHaveText('200');
+  await expect(calculated).toHaveAttribute('aria-invalid', 'false');
+
+  const editCount = async (value: string) => {
+    await page.locator('[data-cell-id="row-0:column-1"]').tap();
+    const editor = page.getByRole('dialog');
+    await editor.getByRole('spinbutton').fill(value);
+    await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+  };
+  const expectBlankResult = async () => {
+    await expect(calculated).toHaveAttribute('aria-label', /平均：空白/);
+    await expect(calculated).toHaveAttribute('aria-invalid', 'false');
+    await expect(averageHeader).not.toContainText('計算異常');
+  };
+
+  await editCount('0');
+  await expectBlankResult();
+  await page.reload();
+  await expectBlankResult();
+
+  await editCount('');
+  await expectBlankResult();
+  await page.reload();
+  await expectBlankResult();
+
+  await editCount('6');
+  await expect(calculated).toHaveText('200');
+  await page.locator('[data-cell-id="row-0:column-0"]').tap();
+  await page.getByRole('dialog').getByRole('spinbutton').fill('1800');
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+  await expect(calculated).toHaveText('300');
+
+  await averageHeader.tap();
+  await page.getByRole('dialog', { name: '屬性設定' }).getByRole('textbox', { name: '計算公式' }).fill('1e308 * 1e308');
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+  await expect(calculated).toHaveAttribute('aria-invalid', 'true');
+  await expect(calculated).toHaveClass(/workspace-formula-invalid/);
+  await expect(averageHeader).toContainText('計算異常');
+  await averageHeader.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('formula-field-error-mobile.png') });
+
+  await averageHeader.tap();
+  await page.getByRole('dialog', { name: '屬性設定' }).getByRole('textbox', { name: '計算公式' }).fill('[價格] / [次數]');
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+  await expect(calculated).toHaveText('300');
+  await expect(calculated).toHaveAttribute('aria-invalid', 'false');
+  await expect(averageHeader).not.toContainText('計算異常');
+});
+
 test('browser Back leaves formulas intact; dependent source deletion is blocked; closing saves fixed results', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();

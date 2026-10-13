@@ -22,7 +22,7 @@ const fixture = (): WorkspaceTable => ({ ...createTable('自動屬性'), columns
 ], rows: [
   { id: 'first', name: '甲', values: { price: 1200, count: 6 } },
   { id: 'second', name: '乙', values: { price: 1200, count: 12 } },
-  { id: 'error', name: '丙', values: { price: 100, count: 0 } },
+  { id: 'error', name: '丙', values: { price: 'invalid', count: 1 } },
 ] });
 const asData = (table: WorkspaceTable) => { const node = createNode('table', table.name, null, 0, table.id); return { ...emptyWorkspace(), nodes: [node], tables: [table], activeNodeId: node.id }; };
 afterEach(() => { cleanup(); localStorage.clear(); });
@@ -49,17 +49,45 @@ describe('formula settings and conversions', () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: { version: 1, expression: '[價格] * 2', variables: { 價格: { columnId: 'price' } } } }));
   });
 
-  it('blocks invalid syntax on close without saving and accepts a corrected formula', async () => {
+  it('reports invalid syntax live and on close without saving, then accepts a corrected formula', async () => {
     const table = fixture(), onSave = vi.fn();
-    render(<ColumnConfig column={table.columns[2]} sourceColumns={table.columns} onSave={onSave} />);
-    fireEvent.change(screen.getByRole('textbox', { name: '計算公式' }), { target: { value: '[未知] + 1' } });
+    render(<ColumnConfig column={table.columns[2]} sourceColumns={table.columns} previewRow={table.rows[0]} onSave={onSave} />);
+    const text = screen.getByRole('textbox', { name: '計算公式' });
+    fireEvent.change(text, { target: { value: '[未知] + 1' } });
+    expect(text).toHaveAttribute('aria-invalid', 'true');
+    const describedBy = text.getAttribute('aria-describedby')!.split(' ');
+    expect(describedBy).toContain('workspace-formula-help');
+    expect(describedBy.some(id => id !== 'workspace-formula-help' && document.getElementById(id)?.textContent?.includes('未定義變數'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未定義變數'));
     expect(onSave).not.toHaveBeenCalled();
     expect(table.columns[2].formula?.expression).toBe('[價格] ÷ [次數]');
-    fireEvent.change(screen.getByRole('textbox', { name: '計算公式' }), { target: { value: '[價格] + 1' } });
+    fireEvent.change(text, { target: { value: '[價格] + 1' } });
+    await waitFor(() => expect(text).toHaveAttribute('aria-invalid', 'false'));
+    expect(screen.getByRole('status')).toHaveTextContent('預覽（甲）：1201');
     fireEvent.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: expect.objectContaining({ expression: '[價格] + 1' }) })));
+  });
+
+  it('immediately warns when a source type change would invalidate another formula and clears on correction', () => {
+    const table = fixture(), onSave = vi.fn();
+    render(<ColumnConfig column={table.columns[0]} sourceColumns={table.columns} onSave={onSave} />);
+    fireEvent.click(screen.getAllByRole('button', { name: '文字' })[1]);
+    expect(screen.getByRole('status')).toHaveTextContent('公式只能引用其他原始數字屬性');
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '數字' }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('styles a runtime preview error while keeping the formula definition valid', () => {
+    const table = fixture();
+    render(<ColumnConfig column={table.columns[2]} sourceColumns={table.columns} previewRow={table.rows[2]} onSave={vi.fn()} />);
+
+    const preview = screen.getByRole('status');
+    expect(preview).toHaveClass('form-error');
+    expect(preview).toHaveTextContent('來源值不是有效數字');
+    expect(screen.getByRole('textbox', { name: '計算公式' })).toHaveAttribute('aria-invalid', 'false');
   });
 
   it('changes a formula without touching rows, while a saved conversion preserves results and supports undo', () => {
@@ -99,7 +127,7 @@ describe('effective values and interchange', () => {
     expect(result.current.filteredRows.map(row => row.id)).toEqual(['first', 'second', 'error']);
     act(() => result.current.setFilterTarget({ axis: 'column', id: 'average', label: '平均' }));
     expect(result.current.activeNumericValues).toEqual([201, 101]);
-    expect(result.current.activeFilterOptions.map(option => option.label)).toContain('無法計算：除數不能為零');
+    expect(result.current.activeFilterOptions.map(option => option.label)).toContain('無法計算：來源值不是有效數字');
     act(() => result.current.setHeaderFilters({ 'column:average': { includedKeys: null, sort: null, min: '150' } }));
     expect(result.current.filteredRows.map(row => row.id)).toEqual(['first']);
     act(() => { result.current.clearFilters(); result.current.setSearchQuery('201'); });

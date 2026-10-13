@@ -83,7 +83,7 @@ describe('workspace formula syntax and evaluation', () => {
     expect(evaluateWorkspaceFormula(plan, makeRow('null', { price: null, count: 2 })).value).toBeNull();
   });
 
-  it('keeps zero numerators valid while reporting zero divisors', () => {
+  it('keeps zero numerators valid while treating a zero divisor as blank', () => {
     const plan = compileWorkspaceFormula(makeFormula('price / count', { price: 'price', count: 'count' }));
 
     const zero = evaluateWorkspaceFormula(plan, makeRow('zero', { price: 0, count: 5 }));
@@ -92,7 +92,36 @@ describe('workspace formula syntax and evaluation', () => {
 
     const divisor = evaluateWorkspaceFormula(plan, makeRow('divisor', { price: 1, count: 0 }));
     expect(divisor.value).toBeNull();
-    expect(divisor.error).toMatch(/zero|divide|除數/i);
+    expect(divisor.error).toBeUndefined();
+  });
+
+  it('treats every zero-like, blank, and missing denominator as a blank result', () => {
+    const plan = compileWorkspaceFormula(makeFormula('price / count', { price: 'price', count: 'count' }));
+    const denominatorCases: Array<[string, WorkspaceCellValue]> = [
+      ['number zero', 0],
+      ['string zero', '0'],
+      ['negative zero', -0],
+      ['null', null],
+      ['empty string', ''],
+    ];
+
+    for (const [label, count] of denominatorCases) {
+      expect(evaluateWorkspaceFormula(plan, makeRow(label, { price: 1, count }))).toEqual({ value: null });
+    }
+    expect(evaluateWorkspaceFormula(plan, makeRow('missing', { price: 1 }))).toEqual({ value: null });
+  });
+
+  it('checks a denominator before an invalid numerator and propagates blank nested divisions', () => {
+    const direct = compileWorkspaceFormula(makeFormula('price / count', { price: 'price', count: 'count' }));
+    const suppressed = evaluateWorkspaceFormula(direct, makeRow('invalid-numerator', {
+      price: { url: 'https://example.com', label: '連結' },
+      count: 0,
+    }));
+    expect(suppressed).toEqual({ value: null });
+
+    const nested = compileWorkspaceFormula(makeFormula('(price / count) * 4 + 1', { price: 'price', count: 'count' }));
+    expect(evaluateWorkspaceFormula(nested, makeRow('nested-blank', { price: 8, count: null }))).toEqual({ value: null });
+    expect(evaluateWorkspaceFormula(nested, makeRow('nested-missing', { price: 8 }))).toEqual({ value: null });
   });
 
   it('reports invalid source values and non-finite arithmetic results', () => {
@@ -183,9 +212,26 @@ describe('workspace formula value reader', () => {
 
   it('returns a visible error value and detail for formula failures', () => {
     const reader = createWorkspaceValueReader();
-    const result = reader.read(makeRow('row-1', { price: 1, count: 0 }), calculatedColumn);
+    const result = reader.read(makeRow('row-1', {
+      price: { url: 'https://example.com', label: '連結' },
+      count: 1,
+    }), calculatedColumn);
 
-    expect(typeof result.value).toBe('string');
-    expect(result.error).toMatch(/zero|divide|除數/i);
+    expect(result.value).toBe('無法計算：來源值不是有效數字');
+    expect(result.error).toBe('來源值不是有效數字');
+  });
+
+  it('recalculates a cached error after an immutable source correction', () => {
+    const evaluate = vi.fn(evaluateWorkspaceFormula);
+    const reader = createWorkspaceValueReader(evaluate);
+    const invalid = makeRow('row-1', {
+      price: { url: 'https://example.com', label: '連結' },
+      count: 1,
+    });
+    expect(reader.read(invalid, calculatedColumn).error).toBe('來源值不是有效數字');
+
+    const recovered = { ...invalid, values: { ...invalid.values, price: 12 } };
+    expect(reader.read(recovered, calculatedColumn)).toEqual({ value: 12 });
+    expect(evaluate).toHaveBeenCalledTimes(2);
   });
 });

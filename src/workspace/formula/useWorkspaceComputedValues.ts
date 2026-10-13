@@ -1,16 +1,23 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { WorkspaceTable } from '../types';
 import { isPendingWorkspaceRow } from '../rowPages';
 import { runWorkspaceIdleSteps } from '../workspaceIdleSteps';
 import { createWorkspaceValueReader } from './values';
+import { getWorkspaceFormulaErrors } from './configuration';
+const emptyColumns = [] as const;
 
 /** Visible cells are immediate. Optional warming never reads the DB or updates React state. */
 export const useWorkspaceComputedValues = (table: WorkspaceTable | undefined) => {
   const ownerId = table?.id;
   const reader = useMemo(() => createWorkspaceValueReader(), [ownerId]);
+  const errors = getWorkspaceFormulaErrors(table?.columns ?? emptyColumns);
+  const read = useCallback<typeof reader.read>((row, column, isRowHeader) => {
+    const error = !isRowHeader && column.formula ? errors.get(column.id) : undefined;
+    return error ? { value: `無法計算：${error}`, error } : reader.read(row, column, isRowHeader);
+  }, [errors, reader]);
   const latest = useRef(table);
   useLayoutEffect(() => { latest.current = table; }, [table]);
-  const formulas = useMemo(() => table?.columns.filter(column => column.formula) ?? [], [table?.columns]);
+  const formulas = useMemo(() => table?.columns.filter(column => column.formula && !errors.has(column.id)) ?? [], [table?.columns, errors]);
   const previousFormulas = useRef(formulas);
   const stableFormulas = formulas.length === previousFormulas.current.length && formulas.every((column, index) => column.id === previousFormulas.current[index].id && column.formula === previousFormulas.current[index].formula) ? previousFormulas.current : formulas;
   useLayoutEffect(() => {
@@ -33,5 +40,5 @@ export const useWorkspaceComputedValues = (table: WorkspaceTable | undefined) =>
     void runWorkspaceIdleSteps(warm(), { signal: controller.signal, isCurrent: () => latest.current?.id === ownerId && previousFormulas.current === stableFormulas, canRun: () => document.visibilityState !== 'hidden' });
     return () => controller.abort();
   }, [reader, stableFormulas, ownerId, table?.rows.length]);
-  return reader.read;
+  return read;
 };

@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaceNumberInputMode, isWorkspaceColor } from './model';
 import { WorkspaceColumn, WorkspaceInputType, WorkspaceNumberRange, WorkspaceOverflowMode, WorkspaceTextAlign, WorkspaceRow } from './types';
 import { emptyWorkspaceFormula, FormulaEditor } from './formula/FormulaEditor';
-import { formulaVariableChoices, normalizeWorkspaceFormula } from './formula/configuration';
+import { formulaVariableChoices, getWorkspaceFormulaErrors, normalizeWorkspaceFormula } from './formula/configuration';
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 import { AutoGrowTextarea, defaultInputTypeFor, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from './workspaceShared';
 
@@ -201,6 +201,13 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
   const pending = useRef(false);
   const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
   const [lineLimitEnabled, setLineLimitEnabled] = useState(() => column.lineLimit !== undefined);
+  const dependentError = useMemo(() => {
+    if (!sourceColumns) return undefined;
+    const variables = { ...formula.variables, ...Object.fromEntries(formulaVariableChoices(sourceColumns, column.id, formula).map(choice => [choice.alias, choice.binding])) };
+    const definition = { ...draft, formula: draft.inputType === 'number' && automatic ? { ...formula, variables } : undefined };
+    const errors = getWorkspaceFormulaErrors(sourceColumns.map(source => source.id === column.id ? definition : source));
+    return [...errors].find(([id]) => id !== column.id)?.[1];
+  }, [automatic, column.id, draft, formula, sourceColumns]);
   const save = async () => {
     if (pending.current) return;
     pending.current = true;
@@ -253,7 +260,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
         <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} aria-pressed={activePanel === 'overflow'} onClick={() => setActivePanel('overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>
       </div>
       <div className="workspace-column-config-panel">
-        {error && <p className="form-error" role="alert">{error}</p>}
+        {(error || dependentError) && <p className="form-error" role={error ? 'alert' : 'status'}>{error || dependentError}</p>}
         {activePanel === 'input' ? <>
           <div className="workspace-input-subtype-options">
             <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} aria-pressed={draft.inputType === value} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
@@ -261,7 +268,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
             {draft.inputType === 'datetime' && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.dateOnly)} onChange={(event) => setDraft((current) => ({ ...current, dateOnly: event.target.checked }))} />只顯示年月日</label>}
           </div>
           {draft.inputType === 'number' && sourceColumns && <fieldset className="workspace-form-field"><legend>數字來源</legend><div className="workspace-number-input-mode-options workspace-formula-source-options">{['手動輸入', '自動計算'].map((label, index) => <button type="button" key={label} aria-pressed={automatic === Boolean(index)} className={automatic === Boolean(index) ? 'selected' : ''} onClick={() => { setAutomatic(Boolean(index)); setError(''); }}>{label}</button>)}</div></fieldset>}
-          {draft.inputType === 'number' && automatic && sourceColumns && <><FormulaEditor column={draft} columns={sourceColumns} formula={formula} previewRow={previewRow} onChange={setFormula} />{!column.formula && <p>儲存後會以公式取代這個屬性的原始內容；可用復原恢復。</p>}</>}
+          {draft.inputType === 'number' && automatic && sourceColumns && <><FormulaEditor column={draft} columns={sourceColumns} formula={formula} previewRow={previewRow} onChange={next => { setFormula(next); setError(''); }} />{!column.formula && <p>儲存後會以公式取代這個屬性的原始內容；可用復原恢復。</p>}</>}
           {column.formula && (!automatic || draft.inputType !== 'number') && <p>儲存後會保留目前計算結果，停止自動計算。</p>}
           {draft.inputType === 'number' && !automatic && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} aria-pressed={getWorkspaceNumberInputMode(draft) === mode} onClick={() => setDraft((current) => ({ ...current, numberInputMode: mode }))}>{label}</button>)}</div></fieldset>}
           {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
