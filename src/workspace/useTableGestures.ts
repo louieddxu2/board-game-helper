@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
 import type { CellHoldSession, UseTableGesturesProps } from './tableGestureTypes';
-import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
+import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TABLE_BOUNCE_LIMIT, TABLE_BOUNCE_RESISTANCE, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 import { useTableReorder } from './useTableReorder';
 import { tableReorderHoldMs } from './workspaceShared';
@@ -348,11 +348,11 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         let overX = 0;
         let overY = 0;
         if (bounceAxis === 'x') {
-          if (targetScrollLeft < 0) overX = Math.min(30, -targetScrollLeft * 0.35);
-          else if (targetScrollLeft > maxLeft) overX = Math.max(-30, (maxLeft - targetScrollLeft) * 0.35);
+          if (targetScrollLeft < 0) overX = Math.min(TABLE_BOUNCE_LIMIT, -targetScrollLeft * TABLE_BOUNCE_RESISTANCE);
+          else if (targetScrollLeft > maxLeft) overX = Math.max(-TABLE_BOUNCE_LIMIT, (maxLeft - targetScrollLeft) * TABLE_BOUNCE_RESISTANCE);
         } else if (bounceAxis === 'y') {
-          if (targetScrollTop < 0) overY = Math.min(30, -targetScrollTop * 0.35);
-          else if (targetScrollTop > maxTop) overY = Math.max(-30, (maxTop - targetScrollTop) * 0.35);
+          if (targetScrollTop < 0) overY = Math.min(TABLE_BOUNCE_LIMIT, -targetScrollTop * TABLE_BOUNCE_RESISTANCE);
+          else if (targetScrollTop > maxTop) overY = Math.max(-TABLE_BOUNCE_LIMIT, (maxTop - targetScrollTop) * TABLE_BOUNCE_RESISTANCE);
         }
 
         if (overX !== 0 || overY !== 0) {

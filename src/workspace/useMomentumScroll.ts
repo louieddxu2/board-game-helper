@@ -7,6 +7,8 @@ const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
 const BOUNCE_SETTLE_DURATION_MS = 200;
+export const TABLE_BOUNCE_LIMIT = 30;
+export const TABLE_BOUNCE_RESISTANCE = 0.35;
 export const TABLE_FLING_ACCELERATION_THRESHOLD = 1.2; // CSS px/ms; below this is a deliberate drag
 export const TABLE_FLING_ACCELERATION_MULTIPLIER = 1.8;
 

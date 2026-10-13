@@ -55,18 +55,25 @@ describe('drawer swipe geometry', () => {
 });
 
 describe('table boundary search gesture', () => {
-  it('recognizes a sustained pull beyond the top edge', () => {
-    expect(getTableBoundarySearchEdge(0, -24, 240, 24, 'y')).toBe('top');
+  it('recognizes a pull at the top bounce limit', () => {
+    expect(getTableBoundarySearchEdge(0, -86, 240, 86, 'y')).toBe('top');
   });
 
-  it('recognizes a sustained pull beyond the bottom edge', () => {
-    expect(getTableBoundarySearchEdge(240, 264, 240, -24, 'y')).toBe('bottom');
-    expect(getTableBoundarySearchEdge(238, 264, 240, -26, 'y')).toBe('bottom');
+  it('recognizes a pull at the bottom bounce limit, including boundary tolerance', () => {
+    expect(getTableBoundarySearchEdge(240, 326, 240, -86, 'y')).toBe('bottom');
+    expect(getTableBoundarySearchEdge(238, 326, 240, -88, 'y')).toBe('bottom');
+  });
+
+  it('ignores light pulls and pulls just below the bounce limit', () => {
+    expect(getTableBoundarySearchEdge(0, -24, 240, 24, 'y')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(240, 264, 240, -24, 'y')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(0, -85, 240, 85, 'y')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(240, 325, 240, -85, 'y')).toBeUndefined();
   });
 
   it('does not recognize a boundary gesture from the wrong axis or an interior scroll', () => {
-    expect(getTableBoundarySearchEdge(12, -24, 240, 36, 'y')).toBeUndefined();
-    expect(getTableBoundarySearchEdge(0, -24, 240, 24, 'x')).toBeUndefined();
-    expect(getTableBoundarySearchEdge(0, -24, 0, 24, 'y')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(12, -90, 240, 102, 'y')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(0, -90, 240, 90, 'x')).toBeUndefined();
+    expect(getTableBoundarySearchEdge(0, -90, 0, 90, 'y')).toBeUndefined();
   });
 });

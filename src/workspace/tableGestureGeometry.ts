@@ -1,8 +1,10 @@
-import { TablePanAxis } from './useMomentumScroll';
+import { TABLE_BOUNCE_LIMIT, TABLE_BOUNCE_RESISTANCE, type TablePanAxis } from './useMomentumScroll';
 
 export const TABLE_BOUNDARY_SEARCH_HOLD_MS = 500;
 
 export const TABLE_BOUNDARY_SCROLL_TOLERANCE = 2;
+// Counting starts when the elastic offset reaches its visible limit.
+const TABLE_BOUNDARY_SEARCH_PULL_DISTANCE = TABLE_BOUNCE_LIMIT / TABLE_BOUNCE_RESISTANCE;
 
 export const CELL_SWEEP_INTENT_DISTANCE = 20;
 
@@ -23,8 +25,8 @@ export const isCellSweepDirection = (deltaX: number, deltaY: number) =>
 
 export const getTableBoundarySearchEdge = (startScrollTop: number, targetScrollTop: number, maxTop: number, deltaY: number, axis?: TablePanAxis): 'top' | 'bottom' | undefined => {
   if (axis !== 'y' || maxTop <= 0) return undefined;
-  if (startScrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop < 0 && deltaY > 0) return 'top';
-  if (startScrollTop >= maxTop - TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop > maxTop && deltaY < 0) return 'bottom';
+  if (startScrollTop <= TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop <= -TABLE_BOUNDARY_SEARCH_PULL_DISTANCE && deltaY > 0) return 'top';
+  if (startScrollTop >= maxTop - TABLE_BOUNDARY_SCROLL_TOLERANCE && targetScrollTop >= maxTop + TABLE_BOUNDARY_SEARCH_PULL_DISTANCE && deltaY < 0) return 'bottom';
   return undefined;
 };
 
