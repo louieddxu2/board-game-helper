@@ -42,7 +42,7 @@ const setup = async (page: Page) => {
   await page.getByRole('button', { name: '開啟目錄' }).click();
   await page.getByRole('button', { name: '開啟 Google Drive 備份' }).click();
   const dialog = page.getByRole('dialog', { name: 'Google Drive 備份' });
-  await expect(dialog.getByText('已連結 Google Drive')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '立即備份' })).toBeEnabled();
   await dialog.getByRole('button', { name: '立即備份' }).click();
   return {
     dialog, longName, errors,

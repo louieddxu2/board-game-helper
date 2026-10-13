@@ -41,6 +41,7 @@ describe('GoogleDriveBackupDialog', () => {
     view.rerender(<GoogleDriveBackupDialog {...props} busy={null} progress={undefined} status="saved" message="已備份整個資料庫" />);
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.getByText('已完成備份')).toBeInTheDocument();
+    expect(screen.queryByText('已備份整個資料庫')).not.toBeInTheDocument();
   });
 
   it('keeps preparation and an empty-workspace finalization indeterminate', () => {
@@ -80,14 +81,16 @@ describe('GoogleDriveBackupDialog', () => {
 
     expect(screen.getByRole('button', { name: '還原此備份' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即備份' })).toBeInTheDocument();
-    expect(screen.getByText('已找到')).toBeInTheDocument();
+    expect(screen.queryByText('已找到')).not.toBeInTheDocument();
+    expect(screen.queryByText('雲端修改')).not.toBeInTheDocument();
     expect(screen.queryByText('manifest.xlsx')).not.toBeInTheDocument();
   });
 
-  it('explains a manual disconnect without offering background actions', () => {
+  it('shows a concise manual disconnect state without offering background actions', () => {
     render(<GoogleDriveBackupDialog {...createProps({ status: 'disconnected' })} />);
 
-    expect(screen.getByText('自動備份已暫停，請重新連結')).toBeInTheDocument();
+    expect(screen.getByText('已主動斷線')).toBeInTheDocument();
+    expect(screen.queryByText('自動備份已暫停，請重新連結')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '連結 Google Drive' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
   });
@@ -102,6 +105,7 @@ describe('GoogleDriveBackupDialog', () => {
 
     expect(screen.getByRole('button', { name: '還原此備份' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '以本機資料覆蓋雲端' })).toBeInTheDocument();
+    expect(screen.getByText('雲端版本不同')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
   });
 });

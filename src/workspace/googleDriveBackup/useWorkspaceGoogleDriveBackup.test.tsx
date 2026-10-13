@@ -334,8 +334,12 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(mocks.backup).toHaveBeenCalledTimes(1);
   });
 
-  it('detects an existing remote snapshot on connect and blocks automatic overwrite', async () => {
+  it.each(['new device', 'previously backed up device'])('blocks automatic overwrite when a %s connects after another device backed up', async device => {
     window.localStorage.setItem(autoBackupKey, 'true');
+    if (device === 'previously backed up device') window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: 'manifest-old', fileName: 'manifest.xlsx', lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1,
+      remoteModifiedTime: '2026-08-21T09:00:00.000Z',
+    }));
     mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-remote', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:30:00.000Z' });
     const { result } = renderBackup();
 
@@ -344,6 +348,27 @@ describe('workspace Google Drive automatic backup scheduling', () => {
 
     expect(result.current.remoteConflict).toBe(true);
     expect(result.current.remoteFile?.id).toBe('manifest-remote');
+    expect(mocks.backup).not.toHaveBeenCalled();
+  });
+
+  it('stops a scheduled automatic backup when another device backs up after connection', async () => {
+    window.localStorage.setItem(autoBackupKey, 'true');
+    const original = { id: 'manifest-original', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:00:00Z' };
+    const phone = { ...original, id: 'manifest-phone', modifiedTime: '2026-08-21T10:00:00Z' };
+    window.localStorage.setItem(recordKey, JSON.stringify({
+      fileId: original.id, fileName: original.name, remoteModifiedTime: original.modifiedTime,
+      lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1,
+    }));
+    mocks.findRemoteFile.mockResolvedValue(original);
+    const { result } = renderBackup();
+    await act(async () => { await result.current.connect(); });
+    expect(result.current.remoteConflict).toBe(false);
+    mocks.findRemoteFile.mockResolvedValue(phone);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+    expect(result.current.remoteConflict).toBe(true);
+    expect(result.current.remoteFile?.id).toBe(phone.id);
+    expect(mocks.backup).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS); });
     expect(mocks.backup).not.toHaveBeenCalled();
   });
 

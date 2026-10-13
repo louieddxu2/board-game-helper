@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { WorkspaceIcon, WorkspaceModal } from '../workspaceShared';
 import type { DriveFile } from './types';
-import { WORKSPACE_BACKUP_RETAINED_VERSIONS } from './backupRetention';
 import type { WorkspaceDriveBackupRecord, WorkspaceDriveBackupStatus } from './useWorkspaceGoogleDriveBackup';
 import { workspaceBackupProgressCount, workspaceBackupProgressLabel, workspaceBackupProgressValue, type WorkspaceBackupProgress } from './backupProgress';
 
@@ -16,13 +15,16 @@ const formatTime = (value: number | string | null | undefined) => {
 const busyLabel = (busy: BusyState) => busy === 'connecting' ? '正在連結…' : busy === 'backing-up' ? '正在備份…' : busy === 'finding' ? '正在尋找…' : busy === 'restoring' ? '正在載入…' : '';
 
 const statusLabel = (status: WorkspaceDriveBackupStatus) => status === 'checking' ? '正在檢查備份變更' : status === 'offline' ? '目前離線' : status === 'disconnected' ? '已主動斷線' : status === 'dirty' ? '有未備份變更' : status === 'saved' ? '已完成備份' : '尚未備份';
-const statusDetail = ({ status, authorized, record }: Pick<GoogleDriveBackupDialogProps, 'status' | 'authorized' | 'record'>) => {
-  if (status === 'disconnected') return '自動備份已暫停，請重新連結';
-  if (status === 'offline') return '恢復連線後才能同步';
-  if (!authorized) return record.lastBackupAt ? '曾經備份過，尚未連結此工作階段' : '需要先連結 Google Drive';
-  if (!record.lastBackupAt) return '尚未建立雲端備份';
-  return `${record.folderCount} 個資料夾 · ${record.tableCount} 張表格`;
-};
+const remoteConflictMessage = '雲端備份與此裝置的紀錄不同，請選擇使用雲端版本或以本機資料覆蓋';
+
+const routineMessages = new Set([
+  '已連結 Google Drive',
+  '已備份整個資料庫',
+  '已自動備份變更',
+  '已找到雲端備份，請確認後還原',
+  '已解除授權；自動備份不會自行重新連結',
+  remoteConflictMessage,
+]);
 
 export interface GoogleDriveBackupDialogProps {
   status: WorkspaceDriveBackupStatus;
@@ -52,7 +54,9 @@ const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { 
 export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error, record, remoteFile, remoteVersions = [], onSelectVersion, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
   const isBusy = Boolean(busy);
   const backupProgress = busy === 'backing-up' ? progress : undefined;
+  const showMessage = Boolean(message && !routineMessages.has(message));
   const canUseDrive = authorized && status !== 'offline' && status !== 'disconnected';
+  const currentStatus = busy === 'backing-up' ? '備份進行中' : remoteConflict && canUseDrive ? '雲端版本不同' : statusLabel(status);
   const showConnect = !authorized || status === 'disconnected';
   const primaryAction = remoteFile
     ? <ActionButton onClick={onRestore} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="check" size={18} />還原此備份</ActionButton>
@@ -62,19 +66,17 @@ export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error
   return <WorkspaceModal owner="google-drive" title="Google Drive 備份" onRequestClose={onClose} className="workspace-google-drive-dialog">
     <div className="workspace-google-drive-status">
       <WorkspaceIcon name="download" size={22} />
-      <div><strong>{busy === 'backing-up' ? '備份進行中' : statusLabel(status)}</strong><small>{statusDetail({ status, authorized, record })}</small></div>
+      <div><strong>{currentStatus}</strong></div>
     </div>
     {backupProgress ? <div className="workspace-google-drive-progress" role="status" aria-atomic="true">
       <strong>{workspaceBackupProgressLabel(backupProgress)}</strong>
       <progress aria-label="表格備份進度" aria-valuetext={`${workspaceBackupProgressLabel(backupProgress)} ${workspaceBackupProgressCount(backupProgress)}`} max={backupProgress.totalTables || 1} value={workspaceBackupProgressValue(backupProgress)} />
       {backupProgress.totalTables !== undefined && <small>{workspaceBackupProgressCount(backupProgress)}</small>}
     </div> : busy && <p className="workspace-dialog-message" role="status">{busyLabel(busy)}</p>}
-    {message && <p className="workspace-google-drive-message" role="status">{message}</p>}
+    {showMessage && <p className="workspace-google-drive-message" role="status">{message}</p>}
     {error && <p className="workspace-google-drive-error" role="alert">{error}</p>}
-    {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div><div><dt>雲端結構</dt><dd>{record.folderCount} 個資料夾 · {record.tableCount} 張表格</dd></div></dl>}
-    {remoteFile && <dl className="workspace-google-drive-meta workspace-google-drive-remote"><div><dt>雲端備份</dt><dd>已找到</dd></div><div><dt>雲端修改</dt><dd>{formatTime(remoteFile.modifiedTime)}</dd></div></dl>}
-    {remoteVersions.length > 1 && <label className="workspace-form-field">備份版本<select aria-label="選擇備份版本" value={remoteFile?.id ?? ''} disabled={isBusy} onChange={event => onSelectVersion?.(event.target.value)}>{remoteVersions.map((file, index) => <option key={file.id} value={file.id}>{index === 0 ? '最新' : `第 ${index + 1} 份`} · {formatTime(file.appProperties?.backedUpAt ?? file.modifiedTime ?? file.createdTime)}</option>)}</select></label>}
-    <p className="workspace-google-drive-message">保留最新 {WORKSPACE_BACKUP_RETAINED_VERSIONS} 份備份；新備份成功後，超出的舊檔移到 Google Drive 垃圾桶。還原會先載入預覽，再選擇合併或取代本機資料。</p>
+    {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div></dl>}
+    {remoteVersions.length > 1 && <label className="workspace-form-field">備份版本<select aria-label="選擇備份版本" value={remoteFile?.id ?? ''} disabled={isBusy} onChange={event => onSelectVersion?.(event.target.value)}>{remoteVersions.map((file, index) => <option key={file.id} value={file.id}>{index === 0 ? '最新' : `歷史 ${index + 1}`} · {formatTime(file.appProperties?.backedUpAt ?? file.modifiedTime ?? file.createdTime)}</option>)}</select></label>}
     <div className="workspace-google-drive-actions">
       {showConnect ? <ActionButton onClick={onConnect} disabled={isBusy || status === 'offline'} variant="primary"><WorkspaceIcon name="external" size={18} />連結 Google Drive</ActionButton> : primaryAction}
       {canUseDrive && remoteFile && remoteConflict && <ActionButton onClick={onOverwrite} disabled={isBusy} variant="danger"><WorkspaceIcon name="upload" size={18} />以本機資料覆蓋雲端</ActionButton>}
@@ -82,6 +84,6 @@ export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error
       {canUseDrive && remoteFile && !remoteVersions.length && <ActionButton onClick={onFindRemote} disabled={isBusy}>選擇其他備份</ActionButton>}
       {canUseDrive && ((!remoteFile && status === 'saved') || (remoteFile && !remoteConflict)) && <ActionButton onClick={onBackup} disabled={isBusy}><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>}
     </div>
-    {authorized && <button type="button" className="workspace-google-drive-disconnect" onClick={onDisconnect} disabled={isBusy}>主動解除授權</button>}
+    {authorized && <button type="button" className="workspace-google-drive-disconnect" onClick={onDisconnect} disabled={isBusy}>解除連結</button>}
   </WorkspaceModal>;
 };
