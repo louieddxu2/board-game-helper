@@ -45,20 +45,21 @@ describe('formula settings and conversions', () => {
     expect(screen.queryByRole('button', { name: '1' })).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
     fireEvent.change(text, { target: { value: '[價格] * 2' } });
-    await user.click(screen.getByRole('button', { name: '儲存' }));
+    await user.click(screen.getByRole('button', { name: '關閉' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: { version: 1, expression: '[價格] * 2', variables: { 價格: { columnId: 'price' } } } }));
   });
 
-  it('cancels a draft and blocks invalid syntax without saving', async () => {
-    const table = fixture(), onSave = vi.fn(), onCancel = vi.fn();
-    render(<ColumnConfig column={table.columns[2]} sourceColumns={table.columns} onSave={onSave} onCancel={onCancel} />);
+  it('blocks invalid syntax on close without saving and accepts a corrected formula', async () => {
+    const table = fixture(), onSave = vi.fn();
+    render(<ColumnConfig column={table.columns[2]} sourceColumns={table.columns} onSave={onSave} />);
     fireEvent.change(screen.getByRole('textbox', { name: '計算公式' }), { target: { value: '[未知] + 1' } });
-    fireEvent.click(screen.getByRole('button', { name: '儲存' }));
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未定義變數'));
     expect(onSave).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    expect(onCancel).toHaveBeenCalledOnce();
     expect(table.columns[2].formula?.expression).toBe('[價格] ÷ [次數]');
+    fireEvent.change(screen.getByRole('textbox', { name: '計算公式' }), { target: { value: '[價格] + 1' } });
+    fireEvent.click(screen.getByRole('button', { name: '關閉' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: expect.objectContaining({ expression: '[價格] + 1' }) })));
   });
 
   it('changes a formula without touching rows, while a saved conversion preserves results and supports undo', () => {

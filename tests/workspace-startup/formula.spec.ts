@@ -30,6 +30,8 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.getByRole('columnheader', { name: '平均', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await expect(dialog).toBeFocused();
+  await expect(dialog.getByRole('button', { name: '取消', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toHaveCount(0);
   await dialog.getByRole('button', { name: '自動計算', exact: true }).click();
   const input = dialog.getByRole('textbox', { name: '計算公式' });
   await dialog.getByRole('button', { name: '插入變數 價格' }).tap();
@@ -47,7 +49,7 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.screenshot({ path: info.outputPath('formula-mobile.png') });
   const box = await dialog.boundingBox();
   expect(box!.width).toBeLessThanOrEqual(390);
-  await dialog.getByRole('button', { name: '儲存', exact: true }).tap();
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   const calculated = page.locator('[data-cell-id="row-0:column-2"]');
   await expect(calculated).toHaveText('200');
@@ -69,26 +71,31 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   expect(errors).toEqual([]);
 });
 
-test('cancel leaves formulas intact; dependent source deletion is blocked; stopping calculation keeps results', async ({ page }) => {
+test('browser Back leaves formulas intact; dependent source deletion is blocked; closing saves fixed results', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
   await dialog.getByRole('button', { name: '自動計算', exact: true }).tap();
   await dialog.getByRole('textbox', { name: '計算公式' }).fill('[價格] / [次數]');
-  await dialog.getByRole('button', { name: '儲存', exact: true }).tap();
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   const value = page.locator('[data-cell-id="row-0:column-2"]');
   await expect(value).toHaveText('200');
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
+  await dialog.getByRole('textbox', { name: '計算公式' }).fill('[價格] +');
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
+  await expect(dialog.getByRole('alert')).toContainText('需要數字');
+  await expect(value).toHaveText('200');
   await dialog.getByRole('textbox', { name: '計算公式' }).fill('999');
-  await dialog.getByRole('button', { name: '取消', exact: true }).tap();
+  await page.goBack();
+  await expect(dialog).toHaveCount(0);
   await expect(value).toHaveText('200');
   await page.getByRole('columnheader', { name: '價格', exact: true }).tap();
   await dialog.getByRole('button', { name: '刪除屬性', exact: true }).tap();
   await expect(dialog).toBeVisible();
   await expect(page.getByRole('dialog', { name: '刪除屬性', exact: true })).toHaveCount(0);
-  await dialog.getByRole('button', { name: '取消', exact: true }).tap();
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
   await dialog.getByRole('button', { name: '手動輸入', exact: true }).tap();
-  await dialog.getByRole('button', { name: '儲存', exact: true }).tap();
+  await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await expect(value).toHaveText('200');
   await expect(value).toHaveAttribute('aria-readonly', 'false');
   await page.reload();

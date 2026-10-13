@@ -192,7 +192,7 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   </div>;
 };
 
-export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, previewRow, onSave, onDelete, onCancel }: { column: WorkspaceColumn; suggestedOptions?: string[]; sourceColumns?: readonly WorkspaceColumn[]; previewRow?: WorkspaceRow; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void; onCancel?(): void }) => {
+export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, previewRow, onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; sourceColumns?: readonly WorkspaceColumn[]; previewRow?: WorkspaceRow; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
   const [automatic, setAutomatic] = useState(Boolean(column.formula));
   const [formula, setFormula] = useState(column.formula ?? emptyWorkspaceFormula());
@@ -277,6 +277,5 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
           </div>
         </div>
     </fieldset>
-    <div className="workspace-dialog-actions">{onCancel && <button type="button" className="workspace-dialog-button secondary" disabled={saving} onClick={onCancel}>取消</button>}<button type="button" className="workspace-dialog-button primary" disabled={saving} onClick={save}>儲存</button></div>
   </WorkspaceModal>;
 };
