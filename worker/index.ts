@@ -9,7 +9,7 @@ import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
 import { cleanupAttributeActivityFeed } from './data/attributes';
 import { cleanupAttributeCatalogDeltas } from './data/catalogRetention';
-import { runCompleteAttributeReplay } from './workflows/attributeReplay';
+import { runWeeklyAttributeRebuild } from './workflows/attributeWeeklyRebuild';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -160,11 +160,11 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   // never recalculates vote scores or rewrites a browser snapshot.
   await flushCatalogOutbox(db, controller.scheduledTime);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
-    // Game-list snapshots and attribute replay are intentionally separate:
+    // Game-list snapshots and attribute refresh are intentionally separate:
     // the game snapshot writes only when its own catalog version changed.
     await rebuildGameCatalog(db, controller.scheduledTime);
-    await runCompleteAttributeReplay(db, controller.scheduledTime);
-    // Replay suppresses its own per-state outbox notifications. This second
+    await runWeeklyAttributeRebuild(db, controller.scheduledTime);
+    // A full replay suppresses its own per-state outbox notifications. This second
     // pass publishes only a real mutation that raced with the replay.
     await flushCatalogOutbox(db, controller.scheduledTime);
   }

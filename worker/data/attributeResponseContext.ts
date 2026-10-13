@@ -52,12 +52,12 @@ export const responseContextAndStates = async (db: Database, input: AttributeRes
       ssa.rating_deviation AS state_a_rating_deviation, ssa.direct_sum AS state_a_direct_sum,
       ssa.direct_count AS state_a_direct_count, ssa.comparison_count AS state_a_comparison_count,
       ssa.decisive_comparison_count AS state_a_decisive_comparison_count,
-      ssa.evidence_count AS state_a_evidence_count,
+      ssa.evidence_count AS state_a_evidence_count, ssa.updated_at AS state_a_updated_at,
       ssb.subject_id AS state_b_subject_id, ssb.score AS state_b_score,
       ssb.rating_deviation AS state_b_rating_deviation, ssb.direct_sum AS state_b_direct_sum,
       ssb.direct_count AS state_b_direct_count, ssb.comparison_count AS state_b_comparison_count,
       ssb.decisive_comparison_count AS state_b_decisive_comparison_count,
-      ssb.evidence_count AS state_b_evidence_count
+      ssb.evidence_count AS state_b_evidence_count, ssb.updated_at AS state_b_updated_at
     FROM attributes a
     JOIN attribute_translations t ON t.attribute_id = a.id AND t.locale = 'zh-TW'
     JOIN attribute_subjects sa ON sa.id = ?

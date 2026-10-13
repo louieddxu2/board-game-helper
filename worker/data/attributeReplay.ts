@@ -403,7 +403,8 @@ const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectA
   ]);
 };
 
-const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
+/** The caller must hold the global replay lock until its snapshot is published. */
+export const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
     queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
   ]);

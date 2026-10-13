@@ -67,6 +67,11 @@ const saveAttributeResponseLocked = async (
   lock: AttributeWriteLock,
 ): Promise<SavedAttributeResponse> => {
   const { context, states: stateMap } = await responseContextAndStates(db, input);
+  // Replay sorts by timestamp and ID. Equal or older timestamps can make a
+  // live comparison differ from that order; numeric answers already mark
+  // replay pending through the response-insert trigger.
+  const comparisonOutOfOrder = input.comparison != null && input.ratingA == null && input.ratingB == null
+    && Math.max(Number(context.state_a_updated_at ?? 0), Number(context.state_b_updated_at ?? 0)) >= input.timestamp;
   if (input.highPole === 'low' && context.scale_type !== 'bipolar') throw new Error('attribute_question_invalid');
   input = canonicalAttributeAnswer(input);
   let stateA = stateMap.get(input.subjectAId) ?? emptyAttributeState();
@@ -141,8 +146,8 @@ const saveAttributeResponseLocked = async (
   statements.push(db.statement(`
     INSERT INTO attribute_vote_responses
       (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b,
-       comparison, activity_json, actor_id, session_id, created_at, updated_at, question_high_pole)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       comparison, activity_json, actor_id, session_id, created_at, updated_at, question_high_pole, recorded_online)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `).bind(
     input.responseId,
     input.attributeId,
@@ -158,6 +163,11 @@ const saveAttributeResponseLocked = async (
     input.timestamp,
     input.highPole ?? 'high',
   ));
+  if (comparisonOutOfOrder) {
+    statements.push(db.statement(`
+      UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1
+    `));
+  }
   statements.push(releaseAttributeWriteLockStatement(db, lock));
   await db.batch(statements);
 

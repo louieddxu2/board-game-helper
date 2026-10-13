@@ -242,6 +242,7 @@ export interface ResponseContextAndStateRow extends ResponseContextRow {
   state_a_comparison_count: number | null;
   state_a_decisive_comparison_count: number | null;
   state_a_evidence_count: number | null;
+  state_a_updated_at?: number | null;
   state_b_subject_id: string | null;
   state_b_score: number | null;
   state_b_rating_deviation: number | null;
@@ -250,6 +251,7 @@ export interface ResponseContextAndStateRow extends ResponseContextRow {
   state_b_comparison_count: number | null;
   state_b_decisive_comparison_count: number | null;
   state_b_evidence_count: number | null;
+  state_b_updated_at?: number | null;
 }
 
 export interface SubjectPageOptions {
