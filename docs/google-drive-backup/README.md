@@ -4,7 +4,9 @@
 
 動態表格目前應維持「本機資料為主」：IndexedDB 是即時使用的資料來源，Google Drive 只提供備份與還原，不先做多裝置即時同步或自動合併。
 
-本機「匯出全部資料」與 Google Drive 備份共用同一套資料夾式格式，外層以 ZIP 打包；每張表仍是可攜式 `.xlsx`，包含資料頁與獨立設定頁。Google Drive 版本可逐表更新，避免每次備份都重寫一個巨大檔案。
+本機「匯出全部資料」將備份打包成 ZIP；Google Drive 以資料夾保存相同的索引與表格格式。每張表仍是可攜式 `.xlsx`，包含資料頁與獨立設定頁。雲端可逐表更新，再以新索引發布完整可還原版本。
+
+目前保留最新 3 個可還原版本。新備份確認成功後，超出的索引與不再共用的表格檔移到垃圾桶。清理失敗、雲端狀態改變或另一個作業正在進行時會延後，後續成功備份再重試。詳細契約見 [data-contract.md](data-contract.md)，實際還原流程見 [ui-flow.md](ui-flow.md)。
 
 ## 本機下載格式
 
@@ -37,7 +39,7 @@ BoardGameHelper/
       └─ 待辦事項.xlsx
 ```
 
-資料夾和表格檔案都帶有 `appProperties.backupKey`、`backupKind` 與本機穩定 ID。`manifest.xlsx` 是一張可開啟的索引試算表，保存目錄樹、排序、表格與 Drive file ID；每張表格的 `.xlsx` 內含資料頁與獨立設定頁，因此備份內容不使用 JSON 檔。舊有單一 XLSX 備份仍可被尋找並還原；新的備份會使用資料夾格式。
+資料夾和表格檔案都帶有 `appProperties.backupKey`、`backupKind` 與本機穩定 ID。每次發布建立新的 `manifest.xlsx` 索引，保存目錄樹、排序、表格與 Drive file ID；每張表格的 `.xlsx` 內含資料頁與獨立設定頁。未變更的表格可由多份索引共用，因此實體檔案數可能超過 3。備份／還原期間另有暫時的 JSON 作業標記，內容不包含表格資料，完成後清理。舊有單一 XLSX 備份仍可被尋找並還原；新的備份會使用資料夾格式。
 
 ## Google 授權方向
 
@@ -45,12 +47,12 @@ BoardGameHelper/
 
 目前依照 `C:\architecture-kits\kits\google-drive-single-file-backup` 採用瀏覽器端 Google Identity Services token flow：
 
-1. 每次重新開啟網頁後，使用者在 workspace 的目錄彈窗中按下「連結 Google Drive」一次；連結成功後，當次工作階段才會執行自動備份。
+1. 使用者開啟 Google Drive 備份彈窗時，若當次工作階段尚未授權，啟動 GIS 授權；必要時也可按「連結 Google Drive」重試。連結成功且啟用自動備份後，當次工作階段才會執行自動備份。
 2. 前端以獨立的 Google Drive OAuth Web Client ID，向 Google 申請 `drive.file` access token；網站登入使用的 Client ID 不會被替換。
 3. access token 僅保存在當次頁面工作階段的記憶體，不寫入 localStorage、IndexedDB、URL 或 Worker。
 4. 前端直接呼叫 Drive v3，建立／更新標記過的資料夾、XLSX 表格檔與 manifest 試算表。
 
-這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權只在使用者主動按下連結按鈕時發生。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；每個新工作階段都需要按一次連結按鈕，但 GIS 會沿用既有同意紀錄，不應每次強制 `prompt=consent`。連結後若 token 在同一工作階段內過期，由 token provider 再向 GIS 取得新 token。
+這和現有 Google 登入保持分離：網站登入只驗證使用者身分，Drive 授權由使用者開啟備份或點按連結觸發。兩者各自使用不同的 Client ID、Token 與 scope。重新整理頁面後不保留 token；新工作階段需要重新授權，但 GIS 會沿用既有同意紀錄，不應每次強制 `prompt=consent`。連結後若 token 在同一工作階段內過期，由 token provider 再向 GIS 取得新 token。
 
 若未來需要無人值守的排程備份、多裝置背景同步，才另行評估 authorization code flow、refresh token 加密保存與 Worker 端 API；那會是不同的安全與資料責任範圍，不屬於目前第一版。
 
@@ -82,7 +84,7 @@ BoardGameHelper/
        更新目錄資料夾 → 更新有變更的表格 XLSX → 更新 manifest 試算表
 ```
 
-還原則反向執行，但在真正覆蓋本機資料前，必須先經過自訂衝突確認介面。第一版不做單格合併：選擇「保留本機」、「使用雲端」或「取消」。
+還原先選取保留版本、下載並驗證，再進入既有「匯入整個資料庫」預覽。使用者選擇「合併」或「取代」才改寫本機資料，取消則保留原狀。合併以表格為單位，不做單格合併。
 
 本機下載／匯入則是：
 

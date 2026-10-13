@@ -1,3 +1,4 @@
+import { WORKSPACE_BACKUP_RETAINED_VERSIONS } from './backupRetention';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData } from '../types';
@@ -96,6 +97,8 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const [error, setError] = useState('');
   const [progress, setProgress] = useState<WorkspaceBackupProgress>();
   const [remoteFile, setRemoteFile] = useState<DriveFile | null>(null);
+  const [remoteVersions, setRemoteVersions] = useState<DriveFile[]>([]);
+  const remoteSource = useRef<'folder' | 'legacy'>('folder');
   const [remoteConflict, setRemoteConflict] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [authorized, setAuthorized] = useState(false);
@@ -153,6 +156,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         tokenProvider: authRef.current,
         folderPath: WORKSPACE_BACKUP_FOLDER_PATH,
         backupKey: FOLDER_BACKUP_KEY,
+        retainedVersions: WORKSPACE_BACKUP_RETAINED_VERSIONS,
         appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
       });
     }
@@ -180,7 +184,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     try {
       const { auth, backup: service, legacyBackup } = await ensureBackup();
       await auth.signIn();
-      const file = await service.findRemoteFile() ?? await legacyBackup.findRemoteFile();
+      const folderFile = await service.findRemoteFile();
+      const file = folderFile ?? await legacyBackup.findRemoteFile();
+      remoteSource.current = folderFile ? 'folder' : 'legacy';
+      setRemoteVersions([]);
       const conflict = !remoteMatchesRecord(file);
       setAuthorized(auth.isAuthorized);
       setManuallyDisconnected(false);
@@ -219,6 +226,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         setProgress({ phase: 'checking-remote' });
         const currentRemote = await service.findRemoteFile();
         if (!folderRemoteMatchesRecord(currentRemote)) {
+          remoteSource.current = 'folder'; setRemoteVersions([]);
           setRemoteFile(currentRemote);
           setRemoteConflict(true);
           setError('雲端備份已在其他裝置變更，請先載入雲端版本或明確選擇覆蓋');
@@ -275,13 +283,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       };
       setAuthorized(true);
       setRemoteConflict(false); setRemoteFile(null);
-      setRecord(nextRecord); saveRecord(nextRecord); setMessage(automatic ? '已自動備份變更' : '已備份整個資料庫'); setNotice('已備份到 Google Drive');
+      setRecord(nextRecord); saveRecord(nextRecord); setRemoteVersions([]); setMessage(receipt.cleanupWarning ?? (automatic ? '已自動備份變更' : '已備份整個資料庫')); setNotice('已備份到 Google Drive');
       setAutoRetryAt(0);
       return true;
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'WorkspaceStorageConflictError') onStorageConflict?.();
       const conflictFile = cause && typeof cause === 'object' && 'remoteFile' in cause ? (cause as RemoteBackupConflictError).remoteFile : undefined;
-      if (conflictFile !== undefined) { setRemoteFile(conflictFile); setRemoteConflict(true); }
+      if (conflictFile !== undefined) { remoteSource.current = 'folder'; setRemoteVersions([]); setRemoteFile(conflictFile); setRemoteConflict(true); }
       setAuthorized(authRef.current?.isAuthorized ?? false);
       setError(cause instanceof Error && cause.name === 'WorkspaceStorageConflictError'
         ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟'
@@ -297,7 +305,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     setBusy('finding'); setError(''); setMessage('');
     try {
       const { backup: service, legacyBackup } = await ensureBackup();
-      const file = await service.findRemoteFile() ?? await legacyBackup.findRemoteFile();
+      const versions = await service.listRemoteBackups();
+      const file = versions[0] ?? await legacyBackup.findRemoteFile();
+      remoteSource.current = versions.length ? 'folder' : 'legacy';
+      setRemoteVersions(versions);
       setAuthorized(authRef.current?.isAuthorized ?? true);
       if (!file) { setRemoteFile(null); setError('找不到雲端備份檔'); return; }
       setRemoteFile(file); setRemoteConflict(!remoteMatchesRecord(file)); setMessage('已找到雲端備份，請確認後還原');
@@ -313,21 +324,22 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     setBusy('restoring'); setError(''); setMessage('');
     try {
       const { backup: service, legacyBackup } = await ensureBackup();
-      const remoteFolderFile = await service.findRemoteFile();
+      const selected = remoteFile;
+      const remoteFolderFile = selected && remoteSource.current === 'folder' ? selected : selected ? null : await service.findRemoteFile();
       const restoredData = remoteFolderFile
-        ? await service.restore()
-        : await legacyBackup.restore().then(async (blob) => {
+        ? await service.restore(remoteFolderFile)
+        : await legacyBackup.restore(selected ?? undefined).then(async (blob) => {
           const imported = await importWorkspaceXlsx(blob);
           if (!imported.data) throw new Error('雲端檔案不是完整的 Workspace 備份');
           return imported.data;
         });
       setAuthorized(authRef.current?.isAuthorized ?? true);
-      setRemoteConflict(false); setDialogOpen(false); setRemoteFile(null); onRestored(restoredData); setNotice('已載入雲端備份，請選擇合併或取代');
+      setRemoteConflict(false); setDialogOpen(false); setRemoteFile(null); setRemoteVersions([]); onRestored(restoredData); setNotice('已載入雲端備份，請選擇合併或取代');
     } catch (cause) {
       setAuthorized(authRef.current?.isAuthorized ?? false);
       setError(cause instanceof Error ? cause.message : 'Google Drive 還原失敗');
     } finally { setBusy(null); }
-  }, [ensureBackup, manuallyDisconnected, onRestored, online, setNotice]);
+  }, [ensureBackup, manuallyDisconnected, onRestored, online, remoteFile, setNotice]);
 
   const disconnect = useCallback(async () => {
     if (!authRef.current) {
@@ -391,6 +403,8 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     message,
     error,
     remoteFile,
+    remoteVersions,
+    selectRemoteVersion: (fileId: string) => { const file = remoteVersions.find(item => item.id === fileId); if (file) setRemoteFile(file); },
     remoteConflict,
     authorized,
     record,

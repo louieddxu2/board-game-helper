@@ -27,7 +27,7 @@ interface WorkspaceDriveBackupRecord {
 
 `dirty` 狀態比較表格的 `changeRevision` 與結構的 `structureRevision`，不掃描儲存格、不計算內容指紋。一般提交、復原／重做與匯入會為變更的表格產生新標記；資料夾、目前表格及底部導覽列變更則更新結構標記。修改後再復原仍視為待備份變更。`updatedAt` 保留時間用途，IndexedDB 的 `storageRevision` 保留跨分頁衝突檢查用途。
 
-舊資料未包含標記時，暫以既有更新時間作為相容標記；第一次本機修改會開始保存新的修訂標記。舊備份紀錄與 manifest 的指紋欄位會被忽略，新紀錄不再寫入。表格 XLSX、Workspace XLSX 與 ZIP 保存選用修訂欄位，格式版本維持 v1。
+舊資料未包含標記時，暫以既有更新時間作為相容標記；第一次本機修改會開始保存新的修訂標記。舊備份紀錄與 manifest 的指紋欄位會被忽略，新紀錄不再寫入。XLSX 與 ZIP 保存選用修訂欄位；索引與一般表格維持 v1，包含自動計算公式的表格設定頁使用 v2。
 
 手動完整備份重新上傳全部表格；自動備份上傳到期的變更表格，每張表格仍最多 30 分鐘一次。未選中的表格沿用已發布的檔案識別，最後上傳新的 manifest 發布備份。若 manifest 上傳失敗，先前發布的備份仍可還原。雲端檔案版本與分支衝突檢查獨立於修訂標記。
 
@@ -51,7 +51,23 @@ interface WorkspaceDriveBackupRecord {
 }
 ```
 
-表格檔使用 `backupKind=table`、`localId=表格 ID`，資料夾使用 `backupKind=folder`、`localId=資料夾 ID`。移動時更新 parent，重新命名時更新 name；刪除時只會將先前由本 App 標記的對應項目移到垃圾桶。
+表格檔使用 `backupKind=table`、`localId=表格 ID`，資料夾使用 `backupKind=folder`、`localId=資料夾 ID`。資料夾可更新 parent 與 name；表格與索引採新檔發布，避免中斷時破壞已完成的版本。索引的 `parentManifestIds` 保存前一版本 ID，供版本排序與分支衝突檢查使用。
+
+## 保留與清理
+
+Workspace 設定保留最新 3 個可還原版本。這是 3 份索引及其需要的所有表格檔，並非最多 3 個實體檔案。版本優先依發布 ancestry 排序；舊索引缺少 ancestry 時，才以備份時間補足。
+
+確認新索引已成為唯一最新版本後，讀取保留的索引、收集共用表格 ID。先把超出的舊索引移到垃圾桶，再清理沒有被保留版本引用的表格，包括中斷上傳留下的孤立檔案。共用表格仍保留。清理只讀檔案 metadata 與最多 3 份小型索引，不下載表格內容，也不額外載入本機所有列。
+
+清理只處理對應 backupKey、位於該備份根目錄或其 App 標記子資料夾的檔案。不刪除其他根目錄、未標記檔案、舊版單一 XLSX，也不移除空資料夾，以免影響使用者自行加入的內容。檔案只移到 Google Drive 垃圾桶，不永久刪除。
+
+備份與還原在讀取索引前，先建立 `backupKind=operation` 的暫時作業標記。完成後移到垃圾桶；殘留標記於 1 小時後到期。時間以 Drive 回應或建立時間校準，避免裝置時鐘偏差。發布索引與完成還原前確認作業仍有效，失效作業必須重新執行。
+
+每次清理前重新檢查版本與作業狀態。若有分支、新版本、保留索引已變更或另一個有效作業，就延後清理；清理失敗也不撤銷已完成的新備份。UI 顯示警告，後續成功備份再重試，所以異常期間可能暫時多於 3 個版本。升級後第一次成功備份才會開始整理既有歷史檔案。
+
+## 還原驗證
+
+使用者選定索引後，還原必須使用該 ID，不重新挑選最新版本。若所選索引已不存在或修改時間改變，要求重新選擇。索引的表格節點、表格引用與 XLSX 內的表格 ID 必須對應，所有表格驗證成功後才交給既有匯入預覽。由使用者選擇合併、取代或取消，下載不直接改寫本機資料。
 
 ## 本機 ZIP 匯出
 
@@ -65,7 +81,7 @@ BoardGameHelper-動態表格備份.zip
    └─ 其他表格.xlsx
 ```
 
-`manifest.xlsx` 與每張表格的 XLSX 都沿用同一套 v1 試算表格式；本機 ZIP 的 manifest 會保留本機 ID 與階層，但不寫入 Google Drive file ID。整個資料庫匯入支援這種 ZIP，也保留單一 Workspace `.xlsx` 的相容讀取路徑。
+`manifest.xlsx` 使用 v1 索引格式；表格 XLSX 依是否包含自動計算使用 v1 或 v2 設定頁。本機 ZIP 的 manifest 保留本機 ID 與階層，不寫入 Google Drive file ID。整個資料庫匯入支援這種 ZIP，也保留單一 Workspace `.xlsx` 的相容讀取路徑。
 
 ## 目前程式分層
 
@@ -76,6 +92,9 @@ src/workspace/googleDriveBackup/
   googleDriveApi.ts                # Drive v3 查找、資料夾與 multipart 上傳／下載
   singleFileBackup.ts              # 舊版單一 XLSX 備份的相容還原 facade
   folderBackup.ts                  # manifest 試算表 + 目錄資料夾 + 逐表 XLSX 備份／還原
+  manifestHistory.ts               # 版本 ancestry、分支與保留版本選取
+  backupOperation.ts               # 有期限的作業標記與有效性檢查
+  backupRetention.ts               # 保留索引、共用表格保護與垃圾桶清理
   useWorkspaceGoogleDriveBackup.ts # folder manifest 備份、舊 XLSX 相容還原與預覽整合
   GoogleDriveBackupDialog.tsx      # 目錄入口開啟的自訂彈窗
 
@@ -91,4 +110,4 @@ Google Drive 備份不新增 Worker route 或 refresh token table；Google clien
 - 雲端 manifest 與表格檔各自明確標記 format 與 version。
 - 新版資料夾備份會驗證 manifest 試算表和每張表格 XLSX；每張表格沿用現有設定頁格式，還原仍經過 `importWorkspaceXlsx()`。
 - 未來格式升級時，解析器先判斷版本，再明確拒絕未知格式或執行受測試覆蓋的 migration。
-- checksum 只用來判斷是否有差異，不取代格式版本，也不作為安全驗證。
+- 是否需要備份使用修訂標記；格式與表格 ID 驗證不依賴內容指紋。

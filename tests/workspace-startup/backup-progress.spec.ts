@@ -1,59 +1,30 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
+import { createInMemoryDrive, type StoredDriveFile } from '../../src/workspace/googleDriveBackup/backupTestFixture';
+import { connectFakeDrive } from './driveSupport';
 import { closeServer, seed, startServer } from './startupSupport';
 
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
 test.afterAll(async () => closeServer(site.server));
 
-interface FakeDriveFile { id: string; name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> }
 const setup = async (page: Page) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(() => {
-    (window as any).google = { accounts: { oauth2: {
-      initTokenClient: () => {
-        const client = { callback: (_response: unknown) => undefined, requestAccessToken: () => client.callback({ access_token: 'test-token', expires_in: 3600 }) };
-        return client;
-      },
-      revoke: (_token: string, done: () => void) => done(),
-    } } };
-  });
-  await page.route('**/api/session', route => route.fulfill({ json: { user: null, googleDriveClientId: 'test-client' } }));
-  const files = new Map<string, FakeDriveFile>();
-  let nextId = 0;
-  let heldTable: { route: Route; file: FakeDriveFile } | undefined;
-  let heldConfirmation: { route: Route; files: FakeDriveFile[] } | undefined;
+  let heldTable: { file: StoredDriveFile; resolve(): void; reject(error: Error): void } | undefined;
+  let heldConfirmation: { finish(missing: boolean): void } | undefined;
   let manifestUploaded = false;
-  const json = (route: Route, value: unknown, status = 200) => route.fulfill({ status, json: value, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS' } });
-  await page.route('https://www.googleapis.com/**', async route => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (request.method() === 'OPTIONS') { await json(route, {}); return; }
-    if (url.pathname.startsWith('/upload/')) {
-      const metadata = request.postDataBuffer()?.toString().match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{[\s\S]*?\})\r\n--/)?.[1];
-      if (!metadata) throw new Error('Missing upload metadata');
-      const file = { ...JSON.parse(metadata), id: `file-${++nextId}` } as FakeDriveFile;
-      if (file.appProperties?.backupKind === 'table') { heldTable = { route, file }; return; }
-      files.set(file.id, file);
-      manifestUploaded = true;
-      await json(route, file);
-      return;
-    }
-    if (request.method() === 'POST') {
-      const file = { ...request.postDataJSON(), id: `folder-${++nextId}` } as FakeDriveFile;
-      files.set(file.id, file);
-      await json(route, file);
-      return;
-    }
-    const query = url.searchParams.get('q') ?? '';
-    const property = query.match(/key='([^']+)' and value='([^']+)'/);
-    const name = query.match(/name = '([^']+)'/);
-    const parent = query.match(/'([^']+)' in parents/);
-    const found = [...files.values()].filter(file => (!property || file.appProperties?.[property[1]] === property[2]) && (!name || file.name === name[1]) && (!parent || file.parents?.includes(parent[1])));
-    if (manifestUploaded && query.includes('dynamic-sheet-primary-workspace-v2')) { heldConfirmation = { route, files: found }; return; }
-    await json(route, { files: found });
+  const fixture = createInMemoryDrive({
+    onUpload: async file => {
+      if (file.appProperties?.backupKind === 'table') await new Promise<void>((resolve, reject) => { heldTable = { file, resolve, reject }; });
+      if (file.appProperties?.backupKind === 'manifest') manifestUploaded = true;
+    },
+    onList: async (query, files) => {
+      if (!manifestUploaded || !query.includes(' in parents') || !query.includes("key='backupKey'")) return;
+      await new Promise<void>(resolve => { heldConfirmation = { finish(missing) { manifestUploaded = false; if (missing) files.splice(0); resolve(); } }; });
+    },
   });
+  await connectFakeDrive(page, fixture);
   await page.goto(`${site.origin}/privacy`);
   await seed(page, 2, 250, 2, 0);
   const longName = '收藏表格與很長的名稱'.repeat(8);
@@ -80,12 +51,12 @@ const setup = async (page: Page) => {
       if (!heldTable) throw new Error('No held table upload');
       const pending = heldTable;
       heldTable = undefined;
-      if (fail) await json(pending.route, { error: { message: '測試上傳失敗' } }, 500);
-      else { files.set(pending.file.id, pending.file); await json(pending.route, pending.file); }
+      if (fail) pending.reject(new Error('測試上傳失敗'));
+      else pending.resolve();
     },
     async finishConfirmation(missing = false) {
       if (!heldConfirmation) throw new Error('No held remote confirmation');
-      await json(heldConfirmation.route, { files: missing ? [] : heldConfirmation.files });
+      heldConfirmation.finish(missing);
     },
   };
 };

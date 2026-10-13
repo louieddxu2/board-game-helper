@@ -11,8 +11,11 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(async () => 'token'),
   signOut: vi.fn(async () => undefined),
   findRemoteFile: vi.fn(),
+  listRemoteBackups: vi.fn(),
   backup: vi.fn(),
   restore: vi.fn(),
+  legacyFind: vi.fn(),
+  legacyRestore: vi.fn(),
 }));
 
 vi.mock('./index', async () => {
@@ -22,10 +25,11 @@ vi.mock('./index', async () => {
     createGoogleIdentityTokenProvider: vi.fn(() => ({ isAuthorized: true, signIn: mocks.signIn, signOut: mocks.signOut, getAccessToken: vi.fn(async () => 'token') })),
     createGoogleDriveFolderBackup: vi.fn(() => ({
       findRemoteFile: mocks.findRemoteFile,
+      listRemoteBackups: mocks.listRemoteBackups,
       backup: mocks.backup,
       restore: mocks.restore,
     })),
-    createGoogleDriveSingleFileBackup: vi.fn(() => ({ findRemoteFile: vi.fn(async () => null), restore: vi.fn() })),
+    createGoogleDriveSingleFileBackup: vi.fn(() => ({ findRemoteFile: mocks.legacyFind, restore: mocks.legacyRestore })),
   };
 });
 
@@ -64,6 +68,8 @@ beforeEach(() => {
   mocks.signIn.mockResolvedValue('token');
   mocks.signOut.mockResolvedValue(undefined);
   mocks.findRemoteFile.mockResolvedValue(null);
+  mocks.legacyFind.mockResolvedValue(null);
+  mocks.listRemoteBackups.mockImplementation(async () => { const file = await mocks.findRemoteFile(); return file ? [file] : []; });
   mocks.backup.mockImplementation(async (data: WorkspaceData) => {
     const receipt = receiptFor(data);
     mocks.findRemoteFile.mockResolvedValue(receipt.file);
@@ -460,4 +466,59 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 2_000); });
     expect(mocks.backup).not.toHaveBeenCalled();
   });
+});
+
+
+it('loads the chosen historical backup into the import preview instead of a newer remote head', async () => {
+  const data = createData(), onRestored = vi.fn();
+  const newest = { id: 'version-new', name: 'manifest.xlsx', modifiedTime: '2026-08-21T11:00:00Z' };
+  const older = { id: 'version-old', name: 'manifest.xlsx', modifiedTime: '2026-08-21T10:00:00Z' };
+  mocks.listRemoteBackups.mockResolvedValue([newest, older]);
+  mocks.restore.mockResolvedValue(data);
+  const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data, inspectChanges: false, loadGoogleClientId: async () => 'client-id', onRestored, setNotice: vi.fn() }));
+  await act(async () => { await result.current.findRemote(); });
+  act(() => result.current.selectRemoteVersion(older.id));
+  mocks.findRemoteFile.mockResolvedValue({ ...newest, id: 'even-newer' });
+  await act(async () => { await result.current.restore(); });
+  expect(mocks.restore).toHaveBeenCalledExactlyOnceWith(older);
+  expect(onRestored).toHaveBeenCalledExactlyOnceWith(data);
+  expect(result.current.message).not.toContain('已取代');
+});
+
+it('does not treat selecting a historical version as a conflicting remote update', async () => {
+  const data = createData(), receipt = receiptFor(data);
+  const older = { ...receipt.file, id: 'older', modifiedTime: '2026-08-21T09:00:00Z' };
+  const { result } = renderBackup(data);
+  await act(async () => { await result.current.backup(); });
+  mocks.listRemoteBackups.mockResolvedValue([receipt.file, older]);
+  await act(async () => { await result.current.findRemote(); });
+  expect(result.current.remoteConflict).toBe(false);
+  act(() => result.current.selectRemoteVersion(older.id));
+  expect(result.current.remoteFile).toEqual(older);
+  expect(result.current.remoteConflict).toBe(false);
+});
+
+it('keeps a selected legacy backup in the legacy restore flow even when a newer folder backup appears', async () => {
+  const data = createData(), onRestored = vi.fn();
+  const legacy = { id: 'legacy-file', name: 'old.xlsx', modifiedTime: '2026-08-21T10:00:00Z' };
+  mocks.listRemoteBackups.mockResolvedValue([]);
+  mocks.legacyFind.mockResolvedValue(legacy);
+  mocks.legacyRestore.mockRejectedValue(new Error('所選備份已有變更'));
+  const { result } = renderHook(() => useWorkspaceGoogleDriveBackup({ data, inspectChanges: false, loadGoogleClientId: async () => 'client-id', onRestored, setNotice: vi.fn() }));
+  await act(async () => { await result.current.findRemote(); });
+  mocks.findRemoteFile.mockResolvedValue({ id: 'new-folder-backup', name: 'manifest.xlsx' });
+  await act(async () => { await result.current.restore(); });
+  expect(mocks.legacyRestore).toHaveBeenCalledExactlyOnceWith(legacy);
+  expect(mocks.restore).not.toHaveBeenCalled();
+  expect(onRestored).not.toHaveBeenCalled();
+  expect(result.current.error).toBe('所選備份已有變更');
+});
+
+it('records a completed backup while preserving its cleanup warning for the user', async () => {
+  const data = createData();
+  mocks.backup.mockResolvedValue({ ...receiptFor(data), cleanupWarning: '備份已完成，但舊版本清理失敗' });
+  const { result } = renderBackup(data);
+  await act(async () => { await result.current.backup(); });
+  expect(result.current.record.fileId).toBe('manifest-new');
+  expect(result.current.message).toContain('清理失敗');
 });

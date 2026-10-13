@@ -18,7 +18,7 @@ export interface GoogleDriveSingleFileBackup {
   ensureFolder(): Promise<string>;
   findRemoteFile(): Promise<DriveFile | null>;
   backup(body: DriveBody, metadata?: BackupMetadata): Promise<BackupReceipt>;
-  restore(): Promise<Blob>;
+  restore(selected?: DriveFile): Promise<Blob>;
 }
 
 export const createGoogleDriveSingleFileBackup = (options: SingleFileBackupOptions): GoogleDriveSingleFileBackup => {
@@ -60,9 +60,10 @@ export const createGoogleDriveSingleFileBackup = (options: SingleFileBackupOptio
       if (!backupPromise) backupPromise = performBackup(body, metadata).finally(() => { backupPromise = null; });
       return backupPromise;
     },
-    async restore() {
+    async restore(selected) {
       const file = await findRemoteFile();
       if (!file) throw new BackupNotFoundError(options.backupKey);
+      if (selected && (selected.id !== file.id || (selected.modifiedTime && selected.modifiedTime !== file.modifiedTime))) throw new Error('所選備份已有變更，請重新尋找後再還原');
       return api.downloadBlob(file.id);
     },
   };

@@ -1,3 +1,7 @@
+import { cleanDriveBackupHistory } from './backupRetention';
+import { withDriveBackupOperation } from './backupOperation';
+import { findDriveManifestHeads, retainedDriveManifests, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY } from './manifestHistory';
+export { findDriveManifestHeads, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY } from './manifestHistory';
 import { normalizeWorkspace } from '../model';
 import { workspaceTableChangeRevision } from '../changeRevisions';
 import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx, type WorkspaceBackupFolderRef, type WorkspaceBackupTableFileRef } from '../spreadsheet';
@@ -16,8 +20,6 @@ export const DRIVE_LOCAL_ID_PROPERTY = 'localId';
 export const DRIVE_MANIFEST_KIND = 'manifest';
 export const DRIVE_FOLDER_KIND = 'folder';
 export const DRIVE_TABLE_KIND = 'table';
-export const DRIVE_PARENT_MANIFEST_IDS_PROPERTY = 'parentManifestIds';
-export const DRIVE_BACKUP_FORK_COUNT_PROPERTY = 'backupForkCount';
 export const DRIVE_XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export interface DriveWorkspaceFolderRef {
@@ -56,13 +58,15 @@ export interface FolderBackupOptions extends GoogleDriveApiOptions {
   folderPath: readonly string[];
   backupKey: string;
   appProperties?: Record<string, string>;
+  retainedVersions?: number;
 }
 
 export interface GoogleDriveFolderBackup {
   ensureFolder(): Promise<string>;
   findRemoteFile(): Promise<DriveFile | null>;
-  backup(data: WorkspaceData, metadata?: BackupMetadata, runOptions?: FolderBackupRunOptions): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }>;
-  restore(): Promise<WorkspaceData>;
+  backup(data: WorkspaceData, metadata?: BackupMetadata, runOptions?: FolderBackupRunOptions): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest; cleanupWarning?: string }>;
+  listRemoteBackups(): Promise<DriveFile[]>;
+  restore(selected?: DriveFile): Promise<WorkspaceData>;
 }
 
 export interface FolderBackupRunOptions {
@@ -95,40 +99,13 @@ const folderDepth = (node: WorkspaceNode, nodes: Map<string, WorkspaceNode>, vis
   return folderDepth(parent, nodes, visiting) + 1;
 };
 
-const sortManifestFiles = (files: DriveFile[]) => [...files].sort((left, right) => {
-  const backedUpDifference = Number(right.appProperties?.backedUpAt ?? 0) - Number(left.appProperties?.backedUpAt ?? 0);
-  if (backedUpDifference) return backedUpDifference;
-  return String(right.modifiedTime ?? right.createdTime ?? '').localeCompare(String(left.modifiedTime ?? left.createdTime ?? ''));
-});
-
-const manifestParentIds = (file: DriveFile): string[] => {
-  const serialized = file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY];
-  if (serialized === undefined) return [];
-  try {
-    const parsed: unknown = JSON.parse(serialized);
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
-  } catch {
-    return [];
-  }
-};
-
-export const findDriveManifestHeads = (files: DriveFile[]): DriveFile[] => {
-  const sorted = sortManifestFiles(files);
-  const versioned = sorted.filter((file) => file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY] !== undefined);
-  if (versioned.length === 0) return sorted.slice(0, 1);
-  const referencedIds = new Set(versioned.flatMap(manifestParentIds));
-  const heads = versioned.filter((file) => !referencedIds.has(file.id));
-  const latestLegacy = sorted.find((file) => file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY] === undefined);
-  if (latestLegacy && !referencedIds.has(latestLegacy.id)) heads.push(latestLegacy);
-  return sortManifestFiles(heads);
-};
-
 export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): GoogleDriveFolderBackup => {
   if (!options.backupKey.trim()) throw new Error('backupKey 不可為空白');
+  if (options.retainedVersions !== undefined && (!Number.isInteger(options.retainedVersions) || options.retainedVersions < 1)) throw new Error('備份保留數量必須是正整數');
   const api = new GoogleDriveApi(options);
   let rootId: string | null = null;
   let rootPromise: Promise<string> | null = null;
-  let backupPromise: Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }> | null = null;
+  let backupPromise: Promise<BackupReceipt & { manifest: DriveWorkspaceManifest; cleanupWarning?: string }> | null = null;
 
   const ensureFolder = async () => {
     if (rootId) return rootId;
@@ -157,7 +134,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const selected = heads[0]
       ? { ...heads[0], appProperties: { ...heads[0].appProperties, [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(heads.length) } }
       : null;
-    return { heads, selected };
+    return { files, heads, selected };
   };
   const findRemoteFile = async () => (await findRemoteState()).selected;
 
@@ -189,7 +166,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     return { id: table.id, name: table.name, updatedAt: table.updatedAt, changeRevision: workspaceTableChangeRevision(table), driveFileId: file.id, fileName };
   };
 
-  const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}, runOptions: FolderBackupRunOptions = {}): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest }> => {
+  const performBackup = async (data: WorkspaceData, metadata: BackupMetadata = {}, runOptions: FolderBackupRunOptions = {}, operation?: { id: string; verify(): void; verifyRemote(): Promise<void> }): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest; cleanupWarning?: string }> => {
     const tableNodes = data.nodes.filter(node => node.type === 'table' && node.tableId);
     let completedTables = 0;
     const report = (phase: WorkspaceBackupPhase, name?: string) => runOptions.onProgress?.({ phase, name, completedTables, totalTables: tableNodes.length });
@@ -231,6 +208,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const selectedTableIds = new Set(runOptions.tableIds ?? tables.map((table) => table.id));
     for (const node of tableNodes) {
       if (!node.tableId) continue;
+      operation?.verify();
       const table = tables.find((item) => item.id === node.tableId);
       if (!table) throw new Error(`找不到表格資料：${node.name}`);
       const parentNode = parentOf(node, nodeMap);
@@ -267,34 +245,63 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
     report('saving-index');
     await runOptions.source?.verify();
+    operation?.verify();
+    await operation?.verifyRemote();
+    const beforeCommit = await findRemoteState();
+    if (beforeCommit.heads.length !== remoteState.heads.length || beforeCommit.heads.some(file => !remoteState.heads.some(prior => prior.id === file.id && prior.modifiedTime === file.modifiedTime))) throw new RemoteBackupConflictError(beforeCommit.selected);
     const file = await api.uploadFile({ parentId: root, name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_XLSX_MIME_TYPE, body: exportWorkspaceBackupManifestXlsx(data, manifestFolderRefs, manifestTableRefs, sourceUpdatedAt), appProperties });
     report('confirming');
     const committedState = await findRemoteState();
     if (committedState.heads.length > 1 || (committedState.selected && committedState.selected.id !== file.id)) throw new RemoteBackupConflictError(committedState.selected);
     if (!committedState.selected) throw new Error('備份檔已上傳，但無法確認雲端備份，請稍後尋找雲端備份');
-    return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest };
+    let cleanupWarning: string | undefined;
+    if (options.retainedVersions && operation) {
+      report('cleaning-history');
+      try { cleanupWarning = await cleanDriveBackupHistory({ api, root, backupKey: options.backupKey, headId: file.id, limit: options.retainedVersions, operationId: operation.id, verify: operation.verify }); }
+      catch (error) { cleanupWarning = `備份已完成，但舊版本清理失敗：${error instanceof Error ? error.message : '請稍後重試'}`; }
+    }
+    return { file, backupKey: options.backupKey, parentId: root, sourceUpdatedAt: metadata.sourceUpdatedAt, manifest, ...(cleanupWarning ? { cleanupWarning } : {}) };
   };
 
+  const listRemoteBackups = async () => {
+    const state = await findRemoteState();
+    if (!state.selected) return [];
+    return retainedDriveManifests(state.files, state.selected.id, options.retainedVersions ?? 3).map(file => file.id === state.selected!.id ? state.selected! : file);
+  };
+  const restore = async (selected?: DriveFile, verify: () => void = () => undefined, verifyRemote: () => Promise<void> = async () => undefined) => {
+    const state = await findRemoteState();
+    const manifestFile = selected ? state.files.find(file => file.id === selected.id) : state.selected;
+    if (!manifestFile) throw new BackupNotFoundError(options.backupKey);
+    if (selected?.modifiedTime && manifestFile.modifiedTime !== selected.modifiedTime) throw new Error('所選備份已有變更，請重新尋找後再還原');
+    const manifest = await importWorkspaceBackupManifestXlsx(await api.downloadBlob(manifestFile.id));
+    const tables: WorkspaceTable[] = [];
+    for (const ref of manifest.tables) {
+      verify();
+      if (!ref.driveFileId || !manifest.nodes.some(node => node.type === 'table' && node.id === ref.nodeId && node.tableId === ref.id)) throw new Error(`雲端備份索引錯誤：${ref.name}`);
+      const imported = await importWorkspaceXlsx(await api.downloadBlob(ref.driveFileId), { preserveIds: true });
+      if (!imported.table || imported.table.id !== ref.id) throw new Error(`雲端表格格式或識別不一致：${ref.name}`);
+      tables.push(imported.table);
+    }
+    if (manifest.nodes.some(node => node.type === 'table' && !manifest.tables.some(ref => ref.id === node.tableId && ref.nodeId === node.id))) throw new Error('雲端備份索引缺少表格');
+    verify();
+    await verifyRemote();
+    return normalizeWorkspace({ version: 1, structureRevision: manifest.structureRevision, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds });
+  };
   return {
-    ensureFolder,
-    findRemoteFile,
+    ensureFolder, findRemoteFile, listRemoteBackups,
     backup(data, metadata, runOptions) {
-      const currentBackup = backupPromise ?? performBackup(data, metadata, runOptions).finally(() => { backupPromise = null; });
+      const run = async () => {
+        if (!options.retainedVersions) return performBackup(data, metadata, runOptions);
+        const result = await withDriveBackupOperation(api, await ensureFolder(), options.backupKey, (verify, id, verifyRemote) => performBackup(data, metadata, runOptions, { verify, id, verifyRemote }));
+        return { ...result.value, cleanupWarning: result.value.cleanupWarning ?? result.warning };
+      };
+      const currentBackup = backupPromise ?? run().finally(() => { backupPromise = null; });
       backupPromise = currentBackup;
       return currentBackup;
     },
-    async restore() {
-      const manifestFile = await findRemoteFile();
-      if (!manifestFile) throw new BackupNotFoundError(options.backupKey);
-      const manifest = await importWorkspaceBackupManifestXlsx(await api.downloadBlob(manifestFile.id));
-      const refs = manifest.tables;
-      const tables: WorkspaceTable[] = [];
-      for (const ref of refs) {
-        const imported = await importWorkspaceXlsx(await api.downloadBlob(ref.driveFileId), { preserveIds: true });
-        if (!imported.table) throw new Error(`雲端表格格式錯誤：${ref.name}`);
-        tables.push(imported.table);
-      }
-      return normalizeWorkspace({ version: 1, structureRevision: manifest.structureRevision, nodes: manifest.nodes as WorkspaceNode[], tables, activeNodeId: manifest.activeNodeId, bottomNavigationTableIds: manifest.bottomNavigationTableIds });
+    async restore(selected) {
+      if (!options.retainedVersions) return restore(selected);
+      return (await withDriveBackupOperation(api, await ensureFolder(), options.backupKey, (verify, _id, verifyRemote) => restore(selected, verify, verifyRemote))).value;
     },
   };
 };

@@ -1,5 +1,5 @@
 export type WorkspaceBackupPhase = 'preparing' | 'checking-remote' | 'reading-directory' | 'preparing-folders'
-  | 'reading-table' | 'creating-file' | 'uploading-table' | 'reusing-table' | 'saving-index' | 'confirming';
+  | 'reading-table' | 'creating-file' | 'uploading-table' | 'reusing-table' | 'saving-index' | 'confirming' | 'cleaning-history';
 
 /** Counts describe processed tables, including remote files reused by automatic backup. */
 export interface WorkspaceBackupProgress {
@@ -19,6 +19,7 @@ const phaseLabels: Record<WorkspaceBackupPhase, string> = {
   'reusing-table': '沿用已有備份',
   'saving-index': '正在完成備份',
   confirming: '正在確認雲端備份',
+  'cleaning-history': '正在清理舊備份',
 };
 export const workspaceBackupProgressLabel = (progress: WorkspaceBackupProgress) => `${phaseLabels[progress.phase]}${progress.name ? `：${progress.name}` : '…'}`;
 export const workspaceBackupProgressCount = (progress: WorkspaceBackupProgress) => progress.totalTables === undefined ? '' : `已處理 ${progress.completedTables ?? 0} / ${progress.totalTables} 張表格`;

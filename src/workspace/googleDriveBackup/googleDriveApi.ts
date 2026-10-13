@@ -33,6 +33,12 @@ export class GoogleDriveApi {
   private readonly fetchImpl: FetchLike;
   private readonly driveBaseUrl: string;
   private readonly uploadBaseUrl: string;
+  private serverClock?: { epoch: number; observedAt: number };
+  serverNow() { return this.serverClock ? this.serverClock.epoch + performance.now() - this.serverClock.observedAt : Date.now(); }
+  observeCreatedTime(value?: string) {
+    const epoch = Date.parse(value ?? '');
+    if (!this.serverClock && Number.isFinite(epoch)) this.serverClock = { epoch, observedAt: performance.now() };
+  }
 
   constructor(options: GoogleDriveApiOptions) {
     this.tokenProvider = options.tokenProvider;
@@ -78,7 +84,10 @@ export class GoogleDriveApi {
   private async fetchAuthorized(url: string, init: RequestInit = {}, tokenOptions: { forceRefresh?: boolean } = {}) {
     const headers = await this.authorizationHeaders(tokenOptions);
     new Headers(init.headers).forEach((value, key) => headers.set(key, value));
-    return this.fetchImpl(url, { ...init, headers });
+    const response = await this.fetchImpl(url, { ...init, headers });
+    const serverDate = Date.parse(response.headers?.get('date') ?? '');
+    if (Number.isFinite(serverDate)) this.serverClock = { epoch: serverDate, observedAt: performance.now() };
+    return response;
   }
 
   async listFiles(options: { query: string; fields?: string; pageSize?: number }): Promise<DriveFile[]> {

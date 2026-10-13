@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { WorkspaceIcon, WorkspaceModal } from '../workspaceShared';
 import type { DriveFile } from './types';
+import { WORKSPACE_BACKUP_RETAINED_VERSIONS } from './backupRetention';
 import type { WorkspaceDriveBackupRecord, WorkspaceDriveBackupStatus } from './useWorkspaceGoogleDriveBackup';
 import { workspaceBackupProgressCount, workspaceBackupProgressLabel, workspaceBackupProgressValue, type WorkspaceBackupProgress } from './backupProgress';
 
@@ -8,7 +9,7 @@ type BusyState = 'connecting' | 'backing-up' | 'finding' | 'restoring' | null;
 
 const formatTime = (value: number | string | null | undefined) => {
   if (!value) return '—';
-  const date = typeof value === 'number' ? new Date(value) : new Date(value);
+  const date = new Date(typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-TW', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
@@ -31,6 +32,8 @@ export interface GoogleDriveBackupDialogProps {
   error: string;
   record: WorkspaceDriveBackupRecord;
   remoteFile: DriveFile | null;
+  remoteVersions?: DriveFile[];
+  onSelectVersion?(fileId: string): void;
   remoteConflict: boolean;
   authorized: boolean;
   onClose(): void;
@@ -46,16 +49,16 @@ const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { 
   <button type="button" className={`workspace-dialog-button ${variant}`} onClick={onClick} disabled={disabled}>{children}</button>
 );
 
-export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error, record, remoteFile, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
+export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error, record, remoteFile, remoteVersions = [], onSelectVersion, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
   const isBusy = Boolean(busy);
   const backupProgress = busy === 'backing-up' ? progress : undefined;
   const canUseDrive = authorized && status !== 'offline' && status !== 'disconnected';
   const showConnect = !authorized || status === 'disconnected';
   const primaryAction = remoteFile
-    ? <ActionButton onClick={onRestore} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="check" size={18} />使用此備份</ActionButton>
+    ? <ActionButton onClick={onRestore} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="check" size={18} />還原此備份</ActionButton>
     : status === 'dirty' || status === 'never'
       ? <ActionButton onClick={onBackup} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>
-      : <ActionButton onClick={onFindRemote} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="download" size={18} />尋找雲端備份</ActionButton>;
+      : <ActionButton onClick={onFindRemote} disabled={isBusy || !canUseDrive} variant="primary"><WorkspaceIcon name="download" size={18} />選擇備份還原</ActionButton>;
   return <WorkspaceModal owner="google-drive" title="Google Drive 備份" onRequestClose={onClose} className="workspace-google-drive-dialog">
     <div className="workspace-google-drive-status">
       <WorkspaceIcon name="download" size={22} />
@@ -70,10 +73,13 @@ export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error
     {error && <p className="workspace-google-drive-error" role="alert">{error}</p>}
     {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div><div><dt>雲端結構</dt><dd>{record.folderCount} 個資料夾 · {record.tableCount} 張表格</dd></div></dl>}
     {remoteFile && <dl className="workspace-google-drive-meta workspace-google-drive-remote"><div><dt>雲端備份</dt><dd>已找到</dd></div><div><dt>雲端修改</dt><dd>{formatTime(remoteFile.modifiedTime)}</dd></div></dl>}
+    {remoteVersions.length > 1 && <label className="workspace-form-field">備份版本<select aria-label="選擇備份版本" value={remoteFile?.id ?? ''} disabled={isBusy} onChange={event => onSelectVersion?.(event.target.value)}>{remoteVersions.map((file, index) => <option key={file.id} value={file.id}>{index === 0 ? '最新' : `第 ${index + 1} 份`} · {formatTime(file.appProperties?.backedUpAt ?? file.modifiedTime ?? file.createdTime)}</option>)}</select></label>}
+    <p className="workspace-google-drive-message">保留最新 {WORKSPACE_BACKUP_RETAINED_VERSIONS} 份備份；新備份成功後，超出的舊檔移到 Google Drive 垃圾桶。還原會先載入預覽，再選擇合併或取代本機資料。</p>
     <div className="workspace-google-drive-actions">
       {showConnect ? <ActionButton onClick={onConnect} disabled={isBusy || status === 'offline'} variant="primary"><WorkspaceIcon name="external" size={18} />連結 Google Drive</ActionButton> : primaryAction}
       {canUseDrive && remoteFile && remoteConflict && <ActionButton onClick={onOverwrite} disabled={isBusy} variant="danger"><WorkspaceIcon name="upload" size={18} />以本機資料覆蓋雲端</ActionButton>}
-      {canUseDrive && !remoteFile && status !== 'saved' && <ActionButton onClick={onFindRemote} disabled={isBusy}><WorkspaceIcon name="download" size={18} />尋找雲端備份</ActionButton>}
+      {canUseDrive && !remoteFile && status !== 'saved' && <ActionButton onClick={onFindRemote} disabled={isBusy}><WorkspaceIcon name="download" size={18} />選擇備份還原</ActionButton>}
+      {canUseDrive && remoteFile && !remoteVersions.length && <ActionButton onClick={onFindRemote} disabled={isBusy}>選擇其他備份</ActionButton>}
       {canUseDrive && ((!remoteFile && status === 'saved') || (remoteFile && !remoteConflict)) && <ActionButton onClick={onBackup} disabled={isBusy}><WorkspaceIcon name="upload" size={18} />立即備份</ActionButton>}
     </div>
     {authorized && <button type="button" className="workspace-google-drive-disconnect" onClick={onDisconnect} disabled={isBusy}>主動解除授權</button>}
