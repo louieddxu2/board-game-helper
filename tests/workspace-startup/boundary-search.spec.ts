@@ -37,13 +37,13 @@ const setup = async (page: Page, atBottom = true, useClock = true) => {
     await touchAt('touchEnd', x, y, id);
     await wait(16);
   };
-  const fling = async (x: number, y: number) => {
+  const fling = async (x: number, y: number, distance = 120, steps = 6, interval = 20) => {
     await touchAt('touchStart', x, y);
-    for (let step = 1; step <= 6; step++) {
-      await wait(20);
-      await touchAt('touchMove', x, y - step * 20);
+    for (let step = 1; step <= steps; step++) {
+      await wait(interval);
+      await touchAt('touchMove', x, y - distance * step / steps);
     }
-    await touchAt('touchEnd', x, y - 120);
+    await touchAt('touchEnd', x, y - distance);
     return Date.now();
   };
   const motionStopped = () => viewport.evaluate(element => new Promise<{ top: number; max: number }>(resolve => {
@@ -181,3 +181,43 @@ test('accepts a fresh tap after an interior fling has naturally finished', async
   expect(gesture.errors).toEqual([]);
   await gesture.client.detach();
 });
+
+for (const delay of [250, 1200]) {
+  test(`stops writing past the native bottom and accepts the first tap ${delay} ms after a fling reaches it`, async ({ page }) => {
+    const gesture = await setup(page, false, false);
+    await gesture.viewport.evaluate(element => { element.scrollTop = element.scrollHeight - element.clientHeight - 1000; });
+    await expect(page.getByText('項目 220', { exact: true })).toBeInViewport();
+    const writes = await gesture.viewport.evaluateHandle(element => {
+      const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      if (!descriptor?.get || !descriptor.set) throw new Error('Missing native scrollTop descriptor');
+      const writes: { requested: number; before: number; actual: number }[] = [];
+      Object.defineProperty(element, 'scrollTop', {
+        configurable: true,
+        get() { return descriptor.get!.call(this); },
+        set(requested: number) {
+          const before = descriptor.get!.call(this);
+          descriptor.set!.call(this, requested);
+          writes.push({ requested, before, actual: descriptor.get!.call(this) });
+        },
+      });
+      return writes;
+    });
+    const source = await gesture.cellPoint();
+    await gesture.fling(source.x, source.y, 240, 4, 16);
+    await expect.poll(() => gesture.viewport.evaluate(element => (
+      element.scrollHeight - element.clientHeight - element.scrollTop
+    ))).toBeLessThanOrEqual(1);
+    await gesture.wait(delay);
+    expect(await writes.evaluate(entries => entries.filter(entry => (
+      Math.abs(entry.requested - entry.actual) > 1 && entry.before === entry.actual
+    )).length)).toBeLessThanOrEqual(1);
+    await expect(gesture.table).not.toHaveClass(/is-bouncing/);
+    await expect(gesture.editor).toHaveCount(0);
+    const target = await gesture.cellPoint();
+    await gesture.tap(target.x, target.y);
+    await expect(gesture.editor).toBeVisible();
+    expect(gesture.errors).toEqual([]);
+    await writes.dispose();
+    await gesture.client.detach();
+  });
+}

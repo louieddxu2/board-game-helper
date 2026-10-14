@@ -5,6 +5,7 @@ const MAX_VELOCITY = MAX_TABLE_MOMENTUM_VELOCITY;
 const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous swipe
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
+const SCROLL_ROUNDING_TOLERANCE_PX = 1;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
 const BOUNCE_SETTLE_DURATION_MS = 200;
 export const TABLE_BOUNCE_LIMIT = 30;
@@ -181,6 +182,12 @@ export function useMomentumScroll() {
     const bounds = cachedBounds ?? getTableContentScrollBounds(viewport, table);
     let previousTimestamp: number | undefined;
 
+    const finishCoast = () => {
+      activeVelocity.current = { vx: 0, vy: 0 };
+      coastingFrame.current = undefined;
+      if (!table?.classList.contains('is-bounce-settling')) resetTableTransform(table);
+    };
+
     const coast = (timestamp: number) => {
       const elapsed = previousTimestamp === undefined
         ? FRAME_INTERVAL_MS
@@ -198,9 +205,7 @@ export function useMomentumScroll() {
       if (atBoundaryY) vy = 0;
 
       if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
-        activeVelocity.current = { vx: 0, vy: 0 };
-        coastingFrame.current = undefined;
-        if (!table?.classList.contains('is-bounce-settling')) resetTableTransform(table);
+        finishCoast();
         return;
       }
 
@@ -212,6 +217,15 @@ export function useMomentumScroll() {
       if (clampedScrollTop !== nextScrollTop) vy = 0;
       viewport.scrollLeft = clampedScrollLeft;
       viewport.scrollTop = clampedScrollTop;
+      // Virtual row measurements can shrink the native range after bounds were
+      // cached. Respect the position the browser accepted instead of repeatedly
+      // trying to scroll past an edge that is already visible.
+      if (Math.abs(viewport.scrollLeft - clampedScrollLeft) > SCROLL_ROUNDING_TOLERANCE_PX) vx = 0;
+      if (Math.abs(viewport.scrollTop - clampedScrollTop) > SCROLL_ROUNDING_TOLERANCE_PX) vy = 0;
+      if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
+        finishCoast();
+        return;
+      }
       const frameRatio = elapsed / FRAME_INTERVAL_MS;
       vx *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
       vy *= Math.pow(MOMENTUM_DECAY_PER_FRAME, frameRatio);
