@@ -56,14 +56,14 @@ describe('formula settings and conversions', () => {
     fireEvent.change(text, { target: { value: '[未知] + 1' } });
     expect(text).toHaveAttribute('aria-invalid', 'true');
     const describedBy = text.getAttribute('aria-describedby')!.split(' ');
-    expect(describedBy).toContain('workspace-formula-help');
-    expect(describedBy.some(id => id !== 'workspace-formula-help' && document.getElementById(id)?.textContent?.includes('未定義變數'))).toBe(true);
+    expect(describedBy.some(id => document.getElementById(id)?.textContent?.includes('未定義變數'))).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('未定義變數'));
     expect(onSave).not.toHaveBeenCalled();
     expect(table.columns[2].formula?.expression).toBe('[價格] ÷ [次數]');
     fireEvent.change(text, { target: { value: '[價格] + 1' } });
     await waitFor(() => expect(text).toHaveAttribute('aria-invalid', 'false'));
+    expect(text).not.toHaveAttribute('aria-describedby');
     expect(screen.getByRole('status')).toHaveTextContent('預覽（甲）：1201');
     fireEvent.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: expect.objectContaining({ expression: '[價格] + 1' }) })));
