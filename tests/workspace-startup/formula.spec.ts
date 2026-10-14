@@ -30,6 +30,18 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.getByRole('columnheader', { name: '平均', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await expect(dialog).toBeFocused();
+  const subtypeBoxes = await dialog.locator('.workspace-input-subtype-options > div > button').evaluateAll(buttons => buttons.map(button => {
+    const box = button.getBoundingClientRect(); return { top: box.top, left: box.left, right: box.right };
+  }));
+  expect(subtypeBoxes).toHaveLength(2);
+  expect(Math.abs(subtypeBoxes[0].top - subtypeBoxes[1].top)).toBeLessThanOrEqual(1);
+  expect(subtypeBoxes[0].right).toBeLessThanOrEqual(subtypeBoxes[1].left);
+  await expect(dialog.getByText('數字來源', { exact: true })).toHaveCount(0);
+  const sourceHeight = await dialog.getByRole('group', { name: '數字來源', exact: true }).evaluate(group => ({
+    group: group.getBoundingClientRect().height,
+    button: Math.max(...Array.from(group.querySelectorAll('button'), button => button.getBoundingClientRect().height)),
+  }));
+  expect(sourceHeight.group).toBeLessThanOrEqual(sourceHeight.button + 2);
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toHaveCount(0);
   await dialog.getByRole('button', { name: '自動計算', exact: true }).click();
@@ -82,6 +94,15 @@ test('mobile formula validation stays live, treats blank division as empty, and 
   await expect(formulaInput).toHaveAttribute('aria-invalid', 'true');
   await expect(dialog.locator('.workspace-formula-editor .form-error')).toContainText('需要');
   await expect(dialog.locator('.workspace-formula-editor .form-error')).toBeInViewport();
+  const errorLine = await dialog.locator('.workspace-formula-editor .form-error').evaluate(element => ({
+    height: element.getBoundingClientRect().height,
+    whiteSpace: getComputedStyle(element).whiteSpace,
+    fullText: element.textContent,
+    title: element.getAttribute('title'),
+  }));
+  expect(errorLine.height).toBeLessThanOrEqual(28);
+  expect(errorLine.whiteSpace).toBe('nowrap');
+  expect(errorLine.title).toBe(errorLine.fullText);
   await page.screenshot({ path: info.outputPath('formula-invalid-mobile.png') });
 
   await formulaInput.fill('[價格] / [次數]');

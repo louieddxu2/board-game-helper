@@ -210,8 +210,8 @@
 .workspace-column-dialog .workspace-form-field,
 .workspace-column-dialog .workspace-multiple-toggle,
 .workspace-column-dialog .workspace-line-limit-toggle { color: var(--muted); }
-.workspace-column-dialog .workspace-input-subtype-options { display: grid; gap: 6px; margin-bottom: 18px; }
-.workspace-column-dialog .workspace-input-subtype-options > div { display: grid; gap: 6px; }
+.workspace-column-dialog .workspace-input-subtype-options { display: grid; gap: 4px; margin-bottom: 10px; }
+.workspace-column-dialog .workspace-input-subtype-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .workspace-column-dialog .workspace-multiple-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
 .workspace-column-dialog input[type="checkbox"] { accent-color: var(--green); }
 .workspace-column-dialog .workspace-multiple-toggle input { width: 18px; min-height: 18px; }
@@ -247,12 +247,13 @@
 .workspace-column-config select:focus-visible,
 .workspace-column-config button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 .workspace-column-dialog .workspace-dialog-actions { border-top: 1px solid var(--line); background: var(--paper); padding: 10px 14px; }
+.workspace-column-dialog .workspace-formula-source-field { gap: 0; margin: 0; }
 .workspace-column-dialog .workspace-formula-source-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .workspace-column-dialog .workspace-formula-source-options button { min-height: 44px; }
-.workspace-formula-editor { display: grid; gap: 10px; margin: 12px 0 20px; }
+.workspace-column-dialog .workspace-formula-editor { display: grid; gap: 6px; margin: 6px 0 14px; }
 .workspace-formula-editor textarea { width: 100%; min-height: 96px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 16px; line-height: 1.5; }
 .workspace-formula-editor p { margin: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; color: var(--muted); }
-.workspace-formula-editor .form-error { color: var(--orange); }
+.workspace-column-dialog .form-error { display: block; margin: 0; max-width: 100%; overflow: hidden; padding: 2px 6px; color: var(--orange); line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-formula-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .workspace-formula-buttons button { min-height: 44px; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); color: var(--green); font-size: 18px; cursor: pointer; overflow-wrap: anywhere; }
 .workspace-formula-buttons button:hover { border-color: var(--green); background: var(--paper); }
