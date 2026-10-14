@@ -171,21 +171,6 @@ export const useWorkspacePage = () => {
     }).catch(reportReadError);
   }, [commit, hydrateWorkspace, reportReadError]);
 
-  const {
-    textScale, panning, tableReorderVisual, consumeSuppressedTableClick,
-    applyTextScale,
-    beginTableReorder, moveTableReorder, endTableReorder,
-    beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: toggleBulkCell, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen, ensureTableReady: activeWindow ? () => readiness.ensure('active') : undefined, onReadError: reportReadError, onPersistTextScale: persistWindowTextScale });
-
-  const stableBeginTableReorder = useStableCallback(beginTableReorder);
-  const stableMoveTableReorder = useStableCallback(moveTableReorder);
-  const stableEndTableReorder = useStableCallback(endTableReorder);
-  const stableBeginTablePan = useStableCallback(beginTablePan);
-  const stableMoveTablePan = useStableCallback(moveTablePan);
-  const stableEndTablePan = useStableCallback(endTablePan);
-  const stableApplyTextScale = useStableCallback(applyTextScale);
-
   const rawActions = useWorkspaceActions({
     data, dataRef, table, rowHeader, commit, getDynamicOptions, setNotice, setExpanded, setDrawerOpen,
     setTableActionsOpen, onExported: markExported, dialogs,
@@ -245,6 +230,27 @@ export const useWorkspacePage = () => {
     }
     toggleBulkCell(row.id, column.id);
   }, [bulkSelection, stableOpenCell, toggleBulkCell]);
+
+  const handleDataCellTap = useCallback((rowId: string, columnId: string) => {
+    const row = table && getWorkspaceRow(table.rows, rowId);
+    const column = table?.columns.find(column => column.id === columnId);
+    if (row && column) handleDataCellClick(row, column);
+  }, [table, handleDataCellClick]);
+
+  const {
+    textScale, panning, tableReorderVisual, consumeSuppressedTableClick,
+    applyTextScale,
+    beginTableReorder, moveTableReorder, endTableReorder,
+    beginTablePan, moveTablePan, endTablePan,
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: handleDataCellTap, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen, ensureTableReady: activeWindow ? () => readiness.ensure('active') : undefined, onReadError: reportReadError, onPersistTextScale: persistWindowTextScale });
+
+  const stableBeginTableReorder = useStableCallback(beginTableReorder);
+  const stableMoveTableReorder = useStableCallback(moveTableReorder);
+  const stableEndTableReorder = useStableCallback(endTableReorder);
+  const stableBeginTablePan = useStableCallback(beginTablePan);
+  const stableMoveTablePan = useStableCallback(moveTablePan);
+  const stableEndTablePan = useStableCallback(endTablePan);
+  const stableApplyTextScale = useStableCallback(applyTextScale);
 
   const { handleWorkspacePaste, pasteTarget, pasteTargetLabel, pasteMatrix } = useWorkspaceClipboard({
     table, rowHeader, dataRef, setNotice, commit, readiness, dialogs,

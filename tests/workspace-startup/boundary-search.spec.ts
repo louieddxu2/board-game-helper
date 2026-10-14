@@ -65,7 +65,7 @@ const setup = async (page: Page, atBottom = true, useClock = true) => {
       for (const cell of cells) {
         const box = cell.getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
         if (y < viewportBox.top + viewportBox.height / 2 || y > viewportBox.bottom - 80) continue;
-        if (document.elementFromPoint(x, y)?.closest('td') === cell) return { x, y };
+        if (document.elementFromPoint(x, y)?.closest('td') === cell) return { x, y, value: cell.textContent ?? '' };
       }
       return null;
     });
@@ -182,7 +182,7 @@ test('accepts a fresh tap after an interior fling has naturally finished', async
   await gesture.client.detach();
 });
 
-for (const delay of [250, 1200]) {
+for (const delay of [0, 250, 1200]) {
   test(`stops writing past the native bottom and accepts the first tap ${delay} ms after a fling reaches it`, async ({ page }) => {
     const gesture = await setup(page, false, false);
     await gesture.viewport.evaluate(element => { element.scrollTop = element.scrollHeight - element.clientHeight - 1000; });
@@ -216,8 +216,27 @@ for (const delay of [250, 1200]) {
     const target = await gesture.cellPoint();
     await gesture.tap(target.x, target.y);
     await expect(gesture.editor).toBeVisible();
+    await expect(gesture.editor.getByRole('textbox')).toHaveValue(target.value);
     expect(gesture.errors).toEqual([]);
     await writes.dispose();
+    await gesture.client.detach();
+  });
+}
+
+for (const delay of [0, 100]) {
+  test(`opens the cell touched during bottom rebound after ${delay} ms without a second tap`, async ({ page }) => {
+    const gesture = await setup(page, true, false);
+    const source = await gesture.cellPoint();
+    await gesture.fling(source.x, source.y);
+    await expect(gesture.table).toHaveClass(/is-bounce-settling/);
+    await gesture.wait(delay);
+    await expect(gesture.editor).toHaveCount(0);
+    const target = await gesture.cellPoint();
+    await gesture.tap(target.x, target.y);
+    await expect(gesture.editor).toBeVisible();
+    await expect(gesture.editor.getByRole('textbox')).toHaveValue(target.value);
+    await expect(gesture.search).toHaveCount(0);
+    expect(gesture.errors).toEqual([]);
     await gesture.client.detach();
   });
 }

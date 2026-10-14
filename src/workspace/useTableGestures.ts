@@ -28,6 +28,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const ignoreNextTableClick = useRef(false);
   const ignoredTouchClickAt = useRef<{ x: number; y: number } | undefined>(undefined);
   const ignoreNextTableClickTimer = useRef<number | undefined>(undefined);
+  const handledTouchClickCleanup = useRef<(() => void) | undefined>(undefined);
   const cellHold = useRef<CellHoldSession | undefined>(undefined);
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
@@ -35,6 +36,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const momentumScroll = useMomentumScroll();
   const clearSuppressedTableClick = useCallback(() => {
     if (ignoreNextTableClickTimer.current !== undefined) window.clearTimeout(ignoreNextTableClickTimer.current);
+    handledTouchClickCleanup.current?.();
+    handledTouchClickCleanup.current = undefined;
     ignoreNextTableClick.current = false;
     ignoredTouchClickAt.current = undefined;
     ignoreNextTableClickTimer.current = undefined;
@@ -59,6 +62,26 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     ignoreNextTableClick.current = true;
     ignoredTouchClickAt.current = touchPoint;
     ignoreNextTableClickTimer.current = window.setTimeout(clearSuppressedTableClick, duration);
+  };
+
+  const suppressHandledTouchClick = (x: number, y: number) => {
+    suppressNextTableClick(500, { x, y });
+    // Opening the editor on pointerup can retarget the compatibility click to
+    // its backdrop. Catch only this tap's click, even outside the viewport.
+    const consumeClick = (click: MouseEvent) => {
+      const pointerType = (click as MouseEvent & { pointerType?: string }).pointerType;
+      if (click.detail === 0 || (pointerType && pointerType !== 'touch')
+        || Math.hypot(click.clientX - x, click.clientY - y) > 12) return;
+      click.preventDefault();
+      click.stopImmediatePropagation();
+      clearSuppressedTableClick();
+    };
+    document.addEventListener('click', consumeClick, true);
+    document.addEventListener('pointerdown', clearSuppressedTableClick, true);
+    handledTouchClickCleanup.current = () => {
+      document.removeEventListener('click', consumeClick, true);
+      document.removeEventListener('pointerdown', clearSuppressedTableClick, true);
+    };
   };
 
   const consumeSuppressedTableClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -139,7 +162,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     } else if (pointers.current.size > 0) {
       drawerSwipe.current = undefined;
     }
-    if (pointers.current.size === 0 && onCellLongPress) {
+    if (pointers.current.size === 0 && (onCellLongPress || onCellTap)) {
       const cell = (event.target as Element).closest<HTMLTableCellElement>('td[data-bulk-row-id][data-bulk-column-id]');
       const rowId = cell?.dataset.bulkRowId;
       const columnId = cell?.dataset.bulkColumnId;
@@ -153,11 +176,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
           directionX: event.clientX, directionY: event.clientY,
           active: immediate, canSweep: immediate, startedInLane,
           immediate, blockTap: bulkTouch && !immediate,
+          canTap: event.pointerType === 'touch' && Boolean(onCellTap)
+            && !(event.target as Element).closest('a, button, input, textarea, select, [contenteditable]:not([contenteditable="false"])'),
           mode: 'pending',
         };
-        if (!bulkTouch) {
+        if (!bulkTouch && onCellLongPress) {
           const owner = table?.id;
           hold.timer = window.setTimeout(() => {
+            hold.canTap = false;
             const activate = () => {
               if (cellHold.current !== hold || latest.current.tableId !== owner) return;
               hold.active = true;
@@ -175,8 +201,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
         }
         cellHold.current = hold;
       }
-    } else if (cellHold.current?.timer) {
-      window.clearTimeout(cellHold.current.timer);
+    } else if (cellHold.current) {
+      if (cellHold.current.timer) window.clearTimeout(cellHold.current.timer);
       cellHold.current = undefined;
     }
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -392,6 +418,10 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       }
     }
     const hold = cellHold.current;
+    const tap = hold?.pointerId === event.pointerId && hold.canTap && !hold.active && !hold.blockTap
+      && !pointerMoved.current && pointers.current.size === 1 && event.type === 'pointerup'
+      && hold.cell.isConnected && Math.hypot(event.clientX - hold.startX, event.clientY - hold.startY) <= 10
+      ? hold : undefined;
     if (hold?.pointerId === event.pointerId) {
       if (hold.timer) window.clearTimeout(hold.timer);
       cellHold.current = undefined;
@@ -443,6 +473,11 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panAxis.current = undefined;
       if (moved) {
         suppressNextTableClick(event.pointerType === 'touch' ? 500 : 0, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
+      } else if (tap && onCellTap) {
+        // A validated touch tap must not depend on the browser emitting a click
+        // after an edge fling. Consume that click if it does arrive afterwards.
+        suppressHandledTouchClick(event.clientX, event.clientY);
+        onCellTap(tap.lastRowId, tap.columnId);
       }
       if (event.pointerType === 'touch') {
         pendingScaleSave.current = latest.current.tableId ? { tableId: latest.current.tableId, scale: textScaleRef.current } : undefined;

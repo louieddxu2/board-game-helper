@@ -19,6 +19,7 @@ export type CellHoldSession = {
   startedInLane: boolean;
   immediate: boolean;
   blockTap: boolean;
+  canTap: boolean;
   mode: 'pending' | 'selecting';
 };
 
