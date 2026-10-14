@@ -28,7 +28,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const ignoreNextTableClick = useRef(false);
   const ignoredTouchClickAt = useRef<{ x: number; y: number } | undefined>(undefined);
   const ignoreNextTableClickTimer = useRef<number | undefined>(undefined);
-  const touchTapAfterPan = useRef<{ pointerId: number; target: HTMLElement; x: number; y: number } | undefined>(undefined);
   const cellHold = useRef<CellHoldSession | undefined>(undefined);
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
@@ -46,7 +45,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     cellHold.current = undefined; boundarySearchHold.current = undefined;
     pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined; drawerSwipe.current = undefined;
     panMetrics.current = undefined; panAxis.current = undefined;
-    touchTapAfterPan.current = undefined;
     clearSuppressedTableClick();
     momentumScroll.stop(); setPanning(false);
   }, [table?.id, momentumScroll.stop, clearSuppressedTableClick]);
@@ -122,10 +120,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     clearBoundarySearchHold();
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
-    const tapTarget = (event.target as Element).closest<HTMLElement>('button, a[href], [data-cell-id], th[data-column-id]');
-    touchTapAfterPan.current = event.pointerType === 'touch' && pointers.current.size === 0 && ignoreNextTableClick.current && tapTarget
-      ? { pointerId: event.pointerId, target: tapTarget, x: event.clientX, y: event.clientY }
-      : undefined;
     // A new pointer gesture must not inherit the previous release's click guard.
     clearSuppressedTableClick();
     const viewport = event.currentTarget;
@@ -388,8 +382,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
-    const tap = touchTapAfterPan.current;
-    if (tap?.pointerId === event.pointerId) touchTapAfterPan.current = undefined;
     const drawerGesture = drawerSwipe.current;
     if (drawerGesture?.pointerId === event.pointerId) {
       drawerSwipe.current = undefined;
@@ -451,11 +443,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panAxis.current = undefined;
       if (moved) {
         suppressNextTableClick(event.pointerType === 'touch' ? 500 : 0, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
-      } else if (tap?.pointerId === event.pointerId && event.type !== 'pointercancel' && tap.target.isConnected
-        && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) <= 10) {
-        // Complete this new tap even when the browser omits its post-pan click.
-        tap.target.click();
-        suppressNextTableClick(500, { x: event.clientX, y: event.clientY });
       }
       if (event.pointerType === 'touch') {
         pendingScaleSave.current = latest.current.tableId ? { tableId: latest.current.tableId, scale: textScaleRef.current } : undefined;
@@ -468,7 +455,6 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     clearSuppressedTableClick();
-    touchTapAfterPan.current = undefined;
     momentumScroll.stop();
     cellHold.current = undefined;
   }, [momentumScroll.stop, clearSuppressedTableClick]);

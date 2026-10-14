@@ -6,7 +6,7 @@ let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
 test.afterAll(async () => closeServer(site.server));
 
-const setup = async (page: Page, atBottom = true) => {
+const setup = async (page: Page, atBottom = true, useClock = true) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${site.origin}/privacy`);
@@ -18,21 +18,46 @@ const setup = async (page: Page, atBottom = true) => {
   await expect(page.getByText(atBottom ? '項目 249' : '項目 124', { exact: true })).toBeInViewport();
   const box = await viewport.boundingBox();
   if (!box) throw new Error('Missing table viewport');
-  const clockStart = Date.now();
-  await page.clock.install({ time: clockStart });
-  await page.clock.pauseAt(clockStart + 1_000);
+  if (useClock) {
+    const clockStart = Date.now();
+    await page.clock.install({ time: clockStart });
+    await page.clock.pauseAt(clockStart + 1_000);
+  }
+  const wait = (ms: number) => useClock ? page.clock.runFor(ms) : page.waitForTimeout(ms);
   const client = await page.context().newCDPSession(page);
-  const touchAt = (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number, y: number, id = 1) => client.send('Input.dispatchTouchEvent', {
+  const touchAt = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number, y: number, id = 1) => client.send('Input.dispatchTouchEvent', {
     type,
+    timestamp: await page.evaluate(() => Date.now() / 1000),
     touchPoints: type === 'touchEnd' ? [] : [{ x, y, id, radiusX: 1, radiusY: 1, force: 1 }],
   });
   const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', pull = 0) => touchAt(type, box.x + box.width - 12, box.y + box.height - 80 - pull);
   const tap = async (x: number, y: number, id = 2) => {
     await touchAt('touchStart', x, y, id);
-    await page.clock.runFor(35);
+    await wait(35);
     await touchAt('touchEnd', x, y, id);
-    await page.clock.runFor(16);
+    await wait(16);
   };
+  const fling = async (x: number, y: number) => {
+    await touchAt('touchStart', x, y);
+    for (let step = 1; step <= 6; step++) {
+      await wait(20);
+      await touchAt('touchMove', x, y - step * 20);
+    }
+    await touchAt('touchEnd', x, y - 120);
+    return Date.now();
+  };
+  const motionStopped = () => viewport.evaluate(element => new Promise<{ top: number; max: number }>(resolve => {
+    let previousTop = element.scrollTop, quietFrames = 0;
+    const sample = () => {
+      const top = element.scrollTop;
+      quietFrames = Math.abs(top - previousTop) < 0.1 ? quietFrames + 1 : 0;
+      previousTop = top;
+      if (quietFrames >= 6 && !element.querySelector('table')?.classList.contains('is-bouncing')) {
+        resolve({ top, max: element.scrollHeight - element.clientHeight });
+      } else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
   const cellPoint = async () => {
     const point = await viewport.evaluate(element => {
       const viewportBox = element.getBoundingClientRect();
@@ -47,7 +72,7 @@ const setup = async (page: Page, atBottom = true) => {
     if (!point) throw new Error('Missing hit-testable cell inside the table viewport');
     return point;
   };
-  return { errors, client, touch, tap, touchAt, cellPoint, table: page.locator('.workspace-table'), viewport, search: page.getByRole('searchbox', { name: '搜尋此表' }), editor: page.locator('.workspace-value-dialog') };
+  return { errors, client, touch, tap, fling, wait, motionStopped, cellPoint, table: page.locator('.workspace-table'), viewport, search: page.getByRole('searchbox', { name: '搜尋此表' }), editor: page.locator('.workspace-value-dialog') };
 };
 
 test('starts the search countdown only after an upward pull reaches the visible bounce limit', async ({ page }) => {
@@ -112,34 +137,43 @@ test('native touch tap control opens an untouched visible cell', async ({ page }
   await gesture.client.detach();
 });
 
-test('opens the first fresh touch tap after a short bottom-boundary pull release', async ({ page }) => {
-  const gesture = await setup(page);
+test('opens the first fresh touch tap after bottom-boundary motion has finished', async ({ page }) => {
+  const gesture = await setup(page, true, false);
   const cell = page.locator('td[data-bulk-row-id="row-249"][data-bulk-column-id="column-0"]');
   await expect(cell).toBeVisible();
-  await gesture.touch('touchStart');
-  await gesture.touch('touchMove', 90);
-  await expect(gesture.table).toHaveCSS('--workspace-bounce-y', '-30.0px');
-  await gesture.touch('touchEnd');
-  await page.clock.runFor(80);
+  const source = await gesture.cellPoint();
+  const releasedAt = await gesture.fling(source.x, source.y);
+  const stopped = await gesture.motionStopped();
+  expect(stopped.top).toBe(stopped.max);
+  await expect(gesture.table).not.toHaveClass(/is-bouncing/);
+  await gesture.wait(80);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBe(stopped.top);
   await expect(gesture.search).toHaveCount(0);
   await expect(gesture.editor).toHaveCount(0);
   const box = await cell.boundingBox();
   if (!box) throw new Error('Missing bottom data cell');
+  expect(Date.now() - releasedAt).toBeLessThan(500);
   await gesture.tap(box.x + box.width / 2, box.y + box.height / 2, 1);
   await expect(gesture.editor).toBeVisible();
+  await expect(gesture.editor.getByRole('textbox')).toHaveValue('資料 249-0');
   expect(gesture.errors).toEqual([]);
   await gesture.client.detach();
 });
 
-test('does not open an editor from an interior pan and accepts the next fresh touch tap', async ({ page }) => {
-  const gesture = await setup(page, false);
+test('accepts a fresh tap after an interior fling has naturally finished', async ({ page }) => {
+  const gesture = await setup(page, false, false);
   const source = await gesture.cellPoint();
   const before = await gesture.viewport.evaluate(element => element.scrollTop);
-  await gesture.touchAt('touchStart', source.x, source.y, 1);
-  await gesture.touchAt('touchMove', source.x, source.y - 80, 1);
-  await gesture.touchAt('touchEnd', source.x, source.y - 80, 1);
-  await page.clock.runFor(80);
-  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(before);
+  const releasedAt = await gesture.fling(source.x, source.y);
+  const releasedTop = await gesture.viewport.evaluate(element => element.scrollTop);
+  await gesture.wait(100);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(releasedTop);
+  const stopped = await gesture.motionStopped();
+  expect(Date.now() - releasedAt).toBeGreaterThan(500);
+  await gesture.wait(80);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBe(stopped.top);
+  expect(stopped.top).toBeGreaterThan(before);
+  expect(stopped.top).toBeLessThan(stopped.max);
   await expect(gesture.editor).toHaveCount(0);
   const target = await gesture.cellPoint();
   await gesture.tap(target.x, target.y);

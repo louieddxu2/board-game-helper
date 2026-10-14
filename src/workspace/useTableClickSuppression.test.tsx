@@ -10,15 +10,6 @@ afterEach(() => { cleanup(); document.body.replaceChildren(); vi.useRealTimers()
 const setup = (tableId = 'table-0') => {
   const viewport = document.createElement('div');
   const table = document.createElement('table');
-  const body = document.createElement('tbody');
-  const row = document.createElement('tr');
-  const tapTarget = document.createElement('td');
-  tapTarget.dataset.cellId = 'cell-0';
-  const tapClicks = vi.fn();
-  tapTarget.addEventListener('click', tapClicks);
-  row.append(tapTarget);
-  body.append(row);
-  table.append(body);
   viewport.append(table);
   document.body.append(viewport);
   let scrollTop = 120;
@@ -40,10 +31,10 @@ const setup = (tableId = 'table-0') => {
   }), { initialProps: { activeTableId: tableId } });
 
   const pointerEvent = ({
-    pointerType = 'touch', button = 0, pointerId = 1, clientX = 50, clientY = 200, target = viewport, type = 'pointerup',
-  }: { pointerType?: string; button?: number; pointerId?: number; clientX?: number; clientY?: number; target?: Element; type?: string } = {}) => ({
+    pointerType = 'touch', button = 0, pointerId = 1, clientX = 50, clientY = 200,
+  }: { pointerType?: string; button?: number; pointerId?: number; clientX?: number; clientY?: number } = {}) => ({
     pointerType, button, pointerId, clientX, clientY,
-    currentTarget: viewport, target, type, preventDefault: vi.fn(),
+    currentTarget: viewport, target: viewport, type: 'pointerup', preventDefault: vi.fn(),
   }) as unknown as PointerEvent<HTMLDivElement>;
 
   const touchClick = (clientX = 50, clientY = 120) => ({
@@ -58,7 +49,6 @@ const setup = (tableId = 'table-0') => {
   };
 
   const begin = (options: Parameters<typeof pointerEvent>[0] = {}) => act(() => view.result.current.beginTablePan(pointerEvent(options)));
-  const move = (options: Parameters<typeof pointerEvent>[0] = {}) => act(() => view.result.current.moveTablePan(pointerEvent(options)));
   const end = (options: Parameters<typeof pointerEvent>[0] = {}) => act(() => view.result.current.endTablePan(pointerEvent(options)));
   const consumeTouchClick = () => {
     let consumed = false;
@@ -67,7 +57,7 @@ const setup = (tableId = 'table-0') => {
   };
 
   return {
-    drag, begin, move, end, consumeTouchClick, tapTarget, tapClicks,
+    drag, begin, end, consumeTouchClick,
     switchTable: (nextTableId: string) => act(() => view.rerender({ activeTableId: nextTableId })),
     wait: (ms: number) => act(() => vi.advanceTimersByTime(ms)),
   };
@@ -90,41 +80,6 @@ describe('table click suppression', () => {
     gesture.begin({ pointerId: 2, clientY: 120 });
     gesture.end({ pointerId: 2, clientY: 120 });
     expect(gesture.consumeTouchClick()).toBe(false);
-  });
-
-  it('clicks the attached cell once for a fresh touch tap and consumes its compatibility click', () => {
-    const gesture = setup();
-    gesture.drag();
-    gesture.wait(80);
-
-    gesture.begin({ pointerId: 2, target: gesture.tapTarget, clientY: 120 });
-    gesture.end({ pointerId: 2, target: gesture.tapTarget, clientY: 120 });
-
-    expect(gesture.tapClicks).toHaveBeenCalledTimes(1);
-    expect(gesture.consumeTouchClick()).toBe(true);
-    expect(gesture.tapClicks).toHaveBeenCalledTimes(1);
-    expect(gesture.consumeTouchClick()).toBe(false);
-  });
-
-  it('does not activate the saved cell when the fresh gesture is canceled', () => {
-    const gesture = setup();
-    gesture.drag();
-
-    gesture.begin({ pointerId: 2, target: gesture.tapTarget, clientY: 120 });
-    gesture.end({ pointerId: 2, target: gesture.tapTarget, clientY: 120, type: 'pointercancel' });
-
-    expect(gesture.tapClicks).not.toHaveBeenCalled();
-  });
-
-  it('does not activate the saved cell when the fresh gesture moves', () => {
-    const gesture = setup();
-    gesture.drag();
-
-    gesture.begin({ pointerId: 2, target: gesture.tapTarget, clientY: 120 });
-    gesture.move({ pointerId: 2, target: gesture.tapTarget, clientY: 40 });
-    gesture.end({ pointerId: 2, target: gesture.tapTarget, clientY: 40 });
-
-    expect(gesture.tapClicks).not.toHaveBeenCalled();
   });
 
   it('keeps suppression when a non-primary mouse button begins', () => {
