@@ -4,6 +4,8 @@ GPT-6 Astra owns scope, integration, review, commits, and releases. Keep one imp
 
 Classify layout separately from interaction. Use browser evidence only when it answers the question; use the target mobile viewport for mobile geometry or touch work. Honor skipped verification for low-risk reversible work. Keep validation proportional.
 
+涉及滑動、切頁或彈窗的測試，應驗證畫面可操作後的首次原生輸入立即且只生效一次，不以額外等待或重試掩蓋漏點。發生漏點時先追蹤事件傳遞、命中目標與狀態清理，修正時保留滑動、縮放、長按與取消的防誤觸。
+
 # Contracts
 
 - Keep maintained source, styles, tests, and scripts within 600 lines per file. Split by responsibility; data, historical migrations, dependency locks, and generated artifacts retain their formats. Run `npm run check:file-size` to verify.
