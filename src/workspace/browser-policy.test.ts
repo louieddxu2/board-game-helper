@@ -53,13 +53,13 @@ describe('workspace browser policies', () => {
     expect(rowReorderRule).toMatch(/left:\s*0/);
   });
 
-  it('gives the frozen first column a distinct surface color', () => {
+  it('keeps distinct default surfaces beneath custom column backgrounds', () => {
     const styles = readCssSource('src/styles.css');
     const rowHeadingRule = styles.match(/\.workspace-row-heading\s*\{([^}]*)\}/)?.[1];
     const dataCellRule = styles.match(/(?:^|\n)\.workspace-table td\s*\{([^}]*)\}/)?.[1];
 
-    expect(rowHeadingRule).toMatch(/background:\s*var\(--cream\)/);
-    expect(dataCellRule).toMatch(/background:\s*var\(--white\)/);
+    expect(rowHeadingRule).toMatch(/background:\s*var\(--workspace-column-background,\s*var\(--cream\)\)/);
+    expect(dataCellRule).toMatch(/background:\s*var\(--workspace-column-background,\s*var\(--white\)\)/);
   });
 
   it('keeps table cells visually dense without removing their clickable area', () => {
