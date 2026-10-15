@@ -1,5 +1,6 @@
 import type { WorkspaceRow } from '../types';
 import type { CompiledWorkspaceFormula, FormulaNode } from './syntax';
+import { roundWorkspaceFormulaValue } from './rounding';
 
 export interface WorkspaceFormulaResult { value: number | null; error?: string }
 export const evaluateWorkspaceFormula = (plan: CompiledWorkspaceFormula, row: WorkspaceRow): WorkspaceFormulaResult => {
@@ -25,6 +26,9 @@ export const evaluateWorkspaceFormula = (plan: CompiledWorkspaceFormula, row: Wo
     if (!Number.isFinite(value)) throw new Error('計算結果不是有限數字');
     return value;
   };
-  try { return { value: evaluate(plan.node) }; }
+  try {
+    const value = evaluate(plan.node);
+    return { value: value === null ? null : roundWorkspaceFormulaValue(value, plan.decimalPlaces) };
+  }
   catch (error) { return { value: null, error: error instanceof Error ? error.message : '無法計算' }; }
 };

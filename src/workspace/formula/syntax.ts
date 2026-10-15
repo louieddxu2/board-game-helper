@@ -1,9 +1,10 @@
 import type { WorkspaceFormula } from '../types';
+import { MAX_FORMULA_DECIMAL_PLACES } from './rounding';
 
 export type FormulaNode = { kind: 'number'; value: number } | { kind: 'source'; columnId: string }
   | { kind: 'unary'; operator: '+' | '-'; operand: FormulaNode }
   | { kind: 'binary'; operator: '+' | '-' | '*' | '/'; left: FormulaNode; right: FormulaNode };
-export interface CompiledWorkspaceFormula { node: FormulaNode; sources: string[]; variablesUsed: string[] }
+export interface CompiledWorkspaceFormula { node: FormulaNode; sources: string[]; variablesUsed: string[]; decimalPlaces?: number }
 interface Token { kind: 'number' | 'variable' | 'symbol' | 'end'; text: string; position: number }
 const compiled = new WeakMap<WorkspaceFormula, CompiledWorkspaceFormula | Error>();
 const symbols: Record<string, string> = { '×': '*', '÷': '/', '−': '-', '＋': '+', '－': '-', '＊': '*', '／': '/', '（': '(', '）': ')' };
@@ -51,6 +52,7 @@ const tokenize = (expression: string): Token[] => {
 const compile = (formula: WorkspaceFormula): CompiledWorkspaceFormula => {
   if (formula.version !== 1) throw new Error('不支援的公式版本');
   if (typeof formula.expression !== 'string' || !formula.variables || typeof formula.variables !== 'object' || Array.isArray(formula.variables)) throw new Error('公式設定格式不正確');
+  if (formula.decimalPlaces !== undefined && (!Number.isInteger(formula.decimalPlaces) || formula.decimalPlaces < 0 || formula.decimalPlaces > MAX_FORMULA_DECIMAL_PLACES)) throw new Error(`小數位數必須是 0～${MAX_FORMULA_DECIMAL_PLACES} 的整數`);
   const tokens = tokenize(formula.expression);
   const sources = new Set<string>(), variablesUsed = new Set<string>();
   let index = 0, nodes = 0;
@@ -86,7 +88,7 @@ const compile = (formula: WorkspaceFormula): CompiledWorkspaceFormula => {
   };
   const root = expression(0, 0);
   if (peek().kind !== 'end') failure(peek().position, '此處需要運算符號，或有多餘的括號');
-  return { node: root, sources: [...sources], variablesUsed: [...variablesUsed] };
+  return { node: root, sources: [...sources], variablesUsed: [...variablesUsed], decimalPlaces: formula.decimalPlaces };
 };
 
 /** Formula definitions are immutable; parsing is shared across rows and consumers. */

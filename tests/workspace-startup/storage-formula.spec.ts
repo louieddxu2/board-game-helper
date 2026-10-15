@@ -32,6 +32,13 @@ test('10k rows: formula definition and cached reads write no payloads; editing o
     api.writes = [];
     await api.db.saveWorkspace(api.data);
     const changedFormula = payloadWrites();
+    const roundedSource = api.data.tables[0];
+    const computedColumn = roundedSource.columns[2];
+    const rounded = api.prepareWorkspaceColumnSave(roundedSource, { ...computedColumn, formula: { ...computedColumn.formula!, decimalPlaces: 2 } });
+    api.data = { ...api.data, tables: [rounded.table] };
+    api.writes = [];
+    await api.db.saveWorkspace(api.data);
+    const changedPrecision = payloadWrites();
     let evaluations = 0;
     const reader = api.createWorkspaceValueReader((plan, row) => { evaluations++; return api.evaluateWorkspaceFormula(plan, row); });
     const calculated = api.data.tables[0].columns[2];
@@ -52,10 +59,13 @@ test('10k rows: formula definition and cached reads write no payloads; editing o
     const loaded = (await api.db.loadWorkspace()).tables[0];
     const reopenedValue = api.createWorkspaceValueReader().read(loaded.rows[5000], loaded.columns[2]).value;
     const imported = await api.spreadsheet.importWorkspaceXlsx(api.spreadsheet.exportWorkspaceXlsx(api.data, loaded), { preserveIds: true });
-    return { added, changedFormula, rowsSame: replacement.table.rows === source.rows, warmEvaluations, cachedEvaluations, calculationReads, calculationWrites, sourceEdit, changedEvaluations, value, reopenedValue, sparse: loaded.rows.every(row => !Object.hasOwn(row.values, column.id)), roundTrip: api.createWorkspaceValueReader().read(imported.table!.rows[5000], imported.table!.columns[2]).value };
+    return { added, changedFormula, changedPrecision, rowsSame: replacement.table.rows === source.rows && rounded.table.rows === roundedSource.rows, precision: loaded.columns[2].formula?.decimalPlaces, importedPrecision: imported.table!.columns[2].formula?.decimalPlaces, warmEvaluations, cachedEvaluations, calculationReads, calculationWrites, sourceEdit, changedEvaluations, value, reopenedValue, sparse: loaded.rows.every(row => !Object.hasOwn(row.values, column.id)), roundTrip: api.createWorkspaceValueReader().read(imported.table!.rows[5000], imported.table!.columns[2]).value };
   });
   expect(result.added).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
   expect(result.changedFormula).toEqual(result.added);
+  expect(result.changedPrecision).toEqual(result.added);
+  expect(result.precision).toBe(2);
+  expect(result.importedPrecision).toBe(2);
   expect(result.rowsSame).toBe(true);
   expect(result.warmEvaluations).toBe(10_000);
   expect(result.cachedEvaluations).toBe(0);

@@ -15,6 +15,7 @@ import { normalizeWorkspaceFormula, validateWorkspaceFormulaColumns } from './co
 import type { WorkspaceFormula, WorkspaceTable } from '../types';
 
 const formula = (expression = '[價格] ÷ [次數]'): WorkspaceFormula => ({ version: 1, expression, variables: { 價格: { columnId: 'price' }, 次數: { columnId: 'count' } } });
+const roundedFormula = (expression = '[價格] ÷ [次數]', decimalPlaces = 2): WorkspaceFormula => ({ ...formula(expression), decimalPlaces });
 const fixture = (): WorkspaceTable => ({ ...createTable('自動屬性'), columns: [
   { ...createColumn('價格', 'number'), id: 'price', numberInputMode: 'input' },
   { ...createColumn('次數', 'number'), id: 'count', numberInputMode: 'input' },
@@ -153,6 +154,50 @@ describe('effective values and interchange', () => {
     expect(normalized.rows[0].values.average).toBeUndefined();
     const ordinary = { ...table, columns: table.columns.map(column => ({ ...column, formula: undefined })) };
     expect(tableSettingsRows(ordinary, '資料')[0][1]).toBe(1);
+  });
+
+  it('preserves rounded effective values and precision metadata through XLSX and Workspace archive transport', async () => {
+    const table = fixture();
+    table.columns[2] = { ...table.columns[2], formula: roundedFormula() };
+    table.rows = [
+      { ...table.rows[0], values: { price: 1, count: 8 } },
+      { ...table.rows[1], values: { price: 9.995, count: 1 } },
+    ];
+    expect(tableDataRows(table)[1]).toEqual(['甲', 1, 8, 0.13]);
+    const workbook = exportWorkspaceXlsx(asData(table), table);
+
+    for (const preserveIds of [true, false]) {
+      const imported = (await importWorkspaceXlsx(workbook, { preserveIds })).table!;
+      const calculated = imported.columns[2];
+      expect(calculated.formula?.decimalPlaces).toBe(2);
+      expect(calculated.formula?.variables['價格'].columnId).toBe(imported.columns[0].id);
+      expect(imported.rows.every(row => !Object.hasOwn(row.values, calculated.id))).toBe(true);
+      expect(createWorkspaceValueReader().read(imported.rows[0], calculated).value).toBe(0.13);
+      expect(createWorkspaceValueReader().read(imported.rows[1], calculated).value).toBe(10);
+    }
+
+    const archived = await importWorkspaceArchive(await exportWorkspaceArchive(asData(table)));
+    const restored = archived.data!.tables[0];
+    const restoredFormula = restored.columns[2].formula!;
+    expect(restoredFormula.decimalPlaces).toBe(2);
+    expect(restoredFormula.variables['價格'].columnId).toBe(restored.columns[0].id);
+    expect(createWorkspaceValueReader().read(restored.rows[0], restored.columns[2]).value).toBe(0.13);
+  });
+
+  it('freezes the rounded effective value when converting a formula to a stored number', () => {
+    const table = fixture();
+    table.columns[2] = { ...table.columns[2], formula: roundedFormula() };
+    table.rows = [{ ...table.rows[0], values: { price: 1, count: 8 } }];
+    const sourceSnapshot = table.rows.map(row => ({ ...row.values }));
+
+    const converted = prepareWorkspaceColumnSave(table, { ...table.columns[2], formula: undefined });
+
+    expect(converted.table.columns[2].formula).toBeUndefined();
+    expect(converted.table.rows[0].values.average).toBe(0.13);
+    expect(converted.table.rows[0].values.price).toBe(1);
+    expect(converted.table.rows[0].values.count).toBe(8);
+    expect(table.rows.map(row => ({ ...row.values }))).toEqual(sourceSnapshot);
+    expect(table.rows[0].values.average).toBeUndefined();
   });
 
   it('rejects a whole paste crossing a formula column without adding rows or changing sources', () => {

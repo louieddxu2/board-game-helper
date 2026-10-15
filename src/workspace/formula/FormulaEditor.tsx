@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useMemo, useRef } from 'react';
 import type { WorkspaceColumn, WorkspaceFormula, WorkspaceRow } from '../types';
 import { formulaVariableChoices, getWorkspaceFormulaError, quoteWorkspaceFormulaVariable } from './configuration';
 import { getWorkspaceEffectiveCell } from './values';
+import { MAX_FORMULA_DECIMAL_PLACES } from './rounding';
 
 export const emptyWorkspaceFormula = (): WorkspaceFormula => ({ version: 1, expression: '', variables: {} });
 
@@ -25,7 +26,6 @@ export const FormulaEditor = ({ column, columns, formula, previewRow, onChange }
   };
   useLayoutEffect(() => {
     if (pendingCaret.current === undefined) return;
-    input.current?.focus({ preventScroll: true });
     input.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
     pendingCaret.current = undefined;
   }, [formula.expression]);
@@ -39,5 +39,9 @@ export const FormulaEditor = ({ column, columns, formula, previewRow, onChange }
       {choices.map(({ column: source, alias }) => <button key={source.id} type="button" title={alias === source.name ? undefined : `公式變數：${alias}`} aria-label={`插入變數 ${source.name}`} onPointerDown={event => event.preventDefault()} onClick={() => insert(quoteWorkspaceFormulaVariable(alias))}>{source.name || '未命名屬性'}</button>)}
     </div>
     {!choices.length && <p>無可引用的數字屬性</p>}
+    <label className="workspace-form-field workspace-formula-rounding">四捨五入<select aria-label="四捨五入小數位數" value={formula.decimalPlaces ?? ''} onChange={event => onChange({ ...complete, decimalPlaces: event.target.value === '' ? undefined : Number(event.target.value) })}>
+      <option value="">不設定</option>
+      {Array.from({ length: MAX_FORMULA_DECIMAL_PLACES + 1 }, (_, places) => <option key={places} value={places}>{places === 0 ? '整數（0 位）' : `小數 ${places} 位`}</option>)}
+    </select></label>
   </div>;
 };

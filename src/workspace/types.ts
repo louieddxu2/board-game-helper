@@ -27,6 +27,8 @@ export interface WorkspaceFormula {
   version: 1;
   expression: string;
   variables: Record<string, { columnId: string }>;
+  /** Round the final numeric result; omitted preserves its original precision. */
+  decimalPlaces?: number;
 }
 
 export interface WorkspaceColumn {
