@@ -1,5 +1,6 @@
 import { normalizeWorkspaceFormula, validateWorkspaceFormulaColumns } from './formula/configuration';
 import type { WorkspaceFormula } from './types';
+import { normalizeWorkspaceColumnBackground } from './columnAppearance';
 import type { Sheet } from 'read-excel-file/browser';
 import { workspaceTableChangeRevision } from './changeRevisions';
 import { createColumn, ensureTableDynamicOptions, getRowHeaderColumn, isWorkspaceColor, isWorkspaceLinkValue, isWorkspaceUrlText, makeId, normalizeWorkspaceDateTime, readDynamicOptions } from './model';
@@ -234,6 +235,7 @@ const parseColumnSettings = (row: SheetCell[] | undefined, fallbackName: string,
   const lineLimit = Number(row?.[13]);
   column.lineLimit = Number.isFinite(lineLimit) && lineLimit > 0 ? Math.max(1, Math.round(lineLimit)) : undefined;
   column.numberInputMode = parseNumberInputMode(stringValue(row?.[14]));
+  column.backgroundColor = normalizeWorkspaceColumnBackground(row?.[16]);
   const formula = stringValue(row?.[15]);
   if (formula) {
     try { column.formula = normalizeWorkspaceFormula(JSON.parse(formula) as WorkspaceFormula); }

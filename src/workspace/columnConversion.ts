@@ -5,6 +5,7 @@ import { finishWorkspaceSteps, runWorkspaceCooperativeSteps } from './workspaceC
 import type { WorkspaceColumn, WorkspaceTable } from './types';
 import { normalizeWorkspaceFormula, validateWorkspaceFormulaColumns } from './formula/configuration';
 import { createWorkspaceValueReader } from './formula/values';
+import { normalizeWorkspaceColumnBackground } from './columnAppearance';
 
 export type WorkspaceColumnValueChange = Omit<WorkspaceCellChange, 'columnId'>;
 
@@ -24,7 +25,7 @@ export function* prepareWorkspaceColumnSaveSteps(table: WorkspaceTable, column: 
   const isRowHeader = rowHeader.id === column.id;
   const previous = isRowHeader ? rowHeader : table.columns.find(item => item.id === column.id);
   if (!previous) throw new Error('找不到要儲存的屬性');
-  column = { ...column, formula: column.formula ? normalizeWorkspaceFormula(column.formula) : undefined };
+  column = { ...column, backgroundColor: normalizeWorkspaceColumnBackground(column.backgroundColor), formula: column.formula ? normalizeWorkspaceFormula(column.formula) : undefined };
   validateWorkspaceFormulaColumns(table.columns.map(item => item.id === column.id ? column : item), isRowHeader ? column : rowHeader);
   const reader = createWorkspaceValueReader();
   const changes: WorkspaceColumnValueChange[] = [];

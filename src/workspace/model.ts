@@ -2,6 +2,7 @@ import type { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceDynam
 import { workspaceTableChangeRevision } from './changeRevisions';
 import { finishWorkspaceSteps } from './workspaceCooperativeWork';
 import { validateWorkspaceFormulaColumns } from './formula/configuration';
+import { normalizeWorkspaceColumnBackground } from './columnAppearance';
 export { sameWorkspaceCellValue } from './cellChanges';
 
 const DEFAULT_ROW_HEADER_NAME = '項目';
@@ -61,6 +62,7 @@ const normalizeColumn = (column: WorkspaceColumn, fallbackOverflow: WorkspaceOve
   options: Array.isArray(column.options) ? column.options : [],
   optionColors: normalizeOptionColors(column.optionColors),
   numberRanges: normalizeNumberRanges(column.numberRanges),
+  backgroundColor: normalizeWorkspaceColumnBackground(column.backgroundColor),
   hidden: Boolean(column.hidden),
   alignment: column.alignment ?? 'left',
   overflowMode: normalizeOverflowMode(column.overflowMode, column.inputType, fallbackOverflow),

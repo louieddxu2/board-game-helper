@@ -11,6 +11,40 @@ test.afterEach(() => expect(errors).toEqual([]));
 
 const sparseColumnId = 'column-sparse-history';
 
+test('appearance-only column edits persist metadata without rewriting row payloads', async ({ page }) => {
+  await page.goto(`${site.origin}/probe`);
+  const result = await page.evaluate(async () => {
+    const api = window.workspaceStorageFixture;
+    await api.initialize(10_000, 2);
+    const previous = api.data;
+    const source = previous.tables[0];
+    const column = source.columns[0];
+    const prepared = api.prepareWorkspaceColumnSave(source, { ...column, backgroundColor: '#E8F0F7' });
+    const revised = api.assignWorkspaceChangeRevisions(previous, { ...previous, tables: [prepared.table] });
+    const mutation = { tableId: source.id, label: '設定欄位底色', action: {
+      type: 'update-column' as const, before: column, after: prepared.table.columns[0], changes: prepared.changes,
+    } };
+    const history = api.history.pushWorkspaceTableHistory(api.history.createEmptyWorkspaceTableHistory(source.id), mutation);
+    api.data = revised;
+    api.instrument();
+    api.writes = [];
+    await api.db.saveWorkspace(revised, { mutation, history: { replace: [history] } });
+    const reloaded = await api.db.loadWorkspace();
+    const restored = reloaded.tables[0];
+    return {
+      backgroundColor: restored.columns[0].backgroundColor,
+      payloadWrites: Object.fromEntries(['rowChunks', 'rowPages', 'rowOrderPages'].map(store => [store, api.writes.filter(write => write.store === store).length])),
+      rowCount: restored.rows.length,
+      firstValue: restored.rows[0].values[column.id],
+    };
+  });
+
+  expect(result.backgroundColor).toBe('#E8F0F7');
+  expect(result.payloadWrites).toEqual({ rowChunks: 0, rowPages: 0, rowOrderPages: 0 });
+  expect(result.rowCount).toBe(10_000);
+  expect(result.firstValue).toBe('資料 0-0');
+});
+
 test('10k-row add-column history preserves sparse rows and writes no row payloads', async ({ page, context }) => {
   await page.goto(`${site.origin}/probe`);
   const result = await page.evaluate(async columnId => {

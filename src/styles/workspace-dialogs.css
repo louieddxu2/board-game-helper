@@ -205,6 +205,8 @@
 .workspace-column-config-rail .workspace-form-field { text-align: center; color: var(--muted); }
 .workspace-column-config-rail legend { width: 100%; padding: 0; color: var(--muted); text-align: center; }
 .workspace-column-config-rail textarea { min-height: 42px; overflow: auto; resize: none; border-color: var(--line); background: var(--white); color: var(--ink); text-align: center; font-weight: 400; }
+.workspace-column-config-rail .workspace-column-background-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; }
+.workspace-column-background-field .workspace-color-palette { min-height: 34px; }
 .workspace-column-config-panel { min-width: 0; overflow: auto; padding: 12px; background: var(--white); }
 .workspace-column-dialog .workspace-column-config fieldset { margin: 0; padding: 0; border: 0; }
 .workspace-column-dialog .workspace-form-field,

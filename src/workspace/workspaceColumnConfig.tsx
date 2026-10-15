@@ -5,14 +5,15 @@ import { emptyWorkspaceFormula, FormulaEditor } from './formula/FormulaEditor';
 import { formulaVariableChoices, getWorkspaceFormulaErrors, normalizeWorkspaceFormula } from './formula/configuration';
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
 import { AutoGrowTextarea, defaultInputTypeFor, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from './workspaceShared';
+import { workspaceColumnBackgroundPalette } from './columnAppearance';
 
-export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: string; onChange(value: string): void; ariaLabel: string }) => {
+type WorkspacePaletteColor = { value: string; label: string };
+
+export const WorkspaceColorPalette = ({ value, onChange, ariaLabel, palette = workspaceColorPalette }: { value: string; onChange(value: string): void; ariaLabel: string; palette?: readonly WorkspacePaletteColor[] }) => {
   const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>();
-  const selected = workspaceColorPalette.find((color) => color.value === value);
-
   useEffect(() => {
     if (!open) return;
     const closeWhenOutside = (event: PointerEvent) => {
@@ -43,7 +44,7 @@ export const WorkspaceColorPalette = ({ value, onChange, ariaLabel }: { value: s
       <span className={`workspace-color-swatch ${value ? '' : 'default'}`} style={value ? { backgroundColor: value } : undefined} />
     </button>
     {open && <div className="workspace-color-menu" role="menu" aria-label={`${ariaLabel}選單`} style={menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined}>
-      {workspaceColorPalette.map((color) => <button type="button" role="menuitem" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-checked={value === color.value} onClick={() => { onChange(color.value); setOpen(false); }}>
+      {palette.map((color) => <button type="button" role="menuitem" key={color.label} className={value === color.value ? 'selected' : ''} aria-label={color.label} aria-checked={value === color.value} onClick={() => { onChange(color.value); setOpen(false); }}>
         <span className={`workspace-color-swatch ${color.value ? '' : 'default'}`} style={color.value ? { backgroundColor: color.value } : undefined} />
       </button>)}
     </div>}
@@ -255,6 +256,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
     <div className="workspace-column-config" aria-busy={saving}>
       <div className="workspace-column-config-rail">
         <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <div className="workspace-form-field workspace-column-background-field"><span>欄位底色</span><WorkspaceColorPalette value={draft.backgroundColor ?? ''} onChange={(backgroundColor) => setDraft((current) => ({ ...current, backgroundColor: backgroundColor || undefined }))} ariaLabel="欄位底色" palette={workspaceColumnBackgroundPalette} /></div>
         <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} aria-pressed={category === value} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
         <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} aria-pressed={(draft.alignment ?? 'left') === alignment} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
         <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} aria-pressed={activePanel === 'overflow'} onClick={() => setActivePanel('overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>

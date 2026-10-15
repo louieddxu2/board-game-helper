@@ -43,6 +43,8 @@ export interface WorkspaceColumn {
   dynamicOptions?: WorkspaceDynamicOptions;
   optionColors?: Record<string, string>;
   numberRanges?: WorkspaceNumberRange[];
+  /** Optional light background shared by this column's header and cells. */
+  backgroundColor?: string;
   hidden?: boolean;
   isMultiple?: boolean;
   alignment?: WorkspaceTextAlign;
