@@ -239,8 +239,6 @@
 .workspace-form-field { display: grid; gap: 7px; color: var(--green); font-size: 13px; font-weight: 700; }
 .workspace-column-dialog .workspace-input-type-field { margin: 0; padding: 0; border: 0; }
 .workspace-column-dialog .workspace-input-type-field legend { padding: 0; }
-.workspace-column-dialog .workspace-input-type-options { display: grid; gap: 6px; }
-.workspace-column-dialog .workspace-input-type-options button { min-height: 40px; padding: 0 9px; border: 1px solid; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 500; }
 .workspace-dialog textarea, .workspace-dialog input, .workspace-dialog select { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255,253,248,.48); color: var(--ink); font: inherit; font-weight: 400; }
 .workspace-dialog input[type="number"] { padding-inline: 2px; appearance: textfield; -moz-appearance: textfield; }
 .workspace-dialog input[type="number"]::-webkit-inner-spin-button, .workspace-dialog input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }

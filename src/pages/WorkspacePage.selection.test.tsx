@@ -109,8 +109,7 @@ it('preserves line breaks in fixed list options', async () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '名稱' })).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '選單' }));
-    await user.click(screen.getByRole('button', { name: '固定列表' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'select');
     const option = screen.getByRole('textbox', { name: '固定選項 1' });
     await user.type(option, '第一行');
     await user.keyboard('{Enter}');

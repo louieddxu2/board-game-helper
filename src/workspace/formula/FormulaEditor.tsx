@@ -30,7 +30,7 @@ export const FormulaEditor = ({ column, columns, formula, previewRow, onChange }
     pendingCaret.current = undefined;
   }, [formula.expression]);
   return <div className="workspace-formula-editor">
-    <label className="workspace-form-field">計算公式<textarea ref={input} rows={3} aria-label="計算公式" aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={formula.expression} placeholder="例如：[價格] ÷ [次數]" onChange={event => onChange({ ...complete, expression: event.target.value })} /></label>
+    <label className="workspace-form-field">計算公式<textarea ref={input} rows={2} aria-label="計算公式" aria-invalid={Boolean(error)} aria-describedby={error ? errorId : undefined} value={formula.expression} placeholder="例如：[價格] ÷ [次數]" onChange={event => onChange({ ...complete, expression: event.target.value })} /></label>
     {error ? <p id={errorId} className="form-error" title={error} role="status">{error}</p> : preview && <p className={preview.error ? 'form-error' : undefined} title={preview.error || undefined} role="status">預覽（{String(previewRow?.name || '第一個物件')}）：{preview.value === null ? '空白' : String(preview.value)}</p>}
     <div className="workspace-formula-buttons" role="group" aria-label="公式運算符號">
       {['+', '−', '×', '÷', '(', ')'].map(symbol => <button key={symbol} type="button" aria-label={`插入 ${symbol}`} onPointerDown={event => event.preventDefault()} onClick={() => insert(symbol)}>{symbol}</button>)}

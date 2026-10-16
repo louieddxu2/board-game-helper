@@ -4,7 +4,7 @@ import { WorkspaceColumn, WorkspaceInputType, WorkspaceNumberRange, WorkspaceOve
 import { emptyWorkspaceFormula, FormulaEditor } from './formula/FormulaEditor';
 import { formulaVariableChoices, getWorkspaceFormulaErrors, normalizeWorkspaceFormula } from './formula/configuration';
 import { DRAG_SCROLL_INTENT_DISTANCE, useDragEdgeAutoScroll } from './useDragEdgeAutoScroll';
-import { AutoGrowTextarea, defaultInputTypeFor, inputCategoryFor, inputCategoryLabels, inputSubtypeLabels, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceInputCategory, WorkspaceModal } from './workspaceShared';
+import { AutoGrowTextarea, numberInputModeLabels, overflowModeLabels, workspaceColorPalette, WorkspaceIcon, WorkspaceModal } from './workspaceShared';
 import { workspaceColumnBackgroundPalette } from './columnAppearance';
 
 type WorkspacePaletteColor = { value: string; label: string };
@@ -59,8 +59,7 @@ export const NumberRangeEditor = ({ ranges, onChange }: { ranges: WorkspaceNumbe
     onChange(ranges.map((range, rangeIndex) => rangeIndex === index ? { ...range, [field]: value } : range));
   };
   return <div className="workspace-number-range-editor">
-    <div className="workspace-number-range-heading"><span>數字範圍顏色</span><button type="button" className="workspace-option-add" onClick={() => onChange([...ranges, { min: null, max: null, color: '' }])}><WorkspaceIcon name="plus" size={17} />新增範圍</button></div>
-    {!ranges.length && <p className="workspace-number-range-empty">尚未設定範圍</p>}
+    <div className="workspace-number-range-heading"><button type="button" className="workspace-option-add" onClick={() => onChange([...ranges, { min: null, max: null, color: '' }])}><WorkspaceIcon name="plus" size={17} />新增範圍</button></div>
     {ranges.map((range, index) => <div className="workspace-number-range-row" key={index}>
       <div className="workspace-number-range-inputs">
         <input type="number" inputMode="decimal" step="any" value={range.min ?? ''} placeholder="−∞" aria-label={`第 ${index + 1} 段下限`} onChange={(event) => updateRange(index, 'min', event.target.value)} />
@@ -193,6 +192,15 @@ export const SelectionOptionsEditor = ({ options, optionColors, onChange }: { op
   </div>;
 };
 
+const workspaceColumnInputTypes: ReadonlyArray<{ value: WorkspaceInputType; label: string }> = [
+  { value: 'text', label: '文字' },
+  { value: 'number', label: '數字' },
+  { value: 'dynamic-select', label: '動態列表' },
+  { value: 'select', label: '固定列表' },
+  { value: 'datetime', label: '時間' },
+  { value: 'link', label: '連結' },
+];
+
 export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, previewRow, onSave, onDelete }: { column: WorkspaceColumn; suggestedOptions?: string[]; sourceColumns?: readonly WorkspaceColumn[]; previewRow?: WorkspaceRow; onSave(column: WorkspaceColumn): string | void | Promise<string | void>; onDelete?(): void }) => {
   const [draft, setDraft] = useState(column);
   const [automatic, setAutomatic] = useState(Boolean(column.formula));
@@ -202,6 +210,7 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
   const pending = useRef(false);
   const [activePanel, setActivePanel] = useState<'input' | 'overflow'>('input');
   const [lineLimitEnabled, setLineLimitEnabled] = useState(() => column.lineLimit !== undefined);
+  const [rangesExpanded, setRangesExpanded] = useState(false);
   const dependentError = useMemo(() => {
     if (!sourceColumns) return undefined;
     const variables = { ...formula.variables, ...Object.fromEntries(formulaVariableChoices(sourceColumns, column.id, formula).map(choice => [choice.alias, choice.binding])) };
@@ -229,18 +238,9 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
       setSaving(false);
     }
   };
-  const category = inputCategoryFor(draft.inputType);
-  const chooseInputCategory = (nextCategory: WorkspaceInputCategory) => {
+  const chooseInputType = (inputType: WorkspaceInputType) => {
     setError('');
     setActivePanel('input');
-    setDraft((current) => {
-      const currentCategory = inputCategoryFor(current.inputType);
-      const nextType = currentCategory === nextCategory ? current.inputType : defaultInputTypeFor(nextCategory);
-      return { ...current, inputType: nextType, overflowMode: nextType === 'link' && current.overflowMode === 'wrap' ? 'ellipsis' : current.overflowMode };
-    });
-  };
-  const chooseInputSubtype = (inputType: WorkspaceInputType) => {
-    setError('');
     setDraft(current => ({
       ...current,
       inputType,
@@ -250,32 +250,34 @@ export const ColumnConfig = ({ column, suggestedOptions = [], sourceColumns, pre
     }));
   };
   const currentOverflowMode = draft.overflowMode ?? (draft.inputType === 'link' ? 'ellipsis' : 'wrap');
+  const rangeCount = draft.numberRanges?.length ?? 0;
   return <WorkspaceModal owner="column-config" title="屬性設定" dialogKind="editor" initialFocus="dialog" onRequestClose={save} className="workspace-column-dialog" leadingAction={onDelete && <button type="button" className="workspace-dialog-delete" onClick={onDelete} disabled={saving} aria-label="刪除屬性"><WorkspaceIcon name="trash" size={20} /></button>}>
     {saving && <p role="status">正在儲存屬性設定…</p>}
     <fieldset disabled={saving} style={{ display: 'contents' }}>
     <div className="workspace-column-config" aria-busy={saving}>
       <div className="workspace-column-config-rail">
-        <label className="workspace-form-field">屬性名稱<AutoGrowTextarea value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
-        <div className="workspace-form-field workspace-column-background-field"><span>欄位底色</span><WorkspaceColorPalette value={draft.backgroundColor ?? ''} onChange={(backgroundColor) => setDraft((current) => ({ ...current, backgroundColor: backgroundColor || undefined }))} ariaLabel="欄位底色" palette={workspaceColumnBackgroundPalette} /></div>
-        <fieldset className="workspace-form-field workspace-input-type-field"><legend>輸入類型</legend><div className="workspace-input-type-options">{(Object.entries(inputCategoryLabels) as Array<[WorkspaceInputCategory, string]>).map(([value, label]) => <button type="button" key={value} className={category === value ? 'selected' : ''} aria-pressed={category === value} onClick={() => chooseInputCategory(value)}>{label}</button>)}</div></fieldset>
-        <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} aria-pressed={(draft.alignment ?? 'left') === alignment} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
-        <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} aria-pressed={activePanel === 'overflow'} onClick={() => setActivePanel('overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>
+        <div className="workspace-column-identity-row">
+          <label className="workspace-form-field workspace-column-name-field"><span>屬性名稱</span><AutoGrowTextarea aria-label="屬性名稱" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+          <div className="workspace-form-field workspace-column-background-field"><span>欄位底色</span><WorkspaceColorPalette value={draft.backgroundColor ?? ''} onChange={(backgroundColor) => setDraft((current) => ({ ...current, backgroundColor: backgroundColor || undefined }))} ariaLabel="欄位底色" palette={workspaceColumnBackgroundPalette} /></div>
+        </div>
+        <div className="workspace-column-shared-controls">
+          <label className="workspace-form-field workspace-input-type-field"><span>輸入類型</span><select aria-label="輸入類型" value={draft.inputType} onChange={(event) => chooseInputType(event.target.value as WorkspaceInputType)}>{workspaceColumnInputTypes.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <fieldset className="workspace-form-field workspace-alignment-field"><legend>文字位置</legend><div className="workspace-alignment-options">{(['left', 'center', 'right'] as WorkspaceTextAlign[]).map((alignment) => <button type="button" key={alignment} className={(draft.alignment ?? 'left') === alignment ? 'selected' : ''} aria-pressed={(draft.alignment ?? 'left') === alignment} onClick={() => setDraft((current) => ({ ...current, alignment }))} aria-label={alignment === 'left' ? '置左' : alignment === 'center' ? '置中' : '置右'}><WorkspaceIcon name={alignment === 'left' ? 'align-left' : alignment === 'center' ? 'align-center' : 'align-right'} size={19} /></button>)}</div></fieldset>
+          <div className="workspace-form-field workspace-overflow-field"><span>內容顯示</span><button type="button" className={activePanel === 'overflow' ? 'selected workspace-overflow-trigger' : 'workspace-overflow-trigger'} aria-pressed={activePanel === 'overflow'} onClick={() => setActivePanel((current) => current === 'overflow' ? 'input' : 'overflow')}>{overflowModeLabels[currentOverflowMode]}<WorkspaceIcon name="chevron" size={17} /></button></div>
+        </div>
       </div>
       <div className="workspace-column-config-panel">
         {(error || dependentError) && <p className="form-error" title={error || dependentError} role={error ? 'alert' : 'status'}>{error || dependentError}</p>}
-        {activePanel === 'input' ? <>
-          <div className="workspace-input-subtype-options">
-            <div>{inputSubtypeLabels[category].map(({ value, label }) => <button type="button" key={value} className={draft.inputType === value ? 'selected' : ''} aria-pressed={draft.inputType === value} onClick={() => chooseInputSubtype(value)}>{label}</button>)}</div>
-            {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
-            {draft.inputType === 'datetime' && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.dateOnly)} onChange={(event) => setDraft((current) => ({ ...current, dateOnly: event.target.checked }))} />只顯示年月日</label>}
-          </div>
-          {draft.inputType === 'number' && sourceColumns && <fieldset className="workspace-form-field workspace-formula-source-field" aria-label="數字來源"><div className="workspace-number-input-mode-options workspace-formula-source-options">{['手動輸入', '自動計算'].map((label, index) => <button type="button" key={label} aria-pressed={automatic === Boolean(index)} className={automatic === Boolean(index) ? 'selected' : ''} onClick={() => { setAutomatic(Boolean(index)); setError(''); }}>{label}</button>)}</div></fieldset>}
-          {draft.inputType === 'number' && automatic && sourceColumns && <><FormulaEditor column={draft} columns={sourceColumns} formula={formula} previewRow={previewRow} onChange={next => { setFormula(next); setError(''); }} />{!column.formula && <p>原內容將改為計算結果</p>}</>}
-          {column.formula && (!automatic || draft.inputType !== 'number') && <p>保留結果，停止計算</p>}
-          {draft.inputType === 'number' && !automatic && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} aria-pressed={getWorkspaceNumberInputMode(draft) === mode} onClick={() => setDraft((current) => ({ ...current, numberInputMode: mode }))}>{label}</button>)}</div></fieldset>}
+        {activePanel === 'input' ? <div className="workspace-column-type-panel">
+          {(draft.inputType === 'select' || draft.inputType === 'dynamic-select') && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.isMultiple)} onChange={(event) => setDraft((current) => ({ ...current, isMultiple: event.target.checked }))} />多選</label>}
+          {draft.inputType === 'datetime' && <label className="workspace-multiple-toggle"><input type="checkbox" checked={Boolean(draft.dateOnly)} onChange={(event) => setDraft((current) => ({ ...current, dateOnly: event.target.checked }))} />只顯示年月日</label>}
+          {draft.inputType === 'number' && <fieldset className="workspace-form-field workspace-number-input-mode-field"><legend>數字輸入方式</legend><div className="workspace-number-input-mode-options">{(Object.entries(numberInputModeLabels) as Array<[keyof typeof numberInputModeLabels, string]>).map(([mode, label]) => <button type="button" key={mode} className={!automatic && getWorkspaceNumberInputMode(draft) === mode ? 'selected' : ''} aria-pressed={!automatic && getWorkspaceNumberInputMode(draft) === mode} onClick={() => { setAutomatic(false); setError(''); setDraft((current) => ({ ...current, numberInputMode: mode })); }}>{label}</button>)}{sourceColumns !== undefined && <button type="button" className={automatic ? 'selected' : ''} aria-pressed={automatic} onClick={() => { setAutomatic(true); setError(''); }}>公式</button>}</div></fieldset>}
+          {draft.inputType === 'number' && automatic && sourceColumns !== undefined && <><FormulaEditor column={draft} columns={sourceColumns} formula={formula} previewRow={previewRow} onChange={next => { setFormula(next); setError(''); }} />{!column.formula && <p className="workspace-column-transition-note">原內容將改為計算結果</p>}</>}
+          {column.formula && (!automatic || draft.inputType !== 'number') && <p className="workspace-column-transition-note">保留結果，停止計算</p>}
           {draft.inputType === 'select' && <SelectionOptionsEditor options={draft.options} optionColors={draft.optionColors} onChange={(options, optionColors) => setDraft((current) => ({ ...current, options, optionColors }))} />}
-          {draft.inputType === 'number' && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}
-        </> : <div className="workspace-overflow-panel">
+          {draft.inputType === 'number' && <div className="workspace-number-range-section"><button type="button" className="workspace-number-range-summary" aria-expanded={rangesExpanded} onClick={() => setRangesExpanded((expanded) => !expanded)}>數字範圍顏色 <span>{rangeCount ? `${rangeCount} 段` : '未設定'}</span><WorkspaceIcon name="chevron" size={17} /></button>{rangesExpanded && <NumberRangeEditor ranges={draft.numberRanges ?? []} onChange={(numberRanges) => setDraft((current) => ({ ...current, numberRanges }))} />}</div>}
+        </div>
+        : <div className="workspace-overflow-panel">
           <div className="workspace-overflow-options">{(Object.entries(overflowModeLabels) as Array<[WorkspaceOverflowMode, string]>).map(([mode, label]) => <button type="button" key={mode} className={currentOverflowMode === mode ? 'selected' : ''} aria-pressed={currentOverflowMode === mode} onClick={() => setDraft((current) => ({ ...current, overflowMode: mode }))}>{label}</button>)}</div>
           {currentOverflowMode !== 'expand' && <label className="workspace-form-field">欄寬上限（全形字數）<input type="number" inputMode="numeric" min="1" step="1" value={draft.widthLimitChars ?? ''} placeholder="未設定" onChange={(event) => setDraft((current) => ({ ...current, widthLimitChars: event.target.value ? Number(event.target.value) : undefined }))} /></label>}
           {currentOverflowMode === 'wrap' && <>

@@ -6,7 +6,6 @@ import { formatWorkspaceDate, formatWorkspaceDateTime, isWorkspaceLinkValue, isW
 import { WorkspaceCellValue, WorkspaceColumn, WorkspaceData, WorkspaceInputType, WorkspaceNode, WorkspaceOverflowMode, WorkspaceTable } from "./types";
 
 export type IconName = 'menu' | 'search' | 'filter' | 'filter-off' | 'edit' | 'check' | 'apply-cells' | 'refresh' | 'close' | 'folder' | 'folder-plus' | 'table' | 'table-plus' | 'bottom-navigation' | 'chevron' | 'more' | 'plus' | 'settings' | 'visibility' | 'eye' | 'eye-off' | 'trash' | 'back' | 'download' | 'upload' | 'clipboard' | 'rows' | 'columns' | 'rows-plus' | 'columns-plus' | 'undo' | 'redo' | 'ratio' | 'home' | 'up' | 'down' | 'move' | 'align-left' | 'align-center' | 'align-right' | 'external';
-export type WorkspaceInputCategory = 'text' | 'select' | 'other';
 export type TableReorderKind = 'row' | 'column';
 export type TableReorderVisual = { kind: TableReorderKind; sourceId: string; targetId: string; after: boolean };
 export type HeaderFilterTarget = { axis: 'column'; id: string; label: string };
@@ -24,14 +23,6 @@ export const workspaceColorPalette = [
   { value: '#0F766E', label: '青色' },
   { value: '#6B7280', label: '灰色' },
 ] as const;
-export const inputCategoryLabels: Record<WorkspaceInputCategory, string> = {
-  text: '文字', select: '選單', other: '其他',
-};
-export const inputSubtypeLabels: Record<WorkspaceInputCategory, Array<{ value: WorkspaceInputType; label: string }>> = {
-  text: [{ value: 'text', label: '文字' }, { value: 'number', label: '數字' }],
-  select: [{ value: 'dynamic-select', label: '動態列表' }, { value: 'select', label: '固定列表' }],
-  other: [{ value: 'datetime', label: '時間(含日期)' }, { value: 'link', label: '連結' }],
-};
 export const numberInputModeLabels: Record<WorkspaceNumberInputMode, string> = {
   input: '輸入', adjust: '加減數字', step: '加減1',
 };
@@ -151,8 +142,6 @@ export const ensureWorkspaceCellVisible = (element: HTMLElement, viewport: HTMLE
   if (elementRect.left < visibleLeft) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.left - visibleLeft));
   else if (elementRect.right > visibleRight) viewport.scrollLeft = Math.min(maxScrollLeft, Math.max(0, viewport.scrollLeft + elementRect.right - visibleRight));
 };
-export const inputCategoryFor = (inputType: WorkspaceInputType): WorkspaceInputCategory => inputType === 'select' || inputType === 'dynamic-select' ? 'select' : inputType === 'link' || inputType === 'datetime' ? 'other' : 'text';
-export const defaultInputTypeFor = (category: WorkspaceInputCategory): WorkspaceInputType => category === 'select' ? 'dynamic-select' : category === 'other' ? 'datetime' : 'text';
 export const hasWorkspaceFilterCriteria = (state: HeaderFilterState) => state.includedKeys !== null || Boolean(state.query?.trim() || state.min?.trim() || state.max?.trim());
 export const matchesWorkspaceFilter = (value: WorkspaceCellValue, inputType: WorkspaceInputType | undefined, state: HeaderFilterState, isMultiple?: boolean, preparedIncludedKeys?: ReadonlySet<string>) => {
   if ((!inputType || isWorkspaceListInput(inputType) || inputType === 'datetime') && state.includedKeys !== null && !(inputType === 'datetime' && (state.min?.trim() || state.max?.trim()))) {

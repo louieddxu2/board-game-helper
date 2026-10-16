@@ -104,7 +104,7 @@ it('preserves fixed options while trying other input types', async () => {
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
 
-    await user.click(screen.getByRole('button', { name: '文字' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'text');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
@@ -114,8 +114,7 @@ it('preserves fixed options while trying other input types', async () => {
     }), expect.objectContaining({ history: expect.any(Object) })));
 
     await user.click(screen.getByRole('button', { name: '類型' }));
-    await user.click(screen.getByRole('button', { name: '選單' }));
-    await user.click(screen.getByRole('button', { name: '固定列表' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'select');
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
   });
@@ -141,6 +140,7 @@ it('configures inclusive open-ended numeric color ranges', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '數量' }));
+    await user.click(screen.getByRole('button', { name: /^數字範圍顏色/ }));
     await user.click(screen.getByRole('button', { name: '新增範圍' }));
     await user.type(screen.getByRole('spinbutton', { name: '第 1 段上限' }), '10');
     const colorGroup = screen.getByRole('group', { name: '第 1 段顏色' });

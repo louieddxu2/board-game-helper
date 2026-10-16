@@ -30,22 +30,20 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.getByRole('columnheader', { name: '平均', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await expect(dialog).toBeFocused();
-  const subtypeBoxes = await dialog.locator('.workspace-input-subtype-options > div > button').evaluateAll(buttons => buttons.map(button => {
+  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveValue('number');
+  const modeBoxes = await dialog.getByRole('group', { name: '數字輸入方式' }).getByRole('button').evaluateAll(buttons => buttons.map(button => {
     const box = button.getBoundingClientRect(); return { top: box.top, left: box.left, right: box.right };
   }));
-  expect(subtypeBoxes).toHaveLength(2);
-  expect(Math.abs(subtypeBoxes[0].top - subtypeBoxes[1].top)).toBeLessThanOrEqual(1);
-  expect(subtypeBoxes[0].right).toBeLessThanOrEqual(subtypeBoxes[1].left);
-  await expect(dialog.getByText('數字來源', { exact: true })).toHaveCount(0);
-  const sourceHeight = await dialog.getByRole('group', { name: '數字來源', exact: true }).evaluate(group => ({
-    group: group.getBoundingClientRect().height,
-    button: Math.max(...Array.from(group.querySelectorAll('button'), button => button.getBoundingClientRect().height)),
-  }));
-  expect(sourceHeight.group).toBeLessThanOrEqual(sourceHeight.button + 2);
+  expect(modeBoxes).toHaveLength(4);
+  modeBoxes.slice(1).forEach((box, index) => {
+    expect(Math.abs(box.top - modeBoxes[0].top)).toBeLessThanOrEqual(1);
+    expect(modeBoxes[index].right).toBeLessThanOrEqual(box.left);
+  });
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toHaveCount(0);
-  await dialog.getByRole('button', { name: '自動計算', exact: true }).click();
+  await dialog.getByRole('button', { name: '公式', exact: true }).tap();
   const input = dialog.getByRole('textbox', { name: '計算公式' });
+  await expect(input).toHaveAttribute('rows', '2');
   await input.evaluate(node => {
     node.dataset.buttonFocusCount = '0';
     node.addEventListener('focus', () => { node.dataset.buttonFocusCount = String(Number(node.dataset.buttonFocusCount) + 1); });
@@ -95,7 +93,7 @@ test('mobile formula validation stays live, treats blank division as empty, and 
   const averageHeader = page.locator('th[data-column-id="column-2"]');
   await averageHeader.tap();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
-  await dialog.getByRole('button', { name: '自動計算', exact: true }).tap();
+  await dialog.getByRole('button', { name: '公式', exact: true }).tap();
   const formulaInput = dialog.getByRole('textbox', { name: '計算公式' });
 
   await formulaInput.fill('[價格] +');
@@ -171,7 +169,7 @@ test('mobile formula validation stays live, treats blank division as empty, and 
 test('browser Back leaves formulas intact; dependent source deletion is blocked; closing saves fixed results', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
-  await dialog.getByRole('button', { name: '自動計算', exact: true }).tap();
+  await dialog.getByRole('button', { name: '公式', exact: true }).tap();
   await dialog.getByRole('textbox', { name: '計算公式' }).fill('[價格] / [次數]');
   await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   const value = page.locator('[data-cell-id="row-0:column-2"]');
@@ -191,7 +189,7 @@ test('browser Back leaves formulas intact; dependent source deletion is blocked;
   await expect(page.getByRole('dialog', { name: '刪除屬性', exact: true })).toHaveCount(0);
   await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
-  await dialog.getByRole('button', { name: '手動輸入', exact: true }).tap();
+  await dialog.getByRole('button', { name: '輸入', exact: true }).tap();
   await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await expect(value).toHaveText('200');
   await expect(value).toHaveAttribute('aria-readonly', 'false');
@@ -206,7 +204,7 @@ test('rounding updates the preview and cached result, persists on reload, and ca
   const value = page.locator('[data-cell-id="row-0:column-2"]');
   const close = () => page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await header.tap();
-  await dialog.getByRole('button', { name: '自動計算', exact: true }).tap();
+  await dialog.getByRole('button', { name: '公式', exact: true }).tap();
   await expect(rounding).toHaveValue('');
   await dialog.getByRole('textbox', { name: '計算公式' }).fill('10 / 3');
   await rounding.selectOption('2');

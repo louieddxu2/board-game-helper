@@ -26,15 +26,14 @@ test('a saved 10k-row conversion persists numeric values and rebuilds dynamic ch
   await page.goto(`${site.origin}/workspace`);
   await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
-  await dialog.getByRole('button', { name: '數字', exact: true }).click();
+  await dialog.getByRole('combobox', { name: '輸入類型' }).selectOption('number');
   await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe(1);
   expect(await readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe(0);
 
   await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
-  await dialog.getByRole('button', { name: '選單', exact: true }).click();
-  await dialog.getByRole('button', { name: '動態列表', exact: true }).click();
+  await dialog.getByRole('combobox', { name: '輸入類型' }).selectOption('dynamic-select');
   await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('1');
@@ -53,11 +52,11 @@ test('column settings wait for explicit name editing and keep keyboard navigatio
   const name = dialog.getByRole('textbox', { name: '屬性名稱' });
   await expect(dialog).toBeFocused();
   await expect(name).not.toBeFocused();
-  await expect(dialog.getByRole('group', { name: '輸入類型' }).getByRole('button', { name: '文字', pressed: true })).toBeVisible();
+  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveValue('text');
   await expect(dialog.getByRole('button', { name: '置左', pressed: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('column-settings.png') });
   await page.keyboard.press('Shift+Tab');
-  await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toBeFocused();
+  await expect(dialog.getByRole('button', { name: '推擠寬度', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(dialog.getByRole('button', { name: '刪除屬性' })).toBeFocused();
   await name.click();

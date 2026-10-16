@@ -49,28 +49,31 @@ it('edits the first column through the same property settings as other columns',
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '物件' }));
 
-    expect(screen.getByRole('button', { name: '選單' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '其他' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    expect(screen.getByRole('button', { name: '連結' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '時間(含日期)' })).toBeInTheDocument();
+    const types = screen.getByRole('combobox', { name: '輸入類型' });
+    expect(within(types).getAllByRole('option').map(option => option.textContent)).toEqual(['文字', '數字', '動態列表', '固定列表', '時間', '連結']);
+    await user.selectOptions(types, 'number');
+    expect(screen.queryByRole('button', { name: '公式' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '刪除屬性' })).not.toBeInTheDocument();
   });
 
-it('opens display settings from one left-side button into the right panel', async () => {
+it('toggles display settings on demand and returns to the current input controls', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
 
-    const rail = document.querySelector('.workspace-column-config-rail');
-    const panel = document.querySelector('.workspace-column-config-panel');
-    expect(rail?.querySelector('.workspace-alignment-field')).toBeInTheDocument();
-    expect(rail?.querySelector('.workspace-overflow-field')).toBeInTheDocument();
-    expect(panel?.querySelector('.workspace-input-subtype-options')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '自動換行' }));
-    expect(panel?.querySelector('.workspace-overflow-panel')).toBeInTheDocument();
-    expect(within(panel as HTMLElement).getByRole('button', { name: '推擠寬度' })).toBeInTheDocument();
-    expect(within(panel as HTMLElement).getByRole('button', { name: '超過省略' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '文字位置' })).toBeInTheDocument();
+    const display = screen.getByRole('button', { name: '自動換行' });
+    expect(screen.queryByRole('button', { name: '推擠寬度' })).not.toBeInTheDocument();
+    await user.click(display);
+    expect(screen.getByRole('button', { name: '推擠寬度' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '超過省略' })).toBeInTheDocument();
+    await user.click(display);
+    expect(screen.queryByRole('button', { name: '推擠寬度' })).not.toBeInTheDocument();
+    await user.click(display);
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
+    expect(screen.getByRole('checkbox', { name: '只顯示年月日' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '推擠寬度' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'text');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(await screen.findByRole('columnheader', { name: '類型' }));
@@ -81,8 +84,7 @@ it('edits and renders a link with a preferred display name and external action',
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '連結' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'link');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -121,8 +123,7 @@ it('suggests current distinct values when changing a property to a fixed list', 
     await user.type(screen.getByRole('textbox', { name: '名稱輸入' }), '合作');
     fireEvent.click(document.querySelector('.workspace-value-dialog-overlay')!);
     await user.click(screen.getByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '選單' }));
-    await user.click(screen.getByRole('button', { name: '固定列表' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'select');
 
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
   });
@@ -131,8 +132,7 @@ it('opens the compact date-time wheel editor and displays zero-padded values', a
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -155,8 +155,7 @@ it('can display only the date without discarding the stored time', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     await user.click(screen.getByRole('checkbox', { name: '只顯示年月日' }));
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
@@ -178,8 +177,7 @@ it('keeps a blank date empty when the editor is closed without interaction', asy
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -193,8 +191,7 @@ it('commits the current date-time immediately from the 現在 action', async () 
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
@@ -208,8 +205,7 @@ it('accepts a directly entered year from the selected year value', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));
 
@@ -226,8 +222,7 @@ it('clears an existing date-time value from the compact editor', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '名稱' }));
-    await user.click(screen.getByRole('button', { name: '其他' }));
-    await user.click(screen.getByRole('button', { name: '時間(含日期)' }));
+    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'datetime');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
 
     await user.click(screen.getByRole('cell', { name: '花火，名稱：空白' }));

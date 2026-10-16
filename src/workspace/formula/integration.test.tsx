@@ -34,7 +34,7 @@ describe('formula settings and conversions', () => {
     const manual = { ...table.columns[2], formula: undefined };
     render(<ColumnConfig column={manual} sourceColumns={table.columns} previewRow={table.rows[0]} onSave={onSave} />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '自動計算' }));
+    await user.click(screen.getByRole('button', { name: '公式' }));
     const text = screen.getByRole('textbox', { name: '計算公式' }) as HTMLTextAreaElement;
     fireEvent.change(text, { target: { value: '10 + 2' } });
     text.setSelectionRange(0, 2);
@@ -73,10 +73,10 @@ describe('formula settings and conversions', () => {
   it('immediately warns when a source type change would invalidate another formula and clears on correction', () => {
     const table = fixture(), onSave = vi.fn();
     render(<ColumnConfig column={table.columns[0]} sourceColumns={table.columns} onSave={onSave} />);
-    fireEvent.click(screen.getAllByRole('button', { name: '文字' })[1]);
+    fireEvent.change(screen.getByRole('combobox', { name: '輸入類型' }), { target: { value: 'text' } });
     expect(screen.getByRole('status')).toHaveTextContent('公式只能引用其他原始數字屬性');
     expect(onSave).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '數字' }));
+    fireEvent.change(screen.getByRole('combobox', { name: '輸入類型' }), { target: { value: 'number' } });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });

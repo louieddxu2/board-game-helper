@@ -59,7 +59,7 @@
   .workspace-value-dialog .workspace-value-textarea { min-height: 42px; }
   .workspace-link-dialog .workspace-dialog-content { padding: 10px; }
   .workspace-link-fields { gap: 8px; }
-  .workspace-column-dialog { width: min(520px, calc(100vw - 24px)); max-height: min(58dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); }
+  .workspace-column-dialog { width: min(580px, calc(100vw - 24px)); max-height: min(78dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px)); }
   .workspace-selection-dialog { align-self: center; width: min(430px, 50vw); height: auto; max-height: min(75dvh, calc(var(--workspace-visual-viewport-height, 100dvh) - 24px), 720px); margin-top: clamp(10px, 4dvh, 28px); border-radius: 12px; }
   .workspace-overlay { align-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
   .workspace-drawer { width: min(88vw, 360px); }
