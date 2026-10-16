@@ -5,7 +5,9 @@ const MAX_VELOCITY = MAX_TABLE_MOMENTUM_VELOCITY;
 const ACCELERATION_STACK_FACTOR = 0.65; // Stack residual speed from previous swipe
 const FRAME_INTERVAL_MS = 1000 / 60;
 const MAX_FRAME_DELTA_MS = 48;
+const VELOCITY_SAMPLE_WINDOW_MS = 120;
 const SCROLL_ROUNDING_TOLERANCE_PX = 1;
+const MIN_COASTING_VELOCITY = 0.1;
 const MOMENTUM_DECAY_PER_FRAME = 0.978; // Keep a phone fling moving long enough for dense tables
 const BOUNCE_SETTLE_DURATION_MS = 200;
 export const TABLE_BOUNCE_LIMIT = 30;
@@ -129,6 +131,7 @@ export function useMomentumScroll() {
   const coastingFrame = useRef<number | undefined>(undefined);
   const activeVelocity = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
   const activeTableRef = useRef<HTMLTableElement | null>(null);
+  const activeViewportRef = useRef<HTMLDivElement | null>(null);
 
   const resetTableTransform = useCallback((table: HTMLTableElement | null) => {
     if (!table) return;
@@ -141,6 +144,7 @@ export function useMomentumScroll() {
       coastingFrame.current = undefined;
     }
     points.current = [];
+    activeViewportRef.current = null;
     resetTableTransform(activeTableRef.current);
   }, [resetTableTransform]);
 
@@ -148,14 +152,21 @@ export function useMomentumScroll() {
     const previous = points.current.at(-1);
     const now = Math.max(Date.now(), previous?.time ?? 0);
     points.current.push({ x, y, time: now });
-    points.current = points.current.filter((p) => now - p.time <= 120).slice(-8);
+    points.current = points.current.filter((p) => now - p.time <= VELOCITY_SAMPLE_WINDOW_MS).slice(-8);
   }, []);
 
   const release = useCallback((viewport: HTMLDivElement, panAxis?: TablePanAxis, cachedBounds?: ReturnType<typeof getTableContentScrollBounds>) => {
+    activeViewportRef.current = viewport;
     const table = viewport.querySelector?.('table') ?? null;
     activeTableRef.current = table;
 
-    if (points.current.length < 2) return;
+    const now = Date.now();
+    points.current = points.current.filter(point => now - point.time <= VELOCITY_SAMPLE_WINDOW_MS);
+    if (points.current.length < 2) {
+      points.current = [];
+      activeVelocity.current = { vx: 0, vy: 0 };
+      return;
+    }
     const first = points.current[0];
     const last = points.current[points.current.length - 1];
     const dt = Math.max(1, last.time - first.time);
@@ -204,7 +215,7 @@ export function useMomentumScroll() {
       if (atBoundaryX) vx = 0;
       if (atBoundaryY) vy = 0;
 
-      if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
+      if (Math.abs(vx) < MIN_COASTING_VELOCITY && Math.abs(vy) < MIN_COASTING_VELOCITY) {
         finishCoast();
         return;
       }
@@ -222,7 +233,7 @@ export function useMomentumScroll() {
       // trying to scroll past an edge that is already visible.
       if (Math.abs(viewport.scrollLeft - clampedScrollLeft) > SCROLL_ROUNDING_TOLERANCE_PX) vx = 0;
       if (Math.abs(viewport.scrollTop - clampedScrollTop) > SCROLL_ROUNDING_TOLERANCE_PX) vy = 0;
-      if (Math.abs(vx) < 0.1 && Math.abs(vy) < 0.1) {
+      if (Math.abs(vx) < MIN_COASTING_VELOCITY && Math.abs(vy) < MIN_COASTING_VELOCITY) {
         finishCoast();
         return;
       }
@@ -236,7 +247,15 @@ export function useMomentumScroll() {
     coastingFrame.current = window.requestAnimationFrame(coast);
   }, [resetTableTransform]);
 
-  const isCoasting = useCallback(() => coastingFrame.current !== undefined, []);
+  const isCoasting = useCallback(() => {
+    const viewport = activeViewportRef.current;
+    if (coastingFrame.current === undefined || !viewport) return false;
+    const canMove = (velocity: number, position: number, maximum: number) => Math.abs(velocity) >= MIN_COASTING_VELOCITY
+      && (velocity > 0 ? position > SCROLL_ROUNDING_TOLERANCE_PX : position < maximum - SCROLL_ROUNDING_TOLERANCE_PX);
+    const { vx, vy } = activeVelocity.current;
+    return canMove(vx, viewport.scrollLeft, Math.max(0, viewport.scrollWidth - viewport.clientWidth))
+      || canMove(vy, viewport.scrollTop, Math.max(0, viewport.scrollHeight - viewport.clientHeight));
+  }, []);
 
   return { stop, trackMove, release, isCoasting };
 }

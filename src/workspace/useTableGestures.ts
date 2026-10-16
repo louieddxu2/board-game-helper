@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
-import type { CellHoldSession, UseTableGesturesProps } from './tableGestureTypes';
+import type { CellHoldSession, TableHeaderTapSession, TableHeaderTapTarget, UseTableGesturesProps } from './tableGestureTypes';
 import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TABLE_BOUNCE_LIMIT, TABLE_BOUNCE_RESISTANCE, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
 import { useTableReorder } from './useTableReorder';
 import { tableReorderHoldMs } from './workspaceShared';
-export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false, ensureTableReady, onReadError, onPersistTextScale }: UseTableGesturesProps) {
+export function useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale, onCellLongPress, onCellSweep, onCellTap, onHeaderTap, bulkSelectionColumnId, onDrawerSwipeProgress, onDrawerSwipeEnd, onOpenSearch, onRevealTopRow, searchOpen = false, ensureTableReady, onReadError, onPersistTextScale }: UseTableGesturesProps) {
   const [panning, setPanning] = useState(false);
   const latest = useRef({ tableId: table?.id, onCellLongPress });
   latest.current = { tableId: table?.id, onCellLongPress };
@@ -31,6 +31,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const ignoreNextTableClickTimer = useRef<number | undefined>(undefined);
   const handledTouchClickCleanup = useRef<(() => void) | undefined>(undefined);
   const cellHold = useRef<CellHoldSession | undefined>(undefined);
+  const headerTap = useRef<TableHeaderTapSession | undefined>(undefined);
   const drawerSwipe = useRef<{ pointerId: number; startX: number; startY: number; active: boolean; lastDeltaX: number } | undefined>(undefined);
   const boundarySearchHold = useRef<{ pointerId: number; edge: 'top' | 'bottom'; timer?: number; triggered: boolean } | undefined>(undefined);
   
@@ -46,7 +47,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   useEffect(() => {
     if (cellHold.current?.timer) window.clearTimeout(cellHold.current.timer);
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
-    cellHold.current = undefined; boundarySearchHold.current = undefined;
+    cellHold.current = undefined; headerTap.current = undefined; boundarySearchHold.current = undefined;
     pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined; drawerSwipe.current = undefined;
     momentumStopPointer.current = undefined;
     panMetrics.current = undefined; panAxis.current = undefined;
@@ -129,6 +130,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const { tableReorderVisual, beginTableReorder, moveTableReorder, endTableReorder: finishTableReorder } = useTableReorder({
     tableId: table?.id, data, commit, viewportRef, setNotice, ensureTableReady, onReadError,
     onActivate: () => {
+      headerTap.current = undefined;
       pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined;
       setPanning(false);
     },
@@ -149,6 +151,16 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     // A new pointer gesture must not inherit the previous release's click guard.
     clearSuppressedTableClick();
     if (pointers.current.size === 0) momentumStopPointer.current = interruptedMomentum ? event.pointerId : undefined;
+    headerTap.current = undefined;
+    if (pointers.current.size === 0 && event.pointerType === 'touch' && !interruptedMomentum && onHeaderTap
+      && !(event.target as Element).closest('a, input, textarea, select, [contenteditable]:not([contenteditable="false"])')) {
+      const cell = (event.target as Element).closest<HTMLTableCellElement>('th');
+      const rowId = cell?.dataset.rowId, columnId = cell?.dataset.columnId;
+      const target: TableHeaderTapTarget | undefined = rowId ? { kind: 'row', id: rowId }
+        : columnId ? { kind: 'column', id: columnId }
+        : cell?.classList.contains('workspace-row-corner') ? { kind: 'corner' } : undefined;
+      if (cell && target) headerTap.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, cell, target };
+    }
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
     const activeHold = cellHold.current;
@@ -414,6 +426,11 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
     const stoppedMomentum = momentumStopPointer.current === event.pointerId;
     if (stoppedMomentum) momentumStopPointer.current = undefined;
+    const header = headerTap.current?.pointerId === event.pointerId ? headerTap.current : undefined;
+    if (header) headerTap.current = undefined;
+    const validHeaderTap = header && !pointerMoved.current && pointers.current.size === 1
+      && event.type === 'pointerup' && header.cell.isConnected
+      && Math.hypot(event.clientX - header.startX, event.clientY - header.startY) <= 10 ? header : undefined;
     const drawerGesture = drawerSwipe.current;
     if (drawerGesture?.pointerId === event.pointerId) {
       drawerSwipe.current = undefined;
@@ -482,6 +499,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       } else if (stoppedMomentum && event.type === 'pointerup') {
         // This gesture stopped a fling; consume its compatibility click too.
         suppressHandledTouchClick(event.clientX, event.clientY);
+      } else if (validHeaderTap && onHeaderTap) {
+        suppressHandledTouchClick(event.clientX, event.clientY);
+        onHeaderTap(validHeaderTap.target);
       } else if (tap && onCellTap) {
         // A validated touch tap must not depend on the browser emitting a click
         // after an edge fling. Consume that click if it does arrive afterwards.
@@ -502,6 +522,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     momentumScroll.stop();
     momentumStopPointer.current = undefined;
     cellHold.current = undefined;
+    headerTap.current = undefined;
   }, [momentumScroll.stop, clearSuppressedTableClick]);
 
   return {

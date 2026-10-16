@@ -30,6 +30,15 @@ const makeCell = (rowId: string, columnId: string) => {
   return cell;
 };
 
+const makeHeader = ({ rowId, columnId, className }: { rowId?: string; columnId?: string; className?: string }) => {
+  const header = document.createElement('th');
+  if (rowId) header.dataset.rowId = rowId;
+  if (columnId) header.dataset.columnId = columnId;
+  if (className) header.className = className;
+  header.getBoundingClientRect = () => CELL_RECT;
+  return header;
+};
+
 const makeTouchClick = (clientX = 140, clientY = 120) => ({
   nativeEvent: { pointerType: 'touch', clientX, clientY, sourceCapabilities: { firesTouchEvents: true } },
   preventDefault: vi.fn(),
@@ -39,13 +48,20 @@ const makeTouchClick = (clientX = 140, clientY = 120) => ({
 const setup = ({ includeLongPress = true }: { includeLongPress?: boolean } = {}) => {
   const viewport = document.createElement('div');
   const tableElement = document.createElement('table');
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  const cornerHeading = makeHeader({ className: 'workspace-row-corner' });
+  const columnHeading = makeHeader({ columnId: 'column-1' });
+  headRow.append(cornerHeading, columnHeading);
+  head.append(headRow);
   const body = document.createElement('tbody');
   const row = document.createElement('tr');
+  const rowHeading = makeHeader({ rowId: 'row-1', className: 'workspace-row-heading' });
   const cell = makeCell('row-1', 'column-1');
   const secondCell = makeCell('row-2', 'column-1');
-  row.append(cell, secondCell);
+  row.append(rowHeading, cell, secondCell);
   body.append(row);
-  tableElement.append(body);
+  tableElement.append(head, body);
   viewport.append(tableElement);
   document.body.append(viewport);
 
@@ -65,6 +81,7 @@ const setup = ({ includeLongPress = true }: { includeLongPress?: boolean } = {})
 
   const onCellLongPress = vi.fn();
   const onCellTap = vi.fn();
+  const onHeaderTap = vi.fn();
   const view = renderHook(({ tableId }: { tableId: string }) => useTableGestures({
     table: { id: tableId } as WorkspaceTable,
     data: undefined,
@@ -75,6 +92,7 @@ const setup = ({ includeLongPress = true }: { includeLongPress?: boolean } = {})
     minTextScale: 1,
     onCellLongPress: includeLongPress ? onCellLongPress : undefined,
     onCellTap,
+    onHeaderTap,
   }), { initialProps: { tableId: 'table-1' } });
 
   const makePointerEvent = (type: string, {
@@ -128,19 +146,99 @@ const setup = ({ includeLongPress = true }: { includeLongPress?: boolean } = {})
     tableElement,
     cell,
     secondCell,
+    rowHeading,
+    columnHeading,
+    cornerHeading,
     onCellLongPress,
     onCellTap,
+    onHeaderTap,
     call,
     tap,
     cancel,
     moveAndRelease,
     consumeTouchClick,
+    beginHeaderReorder: (kind: 'row' | 'column', target: HTMLTableCellElement) => {
+      const event = makePointerEvent('pointerdown', { target });
+      const sourceId = kind === 'row' ? target.dataset.rowId! : target.dataset.columnId!;
+      act(() => {
+        view.result.current.beginTableReorder(kind, sourceId, event);
+        view.result.current.beginTablePan(event);
+      });
+      return event;
+    },
     switchTable: (tableId: string) => act(() => view.rerender({ tableId })),
     wait: (ms: number) => act(() => vi.advanceTimersByTime(ms)),
   };
 };
 
 describe('useTableGestures semantic touch taps', () => {
+  test.each([
+    ['row', 'rowHeading', { kind: 'row', id: 'row-1' }],
+    ['column', 'columnHeading', { kind: 'column', id: 'column-1' }],
+    ['corner', 'cornerHeading', { kind: 'corner' }],
+  ] as const)('invokes the %s header tap once and consumes its compatibility click', (_name, targetKey, expected) => {
+    const gesture = setup();
+
+    gesture.tap({ target: gesture[targetKey] });
+
+    expect(gesture.onHeaderTap).toHaveBeenCalledTimes(1);
+    expect(gesture.onHeaderTap).toHaveBeenCalledWith(expected);
+    expect(gesture.consumeTouchClick()).toBe(true);
+    expect(gesture.consumeTouchClick()).toBe(false);
+    expect(gesture.onHeaderTap).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['movement', 'cancel', 'pinch'] as const)('does not invoke a header tap after %s', (failure) => {
+    const gesture = setup();
+
+    if (failure === 'movement') {
+      gesture.call('begin', { target: gesture.rowHeading });
+      gesture.call('move', { target: gesture.viewport, clientY: 155 });
+      gesture.call('end', { target: gesture.viewport, clientY: 155 });
+    } else if (failure === 'cancel') {
+      gesture.call('begin', { target: gesture.columnHeading });
+      gesture.cancel({ target: gesture.columnHeading });
+    } else {
+      gesture.call('begin', { pointerId: 1, target: gesture.rowHeading });
+      gesture.call('begin', { pointerId: 2, target: gesture.secondCell, clientY: 130 });
+      gesture.call('end', { pointerId: 1, target: gesture.rowHeading });
+      gesture.call('end', { pointerId: 2, target: gesture.secondCell, clientY: 130 });
+    }
+
+    expect(gesture.onHeaderTap).not.toHaveBeenCalled();
+  });
+
+  test('clears a pending header tap when the table changes and ignores links inside a header', () => {
+    const gesture = setup();
+    const link = document.createElement('a');
+    link.href = '#details';
+    gesture.columnHeading.append(link);
+
+    gesture.tap({ target: link });
+    expect(gesture.onHeaderTap).not.toHaveBeenCalled();
+
+    gesture.call('begin', { target: gesture.rowHeading });
+    gesture.switchTable('table-2');
+    gesture.call('end', { target: gesture.rowHeading });
+    expect(gesture.onHeaderTap).not.toHaveBeenCalled();
+  });
+
+  test.each(['row', 'column'] as const)('keeps a %s header long press in reorder behavior, then accepts the next tap', kind => {
+    const gesture = setup();
+    const heading = kind === 'row' ? gesture.rowHeading : gesture.columnHeading;
+    const down = gesture.beginHeaderReorder(kind, heading);
+    gesture.wait(tableReorderHoldMs);
+    expect(gesture.view.result.current.tableReorderVisual?.kind).toBe(kind);
+
+    let handled = false;
+    act(() => { handled = gesture.view.result.current.endTableReorder({ ...down, type: 'pointerup' }); });
+    expect(handled).toBe(true);
+    expect(gesture.onHeaderTap).not.toHaveBeenCalled();
+
+    gesture.tap({ pointerId: 2, target: heading });
+    expect(gesture.onHeaderTap).toHaveBeenCalledTimes(1);
+  });
+
   test('allows a direct body-cell touch when long-press behavior is not supplied', () => {
     const gesture = setup({ includeLongPress: false });
 

@@ -23,6 +23,16 @@ export type CellHoldSession = {
   mode: 'pending' | 'selecting';
 };
 
+export type TableHeaderTapTarget = { kind: 'row' | 'column'; id: string } | { kind: 'corner' };
+
+export type TableHeaderTapSession = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  cell: HTMLTableCellElement;
+  target: TableHeaderTapTarget;
+};
+
 export interface UseTableGesturesProps {
   table: WorkspaceTable | undefined;
   data: WorkspaceData | undefined;
@@ -34,6 +44,7 @@ export interface UseTableGesturesProps {
   onCellLongPress?: (rowId: string, columnId: string) => boolean | void;
   onCellSweep?: (fromRowId: string, toRowId: string, columnId: string) => void;
   onCellTap?: (rowId: string, columnId: string) => void;
+  onHeaderTap?: (target: TableHeaderTapTarget) => void;
   bulkSelectionColumnId?: string;
   onDrawerSwipeProgress?: (deltaX: number) => void;
   onDrawerSwipeEnd?: (deltaX: number) => void;

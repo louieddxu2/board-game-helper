@@ -7,6 +7,7 @@ import { getWorkspaceRow } from './rowIndexes';
 import type { WorkspaceColumn, WorkspaceNode, WorkspaceRow } from './types';
 import { useReadyWorkspaceActions } from './useReadyWorkspaceActions';
 import { useTableGestures } from './useTableGestures';
+import type { TableHeaderTapTarget } from './tableGestureTypes';
 import { useWorkspaceActions } from './useWorkspaceActions';
 import { useWorkspaceBackupStatus } from './useWorkspaceBackupStatus';
 import { useWorkspaceVirtualKeyboardOpen } from './useWorkspaceBrowserBack';
@@ -237,12 +238,25 @@ export const useWorkspacePage = () => {
     if (row && column) handleDataCellClick(row, column);
   }, [table, handleDataCellClick]);
 
+  const handleHeaderTap = useStableCallback((target: TableHeaderTapTarget) => {
+    if (target.kind === 'row') {
+      const row = table && getWorkspaceRow(table.rows, target.id);
+      if (row && rowHeader) {
+        dialogs.set('lastPasteTarget', { rowId: row.id, columnId: rowHeader.id });
+        stableOpenCell(row, rowHeader);
+      }
+      return;
+    }
+    const column = target.kind === 'corner' ? rowHeader : table?.columns.find(column => column.id === target.id);
+    if (column) readyControls.configure(column, target.kind === 'corner');
+  });
+
   const {
     textScale, panning, tableReorderVisual, consumeSuppressedTableClick,
     applyTextScale,
     beginTableReorder, moveTableReorder, endTableReorder,
     beginTablePan, moveTablePan, endTablePan,
-  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: handleDataCellTap, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen, ensureTableReady: activeWindow ? () => readiness.ensure('active') : undefined, onReadError: reportReadError, onPersistTextScale: persistWindowTextScale });
+  } = useTableGestures({ table, data, commit, viewportRef, workspacePageRef, setNotice, minTextScale: localMinTextScale, onCellLongPress: startBulkSelection, onCellSweep: sweepBulkSelection, onCellTap: handleDataCellTap, onHeaderTap: handleHeaderTap, bulkSelectionColumnId: bulkSelection && table?.id === bulkSelection.tableId ? bulkSelection.columnId : undefined, onDrawerSwipeProgress: updateDrawerFromOpenSwipe, onDrawerSwipeEnd: settleDrawerFromOpenSwipe, onOpenSearch: bulkSelection ? undefined : openSearchFromGesture, onRevealTopRow: bulkSelection ? () => setBulkTopRowRevealed(true) : undefined, searchOpen, ensureTableReady: activeWindow ? () => readiness.ensure('active') : undefined, onReadError: reportReadError, onPersistTextScale: persistWindowTextScale });
 
   const stableBeginTableReorder = useStableCallback(beginTableReorder);
   const stableMoveTableReorder = useStableCallback(moveTableReorder);

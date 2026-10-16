@@ -54,8 +54,8 @@ const createViewport = ({
   Object.defineProperties(viewport, {
     clientWidth: { configurable: true, value: 500 },
     clientHeight: { configurable: true, value: 500 },
-    scrollWidth: { configurable: true, value: 2000 },
-    scrollHeight: { configurable: true, value: 2000 },
+    scrollWidth: { configurable: true, value: 500 + actualMaxLeft },
+    scrollHeight: { configurable: true, value: 500 + actualMaxTop },
     scrollLeft: {
       configurable: true,
       get: () => scrollLeft,
@@ -155,6 +155,88 @@ const outOfRangeWrites = (fixture: ViewportFixture, axis: ScrollAxis) => (
 );
 
 describe('useMomentumScroll native boundary behavior', () => {
+  test.each([
+    ['top', 0, { x: 0, y: 0 }, { x: 0, y: 100 }],
+    ['bottom', 1_500, { x: 0, y: 100 }, { x: 0, y: 0 }],
+  ] as const)('does not report an immovable %s coast before its first frame', (_edge, initialTop, first, last) => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const fixture = createViewport({ initialLeft: 20, initialTop, actualMaxLeft: 1_000, actualMaxTop: 1_500 });
+    const raf = installRafController();
+
+    try {
+      releaseFling(result, fixture, 'y', first, last, { maxLeft: fixture.actualMaxLeft, maxTop: fixture.actualMaxTop });
+
+      expect(raf.pending.size).toBe(1);
+      expect(result.current.isCoasting()).toBe(false);
+    } finally {
+      result.current.stop();
+      raf.restore();
+    }
+  });
+
+  test('reports diagonal coasting before its first frame when only one axis is blocked', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const fixture = createViewport({ initialLeft: 1_000, initialTop: 500, actualMaxLeft: 1_000, actualMaxTop: 1_500 });
+    const raf = installRafController();
+
+    try {
+      releaseFling(result, fixture, 'both', { x: 100, y: 100 }, { x: 0, y: 0 }, { maxLeft: fixture.actualMaxLeft, maxTop: fixture.actualMaxTop });
+
+      expect(raf.pending.size).toBe(1);
+      expect(result.current.isCoasting()).toBe(true);
+    } finally {
+      result.current.stop();
+      raf.restore();
+    }
+  });
+
+  test('does not restart a fling from samples that became stale during a stationary hold', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const fixture = createViewport({ initialLeft: 20, initialTop: 500, actualMaxLeft: 1_000, actualMaxTop: 1_500 });
+    const raf = installRafController();
+    const initialTop = fixture.position().top;
+
+    try {
+      vi.setSystemTime(1_000_000);
+      result.current.trackMove(0, 100);
+      vi.setSystemTime(1_000_016);
+      result.current.trackMove(0, 80);
+      vi.setSystemTime(1_000_216);
+      result.current.release(fixture.viewport, 'y');
+
+      expect(fixture.position().top).toBe(initialTop);
+      expect(raf.pending.size).toBe(0);
+      expect(result.current.isCoasting()).toBe(false);
+    } finally {
+      result.current.stop();
+      raf.restore();
+    }
+  });
+
+  test('keeps fresh fast samples and stacks residual velocity after an immediate stop', () => {
+    const { result } = renderHook(() => useMomentumScroll());
+    const fixture = createViewport({ initialLeft: 20, initialTop: 500, actualMaxLeft: 1_000, actualMaxTop: 1_500 });
+    const raf = installRafController();
+
+    try {
+      releaseFling(result, fixture, 'y', { x: 0, y: 100 }, { x: 0, y: 0 });
+      raf.run(0);
+      const firstDelta = fixture.position().top - 500;
+      expect(firstDelta).toBeGreaterThan(0);
+
+      result.current.stop();
+      const secondStart = fixture.position().top;
+      releaseFling(result, fixture, 'y', { x: 0, y: 100 }, { x: 0, y: 0 });
+      raf.run(FRAME_MS);
+
+      expect(fixture.position().top - secondStart).toBeGreaterThan(firstDelta);
+      expect(result.current.isCoasting()).toBe(true);
+    } finally {
+      result.current.stop();
+      raf.restore();
+    }
+  });
+
   test('vertical coast stops at the actual native bottom when the cached bottom is stale', () => {
     const { result } = renderHook(() => useMomentumScroll());
     const fixture = createViewport({ initialLeft: 20, initialTop: 120, actualMaxLeft: 500, actualMaxTop: 150 });

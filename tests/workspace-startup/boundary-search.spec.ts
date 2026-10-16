@@ -72,7 +72,12 @@ const setup = async (page: Page, atBottom = true, useClock = true) => {
     if (!point) throw new Error('Missing hit-testable cell inside the table viewport');
     return point;
   };
-  return { errors, client, touch, tap, fling, wait, motionStopped, cellPoint, table: page.locator('.workspace-table'), viewport, search: page.getByRole('searchbox', { name: '搜尋此表' }), editor: page.locator('.workspace-value-dialog') };
+  const sampleScroll = (frames = 6) => viewport.evaluate((element, frameCount) => new Promise<number[]>(resolve => {
+    const samples: number[] = [];
+    const sample = () => { samples.push(element.scrollTop); if (samples.length >= frameCount) resolve(samples); else requestAnimationFrame(sample); };
+    requestAnimationFrame(sample);
+  }), frames);
+  return { errors, client, touchAt, touch, tap, fling, wait, motionStopped, cellPoint, sampleScroll, table: page.locator('.workspace-table'), viewport, search: page.getByRole('searchbox', { name: '搜尋此表' }), editor: page.locator('.workspace-value-dialog') };
 };
 
 test('starts the search countdown only after an upward pull reaches the visible bounce limit', async ({ page }) => {
@@ -202,6 +207,147 @@ test('does not activate a cell when a touch interrupts active interior coast, th
   await gesture.tap(nextTarget.x, nextTarget.y);
   await expect(gesture.editor).toBeVisible();
   await expect(gesture.editor.getByRole('textbox')).toHaveValue(nextTarget.value);
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+
+test('opens the first row heading tap after the bottom boundary without a retap', async ({ page }) => {
+  const gesture = await setup(page, false, false);
+  await gesture.viewport.evaluate(element => { element.scrollTop = element.scrollHeight - element.clientHeight - 1000; });
+  const source = await gesture.cellPoint();
+  await gesture.fling(source.x, source.y, 240, 4, 16);
+  await expect.poll(() => gesture.viewport.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThanOrEqual(1);
+
+  const target = await gesture.viewport.evaluate(element => {
+    const viewportBox = element.getBoundingClientRect();
+    for (const heading of Array.from(element.querySelectorAll<HTMLElement>('th.workspace-row-heading[data-row-id]'))) {
+      const box = heading.getBoundingClientRect();
+      const x = box.left + box.width / 2, y = box.top + box.height / 2;
+      if (y >= viewportBox.top && y <= viewportBox.bottom && document.elementFromPoint(x, y)?.closest('th') === heading) {
+        return { x, y, value: heading.querySelector('.workspace-cell-value')?.textContent?.trim() ?? '' };
+      }
+    }
+    return null;
+  });
+  if (!target) throw new Error('Missing hit-testable row heading at the bottom boundary');
+  await gesture.tap(target.x, target.y);
+  await expect(gesture.editor).toHaveCount(1);
+  await expect(gesture.editor.getByRole('textbox')).toHaveValue(target.value);
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+
+test('opens the first column heading tap after the top boundary without a retap', async ({ page }) => {
+  const gesture = await setup(page, false, false);
+  const source = await gesture.cellPoint();
+  await gesture.viewport.evaluate(element => { element.scrollTop = 1000; });
+  await expect.poll(() => gesture.viewport.locator('tr[data-virtual-row-id]').count()).toBeGreaterThan(0);
+  await gesture.fling(source.x, source.y, -240, 4, 16);
+  await expect.poll(() => gesture.viewport.evaluate(element => element.scrollTop)).toBe(0);
+
+  const heading = page.locator('th[data-column-id="column-0"]');
+  const box = await heading.boundingBox();
+  if (!box) throw new Error('Missing first column heading at the top boundary');
+  const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('th[data-column-id="column-0"]') !== null, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  expect(hit).toBe(true);
+  await gesture.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.getByRole('dialog', { name: '屬性設定' })).toHaveCount(1);
+  await expect(page.getByRole('dialog', { name: '屬性設定' }).getByRole('textbox', { name: '屬性名稱' })).toHaveValue('欄位 0');
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+
+for (const headingKind of ['row', 'column', 'corner'] as const) {
+test(`opens the ${headingKind} heading from its first pointerup when its compatibility click is omitted`, async ({ page }) => {
+  await page.addInitScript(() => {
+    const trace: string[] = [];
+    let consumeNextCompatibilityClick = false;
+    (window as typeof window & { __boundaryTouchTrace?: string[] }).__boundaryTouchTrace = trace;
+    document.addEventListener('pointerup', event => {
+      if ((event.target as Element | null)?.closest('th[data-column-id], th[data-row-id], th.workspace-row-corner')) {
+        trace.push('pointerup');
+        consumeNextCompatibilityClick = true;
+      }
+    }, true);
+    document.addEventListener('click', event => {
+      if (!consumeNextCompatibilityClick || event.detail === 0) return;
+      consumeNextCompatibilityClick = false;
+      trace.push('click-intercepted');
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+  });
+  const gesture = await setup(page, false, false);
+  const source = await gesture.cellPoint();
+  await gesture.viewport.evaluate(element => { element.scrollTop = 1000; });
+  await expect.poll(() => gesture.viewport.locator('tr[data-virtual-row-id]').count()).toBeGreaterThan(0);
+  await gesture.fling(source.x, source.y, -240, 4, 16);
+  await expect.poll(() => gesture.viewport.evaluate(element => element.scrollTop)).toBe(0);
+
+  const heading = page.locator(headingKind === 'row' ? 'th[data-row-id="row-0"]'
+    : headingKind === 'corner' ? 'th.workspace-row-corner' : 'th[data-column-id="column-0"]');
+  const box = await heading.boundingBox();
+  if (!box) throw new Error(`Missing ${headingKind} heading at the top boundary`);
+  const expectedValue = (await heading.textContent())?.trim();
+  expect(await heading.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest('th') === element;
+  })).toBe(true);
+  await gesture.tap(box.x + box.width / 2, box.y + box.height / 2);
+  expect(await page.evaluate(() => (window as typeof window & { __boundaryTouchTrace?: string[] }).__boundaryTouchTrace)).toEqual(expect.arrayContaining(['pointerup']));
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toHaveCount(1);
+  await expect(headingKind === 'row' ? dialog.getByRole('textbox') : dialog.getByRole('textbox', { name: '屬性名稱' })).toHaveValue(expectedValue!);
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+}
+
+test('keeps an interrupted coast stopped after a stationary touch and accepts the next tap', async ({ page }) => {
+  const gesture = await setup(page, false, false);
+  const source = await gesture.cellPoint();
+  await gesture.fling(source.x, source.y, 240, 4, 16);
+  const releasedTop = await gesture.viewport.evaluate(element => element.scrollTop);
+  await gesture.wait(100);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBeGreaterThan(releasedTop);
+  const target = await gesture.cellPoint();
+  await gesture.touchAt('touchStart', target.x, target.y, 3);
+  const heldSamples = await gesture.sampleScroll();
+  expect(Math.max(...heldSamples) - Math.min(...heldSamples)).toBeLessThan(0.1);
+  await gesture.wait(200);
+  const heldTop = await gesture.viewport.evaluate(element => element.scrollTop);
+  expect(heldTop).toBe(heldSamples[heldSamples.length - 1]);
+  await gesture.touchAt('touchEnd', target.x, target.y, 3);
+  const releasedSamples = await gesture.sampleScroll();
+  expect(Math.max(...releasedSamples) - Math.min(...releasedSamples)).toBeLessThan(0.1);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBe(heldTop);
+  await expect(gesture.editor).toHaveCount(0);
+  const nextTarget = await gesture.cellPoint();
+  await gesture.tap(nextTarget.x, nextTarget.y);
+  await expect(gesture.editor).toBeVisible();
+  await expect(gesture.editor.getByRole('textbox')).toHaveValue(nextTarget.value);
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+
+test('does not restart a drag after holding the same touch before release', async ({ page }) => {
+  const gesture = await setup(page, false, false);
+  const source = await gesture.cellPoint();
+  await gesture.touchAt('touchStart', source.x, source.y, 4);
+  for (let step = 1; step <= 4; step++) {
+    await gesture.wait(16);
+    await gesture.touchAt('touchMove', source.x, source.y - step * 15, 4);
+  }
+  const heldSamples = await gesture.sampleScroll();
+  expect(Math.max(...heldSamples) - Math.min(...heldSamples)).toBeLessThan(0.1);
+  await gesture.wait(200);
+  const heldTop = await gesture.viewport.evaluate(element => element.scrollTop);
+  expect(heldTop).toBe(heldSamples[heldSamples.length - 1]);
+  await gesture.touchAt('touchEnd', source.x, source.y - 60, 4);
+  const releasedSamples = await gesture.sampleScroll();
+  expect(Math.max(...releasedSamples) - Math.min(...releasedSamples)).toBeLessThan(0.1);
+  expect(await gesture.viewport.evaluate(element => element.scrollTop)).toBe(heldTop);
+  await expect(gesture.editor).toHaveCount(0);
   expect(gesture.errors).toEqual([]);
   await gesture.client.detach();
 });
