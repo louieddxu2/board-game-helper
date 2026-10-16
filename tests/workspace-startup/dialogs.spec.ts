@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
 import { closeServer, readTableCell, seed, startServer } from './startupSupport';
+import { chooseWorkspaceSetting } from './settingsSupport';
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
 test.afterAll(async () => { await closeServer(site.server); });
@@ -26,14 +27,14 @@ test('a saved 10k-row conversion persists numeric values and rebuilds dynamic ch
   await page.goto(`${site.origin}/workspace`);
   await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
-  await dialog.getByRole('combobox', { name: '輸入類型' }).selectOption('number');
+  await chooseWorkspaceSetting(dialog, '輸入類型', '數字');
   await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe(1);
   expect(await readTableCell(page, 'table-0', 'row-0', 'column-0')).toBe(0);
 
   await page.getByRole('columnheader', { name: '欄位 0', exact: true }).click();
-  await dialog.getByRole('combobox', { name: '輸入類型' }).selectOption('dynamic-select');
+  await chooseWorkspaceSetting(dialog, '輸入類型', '動態列表');
   await page.locator('.workspace-column-dialog-overlay').click({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   await expect.poll(() => readTableCell(page, 'table-0', 'row-9999', 'column-0')).toBe('1');
@@ -52,7 +53,7 @@ test('column settings wait for explicit name editing and keep keyboard navigatio
   const name = dialog.getByRole('textbox', { name: '屬性名稱' });
   await expect(dialog).toBeFocused();
   await expect(name).not.toBeFocused();
-  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveValue('text');
+  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveText('文字');
   await expect(dialog.getByRole('button', { name: '置左', pressed: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('column-settings.png') });
   await page.keyboard.press('Shift+Tab');

@@ -7,6 +7,7 @@ import { createColumn, createNode, createTable, emptyWorkspace, getRowHeaderColu
 import { exportWorkspaceArchive, exportWorkspaceXlsx, importWorkspaceArchive, importWorkspaceXlsx } from '../spreadsheet';
 import { readStoredXlsx, tableDataRows, tableSettingsRows } from '../spreadsheetCodec';
 import { useWorkspaceFilter } from '../useWorkspaceFilter';
+import { chooseWorkspaceSetting } from '../../test/workspaceSettings';
 import { ColumnConfig } from '../workspaceColumnConfig';
 import { applyWorkspaceMatrixPaste } from '../workspacePaste';
 import { createWorkspaceValueReader } from './values';
@@ -70,13 +71,14 @@ describe('formula settings and conversions', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ formula: expect.objectContaining({ expression: '[價格] + 1' }) })));
   });
 
-  it('immediately warns when a source type change would invalidate another formula and clears on correction', () => {
+  it('immediately warns when a source type change would invalidate another formula and clears on correction', async () => {
     const table = fixture(), onSave = vi.fn();
     render(<ColumnConfig column={table.columns[0]} sourceColumns={table.columns} onSave={onSave} />);
-    fireEvent.change(screen.getByRole('combobox', { name: '輸入類型' }), { target: { value: 'text' } });
+    const user = userEvent.setup();
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '文字');
     expect(screen.getByRole('status')).toHaveTextContent('公式只能引用其他原始數字屬性');
     expect(onSave).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole('combobox', { name: '輸入類型' }), { target: { value: 'number' } });
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '數字');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });

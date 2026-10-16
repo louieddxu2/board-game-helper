@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
 import { closeServer, holdIdleWork, seed, startServer } from './startupSupport';
+import { chooseWorkspaceSetting } from './settingsSupport';
 
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
@@ -30,15 +31,16 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.getByRole('columnheader', { name: '平均', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '屬性設定' });
   await expect(dialog).toBeFocused();
-  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveValue('number');
+  await expect(dialog.getByRole('combobox', { name: '輸入類型' })).toHaveText('數字');
   const modeBoxes = await dialog.getByRole('group', { name: '數字輸入方式' }).getByRole('button').evaluateAll(buttons => buttons.map(button => {
     const box = button.getBoundingClientRect(); return { top: box.top, left: box.left, right: box.right };
   }));
   expect(modeBoxes).toHaveLength(4);
-  modeBoxes.slice(1).forEach((box, index) => {
-    expect(Math.abs(box.top - modeBoxes[0].top)).toBeLessThanOrEqual(1);
-    expect(modeBoxes[index].right).toBeLessThanOrEqual(box.left);
-  });
+  for (const start of [0, 2]) {
+    expect(Math.abs(modeBoxes[start].top - modeBoxes[start + 1].top)).toBeLessThanOrEqual(1);
+    expect(modeBoxes[start].right).toBeLessThanOrEqual(modeBoxes[start + 1].left);
+  }
+  expect(modeBoxes[2].top).toBeGreaterThan(modeBoxes[0].top);
   await expect(dialog.getByRole('button', { name: '取消', exact: true })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: '儲存', exact: true })).toHaveCount(0);
   await dialog.getByRole('button', { name: '公式', exact: true }).tap();
@@ -205,9 +207,9 @@ test('rounding updates the preview and cached result, persists on reload, and ca
   const close = () => page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await header.tap();
   await dialog.getByRole('button', { name: '公式', exact: true }).tap();
-  await expect(rounding).toHaveValue('');
+  await expect(rounding).toHaveText('不設定');
   await dialog.getByRole('textbox', { name: '計算公式' }).fill('10 / 3');
-  await rounding.selectOption('2');
+  await chooseWorkspaceSetting(dialog, '四捨五入小數位數', '小數 2 位');
   await expect(dialog.getByRole('status')).toContainText('3.33');
   await close();
   await expect(value).toHaveText('3.33');
@@ -215,14 +217,14 @@ test('rounding updates the preview and cached result, persists on reload, and ca
   await expect(value).toHaveText('3.33');
 
   await header.tap();
-  await expect(rounding).toHaveValue('2');
-  await rounding.selectOption('0');
+  await expect(rounding).toHaveText('小數 2 位');
+  await chooseWorkspaceSetting(dialog, '四捨五入小數位數', '整數（0 位）');
   await expect(dialog.getByRole('status')).toHaveText('預覽（項目 0）：3');
   await close();
   await expect(value).toHaveText('3');
 
   await header.tap();
-  await rounding.selectOption('');
+  await chooseWorkspaceSetting(dialog, '四捨五入小數位數', '不設定');
   await expect(dialog.getByRole('status')).toHaveText(`預覽（項目 0）：${10 / 3}`);
   await close();
   await expect(value).toHaveText(String(10 / 3));

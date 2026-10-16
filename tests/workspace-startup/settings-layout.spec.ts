@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'node:path';
 import { closeServer, seed, startServer } from './startupSupport';
+import { chooseWorkspaceSetting } from './settingsSupport';
 
 let site: Awaited<ReturnType<typeof startServer>>;
 test.beforeAll(async () => { site = await startServer(resolve('dist/client')); });
@@ -51,7 +52,9 @@ for (const width of [320, 390]) {
       const dimensions = await dialog.evaluate(element => {
         const box = element.getBoundingClientRect();
         const panel = element.querySelector<HTMLElement>('.workspace-column-config-panel')!;
-        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, panelHeight: panel.clientHeight, contentHeight: panel.scrollHeight, overflow: panel.scrollWidth - panel.clientWidth };
+        const rail = element.querySelector<HTMLElement>('.workspace-column-config-rail')!.getBoundingClientRect();
+        const panelBox = panel.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, panelHeight: panel.clientHeight, contentHeight: panel.scrollHeight, overflow: panel.scrollWidth - panel.clientWidth, railRight: rail.right, panelLeft: panelBox.left, railTop: rail.top, panelTop: panelBox.top };
       });
       expect(dimensions.left).toBeGreaterThanOrEqual(0);
       expect(dimensions.right).toBeLessThanOrEqual(width);
@@ -60,6 +63,29 @@ for (const width of [320, 390]) {
       expect(dimensions.panelHeight).toBeGreaterThan(42);
       expect(dimensions.contentHeight).toBeGreaterThan(dimensions.panelHeight);
       expect(dimensions.overflow).toBe(0);
+      expect(dimensions.railRight).toBeLessThanOrEqual(dimensions.panelLeft + 1);
+      expect(Math.abs(dimensions.railTop - dimensions.panelTop)).toBeLessThanOrEqual(1);
+      await expect(dialog.locator('select')).toHaveCount(0);
+      await chooseWorkspaceSetting(dialog, '輸入類型', '數字');
+      await dialog.getByRole('button', { name: '公式', exact: true }).tap();
+      const formula = dialog.getByRole('textbox', { name: '計算公式' });
+      await formula.fill('10 / 3');
+      await chooseWorkspaceSetting(dialog, '四捨五入小數位數', '小數 2 位');
+      await expect(formula).not.toBeFocused();
+      const rounding = dialog.getByRole('combobox', { name: '四捨五入小數位數' });
+      await rounding.press('End');
+      const lastOption = dialog.getByRole('option', { name: '小數 12 位', exact: true });
+      await expect(lastOption).toBeInViewport();
+      const menuBox = await dialog.getByRole('listbox', { name: '四捨五入小數位數' }).boundingBox();
+      expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+      expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(width);
+      expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+      expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(400);
+      await rounding.press('Escape');
+      await expect(dialog.getByRole('listbox')).toHaveCount(0);
+      await expect(dialog).toBeVisible();
+      await expect(rounding).toHaveText('小數 2 位');
+      await expect(dialog.locator('select')).toHaveCount(0);
       await page.screenshot({ path: info.outputPath('short-viewport-settings.png') });
     });
   });

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
+import { chooseWorkspaceSetting } from '../test/workspaceSettings';
 import { WorkspacePage } from './WorkspacePage';
 vi.mock('../workspace/db', () => {
   const loadWorkspace = async () => ({
@@ -109,7 +110,7 @@ it('preserves line breaks in fixed list options', async () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '名稱' })).toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: '名稱' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'select');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '固定列表');
     const option = screen.getByRole('textbox', { name: '固定選項 1' });
     await user.type(option, '第一行');
     await user.keyboard('{Enter}');

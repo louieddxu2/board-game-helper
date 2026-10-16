@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
+import { chooseWorkspaceSetting } from '../test/workspaceSettings';
 import { WorkspacePage } from './WorkspacePage';
 vi.mock('../workspace/db', () => {
   const loadWorkspace = async () => ({
@@ -104,7 +105,7 @@ it('preserves fixed options while trying other input types', async () => {
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'text');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '文字');
     fireEvent.click(document.querySelector('.workspace-column-dialog-overlay')!);
     await waitFor(() => expect(document.querySelector('.workspace-column-dialog-overlay')).toBeNull());
     await waitFor(() => expect(vi.mocked(saveWorkspace)).toHaveBeenCalledWith(expect.objectContaining({
@@ -114,7 +115,7 @@ it('preserves fixed options while trying other input types', async () => {
     }), expect.objectContaining({ history: expect.any(Object) })));
 
     await user.click(screen.getByRole('button', { name: '類型' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'select');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '固定列表');
     expect(screen.getByRole('textbox', { name: '固定選項 1' })).toHaveValue('合作');
     expect(screen.getByRole('textbox', { name: '固定選項 2' })).toHaveValue('競爭');
   });
@@ -140,7 +141,7 @@ it('configures inclusive open-ended numeric color ranges', async () => {
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '數量' }));
-    await user.click(screen.getByRole('button', { name: /^數字範圍顏色/ }));
+    await user.click(screen.getByRole('button', { name: /^範圍配色/ }));
     await user.click(screen.getByRole('button', { name: '新增範圍' }));
     await user.type(screen.getByRole('spinbutton', { name: '第 1 段上限' }), '10');
     const colorGroup = screen.getByRole('group', { name: '第 1 段顏色' });

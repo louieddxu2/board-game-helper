@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveWorkspace } from '../workspace/db';
+import { chooseWorkspaceSetting } from '../test/workspaceSettings';
 import { WorkspacePage } from './WorkspacePage';
 vi.mock('../workspace/db', () => {
   const loadWorkspace = async () => ({
@@ -54,7 +55,7 @@ it('persists column statistics immediately when dynamic-list settings are saved'
     vi.mocked(saveWorkspace).mockClear();
 
     await user.click(screen.getByRole('columnheader', { name: '名稱' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'dynamic-select');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '動態列表');
     await user.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(saveWorkspace).toHaveBeenCalledTimes(1));
     const saved = vi.mocked(saveWorkspace).mock.calls[0][0].tables[0];
@@ -121,7 +122,7 @@ it('does not save a type conversion when the column settings draft is cancelled 
     const user = userEvent.setup();
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('columnheader', { name: '數量' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'dynamic-select');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '動態列表');
     expect(saveWorkspace).not.toHaveBeenCalled();
     expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
 
@@ -130,7 +131,7 @@ it('does not save a type conversion when the column settings draft is cancelled 
     expect(saveWorkspace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('columnheader', { name: '數量' }));
-    expect(screen.getByRole('combobox', { name: '輸入類型' })).toHaveValue('number');
+    expect(screen.getByRole('combobox', { name: '輸入類型' })).toHaveTextContent('數字');
     expect(screen.getByRole('cell', { name: '花火，數量：2' })).toBeInTheDocument();
   });
 
@@ -144,14 +145,14 @@ it('keeps an invalid conversion open without saving, then retries after choosing
     vi.mocked(saveWorkspace).mockClear();
 
     await user.click(screen.getByRole('columnheader', { name: '名稱' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'number');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '數字');
     await user.click(screen.getByRole('button', { name: '關閉' }));
 
     expect(screen.getByRole('dialog', { name: '屬性設定' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('無法轉換成數字');
     expect(saveWorkspace).not.toHaveBeenCalled();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: '輸入類型' }), 'dynamic-select');
+    await chooseWorkspaceSetting(user, document.body, '輸入類型', '動態列表');
     await user.click(screen.getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(saveWorkspace).toHaveBeenCalledTimes(1);
