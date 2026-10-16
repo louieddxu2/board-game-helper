@@ -114,7 +114,7 @@
 .workspace-multi-chip {
   display: inline-flex;
   align-items: center;
-  margin: 0 calc(2px * var(--workspace-text-scale, 1)) 0 0;
+  margin: 0 calc(3px * var(--workspace-text-scale, 1)) 0 0;
   padding: 0 calc(2px * var(--workspace-text-scale, 1));
   font-size: inherit;
   font-weight: 600;
