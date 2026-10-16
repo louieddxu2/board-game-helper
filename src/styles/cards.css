@@ -114,11 +114,11 @@
 .workspace-multi-chip {
   display: inline-flex;
   align-items: center;
-  margin: 2px 4px 2px 0;
-  padding: 2px 7px;
-  font-size: 13px;
+  margin: calc(2px * var(--workspace-text-scale, 1)) calc(4px * var(--workspace-text-scale, 1)) calc(2px * var(--workspace-text-scale, 1)) 0;
+  padding: calc(2px * var(--workspace-text-scale, 1)) calc(7px * var(--workspace-text-scale, 1));
+  font-size: calc(13px * var(--workspace-text-scale, 1));
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: calc(6px * var(--workspace-text-scale, 1));
   background: var(--cream);
   color: var(--palette-green-900);
   border: 1px solid var(--palette-line);
