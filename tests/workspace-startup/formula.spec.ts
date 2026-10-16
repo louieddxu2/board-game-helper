@@ -46,13 +46,20 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await dialog.getByRole('button', { name: '公式', exact: true }).tap();
   const input = dialog.getByRole('textbox', { name: '計算公式' });
   await expect(input).toHaveAttribute('rows', '2');
+  await expect(input).toHaveAttribute('inputmode', 'none');
   await input.evaluate(node => {
     node.dataset.buttonFocusCount = '0';
     node.addEventListener('focus', () => { node.dataset.buttonFocusCount = String(Number(node.dataset.buttonFocusCount) + 1); });
   });
   await dialog.getByRole('button', { name: '插入變數 價格' }).tap();
+  await expect(input).toHaveAttribute('inputmode', 'none');
+  await expect(dialog.getByRole('button', { name: '插入變數 價格' })).toBeFocused();
   await dialog.getByRole('button', { name: '插入 ÷' }).tap();
+  await expect(input).toHaveAttribute('inputmode', 'none');
+  await expect(dialog.getByRole('button', { name: '插入 ÷' })).toBeFocused();
   await dialog.getByRole('button', { name: '插入變數 次數' }).tap();
+  await expect(input).toHaveAttribute('inputmode', 'none');
+  await expect(dialog.getByRole('button', { name: '插入變數 次數' })).toBeFocused();
   await expect(input).toHaveValue('[價格]÷[次數]');
   await input.evaluate((node: HTMLTextAreaElement) => node.setSelectionRange(0, 0));
   await dialog.getByRole('button', { name: '插入 (' }).tap();
@@ -69,6 +76,7 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   expect(box!.width).toBeLessThanOrEqual(390);
   await input.tap();
   expect(await input.evaluate(node => document.activeElement === node)).toBe(true);
+  await expect(input).toHaveAttribute('inputmode', 'text');
   await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await expect(dialog).toHaveCount(0);
   const calculated = page.locator('[data-cell-id="row-0:column-2"]');
@@ -89,6 +97,32 @@ test('mobile formula buttons insert at the caret, save, recalculate and survive 
   await page.locator('.workspace-overlay').tap({ position: { x: 4, y: 4 } });
   await expect(calculated).toHaveText('400');
   expect(errors).toEqual([]);
+});
+
+test('formula buttons leave keyboard input mode after an explicitly focused editor, and tapping the editor enables it again', async ({ page }) => {
+  await page.getByRole('columnheader', { name: '平均', exact: true }).tap();
+  const dialog = page.getByRole('dialog', { name: '屬性設定' });
+  await dialog.getByRole('button', { name: '公式', exact: true }).tap();
+  const input = dialog.getByRole('textbox', { name: '計算公式' });
+  await input.tap();
+  await input.fill('10');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute('inputmode', 'text');
+  // Dismissing a phone's keyboard can leave this text focus intact.
+  await input.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(0, 2));
+  const price = dialog.getByRole('button', { name: '插入變數 價格' });
+  await price.tap();
+  await expect(input).toHaveValue('[價格]');
+  await expect(input).toHaveAttribute('inputmode', 'none');
+  await expect(price).toBeFocused();
+  await dialog.getByRole('button', { name: '插入 ÷', exact: true }).tap();
+  await dialog.getByRole('button', { name: '插入變數 次數' }).tap();
+  await expect(input).toHaveValue('[價格]÷[次數]');
+  await expect(input).not.toBeFocused();
+  await expect(input).toHaveAttribute('inputmode', 'none');
+  await input.tap();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute('inputmode', 'text');
 });
 
 test('mobile formula validation stays live, treats blank division as empty, and clears runtime status after correction', async ({ page }, info) => {

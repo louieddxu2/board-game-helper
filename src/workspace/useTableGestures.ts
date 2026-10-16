@@ -25,6 +25,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   const panAxis = useRef<TablePanAxis | undefined>(undefined);
   const panMetrics = useRef<{ table: HTMLTableElement | null; bounds: ReturnType<typeof getTableContentScrollBounds> } | undefined>(undefined);
   const pointerMoved = useRef(false);
+  const momentumStopPointer = useRef<number | undefined>(undefined);
   const ignoreNextTableClick = useRef(false);
   const ignoredTouchClickAt = useRef<{ x: number; y: number } | undefined>(undefined);
   const ignoreNextTableClickTimer = useRef<number | undefined>(undefined);
@@ -47,6 +48,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     cellHold.current = undefined; boundarySearchHold.current = undefined;
     pointers.current.clear(); panStart.current = undefined; pinchStart.current = undefined; drawerSwipe.current = undefined;
+    momentumStopPointer.current = undefined;
     panMetrics.current = undefined; panAxis.current = undefined;
     clearSuppressedTableClick();
     momentumScroll.stop(); setPanning(false);
@@ -139,12 +141,14 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const beginTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const interruptedMomentum = event.pointerType === 'touch' && momentumScroll.isCoasting();
     momentumScroll.stop();
     clearBoundarySearchHold();
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if ((event.target as Element).closest('input, textarea')) return;
     // A new pointer gesture must not inherit the previous release's click guard.
     clearSuppressedTableClick();
+    if (pointers.current.size === 0) momentumStopPointer.current = interruptedMomentum ? event.pointerId : undefined;
     const viewport = event.currentTarget;
     panMetrics.current = undefined;
     const activeHold = cellHold.current;
@@ -169,18 +173,18 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       if (rowId && columnId) {
         const startedInLane = isInCellSweepLane(cell.getBoundingClientRect(), event.clientX);
         const bulkTouch = event.pointerType === 'touch' && Boolean(bulkSelectionColumnId);
-        const immediate = bulkTouch && columnId === bulkSelectionColumnId && startedInLane;
+        const immediate = !interruptedMomentum && bulkTouch && columnId === bulkSelectionColumnId && startedInLane;
         const hold: CellHoldSession = {
           pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
           x: event.clientX, y: event.clientY, cell, columnId, lastRowId: rowId,
           directionX: event.clientX, directionY: event.clientY,
           active: immediate, canSweep: immediate, startedInLane,
           immediate, blockTap: bulkTouch && !immediate,
-          canTap: event.pointerType === 'touch' && Boolean(onCellTap)
+          canTap: !interruptedMomentum && event.pointerType === 'touch' && Boolean(onCellTap)
             && !(event.target as Element).closest('a, button, input, textarea, select, [contenteditable]:not([contenteditable="false"])'),
           mode: 'pending',
         };
-        if (!bulkTouch && onCellLongPress) {
+        if (!interruptedMomentum && !bulkTouch && onCellLongPress) {
           const owner = table?.id;
           hold.timer = window.setTimeout(() => {
             hold.canTap = false;
@@ -408,6 +412,8 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   };
 
   const endTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const stoppedMomentum = momentumStopPointer.current === event.pointerId;
+    if (stoppedMomentum) momentumStopPointer.current = undefined;
     const drawerGesture = drawerSwipe.current;
     if (drawerGesture?.pointerId === event.pointerId) {
       drawerSwipe.current = undefined;
@@ -473,6 +479,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       panAxis.current = undefined;
       if (moved) {
         suppressNextTableClick(event.pointerType === 'touch' ? 500 : 0, event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : undefined);
+      } else if (stoppedMomentum && event.type === 'pointerup') {
+        // This gesture stopped a fling; consume its compatibility click too.
+        suppressHandledTouchClick(event.clientX, event.clientY);
       } else if (tap && onCellTap) {
         // A validated touch tap must not depend on the browser emitting a click
         // after an edge fling. Consume that click if it does arrive afterwards.
@@ -491,6 +500,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
     if (boundarySearchHold.current?.timer !== undefined) window.clearTimeout(boundarySearchHold.current.timer);
     clearSuppressedTableClick();
     momentumScroll.stop();
+    momentumStopPointer.current = undefined;
     cellHold.current = undefined;
   }, [momentumScroll.stop, clearSuppressedTableClick]);
 

@@ -182,6 +182,30 @@ test('accepts a fresh tap after an interior fling has naturally finished', async
   await gesture.client.detach();
 });
 
+test('does not activate a cell when a touch interrupts active interior coast, then accepts the next tap', async ({ page }) => {
+  const gesture = await setup(page, false, false);
+  const source = await gesture.cellPoint();
+  await gesture.fling(source.x, source.y, 240, 4, 16);
+  const motion = await gesture.viewport.evaluate(element => new Promise<{ before: number; after: number }>(resolve => {
+    requestAnimationFrame(() => {
+      const before = element.scrollTop;
+      requestAnimationFrame(() => resolve({ before, after: element.scrollTop }));
+    });
+  }));
+  expect(motion.after).toBeGreaterThan(motion.before);
+
+  const target = await gesture.cellPoint();
+  await gesture.tap(target.x, target.y);
+  await expect(gesture.editor).toHaveCount(0);
+
+  const nextTarget = await gesture.cellPoint();
+  await gesture.tap(nextTarget.x, nextTarget.y);
+  await expect(gesture.editor).toBeVisible();
+  await expect(gesture.editor.getByRole('textbox')).toHaveValue(nextTarget.value);
+  expect(gesture.errors).toEqual([]);
+  await gesture.client.detach();
+});
+
 for (const delay of [0, 250, 1200]) {
   test(`stops writing past the native bottom and accepts the first tap ${delay} ms after a fling reaches it`, async ({ page }) => {
     const gesture = await setup(page, false, false);
