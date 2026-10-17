@@ -141,6 +141,19 @@ describe('Google Drive appProperties limits', () => {
 });
 
 describe('forked backup metadata contract', () => {
+  it.each(['bytes', 'property-count'])('rejects invalid %s metadata before uploading table files', async limit => {
+    const fixture = createInMemoryDrive();
+    const workspace = createWorkspace();
+    const properties = limit === 'bytes'
+      ? { oversized: '字'.repeat(41) }
+      : Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`extra-${index}`, 'value']));
+
+    await expectDriveBadRequest(createBackup(fixture).backup(workspace.makeData('invalid', 1), { appProperties: properties }));
+
+    expect(fixture.calls.uploads.filter(upload => upload.metadata.appProperties?.backupKind === 'table')).toHaveLength(0);
+    expect(fixture.liveFiles()).toHaveLength(0);
+  });
+
   it('rejects an expected-id backup on a true fork, then merges all parents and continues automatically', async () => {
     const fixture = createInMemoryDrive();
     const workspace = createWorkspace();

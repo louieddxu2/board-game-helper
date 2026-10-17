@@ -1,6 +1,7 @@
 import type { DriveFile } from './types';
+import { hasManifestParents, manifestParentIds } from './manifestParents';
+export { DRIVE_PARENT_MANIFEST_IDS_PROPERTY, manifestParentIds } from './manifestParents';
 
-export const DRIVE_PARENT_MANIFEST_IDS_PROPERTY = 'parentManifestIds';
 export const DRIVE_BACKUP_FORK_COUNT_PROPERTY = 'backupForkCount';
 export const DRIVE_ADOPTED_LEGACY_ID_PROPERTY = 'adoptedLegacyId';
 export const DRIVE_ADOPTED_LEGACY_TIME_PROPERTY = 'adoptedLegacyTime';
@@ -9,15 +10,7 @@ export const sortManifestFiles = (files: DriveFile[]) => [...files].sort((left, 
   const difference = Number(right.appProperties?.backedUpAt ?? 0) - Number(left.appProperties?.backedUpAt ?? 0);
   return difference || String(right.modifiedTime ?? right.createdTime ?? '').localeCompare(String(left.modifiedTime ?? left.createdTime ?? ''));
 });
-export const manifestParentIds = (file: DriveFile): string[] => {
-  const serialized = file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY];
-  if (serialized === undefined) return [];
-  try {
-    const parsed: unknown = JSON.parse(serialized);
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
-  } catch { return []; }
-};
-const isVersioned = (file: DriveFile) => file.appProperties?.[DRIVE_PARENT_MANIFEST_IDS_PROPERTY] !== undefined;
+const isVersioned = hasManifestParents;
 const versionedHeads = (files: DriveFile[]) => {
   const versioned = files.filter(isVersioned);
   const referenced = new Set(versioned.flatMap(manifestParentIds));

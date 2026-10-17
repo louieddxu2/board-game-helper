@@ -8,7 +8,7 @@ import type { WorkspaceBackupProgress } from './backupProgress';
 import type { DriveFile } from './types';
 
 const api = vi.hoisted(() => ({ findFilesByAppProperty: vi.fn(), uploadFile: vi.fn(), downloadBlob: vi.fn() }));
-vi.mock('./googleDriveApi', () => ({ FOLDER_MIME: 'application/vnd.google-apps.folder', GoogleDriveApi: class {
+vi.mock('./googleDriveApi', async importOriginal => ({ ...await importOriginal<typeof import('./googleDriveApi')>(), GoogleDriveApi: class {
   ensureFolderPath = async () => 'root';
   findFilesByAppProperty = api.findFilesByAppProperty;
   uploadFile = api.uploadFile;

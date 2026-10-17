@@ -1,6 +1,7 @@
 import { cleanDriveBackupHistory } from './backupRetention';
 import { withDriveBackupOperation } from './backupOperation';
-import { adoptedDriveLegacyBaseline, driveLegacyBaselineForBackup, needsDriveLegacyHistory, findDriveManifestHeads, retainedDriveManifests, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_ADOPTED_LEGACY_ID_PROPERTY, DRIVE_ADOPTED_LEGACY_TIME_PROPERTY } from './manifestHistory';
+import { adoptedDriveLegacyBaseline, driveLegacyBaselineForBackup, needsDriveLegacyHistory, findDriveManifestHeads, retainedDriveManifests, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_ADOPTED_LEGACY_ID_PROPERTY, DRIVE_ADOPTED_LEGACY_TIME_PROPERTY } from './manifestHistory';
+import { manifestParentProperties } from './manifestParents';
 export { findDriveManifestHeads, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY } from './manifestHistory';
 import { normalizeWorkspace } from '../model';
 import { workspaceTableChangeRevision } from '../changeRevisions';
@@ -8,7 +9,7 @@ import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWork
 import type { WorkspaceData, WorkspaceNode, WorkspaceTable } from '../types';
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import type { WorkspaceBackupPhase, WorkspaceBackupProgress } from './backupProgress';
-import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
+import { assertDriveAppProperties, FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
 import { BackupNotFoundError } from './singleFileBackup';
 import type { BackupMetadata, BackupReceipt, DriveFile, GoogleDriveApiOptions } from './types';
 
@@ -193,6 +194,20 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const tables = runOptions.source?.tables ?? data.tables;
     const fallbackUpdatedAt = Math.max(0, ...tables.map((table) => table.updatedAt)) || Date.now();
     const sourceUpdatedAt = typeof metadata.sourceUpdatedAt === 'number' ? metadata.sourceUpdatedAt : Number(metadata.sourceUpdatedAt ?? fallbackUpdatedAt);
+    const parentManifestIds = 'expectedRemoteFileId' in runOptions
+      ? previousFile ? [previousFile.id] : []
+      : remoteState.heads.map(file => file.id);
+    const legacyBaseline = driveLegacyBaselineForBackup(remoteState.heads, remoteState.legacyBaseline);
+    const appProperties = {
+      ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}),
+      backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION),
+      ...manifestParentProperties(parentManifestIds),
+      ...(legacyBaseline ? {
+        [DRIVE_ADOPTED_LEGACY_ID_PROPERTY]: legacyBaseline.id,
+        [DRIVE_ADOPTED_LEGACY_TIME_PROPERTY]: new Date(legacyBaseline.time).toISOString(),
+      } : {}),
+    };
+    assertDriveAppProperties(appProperties);
     const nodeMap = new Map(data.nodes.map((node) => [node.id, node]));
     const driveFolderIds = new Map<string, string>();
     const folders: DriveWorkspaceFolderRef[] = [];
@@ -243,14 +258,6 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
       folders,
       tables: tableRefs,
     };
-    const parentManifestIds = 'expectedRemoteFileId' in runOptions
-      ? previousFile ? [previousFile.id] : []
-      : remoteState.heads.map((file) => file.id);
-    const legacyBaseline = driveLegacyBaselineForBackup(remoteState.heads, remoteState.legacyBaseline);
-    const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION), [DRIVE_PARENT_MANIFEST_IDS_PROPERTY]: JSON.stringify(parentManifestIds), ...(legacyBaseline ? {
-      [DRIVE_ADOPTED_LEGACY_ID_PROPERTY]: legacyBaseline.id,
-      [DRIVE_ADOPTED_LEGACY_TIME_PROPERTY]: new Date(legacyBaseline.time).toISOString(),
-    } : {}) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
     report('saving-index');

@@ -1,4 +1,5 @@
 import type { DriveBody, DriveFile, FetchLike, GoogleDriveApiOptions } from './types';
+import { driveAppPropertiesError } from './driveAppProperties';
 
 export class GoogleDriveApiError extends Error {
   readonly status: number;
@@ -11,6 +12,11 @@ export class GoogleDriveApiError extends Error {
     this.details = details;
   }
 }
+
+export const assertDriveAppProperties = (properties?: Record<string, string>) => {
+  const message = driveAppPropertiesError(properties);
+  if (message) throw new GoogleDriveApiError(message, 400);
+};
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const DEFAULT_DRIVE_BASE_URL = 'https://www.googleapis.com/drive/v3';
@@ -126,6 +132,7 @@ export class GoogleDriveApi {
   }
 
   async createFolder(name: string, parentId = 'root', appProperties?: Record<string, string>): Promise<DriveFile> {
+    assertDriveAppProperties(appProperties);
     return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,6 +152,7 @@ export class GoogleDriveApi {
 
   async uploadFile(options: { fileId?: string; parentId?: string; name: string; mimeType: string; body: DriveBody; appProperties?: Record<string, string> }): Promise<DriveFile> {
     if (!options.fileId && !options.parentId) throw new Error('建立 Google Drive 檔案需要 parentId');
+    assertDriveAppProperties(options.appProperties);
     const boundary = `drive-backup-${Math.random().toString(16).slice(2)}`;
     const delimiter = `\r\n--${boundary}\r\n`;
     const encoder = new TextEncoder();
@@ -172,6 +180,7 @@ export class GoogleDriveApi {
   }
 
   async updateFileMetadata(fileId: string, metadata: { name?: string; appProperties?: Record<string, string> }): Promise<DriveFile> {
+    assertDriveAppProperties(metadata.appProperties);
     return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
