@@ -1,6 +1,6 @@
 import { cleanDriveBackupHistory } from './backupRetention';
 import { withDriveBackupOperation } from './backupOperation';
-import { findDriveManifestHeads, retainedDriveManifests, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY } from './manifestHistory';
+import { adoptedDriveLegacyBaseline, driveLegacyBaselineForBackup, needsDriveLegacyHistory, findDriveManifestHeads, retainedDriveManifests, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_ADOPTED_LEGACY_ID_PROPERTY, DRIVE_ADOPTED_LEGACY_TIME_PROPERTY } from './manifestHistory';
 export { findDriveManifestHeads, DRIVE_PARENT_MANIFEST_IDS_PROPERTY, DRIVE_BACKUP_FORK_COUNT_PROPERTY } from './manifestHistory';
 import { normalizeWorkspace } from '../model';
 import { workspaceTableChangeRevision } from '../changeRevisions';
@@ -129,12 +129,18 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
   };
 
   const findRemoteState = async () => {
-    const files = await findTagged(DRIVE_MANIFEST_KIND, undefined, await ensureFolder(), DRIVE_XLSX_MIME_TYPE);
-    const heads = findDriveManifestHeads(files);
+    const root = await ensureFolder();
+    const files = await findTagged(DRIVE_MANIFEST_KIND, undefined, root, DRIVE_XLSX_MIME_TYPE);
+    const historical = needsDriveLegacyHistory(files)
+      ? (await api.findFilesByAppProperty({ key: DRIVE_BACKUP_KIND_PROPERTY, value: DRIVE_MANIFEST_KIND, parentId: root, mimeType: DRIVE_XLSX_MIME_TYPE, trashed: true }))
+        .filter(file => file.appProperties?.backupKey === options.backupKey)
+      : [];
+    const legacyBaseline = adoptedDriveLegacyBaseline(files, historical);
+    const heads = findDriveManifestHeads(files, legacyBaseline);
     const selected = heads[0]
       ? { ...heads[0], appProperties: { ...heads[0].appProperties, [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(heads.length) } }
       : null;
-    return { files, heads, selected };
+    return { files, heads, selected, legacyBaseline };
   };
   const findRemoteFile = async () => (await findRemoteState()).selected;
 
@@ -240,7 +246,11 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const parentManifestIds = 'expectedRemoteFileId' in runOptions
       ? previousFile ? [previousFile.id] : []
       : remoteState.heads.map((file) => file.id);
-    const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION), [DRIVE_PARENT_MANIFEST_IDS_PROPERTY]: JSON.stringify(parentManifestIds) };
+    const legacyBaseline = driveLegacyBaselineForBackup(remoteState.heads, remoteState.legacyBaseline);
+    const appProperties = { ...taggedProperties(DRIVE_MANIFEST_KIND), ...(metadata.appProperties ?? {}), backedUpAt: String(Date.now()), sourceUpdatedAt: String(sourceUpdatedAt), schemaVersion: String(DRIVE_MANIFEST_VERSION), [DRIVE_PARENT_MANIFEST_IDS_PROPERTY]: JSON.stringify(parentManifestIds), ...(legacyBaseline ? {
+      [DRIVE_ADOPTED_LEGACY_ID_PROPERTY]: legacyBaseline.id,
+      [DRIVE_ADOPTED_LEGACY_TIME_PROPERTY]: new Date(legacyBaseline.time).toISOString(),
+    } : {}) };
     const manifestFolderRefs: WorkspaceBackupFolderRef[] = folders.map((folder) => ({ ...folder }));
     const manifestTableRefs: WorkspaceBackupTableFileRef[] = tableRefs.map((table) => ({ ...table }));
     report('saving-index');

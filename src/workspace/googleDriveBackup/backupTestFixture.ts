@@ -203,8 +203,9 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       const name = queryValue(query, /name = '([^']+)'/);
       const parent = queryValue(query, /^'([^']+)' in parents/) ?? queryValue(query, /'([^']+)' in parents/);
       const mimeType = queryValue(query, /mimeType = '([^']+)'/);
+      const trashed = query.includes('trashed = true');
       const found = [...files.values()].filter(file => {
-        if (file.trashed) return false;
+        if (Boolean(file.trashed) !== trashed) return false;
         if (propertyKey && file.appProperties?.[propertyKey] !== propertyValue) return false;
         if (name && file.name !== name) return false;
         if (parent && !file.parents?.includes(parent)) return false;
