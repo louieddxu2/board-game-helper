@@ -85,6 +85,20 @@ const responseJson = (value: unknown, now: () => number, status = 200) => new Re
 
 const responseError = (message: string, now: () => number, status = 500) => responseJson({ error: { message } }, now, status);
 
+const MAX_PRIVATE_APP_PROPERTIES = 30;
+const MAX_APP_PROPERTY_BYTES = 124;
+const utf8ByteLength = (value: string) => new TextEncoder().encode(value).byteLength;
+const appPropertiesError = (appProperties?: Record<string, string>) => {
+  if (!appProperties) return undefined;
+  if (Object.keys(appProperties).length > MAX_PRIVATE_APP_PROPERTIES) {
+    return `The maximum number of private app properties is ${MAX_PRIVATE_APP_PROPERTIES}.`;
+  }
+  const oversized = Object.entries(appProperties).find(([key, value]) => utf8ByteLength(key + value) > MAX_APP_PROPERTY_BYTES);
+  return oversized
+    ? 'Properties and app properties are limited to 124 bytes in UTF-8 encoding, counting both the key and the value.'
+    : undefined;
+};
+
 const queryValue = (query: string, expression: RegExp) => query.match(expression)?.[1];
 
 const parseMultipart = async (init: RequestInit | undefined): Promise<MultipartUploadRequest> => {
@@ -138,6 +152,8 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       const id = idMatch ? decodeURIComponent(idMatch[1]) : `file-${nextId++}`;
       request.id = idMatch ? id : undefined;
       calls.uploads.push(request);
+      const propertyError = appPropertiesError(request.metadata.appProperties);
+      if (propertyError) return responseError(propertyError, now, 400);
       const failure = options.shouldFailUpload?.(request);
       if (failure) return responseError(failure, now);
       const previous = files.get(id);
@@ -170,6 +186,8 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
 
     if (url.endsWith('/files') && method === 'POST') {
       const value = JSON.parse(String(init?.body ?? '{}')) as { name: string; mimeType?: string; parents?: string[]; appProperties?: Record<string, string> };
+      const propertyError = appPropertiesError(value.appProperties);
+      if (propertyError) return responseError(propertyError, now, 400);
       const file = addFile({ id: `folder-${nextId++}`, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties, trashed: false });
       return responseJson(publicFile(file), now);
     }
@@ -179,6 +197,8 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       const file = files.get(id);
       if (!file) return responseError('missing file', now, 404);
       const body = JSON.parse(String(init?.body ?? '{}')) as { name?: string; appProperties?: Record<string, string>; trashed?: boolean };
+      const propertyError = appPropertiesError(body.appProperties);
+      if (propertyError) return responseError(propertyError, now, 400);
       if (body.trashed === true) {
         calls.trash.push(id);
         const failure = options.shouldFailTrash?.(file);
