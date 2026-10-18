@@ -164,6 +164,53 @@ describe('independent Drive snapshot backups', () => {
     expect(manifest.fileLayout).toBe('flat');
   });
 
+  test('reports uploaded tables only after each upload and keeps the count unchanged while upload is paused', async () => {
+    const fixture = createWorkspace();
+    let releaseFirstUpload!: () => void;
+    const firstUpload = new Promise<void>(resolve => { releaseFirstUpload = resolve; });
+    const drive = createInMemoryDrive({
+      onUpload: async (_file, request) => {
+        if (request.metadata.appProperties?.backupKind === 'table'
+          && request.metadata.appProperties.localId === fixture.tables[0].id) await firstUpload;
+      },
+    });
+    addRoot(drive);
+    const service = createService(drive, new TestCoordinator(), memoryStorage());
+    const progress: Array<{ phase: string; name?: string; completedTables?: number; totalTables?: number }> = [];
+    const upload = service.backup(fixture.data, {}, { source: fixture.source, onProgress: value => progress.push(value) });
+
+    await vi.waitFor(() => expect(progress.at(-1)).toMatchObject({
+      phase: 'uploading-table', name: fixture.tables[0].name, completedTables: 0, totalTables: 2,
+    }));
+    expect(progress.some(value => value.phase === 'table-uploaded')).toBe(false);
+    expect(progress.every(value => value.completedTables === undefined || value.completedTables === 0)).toBe(true);
+
+    releaseFirstUpload();
+    await upload;
+    expect(progress.map(value => [value.phase, value.completedTables])).toEqual([
+      ['checking-remote', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
+      ['table-uploaded', 1], ['reading-table', 1], ['creating-file', 1], ['uploading-table', 1],
+      ['table-uploaded', 2], ['saving-index', 2], ['confirming', 2],
+    ]);
+  });
+
+  test('does not increment the uploaded count when a table upload fails', async () => {
+    const fixture = createWorkspace();
+    const drive = createInMemoryDrive({
+      shouldFailUpload: request => request.metadata.appProperties?.localId === fixture.tables[1].id ? 'upload failed' : undefined,
+    });
+    addRoot(drive);
+    const service = createService(drive, new TestCoordinator(), memoryStorage());
+    const progress: Array<{ phase: string; completedTables?: number }> = [];
+
+    await expect(service.backup(fixture.data, {}, { source: fixture.source, onProgress: value => progress.push(value) })).rejects.toThrow('upload failed');
+    expect(progress.map(value => [value.phase, value.completedTables])).toEqual([
+      ['checking-remote', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
+      ['table-uploaded', 1], ['reading-table', 1], ['creating-file', 1], ['uploading-table', 1],
+    ]);
+    expect(progress.some(value => value.phase === 'saving-index' || value.phase === 'confirming')).toBe(false);
+  });
+
   test('rejects a corrupted uploaded manifest before publishing the snapshot', async () => {
     let drive!: ReturnType<typeof createInMemoryDrive>;
     let corrupted = false;

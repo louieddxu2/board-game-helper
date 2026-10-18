@@ -118,13 +118,17 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   };
 
   const perform = async (data: WorkspaceData, metadata: BackupMetadata = {}, run: FolderBackupRunOptions = {}): Promise<Receipt> => {
+    run.onProgress?.({ phase: 'checking-remote' });
     const root = await ensureFolder();
     const current = await state(root);
     const previous = headFile(current) ?? await legacyFile();
     const saved = journal.read(current.accountKey);
     const prior = saved ? await coordinator.operation(saved.id) : null;
     // Recover an acknowledged server commit before creating another snapshot, including after a reload.
-    if (prior?.status === 'committed' && !acknowledged.has(prior.id) && current.versions[0]?.id === prior.id) return receipt(prior, root);
+    if (prior?.status === 'committed' && !acknowledged.has(prior.id) && current.versions[0]?.id === prior.id) {
+      run.onProgress?.({ phase: 'confirming' });
+      return receipt(prior, root);
+    }
     const expected = run.expectedRemoteFileId;
     if (('expectedRemoteFileId' in run && (previous?.id ?? null) !== (expected ?? null))
       || (run.expectedRemoteModifiedTime && previous?.modifiedTime !== run.expectedRemoteModifiedTime)
@@ -181,6 +185,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         refs.push({ id: summary.id, nodeId: node.id, folderId: node.parentId, name: summary.name,
           updatedAt: summary.updatedAt, changeRevision: workspaceTableChangeRevision(summary), driveFileId: file.id, fileName });
         completedTables += 1;
+        report('table-uploaded', summary.name);
       }
       await run.source?.verify();
       await keepAlive();
