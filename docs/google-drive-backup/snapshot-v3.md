@@ -103,4 +103,6 @@ v1／v2 保留相容讀取，新版不呼叫其 backup／retention 寫入流程�
 
 測試涵蓋真實 SQLite migration、競爭提交、收據重試、保留三份、還原租約、授權錯誤、檔案異動和 XLSX 完整流程。模擬 API 不代替正式 OAuth／Drive 隔離目錄驗收。
 
+授權契約回歸見 `src/workspace/googleDriveBackup/workspaceAuthorization.integration.test.tsx`：由實際連結入口、GIS scope 設定與 HTTP 請求跑到實際 Worker 驗證，不替換內部授權元件；Google mock 只能依實際請求的 scope 產生識別欄位。只授予 Drive 權限時不可憑空補上 `sub`，並須驗證拒絕後仍能手動重連、單次操作不因契約不符反覆要求授權；此測試由 `npm test` 及發布流程自動執行。
+
 執行 `node --expose-gc --import tsx scripts/benchmark-drive-snapshots.ts` 可量測 500、2,000、10,000 列的合成單表編碼，不連網或讀使用者資料。桌面結果不能當成手機速度或完整備份時間；完整上傳增加傳輸量。若成為瓶頸，再評估將未變更表格複製為獨立檔案，保持快照互不引用。
