@@ -50,6 +50,8 @@ export interface DriveWorkspaceManifest {
   sourceUpdatedAt: number;
   activeNodeId: string | null;
   structureRevision?: string;
+  bottomNavigationTableIds?: string[];
+  fileLayout?: 'flat';
   nodes: WorkspaceNode[];
   folders: DriveWorkspaceFolderRef[];
   tables: DriveWorkspaceTableRef[];
@@ -68,6 +70,8 @@ export interface GoogleDriveFolderBackup {
   backup(data: WorkspaceData, metadata?: BackupMetadata, runOptions?: FolderBackupRunOptions): Promise<BackupReceipt & { manifest: DriveWorkspaceManifest; cleanupWarning?: string }>;
   listRemoteBackups(): Promise<DriveFile[]>;
   restore(selected?: DriveFile): Promise<WorkspaceData>;
+  acknowledgeBackup?(fileId: string, persisted?: boolean): void;
+  maintain?(): Promise<void>;
 }
 
 export interface FolderBackupRunOptions {
@@ -77,6 +81,8 @@ export interface FolderBackupRunOptions {
   complete?: boolean;
   expectedRemoteFileId?: string | null;
   expectedRemoteModifiedTime?: string | null;
+  allowLegacyChange?: boolean;
+  expectedLegacyStamp?: string;
 }
 
 export class RemoteBackupConflictError extends Error {

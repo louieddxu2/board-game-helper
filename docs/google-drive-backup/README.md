@@ -1,4 +1,8 @@
-# Google Drive 資料夾式備份
+# Google Drive Workspace 備份
+
+目前新寫入採用 v3 獨立完整快照與 Worker／D1 原子提交；實作契約、權限、遷移及驗證方式見 [snapshot-v3.md](snapshot-v3.md)。本機原有 ZIP 匯出及表格 XLSX 格式保持相容。
+
+以下內容記錄舊版 v1／v2 的歷史設計，供相容讀取參考；共享表格檔、父版本鏈及純前端版本判定不再用於新版寫入。
 
 ## 目前結論
 

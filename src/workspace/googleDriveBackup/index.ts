@@ -3,3 +3,4 @@ export * from './googleDriveApi';
 export * from './googleIdentityTokenProvider';
 export * from './singleFileBackup';
 export * from './folderBackup';
+export * from './snapshotBackup';

@@ -28,6 +28,8 @@ export interface Env {
   TRUSTED_APP_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_DRIVE_CLIENT_ID?: string;
+  /** Enable only after accepting that automatically created snapshot folders are backup-only. */
+  GOOGLE_DRIVE_SNAPSHOT_FOLDER_CLEANUP?: 'enabled';
   GOOGLE_CLIENT_IDS?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
   EMAIL_HASH_SECRET?: string;

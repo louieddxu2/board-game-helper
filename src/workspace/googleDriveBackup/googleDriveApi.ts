@@ -131,12 +131,27 @@ export class GoogleDriveApi {
     return this.listFiles({ query });
   }
 
-  async createFolder(name: string, parentId = 'root', appProperties?: Record<string, string>): Promise<DriveFile> {
+  getFile(fileId: string): Promise<DriveFile> {
+    return this.requestJson(`${this.driveBaseUrl}/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties,size,md5Checksum,trashed,ownedByMe`);
+  }
+
+  async generateIds(count: number): Promise<string[]> {
+    const ids: string[] = [];
+    while (ids.length < count) {
+      const remaining = Math.min(count - ids.length, 1000);
+      const result = await this.requestJson<{ ids: string[] }>(`${this.driveBaseUrl}/files/generateIds?count=${remaining}&space=drive&type=files`);
+      if (result.ids?.length !== remaining) throw new Error('無法預留完整的備份檔案識別');
+      ids.push(...result.ids);
+    }
+    return ids;
+  }
+
+  async createFolder(name: string, parentId = 'root', appProperties?: Record<string, string>, createId?: string): Promise<DriveFile> {
     assertDriveAppProperties(appProperties);
-    return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files`, {
+    return this.requestJson<DriveFile>(`${this.driveBaseUrl}/files?fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties,ownedByMe,trashed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId], ...(appProperties ? { appProperties } : {}) }),
+      body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId], ...(createId ? { id: createId } : {}), ...(appProperties ? { appProperties } : {}) }),
     });
   }
 
@@ -150,7 +165,7 @@ export class GoogleDriveApi {
     return parentId;
   }
 
-  async uploadFile(options: { fileId?: string; parentId?: string; name: string; mimeType: string; body: DriveBody; appProperties?: Record<string, string> }): Promise<DriveFile> {
+  async uploadFile(options: { fileId?: string; createId?: string; parentId?: string; name: string; mimeType: string; body: DriveBody; appProperties?: Record<string, string> }): Promise<DriveFile> {
     if (!options.fileId && !options.parentId) throw new Error('建立 Google Drive 檔案需要 parentId');
     assertDriveAppProperties(options.appProperties);
     const boundary = `drive-backup-${Math.random().toString(16).slice(2)}`;
@@ -159,13 +174,14 @@ export class GoogleDriveApi {
     const prefix = encoder.encode(`${delimiter}Content-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({
       name: options.name,
       mimeType: options.mimeType,
+      ...(options.createId ? { id: options.createId } : {}),
       ...(options.fileId ? {} : { parents: [options.parentId] }),
       ...(options.appProperties ? { appProperties: options.appProperties } : {}),
     })}${delimiter}Content-Type: ${options.mimeType}\r\n\r\n`);
     const suffix = encoder.encode(`\r\n--${boundary}--`);
     const requestBody = new Blob([prefix, uploadPart(options.body), suffix]);
     const filePath = options.fileId ? `/files/${encodeURIComponent(options.fileId)}` : '/files';
-    const url = `${this.uploadBaseUrl}${filePath}?uploadType=multipart&fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties`;
+    const url = `${this.uploadBaseUrl}${filePath}?uploadType=multipart&fields=id,name,mimeType,parents,createdTime,modifiedTime,appProperties,size,md5Checksum`;
     return this.requestJson<DriveFile>(url, {
       method: options.fileId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },

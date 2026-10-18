@@ -22,6 +22,7 @@ import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
 import { attributesRoutes } from './routes/attributes';
+import { driveSnapshotRoutes } from './routes/driveSnapshots';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -127,6 +128,7 @@ app.use('/api/*', async (c, next) => {
 // recovery flush instead of rolling back correct domain data.
 app.use('/api/*', async (c, next) => {
   await next();
+  if (new URL(c.req.url).pathname.startsWith('/api/workspace-backup/')) return;
   if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) || c.res.status >= 400) return;
   try {
     await flushCatalogOutbox(getDatabase(c));
@@ -138,6 +140,7 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/health', (c) => c.json({ ok: true }));
 
 app.route('/', authRoutes);
+app.route('/', driveSnapshotRoutes);
 app.route('/', homeRoutes);
 app.route('/', rulesRoutes);
 app.route('/', gamesRoutes);

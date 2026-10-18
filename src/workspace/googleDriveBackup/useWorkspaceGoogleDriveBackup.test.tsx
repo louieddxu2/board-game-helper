@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   findRemoteFile: vi.fn(),
   listRemoteBackups: vi.fn(),
   backup: vi.fn(),
+  acknowledgeBackup: vi.fn(),
   restore: vi.fn(),
   legacyFind: vi.fn(),
   legacyRestore: vi.fn(),
@@ -23,10 +24,11 @@ vi.mock('./index', async () => {
   return {
     ...actual,
     createGoogleIdentityTokenProvider: vi.fn(() => ({ isAuthorized: true, signIn: mocks.signIn, signOut: mocks.signOut, getAccessToken: vi.fn(async () => 'token') })),
-    createGoogleDriveFolderBackup: vi.fn(() => ({
+    createGoogleDriveSnapshotBackup: vi.fn(() => ({
       findRemoteFile: mocks.findRemoteFile,
       listRemoteBackups: mocks.listRemoteBackups,
       backup: mocks.backup,
+      acknowledgeBackup: mocks.acknowledgeBackup,
       restore: mocks.restore,
     })),
     createGoogleDriveSingleFileBackup: vi.fn(() => ({ findRemoteFile: mocks.legacyFind, restore: mocks.legacyRestore })),
@@ -77,7 +79,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('workspace Google Drive automatic backup scheduling', () => {
   it.each(['manual', 'overwrite', 'automatic'] as const)('shows live progress for %s backup and clears it only after completion', async mode => {
@@ -138,7 +140,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(result.current.status).toBe('saved');
   });
 
-  it('includes an unloaded changed table in automatic selection and skips its unchanged neighbor', async () => {
+  it('a due unloaded table triggers a complete snapshot without expanding screen data', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     const original = createData();
     const receipt = receiptFor(original);
@@ -153,7 +155,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     await act(async () => { await result.current.connect(); });
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
     expect(mocks.backup).toHaveBeenCalledTimes(1);
-    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: false, source, tableIds: [changed.id] });
+    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: true, source, tableIds: source.tables.map(table => table.id) });
     expect(result.current.record.tableBackups[changed.id].changeRevision).toBe('unopened-edit');
     expect(partial.tables).toHaveLength(1);
   });
@@ -394,7 +396,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
       sourceUpdatedAt: now.getTime() - 10_000, remoteModifiedTime: '2026-08-21T09:00:00.000Z', tableCount: 2, folderCount: 0,
       structureRevision: workspaceStructureChangeRevision(data), tableBackups: {},
     }));
-    mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-old', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:30:00.000Z' });
+    mocks.findRemoteFile.mockResolvedValue({ id: 'manifest-old', name: 'manifest.xlsx', modifiedTime: '2026-08-21T09:30:00.000Z', appProperties: { legacyStamp: 'selected-v1-baseline' } });
     const { result } = renderBackup(data);
     await act(async () => { await result.current.connect(); });
 
@@ -404,9 +406,10 @@ describe('workspace Google Drive automatic backup scheduling', () => {
 
     await act(async () => { expect(await result.current.backup({ force: true })).toBe(true); });
     expect(mocks.backup).toHaveBeenCalledTimes(1);
+    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ expectedRemoteFileId: 'manifest-old', expectedRemoteModifiedTime: '2026-08-21T09:30:00.000Z', expectedLegacyStamp: 'selected-v1-baseline', allowLegacyChange: true });
   });
 
-  it('throttles each Excel independently while manual backup remains complete', async () => {
+  it('a due table triggers a complete snapshot and manual backups remain complete', async () => {
     window.localStorage.setItem(autoBackupKey, 'true');
     const data = createData();
     const [first, second] = data.tables;
@@ -425,7 +428,7 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
 
     expect(mocks.backup).toHaveBeenCalledTimes(1);
-    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: false, tableIds: [second.id] });
+    expect(mocks.backup.mock.calls[0][2]).toMatchObject({ complete: true, tableIds: [first.id, second.id] });
 
     mocks.backup.mockClear();
     await act(async () => { await result.current.backup(); });
@@ -546,4 +549,34 @@ it('records a completed backup while preserving its cleanup warning for the user
   await act(async () => { await result.current.backup(); });
   expect(result.current.record.fileId).toBe('manifest-new');
   expect(result.current.message).toContain('清理失敗');
+});
+
+it('persists the receipt before acknowledging the snapshot journal', async () => {
+  const { result } = renderBackup(createData());
+  await act(async () => { expect(await result.current.backup()).toBe(true); });
+  expect(mocks.acknowledgeBackup).toHaveBeenCalledExactlyOnceWith('manifest-new', true);
+});
+
+it('keeps a successful backup when saving its local receipt hits quota and acknowledges in memory', async () => {
+  const originalSetItem = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+    if (key === recordKey) throw new Error('quota');
+    return originalSetItem.call(this, key, value);
+  });
+  const { result } = renderBackup(createData());
+  await act(async () => { expect(await result.current.backup()).toBe(true); });
+  expect(result.current.record.fileId).toBe('manifest-new');
+  expect(mocks.acknowledgeBackup).toHaveBeenCalledExactlyOnceWith('manifest-new', false);
+});
+
+it('records structure and table revisions from the uploaded receipt rather than newer local data', async () => {
+  const source = createData();
+  const current = { ...source, structureRevision: 'newer-structure', tables: source.tables.map(table => ({ ...table, updatedAt: table.updatedAt + 1, changeRevision: 'newer-table-revision' })) };
+  const uploaded = { ...receiptFor(source), manifest: { ...receiptFor(source).manifest, sourceUpdatedAt: source.updatedAt } };
+  mocks.backup.mockResolvedValue(uploaded);
+  const { result } = renderBackup(current);
+  await act(async () => { expect(await result.current.backup()).toBe(true); });
+  expect(result.current.record.structureRevision).toBe(workspaceStructureChangeRevision(source));
+  expect(result.current.record.tableBackups[source.tables[0].id].changeRevision).toBe(workspaceTableChangeRevision(source.tables[0]));
+  expect(result.current.record.tableBackups[source.tables[0].id].sourceUpdatedAt).toBe(source.tables[0].updatedAt);
 });

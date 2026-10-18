@@ -32,6 +32,7 @@ export interface WorkspaceBackupFolderRef {
 }
 
 export interface ImportedWorkspaceBackupManifest {
+  fileLayout?: 'flat';
   nodes: WorkspaceNode[];
   structureRevision?: string;
   activeNodeId: string | null;
@@ -41,12 +42,13 @@ export interface ImportedWorkspaceBackupManifest {
   tables: WorkspaceBackupTableFileRef[];
 }
 
-export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: WorkspaceBackupFolderRef[], tables: WorkspaceBackupTableFileRef[], sourceUpdatedAt: number) => workbookFromRows([{
+export const exportWorkspaceBackupManifestXlsx = (data: WorkspaceData, folders: WorkspaceBackupFolderRef[], tables: WorkspaceBackupTableFileRef[], sourceUpdatedAt: number, fileLayout?: 'flat') => workbookFromRows([{
   name: '__workspace',
   rows: [
     [BACKUP_MANIFEST_MARKER, CURRENT_XLSX_FORMAT_VERSION],
     ['format', 'board-game-helper-workspace-backup'],
     ['source_updated_at', sourceUpdatedAt],
+    ...(fileLayout ? [['file_layout', fileLayout]] : []),
     ['active_node_id', data.activeNodeId ?? ''],
     ['structure_revision', data.structureRevision ?? ''],
     ['bottom_navigation_table_ids', ...(data.bottomNavigationTableIds ?? [])],
@@ -371,7 +373,9 @@ const parseBackupManifest = (rows: SheetRows): ImportedWorkspaceBackupManifest =
     fileName: stringValue(row[tableColumn('fileName', 7)]),
   })).filter((table) => table.id && table.nodeId && table.fileName);
   if (!Number.isFinite(sourceUpdatedAt)) throw new Error('備份試算表缺少來源更新時間');
-  return { ...parsed, sourceUpdatedAt, folders, tables };
+  const fileLayout = stringValue(rows.find(row => stringValue(row[0]) === 'file_layout')?.[1]);
+  if (fileLayout && fileLayout !== 'flat') throw new Error('不支援的備份檔案配置');
+  return { ...parsed, sourceUpdatedAt, folders, tables, ...(fileLayout === 'flat' ? { fileLayout } : {}) };
 };
 
 export const importWorkspaceBackupManifestXlsx = async (file: Blob): Promise<ImportedWorkspaceBackupManifest> => {
@@ -388,10 +392,13 @@ export const importWorkspaceBackupManifestXlsx = async (file: Blob): Promise<Imp
 
 export const importWorkspaceArchive = async (file: Blob): Promise<ImportedWorkspace> => {
   const entries = await readStoredZip(file);
-  const manifestPath = `${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`;
+  const candidates = [...entries.keys()].filter(path => path === 'manifest.xlsx' || path.endsWith('/manifest.xlsx'));
+  const manifestPath = entries.has(`${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`) ? `${WORKSPACE_ARCHIVE_ROOT}/manifest.xlsx`
+    : candidates.length === 1 ? candidates[0] : '';
   const manifestBytes = entries.get(manifestPath);
   if (!manifestBytes) throw new Error('ZIP 備份缺少 manifest.xlsx');
   const manifest = await importWorkspaceBackupManifestXlsx(blobFromBytes(manifestBytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+  const archiveRoot = manifestPath.slice(0, -'manifest.xlsx'.length);
   const nodeMap = new Map(manifest.nodes.map((node) => [node.id, node]));
   const tableRefs = new Map(manifest.tables.map((ref) => [ref.id, ref]));
   const tables: WorkspaceTable[] = [];
@@ -399,7 +406,8 @@ export const importWorkspaceArchive = async (file: Blob): Promise<ImportedWorksp
     const node = nodeMap.get(ref.nodeId);
     if (!node || node.type !== 'table' || node.tableId !== ref.id) throw new Error(`備份索引的表格結構錯誤：${ref.name}`);
     if (!ref.fileName || ref.fileName.includes('/') || ref.fileName.includes('\\') || ref.fileName.includes('..')) throw new Error(`備份索引的表格檔名不安全：${ref.name}`);
-    const tablePath = [WORKSPACE_ARCHIVE_ROOT, ...archiveFolderSegments(node, nodeMap), ref.fileName].join('/');
+    const folderSegments = archiveFolderSegments(node, nodeMap);
+    const tablePath = archiveRoot + [...(manifest.fileLayout === 'flat' ? [] : folderSegments), ref.fileName].join('/');
     const tableBytes = entries.get(tablePath);
     if (!tableBytes) throw new Error(`ZIP 備份缺少表格：${ref.name}`);
     const imported = await importWorkspaceXlsx(blobFromBytes(tableBytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'), { preserveIds: true });

@@ -126,7 +126,7 @@ describe('Google Drive folder backup boundary', () => {
         files.set(id, { id, name: metadata.name, mimeType: metadata.mimeType, parents: metadata.parents ?? files.get(id)?.parents ?? [], appProperties: metadata.appProperties, body: bodyMatch });
         return jsonResponse(files.get(id));
       }
-      if (url.endsWith('/files') && method === 'POST') {
+      if (new URL(url).pathname.endsWith('/files') && method === 'POST') {
         const value = JSON.parse(String(init?.body ?? '{}')) as { name: string; mimeType: string; parents?: string[]; appProperties?: Record<string, string> };
         const id = `folder-${nextId++}`;
         files.set(id, { id, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties });

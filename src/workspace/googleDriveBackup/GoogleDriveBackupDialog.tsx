@@ -16,6 +16,8 @@ const busyLabel = (busy: BusyState) => busy === 'connecting' ? '正在連結…'
 
 const statusLabel = (status: WorkspaceDriveBackupStatus) => status === 'checking' ? '正在檢查備份變更' : status === 'offline' ? '目前離線' : status === 'disconnected' ? '已主動斷線' : status === 'dirty' ? '有未備份變更' : status === 'saved' ? '已完成備份' : '尚未備份';
 const remoteConflictMessage = '雲端備份與此裝置的紀錄不同，請選擇使用雲端版本或以本機資料覆蓋';
+const versionLabel = (file: DriveFile, index: number) => file.appProperties?.backupKey && file.appProperties.backupKey !== 'dynamic-sheet-primary-workspace-v3'
+  ? '舊備份' : index === 0 ? '最新' : `歷史 ${index + 1}`;
 
 const routineMessages = new Set([
   '已連結 Google Drive',
@@ -76,7 +78,7 @@ export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error
     {showMessage && <p className="workspace-google-drive-message" role="status">{message}</p>}
     {error && <p className="workspace-google-drive-error" role="alert">{error}</p>}
     {record.lastBackupAt && <dl className="workspace-google-drive-meta"><div><dt>上次備份</dt><dd>{formatTime(record.lastBackupAt)}</dd></div></dl>}
-    {remoteVersions.length > 1 && <label className="workspace-form-field">備份版本<select aria-label="選擇備份版本" value={remoteFile?.id ?? ''} disabled={isBusy} onChange={event => onSelectVersion?.(event.target.value)}>{remoteVersions.map((file, index) => <option key={file.id} value={file.id}>{index === 0 ? '最新' : `歷史 ${index + 1}`} · {formatTime(file.appProperties?.backedUpAt ?? file.modifiedTime ?? file.createdTime)}</option>)}</select></label>}
+    {remoteVersions.length > 1 && <label className="workspace-form-field">備份版本<select aria-label="選擇備份版本" value={remoteFile?.id ?? ''} disabled={isBusy} onChange={event => onSelectVersion?.(event.target.value)}>{remoteVersions.map((file, index) => <option key={file.id} value={file.id}>{versionLabel(file, index)} · {formatTime(file.appProperties?.backedUpAt ?? file.modifiedTime ?? file.createdTime)}</option>)}</select></label>}
     <div className="workspace-google-drive-actions">
       {showConnect ? <ActionButton onClick={onConnect} disabled={isBusy || status === 'offline'} variant="primary"><WorkspaceIcon name="external" size={18} />連結 Google Drive</ActionButton> : primaryAction}
       {canUseDrive && remoteFile && remoteConflict && <ActionButton onClick={onOverwrite} disabled={isBusy} variant="danger"><WorkspaceIcon name="upload" size={18} />以本機資料覆蓋雲端</ActionButton>}

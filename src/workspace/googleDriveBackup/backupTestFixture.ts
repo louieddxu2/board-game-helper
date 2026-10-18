@@ -1,13 +1,17 @@
 import type { DriveFile, FetchLike } from './types';
+import { createHash } from 'node:crypto';
 
 export interface StoredDriveFile extends DriveFile {
   body?: Uint8Array;
   trashed?: boolean;
+  /** Simulates a live Drive item outside the app's drive.file-visible set. */
+  visibleToApp?: boolean;
 }
 
 export interface MultipartUploadRequest {
   id?: string;
   metadata: {
+    id?: string;
     name: string;
     mimeType: string;
     parents?: string[];
@@ -76,6 +80,10 @@ const publicFile = (file: StoredDriveFile): DriveFile => ({
   ...(file.createdTime ? { createdTime: file.createdTime } : {}),
   ...(file.modifiedTime ? { modifiedTime: file.modifiedTime } : {}),
   ...(file.appProperties ? { appProperties: { ...file.appProperties } } : {}),
+  ...(file.size ? { size: file.size } : {}),
+  ...(file.md5Checksum ? { md5Checksum: file.md5Checksum } : {}),
+  ownedByMe: file.ownedByMe ?? true,
+  trashed: file.trashed ?? false,
 });
 
 const responseJson = (value: unknown, now: () => number, status = 200) => new Response(JSON.stringify(value), {
@@ -130,6 +138,12 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
   const calls = { uploads: [] as MultipartUploadRequest[], downloads: [] as string[], lists: [] as string[], trash: [] as string[] };
   let nextId = 1;
   const timestamp = () => new Date(now()).toISOString();
+  const isTrashed = (file: StoredDriveFile, visited = new Set<string>()): boolean => {
+    if (file.trashed) return true;
+    if (visited.has(file.id)) return false;
+    visited.add(file.id);
+    return (file.parents ?? []).some(id => { const parent = files.get(id); return parent ? isTrashed(parent, visited) : false; });
+  };
 
   const addFile = (file: Omit<StoredDriveFile, 'createdTime' | 'modifiedTime'> & Partial<Pick<StoredDriveFile, 'createdTime' | 'modifiedTime'>>) => {
     const stored: StoredDriveFile = {
@@ -138,6 +152,7 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       modifiedTime: file.modifiedTime ?? timestamp(),
       parents: file.parents ? [...file.parents] : [],
       appProperties: file.appProperties ? { ...file.appProperties } : undefined,
+      ...(file.body ? { size: String(file.body.byteLength), md5Checksum: createHash('md5').update(file.body).digest('hex') } : {}),
     };
     files.set(stored.id, stored);
     return stored;
@@ -149,9 +164,10 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
     if (url.includes('/upload/drive/v3/files')) {
       const request = await parseMultipart(init);
       const idMatch = new URL(url).pathname.match(/\/files\/([^/]+)$/);
-      const id = idMatch ? decodeURIComponent(idMatch[1]) : `file-${nextId++}`;
+      const id = idMatch ? decodeURIComponent(idMatch[1]) : request.metadata.id ?? `file-${nextId++}`;
       request.id = idMatch ? id : undefined;
       calls.uploads.push(request);
+      if (!idMatch && files.has(id)) return responseError('already exists', now, 409);
       const propertyError = appPropertiesError(request.metadata.appProperties);
       if (propertyError) return responseError(propertyError, now, 400);
       const failure = options.shouldFailUpload?.(request);
@@ -176,7 +192,7 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       const id = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
       const file = files.get(id);
       calls.downloads.push(id);
-      if (!file || file.trashed) return responseError('missing file', now, 404);
+      if (!file || isTrashed(file)) return responseError('missing file', now, 404);
       await options.onDownload?.(file);
       return new Response(file.body ? file.body.slice().buffer as ArrayBuffer : new ArrayBuffer(0), {
         status: 200,
@@ -184,12 +200,24 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       });
     }
 
-    if (url.endsWith('/files') && method === 'POST') {
-      const value = JSON.parse(String(init?.body ?? '{}')) as { name: string; mimeType?: string; parents?: string[]; appProperties?: Record<string, string> };
+    if (new URL(url).pathname.endsWith('/files') && method === 'POST') {
+      const value = JSON.parse(String(init?.body ?? '{}')) as { id?: string; name: string; mimeType?: string; parents?: string[]; appProperties?: Record<string, string> };
       const propertyError = appPropertiesError(value.appProperties);
       if (propertyError) return responseError(propertyError, now, 400);
-      const file = addFile({ id: `folder-${nextId++}`, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties, trashed: false });
+      if (value.id && files.has(value.id)) return responseError('already exists', now, 409);
+      const file = addFile({ id: value.id ?? `folder-${nextId++}`, name: value.name, mimeType: value.mimeType, parents: value.parents ?? [], appProperties: value.appProperties, trashed: false });
       return responseJson(publicFile(file), now);
+    }
+
+    if (url.includes('/files/generateIds')) {
+      const count = Number(new URL(url).searchParams.get('count'));
+      return responseJson({ ids: Array.from({ length: count }, () => `reserved-${nextId++}`) }, now);
+    }
+
+    if (url.includes('/drive/v3/files/') && method === 'GET') {
+      const id = decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '');
+      const file = files.get(id);
+      return file ? responseJson({ ...publicFile(file), trashed: isTrashed(file) }, now) : responseError('missing file', now, 404);
     }
 
     if (url.includes('/drive/v3/files/') && method === 'PATCH') {
@@ -225,7 +253,8 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
       const mimeType = queryValue(query, /mimeType = '([^']+)'/);
       const trashed = query.includes('trashed = true');
       const found = [...files.values()].filter(file => {
-        if (Boolean(file.trashed) !== trashed) return false;
+        if (isTrashed(file) !== trashed) return false;
+        if (file.visibleToApp === false) return false;
         if (propertyKey && file.appProperties?.[propertyKey] !== propertyValue) return false;
         if (name && file.name !== name) return false;
         if (parent && !file.parents?.includes(parent)) return false;
@@ -246,11 +275,13 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
     calls,
     addFile,
     get: id => files.get(id),
-    liveFiles: () => [...files.values()].filter(file => !file.trashed),
+    liveFiles: () => [...files.values()].filter(file => !isTrashed(file)),
     setBody: (id, body) => {
       const file = files.get(id);
       if (!file) throw new Error(`missing file ${id}`);
       file.body = body.slice();
+      file.size = String(body.byteLength);
+      file.md5Checksum = createHash('md5').update(body).digest('hex');
     },
   };
 };

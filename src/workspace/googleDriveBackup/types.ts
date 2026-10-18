@@ -14,6 +14,10 @@ export interface DriveFile {
   createdTime?: string;
   modifiedTime?: string;
   appProperties?: Record<string, string>;
+  size?: string;
+  md5Checksum?: string;
+  trashed?: boolean;
+  ownedByMe?: boolean;
 }
 
 export interface GoogleDriveApiOptions {

@@ -1,6 +1,6 @@
 import zhTWCopy from '../content/zh-TW.json';
 
-const updatedAt = '2026 年 8 月 2 日';
+const updatedAt = '2026 年 10 月 18 日';
 const privacyOpeningCopy = zhTWCopy.author.privacyOpening;
 
 export const PrivacyPage = () => <div className="content-page privacy-page">
@@ -105,10 +105,18 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
       <li>最後登入時間</li>
       <li>本站角色與權限</li>
     </ul>
-    <p>本站不會要求存取 Gmail、Google Drive、聯絡人、日曆或試算表等額外服務。</p>
+    <p>網站登入本身不要求 Gmail、Google Drive、聯絡人、日曆或試算表權限。動態表格的 Drive 備份由使用者另行連結授權。</p>
     <p>網站登入 session 最長維持 30 天。伺服器不直接保存可供登入使用的 session token，只保存 token 的雜湊值。</p>
     <p>登出時會移除目前使用中的 session。已過期的 session 也會由每日排程清除。</p>
     <p>特定整合或短期驗證功能使用的 session 最長維持 1 小時。</p>
+  </section>
+
+  <section>
+    <h2>動態表格與選用備份</h2>
+    <p>動態表格內容保存在裝置的 IndexedDB。選擇連結 Google Drive 後，備份檔保存在你的 Drive；授權範圍限於此 App 建立或你明確授權的檔案。</p>
+    <p>後端保存 Drive 帳號識別碼、備份檔案識別、修訂與作業狀態，用來協調跨裝置提交及保留版本，不保存表格內容。</p>
+    <p>Drive 存取權杖只在頁面記憶體及當次後端驗證、檔案操作期間使用，不寫入資料庫、瀏覽器儲存或日誌，也不保存更新權杖。後端最多快取一分鐘的權杖雜湊及已驗證身分。</p>
+    <p>解除連結會停止自動備份，不會刪除既有備份。還原經過預覽及使用者確認後才改寫本機資料。</p>
   </section>
 
   <section>
@@ -247,7 +255,7 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
 
   <section>
     <h2>外部服務與廣告</h2>
-    <p>Google 提供登入驗證。</p>
+    <p>Google 提供登入驗證及使用者自行啟用的 Drive 備份。</p>
     <p>Cloudflare 提供：</p>
     <ul>
       <li>網站執行</li>
@@ -262,7 +270,6 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
       <li>第三方行為分析服務</li>
       <li>跨站追蹤</li>
       <li>Gmail 整合</li>
-      <li>Google Drive 整合</li>
       <li>Google 聯絡人整合</li>
       <li>Google 日曆整合</li>
     </ul>

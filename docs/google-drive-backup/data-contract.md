@@ -1,5 +1,7 @@
 # Google Drive 備份資料與程式檔案規劃
 
+本文記錄 v1／v2 歷史契約。新版寫入以 [v3 獨立快照契約](snapshot-v3.md) 為準；舊格式僅供相容還原，不由新版清理器刪除。
+
 ## 本機備份狀態
 
 備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；備份 metadata 以獨立 localStorage key 保存，包含檔案識別、時間與小型修訂標記，不包含 access token 或表格內容。

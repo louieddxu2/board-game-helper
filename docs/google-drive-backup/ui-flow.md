@@ -1,5 +1,7 @@
 # Google Drive 備份 UI
 
+v3 維持這些精簡入口，協定差異以 [snapshot-v3.md](snapshot-v3.md) 為準：每次完整獨立快照、後端條件提交、清理失敗不影響自動備份，遷移期舊格式標示「舊備份」。不新增手動驗證或技術診斷設定。
+
 ## 入口與授權
 
 Workspace drawer 提供「開啟 Google Drive 備份」，與本機 ZIP 匯出／匯入並列。開啟彈窗時，若在線且當次工作階段尚未授權，會啟動既有 GIS token flow；也提供「連結 Google Drive」供失敗或主動解除授權後重試。Google 授權使用 Google 的頁面，App 的訊息使用既有自訂 modal。

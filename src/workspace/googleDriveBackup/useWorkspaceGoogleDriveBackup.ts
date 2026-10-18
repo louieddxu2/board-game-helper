@@ -6,7 +6,7 @@ import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from './useWorkspaceBackupSummaries';
 import type { WorkspaceBackupProgress } from './backupProgress';
-import { createGoogleDriveFolderBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
+import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
@@ -70,7 +70,7 @@ const loadRecord = (): WorkspaceDriveBackupRecord => {
 };
 
 const saveRecord = (record: WorkspaceDriveBackupRecord) => {
-  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); } catch { /* Storage is optional. */ }
+  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); return true; } catch { return false; }
 };
 
 const workspaceUpdatedAt = (data?: WorkspaceData) => data ? Math.max(data.updatedAt ?? 0, ...data.tables.map((table) => table.updatedAt)) : 0;
@@ -125,6 +125,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const remoteMatchesRecord = useCallback((file: DriveFile | null) => {
     if (!file) return record.fileId === null;
     if (Number(file.appProperties?.[DRIVE_BACKUP_FORK_COUNT_PROPERTY] ?? 1) > 1) return false;
+    if (file.appProperties?.[SNAPSHOT_PENDING_COMMIT_PROPERTY] === 'true') return true;
     if (file.id !== record.fileId) return false;
     return !record.remoteModifiedTime || !file.modifiedTime || file.modifiedTime === record.remoteModifiedTime;
   }, [record.fileId, record.remoteModifiedTime]);
@@ -151,15 +152,6 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (!authRef.current) {
       authRef.current = createGoogleIdentityTokenProvider({ clientId, scopes: 'https://www.googleapis.com/auth/drive.file' });
     }
-    if (!backupRef.current) {
-      backupRef.current = createGoogleDriveFolderBackup({
-        tokenProvider: authRef.current,
-        folderPath: WORKSPACE_BACKUP_FOLDER_PATH,
-        backupKey: FOLDER_BACKUP_KEY,
-        retainedVersions: WORKSPACE_BACKUP_RETAINED_VERSIONS,
-        appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
-      });
-    }
     if (!legacyBackupRef.current) {
       legacyBackupRef.current = createGoogleDriveSingleFileBackup({
         tokenProvider: authRef.current,
@@ -169,6 +161,11 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         mimeType: BACKUP_MIME_TYPE,
         appProperties: { workspaceFormat: 'dynamic-sheet-v1', schemaVersion: '1' },
       });
+    }
+    if (!backupRef.current) {
+      backupRef.current = createGoogleDriveSnapshotBackup({ tokenProvider: authRef.current,
+        folderPath: WORKSPACE_BACKUP_FOLDER_PATH, backupKey: FOLDER_BACKUP_KEY,
+        retainedVersions: WORKSPACE_BACKUP_RETAINED_VERSIONS, legacySingle: legacyBackupRef.current });
     }
     return { auth: authRef.current, backup: backupRef.current, legacyBackup: legacyBackupRef.current };
   }, [loadGoogleClientId]);
@@ -209,7 +206,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (online && !busy && (!authorized || manuallyDisconnected)) void connect();
   }, [authorized, busy, connect, manuallyDisconnected, online]);
 
-  const backup = useCallback(async ({ automatic = false, force = false, tableIds }: { automatic?: boolean; force?: boolean; tableIds?: string[] } = {}) => {
+  const backup = useCallback(async ({ automatic = false, force = false }: { automatic?: boolean; force?: boolean } = {}) => {
     if (uploadPendingRef.current) return false;
     if (backupBlockedReason) { if (!automatic) setError(backupBlockedReason); return false; }
     if (!data) return false;
@@ -242,21 +239,22 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       const source = await prepareBackup?.(data);
       const tables = source?.tables ?? data.tables;
       const sourceUpdatedAt = Math.max(workspaceUpdatedAt(data), ...tables.map(table => table.updatedAt)) || Date.now();
-      const selectedTableIds = tableIds ?? tables.map((table) => table.id);
+      const selectedTableIds = tables.map((table) => table.id);
       const receipt = await service.backup(data, {
         sourceUpdatedAt,
         appProperties: { exportedAt: new Date().toISOString() },
       }, {
-        complete: !automatic,
+        complete: true,
         onProgress: setProgress,
         tableIds: selectedTableIds,
         ...(source ? { source } : {}),
-        ...(force ? {} : {
-          expectedRemoteFileId: record.fileName === DRIVE_MANIFEST_FILE_NAME ? record.fileId : null,
-          expectedRemoteModifiedTime: record.fileName === DRIVE_MANIFEST_FILE_NAME ? record.remoteModifiedTime : null,
-        }),
+        expectedRemoteFileId: force ? remoteFile?.id ?? null : record.fileId,
+        expectedRemoteModifiedTime: force ? remoteFile?.modifiedTime ?? null : record.remoteModifiedTime,
+        allowLegacyChange: force,
+        ...(force && remoteFile?.appProperties?.legacyStamp ? { expectedLegacyStamp: remoteFile.appProperties.legacyStamp } : {}),
       });
-      const completedAt = Date.now();
+      const remoteCompletedAt = Number(receipt.file.appProperties?.backedUpAt);
+      const completedAt = Number.isFinite(remoteCompletedAt) && remoteCompletedAt > 0 ? remoteCompletedAt : Date.now();
       const nextTableBackups = { ...record.tableBackups };
       // Partial backups also upload tables that have no previous remote file.
       for (const table of receipt.manifest.tables) {
@@ -274,16 +272,18 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         fileId: receipt.file.id,
         fileName: receipt.file.name,
         lastBackupAt: completedAt,
-        sourceUpdatedAt,
+        sourceUpdatedAt: receipt.manifest.sourceUpdatedAt ?? sourceUpdatedAt,
         remoteModifiedTime: receipt.file.modifiedTime ?? null,
         tableCount: receipt.manifest.tables.length,
         folderCount: receipt.manifest.folders.length,
-        structureRevision: workspaceStructureChangeRevision(data),
+        structureRevision: receipt.manifest.structureRevision ?? workspaceStructureChangeRevision(data),
         tableBackups: nextTableBackups,
       };
       setAuthorized(true);
       setRemoteConflict(false); setRemoteFile(null);
-      setRecord(nextRecord); saveRecord(nextRecord); setRemoteVersions([]); setMessage(receipt.cleanupWarning ?? (automatic ? '已自動備份變更' : '已備份整個資料庫')); setNotice('已備份到 Google Drive');
+      const persisted = saveRecord(nextRecord);
+      setRecord(nextRecord); setRemoteVersions([]); setMessage(receipt.cleanupWarning ?? (automatic ? '已自動備份變更' : '已備份整個資料庫')); setNotice('已備份到 Google Drive');
+      service.acknowledgeBackup?.(receipt.file.id, persisted);
       setAutoRetryAt(0);
       return true;
     } catch (cause) {
@@ -297,7 +297,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
       return false;
     } finally { uploadPendingRef.current = false; setProgress(undefined); setBusy(null); }
-  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, prepareBackup, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, setNotice, verifyCurrentData]);
+  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, prepareBackup, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, remoteFile, setNotice, verifyCurrentData]);
 
   const findRemote = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
@@ -359,6 +359,15 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (!enabled) setAutoRetryAt(0);
   }, []);
 
+  useEffect(() => {
+    if (!authorized || !online || manuallyDisconnected) return;
+    const timer = window.setInterval(() => {
+      if (!authRef.current?.isAuthorized || uploadPendingRef.current) return;
+      void backupRef.current?.maintain?.().catch(() => undefined);
+    }, 5 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [authorized, online, manuallyDisconnected]);
+
   const status = useMemo<WorkspaceDriveBackupStatus>(() => {
     if (manuallyDisconnected) return 'disconnected';
     if (!online) return 'offline' as const;
@@ -382,7 +391,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       : Number.POSITIVE_INFINITY;
     const nextAllowedAt = Math.max(autoRetryAt, structureDirty || eligibleTableIds.length > 0 ? now : nextTableAt);
     const delay = Math.max(AUTO_BACKUP_DEBOUNCE_MS, nextAllowedAt - now);
-    const timer = window.setTimeout(() => { void backup({ automatic: true, tableIds: eligibleTableIds }); }, delay);
+    const timer = window.setTimeout(() => { void backup({ automatic: true }); }, delay);
     return () => window.clearTimeout(timer);
   }, [autoBackupEnabled, autoRetryAt, authorized, backup, backupBlockedReason, busy, dirtyTables, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt, record.tableBackups, remoteConflict, structureDirty, summaries, summaryError]);
 
