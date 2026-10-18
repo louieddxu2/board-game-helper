@@ -32,18 +32,27 @@ describe('Drive snapshot bearer-token contract', () => {
   });
 
   test.each([
-    ['audience', { aud: 'another-client.apps.googleusercontent.com' }],
-    ['authorized party', { azp: 'another-client.apps.googleusercontent.com' }],
-    ['subject', { sub: '' }],
-    ['scope', { scope: 'openid profile' }],
-    ['expiry', { exp: NOW / 1000 - 1 }],
-    ['non-numeric expiry', { exp: 'not-a-time' }],
-  ])('rejects a token with an invalid %s claim', async (_claim, overrides) => {
+    ['audience', { aud: 'another-client.apps.googleusercontent.com' }, 'backup_auth_invalid', 403],
+    ['authorized party', { azp: 'another-client.apps.googleusercontent.com' }, 'backup_auth_invalid', 403],
+    ['subject', { sub: '' }, 'backup_identity_required', 403],
+    ['scope', { scope: 'openid profile' }, 'backup_auth_invalid', 403],
+    ['expiry', { exp: NOW / 1000 - 1 }, 'backup_auth_required', 401],
+    ['non-numeric expiry', { exp: 'not-a-time' }, 'backup_auth_required', 401],
+    ['conflicting identities', { user_id: 'another-owner' }, 'backup_auth_invalid', 403],
+  ])('rejects a token with an invalid %s claim', async (_claim, overrides, code, status) => {
     const fetchImpl = fetchFor(tokenInfo(overrides));
     await expect(verifyDriveSnapshotToken(
       `Bearer drive-token-${String(_claim).replaceAll(' ', '-')}`,
       { GOOGLE_DRIVE_CLIENT_ID: CLIENT }, fetchImpl, NOW,
-    )).rejects.toMatchObject({ code: 'backup_auth_required', status: 401 });
+    )).rejects.toMatchObject({ code, status });
+  });
+
+  test('accepts the equivalent Google user_id claim without changing the owner key', async () => {
+    const fetchImpl = fetchFor(tokenInfo({ sub: undefined, user_id: 'google-drive-owner-1' }));
+    const verified = await verifyDriveSnapshotToken('Bearer drive-token-user-id', { GOOGLE_DRIVE_CLIENT_ID: CLIENT }, fetchImpl, NOW);
+    const existing = await verifyDriveSnapshotToken('Bearer drive-token-valid', { GOOGLE_DRIVE_CLIENT_ID: CLIENT }, fetchFor(tokenInfo()), NOW);
+    expect(verified.subject).toBe(existing.subject);
+    expect(verified.accountKey).toBe(existing.accountKey);
   });
 
   test('fails closed for missing or malformed authorization and missing configuration', async () => {

@@ -5,6 +5,8 @@ import type { AccessTokenProvider, FetchLike } from './types';
 
 const messages: Record<string, string> = {
   backup_auth_required: '請重新連結 Google Drive',
+  backup_identity_required: '請重新開啟工作區並連結 Google Drive',
+  backup_auth_invalid: 'Google Drive 授權不符，請重新連結',
   backup_auth_not_configured: 'Google Drive 備份尚未設定完成',
   backup_auth_unavailable: '暫時無法驗證 Google Drive，請稍後再試',
   backup_revision_conflict: '雲端備份已更新，請重新確認版本',

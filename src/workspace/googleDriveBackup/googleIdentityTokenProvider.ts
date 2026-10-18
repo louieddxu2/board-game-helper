@@ -7,10 +7,10 @@ import type {
   GoogleTokenClient,
   GoogleTokenResponse,
 } from './types';
+import { DRIVE_SNAPSHOT_SCOPES } from '../../shared/driveSnapshots';
 
 const DEFAULT_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const DEFAULT_SCRIPT_ID = 'google-identity-services';
-const DEFAULT_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const DEFAULT_SCRIPT_TIMEOUT_MS = 10_000;
 export const GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY = 'board-game-helper-google-drive-manually-disconnected';
 
@@ -89,13 +89,14 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
     scriptId: input.scriptId ?? DEFAULT_SCRIPT_ID,
     scriptTimeoutMs: input.scriptTimeoutMs ?? DEFAULT_SCRIPT_TIMEOUT_MS,
   };
-  const scopes = input.scopes ?? DEFAULT_SCOPES;
+  const scopes = input.scopes ?? DRIVE_SNAPSHOT_SCOPES;
   let token: string | null = null;
   let expiresAt = 0;
   let tokenClient: GoogleTokenClient | null = null;
   let scriptPromise: Promise<void> | null = null;
   let signInPromise: Promise<string> | null = null;
-  let manuallyDisconnected = input.windowRef?.localStorage?.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY) === 'true';
+  let rejectSignIn: ((error: Error) => void) | null = null;
+  let manuallyDisconnected = windowRef.localStorage?.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY) === 'true';
 
   const ensureReady = async () => {
     if (!scriptPromise) scriptPromise = loadIdentityScript(documentRef, windowRef, scriptOptions);
@@ -105,6 +106,8 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
         client_id: input.clientId.trim(),
         scope: scopes,
         callback: () => undefined,
+        error_callback: error => rejectSignIn?.(new Error(error.type === 'popup_closed'
+          ? '已取消 Google Drive 連結' : '無法開啟 Google 授權視窗，請再次點按連結')),
       });
     }
   };
@@ -115,6 +118,7 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
       await ensureReady();
       if (!tokenClient) throw new Error('Google OAuth token client 初始化失敗');
       return new Promise<string>((resolve, reject) => {
+        rejectSignIn = reject;
         tokenClient!.callback = (response: GoogleTokenResponse) => {
           if (response.error || !response.access_token) {
             reject(new Error(response.error_description ?? response.error ?? 'Google 授權失敗'));
@@ -123,12 +127,12 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
           token = response.access_token;
           expiresAt = Date.now() + Math.max((response.expires_in ?? 3600) - 60, 1) * 1000;
           manuallyDisconnected = false;
-          input.windowRef?.localStorage?.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
+          windowRef.localStorage?.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
           resolve(token);
         };
         tokenClient!.requestAccessToken({ prompt });
       });
-    })().finally(() => { signInPromise = null; });
+    })().finally(() => { signInPromise = null; rejectSignIn = null; });
     return signInPromise;
   };
 
@@ -149,7 +153,7 @@ export const createGoogleIdentityTokenProvider = (input: GoogleIdentityTokenProv
       token = null;
       expiresAt = 0;
       manuallyDisconnected = true;
-      input.windowRef?.localStorage?.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
+      windowRef.localStorage?.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
     },
   };
 };

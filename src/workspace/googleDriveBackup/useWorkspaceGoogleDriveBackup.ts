@@ -6,6 +6,7 @@ import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from './useWorkspaceBackupSummaries';
 import type { WorkspaceBackupProgress } from './backupProgress';
+import { SnapshotCoordinatorError } from './snapshotCoordinator';
 import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
@@ -17,6 +18,7 @@ const BACKUP_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsh
 const AUTO_BACKUP_STORAGE_KEY = 'board-game-helper-google-drive-auto-backup';
 export const GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS = 30 * 60 * 1000;
 const AUTO_BACKUP_DEBOUNCE_MS = 1500;
+const isAuthorizationError = (cause: unknown) => cause instanceof SnapshotCoordinatorError && [401, 403].includes(cause.status);
 
 export interface WorkspaceDriveBackupRecord {
   fileId: string | null;
@@ -150,7 +152,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     const clientId = clientIdRef.current?.trim();
     if (!clientId) throw new Error('Google Drive 尚未設定，請先完成 Google Cloud 設定');
     if (!authRef.current) {
-      authRef.current = createGoogleIdentityTokenProvider({ clientId, scopes: 'https://www.googleapis.com/auth/drive.file' });
+      authRef.current = createGoogleIdentityTokenProvider({ clientId });
     }
     if (!legacyBackupRef.current) {
       legacyBackupRef.current = createGoogleDriveSingleFileBackup({
@@ -181,20 +183,20 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     try {
       const { auth, backup: service, legacyBackup } = await ensureBackup();
       await auth.signIn();
+      setManuallyDisconnected(false);
+      window.localStorage.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
       const folderFile = await service.findRemoteFile();
       const file = folderFile ?? await legacyBackup.findRemoteFile();
       remoteSource.current = folderFile ? 'folder' : 'legacy';
       setRemoteVersions([]);
       const conflict = !remoteMatchesRecord(file);
       setAuthorized(auth.isAuthorized);
-      setManuallyDisconnected(false);
-      window.localStorage.removeItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY);
       setAutoRetryAt(0);
       setRemoteFile(conflict ? file : null);
       setRemoteConflict(conflict);
       setMessage(conflict ? '雲端備份與此裝置的紀錄不同，請選擇使用雲端版本或以本機資料覆蓋' : '已連結 Google Drive');
     } catch (cause) {
-      setAuthorized(authRef.current?.isAuthorized ?? false);
+      setAuthorized(false);
       setError(cause instanceof Error ? cause.message : 'Google Drive 連結失敗');
     } finally { setBusy(null); }
   }, [ensureBackup, remoteMatchesRecord]);
@@ -290,7 +292,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (cause instanceof Error && cause.name === 'WorkspaceStorageConflictError') onStorageConflict?.();
       const conflictFile = cause && typeof cause === 'object' && 'remoteFile' in cause ? (cause as RemoteBackupConflictError).remoteFile : undefined;
       if (conflictFile !== undefined) { remoteSource.current = 'folder'; setRemoteVersions([]); setRemoteFile(conflictFile); setRemoteConflict(true); }
-      setAuthorized(authRef.current?.isAuthorized ?? false);
+      setAuthorized(!isAuthorizationError(cause) && (authRef.current?.isAuthorized ?? false));
       setError(cause instanceof Error && cause.name === 'WorkspaceStorageConflictError'
         ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟'
         : cause instanceof Error ? cause.message : 'Google Drive 備份失敗');
@@ -313,7 +315,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (!file) { setRemoteFile(null); setError('找不到雲端備份檔'); return; }
       setRemoteFile(file); setRemoteConflict(!remoteMatchesRecord(file)); setMessage('已找到雲端備份，請確認後還原');
     } catch (cause) {
-      setAuthorized(authRef.current?.isAuthorized ?? false);
+      setAuthorized(!isAuthorizationError(cause) && (authRef.current?.isAuthorized ?? false));
       setError(cause instanceof Error ? cause.message : '讀取 Google Drive 備份失敗');
     } finally { setBusy(null); }
   }, [ensureBackup, manuallyDisconnected, online, remoteMatchesRecord]);
@@ -336,7 +338,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       setAuthorized(authRef.current?.isAuthorized ?? true);
       setRemoteConflict(false); setDialogOpen(false); setRemoteFile(null); setRemoteVersions([]); onRestored(restoredData); setNotice('已載入雲端備份，請選擇合併或取代');
     } catch (cause) {
-      setAuthorized(authRef.current?.isAuthorized ?? false);
+      setAuthorized(!isAuthorizationError(cause) && (authRef.current?.isAuthorized ?? false));
       setError(cause instanceof Error ? cause.message : 'Google Drive 還原失敗');
     } finally { setBusy(null); }
   }, [ensureBackup, manuallyDisconnected, onRestored, online, remoteFile, setNotice]);

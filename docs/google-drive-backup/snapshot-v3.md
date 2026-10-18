@@ -45,9 +45,9 @@ pending journal 依已驗證 Drive 帳號雜湊分區，只存作業 UUID 與來
 
 ## 授權與 API
 
-沿用 GIS `drive.file`，不要求先登入網站。Drive token 在頁面記憶體，也會於備份 API 請求期間短暫交給 Worker，以驗證身分及操作 Drive metadata。token 不寫入 D1、localStorage、IndexedDB、URL 或日誌，不保存 refresh token。
+使用 GIS `openid drive.file`，不要求先登入網站。`openid` 提供穩定帳號識別，不另要求 email、profile 或更多 Drive 檔案權限。Drive token 在頁面記憶體，也會於備份 API 請求期間短暫交給 Worker，以驗證身分及操作 Drive metadata。token 不寫入 D1、localStorage、IndexedDB、URL 或日誌，不保存 refresh token。
 
-Worker 使用 Google 官方 OAuth2Client.getTokenInfo 同樣的 POST＋Authorization Bearer 協定，驗證 aud、azp（存在時）、sub、drive.file scope 和期限。僅快取 token 雜湊及已驗證身分，最多一分鐘、有界 128 項，不保留原 token。驗證失效、限流或後端不可用時延後備份，不推測成功。
+Worker 使用 Google 官方 OAuth2Client.getTokenInfo 同樣的 POST＋Authorization Bearer 協定，驗證 aud、azp（存在時）、sub（或等值 user_id）、drive.file scope 和期限。僅快取 token 雜湊及已驗證身分，最多一分鐘、有界 128 項，不保留原 token。權杖過期才允許一次換發重試；缺少識別欄位或授權不符回傳 403，保留手動重連入口，不因同樣的授權內容重複彈窗。GIS 視窗被關閉或封鎖會結束當次連結，下一次點按可立即重試。
 
 備份 API 位於 `/api/workspace-backup/`，不使用網站 session，也不觸發遊戲規則 catalog outbox；保留 Origin、限流、16 KiB body 限制及 no-store。錯誤只回固定代碼，不回傳 Google 診斷內容。
 

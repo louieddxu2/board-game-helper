@@ -1,6 +1,8 @@
 /** Metadata only: table contents and OAuth tokens never belong in this protocol. */
 export const DRIVE_SNAPSHOT_KEY = 'dynamic-sheet-primary-workspace-v3';
 export const DRIVE_SNAPSHOT_API = '/api/workspace-backup';
+export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+export const DRIVE_SNAPSHOT_SCOPES = `openid ${DRIVE_FILE_SCOPE}`;
 export const DRIVE_SNAPSHOT_LIMIT = 3;
 export const DRIVE_SNAPSHOT_LEASE_MS = 60 * 60 * 1000;
 export const DRIVE_SNAPSHOT_ORPHAN_GRACE_MS = 24 * 60 * 60 * 1000;
