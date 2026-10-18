@@ -118,7 +118,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   };
 
   const perform = async (data: WorkspaceData, metadata: BackupMetadata = {}, run: FolderBackupRunOptions = {}): Promise<Receipt> => {
-    run.onProgress?.({ phase: 'checking-remote' });
+    run.onProgress?.({ phase: 'preparing-cloud' });
     const root = await ensureFolder();
     const current = await state(root);
     const previous = headFile(current) ?? await legacyFile();
@@ -200,6 +200,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         name: DRIVE_MANIFEST_FILE_NAME, mimeType: DRIVE_SNAPSHOT_XLSX,
         body: exportWorkspaceBackupManifestXlsx({ ...data, structureRevision: manifest.structureRevision }, folders, refs, sourceUpdatedAt, 'flat'), appProperties: tags('manifest', op.id) })), op, op.folderId, 'manifest');
       // Decode the uploaded index, including a resumed index, before it can become official.
+      report('verifying-index');
       const verified = await readSnapshotManifest(api, op);
       const signature = (value: DriveWorkspaceManifest) => JSON.stringify({
         source: value.sourceUpdatedAt, structure: value.structureRevision, active: value.activeNodeId,

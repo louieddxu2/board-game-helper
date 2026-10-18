@@ -8,6 +8,7 @@ import { DRIVE_SNAPSHOT_KEY, summarizeDriveSnapshot, type BeginDriveSnapshot, ty
 import { createInMemoryDrive, blobFromBytes } from './backupTestFixture';
 import { createGoogleDriveSnapshotBackup } from './snapshotBackup';
 import type { SnapshotCoordinator } from './snapshotCoordinator';
+import { workspaceBackupProgressValue, type WorkspaceBackupProgress } from './backupProgress';
 
 const ROOT = 'snapshot-root';
 const LEGACY_STAMP = '0'.repeat(64);
@@ -23,6 +24,7 @@ class TestCoordinator implements SnapshotCoordinator {
   failCommitAfterPublish = false;
   failCleanupCount = 0;
   removeOlderOnCleanup = false;
+  commitGate: Promise<void> | null = null;
   private sequence = 0;
 
   state = async (): Promise<DriveSnapshotState> => ({
@@ -63,6 +65,7 @@ class TestCoordinator implements SnapshotCoordinator {
 
   commit = async (id: string) => {
     this.commitCalls += 1;
+    if (this.commitGate) await this.commitGate;
     const operation = this.operations.get(id);
     if (!operation) throw new Error('backup_operation_not_found');
     if (operation.revision != null) return cloneOperation(operation);
@@ -188,10 +191,11 @@ describe('independent Drive snapshot backups', () => {
     releaseFirstUpload();
     await upload;
     expect(progress.map(value => [value.phase, value.completedTables])).toEqual([
-      ['checking-remote', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
+      ['preparing-cloud', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
       ['table-uploaded', 1], ['reading-table', 1], ['creating-file', 1], ['uploading-table', 1],
-      ['table-uploaded', 2], ['saving-index', 2], ['confirming', 2],
+      ['table-uploaded', 2], ['saving-index', 2], ['verifying-index', 2], ['confirming', 2],
     ]);
+    expect(progress.every(value => workspaceBackupProgressValue(value as WorkspaceBackupProgress) < 100)).toBe(true);
   });
 
   test('does not increment the uploaded count when a table upload fails', async () => {
@@ -205,10 +209,29 @@ describe('independent Drive snapshot backups', () => {
 
     await expect(service.backup(fixture.data, {}, { source: fixture.source, onProgress: value => progress.push(value) })).rejects.toThrow('upload failed');
     expect(progress.map(value => [value.phase, value.completedTables])).toEqual([
-      ['checking-remote', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
+      ['preparing-cloud', undefined], ['reading-table', 0], ['creating-file', 0], ['uploading-table', 0],
       ['table-uploaded', 1], ['reading-table', 1], ['creating-file', 1], ['uploading-table', 1],
     ]);
     expect(progress.some(value => value.phase === 'saving-index' || value.phase === 'confirming')).toBe(false);
+    expect(progress.every(value => workspaceBackupProgressValue(value as WorkspaceBackupProgress) < 100)).toBe(true);
+  });
+
+  test('stays below 100 while the remote commit is pending and emits no local completion', async () => {
+    const fixture = createWorkspace();
+    const drive = createInMemoryDrive(); addRoot(drive);
+    const coordinator = new TestCoordinator();
+    let releaseCommit!: () => void;
+    coordinator.commitGate = new Promise<void>(resolve => { releaseCommit = resolve; });
+    const service = createService(drive, coordinator, memoryStorage());
+    const progress: WorkspaceBackupProgress[] = [];
+    const backup = service.backup(fixture.data, {}, { source: fixture.source, onProgress: value => progress.push(value) });
+
+    await vi.waitFor(() => expect(progress.at(-1)?.phase).toBe('confirming'));
+    expect(progress.some(value => value.phase === 'complete')).toBe(false);
+    expect(progress.every(value => workspaceBackupProgressValue(value) < 100)).toBe(true);
+    releaseCommit();
+    await backup;
+    expect(progress.some(value => value.phase === 'complete')).toBe(false);
   });
 
   test('rejects a corrupted uploaded manifest before publishing the snapshot', async () => {

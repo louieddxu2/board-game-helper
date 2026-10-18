@@ -55,7 +55,7 @@ const ActionButton = ({ children, onClick, disabled, variant = 'secondary' }: { 
 
 export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error, record, remoteFile, remoteVersions = [], onSelectVersion, remoteConflict, authorized, onClose, onConnect, onBackup, onFindRemote, onRestore, onOverwrite, onDisconnect }: GoogleDriveBackupDialogProps) => {
   const isBusy = Boolean(busy);
-  const backupProgress = busy === 'backing-up' ? progress : undefined;
+  const backupProgress = busy === 'backing-up' || (!busy && !error && progress?.phase === 'complete') ? progress : undefined;
   const progressCount = backupProgress ? workspaceBackupProgressCount(backupProgress) : '';
   const progressValue = backupProgress ? workspaceBackupProgressValue(backupProgress) : undefined;
   const showMessage = Boolean(message && !routineMessages.has(message));
@@ -74,7 +74,7 @@ export const GoogleDriveBackupDialog = ({ status, busy, progress, message, error
     </div>
     {backupProgress ? <div className="workspace-google-drive-progress" role="status" aria-atomic="true">
       <strong>{workspaceBackupProgressLabel(backupProgress)}</strong>
-      <progress aria-label={progressValue === undefined ? '備份作業進行中' : '表格上傳進度'} aria-valuetext={[workspaceBackupProgressLabel(backupProgress), progressCount].filter(Boolean).join(' · ')} max={progressValue === undefined ? 1 : backupProgress.totalTables} value={progressValue} />
+      <progress aria-label="整體備份進度" aria-valuetext={`${workspaceBackupProgressLabel(backupProgress)} · ${progressCount}`} max={100} value={progressValue} />
       {progressCount && <small>{progressCount}</small>}
     </div> : busy && <p className="workspace-dialog-message" role="status">{busyLabel(busy)}</p>}
     {showMessage && <p className="workspace-google-drive-message" role="status">{message}</p>}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoogleDriveBackupDialog } from './GoogleDriveBackupDialog';
 import type { GoogleDriveBackupDialogProps } from './GoogleDriveBackupDialog';
@@ -26,36 +26,44 @@ const createProps = (overrides: Partial<GoogleDriveBackupDialogProps> = {}): Goo
 
 describe('GoogleDriveBackupDialog', () => {
   it('announces uploaded table count and keeps finalization separate from table progress', () => {
-    const props = createProps({ status: 'dirty', authorized: true, busy: 'backing-up', progress: { phase: 'uploading-table', name: '收藏表', completedTables: 1, totalTables: 3 } });
+    const props = createProps({ status: 'dirty', authorized: true, busy: 'backing-up', progress: { phase: 'uploading-table', name: '收藏表', completedTables: 1, totalTables: 3, overallPercent: 53 } });
     const view = render(<GoogleDriveBackupDialog {...props} />);
     expect(screen.getByText('備份進行中')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('正在上傳表格：收藏表');
-    expect(screen.getByRole('status')).toHaveTextContent('已上傳 1 / 3 張表格');
-    expect(screen.getByRole('progressbar', { name: '表格上傳進度' })).toHaveAttribute('value', '1');
-    expect(screen.getByRole('progressbar')).toHaveAttribute('max', '3');
+    expect(screen.getByRole('status')).toHaveTextContent('53% · 已上傳 1 / 3 張表格');
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('value', '53');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('max', '100');
     expect(screen.getByRole('button', { name: '立即備份' })).toBeDisabled();
-    view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase: 'confirming', completedTables: 3, totalTables: 3 }} />);
+    view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase: 'confirming', completedTables: 3, totalTables: 3, overallPercent: 95 }} />);
     expect(screen.getByRole('status')).toHaveTextContent('正在驗證並完成備份');
+    expect(screen.getByRole('status')).toHaveTextContent('95%');
     expect(screen.getByRole('status')).not.toHaveTextContent('已上傳 3 / 3 張表格');
-    expect(screen.getByRole('progressbar', { name: '備份作業進行中' })).toHaveAttribute('max', '1');
-    expect(screen.getByRole('progressbar')).not.toHaveAttribute('value');
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('max', '100');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '95');
     expect(screen.queryByText('已完成備份')).not.toBeInTheDocument();
-    view.rerender(<GoogleDriveBackupDialog {...props} busy={null} progress={undefined} status="saved" message="已備份整個資料庫" />);
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(screen.getByText('已完成備份')).toBeInTheDocument();
+    view.rerender(<GoogleDriveBackupDialog {...props} busy={null} progress={{ phase: 'complete', overallPercent: 100 }} status="saved" message="已備份整個資料庫" />);
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('max', '100');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '100');
+    expect(screen.getByText('備份已完成')).toBeInTheDocument();
+    const backupButton = screen.getByRole('button', { name: '立即備份' });
+    expect(backupButton).toBeEnabled();
+    fireEvent.click(backupButton);
+    expect(props.onBackup).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('已備份整個資料庫')).not.toBeInTheDocument();
   });
 
-  it('keeps preparation and an empty-workspace finalization indeterminate', () => {
+  it('keeps preparation and an empty-workspace finalization on the overall scale', () => {
     const props = createProps({ busy: 'backing-up', progress: { phase: 'reading-directory' } });
     const view = render(<GoogleDriveBackupDialog {...props} />);
     expect(screen.getByRole('status')).toHaveTextContent('正在讀取表格目錄');
-    expect(screen.getByRole('progressbar')).not.toHaveAttribute('value');
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('max', '100');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '8');
     view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase: 'saving-index', totalTables: 0, completedTables: 0 }} />);
-    expect(screen.getByRole('progressbar')).not.toHaveAttribute('value');
-    expect(screen.getByRole('progressbar')).toHaveAttribute('max', '1');
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('max', '100');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '85');
     expect(screen.getByRole('status')).toHaveTextContent('正在儲存備份目錄');
-    expect(screen.getByRole('status')).not.toHaveTextContent('已上傳 0 / 0 張表格');
+    expect(screen.getByRole('status')).toHaveTextContent('85%');
+    expect(screen.getByRole('status')).not.toHaveTextContent('0 / 0');
   });
 
   it('shows a table count for every table phase, including a completed table event', () => {
@@ -63,14 +71,15 @@ describe('GoogleDriveBackupDialog', () => {
     const view = render(<GoogleDriveBackupDialog {...props} progress={{ phase: 'reading-table', name: '收藏表', completedTables: 0, totalTables: 2 }} />);
     for (const phase of ['reading-table', 'creating-file', 'uploading-table', 'reusing-table'] as const) {
       view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase, name: '收藏表', completedTables: 0, totalTables: 2 }} />);
-      expect(screen.getByRole('status')).toHaveTextContent('已上傳 0 / 2 張表格');
-      expect(screen.getByRole('progressbar', { name: '表格上傳進度' })).toHaveAttribute('max', '2');
-      expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0');
+      expect(screen.getByRole('status')).toHaveTextContent(/\d+% · 已上傳 0 \/ 2 張表格/);
+      expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('max', '100');
+      expect(Number(screen.getByRole('progressbar').getAttribute('value'))).toBeGreaterThan(0);
+      expect(Number(screen.getByRole('progressbar').getAttribute('value'))).toBeLessThan(100);
     }
-    view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase: 'table-uploaded', name: '收藏表', completedTables: 1, totalTables: 2 }} />);
+    view.rerender(<GoogleDriveBackupDialog {...props} progress={{ phase: 'table-uploaded', name: '收藏表', completedTables: 1, totalTables: 2, overallPercent: 50 }} />);
     expect(screen.getByRole('status')).toHaveTextContent('表格已上傳：收藏表');
-    expect(screen.getByRole('status')).toHaveTextContent('已上傳 1 / 2 張表格');
-    expect(screen.getByRole('progressbar', { name: '表格上傳進度' })).toHaveAttribute('value', '1');
+    expect(screen.getByRole('status')).toHaveTextContent('50% · 已上傳 1 / 2 張表格');
+    expect(screen.getByRole('progressbar', { name: '整體備份進度' })).toHaveAttribute('value', '50');
   });
 
   it('shows only the connection action before the first link', () => {

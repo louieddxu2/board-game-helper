@@ -5,7 +5,7 @@ import type { WorkspaceData } from '../types';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from './useWorkspaceBackupSummaries';
-import type { WorkspaceBackupProgress } from './backupProgress';
+import { advanceWorkspaceBackupProgress, type WorkspaceBackupProgress } from './backupProgress';
 import { SnapshotCoordinatorError } from './snapshotCoordinator';
 import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
@@ -176,9 +176,11 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (busy) return;
     setDialogOpen(false);
     setError('');
+    setProgress(undefined);
   }, [busy]);
 
   const connect = useCallback(async () => {
+    setProgress(undefined);
     setBusy('connecting'); setError(''); setMessage('');
     try {
       const { auth, backup: service, legacyBackup } = await ensureBackup();
@@ -205,6 +207,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     setDialogOpen(true);
     setMessage('');
     setError('');
+    if (!busy) setProgress(undefined);
     if (online && !busy && (!authorized || manuallyDisconnected)) void connect();
   }, [authorized, busy, connect, manuallyDisconnected, online]);
 
@@ -217,12 +220,18 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return false; }
     if (!online) { setError('目前離線，恢復連線後才能備份'); if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS); return false; }
     uploadPendingRef.current = true;
-    setProgress({ phase: 'preparing' });
+    let lastProgress: WorkspaceBackupProgress | undefined;
+    let succeeded = false;
+    const reportProgress = (next: WorkspaceBackupProgress) => {
+      lastProgress = advanceWorkspaceBackupProgress(lastProgress, next);
+      setProgress(lastProgress);
+    };
+    reportProgress({ phase: 'preparing' });
     setBusy('backing-up'); setError(''); setMessage('');
     try {
       const { backup: service } = await ensureBackup();
       if (!force) {
-        setProgress({ phase: 'checking-remote' });
+        reportProgress({ phase: 'checking-remote' });
         const currentRemote = await service.findRemoteFile();
         if (!folderRemoteMatchesRecord(currentRemote)) {
           remoteSource.current = 'folder'; setRemoteVersions([]);
@@ -237,7 +246,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         setError('本機資料在備份準備期間已有變更，請稍後再試');
         return false;
       }
-      setProgress({ phase: 'reading-directory' });
+      reportProgress({ phase: 'reading-directory' });
       const source = await prepareBackup?.(data);
       const tables = source?.tables ?? data.tables;
       const sourceUpdatedAt = Math.max(workspaceUpdatedAt(data), ...tables.map(table => table.updatedAt)) || Date.now();
@@ -247,7 +256,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         appProperties: { exportedAt: new Date().toISOString() },
       }, {
         complete: true,
-        onProgress: setProgress,
+        onProgress: reportProgress,
         tableIds: selectedTableIds,
         ...(source ? { source } : {}),
         expectedRemoteFileId: force ? remoteFile?.id ?? null : record.fileId,
@@ -255,6 +264,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         allowLegacyChange: force,
         ...(force && remoteFile?.appProperties?.legacyStamp ? { expectedLegacyStamp: remoteFile.appProperties.legacyStamp } : {}),
       });
+      reportProgress({ phase: 'saving-receipt' });
       const remoteCompletedAt = Number(receipt.file.appProperties?.backedUpAt);
       const completedAt = Number.isFinite(remoteCompletedAt) && remoteCompletedAt > 0 ? remoteCompletedAt : Date.now();
       const nextTableBackups = { ...record.tableBackups };
@@ -287,6 +297,8 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       setRecord(nextRecord); setRemoteVersions([]); setMessage(receipt.cleanupWarning ?? (automatic ? '已自動備份變更' : '已備份整個資料庫')); setNotice('已備份到 Google Drive');
       service.acknowledgeBackup?.(receipt.file.id, persisted);
       setAutoRetryAt(0);
+      succeeded = true;
+      reportProgress({ phase: 'complete' });
       return true;
     } catch (cause) {
       if (cause instanceof Error && cause.name === 'WorkspaceStorageConflictError') onStorageConflict?.();
@@ -298,13 +310,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         : cause instanceof Error ? cause.message : 'Google Drive 備份失敗');
       if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
       return false;
-    } finally { uploadPendingRef.current = false; setProgress(undefined); setBusy(null); }
+    } finally { uploadPendingRef.current = false; if (!succeeded) setProgress(undefined); setBusy(null); }
   }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, manuallyDisconnected, onStorageConflict, online, prepareBackup, record.fileId, record.fileName, record.remoteModifiedTime, record.tableBackups, remoteFile, setNotice, verifyCurrentData]);
 
   const findRemote = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
     if (!online) { setError('目前離線，恢復連線後才能讀取雲端備份'); return; }
-    setBusy('finding'); setError(''); setMessage('');
+    setProgress(undefined); setBusy('finding'); setError(''); setMessage('');
     try {
       const { backup: service, legacyBackup } = await ensureBackup();
       const versions = await service.listRemoteBackups();
@@ -323,7 +335,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const restore = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
     if (!online) { setError('目前離線，恢復連線後才能還原'); return; }
-    setBusy('restoring'); setError(''); setMessage('');
+    setProgress(undefined); setBusy('restoring'); setError(''); setMessage('');
     try {
       const { backup: service, legacyBackup } = await ensureBackup();
       const selected = remoteFile;
@@ -344,6 +356,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   }, [ensureBackup, manuallyDisconnected, onRestored, online, remoteFile, setNotice]);
 
   const disconnect = useCallback(async () => {
+    setProgress(undefined);
     if (!authRef.current) {
       setManuallyDisconnected(true);
       window.localStorage.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');

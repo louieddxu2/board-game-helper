@@ -96,10 +96,10 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     let pending!: Promise<boolean>;
     await act(async () => { pending = result.current.backup({ automatic: mode === 'automatic', force: mode === 'overwrite' }); });
     expect(result.current.busy).toBe('backing-up');
-    expect(result.current.progress).toEqual({ phase: 'uploading-table', name: data.tables[1].name, completedTables: 1, totalTables: 2 });
+    expect(result.current.progress).toMatchObject({ phase: 'uploading-table', name: data.tables[1].name, completedTables: 1, totalTables: 2, overallPercent: 73 });
     expect(result.current.record.lastBackupAt).toBeNull();
     await act(async () => { finish(receiptFor(data)); expect(await pending).toBe(true); });
-    expect(result.current.progress).toBeUndefined();
+    expect(result.current.progress).toMatchObject({ phase: 'complete', overallPercent: 100 });
     expect(result.current.busy).toBeNull();
     expect(result.current.record.lastBackupAt).toBe(now.getTime());
   });
@@ -118,10 +118,10 @@ describe('workspace Google Drive automatic backup scheduling', () => {
     expect(result.current.error).toBe('upload failed');
     let retry!: Promise<boolean>;
     await act(async () => { retry = result.current.backup(); });
-    expect(result.current.progress).toEqual({ phase: 'reading-directory' });
+    expect(result.current.progress).toMatchObject({ phase: 'reading-directory', overallPercent: 8 });
     expect(result.current.error).toBe('');
     await act(async () => { finishPrepare({ tables: data.tables.map(workspaceBackupTableSummary), readTable: vi.fn(), verify: vi.fn() }); expect(await retry).toBe(true); });
-    expect(result.current.progress).toBeUndefined();
+    expect(result.current.progress).toMatchObject({ phase: 'complete', overallPercent: 100 });
   });
 
   it('backs up unloaded tables without expanding the screen data and records their actual uploaded revisions', async () => {
