@@ -10,6 +10,7 @@ import { useWorkspaceRowWindow } from './useWorkspaceRowWindow';
 import { getWorkspaceRowIndexes } from './rowIndexes';
 import { flushWorkspaceTableScrollPosition, loadWorkspaceTableViewState, queueWorkspaceTableScrollPosition } from './viewState';
 import { measureVisibleColumnWidths, preserveColumnScrollPosition } from './visibleColumnWidths';
+import { observeWorkspaceRowHeights } from './observeWorkspaceRowHeights';
 import { calculateWorkspaceTableLayout, type HeaderFilterState, type HeaderFilterTarget } from './workspaceShared';
 
 const emptyRows: WorkspaceRow[] = [];
@@ -171,11 +172,7 @@ export const useWorkspaceTableWindow = ({ readCell = getWorkspaceEffectiveCell, 
     if (!rowWindow.virtual || typeof ResizeObserver === 'undefined') return;
     const elements = viewportRef.current?.querySelectorAll<HTMLTableRowElement>('tbody tr[data-virtual-row-id]');
     if (!elements?.length) return;
-    const update = () => elements.forEach((element) => rowWindow.measureRow(element.dataset.virtualRowId!, element.getBoundingClientRect().height));
-    update();
-    const observer = new ResizeObserver(update);
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
+    return observeWorkspaceRowHeights(elements, rowWindow.measureRow);
   }, [rowMeasurementKey, rowWindow.first, rowWindow.last, rowWindow.measureRow, rowWindow.virtual, rowWindow.visibleRows]);
 
   const rowAnchorRetryRef = useRef<number | undefined>(undefined);

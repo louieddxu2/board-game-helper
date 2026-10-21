@@ -214,6 +214,9 @@ test('does not activate a cell when a touch interrupts active interior coast, th
 test('opens the first row heading tap after the bottom boundary without a retap', async ({ page }) => {
   const gesture = await setup(page, false, false);
   await gesture.viewport.evaluate(element => { element.scrollTop = element.scrollHeight - element.clientHeight - 1000; });
+  // The programmatic jump precedes the scroll event and virtual-window render.
+  // Wait for its content, then retain the first native input without retries.
+  await expect(page.getByText('項目 215', { exact: true })).toBeInViewport();
   const source = await gesture.cellPoint();
   await gesture.fling(source.x, source.y, 240, 4, 16);
   await expect.poll(() => gesture.viewport.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThanOrEqual(1);
