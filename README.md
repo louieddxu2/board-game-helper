@@ -12,7 +12,7 @@
 
 ## 本機開發
 
-使用 Node.js 24 LTS（至少 24.22.1）；建議版本記錄於 `.nvmrc`，CI 也讀取同一份設定。這是本機與建置工具的版本，正式 API 由 Cloudflare Workers 執行。
+使用 Node.js 24 LTS（至少 24.22.1）；建議版本記錄於 `.nvmrc`，CI 也讀取同一份設定。npm 會在安裝套件與執行專案指令前檢查版本，不符合時直接停止。這是本機與建置工具的版本，正式 API 由 Cloudflare Workers 執行。
 
 ```powershell
 npm install

@@ -43,11 +43,15 @@ describe('core release gate wiring', () => {
 
   test('uses the patched Node LTS version consistently for local development and CI', () => {
     const nodeVersion = readFileSync('.nvmrc', 'utf8').trim();
-    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { engines: { node: string } };
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      engines: { node: string };
+      devEngines: { runtime: { name: string; version: string; onFail: string } };
+    };
     const workflow = readFileSync('.github/workflows/core-release-gate.yml', 'utf8');
 
     expect(nodeVersion).toMatch(/^24\.\d+\.\d+$/);
     expect(packageJson.engines.node).toBe(`>=${nodeVersion} <25`);
+    expect(packageJson.devEngines.runtime).toEqual({ name: 'node', version: packageJson.engines.node, onFail: 'error' });
     expect(workflow).toMatch(/node-version-file:\s*\.nvmrc/);
   });
 });

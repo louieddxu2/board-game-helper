@@ -6,6 +6,13 @@
   "engines": {
     "node": ">=24.22.1 <25"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24.22.1 <25",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "dev": "npm run check:protected-copy && cross-env XDG_CONFIG_HOME=.wrangler/xdg vite",
     "build": "npm run check:protected-copy && npm run check:d1-boundary && npm run check:file-size && cross-env NODE_OPTIONS=--disable-warning=DEP0040 XDG_CONFIG_HOME=.wrangler/xdg vite build",
