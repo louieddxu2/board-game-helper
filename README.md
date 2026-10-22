@@ -12,6 +12,8 @@
 
 ## 本機開發
 
+使用 Node.js 24 LTS（至少 24.22.1）；建議版本記錄於 `.nvmrc`，CI 也讀取同一份設定。這是本機與建置工具的版本，正式 API 由 Cloudflare Workers 執行。
+
 ```powershell
 npm install
 npm run db:migrate:local

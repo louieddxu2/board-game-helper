@@ -40,4 +40,14 @@ describe('core release gate wiring', () => {
     expect(packageJson.scripts['test:core']).toContain('cross-env TZ=Asia/Taipei vitest run');
     expect(workflow).toMatch(/env:\s*\r?\n\s+TZ:\s*Asia\/Taipei/);
   });
+
+  test('uses the patched Node LTS version consistently for local development and CI', () => {
+    const nodeVersion = readFileSync('.nvmrc', 'utf8').trim();
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { engines: { node: string } };
+    const workflow = readFileSync('.github/workflows/core-release-gate.yml', 'utf8');
+
+    expect(nodeVersion).toMatch(/^24\.\d+\.\d+$/);
+    expect(packageJson.engines.node).toBe(`>=${nodeVersion} <25`);
+    expect(workflow).toMatch(/node-version-file:\s*\.nvmrc/);
+  });
 });
