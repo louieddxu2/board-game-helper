@@ -6,6 +6,7 @@ import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import zhTWCopy from '../content/zh-TW.json';
 import { ExternalLinkGuard } from './ExternalLinkGuard';
+import { copyRuleContent } from '../lib/ruleClipboard';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -61,12 +62,26 @@ export const RuleCard = ({
     : undefined;
   const effectiveEnglishName = shouldShowGameContext ? englishName || (rule as any).englishName : undefined;
 
+  const getRuleUrl = () => {
+    const targetPath = effectiveGameHref ? `${effectiveGameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
+    return `${window.location.origin}${targetPath}`;
+  };
+
   const copyRuleLink = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const targetPath = effectiveGameHref ? `${effectiveGameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
-    const fullUrl = `${window.location.origin}${targetPath}`;
-    void navigator.clipboard.writeText(fullUrl).then(() => {
+    void navigator.clipboard.writeText(getRuleUrl()).then(() => {
       showToast('已複製這條規則的直接連結 🔗', 'info');
+    }).catch(() => {
+      showToast('無法複製，請確認瀏覽器的剪貼簿權限', 'error');
+    });
+  };
+
+  const copyContent = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    void copyRuleContent(rule, getRuleUrl()).then((format) => {
+      showToast(format === 'rich' ? '已複製內文，支援格式的貼上可保留原文連結' : '已複製純文字內文', 'info');
+    }).catch(() => {
+      showToast('無法複製，請確認瀏覽器的剪貼簿權限', 'error');
     });
   };
 
@@ -232,6 +247,10 @@ export const RuleCard = ({
           </button> : <span className="importance-count" aria-label={`標記數量 ${rule.importanceCount ?? 0}`}>
             <strong>{rule.importanceCount ?? 0}</strong>
           </span>)}
+          <button type="button" className="text-action copy-link-btn" onClick={copyContent}
+            title="複製內文，支援格式的貼上可保留原文連結">
+            複製內文
+          </button>
           <button
             type="button"
             className="text-action copy-link-btn"
