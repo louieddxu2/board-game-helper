@@ -13,13 +13,15 @@ afterEach(() => vi.unstubAllGlobals());
 describe('rule clipboard', () => {
   test('copies readable body text and escaped HTML with a rule permalink and line breaks', () => {
     const result = buildRuleClipboard(rule, url);
-    expect(result.text).toContain(rule.statement);
-    expect(result.text).toContain('不可跳過');
+    expect(result.text).toContain(`✅ ${rule.statement}`);
+    expect(result.text).toContain('❌ 不可跳過');
+    expect(result.text).not.toContain('玩錯情況');
     expect(result.text).toContain('補充說明：只有一次');
     expect(result.text).not.toContain(url);
-    expect(result.html).toContain(`<a href="${url}">先拿 &lt;2&gt; &amp; &quot;3&quot;<br>再行動</a>`);
+    expect(result.html).toContain(`<a href="${url}">✅ 先拿 &lt;2&gt; &amp; &quot;3&quot;<br>再行動</a>`);
+    expect(result.html).toContain('<p>❌ 不可跳過</p>');
     expect(buildRuleClipboard({ ...rule, commonMistake: undefined, details: undefined }, url).text)
-      .toBe(rule.statement);
+      .toBe(`✅ ${rule.statement}`);
   });
 
   test('writes plain text and HTML together in one clipboard item', async () => {

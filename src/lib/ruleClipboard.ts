@@ -1,5 +1,4 @@
 import type { RuleCard } from '../shared/types';
-import zhTWCopy from '../content/zh-TW.json';
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -8,8 +7,8 @@ const htmlText = (text: string) => escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>
 
 export function buildRuleClipboard(rule: RuleCard, url: string) {
   const sections = [
-    rule.statement,
-    ...(rule.commonMistake ? [`${zhTWCopy.terms.mistakeSituation}：${rule.commonMistake}`] : []),
+    `✅ ${rule.statement}`,
+    ...(rule.commonMistake ? [`❌ ${rule.commonMistake}`] : []),
     ...(rule.details ? [`補充說明：${rule.details}`] : []),
   ];
   return {
