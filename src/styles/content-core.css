@@ -171,7 +171,10 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .rule-source a:hover, .rule-source .external-link-button:hover { text-decoration: underline; }
 .unverified { color: var(--color-text-warning); }
 
-.copy-link-btn { border: 0; background: none; color: var(--orange); font-weight: 700; cursor: pointer; font-size: 12px; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
+.icon-action-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 40px; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--orange); cursor: pointer; }
+.icon-action-button:hover { border-color: var(--orange); background: var(--cream); }
+.icon-action-button:focus-visible { outline: 3px solid rgba(218, 125, 45, .35); outline-offset: 2px; }
+.icon-action-button svg { width: 19px; height: 19px; }
 .rule-card-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; flex-wrap: wrap; }
 .importance-button { display: inline-flex; align-items: stretch; min-height: 40px; border: 1px solid #d9c59d; border-radius: 12px; padding: 0; overflow: hidden; background: #fffaf0; color: #765716; font: inherit; cursor: pointer; }
 .importance-button:hover { border-color: var(--orange); background: #fdf0d2; }

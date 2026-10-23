@@ -212,7 +212,7 @@ export const RuleCard = ({
         </div>
       )}
 
-      {/* 第五行：來源與右下角「分享此規則 🔗」 */}
+      {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">
         <div className="rule-source">
           {rule.sourceLabel && <span>來源：{rule.sourceLabel}</span>}
@@ -247,17 +247,31 @@ export const RuleCard = ({
           </button> : <span className="importance-count" aria-label={`標記數量 ${rule.importanceCount ?? 0}`}>
             <strong>{rule.importanceCount ?? 0}</strong>
           </span>)}
-          <button type="button" className="text-action copy-link-btn" onClick={copyContent}
-            title="複製內文，支援格式的貼上可保留原文連結">
-            複製內文
+          <button
+            type="button"
+            className="icon-action-button"
+            onClick={copyContent}
+            title="複製內文，支援格式的貼上可保留原文連結"
+            aria-label="複製內文"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M16 8V6.5A1.5 1.5 0 0 0 14.5 5h-8A1.5 1.5 0 0 0 5 6.5v8A1.5 1.5 0 0 0 6.5 16H8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
           </button>
           <button
             type="button"
-            className="text-action copy-link-btn"
+            className="icon-action-button"
             onClick={copyRuleLink}
             title="複製這條規則的分享連結"
+            aria-label="分享此規則"
           >
-            分享此規則 🔗
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="6" cy="12" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="17.5" cy="6" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="17.5" cy="18" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="m8 11 7.4-4M8 13l7.4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
       </div>
