@@ -12,9 +12,8 @@ export function buildRuleClipboard(rule: RuleCard, url: string) {
     ...(rule.details ? [`補充說明：${rule.details}`] : []),
   ];
   return {
-    text: sections.join('\n\n'),
-    html: `<p><a href="${escapeHtml(url)}">${htmlText(sections[0])}</a></p>`
-      + sections.slice(1).map((section) => `<p>${htmlText(section)}</p>`).join(''),
+    text: sections.join('\n'),
+    html: `<a href="${escapeHtml(url)}">${sections.map(htmlText).join('<br>')}</a>`,
   };
 }
 
