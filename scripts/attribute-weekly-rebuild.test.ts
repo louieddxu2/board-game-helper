@@ -262,39 +262,52 @@ test('history corrections mark replay pending while metadata-only and no-op edit
   } finally { close(harness); }
 });
 
-test('changed pools and incomplete or malformed snapshots choose full replay', async () => {
-  const firstRun = await establishBaseline();
+test('changed pools choose full replay', async () => {
+  const { harness, timestamp } = await establishBaseline();
   try {
     const gameId = 'game-weekly-pool-change';
-    firstRun.harness.sqlite.prepare(`
+    harness.sqlite.prepare(`
       INSERT INTO games (
         id, slug, display_name, english_name, normalized_name, merged_into_game_id,
         created_by, created_at, updated_at, visibility, review_status, reviewed_at,
         attribute_enabled, bgg_id, entity_kind
       ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, 'public', 'pending', NULL, 1, ?, 'base')
-    `).run(gameId, 'weekly-pool-change', '每週池變更', '每週池變更', firstRun.timestamp + 1, firstRun.timestamp + 1, 980001);
-    await flushCatalogOutbox(firstRun.harness.gateway, firstRun.timestamp + 2);
-    firstRun.harness.executedSql.length = 0;
-    await expect(runWeeklyAttributeRebuild(firstRun.harness.gateway, firstRun.timestamp + 3)).resolves.toBe('replay');
-    expect(firstRun.harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
-  } finally { close(firstRun.harness); }
+    `).run(gameId, 'weekly-pool-change', '每週池變更', '每週池變更', timestamp + 1, timestamp + 1, 980001);
+    await flushCatalogOutbox(harness.gateway, timestamp + 2);
+    harness.executedSql.length = 0;
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+  } finally { close(harness); }
+});
 
-  const secondRun = await establishBaseline();
+test('incomplete snapshots choose full replay and repair the snapshot', async () => {
+  const { harness, timestamp } = await establishBaseline();
   try {
-    const snapshot = secondRun.harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number };
-    secondRun.harness.sqlite.prepare('DELETE FROM attribute_catalog_snapshot_chunks WHERE generation = ? AND chunk_number = 0')
+    const snapshot = harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number };
+    harness.sqlite.prepare('DELETE FROM attribute_catalog_snapshot_chunks WHERE generation = ? AND chunk_number = 0')
       .run(snapshot.active_generation);
-    secondRun.harness.executedSql.length = 0;
-    await expect(runWeeklyAttributeRebuild(secondRun.harness.gateway, secondRun.timestamp + 3)).resolves.toBe('replay');
-    expect(secondRun.harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+    harness.executedSql.length = 0;
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
 
-    const repaired = secondRun.harness.sqlite.prepare('SELECT active_generation, chunk_count FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number; chunk_count: number };
-    secondRun.harness.sqlite.prepare('UPDATE attribute_catalog_snapshot_chunks SET entries_json = ? WHERE generation = ? AND chunk_number = 0')
-      .run('{}', repaired.active_generation);
-    secondRun.harness.executedSql.length = 0;
-    await expect(runWeeklyAttributeRebuild(secondRun.harness.gateway, secondRun.timestamp + 4)).resolves.toBe('replay');
-    expect(secondRun.harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
-  } finally { close(secondRun.harness); }
+    const repaired = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    expect(repaired.values.length).toBeGreaterThan(0);
+  } finally { close(harness); }
+});
+
+test('malformed snapshots choose full replay and repair the snapshot', async () => {
+  const { harness, timestamp } = await establishBaseline();
+  try {
+    const snapshot = harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number };
+    harness.sqlite.prepare('UPDATE attribute_catalog_snapshot_chunks SET entries_json = ? WHERE generation = ? AND chunk_number = 0')
+      .run('{}', snapshot.active_generation);
+    harness.executedSql.length = 0;
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+
+    const repaired = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    expect(repaired.values.length).toBeGreaterThan(0);
+  } finally { close(harness); }
 });
 
 test('failed full publication leaves the revision pending and releases the replay lock', async () => {
