@@ -7,6 +7,11 @@ dist/
 coverage/
 playwright-report/
 test-results/
+scratch/
+outputs/
+.codex-remote-attachments/
+.codex-disabled-*/
+*.log
 imports/private/
 imports/generated/
 參考資料/*
