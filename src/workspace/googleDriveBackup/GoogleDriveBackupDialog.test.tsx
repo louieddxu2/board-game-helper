@@ -25,6 +25,24 @@ const createProps = (overrides: Partial<GoogleDriveBackupDialogProps> = {}): Goo
 });
 
 describe('GoogleDriveBackupDialog', () => {
+  it('warns about empty local data and offers restore without any upload action', () => {
+    render(<GoogleDriveBackupDialog {...createProps({ status: 'dirty', authorized: true, backupSafety: 'empty',
+      remoteConflict: true, remoteFile: { id: 'remote', name: 'manifest.xlsx' } })} />);
+    expect(screen.getByText('自動備份已暫停')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('本機資料為空，已暫停自動備份。請先還原雲端備份。');
+    expect(screen.getByRole('button', { name: '還原此備份' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '以本機資料覆蓋雲端' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a concise warning when the rebuilt local source needs explicit confirmation', () => {
+    render(<GoogleDriveBackupDialog {...createProps({ status: 'dirty', authorized: true, backupSafety: 'unconfirmed',
+      remoteConflict: false, remoteFile: { id: 'remote', name: 'manifest.xlsx' } })} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('本機資料尚未確認，已暫停自動備份。');
+    expect(screen.getByRole('button', { name: '以本機資料覆蓋雲端' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: '立即備份' })).not.toBeInTheDocument();
+  });
+
   it('announces uploaded table count and keeps finalization separate from table progress', () => {
     const props = createProps({ status: 'dirty', authorized: true, busy: 'backing-up', progress: { phase: 'uploading-table', name: '收藏表', completedTables: 1, totalTables: 3, overallPercent: 53 } });
     const view = render(<GoogleDriveBackupDialog {...props} />);

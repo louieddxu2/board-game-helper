@@ -7,6 +7,7 @@ import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from './useWorkspaceBackupSummaries';
 import { advanceWorkspaceBackupProgress, type WorkspaceBackupProgress } from './backupProgress';
 import { SnapshotCoordinatorError } from './snapshotCoordinator';
+import { workspaceHasBackupTables, type WorkspaceBackupSafety } from './backupSafety';
 import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
@@ -105,6 +106,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const [remoteVersions, setRemoteVersions] = useState<DriveFile[]>([]);
   const remoteSource = useRef<'folder' | 'legacy'>('folder');
   const [remoteConflict, setRemoteConflict] = useState(false);
+  const [safety, setSafety] = useState<WorkspaceBackupSafety>();
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [authorized, setAuthorized] = useState(false);
   const [autoBackupEnabled, setAutoBackupEnabledState] = useState(() => window.localStorage.getItem(AUTO_BACKUP_STORAGE_KEY) === 'true');
@@ -116,6 +118,16 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   const clientIdLoadedRef = useRef(false);
   const clientIdRef = useRef<string | null>(null);
   const uploadPendingRef = useRef(false);
+  const backupSafety: WorkspaceBackupSafety | undefined = safety && (data && workspaceHasBackupTables(data) ? 'unconfirmed' : 'empty');
+  const requireConfirmation = useCallback((reason: WorkspaceBackupSafety) => {
+    setSafety(reason); setProgress(undefined); setError(''); setDialogOpen(true);
+  }, []);
+  const sourceSafety = useCallback((file: DriveFile | null, identity?: string): WorkspaceBackupSafety | undefined => {
+    if (!data) return 'unconfirmed';
+    if (!workspaceHasBackupTables(data)) return 'empty';
+    if (safety || (file && identity && record.storageIdentity !== identity)) return 'unconfirmed';
+    return undefined;
+  }, [data, record.storageIdentity, safety]);
   const inspectBackup = inspectChanges || dialogOpen || authorized;
   const { tables: summaries, error: summaryError } = useWorkspaceBackupSummaries(data, inspectBackup && !backupBlockedReason, loadTableSummaries);
   const dirtyTables = useMemo(() => inspectBackup ? summaries?.filter((table) => record.tableBackups[table.id]?.changeRevision !== workspaceTableChangeRevision(table)) ?? [] : [], [summaries, inspectBackup, record.tableBackups]);
@@ -138,6 +150,10 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (!file && record.fileId && record.fileName !== DRIVE_MANIFEST_FILE_NAME) return true;
     return remoteMatchesRecord(file);
   }, [record.fileId, record.fileName, remoteMatchesRecord]);
+
+  useEffect(() => {
+    if (authorized && data && !workspaceHasBackupTables(data) && safety !== 'empty') requireConfirmation('empty');
+  }, [authorized, data, requireConfirmation, safety]);
 
   useEffect(() => {
     const onOnline = () => { setOnline(true); setAutoRetryAt(0); };
@@ -183,6 +199,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   }, [busy]);
 
   const connect = useCallback(async () => {
+    if (data && !workspaceHasBackupTables(data)) requireConfirmation('empty');
     setProgress(undefined);
     setBusy('connecting'); setError(''); setMessage('');
     try {
@@ -195,17 +212,19 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       remoteSource.current = folderFile ? 'folder' : 'legacy';
       setRemoteVersions([]);
       const storageIdentity = await loadStorageIdentity?.();
+      const unsafe = sourceSafety(file, storageIdentity);
       const conflict = !remoteMatchesRecord(file) || Boolean(file && storageIdentity && record.storageIdentity !== storageIdentity);
       setAuthorized(auth.isAuthorized);
       setAutoRetryAt(0);
-      setRemoteFile(conflict ? file : null);
+      setRemoteFile(conflict || unsafe ? file : null);
       setRemoteConflict(conflict);
+      if (unsafe) requireConfirmation(unsafe);
       setMessage(conflict ? '雲端備份與此裝置的紀錄不同，請選擇使用雲端版本或以本機資料覆蓋' : '已連結 Google Drive');
     } catch (cause) {
       setAuthorized(false);
       setError(cause instanceof Error ? cause.message : 'Google Drive 連結失敗');
     } finally { setBusy(null); }
-  }, [ensureBackup, loadStorageIdentity, record.storageIdentity, remoteMatchesRecord]);
+  }, [data, ensureBackup, loadStorageIdentity, record.storageIdentity, remoteMatchesRecord, requireConfirmation, sourceSafety]);
 
   const open = useCallback(() => {
     setDialogOpen(true);
@@ -219,11 +238,11 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     if (uploadPendingRef.current) return false;
     if (backupBlockedReason) { if (!automatic) setError(backupBlockedReason); return false; }
     if (!data) return false;
-    if (!data.nodes.some(node => node.type === 'table') && !data.tables.length) {
-      if (!automatic) setError('本機沒有表格，已停止備份；請先選擇雲端備份還原');
+    if (!workspaceHasBackupTables(data)) {
+      requireConfirmation('empty');
       return false;
     }
-    if (automatic && (!autoBackupEnabled || manuallyDisconnected || remoteConflict || force)) return false;
+    if (automatic && (!autoBackupEnabled || manuallyDisconnected || remoteConflict || backupSafety || force)) return false;
     if (automatic && !authorized) return false;
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return false; }
     if (!online) { setError('目前離線，恢復連線後才能備份'); if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS); return false; }
@@ -242,11 +261,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (!force) {
         reportProgress({ phase: 'checking-remote' });
         const currentRemote = await service.findRemoteFile();
-        if (!folderRemoteMatchesRecord(currentRemote) || (currentRemote && storageIdentity && record.storageIdentity !== storageIdentity)) {
+        const unsafe = sourceSafety(currentRemote, storageIdentity);
+        if (!folderRemoteMatchesRecord(currentRemote) || (currentRemote && unsafe)) {
           remoteSource.current = 'folder'; setRemoteVersions([]);
           setRemoteFile(currentRemote);
           setRemoteConflict(true);
-          setError('本機資料來源或雲端版本不同，請先還原備份或明確選擇覆蓋');
+          if (unsafe) requireConfirmation(unsafe);
+          else setError('雲端備份已在其他裝置變更，請先還原備份或明確選擇覆蓋');
           return false;
         }
       }
@@ -302,6 +323,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         tableBackups: nextTableBackups,
       };
       setAuthorized(true);
+      setSafety(undefined);
       setRemoteConflict(false); setRemoteFile(null);
       const persisted = saveRecord(nextRecord);
       setRecord(nextRecord); setRemoteVersions([]); setMessage(receipt.cleanupWarning ?? (automatic ? '已自動備份變更' : '已備份整個資料庫')); setNotice('已備份到 Google Drive');
@@ -321,7 +343,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       if (automatic) setAutoRetryAt(Date.now() + GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS);
       return false;
     } finally { uploadPendingRef.current = false; if (!succeeded) setProgress(undefined); setBusy(null); }
-  }, [autoBackupEnabled, authorized, backupBlockedReason, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, loadStorageIdentity, manuallyDisconnected, onStorageConflict, online, prepareBackup, record.fileId, record.fileName, record.remoteModifiedTime, record.storageIdentity, record.tableBackups, remoteConflict, remoteFile, setNotice, verifyCurrentData]);
+  }, [autoBackupEnabled, authorized, backupBlockedReason, backupSafety, data, ensureBackup, folderRemoteMatchesRecord, isCurrentData, loadStorageIdentity, manuallyDisconnected, onStorageConflict, online, prepareBackup, record.fileId, record.fileName, record.remoteModifiedTime, record.storageIdentity, record.tableBackups, remoteConflict, remoteFile, requireConfirmation, setNotice, sourceSafety, verifyCurrentData]);
 
   const findRemote = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
@@ -336,13 +358,15 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
       setAuthorized(authRef.current?.isAuthorized ?? true);
       if (!file) { setRemoteFile(null); setError('找不到雲端備份檔'); return; }
       const storageIdentity = await loadStorageIdentity?.();
+      const unsafe = sourceSafety(file, storageIdentity);
       const conflict = !remoteMatchesRecord(file) || Boolean(storageIdentity && record.storageIdentity !== storageIdentity);
+      if (unsafe) requireConfirmation(unsafe);
       setRemoteFile(file); setRemoteConflict(previous => previous || conflict); setMessage('已找到雲端備份，請確認後還原');
     } catch (cause) {
       setAuthorized(!isAuthorizationError(cause) && (authRef.current?.isAuthorized ?? false));
       setError(cause instanceof Error ? cause.message : '讀取 Google Drive 備份失敗');
     } finally { setBusy(null); }
-  }, [ensureBackup, loadStorageIdentity, manuallyDisconnected, online, record.storageIdentity, remoteMatchesRecord]);
+  }, [ensureBackup, loadStorageIdentity, manuallyDisconnected, online, record.storageIdentity, remoteMatchesRecord, requireConfirmation, sourceSafety]);
 
   const restore = useCallback(async () => {
     if (manuallyDisconnected) { setError('Google Drive 已由使用者主動斷線，請先重新連結'); return; }
@@ -388,13 +412,13 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
   }, []);
 
   useEffect(() => {
-    if (!authorized || !online || manuallyDisconnected) return;
+    if (!authorized || !online || manuallyDisconnected || backupSafety) return;
     const timer = window.setInterval(() => {
       if (!authRef.current?.isAuthorized || uploadPendingRef.current) return;
       void backupRef.current?.maintain?.().catch(() => undefined);
     }, 5 * 60_000);
     return () => window.clearInterval(timer);
-  }, [authorized, online, manuallyDisconnected]);
+  }, [authorized, online, manuallyDisconnected, backupSafety]);
 
   const status = useMemo<WorkspaceDriveBackupStatus>(() => {
     if (manuallyDisconnected) return 'disconnected';
@@ -407,7 +431,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
 
   const hasPendingBackup = status === 'never' || status === 'dirty';
   useEffect(() => {
-    if (backupBlockedReason || !summaries?.length || summaryError || !autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy || !authorized || remoteConflict) return;
+    if (backupBlockedReason || backupSafety || !summaries?.length || summaryError || !autoBackupEnabled || !hasPendingBackup || !online || manuallyDisconnected || busy || !authorized || remoteConflict) return;
     const now = Date.now();
     const lastTableBackupAt = (tableId: string) => record.tableBackups[tableId]?.lastBackupAt
       ?? (record.structureRevision === null ? record.lastBackupAt ?? 0 : 0);
@@ -421,7 +445,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     const delay = Math.max(AUTO_BACKUP_DEBOUNCE_MS, nextAllowedAt - now);
     const timer = window.setTimeout(() => { void backup({ automatic: true }); }, delay);
     return () => window.clearTimeout(timer);
-  }, [autoBackupEnabled, autoRetryAt, authorized, backup, backupBlockedReason, busy, dirtyTables, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt, record.tableBackups, remoteConflict, structureDirty, summaries, summaryError]);
+  }, [autoBackupEnabled, autoRetryAt, authorized, backup, backupBlockedReason, backupSafety, busy, dirtyTables, hasPendingBackup, manuallyDisconnected, online, record.lastBackupAt, record.tableBackups, remoteConflict, structureDirty, summaries, summaryError]);
 
   return {
     dialogOpen,
@@ -443,6 +467,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     remoteVersions,
     selectRemoteVersion: (fileId: string) => { const file = remoteVersions.find(item => item.id === fileId); if (file) setRemoteFile(file); },
     remoteConflict,
+    backupSafety,
     authorized,
     record,
     status,

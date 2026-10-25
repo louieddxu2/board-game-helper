@@ -29,9 +29,9 @@ const saveBaseline = (storageIdentity: string | undefined = 'original-db') => {
     remoteModifiedTime: remote.modifiedTime, lastBackupAt: now.getTime() - GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS - 1,
     storageIdentity, structureRevision: 'previous-structure', tableBackups: {} }));
 };
-const render = (data: WorkspaceData, loadStorageIdentity = async () => 'original-db') => renderHook(() =>
-  useWorkspaceGoogleDriveBackup({ data, loadStorageIdentity, loadGoogleClientId: async () => 'client',
-    onRestored: vi.fn(), setNotice: vi.fn() }));
+const render = (data: WorkspaceData, loadStorageIdentity = async () => 'original-db') => renderHook(({ value }) =>
+  useWorkspaceGoogleDriveBackup({ data: value, loadStorageIdentity, loadGoogleClientId: async () => 'client',
+    onRestored: vi.fn(), setNotice: vi.fn() }), { initialProps: { value: data } });
 
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(now);
@@ -50,11 +50,44 @@ describe('backup protection after browser data deletion', () => {
     saveBaseline();
     const hook = render(emptyWorkspace(), async () => identity);
     await act(async () => { await hook.result.current.connect(); });
+    expect(hook.result.current.backupSafety).toBe('empty');
+    expect(hook.result.current.dialogOpen).toBe(true);
+    expect(hook.result.current.remoteFile?.id).toBe(remote.id);
     await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 2_000); });
     await act(async () => { expect(await hook.result.current.backup()).toBe(false); });
     await act(async () => { expect(await hook.result.current.backup({ force: true })).toBe(false); });
     expect(cloud.backup).not.toHaveBeenCalled();
     expect(hook.result.current.record.fileId).toBe(remote.id);
+  });
+
+  test('cleared settings still produce a warning and enabling automatic backup cannot bypass it', async () => {
+    window.localStorage.clear();
+    const hook = render(emptyWorkspace(), async () => 'recreated-db');
+    await act(async () => { await hook.result.current.connect(); });
+    expect(hook.result.current.backupSafety).toBe('empty');
+    expect(hook.result.current.dialogOpen).toBe(true);
+    act(() => hook.result.current.setAutoBackupEnabled(true));
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 2_000); });
+    expect(cloud.backup).not.toHaveBeenCalled();
+  });
+
+  test('closing, reopening and reconnecting do not approve data that appears after the empty warning', async () => {
+    saveBaseline();
+    const hook = render(emptyWorkspace());
+    await act(async () => { await hook.result.current.connect(); });
+    act(() => hook.result.current.close());
+    hook.rerender({ value: populated() });
+    act(() => hook.result.current.open());
+    await act(async () => { await hook.result.current.connect(); });
+    act(() => { hook.result.current.setAutoBackupEnabled(false); hook.result.current.setAutoBackupEnabled(true); });
+    act(() => window.dispatchEvent(new Event('online')));
+    await act(async () => { await vi.advanceTimersByTimeAsync(GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS + 2_000); });
+    expect(hook.result.current.backupSafety).toBe('unconfirmed');
+    expect(cloud.backup).not.toHaveBeenCalled();
+    await act(async () => { expect(await hook.result.current.backup()).toBe(false); });
+    await act(async () => { expect(await hook.result.current.backup({ force: true })).toBe(true); });
+    expect(hook.result.current.backupSafety).toBeUndefined();
+    expect(cloud.backup).toHaveBeenCalledTimes(1);
   });
 
   test.each(['recreated-db', 'legacy'])('requires explicit overwrite for %s even when the cloud receipt matches', async scenario => {

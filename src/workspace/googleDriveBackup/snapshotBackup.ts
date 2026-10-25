@@ -41,7 +41,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   const journal = createSnapshotJournal(storage);
   let lastState: DriveSnapshotState | undefined;
   let pending: Promise<Receipt> | null = null;
-  let cleanupAt = 0;
   let maintenance: Promise<void> | null = null;
   const receipts = new Map<string, { account: string; id: string }>();
   const acknowledged = new Set<string>();
@@ -59,10 +58,9 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         throw error;
       }
     }
-    cleanupAt = Date.now() + 60_000;
   };
   const maintain = () => {
-    if (!maintenance) maintenance = cleanup().catch(() => { cleanupAt = Date.now() + 60_000; }).finally(() => { maintenance = null; });
+    if (!maintenance) maintenance = cleanup().catch(() => undefined).finally(() => { maintenance = null; });
     return maintenance;
   };
   const ensureFolder = async () => {
@@ -94,7 +92,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   };
   const findRemoteFile = async () => {
     const current = await state();
-    if (current.versions.length && Date.now() >= cleanupAt) void maintain();
     return headFile(current) ?? legacyFile();
   };
   const receipt = async (op: DriveSnapshotOperation, root: string): Promise<Receipt> => {

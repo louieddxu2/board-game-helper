@@ -143,6 +143,19 @@ const addRoot = (drive: ReturnType<typeof createInMemoryDrive>) => drive.addFile
 describe('independent Drive snapshot backups', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  test('checking the remote head does not clean up or write any backup files', async () => {
+    const drive = createInMemoryDrive(); addRoot(drive);
+    const coordinator = new TestCoordinator();
+    const fixture = createWorkspace(); const service = createService(drive, coordinator, memoryStorage());
+    const receipt = await service.backup(fixture.data, {}, { source: fixture.source });
+    await service.maintain?.();
+    coordinator.cleanupCalls.length = 0;
+    const uploads = drive.calls.uploads.length;
+    expect(await service.findRemoteFile()).toMatchObject({ id: receipt.file.id });
+    expect(coordinator.cleanupCalls).toEqual([]);
+    expect(drive.calls.uploads).toHaveLength(uploads);
+  });
+
   test('rejects an empty workspace before cloud writes, even with explicit overwrite options', async () => {
     const drive = createInMemoryDrive(); addRoot(drive);
     const coordinator = new TestCoordinator();
