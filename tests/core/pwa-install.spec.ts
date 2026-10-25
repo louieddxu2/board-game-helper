@@ -14,32 +14,42 @@ const routeHome = async (page: import('@playwright/test').Page, getUser: () => o
   } }));
 };
 
-test('keeps the install action inside the 66px mobile header for signed-out and signed-in home', async ({ page }) => {
+test('places install at the hero top right outside the unchanged mobile header in both home modes', async ({ page }) => {
   let user: object | null = null;
   await routeHome(page, () => user);
+  const header = page.locator('.site-header');
+  const install = page.getByRole('button', { name: '加入主畫面' });
+  const checkHeroPosition = async () => {
+    const hero = page.locator('.hero, .personal-home-hero');
+    await expect(hero.locator('> .pwa-install-button')).toBeVisible();
+    await expect(header.locator('.pwa-install-button')).toHaveCount(0);
+    const heroBox = (await hero.boundingBox())!;
+    const installBox = (await install.boundingBox())!;
+    const headerBox = (await header.boundingBox())!;
+    const contentBox = (await hero.locator('h1, .personal-home-search').first().boundingBox())!;
+    expect(headerBox.height).toBe(66);
+    expect(heroBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
+    expect(installBox.y).toBeCloseTo(heroBox.y + 8, 0);
+    expect(heroBox.x + heroBox.width - installBox.x - installBox.width).toBeCloseTo(12, 0);
+    expect(installBox.y + installBox.height).toBeLessThanOrEqual(contentBox.y);
+    expect(await page.locator('body').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  };
   for (const width of [320, 393]) {
     await page.setViewportSize({ width, height: 851 });
     await page.goto('/');
-    const header = page.locator('.site-header');
-    const install = page.getByRole('button', { name: '加入主畫面' });
     await expect(install).toBeVisible();
-    await expect.poll(() => header.evaluate((element) => Math.round(element.getBoundingClientRect().height))).toBe(66);
-    expect(await page.locator('body').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await checkHeroPosition();
 
     user = { id: 'mobile-user', displayName: '測試使用者', maskedEmail: 't***@example.com', roles: [] };
     await page.reload();
     await expect(page.getByRole('button', { name: '我的收藏' })).toBeVisible();
     await expect(install).toBeVisible();
-    const modeBox = await page.getByRole('button', { name: '我的收藏' }).boundingBox();
-    const installBox = await install.boundingBox();
-    expect(modeBox).not.toBeNull();
-    expect(installBox).not.toBeNull();
-    expect(installBox!.y).toBeGreaterThan(modeBox!.y + modeBox!.height - 1);
-    const headerBox = await header.boundingBox();
-    const brandBox = await page.locator('.brand').boundingBox();
-    expect(installBox!.y + installBox!.height).toBeLessThanOrEqual(headerBox!.y + headerBox!.height);
-    expect(brandBox!.x + brandBox!.width).toBeLessThanOrEqual(installBox!.x);
-    expect(await page.locator('body').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await checkHeroPosition();
+    await header.getByRole('button', { name: '我的收藏' }).tap();
+    await expect(page.locator('.personal-home-hero')).toBeVisible();
+    await checkHeroPosition();
+    await header.getByRole('button', { name: '探索', exact: true }).tap();
+    await expect(page.locator('.hero')).toBeVisible();
     user = null;
   }
   user = { id: 'mobile-user', displayName: '測試使用者', maskedEmail: 't***@example.com', roles: [] };

@@ -10,8 +10,9 @@ export const PwaInstallButton = () => {
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (helpOpen && state !== 'installed') dialog?.showModal();
-    else dialog?.close();
+    if (helpOpen && state !== 'installed') {
+      if (dialog && !dialog.open) dialog.showModal();
+    } else if (dialog?.open) dialog.close();
   }, [helpOpen, state]);
 
   if (state === 'installed') return null;

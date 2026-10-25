@@ -10,6 +10,7 @@ import { homeContentKey } from '../lib/homeCache';
 import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
 import { PersonalHomeCard } from '../components/PersonalHomeCard';
+import { PwaInstallButton } from '../components/PwaInstallButton';
 import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
 import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
@@ -193,6 +194,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     <section className="hero">
       <div className="hero-bg" aria-hidden="true" />
       {onShowPersonal && <button type="button" className="home-mode-button explore-mode-button" onClick={onShowPersonal}>我的收藏</button>}
+      <PwaInstallButton />
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
         <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
@@ -254,6 +256,7 @@ const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onS
   return <div className="personal-home">
     <section className="personal-home-hero">
       <div className="personal-home-hero-bg" aria-hidden="true" />
+      <PwaInstallButton />
       <div className="personal-home-search">
       <div className="personal-home-search-row">
         <GameSearch value={query} onChange={setQuery} includeRules allowCreate={Boolean(user)}
