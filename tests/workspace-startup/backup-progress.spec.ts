@@ -12,22 +12,11 @@ const setup = async (page: Page) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   let heldTable: { file: StoredDriveFile; resolve(): void; reject(error: Error): void } | undefined;
-  let heldConfirmation: { finish(missing: boolean): void } | undefined;
-  let confirmationStarted!: () => void;
-  const confirmationReady = new Promise<void>(resolve => { confirmationStarted = resolve; });
-  let manifestUploaded = false;
+  let heldManifest: { resolve(): void; reject(error: Error): void } | undefined;
   const fixture = createInMemoryDrive({
     onUpload: async file => {
       if (file.appProperties?.backupKind === 'table') await new Promise<void>((resolve, reject) => { heldTable = { file, resolve, reject }; });
-      if (file.appProperties?.backupKind === 'manifest') manifestUploaded = true;
-    },
-    onList: async (query, files) => {
-      if (!manifestUploaded || !query.includes("key='backupKind' and value='manifest'")
-        || !files.some(file => file.appProperties?.backupKind === 'manifest')) return;
-      await new Promise<void>(resolve => {
-        heldConfirmation = { finish(missing) { manifestUploaded = false; if (missing) files.splice(0); resolve(); } };
-        confirmationStarted();
-      });
+      if (file.appProperties?.backupKind === 'manifest') await new Promise<void>((resolve, reject) => { heldManifest = { resolve, reject }; });
     },
   });
   await connectFakeDrive(page, fixture);
@@ -53,6 +42,7 @@ const setup = async (page: Page) => {
   return {
     dialog, longName, errors,
     tableId: () => heldTable?.file.appProperties?.localId,
+    manifestPending: () => Boolean(heldManifest),
     async finishTable(fail = false) {
       if (!heldTable) throw new Error('No held table upload');
       const pending = heldTable;
@@ -60,15 +50,16 @@ const setup = async (page: Page) => {
       if (fail) pending.reject(new Error('測試上傳失敗'));
       else pending.resolve();
     },
-    async finishConfirmation(missing = false) {
-      await confirmationReady;
-      if (!heldConfirmation) throw new Error('No held remote confirmation');
-      heldConfirmation.finish(missing);
+    async finishManifest(fail = false) {
+      if (!heldManifest) throw new Error('No held manifest upload');
+      const pending = heldManifest; heldManifest = undefined;
+      if (fail) pending.reject(new Error('測試索引上傳失敗'));
+      else pending.resolve();
     },
   };
 };
 
-test('shows each table upload and final confirmation on mobile without overflow or early completion', async ({ page }) => {
+test('shows table progress and completes only after the final manifest upload succeeds', async ({ page }) => {
   const backup = await setup(page);
   await expect.poll(backup.tableId).toBe('table-0');
   await expect(backup.dialog.getByRole('status')).toContainText(`正在上傳表格：${backup.longName}`);
@@ -91,12 +82,13 @@ test('shows each table upload and final confirmation on mobile without overflow 
   const secondPercent = Number(await progress.getAttribute('value'));
   expect(secondPercent).toBeGreaterThan(firstPercent); expect(secondPercent).toBeLessThan(100);
   await backup.finishTable();
-  await expect(backup.dialog.getByRole('status')).toContainText('正在驗證並完成備份');
+  await expect.poll(backup.manifestPending).toBe(true);
+  await expect(backup.dialog.getByRole('status')).toContainText('正在儲存備份目錄');
   await expect(backup.dialog.getByRole('status')).not.toContainText('張表格');
   const confirmingPercent = Number(await progress.getAttribute('value'));
   expect(confirmingPercent).toBeGreaterThan(secondPercent); expect(confirmingPercent).toBeLessThan(100);
   await expect(backup.dialog.getByText('備份進行中')).toBeVisible();
-  await backup.finishConfirmation();
+  await backup.finishManifest();
   await expect(progress).toHaveAttribute('value', '100');
   await expect(backup.dialog.getByText('已完成備份', { exact: true })).toBeVisible();
   expect(backup.errors).toEqual([]);
@@ -113,16 +105,17 @@ test('replaces an interrupted upload with its error and re-enables backup', asyn
   expect(backup.errors).toEqual([]);
 });
 
-test('keeps the previous completion record when the uploaded backup cannot be confirmed', async ({ page }) => {
+test('keeps the previous completion record when the final manifest upload fails', async ({ page }) => {
   const backup = await setup(page);
   const previousRecord = await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'));
   await expect.poll(backup.tableId).toBe('table-0');
   await backup.finishTable();
   await expect.poll(backup.tableId).toBe('table-1');
   await backup.finishTable();
-  await expect(backup.dialog.getByRole('status')).toContainText('正在驗證並完成備份');
-  await backup.finishConfirmation(true);
-  await expect(backup.dialog.getByRole('alert')).toHaveText('雲端備份已在其他裝置變更，請先載入雲端版本或明確選擇覆蓋');
+  await expect.poll(backup.manifestPending).toBe(true);
+  await expect(backup.dialog.getByRole('status')).toContainText('正在儲存備份目錄');
+  await backup.finishManifest(true);
+  await expect(backup.dialog.getByRole('alert')).toHaveText('測試索引上傳失敗');
   await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'))).toBe(previousRecord);
   expect(backup.errors).toEqual([]);

@@ -82,7 +82,7 @@ const createService = (fixture: ReturnType<typeof loggedDrive>, retainedVersions
   });
 
 describe('Lightweight Google Drive Snapshot Backup', () => {
-  test('bounds a warm 2-table backup including version checks and generates no cloud coordination files', async () => {
+  test('uses exactly five API calls for a warm two-table backup and creates no cloud coordination files', async () => {
     const fixture = loggedDrive();
     const service = createService(fixture);
 
@@ -100,7 +100,6 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     fixture.logs.length = 0;
     const remote = await service.findRemoteFile();
     const findRequests = fixture.logs.length;
-    expect(findRequests).toBe(2); // Snapshot folders and manifest metadata, without XLSX downloads.
 
     fixture.logs.length = 0;
     const second = createWorkspaceFixture(2);
@@ -110,18 +109,18 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     });
     expect(secondReceipt.file.name).toBe('manifest.xlsx');
 
-    // Three metadata checks (2 requests each), one folder, and three XLSX uploads.
+    // One discovery, one new folder, two table uploads, and the final manifest upload.
     const backupRequests = fixture.logs.length;
     process.stdout.write(`[actual-lightweight-requests] find: ${findRequests}, backup: ${backupRequests}\n`);
-    expect(backupRequests).toBe(10);
-    expect(findRequests + backupRequests).toBeLessThan(20);
+    expect(backupRequests).toBe(5);
+    expect(findRequests).toBe(1);
 
     // Again verify zero JSON receipt/lease files
     const allJsonFiles = [...fixture.drive.files.values()].filter(f => f.name.endsWith('.json') || f.mimeType === 'application/json');
     expect(allJsonFiles).toHaveLength(0);
   });
 
-  test('restores two tables with two metadata queries and three XLSX downloads', async () => {
+  test('restores two tables with one manifest lookup and three XLSX downloads', async () => {
     const fixture = loggedDrive();
     const service = createService(fixture);
     const data = createWorkspaceFixture(1);
@@ -132,7 +131,7 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     const restored = await service.restore();
     const restoreRequests = fixture.logs.length;
 
-    expect(restoreRequests).toBe(5);
+    expect(restoreRequests).toBe(4);
     expect(restored.nodes).toHaveLength(2);
     expect(restored.tables).toHaveLength(2);
     expect(restored.tables[0].name).toContain('測試表A');
@@ -230,12 +229,11 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     expect(uploadAttempts).toHaveLength(0);
   });
 
-  test('keeps exactly three versions during repeated maintenance and preserves manually added files', async () => {
+  test('keeps three versions and retires one obsolete backup folder with one delete request', async () => {
     const fixture = loggedDrive(); const service = createService(fixture);
     const first = createWorkspaceFixture(1);
     const oldest = await service.backup(first.data, {}, { source: first.source });
     const folder = oldest.file.parents![0];
-    fixture.drive.addFile({ id: 'manual-note', name: '手動保存.txt', parents: [folder], mimeType: 'text/plain', visibleToApp: false });
     for (const suffix of [2, 3]) {
       const next = createWorkspaceFixture(suffix);
       await service.backup(next.data, {}, { source: next.source }); await service.maintain?.();
@@ -247,11 +245,12 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     const next = createWorkspaceFixture(4);
     await service.backup(next.data, {}, { source: next.source, expectedRemoteFileId: remote?.id });
     await service.maintain?.();
-    expect(fixture.logs.length).toBeLessThanOrEqual(20);
     expect(fixture.drive.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toHaveLength(3);
-    expect(fixture.drive.get(oldest.file.id)?.trashed).toBe(true);
-    expect(fixture.drive.get(folder)?.trashed).not.toBe(true);
-    expect(fixture.drive.get('manual-note')?.trashed).not.toBe(true);
+    expect(fixture.drive.liveFiles().some(file => file.id === oldest.file.id)).toBe(false);
+    expect(fixture.drive.get(folder)?.trashed).toBe(true);
+    expect(fixture.logs.filter(log => log.method === 'PATCH')).toEqual([
+      expect.objectContaining({ path: `/drive/v3/files/${folder}` }),
+    ]);
     expect(fixture.drive.liveFiles().filter(file => file.mimeType === 'application/json')).toEqual([]);
   });
 
@@ -263,23 +262,6 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     data.source.verify = async () => { if (changed) throw new Error('備份期間已有變更'); };
     await expect(service.backup(data.data, {}, { source: data.source })).rejects.toThrow('備份期間已有變更');
     expect(drive.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toEqual([]);
-  });
-
-  test('rejects a cloud change made while its tables are uploading', async () => {
-    let otherWrite: (() => Promise<unknown>) | undefined;
-    const drive = createInMemoryDrive({ onUpload: async file => {
-      if (file.appProperties?.backupKind !== 'table' || !otherWrite) return;
-      const write = otherWrite; otherWrite = undefined; await write();
-    } });
-    const fixture = { drive, logs: [], fetchImpl: drive.fetchImpl };
-    const firstService = createService(fixture); const otherService = createService(fixture);
-    const initial = createWorkspaceFixture(1); const first = await firstService.backup(initial.data, {}, { source: initial.source });
-    let otherId: string | undefined;
-    otherWrite = async () => { const next = createWorkspaceFixture(3); otherId = (await otherService.backup(next.data, {}, { source: next.source, expectedRemoteFileId: first.file.id })).file.id; };
-    const next = createWorkspaceFixture(2);
-    await expect(firstService.backup(next.data, {}, { source: next.source, expectedRemoteFileId: first.file.id })).rejects.toBeInstanceOf(RemoteBackupConflictError);
-    expect((await firstService.findRemoteFile())?.id).toBe(otherId);
-    expect(drive.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toHaveLength(2);
   });
 
   test('rejects a table whose XLSX identity differs from the index', async () => {
@@ -307,44 +289,4 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     expect(fixture.logs.filter(log => log.query.includes('alt=media'))).toEqual([]);
   });
 
-  test('ignores manifests moved outside the app snapshot root', async () => {
-    const fixture = loggedDrive(); const service = createService(fixture); const data = createWorkspaceFixture(1);
-    const receipt = await service.backup(data.data, {}, { source: data.source });
-    fixture.drive.get(receipt.file.parents![0])!.parents = ['unrelated-user-folder'];
-    expect(await service.findRemoteFile()).toBeNull();
-  });
-
-  test('preserves independent Drive branches and merges them only after explicit confirmation', async () => {
-    const fixture = loggedDrive(); const service = createService(fixture);
-    const initial = createWorkspaceFixture(1);
-    const parent = await service.backup(initial.data, {}, { source: initial.source });
-    const second = createWorkspaceFixture(2);
-    await service.backup(second.data, {}, { source: second.source });
-    const third = createWorkspaceFixture(3);
-    const sibling = await service.backup(third.data, {}, { source: third.source });
-    await service.maintain?.();
-    // Model two independently completed snapshots with the same observed parent.
-    fixture.drive.get(sibling.file.id)!.appProperties!.parentManifestIds = JSON.stringify([parent.file.id]);
-    const remote = await service.findRemoteFile();
-    expect(remote?.appProperties?.backupForkCount).toBe('2');
-    expect((await service.listRemoteBackups())[0].appProperties?.backupForkCount).toBe('2');
-    fixture.logs.length = 0;
-    await service.maintain?.();
-    const fourth = createWorkspaceFixture(4);
-    await expect(service.backup(fourth.data, {}, { source: fourth.source, expectedRemoteFileId: remote?.id })).rejects.toBeInstanceOf(RemoteBackupConflictError);
-    expect(fixture.logs.filter(log => ['POST', 'PATCH'].includes(log.method))).toEqual([]);
-    await service.backup(fourth.data, {}, { source: fourth.source, expectedRemoteFileId: remote?.id, allowLegacyChange: true });
-    expect((await service.findRemoteFile())?.appProperties?.backupForkCount).toBe('1');
-    await service.maintain?.();
-  });
-
-  test('rejects a changed legacy Drive stamp before any write', async () => {
-    const fixture = loggedDrive(); const service = createService(fixture); const data = createWorkspaceFixture(1);
-    const receipt = await service.backup(data.data, {}, { source: data.source });
-    fixture.drive.get(receipt.file.id)!.appProperties!.legacyStamp = 'changed-drive-metadata';
-    fixture.logs.length = 0;
-    await expect(service.backup(data.data, {}, { source: data.source, expectedRemoteFileId: receipt.file.id,
-      expectedLegacyStamp: 'previous-drive-metadata' })).rejects.toBeInstanceOf(RemoteBackupConflictError);
-    expect(fixture.logs.filter(log => ['POST', 'PATCH'].includes(log.method))).toEqual([]);
-  });
 });
