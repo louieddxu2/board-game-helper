@@ -1,105 +1,84 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { DRIVE_FILE_SCOPE, SnapshotProtocolError } from '../../shared/driveSnapshots';
-import { verifyDriveSnapshotToken } from '../../../worker/services/driveSnapshotAuth';
+import { DRIVE_FILE_SCOPE, DRIVE_SNAPSHOT_SCOPES, DRIVE_SNAPSHOT_KEY } from '../../shared/driveSnapshots';
 import { createGoogleIdentityTokenProvider, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY } from './googleIdentityTokenProvider';
 import { createSnapshotCoordinator } from './snapshotCoordinator';
+import { createInMemoryDrive } from './backupTestFixture';
+import { FOLDER_MIME } from './googleDriveApi';
 import type { GoogleIdentityWindow, GoogleTokenClient } from './types';
 
 const CLIENT = 'drive-connection-test.apps.googleusercontent.com';
+const ROOT = 'connection-root';
 type OAuth = NonNullable<NonNullable<NonNullable<GoogleIdentityWindow['google']>['accounts']>['oauth2']>;
 type TokenConfig = Parameters<OAuth['initTokenClient']>[0];
 
-// Tokeninfo identity depends on the scopes actually requested by the real provider.
-// A Drive-only grant deliberately has no identity, rather than fabricating an OpenID response.
-const connection = (scopes?: string, windowRef: GoogleIdentityWindow = {}) => {
-  let config: TokenConfig;
-  let popupError: string | undefined;
-  const claims = new Map<string, Record<string, unknown>>();
-  const tokenClient: GoogleTokenClient = {
-    callback: () => undefined,
-    requestAccessToken: vi.fn(() => {
-      if (popupError) { config.error_callback?.({ type: popupError }); return; }
-      const token = `connection-${crypto.randomUUID()}`;
-      claims.set(token, { aud: CLIENT, scope: config.scope, expires_in: 3600,
-        ...(config.scope.split(/\s+/).includes('openid') ? { sub: 'connection-owner' } : {}) });
-      tokenClient.callback({ access_token: token, expires_in: 3600 });
-    }),
-  };
+const connection = (scopes?: string) => {
+  const drive = createInMemoryDrive();
+  drive.addFile({ id: ROOT, name: '新版快照', mimeType: FOLDER_MIME, parents: ['root'], appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'root', schemaVersion: '4' } });
+  let config: TokenConfig; let popupError: string | undefined; let failFirst401 = false; let always403 = false; let attempts = 0;
+  const grants = new Map<string, { scope: string; sub?: string }>(); const requests: Array<{ url: string; token: string }> = [];
+  const tokenClient: GoogleTokenClient = { callback: () => undefined, requestAccessToken: vi.fn(() => {
+    if (popupError) { config.error_callback?.({ type: popupError }); return; }
+    const token = `connection-${crypto.randomUUID()}`; const scope = config.scope.split(/\s+/).filter(Boolean).join(' ');
+    grants.set(token, { scope, ...(scope.split(/\s+/).includes('openid') ? { sub: 'connection-owner' } : {}) });
+    tokenClient.callback({ access_token: token, expires_in: 3600 });
+  }) };
   const initTokenClient = vi.fn((input: TokenConfig) => { config = input; return tokenClient; });
-  windowRef.google = { accounts: { oauth2: { initTokenClient, revoke: (_token, done) => done() } } };
-  const provider = createGoogleIdentityTokenProvider({ clientId: CLIENT, scopes, windowRef,
-    documentRef: { body: { appendChild: vi.fn() }, getElementById: () => null, createElement: vi.fn() } });
-  const tokeninfo = vi.fn<typeof fetch>(async (_input, init) => {
-    const token = new Headers(init?.headers).get('Authorization')?.replace(/^Bearer /, '') ?? '';
-    return new Response(JSON.stringify(claims.get(token)), { status: claims.has(token) ? 200 : 401 });
-  });
-  const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
-    try {
-      const owner = await verifyDriveSnapshotToken(new Headers(init?.headers).get('Authorization') ?? undefined,
-        { GOOGLE_DRIVE_CLIENT_ID: CLIENT }, tokeninfo);
-      return new Response(JSON.stringify({ accountKey: owner.accountKey, rootId: null, revision: 0, versions: [] }));
-    } catch (error) {
-      if (!(error instanceof SnapshotProtocolError)) throw error;
-      return new Response(JSON.stringify({ error: error.code }), { status: error.status });
-    }
-  });
-  return { provider, coordinator: createSnapshotCoordinator({ tokenProvider: provider, fetchImpl }), tokenClient,
-    initTokenClient, fetchImpl, setPopupError: (value?: string) => { popupError = value; } };
+  const windowRef: GoogleIdentityWindow = { localStorage: window.localStorage, google: { accounts: { oauth2: { initTokenClient, revoke: (_token, done) => done() } } } };
+  const provider = createGoogleIdentityTokenProvider({ clientId: CLIENT, scopes, windowRef, documentRef: { body: { appendChild: vi.fn() }, getElementById: () => null, createElement: vi.fn() } });
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const token = new Headers(init?.headers).get('Authorization')?.replace(/^Bearer /, '') ?? ''; const url = String(input);
+    requests.push({ url, token }); attempts += 1;
+    if (always403 || (failFirst401 && attempts === 1)) return new Response(JSON.stringify({ error: { message: 'denied' } }), { status: always403 ? 403 : 401 });
+    if (!grants.has(token)) return new Response(JSON.stringify({ error: { message: 'unknown token' } }), { status: 401 });
+    return drive.fetchImpl(input, init);
+  };
+  return { drive, provider, coordinator: createSnapshotCoordinator({ tokenProvider: provider, fetchImpl }), tokenClient, initTokenClient, requests, grants,
+    setPopupError: (value?: string) => { popupError = value; }, setFailFirst401: () => { failFirst401 = true; }, setAlways403: () => { always403 = true; } };
 };
 
-describe('Google Drive connection across the authorization boundary', () => {
+describe('Google Drive GIS to direct Drive authorization', () => {
   afterEach(() => { window.localStorage.clear(); vi.unstubAllGlobals(); });
 
-  test('requests the identity needed by the server and connects with only one authorization popup', async () => {
-    const flow = connection();
-    await flow.provider.signIn();
-    await expect(flow.coordinator.state()).resolves.toMatchObject({ revision: 0, versions: [] });
-    expect(flow.initTokenClient.mock.calls[0][0].scope.split(/\s+/).sort()).toEqual([DRIVE_FILE_SCOPE, 'openid'].sort());
+  test('requests openid plus drive.file and sends the bearer only to Drive', async () => {
+    const flow = connection(); await flow.provider.signIn();
+    await expect(flow.coordinator.state()).resolves.toMatchObject({ revision: 0, rootId: ROOT, accountKey: `drive:${ROOT}` });
+    expect(flow.initTokenClient.mock.calls[0][0].scope.split(/\s+/).sort()).toEqual(DRIVE_SNAPSHOT_SCOPES.split(/\s+/).sort());
     expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(1);
+    expect(flow.requests.every(request => request.url.startsWith('https://www.googleapis.com/drive/') || request.url.startsWith('https://www.googleapis.com/upload/drive/'))).toBe(true);
   });
 
-  test('does not reopen OAuth when a valid Drive-only grant lacks account identity', async () => {
-    const flow = connection(DRIVE_FILE_SCOPE);
-    await flow.provider.signIn();
-    await expect(flow.coordinator.state()).rejects.toMatchObject({ code: 'backup_identity_required', status: 403 });
-    await expect(flow.coordinator.state()).rejects.toMatchObject({ code: 'backup_identity_required', status: 403 });
-    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(1);
-    expect(flow.fetchImpl).toHaveBeenCalledTimes(2);
+  test('accepts a real drive.file-only grant without fabricating an identity or tokeninfo request', async () => {
+    const flow = connection(DRIVE_FILE_SCOPE); await flow.provider.signIn();
+    const state = await flow.coordinator.state();
+    const token = flow.requests[0].token;
+    expect(state.accountKey).toBe(`drive:${ROOT}`); expect(flow.grants.get(token)).not.toHaveProperty('sub');
+    expect(flow.initTokenClient.mock.calls[0][0].scope).toBe(DRIVE_FILE_SCOPE);
+    expect(flow.requests.every(request => !request.url.includes('tokeninfo'))).toBe(true);
   });
 
-  test('explicit reconnect clears a persisted disconnect and can authenticate again', async () => {
-    const flow = connection(undefined, { localStorage: window.localStorage });
-    await flow.provider.signIn();
-    await flow.provider.signOut();
+  test('refreshes exactly once after a Drive 401', async () => {
+    const flow = connection(); flow.setFailFirst401();
+    await expect(flow.coordinator.state()).resolves.toMatchObject({ rootId: ROOT });
+    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
+    expect(flow.requests.length).toBeGreaterThanOrEqual(2); expect(flow.requests[0].url).toBe(flow.requests[1].url); expect(flow.requests[0].token).not.toBe(flow.requests[1].token);
+  });
+
+  test('does not enter a popup loop after a Drive 403; a later explicit retry remains possible', async () => {
+    const flow = connection(); flow.setAlways403(); await flow.provider.signIn();
+    await expect(flow.coordinator.state()).rejects.toMatchObject({ status: 403 });
+    await expect(flow.coordinator.state()).rejects.toMatchObject({ status: 403 });
+    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(1);
+    const retry = connection(); retry.setPopupError('popup_closed');
+    await expect(retry.provider.signIn()).rejects.toThrow('已取消'); retry.setPopupError(); await retry.provider.signIn();
+    await expect(retry.coordinator.state()).resolves.toMatchObject({ rootId: ROOT });
+    expect(retry.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
+  });
+
+  test('persists a manual disconnect only until the next explicit sign-in', async () => {
+    const flow = connection(); await flow.provider.signIn(); await flow.provider.signOut();
     expect(window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY)).toBe('true');
-    await expect(flow.provider.getAccessToken()).rejects.toThrow('主動斷線');
-    await flow.provider.signIn();
-    await expect(flow.coordinator.state()).resolves.toMatchObject({ revision: 0 });
+    await expect(flow.provider.getAccessToken()).rejects.toThrow('主動斷線'); await flow.provider.signIn();
     expect(window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY)).toBeNull();
     expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
-  });
-
-  test.each(['popup_closed', 'popup_failed_to_open'])('releases the pending connection after %s so the next click can retry', async error => {
-    const flow = connection();
-    flow.setPopupError(error);
-    await expect(flow.provider.signIn()).rejects.toThrow(error === 'popup_closed' ? '已取消' : '無法開啟');
-    flow.setPopupError();
-    await flow.provider.signIn();
-    await expect(flow.coordinator.state()).resolves.toMatchObject({ revision: 0 });
-    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
-  });
-
-  test('uses the real browser storage when no window override is supplied', async () => {
-    const setup = connection();
-    vi.stubGlobal('google', { accounts: { oauth2: {
-      initTokenClient: setup.initTokenClient, revoke: (_token: string, done: () => void) => done(),
-    } } });
-    window.localStorage.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
-    const provider = createGoogleIdentityTokenProvider({ clientId: CLIENT });
-    await expect(provider.getAccessToken()).rejects.toThrow('主動斷線');
-    await provider.signIn();
-    expect(window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY)).toBeNull();
-    await provider.signOut();
-    expect(window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY)).toBe('true');
   });
 });

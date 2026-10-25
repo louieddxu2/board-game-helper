@@ -1,141 +1,135 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { app } from '../../../worker/index';
-import { createDriveSnapshotTestDatabase } from '../../../worker/data/driveSnapshotTestFixture';
-import { createInMemoryDrive } from './backupTestFixture';
-import { createGoogleDriveSnapshotBackup } from './snapshotBackup';
-import { createSnapshotCoordinator } from './snapshotCoordinator';
-import { RemoteBackupConflictError } from './folderBackup';
+import { describe, expect, test } from 'vitest';
 import { createNode, createTable, emptyWorkspace } from '../model';
 import type { WorkspaceData } from '../types';
 import { workspaceBackupTableSummary, type WorkspaceBackupSource } from '../workspaceBackupSource';
+import { createInMemoryDrive, type InMemoryDriveFixture } from './backupTestFixture';
+import { createGoogleDriveSnapshotBackup } from './snapshotBackup';
+import { RemoteBackupConflictError } from './folderBackup';
+import { createSnapshotCoordinator } from './snapshotCoordinator';
+import { DRIVE_SNAPSHOT_KEY, DRIVE_SNAPSHOT_XLSX } from '../../shared/driveSnapshots';
+import { FOLDER_MIME } from './googleDriveApi';
+import { snapshotTags } from './driveSnapshotStore';
 
-const CLIENT_ID = 'snapshot-protocol.integration.apps.googleusercontent.com';
-const OWNER = 'snapshot-protocol-owner';
-const TOKEN = `snapshot-protocol-token-${crypto.randomUUID()}`;
-const API_BASE = 'https://rules.test/api/workspace-backup';
-
-const memoryStorage = () => {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
-    removeItem: (key: string) => { values.delete(key); },
-  };
-};
-
-const createFixture = () => {
-  const database = createDriveSnapshotTestDatabase();
-  const drive = createInMemoryDrive();
-  const environment = {
-    DB: database.raw,
-    PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) },
-    WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) },
-    APP_ORIGIN: 'https://rules.test', TRUSTED_APP_ORIGINS: '', GOOGLE_DRIVE_CLIENT_ID: CLIENT_ID,
-  } as never;
-  const fetchBridge: typeof fetch = async (input, init) => {
-    const url = new URL(String(input));
-    if (url.hostname === 'oauth2.googleapis.com') {
-      return new Response(JSON.stringify({ sub: OWNER, aud: CLIENT_ID, azp: CLIENT_ID,
-        scope: 'openid https://www.googleapis.com/auth/drive.file', exp: Math.floor(Date.now() / 1000) + 3600 }),
-      { status: 200, headers: { 'content-type': 'application/json' } });
-    }
-    if (url.hostname === 'rules.test') return app.request(url.toString(), init, environment);
-    return drive.fetchImpl(input, init);
-  };
-  return { database, drive, environment, fetchBridge };
-};
-
-const createWorkspace = () => {
-  const table = createTable('整合測試');
-  table.updatedAt = 100; table.changeRevision = 'table-revision-1';
-  table.rows = [{ ...table.rows[0], id: 'row-1', name: '第一列', values: { [table.columns[0].id]: '內容' } }];
+const TOKEN = 'snapshot-protocol-drive-token';
+const memoryStorage = () => { const values = new Map<string, string>(); return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } }; };
+const workspace = (suffix = 1) => {
+  const table = createTable(`整合測試-${suffix}`); table.updatedAt = 100 + suffix; table.changeRevision = `table-revision-${suffix}`;
+  table.rows = [{ ...table.rows[0], id: `row-${suffix}`, name: `第一列-${suffix}`, values: { [table.columns[0].id]: `內容-${suffix}` } }];
   const node = createNode('table', table.name, null, 0, table.id);
-  const data: WorkspaceData = { ...emptyWorkspace(), structureRevision: 'structure-revision-1', nodes: [node], tables: [], activeNodeId: node.id,
-    bottomNavigationTableIds: [table.id] };
-  const source: WorkspaceBackupSource = {
-    tables: [workspaceBackupTableSummary(table)],
-    readTable: async (id) => { if (id !== table.id) throw new Error('unexpected table'); return table; },
-    verify: async () => undefined,
-  };
+  const data: WorkspaceData = { ...emptyWorkspace(), structureRevision: `structure-revision-${suffix}`, nodes: [node], tables: [], activeNodeId: node.id, bottomNavigationTableIds: [table.id] };
+  const source: WorkspaceBackupSource = { tables: [workspaceBackupTableSummary(table)], readTable: async id => { if (id !== table.id) throw new Error('unexpected table'); return table; }, verify: async () => undefined };
   return { data, source, table };
 };
+const serviceFor = (drive: InMemoryDriveFixture, storage = memoryStorage()) => createGoogleDriveSnapshotBackup({
+  folderPath: ['BoardGameHelper', '動態表格備份'], backupKey: 'dynamic-sheet-primary-workspace-v2', retainedVersions: 3,
+  tokenProvider: { getAccessToken: async () => TOKEN }, fetchImpl: drive.fetchImpl, storage,
+});
+const rootFor = (drive: InMemoryDriveFixture) => [...drive.files.values()].find(file => file.appProperties?.backupKind === 'root');
 
-const createClient = (fixture: ReturnType<typeof createFixture>) => {
-  const tokenProvider = { getAccessToken: async () => TOKEN };
-  const coordinator = createSnapshotCoordinator({ tokenProvider, fetchImpl: fixture.fetchBridge, baseUrl: API_BASE });
-  const service = createGoogleDriveSnapshotBackup({
-    folderPath: ['BoardGameHelper', '動態表格備份'], backupKey: 'dynamic-sheet-primary-workspace-v2', retainedVersions: 3,
-    tokenProvider, fetchImpl: fixture.fetchBridge, coordinator, storage: memoryStorage(),
+describe('browser-to-Drive snapshot protocol integration', () => {
+  test('blocks an empty source before creating Drive folders or receipts', async () => {
+    const drive = createInMemoryDrive(); const service = serviceFor(drive); const before = [...drive.files.keys()];
+    await expect(service.backup(emptyWorkspace(), {}, {})).rejects.toThrow('沒有表格');
+    expect([...drive.files.keys()]).toEqual(before); expect(drive.calls.uploads).toHaveLength(0);
   });
-  return { coordinator, service };
-};
 
-describe('Drive snapshot protocol integration', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  test('writes a receipt beside a complete XLSX snapshot and restores through Drive leases', async () => {
+    const requests: string[] = []; const drive = createInMemoryDrive();
+    const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => { requests.push(String(input)); return drive.fetchImpl(input, init); };
+    const fixture = workspace(); const service = createGoogleDriveSnapshotBackup({ folderPath: ['BoardGameHelper', '動態表格備份'], backupKey: 'dynamic-sheet-primary-workspace-v2', retainedVersions: 3, tokenProvider: { getAccessToken: async () => TOKEN }, fetchImpl, storage: memoryStorage() });
+    const receipt = await service.backup(fixture.data, { sourceUpdatedAt: 101 }, { source: fixture.source });
+    service.acknowledgeBackup?.(receipt.file.id); await service.maintain?.();
+    const root = rootFor(drive); expect(root?.appProperties).toMatchObject({ backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'root' });
+    const snapshotId = receipt.file.appProperties?.snapshotId;
+    const folder = [...drive.files.values()].find(file => file.appProperties?.backupKind === 'snapshot' && file.appProperties.snapshotId === snapshotId)!;
+    const children = [...drive.files.values()].filter(file => file.parents?.[0] === folder.id && !file.trashed);
+    expect(children).toHaveLength(2); expect(children.every(file => file.mimeType === DRIVE_SNAPSHOT_XLSX)).toBe(true);
+    expect(children.map(file => file.appProperties?.backupKind).sort()).toEqual(['manifest', 'table']);
+    const jsonReceipt = [...drive.files.values()].find(file => file.appProperties?.backupKind === 'receipt' && file.appProperties.snapshotId === snapshotId)!;
+    expect(jsonReceipt.parents).toEqual([root!.id]); expect(jsonReceipt.appProperties).toMatchObject({ schemaVersion: '4' });
+    expect(JSON.parse(new TextDecoder().decode(jsonReceipt.body))).toMatchObject({ schema: 1, operation: { status: 'committed', id: snapshotId } });
+    const restored = await service.restore(receipt.file);
+    expect(restored.tables[0].id).toBe(fixture.table.id); expect(restored.tables[0].rows[0].values[restored.tables[0].columns[0].id]).toBe('內容-1');
+    expect(requests.every(url => url.startsWith('https://www.googleapis.com/drive/') || url.startsWith('https://www.googleapis.com/upload/drive/'))).toBe(true);
+  });
 
-  test('initializes the root, uploads and validates XLSX files, enforces CAS, restores, and keeps the latest three', async () => {
-    const fixture = createFixture();
-    vi.stubGlobal('fetch', fixture.fetchBridge);
-    const workspace = createWorkspace();
-    const firstClient = createClient(fixture);
-    const first = await firstClient.service.backup(workspace.data, { sourceUpdatedAt: 100 }, { source: workspace.source });
-    firstClient.service.acknowledgeBackup?.(first.file.id);
-    const firstOperation = await firstClient.coordinator.operation(first.file.appProperties?.snapshotId!);
-    expect(firstOperation).not.toBeNull();
-    const externalVisible = fixture.drive.addFile({
-      id: 'manual-visible-child', name: 'manual-visible.txt', mimeType: 'text/plain', parents: [firstOperation!.folderId],
-    });
-    const externalHidden = fixture.drive.addFile({
-      id: 'manual-hidden-child', name: 'manual-hidden.txt', mimeType: 'text/plain', parents: [firstOperation!.folderId], visibleToApp: false,
-    });
+  test('resumes a partial upload without creating a second snapshot folder', async () => {
+    const fixture = workspace(); let failed = false;
+    const drive = createInMemoryDrive({ shouldFailUpload: request => request.metadata.appProperties?.backupKind === 'table' && !failed ? (failed = true, 'one table failed') : undefined });
+    const storage = memoryStorage(); const service = serviceFor(drive, storage);
+    await expect(service.backup(fixture.data, {}, { source: fixture.source })).rejects.toThrow('one table failed');
+    const firstFolders = [...drive.files.values()].filter(file => file.appProperties?.backupKind === 'snapshot');
+    await expect(service.backup(fixture.data, {}, { source: fixture.source })).resolves.toBeDefined();
+    const folders = [...drive.files.values()].filter(file => file.appProperties?.backupKind === 'snapshot' && !file.trashed);
+    expect(folders).toHaveLength(1); expect(folders[0].id).toBe(firstFolders[0].id);
+    expect(drive.liveFiles().filter(file => file.appProperties?.backupKind === 'table')).toHaveLength(1);
+  });
 
-    const root = fixture.drive.liveFiles().find(file => file.appProperties?.backupKind === 'root');
-    expect(root).toBeDefined();
-    expect(root?.appProperties?.backupKey).toBe('dynamic-sheet-primary-workspace-v3');
-    expect(fixture.drive.calls.uploads.filter(upload => upload.metadata.appProperties?.backupKind === 'table')).toHaveLength(1);
-    expect(fixture.database.sqlite.prepare('SELECT revision, head_id FROM drive_backup_sets').all()).toEqual([
-      { revision: 1, head_id: first.file.appProperties?.snapshotId },
-    ]);
+  test('recovers a lost commit response after a service reload without duplicating XLSX files', async () => {
+    let loseResponse = true; const drive = createInMemoryDrive({ onUpload: async file => {
+      if (!loseResponse || file.appProperties?.backupKind !== 'receipt' || !file.body) return;
+      const body = JSON.parse(new TextDecoder().decode(file.body)) as { operation?: { status?: string } };
+      if (body.operation?.status === 'committed') { loseResponse = false; throw new Error('lost commit response'); }
+    }});
+    const storage = memoryStorage(); const fixture = workspace(); const first = serviceFor(drive, storage);
+    const receipt = await first.backup(fixture.data, {}, { source: fixture.source }); const uploads = drive.calls.uploads.length; await first.maintain?.();
+    const reloaded = serviceFor(drive, storage); const recovered = await reloaded.backup(fixture.data, {}, { source: fixture.source });
+    expect(recovered.file.id).toBe(receipt.file.id); expect(drive.calls.uploads.length).toBe(uploads);
+  });
 
-    const secondClient = createClient(fixture);
-    const race = await Promise.allSettled([
-      firstClient.service.backup(workspace.data, { sourceUpdatedAt: 100 }, { source: workspace.source }),
-      secondClient.service.backup(workspace.data, { sourceUpdatedAt: 100 }, { source: workspace.source }),
-    ]);
-    expect(race.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-    expect(race.filter(result => result.status === 'rejected').map(result => result.reason)).toEqual([
-      expect.any(RemoteBackupConflictError),
-    ]);
-    const winner = race.find((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof firstClient.service.backup>>> => result.status === 'fulfilled');
-    expect(winner).toBeDefined();
-    const winnerClient = race[0].status === 'fulfilled' ? firstClient : secondClient;
-    winnerClient.service.acknowledgeBackup?.(winner!.value.file.id);
+  test('validates the decoded manifest before allowing the coordinator to commit', async () => {
+    let drive!: InMemoryDriveFixture; let corrupted = false;
+    drive = createInMemoryDrive({ onUpload: async file => {
+      if (corrupted || file.appProperties?.backupKind !== 'manifest') return;
+      corrupted = true; drive.setBody(file.id, new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
+    }});
+    const fixture = workspace(); const service = serviceFor(drive);
+    await expect(service.backup(fixture.data, {}, { source: fixture.source })).rejects.toThrow();
+    const receipts = [...drive.files.values()].filter(file => file.appProperties?.backupKind === 'receipt' && !file.trashed);
+    expect(receipts).toHaveLength(1);
+    expect(JSON.parse(new TextDecoder().decode(receipts[0].body)).operation.status).toBe('uploading');
+    expect(receipts[0].appProperties?.schemaVersion).toBe('4');
+  });
 
-    for (let index = 0; index < 2; index += 1) {
-      const receipt = await winnerClient.service.backup(workspace.data, { sourceUpdatedAt: 100 + index + 1 }, { source: workspace.source });
-      winnerClient.service.acknowledgeBackup?.(receipt.file.id);
-    }
+  test('rejects a stale cross-device overwrite before another Drive write', async () => {
+    const drive = createInMemoryDrive(); const first = serviceFor(drive, memoryStorage()); const firstWorkspace = workspace(1);
+    const firstReceipt = await first.backup(firstWorkspace.data, {}, { source: firstWorkspace.source }); first.acknowledgeBackup?.(firstReceipt.file.id); await first.maintain?.();
+    const second = serviceFor(drive, memoryStorage()); const secondWorkspace = workspace(2);
+    const secondReceipt = await second.backup(secondWorkspace.data, {}, { source: secondWorkspace.source }); second.acknowledgeBackup?.(secondReceipt.file.id); await second.maintain?.();
+    const uploads = drive.calls.uploads.length;
+    await expect(first.backup(firstWorkspace.data, {}, { source: firstWorkspace.source, expectedRemoteFileId: firstReceipt.file.id })).rejects.toBeInstanceOf(RemoteBackupConflictError);
+    expect(drive.calls.uploads.length).toBe(uploads);
+  });
 
-    await winnerClient.service.maintain?.();
-    const state = await winnerClient.coordinator.state();
-    expect(state.revision).toBe(4);
-    expect(state.versions).toHaveLength(3);
-    expect(new Set(state.versions.map(version => version.id)).size).toBe(3);
-    const committedIds = new Set(state.versions.map(version => version.id));
-    expect(fixture.drive.liveFiles().filter(file => committedIds.has(file.appProperties?.snapshotId ?? '') && file.appProperties?.backupKind === 'snapshot')).toHaveLength(3);
-    expect(fixture.drive.liveFiles().filter(file => committedIds.has(file.appProperties?.snapshotId ?? '') && ['manifest', 'table'].includes(file.appProperties?.backupKind ?? '')).length).toBe(6);
-    expect(fixture.drive.get(firstOperation!.folderId)?.trashed).toBe(false);
-    expect(firstOperation!.fileIds.every(id => fixture.drive.get(id)?.trashed)).toBe(true);
-    expect(externalVisible.trashed ?? false).toBe(false);
-    expect(externalHidden.trashed ?? false).toBe(false);
-    expect(externalHidden.visibleToApp).toBe(false);
-    expect(fixture.drive.liveFiles()).toContain(externalHidden);
+  test('treats changed or missing snapshot files as unavailable during restore', async () => {
+    const drive = createInMemoryDrive(); const fixture = workspace(); const service = serviceFor(drive);
+    const receipt = await service.backup(fixture.data, {}, { source: fixture.source }); service.acknowledgeBackup?.(receipt.file.id); await service.maintain?.();
+    const table = [...drive.files.values()].find(file => file.appProperties?.backupKind === 'table' && file.appProperties.snapshotId === receipt.file.appProperties?.snapshotId)!;
+    drive.setBody(table.id, new Uint8Array([99, 98, 97]));
+    await expect(service.restore(receipt.file)).rejects.toMatchObject({ code: 'backup_snapshot_changed' });
+    table.trashed = true;
+    await expect(service.restore(receipt.file)).rejects.toMatchObject({ code: 'backup_snapshot_incomplete' });
+  });
 
-    const selected = await winnerClient.service.findRemoteFile();
-    const restored = await winnerClient.service.restore(selected ?? undefined);
-    expect(restored.tables).toHaveLength(1);
-    expect(restored.tables[0].id).toBe(workspace.table.id);
-    expect(restored.tables[0].rows[0].values[restored.tables[0].columns[0].id]).toBe('內容');
+  test('adopts complete v3 folders as readonly snapshots and ignores incomplete folders', async () => {
+    const drive = createInMemoryDrive(); const fixture = workspace(); const service = serviceFor(drive);
+    const receipt = await service.backup(fixture.data, {}, { source: fixture.source }); service.acknowledgeBackup?.(receipt.file.id); await service.maintain?.();
+    const snapshotId = receipt.file.appProperties?.snapshotId!; const snapshot = [...drive.files.values()].find(file => file.appProperties?.snapshotId === snapshotId && file.appProperties.backupKind === 'snapshot')!;
+    const children = [...drive.files.values()].filter(file => file.parents?.[0] === snapshot.id);
+    snapshot.appProperties = { ...snapshot.appProperties, schemaVersion: '3' }; children.forEach(file => { file.appProperties = { ...file.appProperties, schemaVersion: '3' }; });
+    const oldReceipt = [...drive.files.values()].find(file => file.appProperties?.backupKind === 'receipt' && file.appProperties.snapshotId === snapshotId)!; oldReceipt.trashed = true;
+    const incompleteFolder = drive.addFile({ id: 'legacy-incomplete', name: '舊版未完成', mimeType: FOLDER_MIME, parents: [rootFor(drive)!.id], appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'snapshot', schemaVersion: '3', snapshotId: 'legacy-incomplete' } });
+    drive.addFile({ id: 'legacy-incomplete-manifest', name: 'manifest.xlsx', mimeType: DRIVE_SNAPSHOT_XLSX, parents: [incompleteFolder.id], appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'manifest', schemaVersion: '3', snapshotId: 'legacy-incomplete' }, body: new Uint8Array([1]) });
+    const coordinator = createSnapshotCoordinator({ tokenProvider: { getAccessToken: async () => TOKEN }, fetchImpl: drive.fetchImpl });
+    const adopted = await coordinator.state(rootFor(drive)!.id);
+    expect(adopted.versions).toHaveLength(1); expect(adopted.versions[0].id).toBe(snapshotId);
+    await expect(coordinator.cleanup()).resolves.toEqual({ cleaned: false });
+    expect(snapshot.trashed).not.toBe(true); expect(children.every(file => !file.trashed)).toBe(true);
+    const next = workspace(2); const migrated = serviceFor(drive, memoryStorage()); const nextReceipt = await migrated.backup(next.data, {}, { source: next.source });
+    expect(nextReceipt.file.appProperties?.snapshotId).not.toBe(snapshotId); expect(snapshot.trashed).not.toBe(true); expect(children.every(file => !file.trashed)).toBe(true);
+    expect((await coordinator.state(rootFor(drive)!.id)).versions.map(version => version.id)).toContain(nextReceipt.file.appProperties?.snapshotId);
+    // The malformed folder remains in Drive but is never promoted to a version.
+    expect(incompleteFolder.trashed).not.toBe(true);
   });
 });
