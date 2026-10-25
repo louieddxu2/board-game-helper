@@ -234,6 +234,7 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     const first = createWorkspaceFixture(1);
     const oldest = await service.backup(first.data, {}, { source: first.source });
     const folder = oldest.file.parents![0];
+    fixture.drive.addFile({ id: 'manual-extra', name: '手動放入.txt', parents: [folder], mimeType: 'text/plain', visibleToApp: false });
     for (const suffix of [2, 3]) {
       const next = createWorkspaceFixture(suffix);
       await service.backup(next.data, {}, { source: next.source }); await service.maintain?.();
@@ -248,10 +249,37 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     expect(fixture.drive.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toHaveLength(3);
     expect(fixture.drive.liveFiles().some(file => file.id === oldest.file.id)).toBe(false);
     expect(fixture.drive.get(folder)?.trashed).toBe(true);
+    expect(fixture.drive.liveFiles().some(file => file.id === 'manual-extra')).toBe(false);
     expect(fixture.logs.filter(log => log.method === 'PATCH')).toEqual([
       expect.objectContaining({ path: `/drive/v3/files/${folder}` }),
     ]);
     expect(fixture.drive.liveFiles().filter(file => file.mimeType === 'application/json')).toEqual([]);
+  });
+
+  test('keeps independent concurrent backups as separate complete copies', async () => {
+    let racing = false; let arrivals = 0; let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    const drive = createInMemoryDrive({ onUpload: async file => {
+      if (!racing || !file.name.startsWith('測試表A')) return;
+      if (++arrivals === 2) release();
+      await ready;
+    } });
+    const fixture = { drive, logs: [], fetchImpl: drive.fetchImpl };
+    const firstService = createService(fixture); const secondService = createService(fixture);
+    const initial = createWorkspaceFixture(1);
+    const initialBackup = await firstService.backup(initial.data, {}, { source: initial.source });
+    await secondService.findRemoteFile();
+    const first = createWorkspaceFixture(2); const second = createWorkspaceFixture(3);
+    racing = true;
+    const [left, right] = await Promise.all([
+      firstService.backup(first.data, {}, { source: first.source, expectedRemoteFileId: initialBackup.file.id }),
+      secondService.backup(second.data, {}, { source: second.source, expectedRemoteFileId: initialBackup.file.id }),
+    ]);
+    expect(left.file.id).not.toBe(right.file.id);
+    expect(left.file.parents).not.toEqual(right.file.parents);
+    expect(drive.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toHaveLength(3);
+    expect((await firstService.restore(left.file)).tables[0].name).toBe(first.tables[0].name);
+    expect((await secondService.restore(right.file)).tables[0].name).toBe(second.tables[0].name);
   });
 
   test('does not publish an index when local data changes during the last table upload', async () => {

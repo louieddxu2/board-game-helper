@@ -75,6 +75,8 @@ export interface GoogleDriveFolderBackup {
 }
 
 export interface FolderBackupRunOptions {
+  /** Share the service's lookup with caller-side source checks instead of querying twice. */
+  validateRemote?(file: DriveFile | null): void;
   onProgress?(progress: WorkspaceBackupProgress): void;
   source?: WorkspaceBackupSource;
   tableIds?: string[];
@@ -189,6 +191,7 @@ export const createGoogleDriveFolderBackup = (options: FolderBackupOptions): Goo
     const root = await ensureFolder();
     const remoteState = await findRemoteState();
     const previousFile = remoteState.selected;
+    runOptions.validateRemote?.(previousFile);
     if ('expectedRemoteFileId' in runOptions) {
       const idChanged = (previousFile?.id ?? null) !== (runOptions.expectedRemoteFileId ?? null);
       const timeChanged = runOptions.expectedRemoteModifiedTime != null

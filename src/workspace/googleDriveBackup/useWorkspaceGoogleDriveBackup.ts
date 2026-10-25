@@ -8,7 +8,7 @@ import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from '
 import { advanceWorkspaceBackupProgress, type WorkspaceBackupProgress } from './backupProgress';
 import { GoogleDriveApiError } from './googleDriveApi';
 import { workspaceHasBackupTables, type WorkspaceBackupSafety } from './backupSafety';
-import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
+import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, RemoteBackupConflictError, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider } from './index';
 
 const STORAGE_KEY = 'board-game-helper-google-drive-backup';
 const BACKUP_KEY = 'dynamic-sheet-primary-workspace-v1';
@@ -258,9 +258,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
     try {
       const { backup: service } = await ensureBackup();
       const storageIdentity = await loadStorageIdentity?.();
-      if (!force) {
-        reportProgress({ phase: 'checking-remote' });
-        const currentRemote = await service.findRemoteFile();
+      const validateRemote = force ? undefined : (currentRemote: DriveFile | null) => {
         const unsafe = sourceSafety(currentRemote, storageIdentity);
         if (!folderRemoteMatchesRecord(currentRemote) || (currentRemote && unsafe)) {
           remoteSource.current = 'folder'; setRemoteVersions([]);
@@ -268,9 +266,9 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
           setRemoteConflict(true);
           if (unsafe) requireConfirmation(unsafe);
           else setError('雲端備份已在其他裝置變更，請先還原備份或明確選擇覆蓋');
-          return false;
+          throw new RemoteBackupConflictError(currentRemote);
         }
-      }
+      };
       await verifyCurrentData?.();
       if (isCurrentData && !isCurrentData(data)) {
         setError('本機資料在備份準備期間已有變更，請稍後再試');
@@ -286,6 +284,7 @@ export const useWorkspaceGoogleDriveBackup = ({ data, inspectChanges = true, bac
         appProperties: { exportedAt: new Date().toISOString() },
       }, {
         complete: true,
+        validateRemote,
         onProgress: reportProgress,
         tableIds: selectedTableIds,
         ...(source ? { source } : {}),

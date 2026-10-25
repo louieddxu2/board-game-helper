@@ -1,17 +1,17 @@
 # Workspace 備份測試清理（2026-10-26）
 
-範圍：以已發布的直接 Drive 實作為基準，清除舊 coordinator／網站 session 假設，修復本輪發現的資料安全退步。Workspace 的執行路徑、設定、授權及備份不使用 D1；歷史資料移除與零 D1 守門測試保留。
+範圍：維持直接 Drive 的五次呼叫契約，清除不適用的 coordinator／網站 session 假設。前一輪擅自新增的 10～20 次預算及分支協調要求已撤回；測試以使用者確認的輕量流程為準。Workspace 不使用 D1，歷史資料移除與零 D1 守門測試保留。
 
 ## 檔案審查
 
 | 檔案 | 嚴重度 | 結果 |
 | --- | --- | --- |
-| `snapshotBackup.ts` | 高 | 補回索引發布前的來源與版本核對、發布後分支確認，移除無用 coordinator 參數與修訂雜湊。 |
-| `snapshotStorage.ts` | 高 | 限定根目錄與擁有權、核對還原 ID、修正三份保留邊界，只清理已知檔案；選定還原另由服務重查位置與修改時間。 |
-| `snapshotLightweightBackup.test.ts` | 高 | 修正請求名稱與實際計數；補來源變更、雲端變更、分支、還原錯配及三份保留的失敗案例。 |
+| `snapshotBackup.ts` | 高 | 只做一次上傳前查找，共用畫面的來源檢查；保留本機來源驗證與完整副本，不添加分支協調查詢。 |
+| `snapshotStorage.ts` | 高 | 單次 metadata 查找、還原 ID 核對及三份保留邊界；按已確認範圍整夾清理超額單次備份。 |
+| `snapshotLightweightBackup.test.ts` | 高 | 固定五次呼叫契約，涵蓋本機來源變更、還原錯配、三份保留及並行副本互不覆寫。 |
 | `tests/core/workspace-backup-safety.spec.ts` | 高 | 用目前的服務建立 fixture，實際清除 IndexedDB，涵蓋 localStorage 保留／清除；不建立舊 JSON 收據。 |
-| `tests/workspace-startup/backup-progress.spec.ts` | 中 | 確認階段改攔截現行索引 metadata 查詢，失敗時保留舊本機紀錄。 |
-| `tests/workspace-startup/backup-restore.spec.ts` | 中 | 保留手機三份版本、預覽與還原到 IndexedDB 的整段驗證。 |
+| `tests/workspace-startup/backup-progress.spec.ts` | 中 | 等待最後一次 manifest 上傳回應，不要求額外確認查詢；失敗時保留舊本機紀錄。 |
+| `tests/workspace-startup/backup-restore.spec.ts` | 中 | 驗證手機三份版本、預覽與還原，並從原生點擊確認全部 API 呼叫為 5 次／含清理 6 次。 |
 | `tests/workspace-startup/driveSupport.ts` | 高 | 拒絕 `/api/session` 與其他網站 API；資料準備改用無應用程式的空白同源頁。 |
 | `scripts/run-core-e2e.mjs` | 中 | 發布 E2E 同時執行手機備份進度／還原，修正原先漏跑的原因。 |
 | `scripts/core-release-gate.test.ts` | 中 | 驗證這兩份手機 E2E 確實接入發布 runner。 |
@@ -54,4 +54,4 @@
 
 包含完整 Vitest、型別／行數／零 D1 邊界檢查、core E2E 與手機進度／還原 E2E。合成 fixture 的請求預算包含版本確認；不代表真實 Google、實體 Android 或網路耗時驗收。
 
-本輪結果：207 個 Vitest 檔案／1,453 項通過；core 13 項及手機備份 4 項 E2E 通過；型別與邊界檢查通過，最大維護檔案 582 行。
+本輪重新驗證：207 個 Vitest 檔案／1,450 項通過，core 13 項及手機備份 5 項 E2E 通過，型別及零 D1 邊界檢查通過。原生點擊的版本 2、3 各 5 次，版本 4 含清理共 6 次；不沿用前一輪採錯誤請求預算的綠燈作為驗收。

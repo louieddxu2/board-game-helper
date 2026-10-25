@@ -5,7 +5,7 @@ import { workspaceBackupTableSummary, type WorkspaceBackupSource } from '../work
 import type { WorkspaceData } from '../types';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import { GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
-import type { FolderBackupRunOptions } from './folderBackup';
+import type { FolderBackupRunOptions, GoogleDriveFolderBackup } from './folderBackup';
 
 const mocks = vi.hoisted(() => ({
   signIn: vi.fn(async () => 'token'),
@@ -27,7 +27,10 @@ vi.mock('./index', async () => {
     createGoogleDriveSnapshotBackup: vi.fn(() => ({
       findRemoteFile: mocks.findRemoteFile,
       listRemoteBackups: mocks.listRemoteBackups,
-      backup: mocks.backup,
+      backup: async (...args: Parameters<GoogleDriveFolderBackup['backup']>) => {
+        args[2]?.validateRemote?.(await mocks.findRemoteFile());
+        return mocks.backup(...args);
+      },
       acknowledgeBackup: mocks.acknowledgeBackup,
       restore: mocks.restore,
     })),

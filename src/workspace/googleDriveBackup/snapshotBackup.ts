@@ -12,9 +12,6 @@ import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
 import { BackupNotFoundError, type GoogleDriveSingleFileBackup } from './singleFileBackup';
 import { createSnapshotJournal } from './snapshotJournal';
 import { cleanSnapshotVersions, listSnapshotManifests, readSnapshotManifest, SNAPSHOT_METADATA_FIELDS } from './snapshotStorage';
-import { DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_ADOPTED_LEGACY_ID_PROPERTY, DRIVE_ADOPTED_LEGACY_TIME_PROPERTY,
-  adoptedDriveLegacyBaseline, driveLegacyBaselineForBackup, findDriveManifestHeads } from './manifestHistory';
-import { manifestParentProperties } from './manifestParents';
 import type { BackupMetadata, BackupReceipt, DriveFile } from './types';
 
 export const SNAPSHOT_REVISION_PROPERTY = 'snapshotRevision';
@@ -71,18 +68,11 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       || (b.createdTime ?? '').localeCompare(a.createdTime ?? ''));
     return valid;
   };
-  const selectedHead = (files: DriveFile[]): DriveFile | null => {
-    const heads = findDriveManifestHeads(files);
-    return heads[0] ? { ...heads[0], appProperties: { ...heads[0].appProperties, [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(heads.length) } } : null;
-  };
-  const headSignature = (files: DriveFile[]) => JSON.stringify(findDriveManifestHeads(files).map(file => [file.id, file.modifiedTime]).sort());
-
   const findRemoteFile = async () => {
     const root = await ensureFolder();
     const manifests = await findManifests(root);
-    const head = selectedHead(manifests);
-    if (head) {
-      const file = head;
+    if (manifests[0]) {
+      const file = manifests[0];
       const accountKey = `drive:${root}`;
       const saved = journal.read(accountKey);
       if (saved && file.appProperties?.[operationProperty] === saved.id && !acknowledged.has(saved.id)) {
@@ -97,8 +87,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const root = await ensureFolder();
     const manifests = await findManifests(root);
     const legacyBackups = await legacy.listRemoteBackups();
-    const head = selectedHead(manifests);
-    return [...(head ? [head, ...manifests.filter(file => file.id !== head.id)] : manifests), ...legacyBackups];
+    return [...manifests, ...legacyBackups];
   };
 
   const maintain = (known?: { root: string; manifests: DriveFile[] }) => {
@@ -125,6 +114,12 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       const root = await ensureFolder();
       const current = (await findManifests(root)).find(file => file.id === selected.id);
       if (!current || (selected.modifiedTime && selected.modifiedTime !== current.modifiedTime)) {
+        throw new Error('所選備份已有變更，請重新選擇');
+      }
+      const folder = await api.getFile(current.parents![0]);
+      if (folder.trashed || folder.ownedByMe !== true || folder.mimeType !== FOLDER_MIME
+        || folder.parents?.length !== 1 || folder.parents[0] !== root
+        || folder.appProperties?.backupKey !== DRIVE_SNAPSHOT_KEY || folder.appProperties.snapshotId !== current.appProperties?.snapshotId) {
         throw new Error('所選備份已有變更，請重新選擇');
       }
       manifestFile = current;
@@ -158,11 +153,10 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const root = await ensureFolder();
     const accountKey = `drive:${root}`;
     const manifests = await findManifests(root);
-    const heads = findDriveManifestHeads(manifests);
-    const previous = selectedHead(manifests) ?? await legacyFile();
+    const previous = manifests[0] ?? await legacyFile();
+    run.validateRemote?.(previous);
 
-    if ((heads.length > 1 && !run.allowLegacyChange)
-      || (run.expectedLegacyStamp && previous?.appProperties?.legacyStamp !== run.expectedLegacyStamp)) {
+    if (run.expectedLegacyStamp && previous?.appProperties?.legacyStamp !== run.expectedLegacyStamp) {
       throw new RemoteBackupConflictError(previous);
     }
 
@@ -227,13 +221,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     }
 
     await run.source?.verify();
-    const beforeCommit = await findManifests(root);
-    if (headSignature(beforeCommit) !== headSignature(manifests)) throw new RemoteBackupConflictError(selectedHead(beforeCommit));
-    if (!heads.length) {
-      const old = await legacyFile();
-      if (old?.id !== previous?.id || old?.modifiedTime !== previous?.modifiedTime) throw new RemoteBackupConflictError(old);
-    }
-    await run.source?.verify();
     report('saving-index');
     const folders = data.nodes.filter(node => node.type === 'folder').map(node => ({ ...node, driveFolderId: '' }));
     const manifest: DriveWorkspaceManifest = {
@@ -253,7 +240,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
 
     const previousRevision = Number(previous?.appProperties?.[SNAPSHOT_REVISION_PROPERTY] ?? 0);
     const revision = previousRevision + 1;
-    const baseline = driveLegacyBaselineForBackup(heads, adoptedDriveLegacyBaseline(manifests));
     const uploadedManifest = await api.uploadFile({
       parentId: snapshotFolder.id,
       name: DRIVE_MANIFEST_FILE_NAME,
@@ -264,20 +250,13 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         [SNAPSHOT_REVISION_PROPERTY]: String(revision),
         sourceUpdatedAt: String(sourceUpdatedAt),
         backedUpAt: String(Date.now()),
-        ...manifestParentProperties(heads.map(file => file.id)),
-        ...(baseline ? { [DRIVE_ADOPTED_LEGACY_ID_PROPERTY]: baseline.id,
-          [DRIVE_ADOPTED_LEGACY_TIME_PROPERTY]: new Date(baseline.time).toISOString() } : {}),
+        snapshotRoot: root,
       },
     });
 
     report('confirming');
-    const afterCommit = await findManifests(root);
-    const confirmed = selectedHead(afterCommit);
-    if (confirmed?.id !== uploadedManifest.id || Number(confirmed.appProperties?.[DRIVE_BACKUP_FORK_COUNT_PROPERTY]) > 1) {
-      throw new RemoteBackupConflictError(confirmed);
-    }
     receipts.set(uploadedManifest.id, { account: accountKey, id: snapshotId });
-    void maintain({ root, manifests: afterCommit }).catch(() => undefined);
+    void maintain({ root, manifests: [uploadedManifest, ...manifests] }).catch(() => undefined);
 
     return {
       file: uploadedManifest,

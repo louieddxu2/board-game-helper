@@ -4,7 +4,7 @@ Workspace 只以本機 IndexedDB 儲存資料。備份與還原直接連線 Goog
 
 目前的檔案、資料遺失防護、版本檢查、清理及請求預算以 [獨立快照契約](snapshot-v3.md) 為準。[data-contract.md](data-contract.md) 僅記錄 v1／v2 歷史格式，供舊備份相容還原使用。
 
-每次備份建立獨立資料夾，包含 `manifest.xlsx` 與全部表格 XLSX，索引最後上傳。新版不建立雲端 JSON 收據或作業租約。正常保留三份；可疑或發生衝突的歷史先保留。清理只移除已知 App 檔案，不刪整個資料夾。
+每次備份建立獨立資料夾，包含 `manifest.xlsx` 與全部表格 XLSX，索引最後上傳。新版不建立雲端 JSON 收據或作業租約。兩表正常備份 5 次 API 呼叫；保留三份，需回收超額版本時整個單次備份子資料夾移到垃圾桶，再加 1 次，不動備份根目錄。
 
 Google Drive 授權與網站登入分離。公開 `/api/workspace-config` 提供 Client ID；權杖只存在頁面記憶體並直接送給 Google。使用者授權後可在當次網頁工作階段自動備份；關頁後不保留 token，也沒有後端排程上傳。
 

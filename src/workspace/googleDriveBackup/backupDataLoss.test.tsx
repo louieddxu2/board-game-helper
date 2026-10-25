@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createNode, createTable, emptyWorkspace } from '../model';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
 import type { WorkspaceData } from '../types';
+import type { GoogleDriveFolderBackup } from './folderBackup';
 import { GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS, useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
 
 const cloud = vi.hoisted(() => ({ find: vi.fn(), list: vi.fn(), backup: vi.fn(), restore: vi.fn() }));
@@ -11,7 +12,10 @@ vi.mock('./index', async importOriginal => ({
   ...await importOriginal<typeof import('./index')>(),
   createGoogleIdentityTokenProvider: () => ({ isAuthorized: true, signIn: async () => 'token' }),
   createGoogleDriveSnapshotBackup: () => ({ findRemoteFile: cloud.find, listRemoteBackups: cloud.list,
-    backup: cloud.backup, restore: cloud.restore }),
+    backup: async (...args: Parameters<GoogleDriveFolderBackup['backup']>) => {
+      args[2]?.validateRemote?.(await cloud.find());
+      return cloud.backup(...args);
+    }, restore: cloud.restore }),
   createGoogleDriveSingleFileBackup: () => ({ findRemoteFile: async () => null }),
 }));
 
