@@ -12,6 +12,7 @@ export const connectFakeDrive = async (page: Page, fixture: InMemoryDriveFixture
     } } };
   });
   await page.route('**/api/session', route => route.fulfill({ json: { user: null, googleDriveClientId: 'test-client' } }));
+  await page.route('**/api/workspace-config', route => route.fulfill({ json: { googleDriveClientId: 'test-client' } }));
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS' };
   await page.route('https://www.googleapis.com/**', async route => {
     const request = route.request();

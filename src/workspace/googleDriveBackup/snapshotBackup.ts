@@ -46,7 +46,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   const acknowledged = new Set<string>();
   const state = async (root?: string) => (lastState = await coordinator.state(root));
   const tags = (kind: string, id?: string, localId?: string) => ({ backupKey: DRIVE_SNAPSHOT_KEY, backupKind: kind,
-    schemaVersion: '3', workspaceFormat: 'dynamic-sheet-v1',
+    schemaVersion: '4', workspaceFormat: 'dynamic-sheet-v1',
     ...(id ? { snapshotId: id } : {}), ...(localId ? { localId } : {}) });
 
   const cleanup = async () => {
@@ -80,6 +80,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     if (!head) return null;
     const file = manifestFile(head);
     file.appProperties = { ...file.appProperties, legacyStamp: current.legacyStamp,
+      ...((current.forkCount ?? 0) > 1 ? { [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(current.forkCount) } : {}),
       ...(current.legacyChanged ? { [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: '2' } : {}),
       ...(journal.read(current.accountKey)?.id === head.id && !acknowledged.has(head.id) ? { [SNAPSHOT_PENDING_COMMIT_PROPERTY]: 'true' } : {}) };
     return file;
@@ -126,7 +127,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const previous = headFile(current) ?? await legacyFile();
     const saved = journal.read(current.accountKey);
     const prior = saved ? await coordinator.operation(saved.id) : null;
-    // Recover an acknowledged server commit before creating another snapshot, including after a reload.
+    // Recover a confirmed Drive commit before creating another snapshot, including after a reload.
     if (prior?.status === 'committed' && !acknowledged.has(prior.id) && current.versions[0]?.id === prior.id) {
       run.onProgress?.({ phase: 'confirming' });
       return receipt(prior, root);
@@ -211,6 +212,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       let committed: DriveSnapshotOperation;
       try { committed = await coordinator.commit(op.id); }
       catch (error) {
+        if (error instanceof SnapshotCoordinatorError && ['backup_revision_conflict', 'backup_legacy_changed'].includes(error.code)) throw error;
         // A lost HTTP response is not evidence that the conditional commit failed.
         const recovered = await coordinator.operation(op.id).catch(() => null);
         if (recovered?.status !== 'committed') throw error;
@@ -262,7 +264,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       const execute = async () => {
         try { return await perform(data, metadata, run); }
         catch (error) {
-          // Concurrent first-use folder creation is resolved by the account's D1 binding.
+          // A changed root is retried only after refreshing Drive discovery.
           if (error instanceof SnapshotCoordinatorError && error.code === 'backup_root_changed') return perform(data, metadata, run);
           throw error;
         }

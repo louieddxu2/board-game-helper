@@ -41,6 +41,23 @@ const walk = (directory) => {
 
 walk(root);
 
+// Workspace backup coordination belongs in the user's Drive, never in the site's database.
+for (const directory of ['worker', 'src/workspace/googleDriveBackup']) {
+  const checkWorkspaceBackup = current => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) { checkWorkspaceBackup(fullPath); continue; }
+      if (!/\.(ts|tsx|js|mjs)$/.test(entry.name) || /\.test\./.test(entry.name)) continue;
+      const source = fs.readFileSync(fullPath, 'utf8');
+      if (/\bdrive_backup_(?:sets|operations|restore_leases)\b/.test(source)
+        || (directory.startsWith('src/') && /['"](?:[^'"]*\/worker\/|\/api\/workspace-backup)/.test(source))) {
+        violations.push(`${fullPath}: Workspace backups must use Google Drive directly without server database coordination`);
+      }
+    }
+  };
+  checkWorkspaceBackup(path.resolve(directory));
+}
+
 const apiSource = fs.readFileSync(path.resolve('src/lib/api.ts'), 'utf8');
 if (!/game:\s*async\s*\(identifier:\s*string,\s*includePrivate\s*=\s*false,\s*onUpdated\?:/.test(apiSource)) {
   violations.push('src/lib/api.ts: api.game may expose only identity, privacy scope, and an update callback; cache bypass parameters are forbidden');

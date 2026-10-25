@@ -22,9 +22,20 @@ import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
 import { attributesRoutes } from './routes/attributes';
-import { driveSnapshotRoutes } from './routes/driveSnapshots';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
+
+// Public OAuth client configuration is independent of website sessions and D1 availability.
+app.get('/api/workspace-config', c => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null });
+});
+
+// Retired clients must stop safely before session/DB middleware. Workspace backups now use Drive directly.
+app.all('/api/workspace-backup/*', c => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ error: 'backup_client_update_required' }, 410);
+});
 
 app.use('/api/*', async (c, next) => {
   c.set('database', createDatabase(c.env));
@@ -128,7 +139,6 @@ app.use('/api/*', async (c, next) => {
 // recovery flush instead of rolling back correct domain data.
 app.use('/api/*', async (c, next) => {
   await next();
-  if (new URL(c.req.url).pathname.startsWith('/api/workspace-backup/')) return;
   if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) || c.res.status >= 400) return;
   try {
     await flushCatalogOutbox(getDatabase(c));
@@ -140,7 +150,6 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/health', (c) => c.json({ ok: true }));
 
 app.route('/', authRoutes);
-app.route('/', driveSnapshotRoutes);
 app.route('/', homeRoutes);
 app.route('/', rulesRoutes);
 app.route('/', gamesRoutes);

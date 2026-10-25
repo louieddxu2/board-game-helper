@@ -178,7 +178,7 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
         name: request.metadata.name,
         mimeType: request.metadata.mimeType,
         parents: request.metadata.parents ?? previous?.parents ?? [],
-        appProperties: request.metadata.appProperties,
+        appProperties: { ...previous?.appProperties, ...request.metadata.appProperties },
         body: request.body,
         createdTime: previous?.createdTime,
         modifiedTime: timestamp(),
@@ -234,7 +234,7 @@ export const createInMemoryDrive = (options: DriveFixtureOptions = {}): InMemory
         file.trashed = true;
       }
       if (body.name !== undefined) file.name = body.name;
-      if (body.appProperties) file.appProperties = { ...body.appProperties };
+      if (body.appProperties) file.appProperties = { ...file.appProperties, ...body.appProperties };
       const params = new URL(url).searchParams;
       const addParent = params.get('addParents');
       const removeParent = params.get('removeParents');

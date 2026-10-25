@@ -1,6 +1,5 @@
 /** Metadata only: table contents and OAuth tokens never belong in this protocol. */
 export const DRIVE_SNAPSHOT_KEY = 'dynamic-sheet-primary-workspace-v3';
-export const DRIVE_SNAPSHOT_API = '/api/workspace-backup';
 export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const DRIVE_SNAPSHOT_SCOPES = `openid ${DRIVE_FILE_SCOPE}`;
 export const DRIVE_SNAPSHOT_LIMIT = 3;
@@ -55,6 +54,8 @@ export interface DriveSnapshotState {
   legacyStamp: string;
   legacyChanged: boolean;
   versions: DriveSnapshotSummary[];
+  /** Independent simultaneous uploads are retained as separate heads. */
+  forkCount?: number;
 }
 
 export interface BeginDriveSnapshot {
@@ -66,11 +67,4 @@ export interface BeginDriveSnapshot {
   allowLegacyChange?: boolean;
   fileCount: number;
   sourceUpdatedAt: number;
-}
-
-export class SnapshotProtocolError extends Error {
-  constructor(readonly code: string, readonly status = 409) {
-    super(code);
-    this.name = 'SnapshotProtocolError';
-  }
 }

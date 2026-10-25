@@ -10,6 +10,7 @@ Classify layout separately from interaction. Use browser evidence only when it a
 
 # Contracts
 
+- Workspace backups must operate directly between the browser and Google Drive. Do not add D1, KV, Durable Objects, server-held Google credentials, or website-session dependencies. Public OAuth client configuration may be served without database/session access. Preserve existing backup compatibility and data-loss safeguards.
 - Keep maintained source, styles, tests, and scripts within 600 lines per file. Split by responsibility; data, historical migrations, dependency locks, and generated artifacts retain their formats. Run `npm run check:file-size` to verify.
 - Preserve `src/content/zh-TW.json` `author` and `terms` entries unless requested. For an approved change, show its diff, update `scripts/protected-copy.sha256` from the canonical JSON, and run the relevant checks.
 - Read `docs/rule-list-import.md` before record-page JSON work; preserve its separate draft, submission, and admin-export formats.

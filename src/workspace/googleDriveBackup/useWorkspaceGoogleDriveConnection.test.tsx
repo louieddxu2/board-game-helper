@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useWorkspaceGoogleDriveBackup } from './useWorkspaceGoogleDriveBackup';
-import { SnapshotCoordinatorError } from './snapshotCoordinator';
+import { GoogleDriveApiError } from './googleDriveApi';
 import { GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY } from './googleIdentityTokenProvider';
 
 const mocks = vi.hoisted(() => ({ signIn: vi.fn(), signOut: vi.fn(), find: vi.fn(), list: vi.fn(), backup: vi.fn() }));
@@ -25,15 +25,15 @@ describe('Workspace connection recovery', () => {
   });
   afterEach(() => window.localStorage.clear());
 
-  test('keeps reconnect available after OAuth succeeds but backend identity verification fails', async () => {
+  test('keeps reconnect available after OAuth succeeds but Drive rejects access', async () => {
     window.localStorage.setItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, 'true');
-    mocks.find.mockRejectedValueOnce(new SnapshotCoordinatorError('backup_identity_required', 403));
+    mocks.find.mockRejectedValueOnce(new GoogleDriveApiError('請重新連結 Google Drive', 403));
     const { result } = renderConnection();
     await act(async () => { await result.current.connect(); });
     expect(result.current.authorized).toBe(false);
     expect(result.current.manuallyDisconnected).toBe(false);
     expect(result.current.busy).toBeNull();
-    expect(result.current.error).toContain('重新開啟');
+    expect(result.current.error).toContain('重新連結');
     expect(window.localStorage.getItem(GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY)).toBeNull();
     await act(async () => { await result.current.connect(); });
     expect(result.current.authorized).toBe(true);
@@ -46,7 +46,7 @@ describe('Workspace connection recovery', () => {
     const { result } = renderConnection();
     await act(async () => { await result.current.connect(); });
     expect(result.current.authorized).toBe(true);
-    mocks.list.mockRejectedValueOnce(new SnapshotCoordinatorError('backup_auth_invalid', 403));
+    mocks.list.mockRejectedValueOnce(new GoogleDriveApiError('請重新連結 Google Drive', 403));
     await act(async () => { await result.current.findRemote(); });
     expect(result.current.authorized).toBe(false);
     expect(result.current.busy).toBeNull();

@@ -6,7 +6,7 @@ import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '
 import type { WorkspaceBackupSource } from '../workspaceBackupSource';
 import { useWorkspaceBackupSummaries, type WorkspaceBackupSummaryLoader } from './useWorkspaceBackupSummaries';
 import { advanceWorkspaceBackupProgress, type WorkspaceBackupProgress } from './backupProgress';
-import { SnapshotCoordinatorError } from './snapshotCoordinator';
+import { GoogleDriveApiError } from './googleDriveApi';
 import { workspaceHasBackupTables, type WorkspaceBackupSafety } from './backupSafety';
 import { createGoogleDriveSnapshotBackup, createGoogleDriveSingleFileBackup, createGoogleIdentityTokenProvider, DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_MANIFEST_FILE_NAME, SNAPSHOT_PENDING_COMMIT_PROPERTY, GOOGLE_DRIVE_MANUAL_DISCONNECT_STORAGE_KEY, type DriveFile, type GoogleDriveFolderBackup, type GoogleDriveSingleFileBackup, type GoogleIdentityTokenProvider, type RemoteBackupConflictError } from './index';
 
@@ -19,7 +19,7 @@ const BACKUP_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsh
 const AUTO_BACKUP_STORAGE_KEY = 'board-game-helper-google-drive-auto-backup';
 export const GOOGLE_DRIVE_AUTO_BACKUP_INTERVAL_MS = 30 * 60 * 1000;
 const AUTO_BACKUP_DEBOUNCE_MS = 1500;
-const isAuthorizationError = (cause: unknown) => cause instanceof SnapshotCoordinatorError && [401, 403].includes(cause.status);
+const isAuthorizationError = (cause: unknown) => cause instanceof GoogleDriveApiError && [401, 403].includes(cause.status);
 
 export interface WorkspaceDriveBackupRecord {
   storageIdentity?: string;

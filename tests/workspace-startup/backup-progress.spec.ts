@@ -13,6 +13,8 @@ const setup = async (page: Page) => {
   page.on('pageerror', error => errors.push(error.message));
   let heldTable: { file: StoredDriveFile; resolve(): void; reject(error: Error): void } | undefined;
   let heldConfirmation: { finish(missing: boolean): void } | undefined;
+  let confirmationStarted!: () => void;
+  const confirmationReady = new Promise<void>(resolve => { confirmationStarted = resolve; });
   let manifestUploaded = false;
   const fixture = createInMemoryDrive({
     onUpload: async file => {
@@ -20,8 +22,11 @@ const setup = async (page: Page) => {
       if (file.appProperties?.backupKind === 'manifest') manifestUploaded = true;
     },
     onList: async (query, files) => {
-      if (!manifestUploaded || !query.includes(' in parents') || !query.includes("key='backupKey'")) return;
-      await new Promise<void>(resolve => { heldConfirmation = { finish(missing) { manifestUploaded = false; if (missing) files.splice(0); resolve(); } }; });
+      if (!manifestUploaded || !query.includes(' in parents') || !files.some(file => file.appProperties?.backupKind === 'manifest')) return;
+      await new Promise<void>(resolve => {
+        heldConfirmation = { finish(missing) { manifestUploaded = false; if (missing) files.splice(0); resolve(); } };
+        confirmationStarted();
+      });
     },
   });
   await connectFakeDrive(page, fixture);
@@ -55,6 +60,7 @@ const setup = async (page: Page) => {
       else pending.resolve();
     },
     async finishConfirmation(missing = false) {
+      await confirmationReady;
       if (!heldConfirmation) throw new Error('No held remote confirmation');
       heldConfirmation.finish(missing);
     },
@@ -65,8 +71,10 @@ test('shows each table upload and final confirmation on mobile without overflow 
   const backup = await setup(page);
   await expect.poll(backup.tableId).toBe('table-0');
   await expect(backup.dialog.getByRole('status')).toContainText(`正在上傳表格：${backup.longName}`);
-  await expect(backup.dialog.getByRole('status')).toContainText('已處理 0 / 2 張表格');
-  await expect(backup.dialog.getByRole('progressbar')).toHaveAttribute('value', '0');
+  await expect(backup.dialog.getByRole('status')).toContainText('已上傳 0 / 2 張表格');
+  const progress = backup.dialog.getByRole('progressbar');
+  const firstPercent = Number(await progress.getAttribute('value'));
+  expect(firstPercent).toBeGreaterThan(0); expect(firstPercent).toBeLessThan(100);
   const geometry = await backup.dialog.evaluate(element => {
     const box = element.getBoundingClientRect();
     const progress = element.querySelector('.workspace-google-drive-progress')!;
@@ -78,14 +86,17 @@ test('shows each table upload and final confirmation on mobile without overflow 
   await backup.finishTable();
   await expect.poll(backup.tableId).toBe('table-1');
   await expect(backup.dialog.getByRole('status')).toContainText('正在上傳表格：測試表 1');
-  await expect(backup.dialog.getByRole('progressbar')).toHaveAttribute('value', '1');
+  await expect(backup.dialog.getByRole('status')).toContainText('已上傳 1 / 2 張表格');
+  const secondPercent = Number(await progress.getAttribute('value'));
+  expect(secondPercent).toBeGreaterThan(firstPercent); expect(secondPercent).toBeLessThan(100);
   await backup.finishTable();
-  await expect(backup.dialog.getByRole('status')).toContainText('正在確認雲端備份');
-  await expect(backup.dialog.getByRole('status')).toContainText('已處理 2 / 2 張表格');
-  await expect(backup.dialog.getByRole('progressbar')).not.toHaveAttribute('value');
+  await expect(backup.dialog.getByRole('status')).toContainText('正在驗證並完成備份');
+  await expect(backup.dialog.getByRole('status')).not.toContainText('張表格');
+  const confirmingPercent = Number(await progress.getAttribute('value'));
+  expect(confirmingPercent).toBeGreaterThan(secondPercent); expect(confirmingPercent).toBeLessThan(100);
   await expect(backup.dialog.getByText('備份進行中')).toBeVisible();
   await backup.finishConfirmation();
-  await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
+  await expect(progress).toHaveAttribute('value', '100');
   await expect(backup.dialog.getByText('已完成備份', { exact: true })).toBeVisible();
   expect(backup.errors).toEqual([]);
 });
@@ -108,9 +119,9 @@ test('keeps the previous completion record when the uploaded backup cannot be co
   await backup.finishTable();
   await expect.poll(backup.tableId).toBe('table-1');
   await backup.finishTable();
-  await expect(backup.dialog.getByRole('status')).toContainText('正在確認雲端備份');
+  await expect(backup.dialog.getByRole('status')).toContainText('正在驗證並完成備份');
   await backup.finishConfirmation(true);
-  await expect(backup.dialog.getByRole('alert')).toHaveText('備份檔已上傳，但無法確認雲端備份，請稍後尋找雲端備份');
+  await expect(backup.dialog.getByRole('alert')).toHaveText('備份檔尚未完整上傳，請重試');
   await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'))).toBe(previousRecord);
   expect(backup.errors).toEqual([]);

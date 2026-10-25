@@ -100,7 +100,6 @@ export const sessionMiddleware: MiddlewareHandler<{
   Bindings: RouteEnv;
   Variables: AppVariables;
 }> = async (c, next) => {
-  if (new URL(c.req.url).pathname.startsWith('/api/workspace-backup/')) { await next(); return; }
   const isPublicRead = isPublicReadRequest(c.req.method, c.req.url);
   if (isPublicRead) { await next(); return; }
   const authorization = c.req.header('Authorization');

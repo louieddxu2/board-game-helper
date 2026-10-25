@@ -33,12 +33,11 @@ export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, mountedR
   const loadGoogleDriveClientId = useCallback(async () => {
     if (googleDriveClientId !== undefined) return googleDriveClientId;
     if (!googleDriveClientIdPromiseRef.current) {
-      googleDriveClientIdPromiseRef.current = import('../lib/api').then(({ api }) => api.session()).then((session) => {
-        const clientId = session.googleDriveClientId ?? null;
+      googleDriveClientIdPromiseRef.current = import('./googleDriveBackup/workspaceConfig').then(({ loadWorkspaceGoogleDriveClientId }) => loadWorkspaceGoogleDriveClientId()).then((clientId) => {
         setGoogleDriveClientId(clientId);
         return clientId;
       }).catch(() => {
-        setGoogleDriveClientId(null);
+        // Keep undefined so a transient configuration failure can be retried on the next explicit connection.
         return null;
       }).finally(() => { googleDriveClientIdPromiseRef.current = undefined; });
     }

@@ -25,10 +25,10 @@ test('mobile backups stay at three versions and an older version restores to Ind
     await openDrive();
     await drive.getByRole('button', { name: '立即備份', exact: true }).click();
     await expect(drive.getByText('已完成備份', { exact: true })).toBeVisible();
-    expect(fixture.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest')).toHaveLength(Math.min(version, 3));
+    await expect.poll(() => fixture.liveFiles().filter(file => file.appProperties?.backupKind === 'manifest').length).toBe(Math.min(version, 3));
     if (version < 4) await page.locator('.workspace-overlay').click({ position: { x: 4, y: 4 } });
   }
-  expect(fixture.liveFiles().filter(file => file.appProperties?.backupKind === 'table')).toHaveLength(3);
+  await expect.poll(() => fixture.liveFiles().filter(file => file.appProperties?.backupKind === 'table').length).toBe(3);
   await drive.getByRole('button', { name: '選擇備份還原', exact: true }).click();
   const versions = drive.getByRole('combobox', { name: '選擇備份版本' });
   await expect(versions.locator('option')).toHaveCount(3);
