@@ -178,16 +178,20 @@ describe('Lightweight Google Drive Snapshot Backup', () => {
     // Simulate an aborted upload: a folder with an orphan table but no manifest.xlsx
     const root = [...fixture.drive.files.values()].find(f => f.appProperties?.backupKind === 'root')!;
     const incompleteFolder = fixture.drive.addFile({
+      id: 'incomplete-folder-1',
       name: '備份-未完成',
       mimeType: 'application/vnd.google-apps.folder',
       parents: [root.id],
       appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'snapshot' },
+      trashed: false,
     });
     fixture.drive.addFile({
+      id: 'orphan-table-1',
       name: '孤兒表.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       parents: [incompleteFolder.id],
       appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'table' },
+      trashed: false,
     });
 
     // findRemoteFile must find the valid snapshot, completely ignoring the incomplete folder
