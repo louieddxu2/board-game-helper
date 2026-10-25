@@ -124,6 +124,15 @@ const loadWorkspaceVersion = async (options?: WorkspaceLoadOptions): Promise<{ d
     await transaction.done;
     checkCurrent();
     if (options?.expectCurrentRevision) assertRevision(state);
+    // Missing directory metadata is not proof of a new database. Preserve orphaned
+    // records instead of publishing and saving an empty workspace over them.
+    const legacyValid = legacy && legacy.version === 1 && Array.isArray(legacy.nodes) && Array.isArray(legacy.tables);
+    if (metaValue !== undefined || (legacy !== undefined && !legacyValid)) throw new WorkspaceStorageIntegrityError('Invalid workspace metadata');
+    const residue = db.transaction([...stores], 'readonly');
+    const counts = await Promise.all(stores.map(name => name === 'state' && legacyValid ? Promise.resolve(0) : residue.objectStore(name).count()));
+    await residue.done;
+    checkCurrent();
+    if (counts.some(count => count > 0)) throw new WorkspaceStorageIntegrityError('Missing workspace metadata with existing records');
     resetSnapshots(); savedMetadata = undefined; savedStorageRevision = state?.storageRevision ?? null;
     const loaded = normalizeWorkspace(legacy ?? emptyWorkspace(), { deferDynamicOptions: options?.deferStartupWork });
     await saveWorkspace(loaded);
