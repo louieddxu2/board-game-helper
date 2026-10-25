@@ -1,15 +1,20 @@
 @media (max-width: 800px) {
-  .site-header { height: 66px; padding: 0 14px; }
+  .site-header { height: 66px; gap: 8px; padding: 0 10px; }
   html[data-standalone='true'] .site-header { height: calc(66px + env(safe-area-inset-top, 0px)); }
   .brand small { display: none; }
   .brand-mark { width: 34px; height: 34px; }
+  .brand strong { overflow: hidden; text-overflow: ellipsis; }
   .desktop-nav { display: none !important; }
-  .site-header-action { display: flex !important; margin-left: auto; margin-right: 0; }
+  .site-header-tools { flex: 0 0 auto; }
+  .site-header-tools.is-home:has(.pwa-install-button) { grid-template-rows: 34px 24px; min-height: 58px; }
+  .site-header-tools.is-home .site-header-action { grid-row: 1; }
+  .site-header-tools.is-home .pwa-install-button { grid-row: 2; }
+  .site-header-action { display: flex !important; margin: 0; }
   .site-header-action .header-mode-button { min-height: 34px; height: 34px; padding: 0 13px; font-size: 13px; border-color: rgba(22,53,47,.3); background: var(--green); color: white; outline: none; }
   .site-header-action .header-mode-button:hover,
   .site-header-action .header-mode-button:focus,
-  .site-header-action .header-mode-button:focus-visible,
   .site-header-action .header-mode-button:active { background: var(--green); color: white; outline: none; box-shadow: none; }
+  .site-header-action .header-mode-button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; box-shadow: none; }
   .explore-mode-button, .personal-explore-btn { display: none !important; }
   .personal-home-hero { padding: 20px 16px 18px; }
   .personal-home-search-row { display: block; }

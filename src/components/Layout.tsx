@@ -4,6 +4,7 @@ import { useSession } from '../context/SessionContext';
 import { localDb } from '../lib/localDb';
 import { SearchModal } from './SearchModal';
 import { ScrollToTop } from './ScrollToTop';
+import { PwaInstallButton } from './PwaInstallButton';
 
 const mockLabels: Record<string, string> = {
   unauthenticated: '未登入',
@@ -72,6 +73,7 @@ export const Layout = () => {
         <span className="brand-mark">✓</span>
         <span><strong>玩錯的桌遊規則</strong><small>這次玩對，或是下次玩對。</small></span>
       </NavLink>
+      <div className={location.pathname === '/' ? 'site-header-tools is-home' : 'site-header-tools'}>
       {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <NavLink to="/">探索</NavLink>
@@ -81,6 +83,8 @@ export const Layout = () => {
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
         <NavLink to={user ? '/account' : '/login'}>{user ? '帳號' : '登入'}</NavLink>
       </nav>
+      {location.pathname === '/' && <PwaInstallButton />}
+      </div>
     </header>
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">

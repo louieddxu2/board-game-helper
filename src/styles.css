@@ -1,4 +1,5 @@
 @import './styles/tokens.css';
+@import './styles/pwa-install.css';
 @import './styles/workspace-core.css';
 @import './styles/workspace-dialogs.css';
 @import './styles/workspace-mobile.css';

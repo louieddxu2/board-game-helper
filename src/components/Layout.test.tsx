@@ -9,6 +9,7 @@ vi.mock('../context/SessionContext', () => ({
 vi.mock('../lib/localDb', () => ({ localDb: { getPending: () => Promise.resolve([]) } }));
 vi.mock('./SearchModal', () => ({ SearchModal: () => null }));
 vi.mock('./ScrollToTop', () => ({ ScrollToTop: () => null }));
+vi.mock('./PwaInstallButton', () => ({ PwaInstallButton: () => null }));
 
 describe('Layout navigation', () => {
   afterEach(cleanup);
