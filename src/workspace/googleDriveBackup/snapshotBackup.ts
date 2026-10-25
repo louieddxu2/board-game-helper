@@ -63,8 +63,8 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     if (!maintenance) maintenance = cleanup().catch(() => undefined).finally(() => { maintenance = null; });
     return maintenance;
   };
-  const ensureFolder = async () => {
-    const current = await state();
+  const ensureFolder = async (known?: DriveSnapshotState) => {
+    const current = known ?? await state();
     if (current.rootId) return current.rootId;
     const parent = await api.ensureFolderPath(options.folderPath);
     const candidates = await api.findFilesByAppProperty({ key: 'backupKey', value: DRIVE_SNAPSHOT_KEY, parentId: parent, mimeType: FOLDER_MIME });
@@ -122,8 +122,9 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     if (!nodes.length || new Set(nodes.map(node => node.tableId)).size !== nodes.length || nodes.length !== summaries.length
       || nodes.some(node => !summaryById.has(node.tableId!))) throw new Error('備份目錄與表格不一致或沒有表格，已停止備份');
     run.onProgress?.({ phase: 'preparing-cloud' });
-    const root = await ensureFolder();
-    const current = await state(root);
+    const discovered = await state();
+    const root = await ensureFolder(discovered);
+    const current = discovered.rootId === root ? discovered : await state(root);
     const previous = headFile(current) ?? await legacyFile();
     const saved = journal.read(current.accountKey);
     const prior = saved ? await coordinator.operation(saved.id) : null;

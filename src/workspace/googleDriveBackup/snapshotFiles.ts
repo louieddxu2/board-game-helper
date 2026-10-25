@@ -4,9 +4,10 @@ import { SnapshotCoordinatorError } from './snapshotErrors';
 import { snapshotRevisionDigest } from './snapshotJournal';
 import type { DriveFile } from './types';
 
+export const SNAPSHOT_FILE_FIELDS = 'id,name,mimeType,parents,createdTime,modifiedTime,size,md5Checksum,appProperties,ownedByMe,trashed';
 export const snapshotChildren = (api: GoogleDriveApi, folder: string) => api.listFiles({
   query: `'${folder.replace(/'/g, "\\'")}' in parents and trashed = false`,
-  fields: 'id,name,mimeType,parents,createdTime,modifiedTime,size,md5Checksum,appProperties,ownedByMe,trashed',
+  fields: SNAPSHOT_FILE_FIELDS,
 });
 
 export const assertSnapshotRoot = (file: DriveFile) => {
@@ -24,15 +25,16 @@ export const snapshotLegacyStamp = async (api: GoogleDriveApi, roots: DriveFile[
     .map(file => [file.id, file.modifiedTime ?? '']).sort((a, b) => a[0].localeCompare(b[0]))));
 };
 
-export const inspectSnapshotFiles = async (api: GoogleDriveApi, root: string, op: DriveSnapshotOperation): Promise<SnapshotFileSignature[]> => {
-  const folder = await api.getFile(op.folderId);
+export const inspectSnapshotFiles = async (api: GoogleDriveApi, root: string, op: DriveSnapshotOperation,
+  observed?: { folder: DriveFile; files: DriveFile[] }): Promise<SnapshotFileSignature[]> => {
+  const folder = observed?.folder ?? await api.getFile(op.folderId);
   if (folder.trashed || folder.ownedByMe !== true || folder.mimeType !== FOLDER_MIME || folder.parents?.length !== 1
     || folder.parents[0] !== root || folder.appProperties?.backupKey !== DRIVE_SNAPSHOT_KEY
     || folder.appProperties.snapshotId !== op.id || folder.appProperties.backupKind !== 'snapshot') {
     throw new SnapshotCoordinatorError('backup_snapshot_unavailable', 409);
   }
   const allocated = new Set(op.fileIds);
-  const files = (await snapshotChildren(api, op.folderId)).filter(file => allocated.has(file.id));
+  const files = (observed?.files ?? await snapshotChildren(api, op.folderId)).filter(file => allocated.has(file.id));
   if (files.length !== op.fileIds.length || new Set(op.fileIds).size !== op.fileIds.length) {
     throw new SnapshotCoordinatorError('backup_snapshot_incomplete', 422);
   }

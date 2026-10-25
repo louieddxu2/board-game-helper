@@ -54,6 +54,19 @@ const committed = async (drive: InMemoryDriveFixture, coordinator: ReturnType<ty
 };
 
 describe('Drive snapshot safety boundaries', () => {
+  test('a cached receipt location cannot be reused after its operation identity changes', async () => {
+    const drive = createInMemoryDrive(); addRoot(drive); const coordinator = coordinatorFor(drive);
+    const operation = await beginAndUpload(drive, coordinator, 'original-operation');
+    const receipt = receiptFor(drive, operation.id)!; const body = receiptBody(drive, operation.id);
+    receipt.appProperties = { ...receipt.appProperties, snapshotId: 'different-operation' };
+    body.operation.id = 'different-operation';
+    drive.setBody(receipt.id, new TextEncoder().encode(JSON.stringify(body)));
+    const uploads = drive.calls.uploads.length;
+    await expect(coordinator.operation(operation.id)).rejects.toMatchObject({ code: 'backup_snapshot_invalid', status: 422 });
+    await expect(coordinator.renew(operation.id)).rejects.toMatchObject({ code: 'backup_snapshot_invalid', status: 422 });
+    expect(drive.calls.uploads).toHaveLength(uploads);
+  });
+
   test.each([false, true])('expired orphan cleanup batches over 20 files without consuming parents (live head: %s)', async liveHead => {
     let now = Date.now(); const drive = createInMemoryDrive({ now: () => now }); addRoot(drive);
     const coordinator = coordinatorFor(drive);

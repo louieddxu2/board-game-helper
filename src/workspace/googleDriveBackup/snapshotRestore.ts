@@ -7,8 +7,7 @@ import type { GoogleDriveApi } from './googleDriveApi';
 import type { SnapshotCoordinator } from './snapshotCoordinator';
 import { withSnapshotLease } from './snapshotLease';
 
-export const readSnapshotManifest = async (api: GoogleDriveApi, op: DriveSnapshotOperation): Promise<DriveWorkspaceManifest> => {
-  const manifest = await importWorkspaceBackupManifestXlsx(await api.downloadBlob(op.fileIds[0]));
+export const validateSnapshotManifest = (manifest: DriveWorkspaceManifest | Awaited<ReturnType<typeof importWorkspaceBackupManifestXlsx>>, op: DriveSnapshotOperation): DriveWorkspaceManifest => {
   const refs = manifest.tables;
   const tableNodes = manifest.nodes.filter(node => node.type === 'table');
   if (manifest.fileLayout !== 'flat' || refs.length + 1 !== op.fileIds.length || refs.length !== tableNodes.length
@@ -20,6 +19,9 @@ export const readSnapshotManifest = async (api: GoogleDriveApi, op: DriveSnapsho
   return { ...manifest, format: DRIVE_MANIFEST_FORMAT, version: DRIVE_MANIFEST_VERSION,
     backupKey: 'dynamic-sheet-primary-workspace-v3', updatedAt: manifest.sourceUpdatedAt };
 };
+
+export const readSnapshotManifest = async (api: GoogleDriveApi, op: DriveSnapshotOperation): Promise<DriveWorkspaceManifest> =>
+  validateSnapshotManifest(await importWorkspaceBackupManifestXlsx(await api.downloadBlob(op.fileIds[0])), op);
 
 export const restoreSnapshot = async (api: GoogleDriveApi, coordinator: SnapshotCoordinator, op: DriveSnapshotOperation) => {
   const lease = crypto.randomUUID();

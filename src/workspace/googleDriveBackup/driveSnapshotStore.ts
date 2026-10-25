@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { DRIVE_SNAPSHOT_KEY, DRIVE_SNAPSHOT_MAX_FILES, type DriveSnapshotOperation } from '../../shared/driveSnapshots';
-import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
+import { DRIVE_SNAPSHOT_KEY, DRIVE_SNAPSHOT_MAX_FILES, DRIVE_SNAPSHOT_XLSX, type DriveSnapshotOperation } from '../../shared/driveSnapshots';
+import { FOLDER_MIME, GoogleDriveApi, GoogleDriveApiError } from './googleDriveApi';
 import { SnapshotCoordinatorError } from './snapshotErrors';
-import { assertSnapshotRoot, inspectSnapshotFiles, snapshotChildren } from './snapshotFiles';
-import { readSnapshotManifest } from './snapshotRestore';
+import { assertSnapshotRoot, inspectSnapshotFiles, snapshotChildren, SNAPSHOT_FILE_FIELDS } from './snapshotFiles';
+import { readSnapshotManifest, validateSnapshotManifest } from './snapshotRestore';
 import { blobBytes } from '../spreadsheetCodec';
+import type { DriveWorkspaceManifest } from './folderBackup';
 import type { DriveFile } from './types';
 
 const JSON_MIME = 'application/json';
@@ -39,28 +40,36 @@ export interface SnapshotRecord {
 export const snapshotTags = (kind: string, snapshotId?: string) => ({ backupKey: DRIVE_SNAPSHOT_KEY, backupKind: kind,
   schemaVersion: '4', ...(snapshotId ? { snapshotId } : {}) });
 
+const mapBatches = async <T, U>(items: T[], read: (item: T) => Promise<U>): Promise<U[]> => {
+  const results: U[] = [];
+  for (let offset = 0; offset < items.length; offset += 4) results.push(...await Promise.all(items.slice(offset, offset + 4).map(read)));
+  return results;
+};
+const signature = (file: DriveFile) => `${file.modifiedTime}:${file.md5Checksum}:${file.size}`;
+
 /** JSON receipts live beside snapshot folders. Each snapshot folder retains its original XLSX layout. */
 export class DriveSnapshotStore {
   private readonly cache = new Map<string, { signature: string; text: string }>();
+  private readonly legacyIndexes = new Map<string, { signature: string; manifest: DriveWorkspaceManifest }>();
+  private readonly locations = new Map<string, { rootId: string; fileId?: string; folderId?: string }>();
   constructor(readonly api: GoogleDriveApi) {}
 
   async roots(rootId?: string) {
-    const found = await this.api.findFilesByAppProperty({ key: 'backupKey', value: DRIVE_SNAPSHOT_KEY, mimeType: FOLDER_MIME });
-    const roots = found.filter(file => file.appProperties?.backupKind === 'root');
+    const found = await this.api.findFilesByAppProperty({ key: 'backupKind', value: 'root', mimeType: FOLDER_MIME, fields: SNAPSHOT_FILE_FIELDS });
+    const roots = found.filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY);
     if (rootId && !roots.some(file => file.id === rootId)) roots.push(await this.api.getFile(rootId));
-    const verified: DriveFile[] = [];
-    for (const file of roots) verified.push(assertSnapshotRoot(await this.api.getFile(file.id)));
+    const verified = roots.map(assertSnapshotRoot);
     return verified.sort((a, b) => (a.createdTime ?? '').localeCompare(b.createdTime ?? '') || a.id.localeCompare(b.id));
   }
 
   private async text(file: DriveFile) {
-    const signature = `${file.modifiedTime}:${file.md5Checksum}:${file.size}`;
+    const key = signature(file);
     const cached = this.cache.get(file.id);
-    if (cached?.signature === signature) return cached.text;
+    if (cached?.signature === key) return cached.text;
     const blob = await this.api.downloadBlob(file.id);
     if (blob.size > 4_000_000) throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
     const text = new TextDecoder().decode(await blobBytes(blob));
-    this.cache.set(file.id, { signature, text });
+    this.cache.set(file.id, { signature: key, text });
     if (this.cache.size > 128) this.cache.delete(this.cache.keys().next().value!);
     return text;
   }
@@ -86,7 +95,51 @@ export class DriveSnapshotStore {
     if (file.appProperties.snapshotAbandoned === 'true') record.abandoned = true;
     const expiry = Number(file.appProperties.expiresAt);
     if (record.operation.status === 'uploading' && Number.isFinite(expiry) && expiry > 0) record.operation.expiresAt = expiry;
+    // A targeted operation read must also notice uploads that arrived after orphan cleanup.
+    if (record.abandoned && record.operation.status === 'deleted') {
+      const contents = await snapshotChildren(this.api, record.operation.folderId);
+      if (contents.some(file => record.operation.fileIds.includes(file.id))) record.operation.status = 'deleting';
+    }
+    this.locations.set(record.operation.id, { rootId: root, fileId: file.id });
+    if (this.locations.size > 128) this.locations.delete(this.locations.keys().next().value!);
     return record;
+  }
+
+  /** Read one operation by its stable Drive ID, including fresh deletion and expiry metadata.
+   * Global graph/duplicate-ID validation belongs to discovery and commit, not this targeted read. */
+  async find(id: string): Promise<SnapshotRecord | null> {
+    try {
+      const known = this.locations.get(id);
+      if (known) {
+        assertSnapshotRoot(await this.api.getFile(known.rootId));
+        if (known.fileId) {
+          const file = await this.api.getFile(known.fileId);
+          if (file.trashed) return null;
+          if (file.appProperties?.snapshotId !== id) throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
+          return this.read(file, known.rootId);
+        }
+        const folder = await this.api.getFile(known.folderId!);
+        if (folder.trashed) return null;
+        if (folder.appProperties?.snapshotId !== id) throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
+        return this.legacy(known.rootId, folder);
+      }
+      const findKind = (mimeType: string) => this.api.findFilesByAppProperty({ key: 'snapshotId', value: id, mimeType, fields: SNAPSHOT_FILE_FIELDS });
+      const receipts = (await findKind(JSON_MIME)).filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY && file.appProperties.backupKind === 'receipt');
+      if (receipts.length > 1) throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
+      if (receipts[0]) {
+        const root = assertSnapshotRoot(await this.api.getFile(receipts[0].parents?.[0] ?? ''));
+        return this.read(receipts[0], root.id);
+      }
+      const folders = (await findKind(FOLDER_MIME)).filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY
+        && file.appProperties.backupKind === 'snapshot' && file.appProperties.schemaVersion !== '4');
+      if (folders.length > 1) throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
+      if (!folders[0]) return null;
+      const root = assertSnapshotRoot(await this.api.getFile(folders[0].parents?.[0] ?? ''));
+      return this.legacy(root.id, folders[0]);
+    } catch (error) {
+      if (error instanceof GoogleDriveApiError && error.status === 404) return null;
+      throw error;
+    }
   }
 
   async write(record: SnapshotRecord, createId?: string) {
@@ -102,26 +155,28 @@ export class DriveSnapshotStore {
 
   async records(roots: DriveFile[]) {
     const records: SnapshotRecord[] = [];
-    for (const root of roots) {
-      const files = await snapshotChildren(this.api, root.id);
+    const directories = await mapBatches(roots, async root => ({ root, files: await snapshotChildren(this.api, root.id) }));
+    const legacyFolders: Array<{ root: string; folder: DriveFile }> = [];
+    for (const { root, files } of directories) {
       const receipts = files.filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY && file.appProperties.backupKind === 'receipt');
-      for (const file of receipts) {
+      records.push(...await mapBatches(receipts, async file => {
         const record = await this.read(file, root.id);
-        // Keep abandoned IDs recoverable: a previously in-flight upload can finish after cleanup.
-        if (record.abandoned && record.operation.status === 'deleted') {
-          const contents = await snapshotChildren(this.api, record.operation.folderId);
-          if (contents.some(file => record.operation.fileIds.includes(file.id))) record.operation.status = 'deleting';
-        }
-        records.push(record);
-      }
+        return record;
+      }));
       const known = new Set(records.map(record => record.operation.folderId));
       for (const folder of files.filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY
         && file.appProperties.backupKind === 'snapshot' && !known.has(file.id))) {
         // New candidates always have a receipt before a folder. Missing receipts are not legacy snapshots.
         if (folder.appProperties?.schemaVersion === '4') continue;
-        const legacy = await this.legacy(root.id, folder);
-        if (legacy) records.push(legacy);
+        legacyFolders.push({ root: root.id, folder });
       }
+    }
+    if (legacyFolders.length) {
+      // Empty historical folder shells cannot contain a usable snapshot. One projected query skips all of them.
+      const indexes = await this.api.findFilesByAppProperty({ key: 'backupKind', value: 'manifest', mimeType: DRIVE_SNAPSHOT_XLSX, fields: SNAPSHOT_FILE_FIELDS });
+      const parents = new Set(indexes.filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY).flatMap(file => file.parents ?? []));
+      const legacy = await mapBatches(legacyFolders.filter(entry => parents.has(entry.folder.id)), entry => this.legacy(entry.root, entry.folder));
+      records.push(...legacy.filter((record): record is SnapshotRecord => record !== null));
     }
     if (new Set(records.map(record => record.operation.id)).size !== records.length) {
       throw new SnapshotCoordinatorError('backup_snapshot_invalid', 422);
@@ -139,10 +194,15 @@ export class DriveSnapshotStore {
       expiresAt: 0, revision: 0, committedAt: Date.parse(manifest.createdTime ?? manifest.modifiedTime ?? ''), sourceUpdatedAt: 0, inventory: [] };
     if (!Number.isFinite(operation.committedAt)) return null;
     try {
-      operation.inventory = await inspectSnapshotFiles(this.api, root, operation);
-      const index = await readSnapshotManifest(this.api, operation);
+      operation.inventory = await inspectSnapshotFiles(this.api, root, operation, { folder, files });
+      const key = signature(manifest);
+      const cached = this.legacyIndexes.get(manifest.id);
+      const index = cached?.signature === key ? validateSnapshotManifest(cached.manifest, operation) : await readSnapshotManifest(this.api, operation);
       if (!index.tables.length) return null;
+      this.legacyIndexes.set(manifest.id, { signature: key, manifest: index });
+      if (this.legacyIndexes.size > 128) this.legacyIndexes.delete(this.legacyIndexes.keys().next().value!);
       operation.sourceUpdatedAt = index.sourceUpdatedAt;
+      this.locations.set(operation.id, { rootId: root, folderId: folder.id });
       return { schema: 1, rootId: root, parents: [], operation, legacy: true };
     } catch (error) {
       if (error instanceof SnapshotCoordinatorError) return null;

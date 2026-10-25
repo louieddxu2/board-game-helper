@@ -124,11 +124,11 @@ export class GoogleDriveApi {
     return (await this.findFilesByAppProperty(options))[0] ?? null;
   }
 
-  async findFilesByAppProperty(options: { key: string; value: string; parentId?: string; mimeType?: string; trashed?: boolean }): Promise<DriveFile[]> {
+  async findFilesByAppProperty(options: { key: string; value: string; parentId?: string; mimeType?: string; trashed?: boolean; fields?: string }): Promise<DriveFile[]> {
     let query = `appProperties has { key='${escapeQueryLiteral(options.key)}' and value='${escapeQueryLiteral(options.value)}' } and trashed = ${options.trashed ?? false}`;
     if (options.parentId) query = `'${escapeQueryLiteral(options.parentId)}' in parents and ${query}`;
     if (options.mimeType) query += ` and mimeType = '${escapeQueryLiteral(options.mimeType)}'`;
-    return this.listFiles({ query });
+    return this.listFiles({ query, fields: options.fields });
   }
 
   getFile(fileId: string): Promise<DriveFile> {

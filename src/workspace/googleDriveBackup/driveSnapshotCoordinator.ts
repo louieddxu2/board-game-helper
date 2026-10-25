@@ -29,9 +29,10 @@ export const createDriveSnapshotCoordinator = (options: GoogleDriveApiOptions): 
   const store = new DriveSnapshotStore(api);
   const readAll = async (root?: string) => {
     const roots = await store.roots(root);
-    return { roots, records: await store.records(roots), legacyStamp: await snapshotLegacyStamp(api, roots) };
+    const [records, legacyStamp] = await Promise.all([store.records(roots), snapshotLegacyStamp(api, roots)]);
+    return { roots, records, legacyStamp };
   };
-  const find = async (id: string) => (await readAll()).records.find(record => record.operation.id === id) ?? null;
+  const find = (id: string) => store.find(id);
   const requireRecord = async (id: string) => {
     const record = await find(id);
     if (!record) throw new SnapshotCoordinatorError('backup_snapshot_unavailable', 404);
