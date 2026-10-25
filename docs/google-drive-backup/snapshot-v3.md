@@ -47,6 +47,8 @@ appProperties 只存固定短標記：backupKey、backupKind、snapshotId、loca
 
 IndexedDB 是網站資料，Chrome 刪除「Cookie 和網站資料」可能一併移除它，並非僅清除程式碼快取。時間範圍不代表只刪除該期間新增的表格列；持久儲存也無法阻止使用者主動清除網站資料。資料遺失時先停止備份，從歷史版本選擇事故前的完整快照，再透過匯入預覽還原；程式不清空 Google 垃圾桶。
 
+不能假設按時間範圍清除時，IndexedDB 與 localStorage 必定一起消失。Chromium 對 localStorage 使用其最後修改時間，對 IndexedDB 等配額儲存則篩選該期間修改過的 bucket，再移除資料，見 [Chromium 清除實作](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/content/browser/storage_partition_impl.cc#312)。隔離桌面 Chromium 148.0.7778.96 實測同一個 `chrome.browsingData.remove` 請求同時指定兩者：較舊 localStorage 保留、較新 IndexedDB 被清除；兩者都在範圍內修改時則一起被清除。此實驗使用短時間邊界，並非實體 Android 的十五分鐘清除驗收，不能據此確定個別事故原因；其他網站未受影響也不足以反證，因為來源與修改時間不同。判斷事故時須分開保留本機讀取證據、Drive 實體檔案清單與正式提交收據；部分上傳資料夾不等於有效備份，已還原的本機 DB 也不能代表事故時的內容。
+
 pending journal 依已驗證 Drive 帳號雜湊分區，只存作業 UUID 與來源修訂摘要。摘要使用既有修訂標記和目錄 metadata，不讀取或雜湊儲存格。
 
 提交回應遺失時，先以原 UUID 查成功收據；不直接建立另一份。只有本機收據確認保存後才清持久 journal。Storage 寫入失敗時保留重載恢復資訊；當次記憶體中仍會確認收據，避免阻擋後續新變更。其他裝置已有後續版本時，不會拿舊收據掩蓋衝突。
