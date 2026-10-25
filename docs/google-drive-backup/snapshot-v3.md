@@ -64,7 +64,9 @@ pending journal 依已驗證的 Drive 根資料夾 ID 分區，只保存作業 U
 
 v1／v2 保留相容讀取，不寫入、搬動或清理舊檔。既有沒有 Drive JSON 紀錄的 v3 資料夾，必須有完整可解碼索引、非空表格對應及正確的檔案 metadata 才納入歷史；只有 manifest 或部分上傳不會當成有效版本。這些舊 v3 快照只讀，不自動清理。schemaVersion=4 資料夾遺失紀錄時不冒充舊備份。
 
-Worker 已移除備份授權驗證、版本、提交、租約與清理的 D1 程式。舊 `/api/workspace-backup/*` 在任何資料庫及 session middleware 前回傳 410，讓舊客戶端停止操作並更新。歷史 migration 0115 與既有 D1 資料表保留，完全停止讀寫；本次不刪除生產資料。其他網站功能的 D1 與 Workspace 備份無關。
+整個 Workspace 路由、其中的所有專案、啟動、共用模組、設定、授權及背景工作均不使用 D1。Worker 已移除備份授權驗證、版本、提交、租約與清理的 D1 程式。除了公開設定的 GET／HEAD，其餘 `/api/workspace` 命名空間（包括舊備份 API、未知路徑與其他 HTTP 方法）均在任何資料庫及 session middleware 前回傳 410，不將 Google 權杖當作網站 session。
+
+使用者已明確要求清除全部 Workspace D1 紀錄。歷史 migration 0115 保留供遷移追蹤，0116 移除三張 `drive_backup_*` 資料表、資料、索引及兩個發布 trigger，不移除其他網站資料或 Google Drive 檔案。發布流程先部署不依賴 D1 的程式並通過正式站檢查，才套用 0116；直接執行遠端 migration 也須先確認正式站已停用 Workspace D1 API，避免舊版仍使用資料表時先刪資料。0116 不與其他待套用 migration 混合發布。
 
 公開 `/api/workspace-config` 只提供 Google OAuth Client ID，在任何 DB/session middleware 前回應，前端使用 credentials:omit，不帶網站登入或 Google 權杖。備份本體與提交紀錄不經網站後端。維持既有 GIS `openid drive.file` scope；不呼叫 tokeninfo，不依賴 sub 或網站帳號來補出授權未保證的欄位。
 
@@ -75,6 +77,8 @@ Worker 已移除備份授權驗證、版本、提交、租約與清理的 D1 程
 維持既有精簡介面，不新增手動驗證或技術診斷設定。全流程同一條 0–100% 進度，依實際階段與表格步驟估計工作量，不是位元組或剩餘時間。成功前最高 99%，Drive 提交及本機收據成功後顯示 100% 並立即解除忙碌，不等待清理。
 
 測試以實際前端 GIS 設定及請求呼叫直接 Drive fixture，涵蓋續傳、回應遺失、分支、保留三份、租約、檔案異動、XLSX 讀寫及空資料保護，並拒絕任何應用程式備份 API 請求。設定測試以實際前端 loader 呼叫實際 Worker 公開設定 route，缺少 D1、帶有舊 session 時仍能工作。401 只換發一次，403 不反覆開 OAuth，拒絕後仍可手動重試。
+
+`check-workspace-boundary.mjs` 納入測試、型別檢查及建置，掃描整個 Workspace 與啟動模組，追蹤共用模組、重新匯出及動態 import，拒絕網站 session／資料 API／Worker 資料層依賴。`tests/core/workspace-no-database.spec.ts` 以舊網站 session cookie 開啟 Workspace，完成編輯、搜尋、設定、Drive 備份與重開；除公開 Client ID 外不得發出任何本站 API 請求。清除 migration 在含既有紀錄與外鍵的 SQLite 及完整新 schema 上驗證，必須移除所有 Workspace 物件且保留其他網站資料。
 
 `tests/core/workspace-backup-safety.spec.ts` 以隔離 IndexedDB、直接 Drive fixture 與手機原生觸控驗證清空資料的提醒；設定保留／一起清除都不得上傳。畫面可操作後首次觸控立即且只生效一次，不用等待或重試掩蓋漏點。模擬測試、正式站健康檢查與真實 Google／實體手機驗收分開回報，fixture 不代表真實第三方驗收。
 

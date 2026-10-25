@@ -32,6 +32,16 @@ describe('core release gate wiring', () => {
     expect(packageJson.scripts['test:migrations:fresh']).toContain('CORE_TEST_DATABASE_MODE=fresh');
   });
 
+  test('Workspace record removal runs after the new Worker and production smoke, before marking deployment successful', () => {
+    const source = readFileSync('scripts/deploy-with-migration-check.mjs', 'utf8');
+    const smoke = source.indexOf("execSync('npm run smoke:production'");
+    const deferredCleanup = source.indexOf('if (removalAfterCode)', smoke);
+    const migration = source.indexOf("execSync('npm run db:migrate:remote'", deferredCleanup);
+    expect(deferredCleanup).toBeGreaterThan(smoke);
+    expect(migration).toBeGreaterThan(deferredCleanup);
+    expect(source.indexOf('recordSuccessfulDeploy(deployingSha)')).toBeGreaterThan(migration);
+  });
+
   test('pins date-sensitive release checks to the product timezone', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
     const workflow = readFileSync('.github/workflows/core-release-gate.yml', 'utf8');

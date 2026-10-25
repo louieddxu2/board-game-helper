@@ -31,10 +31,14 @@ app.get('/api/workspace-config', c => {
   return c.json({ googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null });
 });
 
-// Retired clients must stop safely before session/DB middleware. Workspace backups now use Drive directly.
-app.all('/api/workspace-backup/*', c => {
-  c.header('Cache-Control', 'no-store');
-  return c.json({ error: 'backup_client_update_required' }, 410);
+// Reserve the entire Workspace API namespace before any site database/session middleware.
+// Only the public GET/HEAD configuration above is allowed; old and future API paths fail closed.
+app.use('/api/*', async (c, next) => {
+  if (/^\/api\/workspace(?:[-/]|$)/u.test(new URL(c.req.url).pathname)) {
+    c.header('Cache-Control', 'no-store');
+    return c.json({ error: 'backup_client_update_required' }, 410);
+  }
+  await next();
 });
 
 app.use('/api/*', async (c, next) => {

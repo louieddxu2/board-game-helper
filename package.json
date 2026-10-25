@@ -29,7 +29,7 @@
     "typecheck": "npm run check:protected-copy && npm run check:d1-boundary && npm run check:file-size && tsc --noEmit",
     "check:file-size": "node scripts/check-file-size.mjs",
     "check:protected-copy": "node scripts/check-protected-copy.mjs",
-    "check:d1-boundary": "node scripts/check-d1-boundary.mjs",
+    "check:d1-boundary": "node scripts/check-d1-boundary.mjs && node scripts/check-workspace-boundary.mjs",
     "check:d1-fanout": "node --disable-warning=ExperimentalWarning scripts/check-d1-trigger-fanout.mjs",
     "cloudflare:login": "node scripts/cloudflare-login.mjs",
     "cloudflare:whoami": "cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler whoami",

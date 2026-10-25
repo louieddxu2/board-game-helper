@@ -1,10 +1,17 @@
 import { execSync } from 'node:child_process';
 import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
 import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
+import { readFileSync } from 'node:fs';
+import { productionReleaseConfig } from './production-smoke.mjs';
+import { WORKSPACE_D1_REMOVAL_MIGRATION, assertWorkspaceD1RemovalReady } from './workspace-d1-release.mjs';
 
 try {
   const pending = listPendingRemoteMigrations();
   checkD1TriggerFanout(pending);
+  if (pending.includes(WORKSPACE_D1_REMOVAL_MIGRATION)) {
+    const { origin } = productionReleaseConfig(readFileSync('wrangler.production.jsonc', 'utf8'));
+    await assertWorkspaceD1RemovalReady(origin);
+  }
   if (pending.length === 0) {
     console.log('✅ No pending D1 migrations.');
   } else {

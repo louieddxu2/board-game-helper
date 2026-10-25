@@ -5,6 +5,7 @@ import { ensureCloudflareAuth } from './cloudflare-login.mjs';
 import { detectAuthSensitiveReleaseChanges, missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
 import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
 import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
+import { deferWorkspaceD1Removal } from './workspace-d1-release.mjs';
 
 const DEPLOY_STATE_PATH = '.wrangler/last-successful-deploy-sha';
 
@@ -84,8 +85,11 @@ const main = async () => {
   const pending = listPendingRemoteMigrations();
   checkD1TriggerFanout(pending);
   const isCI = process.env.CI === 'true' || !process.stdin.isTTY;
+  const removalAfterCode = deferWorkspaceD1Removal(pending);
 
-  if (pending.length > 0) {
+  if (removalAfterCode) {
+    console.log('🛡️ Workspace D1 移除會在新版 Worker 部署與健康檢查成功後才執行。');
+  } else if (pending.length > 0) {
     console.log(`\n⚠️ 發現 ${pending.length} 個尚未套用到遠端的 Migration：`);
     pending.forEach((file) => console.log(`   - ${file}`));
     
@@ -112,6 +116,10 @@ const main = async () => {
   execSync('npm run deploy:code', { stdio: 'inherit' });
   console.log('\n🔎 正在驗證正式站健康狀態、Session 設定、Google Client ID 與 CSP...');
   execSync('npm run smoke:production', { stdio: 'inherit' });
+  if (removalAfterCode) {
+    console.log('🧹 新版已生效，正在驗證 Workspace 隔離並移除舊 D1 紀錄...');
+    execSync('npm run db:migrate:remote', { stdio: 'inherit' });
+  }
   recordSuccessfulDeploy(deployingSha);
   console.log('\n🎉 部署流程完全結束！');
 };
