@@ -143,6 +143,19 @@ const addRoot = (drive: ReturnType<typeof createInMemoryDrive>) => drive.addFile
 describe('independent Drive snapshot backups', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  test('rejects an empty workspace before cloud writes, even with explicit overwrite options', async () => {
+    const drive = createInMemoryDrive(); addRoot(drive);
+    const coordinator = new TestCoordinator();
+    const service = createService(drive, coordinator, memoryStorage());
+    const data: WorkspaceData = { version: 1, nodes: [], tables: [], activeNodeId: null };
+    const before = [...drive.files.keys()];
+    await expect(service.backup(data, {}, { expectedRemoteFileId: null, allowLegacyChange: true })).rejects.toThrow('沒有表格');
+    expect([...drive.files.keys()]).toEqual(before);
+    expect(coordinator.operations.size).toBe(0);
+    expect(coordinator.commitCalls).toBe(0);
+    expect(coordinator.cleanupCalls).toEqual([]);
+  });
+
   test('reads each source table, writes a complete XLSX snapshot and round-trips table and manifest contents', async () => {
     const drive = createInMemoryDrive(); addRoot(drive);
     const coordinator = new TestCoordinator(); const { data, tables, source } = createWorkspace();

@@ -15,6 +15,7 @@ const messages: Record<string, string> = {
   backup_snapshot_changed: '所選備份已有變更，請重新選擇',
   backup_snapshot_incomplete: '備份檔尚未完整上傳，請重試',
   backup_snapshot_invalid: '備份檔案驗證失敗',
+  backup_snapshot_empty: '本機沒有表格，已停止備份；請先選擇雲端備份還原',
   backup_root_changed: '備份資料夾已有變更，請重新連結',
   backup_root_invalid: '備份資料夾無法使用，請檢查 Google Drive',
   backup_snapshot_unavailable: '所選備份已無法使用，請重新選擇',

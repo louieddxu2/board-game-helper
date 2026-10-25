@@ -10,7 +10,7 @@ export type WorkspaceMetadata = {
   version: WorkspaceData['version']; structureRevision?: string; nodes: WorkspaceNode[];
   activeNodeId: string | null; bottomNavigationTableIds?: string[];
 };
-export type WorkspaceStorageState = { storageRevision: string; updatedAt?: number };
+export type WorkspaceStorageState = { storageRevision: string; updatedAt?: number; storageIdentity?: string };
 export interface WorkspaceDb extends DBSchema {
   state: { key: string; value: WorkspaceData };
   meta: { key: string; value: WorkspaceMetadata | WorkspaceStorageState };

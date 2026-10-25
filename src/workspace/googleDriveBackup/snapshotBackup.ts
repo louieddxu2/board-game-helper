@@ -118,6 +118,11 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   };
 
   const perform = async (data: WorkspaceData, metadata: BackupMetadata = {}, run: FolderBackupRunOptions = {}): Promise<Receipt> => {
+    const summaries = run.source?.tables ?? data.tables;
+    const summaryById = new Map(summaries.map(table => [table.id, table]));
+    const nodes = data.nodes.filter(node => node.type === 'table' && node.tableId);
+    if (!nodes.length || new Set(nodes.map(node => node.tableId)).size !== nodes.length || nodes.length !== summaries.length
+      || nodes.some(node => !summaryById.has(node.tableId!))) throw new Error('備份目錄與表格不一致或沒有表格，已停止備份');
     run.onProgress?.({ phase: 'preparing-cloud' });
     const root = await ensureFolder();
     const current = await state(root);
@@ -134,11 +139,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       || (run.expectedRemoteModifiedTime && previous?.modifiedTime !== run.expectedRemoteModifiedTime)
       || (current.legacyChanged && !run.allowLegacyChange)
       || (run.expectedLegacyStamp && current.legacyStamp !== run.expectedLegacyStamp)) throw new RemoteBackupConflictError(previous);
-    const summaries = run.source?.tables ?? data.tables;
-    const summaryById = new Map(summaries.map(table => [table.id, table]));
-    const nodes = data.nodes.filter(node => node.type === 'table' && node.tableId);
-    if (new Set(nodes.map(node => node.tableId)).size !== nodes.length || nodes.length !== summaries.length
-      || nodes.some(node => !summaryById.has(node.tableId!))) throw new Error('備份目錄與表格不一致');
     const sourceRevision = await snapshotRevisionDigest(JSON.stringify({ structure: workspaceStructureChangeRevision(data),
       nodes: data.nodes, active: data.activeNodeId, navigation: data.bottomNavigationTableIds,
       tables: summaries.map(table => [table.id, table.name, table.updatedAt, workspaceTableChangeRevision(table)]) }));

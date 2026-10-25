@@ -1,6 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useRef, useState } from 'react';
-import { assertWorkspaceStorageCurrent, loadWorkspaceBackupSummaries, prepareWorkspaceBackup } from './db';
+import { assertWorkspaceStorageCurrent, loadWorkspaceBackupSummaries, loadWorkspaceStorageIdentity, prepareWorkspaceBackup } from './db';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from './changeRevisions';
 import { useWorkspaceGoogleDriveBackup } from './googleDriveBackup/useWorkspaceGoogleDriveBackup';
 import type { WorkspaceData } from './types';
@@ -19,7 +19,7 @@ interface WorkspaceBackupStatusOptions {
   storageConflict: boolean;
   saveState: "saved" | "saving" | "error";
   setNotice: Dispatch<SetStateAction<string>>;
-  dialogs: Pick<WorkspaceDialogController, 'set' | 'close'>;
+  dialogs: Pick<WorkspaceDialogController, 'set' | 'close' | 'state'>;
 }
 
 export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, mountedRef, data, drawerOpen, storageConflict, saveState, setNotice, dialogs }: WorkspaceBackupStatusOptions) => {
@@ -65,13 +65,17 @@ export const useWorkspaceBackupStatus = ({ setStorageConflict, dataRef, mountedR
   }, []);
   const loadTableSummaries = useCallback((snapshot: WorkspaceData) => loadWorkspaceBackupSummaries(snapshot, { isCurrent: () => isCurrentWorkspaceData(snapshot) }), []);
   const prepareBackup = useCallback((snapshot: WorkspaceData) => prepareWorkspaceBackup(snapshot, { isCurrent: () => isCurrentWorkspaceData(snapshot) }), []);
+  const loadStorageIdentity = useCallback(() => loadWorkspaceStorageIdentity(), []);
 
   const driveBackup = useWorkspaceGoogleDriveBackup({
     data,
+    loadStorageIdentity,
     loadTableSummaries,
     prepareBackup,
     inspectChanges: drawerOpen,
-    backupBlockedReason: storageConflict ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟' : saveState !== 'saved' ? '本機資料尚未完成儲存，請稍後再備份' : undefined,
+    backupBlockedReason: storageConflict ? '本機資料已由另一個分頁更新，請先確認未儲存內容再重新開啟'
+      : dialogs.state.workspaceImport ? '請先確認或取消匯入預覽'
+        : saveState !== 'saved' ? '本機資料尚未完成儲存，請稍後再備份' : undefined,
     verifyCurrentData: assertWorkspaceStorageCurrent,
     isCurrentData: isCurrentWorkspaceData,
     onStorageConflict: noteStorageConflict,

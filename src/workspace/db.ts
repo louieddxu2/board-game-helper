@@ -280,10 +280,11 @@ export const saveWorkspace = (data: WorkspaceData, options?: WorkspaceSaveOption
     const transaction = db.transaction([...stores], 'readwrite');
     const writes: Promise<unknown>[] = [];
     try {
-      assertRevision(asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY)));
+      const state = asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY));
+      assertRevision(state);
       const revision = nextStorageRevision();
       if (!sameMetadata(savedMetadata, meta)) writes.push(transaction.objectStore('meta').put(meta, META_KEY));
-      writes.push(transaction.objectStore('meta').put({ storageRevision: revision, updatedAt: data.updatedAt }, STORAGE_KEY));
+      writes.push(transaction.objectStore('meta').put({ ...state, storageRevision: revision, updatedAt: data.updatedAt }, STORAGE_KEY));
       for (const { snapshot, plan, pages } of plans) {
         const id = snapshot.table.id;
         if (plan.definition) writes.push(transaction.objectStore('tables').put(plan.definition, id));
@@ -354,7 +355,7 @@ export const maintainWorkspaceRowPages = async (tableId: string, options: Worksp
           return;
         }
         const revision = nextStorageRevision();
-        writes.push(transaction.objectStore('meta').put({ storageRevision: revision, updatedAt: state?.updatedAt }, STORAGE_KEY));
+        writes.push(transaction.objectStore('meta').put({ ...state, storageRevision: revision, updatedAt: state?.updatedAt }, STORAGE_KEY));
         writes.push(transaction.objectStore('tableHeads').put(plan.head, tableId));
         for (const page of plan.pages) writes.push(transaction.objectStore('rowPages').put(page, [tableId, page.id]));
         for (const id of plan.deletes) writes.push(transaction.objectStore('rowPages').delete([tableId, id]));
@@ -505,10 +506,11 @@ const saveHistoryChanges = (changes: WorkspaceHistoryStorageChanges) => enqueueS
   const db = await database;
   const transaction = db.transaction([...stores], 'readwrite');
   try {
-    assertRevision(asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY)));
+    const state = asStorageState(await transaction.objectStore('meta').get(STORAGE_KEY));
+    assertRevision(state);
     await historyStorage.writeChanges(transaction, changes);
     const revision = nextStorageRevision();
-    await transaction.objectStore('meta').put({ storageRevision: revision, updatedAt: savedUpdatedAt }, STORAGE_KEY);
+    await transaction.objectStore('meta').put({ ...state, storageRevision: revision, updatedAt: savedUpdatedAt }, STORAGE_KEY);
     await transaction.done;
     savedStorageRevision = revision;
     historyStorage.rememberSaved(changes);
@@ -518,6 +520,28 @@ const saveHistoryChanges = (changes: WorkspaceHistoryStorageChanges) => enqueueS
     throw error;
   }
 });
+/** Bind backup receipts to this database, independently of surviving localStorage settings. */
+export const loadWorkspaceStorageIdentity = async (): Promise<string> => {
+  if (!database) throw new Error('Workspace database is unavailable');
+  let identity = '';
+  await enqueueSave(async () => {
+    const db = await database;
+    const transaction = db.transaction('meta', 'readwrite');
+    try {
+      const state = asStorageState(await transaction.store.get(STORAGE_KEY));
+      assertRevision(state);
+      if (!state) throw new WorkspaceStorageConflictError();
+      identity = state.storageIdentity || nextStorageRevision();
+      if (!state.storageIdentity) await transaction.store.put({ ...state, storageIdentity: identity }, STORAGE_KEY);
+      await transaction.done;
+    } catch (error) {
+      try { transaction.abort(); } catch { /* Already aborted. */ }
+      await transaction.done.catch(() => undefined);
+      throw error;
+    }
+  });
+  return identity;
+};
 // Compatibility for non-UI callers; normal mutations use saveWorkspace's atomic history plan.
 export const saveWorkspaceHistory = (history: WorkspaceTableHistory) => saveHistoryChanges({ replace: [history] });
 export const appendWorkspaceHistoryEntry = (entry: WorkspaceTableHistoryEntry) => saveHistoryChanges({ append: [entry] });

@@ -28,6 +28,7 @@ test('merges fragmented variable blocks with bounded display writes and is idemp
   const result = await page.evaluate(async () => {
     const api = window.workspaceStorageFixture;
     await api.initialize(512, 2);
+    const storageIdentity = await api.db.loadWorkspaceStorageIdentity();
     const table = api.data.tables[0];
     const rows = [...table.rows.slice(0, 40), ...table.rows.slice(128, 168), ...table.rows.slice(256)];
     api.data = { ...api.data, tables: [{ ...table, rows }] };
@@ -47,6 +48,7 @@ test('merges fragmented variable blocks with bounded display writes and is idemp
     await api.db.maintainWorkspaceRowPages(table.id, { signal: new AbortController().signal, isCurrent: () => true, canRun: () => true });
     return {
       writes, reads,
+      storageIdentity, maintainedIdentity: await api.db.loadWorkspaceStorageIdentity(),
       secondWrites: api.writes,
       beforeHead: before.tableHeads[0], afterHead: after.tableHeads[0],
       beforeState, afterState: after.states.find(state => state.tableId === table.id),
@@ -56,6 +58,7 @@ test('merges fragmented variable blocks with bounded display writes and is idemp
     };
   });
   expect(result.writes.filter(write => write.store === 'rowPages' && write.method === 'put')).toHaveLength(1);
+  expect(result.maintainedIdentity).toBe(result.storageIdentity);
   expect(result.writes.filter(write => write.store === 'rowPages' && write.method === 'delete')).toHaveLength(1);
   expect(result.writes.filter(write => write.store === 'tableHeads' && write.method === 'put')).toHaveLength(1);
   expect(result.writes.filter(write => write.store === 'meta' && write.method === 'put')).toHaveLength(1);

@@ -145,6 +145,43 @@ const request = (url: string, env: any, token = 'route-owner-1', init: RequestIn
 describe('Drive snapshot Hono routes', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  test('rejects empty reservations before any Drive calls or new backup state', async () => {
+    const fixture = createDriveSnapshotTestDatabase();
+    const drive = new DriveFixture(); drive.addRoot();
+    vi.stubGlobal('fetch', drive.fetch);
+    try {
+      const response = await request('/api/workspace-backup/begin', envFor(fixture), 'route-owner-1', {
+        method: 'POST', body: JSON.stringify({ id: crypto.randomUUID(), rootId: ROOT, expectedRevision: 0,
+          sourceRevision: '0'.repeat(64), legacyStamp: '0'.repeat(64), fileCount: 1, sourceUpdatedAt: now() }),
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: 'backup_snapshot_empty' });
+      expect(drive.fetch.mock.calls.some(([url]) => String(url).includes('www.googleapis.com'))).toBe(false);
+      expect(fixture.sqlite.prepare('SELECT * FROM drive_backup_operations').all()).toEqual([]);
+    } finally { fixture.sqlite.close(); }
+  });
+
+  test('rejects an empty candidate from an old client without advancing the existing head', async () => {
+    const fixture = createDriveSnapshotTestDatabase();
+    const drive = new DriveFixture(); drive.addRoot();
+    vi.stubGlobal('fetch', drive.fetch);
+    try {
+      const head = await makeCommitted(fixture, crypto.randomUUID(), 0);
+      const id = crypto.randomUUID();
+      await beginSnapshot(fixture.db, OWNER_ONE, { id, rootId: ROOT, expectedRevision: 1,
+        sourceRevision: '1'.repeat(64), legacyStamp: await sha256Hex('[]'), fileCount: 1, sourceUpdatedAt: now() },
+      [`folder-${id}`, `manifest-${id}`], now());
+      const response = await request(`/api/workspace-backup/operations/${id}/commit`, envFor(fixture), 'route-owner-1', { method: 'POST' });
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: 'backup_snapshot_empty' });
+      expect((await readSnapshotOperation(fixture.db, OWNER_ONE, id))?.status).toBe('uploading');
+      expect(fixture.sqlite.prepare('SELECT revision, head_id FROM drive_backup_sets').get())
+        .toEqual({ revision: 1, head_id: head.id });
+      expect(drive.trashCalls).toEqual([]);
+    } finally { fixture.sqlite.close(); }
+  });
+
   test('returns a sanitized 422 for incomplete restore data and does not touch session/outbox SQL', async () => {
     const fixture = createDriveSnapshotTestDatabase();
     const drive = new DriveFixture(); drive.addRoot();

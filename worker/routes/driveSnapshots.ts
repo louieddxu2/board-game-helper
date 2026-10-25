@@ -54,6 +54,7 @@ const beginSchema = z.object({
 routes.post(`${prefix}/begin`, async c => {
   const input = beginSchema.safeParse(await c.req.json().catch(() => null));
   if (!input.success) return c.json({ error: 'backup_request_invalid' }, 400);
+  if (input.data.fileCount < 2) throw new SnapshotProtocolError('backup_snapshot_empty', 422);
   const { subject, token } = c.get('driveAuth');
   const db = getDatabase(c);
   const existing = await readSnapshotOperation(db, subject, input.data.id);
@@ -85,6 +86,8 @@ routes.post(`${prefix}/operations/:id/commit`, async c => {
     if (op.status !== 'committed') throw new SnapshotProtocolError('backup_snapshot_unavailable');
     return c.json(op);
   }
+  // Also reject empty candidates reserved by clients deployed before this guard.
+  if (op.fileIds.length < 2) throw new SnapshotProtocolError('backup_snapshot_empty', 422);
   const rootMetadata = await assertSnapshotRoot(snapshotDriveApi(token), set.root_id);
   if (await snapshotLegacyStamp(snapshotDriveApi(token), set.root_id, rootMetadata) !== op.legacyStamp) throw new SnapshotProtocolError('backup_legacy_changed');
   const inventory = await inspectSnapshotFiles(snapshotDriveApi(token), set.root_id, op);
