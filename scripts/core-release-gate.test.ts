@@ -28,6 +28,9 @@ describe('core release gate wiring', () => {
     const runner = readFileSync('scripts/run-core-e2e.mjs', 'utf8');
     expect(runner).toContain("execSync('npm run build'");
     expect(runner).toContain("@playwright', 'test', 'cli.js");
+    expect(runner).toContain('playwright.workspace-startup.config.ts');
+    expect(runner).toContain('tests/workspace-startup/backup-progress.spec.ts');
+    expect(runner).toContain('tests/workspace-startup/backup-restore.spec.ts');
     expect(packageJson.scripts['test:core:prepare']).toContain('prepare-core-test');
     expect(packageJson.scripts['test:migrations:fresh']).toContain('CORE_TEST_DATABASE_MODE=fresh');
   });

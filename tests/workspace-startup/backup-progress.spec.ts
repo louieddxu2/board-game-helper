@@ -22,7 +22,8 @@ const setup = async (page: Page) => {
       if (file.appProperties?.backupKind === 'manifest') manifestUploaded = true;
     },
     onList: async (query, files) => {
-      if (!manifestUploaded || !query.includes(' in parents') || !files.some(file => file.appProperties?.backupKind === 'manifest')) return;
+      if (!manifestUploaded || !query.includes("key='backupKind' and value='manifest'")
+        || !files.some(file => file.appProperties?.backupKind === 'manifest')) return;
       await new Promise<void>(resolve => {
         heldConfirmation = { finish(missing) { manifestUploaded = false; if (missing) files.splice(0); resolve(); } };
         confirmationStarted();
@@ -30,7 +31,7 @@ const setup = async (page: Page) => {
     },
   });
   await connectFakeDrive(page, fixture);
-  await page.goto(`${site.origin}/privacy`);
+  await page.goto(`${site.origin}/__workspace-storage-seed`);
   await seed(page, 2, 250, 2, 0);
   const longName = '收藏表格與很長的名稱'.repeat(8);
   await page.evaluate(async longName => {
@@ -121,7 +122,7 @@ test('keeps the previous completion record when the uploaded backup cannot be co
   await backup.finishTable();
   await expect(backup.dialog.getByRole('status')).toContainText('正在驗證並完成備份');
   await backup.finishConfirmation(true);
-  await expect(backup.dialog.getByRole('alert')).toHaveText('備份檔尚未完整上傳，請重試');
+  await expect(backup.dialog.getByRole('alert')).toHaveText('雲端備份已在其他裝置變更，請先載入雲端版本或明確選擇覆蓋');
   await expect(backup.dialog.getByRole('progressbar')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('board-game-helper-google-drive-backup'))).toBe(previousRecord);
   expect(backup.errors).toEqual([]);

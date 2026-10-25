@@ -40,3 +40,13 @@ test('rejects site sessions, D1 types, and direct site data requests anywhere in
   const violations = auditWorkspaceBoundary(root).join('\n');
   expect(violations).toContain('SessionContext'); expect(violations).toContain('D1 types'); expect(violations).toContain('/api/session');
 });
+
+test.each(['KVNamespace', 'DurableObjectNamespace', 'DurableObjectStorage', 'DurableObjectState'])('rejects a server storage substitute: %s', name => {
+  const root = fixture({ 'src/workspace/feature.ts': `interface ${name} {};` });
+  expect(auditWorkspaceBoundary(root).join('\n')).toContain('forbidden in Workspace');
+});
+
+test('rejects absolute website API URLs while allowing direct Google Drive requests', () => {
+  const root = fixture({ 'src/workspace/feature.ts': "fetch('https://example.test/api/workspace-backup/state'); fetch('https://www.googleapis.com/drive/v3/files');" });
+  expect(auditWorkspaceBoundary(root)).toEqual([expect.stringContaining('https://example.test/api/workspace-backup/state')]);
+});

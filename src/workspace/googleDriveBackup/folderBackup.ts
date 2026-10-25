@@ -81,7 +81,9 @@ export interface FolderBackupRunOptions {
   complete?: boolean;
   expectedRemoteFileId?: string | null;
   expectedRemoteModifiedTime?: string | null;
+  /** Explicitly adopt visible Drive branches; never skips the final version check. */
   allowLegacyChange?: boolean;
+  /** Compatibility with previously selected Drive metadata, independent of any server state. */
   expectedLegacyStamp?: string;
 }
 

@@ -1,7 +1,7 @@
 import { DRIVE_SNAPSHOT_KEY, DRIVE_SNAPSHOT_XLSX } from '../../shared/driveSnapshots';
 import { normalizeWorkspace } from '../model';
 import { workspaceStructureChangeRevision, workspaceTableChangeRevision } from '../changeRevisions';
-import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWorkspaceBackupManifestXlsx, importWorkspaceXlsx } from '../spreadsheet';
+import { exportWorkspaceBackupManifestXlsx, exportWorkspaceXlsxAsync, importWorkspaceXlsx } from '../spreadsheet';
 import type { WorkspaceData, WorkspaceTable } from '../types';
 import {
   createGoogleDriveFolderBackup, DRIVE_MANIFEST_FILE_NAME,
@@ -10,7 +10,11 @@ import {
 } from './folderBackup';
 import { FOLDER_MIME, GoogleDriveApi } from './googleDriveApi';
 import { BackupNotFoundError, type GoogleDriveSingleFileBackup } from './singleFileBackup';
-import { createSnapshotJournal, snapshotRevisionDigest } from './snapshotJournal';
+import { createSnapshotJournal } from './snapshotJournal';
+import { cleanSnapshotVersions, listSnapshotManifests, readSnapshotManifest, SNAPSHOT_METADATA_FIELDS } from './snapshotStorage';
+import { DRIVE_BACKUP_FORK_COUNT_PROPERTY, DRIVE_ADOPTED_LEGACY_ID_PROPERTY, DRIVE_ADOPTED_LEGACY_TIME_PROPERTY,
+  adoptedDriveLegacyBaseline, driveLegacyBaselineForBackup, findDriveManifestHeads } from './manifestHistory';
+import { manifestParentProperties } from './manifestParents';
 import type { BackupMetadata, BackupReceipt, DriveFile } from './types';
 
 export const SNAPSHOT_REVISION_PROPERTY = 'snapshotRevision';
@@ -19,7 +23,6 @@ const operationProperty = 'snapshotId';
 type Receipt = BackupReceipt & { manifest: DriveWorkspaceManifest; cleanupWarning?: string };
 
 export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
-  coordinator?: any;
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   legacySingle?: Pick<GoogleDriveSingleFileBackup, 'findRemoteFile' | 'restore'>;
 }): GoogleDriveFolderBackup => {
@@ -32,6 +35,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   const acknowledged = new Set<string>();
   let cachedRootId: string | null = null;
   let pending: Promise<Receipt> | null = null;
+  let maintenance: Promise<void> | null = null;
 
   const tags = (kind: string, id?: string, localId?: string) => ({
     backupKey: DRIVE_SNAPSHOT_KEY,
@@ -52,33 +56,33 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
   const ensureFolder = async () => {
     if (cachedRootId) return cachedRootId;
     const parent = await api.ensureFolderPath(options.folderPath);
-    const candidates = await api.findFilesByAppProperty({ key: 'backupKey', value: DRIVE_SNAPSHOT_KEY, parentId: parent, mimeType: FOLDER_MIME });
+    const candidates = await api.findFilesByAppProperty({ key: 'backupKey', value: DRIVE_SNAPSHOT_KEY, parentId: parent, mimeType: FOLDER_MIME, fields: SNAPSHOT_METADATA_FIELDS });
     for (const candidate of candidates) {
-      if (candidate.appProperties?.backupKind === 'root' && !candidate.trashed) return (cachedRootId = candidate.id);
+      if (candidate.appProperties?.backupKind === 'root' && candidate.ownedByMe === true && !candidate.trashed) return (cachedRootId = candidate.id);
     }
     const created = await api.createFolder('新版快照', parent, tags('root'));
     return (cachedRootId = created.id);
   };
 
   const findManifests = async (rootId: string) => {
-    const candidates = await api.findFilesByAppProperty({
-      key: 'backupKind',
-      value: 'manifest',
-      mimeType: DRIVE_SNAPSHOT_XLSX,
-    });
-    const valid = candidates.filter(file => file.appProperties?.backupKey === DRIVE_SNAPSHOT_KEY && !file.trashed
-      && file.parents?.length === 1 && file.parents[0] !== rootId);
+    const valid = await listSnapshotManifests(api, rootId);
     valid.sort((a, b) => (Number(b.appProperties?.[SNAPSHOT_REVISION_PROPERTY] ?? 0)) - (Number(a.appProperties?.[SNAPSHOT_REVISION_PROPERTY] ?? 0))
       || (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? '')
       || (b.createdTime ?? '').localeCompare(a.createdTime ?? ''));
     return valid;
   };
+  const selectedHead = (files: DriveFile[]): DriveFile | null => {
+    const heads = findDriveManifestHeads(files);
+    return heads[0] ? { ...heads[0], appProperties: { ...heads[0].appProperties, [DRIVE_BACKUP_FORK_COUNT_PROPERTY]: String(heads.length) } } : null;
+  };
+  const headSignature = (files: DriveFile[]) => JSON.stringify(findDriveManifestHeads(files).map(file => [file.id, file.modifiedTime]).sort());
 
   const findRemoteFile = async () => {
     const root = await ensureFolder();
     const manifests = await findManifests(root);
-    if (manifests[0]) {
-      const file = manifests[0];
+    const head = selectedHead(manifests);
+    if (head) {
+      const file = head;
       const accountKey = `drive:${root}`;
       const saved = journal.read(accountKey);
       if (saved && file.appProperties?.[operationProperty] === saved.id && !acknowledged.has(saved.id)) {
@@ -93,18 +97,16 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const root = await ensureFolder();
     const manifests = await findManifests(root);
     const legacyBackups = await legacy.listRemoteBackups();
-    return [...manifests, ...legacyBackups];
+    const head = selectedHead(manifests);
+    return [...(head ? [head, ...manifests.filter(file => file.id !== head.id)] : manifests), ...legacyBackups];
   };
 
-  const cleanObsoleteVersions = async (root: string, manifests: DriveFile[]) => {
-    if (!options.retainedVersions || manifests.length < options.retainedVersions) return;
-    const obsolete = manifests.slice(options.retainedVersions - 1);
-    for (const item of obsolete) {
-      const folderId = item.parents?.[0];
-      if (folderId && folderId !== root) {
-        try { await api.trashFile(folderId); } catch { /* ignore */ }
-      }
-    }
+  const maintain = (known?: { root: string; manifests: DriveFile[] }) => {
+    if (!maintenance) maintenance = (async () => {
+      const root = known?.root ?? await ensureFolder();
+      await cleanSnapshotVersions(api, root, known?.manifests ?? await findManifests(root), options.retainedVersions);
+    })().finally(() => { maintenance = null; });
+    return maintenance;
   };
 
   const restore = async (selected?: DriveFile): Promise<WorkspaceData> => {
@@ -119,19 +121,26 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     if (manifestFile.appProperties?.backupKey !== DRIVE_SNAPSHOT_KEY) {
       return legacy.restore(manifestFile);
     }
-    const blob = await api.downloadBlob(manifestFile.id);
-    const manifest = await importWorkspaceBackupManifestXlsx(blob);
+    if (selected) {
+      const root = await ensureFolder();
+      const current = (await findManifests(root)).find(file => file.id === selected.id);
+      if (!current || (selected.modifiedTime && selected.modifiedTime !== current.modifiedTime)) {
+        throw new Error('所選備份已有變更，請重新選擇');
+      }
+      manifestFile = current;
+    }
+    const manifest = await readSnapshotManifest(api, manifestFile);
     const tables: WorkspaceTable[] = [];
     for (const ref of manifest.tables) {
       const tableBlob = await api.downloadBlob(ref.driveFileId);
       const imported = await importWorkspaceXlsx(tableBlob, { preserveIds: true });
-      if (!imported.table) throw new Error(`雲端表格格式或識別不一致：${ref.name}`);
+      if (!imported.table || imported.table.id !== ref.id) throw new Error(`雲端表格格式或識別不一致：${ref.name}`);
       tables.push(imported.table);
     }
     return normalizeWorkspace({
       version: 1,
       structureRevision: manifest.structureRevision,
-      nodes: manifest.nodes as any,
+      nodes: manifest.nodes,
       tables,
       activeNodeId: manifest.activeNodeId,
       bottomNavigationTableIds: manifest.bottomNavigationTableIds,
@@ -149,7 +158,13 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const root = await ensureFolder();
     const accountKey = `drive:${root}`;
     const manifests = await findManifests(root);
-    const previous = manifests[0] ?? await legacyFile();
+    const heads = findDriveManifestHeads(manifests);
+    const previous = selectedHead(manifests) ?? await legacyFile();
+
+    if ((heads.length > 1 && !run.allowLegacyChange)
+      || (run.expectedLegacyStamp && previous?.appProperties?.legacyStamp !== run.expectedLegacyStamp)) {
+      throw new RemoteBackupConflictError(previous);
+    }
 
     // Conflict detection before creating folders or uploading files
     if ('expectedRemoteFileId' in run && (previous?.id ?? null) !== (run.expectedRemoteFileId ?? null)) {
@@ -160,14 +175,8 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     }
 
     const snapshotId = crypto.randomUUID();
-    const sourceRevision = await snapshotRevisionDigest(JSON.stringify({
-      structure: workspaceStructureChangeRevision(data),
-      nodes: data.nodes,
-      active: data.activeNodeId,
-      navigation: data.bottomNavigationTableIds,
-      tables: summaries.map(table => [table.id, table.name, table.updatedAt, workspaceTableChangeRevision(table)]),
-    }));
-    journal.write(accountKey, { id: snapshotId, sourceRevision });
+    // The local journal identifies this upload; no coordinator revision digest is needed.
+    journal.write(accountKey, { id: snapshotId });
 
     const sourceUpdatedAt = Number(metadata.sourceUpdatedAt ?? Math.max(data.updatedAt ?? 0, ...summaries.map(table => table.updatedAt)));
     const snapshotFolder = await api.createFolder(`備份-${snapshotId}`, root, tags('snapshot', snapshotId));
@@ -217,6 +226,14 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       report('table-uploaded', summary.name);
     }
 
+    await run.source?.verify();
+    const beforeCommit = await findManifests(root);
+    if (headSignature(beforeCommit) !== headSignature(manifests)) throw new RemoteBackupConflictError(selectedHead(beforeCommit));
+    if (!heads.length) {
+      const old = await legacyFile();
+      if (old?.id !== previous?.id || old?.modifiedTime !== previous?.modifiedTime) throw new RemoteBackupConflictError(old);
+    }
+    await run.source?.verify();
     report('saving-index');
     const folders = data.nodes.filter(node => node.type === 'folder').map(node => ({ ...node, driveFolderId: '' }));
     const manifest: DriveWorkspaceManifest = {
@@ -236,6 +253,7 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
 
     const previousRevision = Number(previous?.appProperties?.[SNAPSHOT_REVISION_PROPERTY] ?? 0);
     const revision = previousRevision + 1;
+    const baseline = driveLegacyBaselineForBackup(heads, adoptedDriveLegacyBaseline(manifests));
     const uploadedManifest = await api.uploadFile({
       parentId: snapshotFolder.id,
       name: DRIVE_MANIFEST_FILE_NAME,
@@ -246,12 +264,20 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         [SNAPSHOT_REVISION_PROPERTY]: String(revision),
         sourceUpdatedAt: String(sourceUpdatedAt),
         backedUpAt: String(Date.now()),
+        ...manifestParentProperties(heads.map(file => file.id)),
+        ...(baseline ? { [DRIVE_ADOPTED_LEGACY_ID_PROPERTY]: baseline.id,
+          [DRIVE_ADOPTED_LEGACY_TIME_PROPERTY]: new Date(baseline.time).toISOString() } : {}),
       },
     });
 
     report('confirming');
+    const afterCommit = await findManifests(root);
+    const confirmed = selectedHead(afterCommit);
+    if (confirmed?.id !== uploadedManifest.id || Number(confirmed.appProperties?.[DRIVE_BACKUP_FORK_COUNT_PROPERTY]) > 1) {
+      throw new RemoteBackupConflictError(confirmed);
+    }
     receipts.set(uploadedManifest.id, { account: accountKey, id: snapshotId });
-    void cleanObsoleteVersions(root, manifests);
+    void maintain({ root, manifests: afterCommit }).catch(() => undefined);
 
     return {
       file: uploadedManifest,
@@ -283,10 +309,6 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
         receipts.delete(fileId);
       }
     },
-    maintain: async () => {
-      const root = await ensureFolder();
-      const manifests = await findManifests(root);
-      await cleanObsoleteVersions(root, manifests);
-    },
+    maintain: () => maintain(),
   };
 };

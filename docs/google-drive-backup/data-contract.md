@@ -1,4 +1,4 @@
-# Google Drive 備份資料與程式檔案規劃
+# Google Drive v1／v2 歷史資料契約
 
 本文記錄 v1／v2 歷史契約。新版寫入以 [v3 獨立快照契約](snapshot-v3.md) 為準；舊格式僅供相容還原，不由新版清理器刪除。
 
@@ -6,7 +6,7 @@
 
 備份連結資訊與 workspace 資料分開保存。workspace 本身仍由現有 IndexedDB 管理；備份 metadata 以獨立 localStorage key 保存，包含檔案識別、時間與小型修訂標記，不包含 access token 或表格內容。
 
-目前實作的最小資料形狀是：
+以下為舊版資料形狀；現行紀錄另含 IndexedDB `storageIdentity`，以新版契約為準：
 
 ```ts
 interface WorkspaceDriveBackupRecord {
@@ -85,7 +85,7 @@ BoardGameHelper-動態表格備份.zip
 
 `manifest.xlsx` 使用 v1 索引格式；表格 XLSX 依是否包含自動計算使用 v1 或 v2 設定頁。本機 ZIP 的 manifest 保留本機 ID 與階層，不寫入 Google Drive file ID。整個資料庫匯入支援這種 ZIP，也保留單一 Workspace `.xlsx` 的相容讀取路徑。
 
-## 目前程式分層
+## 舊版相容模組
 
 ```text
 src/workspace/googleDriveBackup/
@@ -103,9 +103,9 @@ src/workspace/googleDriveBackup/
 src/pages/WorkspacePage.tsx        # 只在 Drawer 放置備份入口
 ```
 
-Google Drive 備份不新增 Worker route 或 refresh token table；Google client ID 沿用既有 `/api/session` 提供的公開設定，Drive API 由瀏覽器直接呼叫。遊戲頁的外部資源是獨立的 D1 migration，不與 Drive 備份資料混在一起。
+舊版曾從 `/api/session` 取得公開 Client ID，此路徑已停用。現行 Workspace 只從不存取資料庫／session 的 `/api/workspace-config` 取得公開設定，Drive API 由瀏覽器直接呼叫。
 
-如果未來要支援排程備份或背景同步，才需要另開一版設計，重新確認 Worker 保存 refresh token 的安全邊界與 OAuth redirect URI；不能把那套責任混進目前的前端手動備份。
+整個 Workspace 不使用 D1、KV、Durable Objects、網站 session 或伺服器持有的 Google 憑證；本文件的歷史作業標記不適用於目前的新備份流程。
 
 ## 版本與相容性
 

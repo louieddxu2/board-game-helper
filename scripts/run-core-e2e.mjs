@@ -12,6 +12,9 @@ try {
   execSync('npm run build', { cwd: workspaceRoot, stdio: 'inherit', env });
   run(process.execPath, [path.resolve('scripts', 'prepare-core-test.mjs')]);
   run(process.execPath, [path.resolve('node_modules', '@playwright', 'test', 'cli.js'), 'test']);
+  run(process.execPath, [path.resolve('node_modules', '@playwright', 'test', 'cli.js'), 'test',
+    '--config', 'playwright.workspace-startup.config.ts',
+    'tests/workspace-startup/backup-progress.spec.ts', 'tests/workspace-startup/backup-restore.spec.ts']);
 } finally {
   rmSync(path.resolve(workspaceRoot, '.wrangler', stateName), {
     recursive: true,

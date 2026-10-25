@@ -1,7 +1,9 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import type { InMemoryDriveFixture } from '../../src/workspace/googleDriveBackup/backupTestFixture';
 
 export const connectFakeDrive = async (page: Page, fixture: InMemoryDriveFixture) => {
+  // Seed IndexedDB on the same origin without entering any website route or session provider.
+  await page.route('**/__workspace-storage-seed', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Workspace storage fixture</title>' }));
   await page.addInitScript(() => {
     (window as any).google = { accounts: { oauth2: {
       initTokenClient: () => {
@@ -11,8 +13,10 @@ export const connectFakeDrive = async (page: Page, fixture: InMemoryDriveFixture
       revoke: (_token: string, done: () => void) => done(),
     } } };
   });
-  await page.route('**/api/session', route => route.fulfill({ json: { user: null, googleDriveClientId: 'test-client' } }));
-  await page.route('**/api/workspace-config', route => route.fulfill({ json: { googleDriveClientId: 'test-client' } }));
+  await page.route('**/api/**', route => {
+    expect(new URL(route.request().url()).pathname, 'Workspace must not request website sessions or database APIs').toBe('/api/workspace-config');
+    return route.fulfill({ json: { googleDriveClientId: 'test-client' } });
+  });
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS' };
   await page.route('https://www.googleapis.com/**', async route => {
     const request = route.request();

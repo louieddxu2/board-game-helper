@@ -29,11 +29,16 @@ export const auditWorkspaceBoundary = (root = process.cwd()) => {
     }
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     const inspect = node => {
-      if (ts.isIdentifier(node) && /^D1(?:Database|PreparedStatement|Result)$/u.test(node.text)) {
-        violations.push(`${relative}: D1 types and APIs are forbidden in Workspace`);
+      if (ts.isIdentifier(node) && /^(?:D1(?:Database|PreparedStatement|Result)|KVNamespace|DurableObject(?:Namespace|Storage|State))$/u.test(node.text)) {
+        violations.push(`${relative}: D1 types and APIs, KV, and Durable Objects are forbidden in Workspace`);
       }
-      if ((ts.isStringLiteralLike(node) || ts.isTemplateHead(node)) && /^\/api(?:\/|$)/u.test(node.text)) {
-        if (relative !== 'src/workspace/googleDriveBackup/workspaceConfig.ts' || node.text !== '/api/workspace-config') {
+      if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node)) {
+        let pathname = node.text;
+        if (/^https?:\/\//u.test(pathname)) {
+          try { pathname = new URL(pathname).pathname; } catch { /* Incomplete template URLs are checked by their literal path. */ }
+        }
+        if (/^\/api(?:\/|$)/u.test(pathname)
+          && (relative !== 'src/workspace/googleDriveBackup/workspaceConfig.ts' || node.text !== '/api/workspace-config')) {
           violations.push(`${relative}: Workspace cannot request the site's API (${node.text})`);
         }
       }

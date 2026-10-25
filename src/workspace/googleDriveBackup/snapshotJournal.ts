@@ -1,13 +1,13 @@
-interface PendingSnapshot { id: string; sourceRevision: string }
+interface PendingSnapshot { id: string }
 const prefix = 'board-game-helper-drive-snapshot-pending:';
 
-/** This journal contains only operation/revision IDs. Acknowledge after saving the local receipt. */
+/** The local upload identity survives reloads until its backup record is acknowledged. */
 export const createSnapshotJournal = (storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>) => {
   const memory = new Map<string, PendingSnapshot>();
   const read = (account: string): PendingSnapshot | null => {
     try {
       const value = JSON.parse(storage?.getItem(prefix + account) ?? 'null');
-      if (typeof value?.id === 'string' && typeof value.sourceRevision === 'string') return value;
+      if (typeof value?.id === 'string') return { id: value.id };
     } catch { /* The in-memory journal also supports blocked browser storage. */ }
     return memory.get(account) ?? null;
   };
@@ -23,9 +23,4 @@ export const createSnapshotJournal = (storage?: Pick<Storage, 'getItem' | 'setIt
       try { storage?.removeItem(prefix + account); } catch { /* Optional persistence. */ }
     },
   };
-};
-
-export const snapshotRevisionDigest = async (revision: string) => {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(revision));
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 };

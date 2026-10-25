@@ -12,7 +12,7 @@ test('mobile backups stay at three versions and an older version restores to Ind
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   const fixture = createInMemoryDrive();
   await connectFakeDrive(page, fixture);
-  await page.goto(`${site.origin}/privacy`);
+  await page.goto(`${site.origin}/__workspace-storage-seed`);
   await seed(page, 1, 4, 2, 0);
   await page.goto(`${site.origin}/workspace`);
   const drive = page.getByRole('dialog', { name: 'Google Drive 備份' });
