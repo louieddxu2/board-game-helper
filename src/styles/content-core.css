@@ -12,15 +12,16 @@
 .hero .eyebrow { color: var(--yellow); text-align: center; }
 .hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
 .hero-inner { width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+.hero-main { width: 100%; max-width: 760px; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
 .hero-recents { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; text-align: center; }
-.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: 680px; }
+.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
 .recent-game-chips button, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
-.hero-recents a { display: inline-flex; align-items: center; justify-content: center; text-align: center; border: 1px solid rgba(255,255,255,.25); border-radius: 100px; background: rgba(255,255,255,.12); color: white; padding: 6px 14px; font-size: 13px; line-height: 1.2; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 150ms ease, border-color 150ms ease; }
+.hero-recents a { display: inline-flex; align-items: center; justify-content: center; max-width: 100%; min-width: 0; text-align: center; border: 1px solid rgba(255,255,255,.25); border-radius: 100px; background: rgba(255,255,255,.12); color: white; padding: 6px 14px; font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; text-decoration: none; cursor: pointer; white-space: normal; transition: background 150ms ease, border-color 150ms ease; }
 .hero-recents a:hover { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }
 .hero-copy { font-size: 20px; line-height: 1.6; max-width: 620px; color: #dfe8e4; text-align: center; margin-bottom: 40px; }
 .hero-actions { display: flex; gap: 12px; margin: 34px 0 48px; }
@@ -31,6 +32,7 @@
 .button.secondary { background: transparent; border-color: currentColor; color: inherit; }
 .button.danger { background: #a52f23; color: white; }
 .hero-search { width: 100%; max-width: 760px; position: relative; z-index: 2; margin-bottom: 24px; }
+.hero-search-label { display: block; margin: 0 0 8px 4px; color: #dfe8e4; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
 .hero-search label { color: #dfe8e4; }
 .hero-search .search-input { background: white; border-radius: 24px; }
 .hero-search .search-input input { padding: 24px 30px; font-size: 22px; }
@@ -57,6 +59,7 @@
 .create-result-login:hover { background: var(--cream); color: var(--ink); }
 
 .content-section { max-width: 1180px; margin: 0 auto; padding: 90px 24px; }
+.home-discover-section { padding-top: 70px; }
 .content-section + .content-section { padding-top: 20px; }
 .ad-slot { min-height: 34px; display: grid; place-items: center; color: var(--color-text-subtle); background: rgba(255,253,248,.55); border: 1px dashed #c9c3b7; border-radius: 10px; text-align: center; }
 .ad-slot small { min-height: auto; font-size: 10px; letter-spacing: .08em; }
@@ -81,8 +84,8 @@
 .personal-home-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .personal-home-search .search-input { box-shadow: 0 12px 32px rgba(4,22,17,.22); }
 .personal-home-recents { margin-top: 10px; color: #b9c9c3; font-size: 12px; }
-.personal-home-recents > div { display: flex; flex-wrap: wrap; gap: 6px; }
-.personal-home-recents a { display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; min-height: 26px; padding: 4px 10px; line-height: 1.2; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; }
+.personal-home-recents > div { display: flex; flex-wrap: wrap; min-width: 0; gap: 6px; }
+.personal-home-recents a { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; min-height: 26px; padding: 4px 10px; line-height: 1.2; overflow-wrap: anywhere; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; white-space: normal; }
 .personal-home-recents a:hover { background: rgba(255,255,255,.22); }
 .personal-home-content { padding: 38px 0 18px; }
 .personal-home-section { width: 100%; }
@@ -142,7 +145,7 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 /* 第一行：標題 + 屬性 + 編輯按鈕 */
 .rule-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .rule-card-title-group { min-width: 0; flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
-.rule-game-title { font-size: 19px; font-weight: 700; line-height: 1.35; color: var(--ink); margin: 0; }
+.rule-game-title { min-width: 0; font-size: 19px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; color: var(--ink); margin: 0; }
 .rule-attributes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .attr-chip { display: inline-flex; align-items: center; min-height: 0; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 .attr-chip:where(button) { cursor: pointer; }

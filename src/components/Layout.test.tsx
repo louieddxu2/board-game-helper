@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { Layout } from './Layout';
@@ -12,6 +13,45 @@ vi.mock('./ScrollToTop', () => ({ ScrollToTop: () => null }));
 
 describe('Layout navigation', () => {
   afterEach(cleanup);
+
+  test.each([
+    ['/', '/add'],
+    ['/games/seize-the-bean', '/add?game=seize-the-bean'],
+    ['/account', '/add'],
+  ])('keeps the mobile navigation focused on actions at %s', (path, recordHref) => {
+    render(<MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="*" element={<Outlet />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+
+    const mobileNav = document.querySelector('.mobile-nav');
+    expect(mobileNav).toBeInTheDocument();
+    expect(within(mobileNav as HTMLElement).getByRole('button', { name: /搜尋/ })).toBeInTheDocument();
+    expect(within(mobileNav as HTMLElement).getByRole('link', { name: /記錄/ })).toHaveAttribute('href', recordHref);
+    expect(within(mobileNav as HTMLElement).getByRole('link', { name: /帳號/ })).toBeInTheDocument();
+    expect(within(mobileNav as HTMLElement).queryByRole('link', { name: /首頁|探索/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '玩錯的桌遊規則首頁' })).toBeInTheDocument();
+  });
+
+  test('returns to the home route when the top-left brand is clicked', async () => {
+    const user = userEvent.setup();
+
+    render(<MemoryRouter initialEntries={['/account']}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<h1>首頁內容</h1>} />
+          <Route path="/account" element={<div>帳號內容</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+
+    await user.click(screen.getByRole('link', { name: '玩錯的桌遊規則首頁' }));
+
+    expect(await screen.findByRole('heading', { name: '首頁內容' })).toBeInTheDocument();
+  });
 
   test('does not expose the local Workspace from the site navigation', () => {
     render(<MemoryRouter initialEntries={['/']}>

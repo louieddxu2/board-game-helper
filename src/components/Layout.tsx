@@ -84,7 +84,6 @@ export const Layout = () => {
     </header>
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">
-      <NavLink to="/" end><span aria-hidden="true">⌂</span><small>探索</small></NavLink>
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true">⌕</span><small>搜尋</small></button>
       <NavLink to={addRuleHref} className={currentGameIdentifier ? 'mobile-primary game-page-primary' : 'mobile-primary'}><span aria-hidden="true">＋{!user && <FaintRedLock />}</span><small>記錄{user && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
       {isAdmin && <NavLink to="/review"><span aria-hidden="true">校</span><small>校稿</small></NavLink>}

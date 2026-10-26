@@ -197,7 +197,10 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <PwaInstallButton />
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
-        <div className="hero-search" id="home-search"><GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} /></div>
+        <div className="hero-search" id="home-search">
+          <span className="hero-search-label">查詢玩錯規則</span>
+          <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
+        </div>
         {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
       </div>
       </div>
@@ -206,7 +209,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <div><small>未完成草稿</small><strong>{draft.game?.displayName ?? '尚未選擇遊戲'}・{draft.rules.length} 個輸入格</strong></div>
       <Link to="/add">繼續記錄 →</Link>
     </section>}
-    <section id="discover" className="content-section">
+    <section id="discover" className="content-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       <div className="rule-grid">
         {displayedFeaturedRules.map((rule) =>
