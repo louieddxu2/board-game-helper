@@ -300,12 +300,18 @@ describe('useTableGestures semantic touch taps', () => {
     gesture.tap();
     const click = () => new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 140, clientY: 120 });
 
+    const compatibilityMouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1, clientX: 140, clientY: 120 });
+    backdrop.dispatchEvent(compatibilityMouseDown);
+    expect(compatibilityMouseDown.defaultPrevented).toBe(true);
     const compatibilityClick = click();
     backdrop.dispatchEvent(compatibilityClick);
     expect(compatibilityClick.defaultPrevented).toBe(true);
     expect(closeEditor).not.toHaveBeenCalled();
 
     backdrop.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const freshMouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1, clientX: 140, clientY: 120 });
+    backdrop.dispatchEvent(freshMouseDown);
+    expect(freshMouseDown.defaultPrevented).toBe(false);
     backdrop.dispatchEvent(click());
     expect(closeEditor).toHaveBeenCalledTimes(1);
   });

@@ -6,6 +6,8 @@ Classify layout separately from interaction. Use browser evidence only when it a
 
 涉及滑動、切頁或彈窗的測試，應驗證畫面可操作後的首次原生輸入立即且只生效一次，不以額外等待或重試掩蓋漏點。發生漏點時先追蹤事件傳遞、命中目標與狀態清理，修正時保留滑動、縮放、長按與取消的防誤觸。
 
+輸入框須用手機原生 tap 與桌面 click 驗證開窗聚焦、進入欄位全選及首字直接取代原值；須涵蓋觸控補發的滑鼠事件，不以 focus/select 呼叫紀錄或 fill 取代操作驗證。
+
 修改 OAuth 或其他前後端契約時，至少以實際前端設定／請求連接實際後端驗證做回歸測試；第三方 mock 不得補出該請求與權限未保證的欄位，並須涵蓋拒絕與重試邊界。分開回報模擬測試、正式站健康檢查與真實第三方驗收；Drive 範例見 `docs/google-drive-backup/snapshot-v3.md`。
 
 # Contracts

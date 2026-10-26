@@ -69,19 +69,21 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
 
   const suppressHandledTouchClick = (x: number, y: number) => {
     suppressNextTableClick(500, { x, y });
-    // Opening the editor on pointerup can retarget the compatibility click to
-    // its backdrop. Catch only this tap's click, even outside the viewport.
+    // Opening on pointerup retargets compatibility mouse events to the dialog.
+    // Its mousedown must not blur the editor before we consume the click.
     const consumeClick = (click: MouseEvent) => {
       const pointerType = (click as MouseEvent & { pointerType?: string }).pointerType;
       if (click.detail === 0 || (pointerType && pointerType !== 'touch')
         || Math.hypot(click.clientX - x, click.clientY - y) > 12) return;
       click.preventDefault();
       click.stopImmediatePropagation();
-      clearSuppressedTableClick();
+      if (click.type === 'click') clearSuppressedTableClick();
     };
+    document.addEventListener('mousedown', consumeClick, true);
     document.addEventListener('click', consumeClick, true);
     document.addEventListener('pointerdown', clearSuppressedTableClick, true);
     handledTouchClickCleanup.current = () => {
+      document.removeEventListener('mousedown', consumeClick, true);
       document.removeEventListener('click', consumeClick, true);
       document.removeEventListener('pointerdown', clearSuppressedTableClick, true);
     };
