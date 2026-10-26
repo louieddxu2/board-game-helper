@@ -1,6 +1,6 @@
 # Workflow
 
-GPT-6 Astra owns scope, integration, review, commits, and releases. Keep one implementation writer active. Choose a specialist role only after delegation is justified by the global policy.
+GPT-6 Astra owns scope, integration, review, commits, and releases. Keep one implementation writer active. Use only Luna-based subagents, and only when delegation is justified by the global policy.
 
 Classify layout separately from interaction. Use browser evidence only when it answers the question; use the target mobile viewport for mobile geometry or touch work. Honor skipped verification for low-risk reversible work. Keep validation proportional.
 
