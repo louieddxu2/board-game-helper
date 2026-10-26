@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { GamePage } from './GamePage';
 import { uiHistory } from '../workspace/uiHistory';
+import type { SessionUser } from '../shared/types';
 
 const mocks = vi.hoisted(() => ({
   game: vi.fn(),
@@ -11,14 +12,22 @@ const mocks = vi.hoisted(() => ({
   tags: vi.fn(),
   hydrateGameTags: vi.fn(),
   hydrateRuleTags: vi.fn(),
+  user: null as SessionUser | null,
   canEdit: false,
+  isAdmin: false,
   createGameExternalResource: vi.fn(),
   deleteGameExternalResource: vi.fn(),
   invalidateGame: vi.fn(),
+  favoriteStatus: vi.fn(),
+  addFavorite: vi.fn(),
+  removeFavorite: vi.fn(),
+  markFavoriteSeen: vi.fn(),
+  recordView: vi.fn(),
+  ruleImportance: vi.fn(),
 }));
 
 vi.mock('../context/SessionContext', () => ({
-  useSession: () => ({ user: null, canEdit: mocks.canEdit, isAdmin: false }),
+  useSession: () => ({ user: mocks.user, canEdit: mocks.canEdit, isAdmin: mocks.isAdmin }),
 }));
 vi.mock('../context/ToastContext', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../context/ToastContext')>();
@@ -27,7 +36,19 @@ vi.mock('../context/ToastContext', async (importOriginal) => {
 vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
 vi.mock('../lib/api', () => ({
   ApiError: class ApiError extends Error {},
-  api: { game: mocks.game, ruleFresh: mocks.ruleFresh, tags: mocks.tags, createGameExternalResource: mocks.createGameExternalResource, deleteGameExternalResource: mocks.deleteGameExternalResource },
+  api: {
+    game: mocks.game,
+    ruleFresh: mocks.ruleFresh,
+    tags: mocks.tags,
+    createGameExternalResource: mocks.createGameExternalResource,
+    deleteGameExternalResource: mocks.deleteGameExternalResource,
+    favoriteStatus: mocks.favoriteStatus,
+    addFavorite: mocks.addFavorite,
+    removeFavorite: mocks.removeFavorite,
+    markFavoriteSeen: mocks.markFavoriteSeen,
+    recordView: mocks.recordView,
+    ruleImportance: mocks.ruleImportance,
+  },
 }));
 vi.mock('../lib/localDb', () => ({ localDb: { invalidateGame: mocks.invalidateGame } }));
 vi.mock('../components/GameSearch', () => ({ clearSearchCache: vi.fn() }));
@@ -49,12 +70,20 @@ describe('GamePage compact rule view', () => {
     uiHistory.dispose();
     window.history.pushState({ idx: (window.history.state?.idx ?? 0) + 1 }, '', '/games/test-game');
     vi.clearAllMocks();
+    mocks.user = null;
     mocks.canEdit = false;
+    mocks.isAdmin = false;
     mocks.game.mockResolvedValue({ game });
     mocks.ruleFresh.mockResolvedValue(game.rules[0]);
     mocks.tags.mockResolvedValue({ tags: [] });
     mocks.hydrateGameTags.mockImplementation(async (value: typeof game) => value);
     mocks.hydrateRuleTags.mockImplementation(async (rules: typeof game.rules) => rules);
+    mocks.favoriteStatus.mockResolvedValue({ favorite: false, favoriteCount: 0 });
+    mocks.addFavorite.mockResolvedValue({ wasFirst: false });
+    mocks.removeFavorite.mockResolvedValue({});
+    mocks.markFavoriteSeen.mockResolvedValue({ ok: true });
+    mocks.recordView.mockResolvedValue({ ok: true });
+    mocks.ruleImportance.mockResolvedValue({ ruleIds: [] });
   });
 
   afterEach(async () => {
@@ -202,6 +231,61 @@ describe('GamePage compact rule view', () => {
     await waitFor(() => expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /清除篩選/ })).not.toBeInTheDocument();
     expect(search).toHaveValue('第一條');
+  });
+
+  test('keeps favorite state visible and ignores a second tap while saving', async () => {
+    const user = userEvent.setup();
+    mocks.user = { id: 'reader-1', maskedEmail: 'r***r@example.com', roles: [] };
+    let resolveAdd!: (value: { wasFirst: boolean }) => void;
+    mocks.addFavorite.mockReturnValue(new Promise((resolve) => { resolveAdd = resolve; }));
+
+    renderGamePage();
+
+    const favorite = await screen.findByRole('button', { name: '收藏遊戲' });
+    expect(favorite).toHaveAttribute('aria-pressed', 'false');
+    await user.click(favorite);
+    await waitFor(() => expect(screen.getByRole('button', { name: '正在處理收藏' })).toBeDisabled());
+    expect(screen.getByText('處理中…')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '正在處理收藏' }));
+    expect(mocks.addFavorite).toHaveBeenCalledOnce();
+
+    resolveAdd({ wasFirst: false });
+    await waitFor(() => expect(screen.getByRole('button', { name: '取消收藏' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByText('★ 已收藏')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '取消收藏' }));
+    await waitFor(() => expect(mocks.removeFavorite).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('button', { name: '收藏遊戲' })).toHaveAttribute('aria-pressed', 'false'));
+  });
+
+  test('does not expose edit or review actions to a regular non-owner', async () => {
+    mocks.user = { id: 'reader-1', maskedEmail: 'r***r@example.com', roles: [] };
+    mocks.game.mockResolvedValue({ game: { ...game, reviewStatus: 'pending', renameOwnerId: 'another-user' } });
+
+    renderGamePage();
+
+    await screen.findByRole('button', { name: '收藏遊戲' });
+    expect(screen.queryByRole('button', { name: '編輯遊戲名稱' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '審核遊戲' })).not.toBeInTheDocument();
+  });
+
+  test('keeps editor pending-game actions and locked-name state distinct', async () => {
+    mocks.user = { id: 'editor-1', maskedEmail: 'e***r@example.com', roles: ['editor'] };
+    mocks.canEdit = true;
+    mocks.game.mockResolvedValue({ game: { ...game, reviewStatus: 'pending', renameOwnerId: 'another-user' } });
+
+    const { unmount } = renderGamePage();
+    await screen.findByRole('button', { name: '編輯遊戲名稱' });
+    expect(screen.getByRole('button', { name: '審核遊戲' })).toBeInTheDocument();
+    unmount();
+
+    mocks.game.mockResolvedValue({ game: { ...game, reviewStatus: 'not_required', renameOwnerId: 'another-user', renameLocked: true } });
+    renderGamePage();
+    await screen.findByRole('button', { name: '收藏遊戲' });
+    expect(screen.getByLabelText('遊戲名稱已鎖定')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '編輯遊戲名稱' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '審核遊戲' })).not.toBeInTheDocument();
   });
 
   test('keeps external resource creation in a separate modal and closes only the top layer from browser back', async () => {

@@ -62,14 +62,20 @@
   .personal-home-empty p { font-size: 12px; line-height: 1.5; }
   .personal-home-empty .button { grid-column: 1 / -1; min-height: 40px; }
   .draft-banner { margin: 14px; }
-  .game-hero { align-items: start; gap: 20px; }
-  .game-hero .button { padding: 0 14px; white-space: nowrap; }
-  .game-hero-meta { align-items: flex-start; }
-  .game-hero-actions { width: 100%; gap: 8px; }
+  .game-hero { display: grid; grid-template-columns: minmax(0, 1fr) 20vw; align-items: start; column-gap: 8px; }
+  .game-hero-info { min-width: 0; }
+  .game-hero h1 { font-size: clamp(24px, calc((80vw - 40px) / var(--game-title-units)), 30px); line-height: 1.12; overflow-wrap: anywhere; }
+  .game-hero-meta { display: block; min-height: 0; }
+  .game-hero-meta .english-name { margin: 3px 0 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  .game-hero-actions { display: grid; grid-auto-rows: 44px; gap: 5px; width: 20vw; margin: 0; }
+  .game-hero-actions .game-header-action,
+  .game-hero-actions .game-name-locked { box-sizing: border-box; width: 20vw; min-width: 20vw; height: 44px; min-height: 44px; margin: 0; padding: 0 2px; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 1; }
+  .game-hero-actions .game-name-locked { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); text-align: center; }
+  .game-header-action-desktop { display: none; }
+  .game-header-action-mobile { display: inline; }
   .stage-tabs { top: 66px; }
-  .game-page { padding: 44px 16px 100px; }
-  .game-hero { display: grid; }
-  .game-hero-actions .button { width: 100%; }
+  .game-page { padding: 20px 16px 100px; }
+  .game-hero { padding-bottom: 12px; }
   .game-hero-actions .game-add-rule-button { display: none; }
   .mobile-nav .mobile-primary.game-page-primary { background: var(--orange); color: white; font-weight: 900; box-shadow: 0 3px 12px rgba(229, 115, 0, .28); }
   .rule-card, .rule-card-compact { scroll-margin-top: 16px; }
@@ -85,6 +91,7 @@
   .statement-text { font-size: 18px; line-height: 1.75; }
   .mistake .mistake-text, .rule-details-note .details-text { font-size: 16px; line-height: 1.7; }
   .compact-rule-mistake { padding: 3px 5px; }
+  .rule-filters { gap: 8px; padding-top: 14px; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 20px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }

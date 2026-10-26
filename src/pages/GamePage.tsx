@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
 import { clearSearchCache } from '../components/GameSearch';
@@ -16,6 +16,10 @@ import { hydrateGameTags, hydrateRuleTags } from '../lib/tagHydration';
 import type { PersonalHomeGame } from '../shared/types';
 import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
+
+const estimateTitleWidthUnits = (title: string) => Math.max(8, Math.ceil(Array.from(title).reduce((total, character) => (
+  total + (character === ' ' ? 0.35 : character.charCodeAt(0) <= 0x7f ? 0.6 : 1)
+), 0)));
 
 export const GamePage = () => {
   const { identifier = '' } = useParams();
@@ -382,24 +386,25 @@ export const GamePage = () => {
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
   if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
   const addRuleHref = `/add?game=${encodeURIComponent(game.slug)}`;
+  const titleWidthUnits = estimateTitleWidthUnits(game.displayName);
   return <section className="game-page">
     <header className="game-hero">
-      <div className="game-hero-info"><h1>{game.displayName}</h1>
+      <div className="game-hero-info"><h1 style={{ '--game-title-units': titleWidthUnits } as CSSProperties}>{game.displayName}</h1>
         <div className="game-hero-meta">
           {game.englishName && <p className="english-name">{game.englishName}</p>}
-          {user && <button type="button" className={favorite ? 'button favorite-button active' : 'button secondary favorite-button'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} onClick={() => void toggleFavorite()}>
-          {favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}
-          </button>}
         </div>
       </div>
       <div className="inline-actions game-hero-actions">
-        <button type="button" className="button secondary" onClick={() => setExternalResourcesOpen(true)}>外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</button>
+        {user && <button type="button" className={favorite ? 'button favorite-button active game-header-action' : 'button secondary favorite-button game-header-action'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} aria-label={favoriteSaving ? '正在處理收藏' : favorite ? '取消收藏' : '收藏遊戲'} onClick={() => void toggleFavorite()}>
+          <span className="game-header-action-desktop">{favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}</span><span className="game-header-action-mobile" aria-hidden="true">{favoriteSaving ? '處理中' : favorite ? '已收藏' : '收藏'}</span>
+        </button>}
+        <button type="button" className="button secondary game-header-action" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}><span className="game-header-action-desktop">外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</span><span className="game-header-action-mobile" aria-hidden="true">資源</span></button>
         {(user || canEdit) && <>
-          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
+          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary game-header-action" aria-label="編輯遊戲名稱" onClick={() => setEditingGame(true)}><span className="game-header-action-desktop">編輯遊戲名稱</span><span className="game-header-action-mobile" aria-hidden="true">編輯</span></button>}
           {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
-            ? <button type="button" className="button secondary" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
-            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。">遊戲名稱已鎖定</span>}
-            {game.reviewStatus === 'pending' && <button type="button" className="button secondary" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
+            ? <button type="button" className="button secondary game-header-action" aria-label="編輯遊戲名稱" onClick={() => setEditingGame(true)}><span className="game-header-action-desktop">編輯遊戲名稱</span><span className="game-header-action-mobile" aria-hidden="true">編輯</span></button>
+            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定"><span className="game-header-action-desktop">遊戲名稱已鎖定</span><span className="game-header-action-mobile" aria-hidden="true">鎖定</span></span>}
+            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" aria-label="審核遊戲" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}><span className="game-header-action-desktop">審核遊戲</span><span className="game-header-action-mobile" aria-hidden="true">審核</span></button>}</Fragment>}
           {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
         </>}
       </div>
