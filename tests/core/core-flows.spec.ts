@@ -2,6 +2,17 @@ import { expect, test } from '@playwright/test';
 
 test('登入、建立規則、編輯規則與登出皆實際持久化', async ({ page, context }) => {
   const browserErrors: string[] = [];
+  const unexpectedGoogleRequests: string[] = [];
+  // This flow authenticates through the real local-admin endpoint. Keep the
+  // unrelated Google SDK offline: the test client ID is intentionally not real.
+  await page.route('https://accounts.google.com/**', async (route) => {
+    if (route.request().url() === 'https://accounts.google.com/gsi/client') {
+      await route.fulfill({ contentType: 'text/javascript', body: '// Google sign-in is outside this local-admin flow.' });
+      return;
+    }
+    unexpectedGoogleRequests.push(route.request().url());
+    await route.abort('blockedbyclient');
+  });
   page.on('console', (message) => {
     if (message.type() === 'error') browserErrors.push(message.text());
   });
@@ -75,5 +86,6 @@ test('登入、建立規則、編輯規則與登出皆實際持久化', async ({
   expect(signedOut.ok()).toBeTruthy();
   expect((await signedOut.json()).user).toBeNull();
   expect((await context.cookies()).some((cookie) => cookie.name === 'wbr_session')).toBe(false);
+  expect(unexpectedGoogleRequests).toEqual([]);
   expect(browserErrors).toEqual([]);
 });
