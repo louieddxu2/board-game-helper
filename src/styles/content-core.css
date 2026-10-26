@@ -117,9 +117,12 @@
 .rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
 .rule-card-compact { min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; position: relative; box-shadow: 0 2px 8px rgba(23,47,40,.025); scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
 .rule-card-compact:has(.rule-toggle-text:hover) { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
+.compact-expand-hint { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 18px; height: 18px; color: var(--orange); pointer-events: none; }
+.compact-expand-hint svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .rule-toggle-text { cursor: pointer; }
 .rule-toggle-text:focus-visible { outline: 3px solid rgba(233,180,76,.45); outline-offset: 2px; border-radius: 4px; }
-.compact-rule-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; min-width: 0; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.compact-rule-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 7px; min-width: 0; margin-bottom: 6px; padding-right: 24px; color: var(--muted); font-size: 12px; }
+.compact-rule-meta:empty + .compact-rule-correct { padding-right: 24px; }
 .compact-attribute { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--cream); color: var(--green); font: inherit; font-weight: 700; line-height: 1.2; }
 button.compact-attribute { cursor: pointer; }
 button.compact-attribute:hover { border-color: var(--green); background: #e3dccf; }

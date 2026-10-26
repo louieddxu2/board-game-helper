@@ -306,7 +306,7 @@ export const GamePage = () => {
   }, [visibleRules, activeTags, normalizedQuery]);
 
   const hasSpecialOptions = availablePlayerCounts.length > 0 || availableEditions.length > 0;
-  const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0 || Boolean(ruleQuery);
+  const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0;
   useEffect(() => {
     if (expandedRuleId && !visibleRules.some((rule) => rule.id === expandedRuleId)) {
       setExpandedRuleId(null);
@@ -530,7 +530,7 @@ export const GamePage = () => {
           onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined}
         />;
       })}
-      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p><button type="button" className="text-action" onClick={() => { setActiveCategory('all'); setActiveTags([]); setRuleQuery(''); }}>清除篩選</button></div>}
+      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
