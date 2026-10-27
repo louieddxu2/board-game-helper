@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { ApiError } from '../lib/api';
+import { loginReturnTo } from '../lib/loginNavigation';
 
 declare global {
   interface Window {
@@ -24,12 +25,13 @@ export const googleLoginErrorMessage = (caught: unknown) => {
 };
 
 export const LoginPage = () => {
-  const { user, googleClientId, localDevLogin, devLogin, googleLogin } = useSession();
+  const { user, loading, googleClientId, localDevLogin, devLogin, googleLogin } = useSession();
   const buttonRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const returnTo = loginReturnTo(useLocation().search);
   const [error, setError] = useState('');
   useEffect(() => {
-    if (user || !googleClientId || !buttonRef.current) return;
+    if (loading || user || !googleClientId || !buttonRef.current) return;
     const setup = () => {
       const google = window.google;
       const target = buttonRef.current;
@@ -40,7 +42,8 @@ export const LoginPage = () => {
           use_fedcm_for_prompt: false,
           auto_select: false,
           callback: (response) => {
-            void googleLogin(response.credential).then(() => navigate('/account')).catch((caught) => setError(googleLoginErrorMessage(caught)));
+            setError('');
+            void googleLogin(response.credential).then(() => navigate(returnTo, { replace: true })).catch((caught) => setError(googleLoginErrorMessage(caught)));
           },
         });
         google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });
@@ -49,11 +52,17 @@ export const LoginPage = () => {
       }
     };
     const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity]');
-    if (existing) { if (window.google) setup(); else existing.addEventListener('load', setup, { once: true }); return; }
+    if (existing) {
+      if (window.google) setup(); else existing.addEventListener('load', setup, { once: true });
+      return () => existing.removeEventListener('load', setup);
+    }
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.dataset.googleIdentity = 'true'; script.addEventListener('load', setup, { once: true });
     document.head.append(script);
-  }, [googleClientId, googleLogin, navigate]);
+    return () => script.removeEventListener('load', setup);
+  }, [googleClientId, googleLogin, loading, navigate, returnTo, user]);
+  if (loading) return <section className="login-page narrow-page"><h1>正在確認登入狀態…</h1></section>;
+  if (user) return <Navigate to={returnTo} replace />;
   return <section className="login-page narrow-page">
     <p className="eyebrow">帳號</p>
     <h1>登入後可以：</h1>
@@ -68,7 +77,7 @@ export const LoginPage = () => {
       <p className="login-disclaimer">Google 登入僅用來識別身分，本站不會要求存取 Drive、Gmail 等其他權限。登入前請先閱讀本站的 <Link to="/privacy">隱私與資料說明</Link>。</p>
     </div>
     {!googleClientId && !localDevLogin && <p className="muted">Google 登入尚未設定。</p>}
-    {localDevLogin && <button type="button" className="button primary" onClick={() => void devLogin().then(() => navigate('/account')).catch(() => setError('本機登入失敗，請確認 migrations 已套用。'))}>以本機管理員登入</button>}
-    {error && <p className="form-error">{error}</p>}
+    {localDevLogin && <button type="button" className="button primary" onClick={() => { setError(''); void devLogin().then(() => navigate(returnTo, { replace: true })).catch(() => setError('本機登入失敗，請確認 migrations 已套用。')); }}>以本機管理員登入</button>}
+    {error && <p className="form-error" role="alert">{error}</p>}
   </section>;
 };

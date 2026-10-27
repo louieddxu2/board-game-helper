@@ -54,13 +54,13 @@ type GameMergeResponse = {
 
 type GameResponse = { game: GameDetail; rulesComplete?: boolean };
 
-const fetchGame = async (identifier: string, includePrivate: boolean) => {
+const fetchGame = async (identifier: string, includePrivate: boolean, signal: AbortSignal) => {
   const params = new URLSearchParams();
   if (includePrivate) params.set('includePrivate', '1');
   const query = params.size ? `?${params.toString()}` : '';
   const result = await transportResponse<GameResponse>(
     `/api/games/${encodeURIComponent(identifier)}${query}`,
-    undefined,
+    { signal },
     'cache-miss',
   );
   return { ...result.data, offlineFallback: result.response.headers.get('X-Offline-Fallback') === '1' };
@@ -234,7 +234,11 @@ const refreshGame = (identifier: string, includePrivate: boolean): Promise<{ gam
   const existing = gameRefreshRequests.get(key);
   if (existing) return existing;
   const request = (async () => {
-    const response = await fetchGame(identifier, includePrivate);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    let response: Awaited<ReturnType<typeof fetchGame>>;
+    try { response = await fetchGame(identifier, includePrivate, controller.signal); }
+    finally { clearTimeout(timeout); }
     const rulesComplete = Boolean(response.rulesComplete);
     if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
     if (!response.offlineFallback) await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);

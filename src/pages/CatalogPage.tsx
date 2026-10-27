@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { clearSearchCache } from '../components/GameSearch';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
@@ -12,6 +12,7 @@ import { effectiveRuleCategories } from '../lib/ruleCategories';
 import zhTWCopy from '../content/zh-TW.json';
 import { ExternalLinkGuard } from '../components/ExternalLinkGuard';
 import { useToast } from '../context/ToastContext';
+import { loginHref } from '../lib/loginNavigation';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -127,6 +128,7 @@ const RulesSheet = ({ game, publicTags, activeTags, onTagsChange, onEdit, canEdi
 };
 
 export const CatalogPage = () => {
+  const location = useLocation();
   const { canEdit, loading, user, isAdmin } = useSession();
   const { showToast } = useToast();
   const canEditRule = (rule: RuleCard) => canUserEditRule(rule, user, isAdmin);
@@ -281,7 +283,7 @@ export const CatalogPage = () => {
   };
 
   if (loading) return <section className="catalog-page"><h1>正在確認權限…</h1></section>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={loginHref(location)} replace />;
 
   return <section className="catalog-page">
     <header className="catalog-header">

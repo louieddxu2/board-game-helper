@@ -16,9 +16,9 @@ describe('ContributionsPage', () => {
 
   test('gives signed-out visitors only the limited-contribution login prompt', () => {
     useSession.mockReturnValue({ user: null, loading: false, canEdit: false });
-    render(<MemoryRouter><ContributionsPage /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/contributions']}><ContributionsPage /></MemoryRouter>);
 
-    expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login?returnTo=%2Fcontributions');
     expect(screen.getByRole('heading', { name: '使用Google帳戶登入後即可填寫' })).toBeInTheDocument();
     expect(screen.getByText('登入後可有限度地建立規則。')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '如何申請完整的編輯/審核權限？' })).not.toBeInTheDocument();

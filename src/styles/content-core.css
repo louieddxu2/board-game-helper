@@ -317,6 +317,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .english-name { font-size: 18px; }
 .game-hero-actions { align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 0; }
 .game-header-action-mobile { display: none; }
+.game-load-error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
+.game-load-error p { flex: 1; margin: 0; }
+.game-load-error .button { min-height: 44px; padding: 6px 12px; font-size: 13px; }
 .stage-tabs { display: flex; gap: 7px; overflow-x: auto; padding: 25px 0; position: sticky; top: 78px; background: rgba(246,243,235,.94); backdrop-filter: blur(10px); z-index: 5; }
 .stage-tabs button { flex: none; border: 1px solid var(--line); border-radius: 100px; padding: 9px 13px; background: var(--white); color: var(--ink); cursor: pointer; }
 .stage-tabs button.active { background: var(--green); color: white; border-color: var(--green); }

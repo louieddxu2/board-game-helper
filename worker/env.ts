@@ -21,6 +21,7 @@ export interface RateLimitBinding {
 }
 
 export interface Env {
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   DB: D1Database;
   PUBLIC_RATE_LIMITER: RateLimitBinding;
   WRITE_RATE_LIMITER: RateLimitBinding;

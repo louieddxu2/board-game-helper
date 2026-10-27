@@ -22,8 +22,10 @@ import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
 import { attributesRoutes } from './routes/attributes';
+import { gamePreviewRoutes } from './routes/gamePreview';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
+app.route('/', gamePreviewRoutes);
 
 // Public OAuth client configuration is independent of website sessions and D1 availability.
 app.get('/api/workspace-config', c => {

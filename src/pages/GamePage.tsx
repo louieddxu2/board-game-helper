@@ -12,10 +12,12 @@ import { localDb } from '../lib/localDb';
 import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
-import { hydrateGameTags, hydrateRuleTags } from '../lib/tagHydration';
+import { hydrateRuleTags } from '../lib/tagHydration';
 import type { PersonalHomeGame } from '../shared/types';
-import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type GameDetail, type RuleCard as RuleCardType, type RuleCategory, type TagSummary } from '../shared/types';
+import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type RuleCard as RuleCardType, type RuleCategory, type TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
+import { useGameDetail } from './useGameDetail';
+import { SITE_TITLE } from '../shared/gamePreview';
 
 const estimateTitleWidthUnits = (title: string) => Math.max(8, Math.ceil(Array.from(title).reduce((total, character) => (
   total + (character === ' ' ? 0.35 : character.charCodeAt(0) <= 0x7f ? 0.6 : 1)
@@ -31,9 +33,8 @@ export const GamePage = () => {
     const category = new URLSearchParams(location.search).get('category');
     return RULE_CATEGORIES.includes(category as RuleCategory) ? category as RuleCategory : 'all';
   });
-  const [game, setGame] = useState<GameDetail>();
+  const { game, setGame, loading, error: gameError, reload: load } = useGameDetail(identifier, (location.state as { justAdded?: number } | null)?.justAdded);
   const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
   const [externalResourcesOpen, setExternalResourcesOpen] = useState(false);
@@ -120,29 +121,11 @@ export const GamePage = () => {
   };
 
   const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
-  const load = async () => {
-    try {
-      const response = await api.game(identifier, false, (updated) => {
-        void hydrateGameTags(updated.game).then(setGame);
-      });
-      const hydratedGame = await hydrateGameTags(response.game);
-      setGame(hydratedGame);
-    } finally { setLoading(false); }
-  };
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    const justAdded = Boolean((location.state as { justAdded?: number } | null)?.justAdded);
-    const applyUpdated = async (updated: { game: GameDetail }) => {
-      const hydratedGame = await hydrateGameTags(updated.game);
-      if (active) setGame(hydratedGame);
-    };
-    void (justAdded ? localDb.invalidateGame(identifier) : Promise.resolve()).then(() => api.game(identifier, false, (updated) => { void applyUpdated(updated); })).then(async (response) => {
-      const hydratedGame = await hydrateGameTags(response.game);
-      if (active) setGame(hydratedGame);
-    }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [identifier, location.state]);
+    if (!game) return;
+    document.title = `${game.displayName}｜${SITE_TITLE}`;
+    return () => { document.title = SITE_TITLE; };
+  }, [game?.displayName]);
   useEffect(() => {
     setExpandedRuleId(null);
     setEditing(undefined);
@@ -192,7 +175,7 @@ export const GamePage = () => {
         .then(() => localStorage.setItem(storageKey, today))
         .catch(() => undefined);
     }
-  }, [game, user]);
+  }, [game?.id, user?.id]);
   useEffect(() => {
     if (!game || !user) { setFavorite(undefined); return; }
     let active = true;
@@ -384,7 +367,14 @@ export const GamePage = () => {
     }
   };
   if (!game && loading) return <section className="game-page"><header className="game-hero"><div><div className="skeleton-line title" style={{ width: '50%' }} /><div className="skeleton-line medium" /></div></header><div className="game-rules">{Array.from({ length: 4 }, (_, index) => (<div className="skeleton-card" key={index}><div className="skeleton-line title" /><div className="skeleton-line" /><div className="skeleton-line medium" /><div className="skeleton-line short" /></div>))}</div></section>;
-  if (!game) return <section className="narrow-page"><h1>找不到這款遊戲</h1><Link to="/">回首頁搜尋</Link></section>;
+  if (!game) return <section className="narrow-page">
+    <h1>{gameError === 'not-found' ? '找不到這款遊戲' : '暫時無法載入遊戲'}</h1>
+    {gameError !== 'not-found' && <p role="alert">請確認網路連線，或稍後再試。</p>}
+    <div className="inline-actions">
+      {gameError !== 'not-found' && <button type="button" className="button primary" onClick={() => void load()}>重新載入</button>}
+      <Link to="/">回首頁搜尋</Link>
+    </div>
+  </section>;
   const addRuleHref = `/add?game=${encodeURIComponent(game.slug)}`;
   const titleWidthUnits = estimateTitleWidthUnits(game.displayName);
   return <section className="game-page">
@@ -404,11 +394,12 @@ export const GamePage = () => {
           {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
             ? <button type="button" className="button secondary game-header-action" aria-label="編輯遊戲名稱" onClick={() => setEditingGame(true)}><span className="game-header-action-desktop">編輯遊戲名稱</span><span className="game-header-action-mobile" aria-hidden="true">編輯</span></button>
             : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定"><span className="game-header-action-desktop">遊戲名稱已鎖定</span><span className="game-header-action-mobile" aria-hidden="true">鎖定</span></span>}
-            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" aria-label="審核遊戲" onClick={() => void api.reviewGame(game.id).then(async () => { await localDb.invalidateGame(game.id); await load(); }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}><span className="game-header-action-desktop">審核遊戲</span><span className="game-header-action-mobile" aria-hidden="true">審核</span></button>}</Fragment>}
+            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" aria-label="審核遊戲" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}><span className="game-header-action-desktop">審核遊戲</span><span className="game-header-action-mobile" aria-hidden="true">審核</span></button>}</Fragment>}
           {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
         </>}
       </div>
     </header>
+    {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
     <section className="rule-filters" aria-label="篩選規則">
       {/* 第一列：規則分類 (Category Tabs) */}
       <div className="rule-category-filter" role="tablist" aria-label="規則分類">
@@ -538,9 +529,9 @@ export const GamePage = () => {
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
-    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
-    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await localDb.invalidateGame(game.slug); clearSearchCache(); await load(); }} />}
-    {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} onClose={() => setExternalResourcesOpen(false)} onChanged={async () => { await localDb.invalidateGame(game.slug); await load(); }} />}
+    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); clearSearchCache(); await load(); }} />}
+    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); clearSearchCache(); await load(); }} />}
+    {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} onClose={() => setExternalResourcesOpen(false)} onChanged={() => load()} />}
     {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
       onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}
   </section>;

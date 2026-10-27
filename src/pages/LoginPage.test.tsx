@@ -1,23 +1,56 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LoginPage, googleLoginErrorMessage } from './LoginPage';
 import { ApiError } from '../lib/api';
 
-afterEach(cleanup);
+const session = vi.hoisted(() => ({ user: null as object | null, loading: false, googleClientId: '', localDevLogin: false, devLogin: vi.fn(), googleLogin: vi.fn() }));
+beforeEach(() => { session.user = null; session.googleClientId = ''; session.localDevLogin = false; vi.clearAllMocks(); });
+afterEach(() => { cleanup(); delete window.google; document.querySelectorAll('script[data-google-identity]').forEach(script => script.remove()); });
 
 vi.mock('../context/SessionContext', () => ({
-  useSession: () => ({
-    user: null,
-    googleClientId: '',
-    localDevLogin: false,
-    devLogin: vi.fn(),
-    googleLogin: vi.fn(),
-  }),
+  useSession: () => session,
 }));
 
+const Destination = () => { const location = useLocation(); return <h1>{location.pathname}{location.search}{location.hash}</h1>; };
+const renderLogin = (entry: string) => render(<MemoryRouter initialEntries={[entry]}><Routes>
+  <Route path="/login" element={<LoginPage />} /><Route path="*" element={<Destination />} />
+</Routes></MemoryRouter>);
+
 describe('LoginPage', () => {
+  test('returns a local login to the originating game action', async () => {
+    session.localDevLogin = true;
+    session.devLogin.mockResolvedValue(undefined);
+    renderLogin(`/login?${new URLSearchParams({ returnTo: '/add?game=shipyard#draft' })}`);
+    await userEvent.click(screen.getByRole('button', { name: '以本機管理員登入' }));
+    expect(await screen.findByRole('heading', { name: '/add?game=shipyard#draft' })).toBeInTheDocument();
+    expect(session.devLogin).toHaveBeenCalledOnce();
+  });
+
+  test('keeps the return destination after Google rejects a login, then allows retry', async () => {
+    session.googleClientId = 'test-client';
+    session.googleLogin.mockRejectedValueOnce(new ApiError('invalid_google_identity', 401)).mockResolvedValueOnce(undefined);
+    let credentialCallback!: (response: { credential: string }) => void;
+    window.google = { accounts: { id: {
+      initialize: vi.fn(options => { credentialCallback = options.callback; }), renderButton: vi.fn(), prompt: vi.fn(), disableAutoSelect: vi.fn(),
+    } } };
+    const script = document.createElement('script'); script.dataset.googleIdentity = 'true'; document.head.append(script);
+    renderLogin(`/login?${new URLSearchParams({ returnTo: '/catalog?filter=ship' })}`);
+    await act(async () => credentialCallback({ credential: 'rejected-token' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('可驗證的信箱身分');
+    await act(async () => credentialCallback({ credential: 'retry-token' }));
+    expect(await screen.findByRole('heading', { name: '/catalog?filter=ship' })).toBeInTheDocument();
+    expect(session.googleLogin.mock.calls).toEqual([['rejected-token'], ['retry-token']]);
+  });
+
+  test('continues an originating action when already signed in', async () => {
+    session.user = { id: 'signed-in' };
+    renderLogin(`/login?${new URLSearchParams({ returnTo: '/add?game=shipyard' })}`);
+    expect(await screen.findByRole('heading', { name: '/add?game=shipyard' })).toBeInTheDocument();
+  });
+
   test('links to the privacy notice before Google login', () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
 

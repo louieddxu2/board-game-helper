@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { RuleCategoryInput } from '../components/RuleCategoryInput';
 import { useSession } from '../context/SessionContext';
+import { loginHref } from '../lib/loginNavigation';
 import { useConfirm } from '../context/ConfirmContext';
 import { useToast } from '../context/ToastContext';
 import { ApiError, api } from '../lib/api';
@@ -35,6 +36,7 @@ type RuleInput = {
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 export const AddPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user, canEdit, isAdmin, loading } = useSession();
   const { confirm } = useConfirm();
@@ -271,7 +273,7 @@ export const AddPage = () => {
 
   if (!loading && !user) return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1></header>
-    <div className="account-card"><h2 style={{ marginTop: 0 }}>使用Google帳戶登入後即可填寫</h2><p>登入後可有限度地建立規則。</p><Link className="button primary" to="/login">登入</Link></div>
+    <div className="account-card"><h2 style={{ marginTop: 0 }}>使用Google帳戶登入後即可填寫</h2><p>登入後可有限度地建立規則。</p><Link className="button primary" to={loginHref(location)} replace>登入</Link></div>
   </section>;
 
   return <section className="add-page narrow-page">

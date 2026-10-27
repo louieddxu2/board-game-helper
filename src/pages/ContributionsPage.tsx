@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useSession } from '../context/SessionContext';
 import type { ContributionGameSummary, ContributionRuleSummary, ContributionsPayload } from '../shared/types';
 import zhTWCopy from '../content/zh-TW.json';
+import { loginHref } from '../lib/loginNavigation';
 
 const editorApplicationCopy = zhTWCopy.author.editorApplication;
 
@@ -22,6 +23,7 @@ const GameItem = ({ game }: { game: ContributionGameSummary }) => (
 );
 
 export const ContributionsPage = () => {
+  const location = useLocation();
   const { user, loading, canEdit } = useSession();
   const [data, setData] = useState<ContributionsPayload>();
   const [error, setError] = useState('');
@@ -43,7 +45,7 @@ export const ContributionsPage = () => {
     <section className="account-card contribution-login">
       <h2>使用Google帳戶登入後即可填寫</h2>
       <p>登入後可有限度地建立規則。</p>
-      <Link className="button primary" to="/login">登入</Link>
+      <Link className="button primary" to={loginHref(location)} replace>登入</Link>
     </section>
   </section>;
 

@@ -72,8 +72,8 @@ describe('AddPage contribution constraints', () => {
 
   test('shows only a login CTA for visitors who are not signed in', () => {
     mocks.useSession.mockReturnValue({ user: null, canEdit: false, isAdmin: false, loading: false });
-    render(<MemoryRouter><AddPage /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login');
+    render(<MemoryRouter initialEntries={['/add?game=shipyard']}><AddPage /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: '登入' })).toHaveAttribute('href', '/login?returnTo=%2Fadd%3Fgame%3Dshipyard');
     expect(screen.getByRole('heading', { name: '使用Google帳戶登入後即可填寫' })).toBeInTheDocument();
     expect(screen.getByText('登入後可有限度地建立規則。')).toBeInTheDocument();
     expect(screen.queryByText('新增一條規則')).not.toBeInTheDocument();
