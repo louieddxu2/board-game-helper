@@ -280,22 +280,21 @@ export const CatalogPage = () => {
     }
   };
 
-  if (loading) return <section className="catalog-page"><p className="eyebrow">列表</p><h1>正在確認權限…</h1></section>;
+  if (loading) return <section className="catalog-page"><h1>正在確認權限…</h1></section>;
   if (!user) return <Navigate to="/login" replace />;
 
   return <section className="catalog-page">
     <header className="catalog-header">
-      <div>
-        <p className="eyebrow">{canEdit ? 'Editor / Admin' : '已登入帳號'}</p>
+      <div className="catalog-heading">
         <h1>遊戲列表</h1>
+        <span className="catalog-count" role="status">{gameQuery.trim() || onlyPending ? `${filteredGames.length} / ${games.length}` : games.length} 款</span>
       </div>
-      {canEdit && <button type="button" className="button secondary" onClick={() => void syncGames()}>同步目錄</button>}
+      {canEdit && <button type="button" className="button secondary catalog-sync-button" onClick={() => void syncGames()}>同步目錄</button>}
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">
-      <label className="catalog-game-filter">篩選遊戲名稱<input type="search" value={gameQuery} onChange={(event) => setGameQuery(event.target.value)} placeholder="輸入中文或英文名稱" /></label>
-      {canEdit && <label className="checkbox-row"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} />只顯示待審核內容</label>}
-      <strong>{gameQuery.trim() ? `${filteredGames.length} / ${games.length}` : games.length} 款遊戲</strong>
+      <label className="catalog-game-filter"><span className="sr-only">篩選遊戲名稱</span><input type="search" value={gameQuery} onChange={(event) => setGameQuery(event.target.value)} placeholder="篩選遊戲名稱（中／英文）" /></label>
+      {canEdit && <label className="checkbox-row"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} />只看待審核</label>}
     </div>
     <div className="catalog-sheet-scroll">
       <table className="catalog-table">

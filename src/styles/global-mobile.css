@@ -151,10 +151,11 @@
   .account-header .button { width: 100%; }
   .account-card { padding: 16px; }
   .account-section-heading h2 { font-size: 21px; }
-  .catalog-page { padding: 42px 14px 110px; }
-  .catalog-header { display: grid; gap: 18px; }
-  .catalog-header .button { width: 100%; }
-  .catalog-toolbar { align-items: stretch; flex-direction: column; gap: 8px; }
+  .catalog-page { padding: 20px 14px 110px; }
+  .catalog-header { gap: 8px; }
+  .catalog-header h1 { font-size: 28px; }
+  .catalog-sync-button { flex: 0 0 20vw; width: 20vw; min-width: 20vw; height: 44px; min-height: 44px; margin: 0; padding: 0 2px; white-space: nowrap; font-size: 12px; }
+  .catalog-toolbar { align-items: stretch; flex-direction: column; gap: 4px; }
   .catalog-game-filter { width: 100%; }
   .catalog-sheet-scroll, .catalog-detail-scroll { overflow: visible; border: 0; background: transparent; }
   .catalog-table, .catalog-rules-table { min-width: 0; table-layout: auto; }
