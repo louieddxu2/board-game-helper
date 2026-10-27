@@ -74,7 +74,11 @@ test('serves the static application shell for direct game links', async ({ reque
   expect(html).toContain('<title>玩錯的桌遊規則</title>');
   expect(html).not.toContain(statement);
   expect(html).toContain('<meta property="og:title"');
-  expect(html).toContain('content="/social-preview.png"');
+  expect(html).toContain('<meta name="twitter:card" content="summary"');
+  expect(html).toContain('<meta property="og:image" content="https://board-game-helper.louieddxu2.workers.dev/icons/icon-512.png"');
+  expect(html).toContain('<meta property="og:image:width" content="512"');
+  expect(html).toContain('<meta property="og:image:height" content="512"');
+  expect(html).not.toContain('summary_large_image');
 });
 
 test('distinguishes a missing game from a recoverable network error', async ({ page }) => {
