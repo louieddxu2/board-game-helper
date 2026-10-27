@@ -17,7 +17,8 @@ import type { PersonalHomeGame } from '../shared/types';
 import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type RuleCard as RuleCardType, type RuleCategory, type TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
 import { useGameDetail } from './useGameDetail';
-import { SITE_TITLE } from '../shared/gamePreview';
+
+const SITE_TITLE = '玩錯的桌遊規則';
 
 const estimateTitleWidthUnits = (title: string) => Math.max(8, Math.ceil(Array.from(title).reduce((total, character) => (
   total + (character === ' ' ? 0.35 : character.charCodeAt(0) <= 0x7f ? 0.6 : 1)

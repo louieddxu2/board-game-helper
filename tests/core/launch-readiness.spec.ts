@@ -3,15 +3,15 @@ import { expect, test } from '@playwright/test';
 test.use({ serviceWorkers: 'block' });
 let gameName: string;
 let gameSlug: string;
-const statement = '三人局只有五個方塊，這是公開分享的規則摘要。';
+const statement = '三人局只有五個方塊。';
 
 test.beforeAll(async ({ playwright, baseURL }) => {
   const setup = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL! } });
   try {
     expect((await setup.post('/api/auth/dev', { data: {} })).ok()).toBe(true);
-    gameName = `公開預覽 <&> ${Date.now()}`;
+    gameName = `發布驗證 <&> ${Date.now()}`;
     const response = await setup.post('/api/submissions', { data: {
-      newGame: { displayName: gameName, englishName: 'Launch Preview' },
+      newGame: { displayName: gameName, englishName: 'Launch Check' },
       idempotencyKey: crypto.randomUUID(), rules: [{ statement }],
     } });
     expect(response.status()).toBe(201);
@@ -33,6 +33,7 @@ for (const touch of [false, true]) {
     test('returns the first login action to its selected game', async ({ page }) => {
       await page.goto(`/games/${encodeURIComponent(gameSlug)}`);
       await expect(page.getByRole('heading', { name: gameName, exact: true })).toBeVisible();
+      await expect(page).toHaveTitle(`${gameName}｜玩錯的桌遊規則`);
       const record = page.getByRole('link', { name: /記錄/u });
       if (touch) await record.tap(); else await record.click();
       await expect(page.locator('.add-page')).toBeVisible();
@@ -66,15 +67,14 @@ for (const touch of [false, true]) {
   });
 }
 
-test('serves readable game-specific previews in the initial HTML without executing scripts', async ({ request }) => {
+test('serves the static application shell for direct game links', async ({ request }) => {
   const response = await request.get(`/games/${encodeURIComponent(gameSlug)}`);
   expect(response.status()).toBe(200);
   const html = await response.text();
-  expect(html).toContain(`<title>${gameName.replace('<&>', '&lt;&amp;&gt;')}｜玩錯的桌遊規則</title>`);
-  expect(html).toContain(statement);
+  expect(html).toContain('<title>玩錯的桌遊規則</title>');
+  expect(html).not.toContain(statement);
   expect(html).toContain('<meta property="og:title"');
-  expect(html).toContain(`<link rel="canonical" href="http://127.0.0.1:4173/games/${encodeURIComponent(gameSlug)}"`);
-  expect(html).toContain('content="http://127.0.0.1:4173/social-preview.png"');
+  expect(html).toContain('content="/social-preview.png"');
 });
 
 test('distinguishes a missing game from a recoverable network error', async ({ page }) => {
