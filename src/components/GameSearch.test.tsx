@@ -76,4 +76,20 @@ describe('GameSearch mobile keyboard behavior', () => {
       Object.defineProperty(window, 'visualViewport', { configurable: true, value: previousVisualViewport });
     }
   });
+
+  test('keeps the query and retries a failed search only on the explicit action', async () => {
+    mocks.searchGames.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Harness /></MemoryRouter>);
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '範例' } });
+    const retry = await screen.findByRole('button', { name: '重試搜尋' });
+    expect(mocks.searchGames).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue('範例');
+    fireEvent.click(retry);
+    await screen.findByRole('option', { name: '範例遊戲' });
+    expect(mocks.searchGames).toHaveBeenCalledTimes(2);
+    expect(input).toHaveValue('範例');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

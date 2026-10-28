@@ -1,11 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useNavigationType } from 'react-router-dom';
 
 export const ScrollToTop = () => {
   const location = useLocation();
   const navigationType = useNavigationType();
+  const previousTarget = useRef<string | undefined>(undefined);
 
   useEffect(() => {
+    const target = location.pathname + location.hash;
+    if (previousTarget.current === target) return;
+    previousTarget.current = target;
     // 1. 返回／前進交給瀏覽器恢復原位置
     if (navigationType === 'POP') return;
 

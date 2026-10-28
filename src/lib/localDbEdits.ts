@@ -8,10 +8,17 @@ import {
 import type { AttributeQuestionCacheRecord, CacheRecord, DeferredAttributeSubject, DraftRecord, PendingAttributeResponse } from './localDbCore';
 import { getDatabase, notifyPending } from './localDbCore';
 
+let draftWrites: Promise<unknown> = Promise.resolve();
+const writeDraft = <T,>(operation: () => Promise<T>) => {
+  const result = draftWrites.then(operation, operation);
+  draftWrites = result.catch(() => undefined);
+  return result;
+};
+
 export const localDbEdits = {
-  getDraft: async () => (await getDatabase()).get('drafts', 'active'),
-  saveDraft: async (draft: Omit<DraftRecord, 'id'>) => (await getDatabase()).put('drafts', { ...draft, id: 'active' }),
-  clearDraft: async () => (await getDatabase()).delete('drafts', 'active'),
+  getDraft: async () => { await draftWrites; return (await getDatabase()).get('drafts', 'active'); },
+  saveDraft: (draft: Omit<DraftRecord, 'id'>) => writeDraft(async () => (await getDatabase()).put('drafts', { ...draft, id: 'active' })),
+  clearDraft: () => writeDraft(async () => (await getDatabase()).delete('drafts', 'active')),
   addPending: async (userId: string, payload: SubmissionInput) => { const result = await (await getDatabase()).put('pending', { id: payload.idempotencyKey, userId, payload, createdAt: Date.now() }); notifyPending(); return result; },
   removePending: async (id: string) => { await (await getDatabase()).delete('pending', id); notifyPending(); },
   getPending: async (userId: string) => (await (await getDatabase()).getAll('pending')).filter((item) => item.userId === userId),

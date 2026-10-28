@@ -21,6 +21,7 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
   const titleId = useId();
   const messageId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   useWorkspaceBrowserBack({ active: open, onBack: onCancel });
 
   useEffect(() => {
@@ -33,12 +34,13 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
       onCancel();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    window.setTimeout(() => confirmRef.current?.focus(), 0);
+    const timer = window.setTimeout(() => (tone === 'danger' ? cancelRef : confirmRef).current?.focus(), 0);
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener('keydown', closeOnEscape, true);
       previousFocus?.focus();
     };
-  }, [onCancel, open]);
+  }, [onCancel, open, tone]);
 
   if (!open) return null;
   return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
@@ -48,7 +50,7 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
       </div>}
       <div className="confirm-dialog-copy"><h2 id={titleId}>{title}</h2><p id={messageId}>{message}</p></div>
       <div className="confirm-dialog-actions">
-        <button type="button" className="button secondary" onClick={onCancel}>{cancelLabel}</button>
+        <button ref={cancelRef} type="button" className="button secondary" onClick={onCancel}>{cancelLabel}</button>
         <button ref={confirmRef} type="button" className={tone === 'danger' ? 'button danger' : 'button primary'} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </section>

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { clearSearchCache } from '../components/GameSearch';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
@@ -150,18 +150,32 @@ export const CatalogPage = () => {
     }
   };
   const [games, setGames] = useState<GameSummary[]>([]);
-  const [gameQuery, setGameQuery] = useState('');
-  const [expandedGameId, setExpandedGameId] = useState<string>();
+  const [viewParams, setViewParams] = useSearchParams();
+  const navigationType = useNavigationType();
+  const [gameQuery, setGameQuery] = useState(() => viewParams.get('q') ?? '');
+  useEffect(() => {
+    if (navigationType !== 'REPLACE') setGameQuery(viewParams.get('q') ?? '');
+  }, [viewParams, navigationType]);
+  const expandedGameId = viewParams.get('game') ?? undefined;
   const [expandedGame, setExpandedGame] = useState<GameDetail>();
-  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const activeTags = viewParams.getAll('tag');
   const [editingRule, setEditingRule] = useState<RuleCard>();
   const [loadingGameId, setLoadingGameId] = useState<string>();
   const [error, setError] = useState('');
   const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
   const [pendingRuleCounts, setPendingRuleCounts] = useState<Record<string, number>>({});
   const [pendingGameIds, setPendingGameIds] = useState<string[]>([]);
-  const [onlyPending, setOnlyPending] = useState(false);
+  const onlyPending = canEdit && viewParams.get('pending') === '1';
   const detailRequestId = useRef(0);
+  const updateView = (patch: { q?: string; game?: string; tag?: string[]; pending?: boolean }) => setViewParams(current => {
+    const next = new URLSearchParams(current);
+    for (const [key, value] of Object.entries(patch)) {
+      next.delete(key);
+      if (Array.isArray(value)) value.forEach(tag => next.append(key, tag));
+      else if (value) next.set(key, value === true ? '1' : value);
+    }
+    return next;
+  }, { replace: true });
 
   const filteredGames = useMemo(() => {
     const query = gameQuery.trim().toLocaleLowerCase();
@@ -195,14 +209,6 @@ export const CatalogPage = () => {
     try {
       const data = await api.syncCatalogGames(canEdit);
       setGames(data.games);
-      if (expandedGameId && !data.games.some((game) => game.id === expandedGameId)) {
-        detailRequestId.current += 1;
-        setExpandedGameId(undefined);
-        setExpandedGame(undefined);
-        setActiveTags([]);
-        setEditingRule(undefined);
-        setLoadingGameId(undefined);
-      }
     } catch {
       setError('列表載入失敗，請重新整理後再試。');
     }
@@ -224,40 +230,40 @@ export const CatalogPage = () => {
     return () => { active = false; };
   }, [user?.id]);
 
-  const toggleGame = async (game: GameSummary) => {
+  const toggleGame = (game: GameSummary) => {
     setEditingRule(undefined);
-    const requestId = ++detailRequestId.current;
-    if (expandedGameId === game.id) {
-      setExpandedGameId(undefined);
-      setExpandedGame(undefined);
-      setActiveTags([]);
-      return;
-    }
-    setExpandedGameId(game.id);
-    setExpandedGame(undefined);
-    setActiveTags([]);
-    setLoadingGameId(game.id);
-    setError('');
-    try {
-      const applyUpdated = async (updated: { game: GameDetail }) => {
-        const hydrated = await hydrateGameTags(updated.game);
-        if (requestId !== detailRequestId.current) return;
-        setExpandedGame(hydrated);
-        updateGameSummary(hydrated);
-      };
-      const data = await api.game(game.id, canEdit, (updated) => { void applyUpdated(updated); });
-      const hydratedGame = await hydrateGameTags(data.game);
-      if (requestId !== detailRequestId.current) return;
-      setExpandedGame(hydratedGame);
-      updateGameSummary(hydratedGame);
-    } catch {
-      if (requestId !== detailRequestId.current) return;
-      setExpandedGameId(undefined);
-      setError('這個遊戲的規則載入失敗，請再試一次。');
-    } finally {
-      if (requestId === detailRequestId.current) setLoadingGameId(undefined);
-    }
+    updateView({ game: expandedGameId === game.id ? undefined : game.id, tag: [] });
   };
+  const availableExpandedGameId = games.some(game => game.id === expandedGameId) ? expandedGameId : undefined;
+  useEffect(() => {
+    const requestId = ++detailRequestId.current;
+    setExpandedGame(undefined);
+    setEditingRule(undefined);
+    if (!availableExpandedGameId) { setLoadingGameId(undefined); return; }
+    setLoadingGameId(availableExpandedGameId);
+    setError('');
+    void (async () => {
+      try {
+        const applyUpdated = async (updated: { game: GameDetail }) => {
+          const hydrated = await hydrateGameTags(updated.game);
+          if (requestId !== detailRequestId.current) return;
+          setExpandedGame(hydrated);
+          updateGameSummary(hydrated);
+        };
+        const data = await api.game(availableExpandedGameId, canEdit, (updated) => { void applyUpdated(updated); });
+        const hydratedGame = await hydrateGameTags(data.game);
+        if (requestId !== detailRequestId.current) return;
+        setExpandedGame(hydratedGame);
+        updateGameSummary(hydratedGame);
+      } catch {
+        if (requestId !== detailRequestId.current) return;
+        setError('這個遊戲的規則載入失敗，請再試一次。');
+      } finally {
+        if (requestId === detailRequestId.current) setLoadingGameId(undefined);
+      }
+    })();
+    return () => { detailRequestId.current++; };
+  }, [availableExpandedGameId, canEdit]);
 
   const refreshEditedRule = async () => {
     if (!expandedGame || !editingRule) return;
@@ -295,8 +301,8 @@ export const CatalogPage = () => {
     </header>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="catalog-toolbar">
-      <label className="catalog-game-filter"><span className="sr-only">篩選遊戲名稱</span><input type="search" value={gameQuery} onChange={(event) => setGameQuery(event.target.value)} placeholder="篩選遊戲名稱（中／英文）" /></label>
-      {canEdit && <label className="checkbox-row"><input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} />只看待審核</label>}
+      <label className="catalog-game-filter"><span className="sr-only">篩選遊戲名稱</span><input type="search" value={gameQuery} onChange={(event) => { setGameQuery(event.target.value); updateView({ q: event.target.value }); }} placeholder="篩選遊戲名稱（中／英文）" /></label>
+      {canEdit && <label className="checkbox-row"><input type="checkbox" checked={onlyPending} onChange={(event) => updateView({ pending: event.target.checked })} />只看待審核</label>}
     </div>
     <div className="catalog-sheet-scroll">
       <table className="catalog-table">
@@ -324,7 +330,7 @@ export const CatalogPage = () => {
               <td data-label="規則數" data-mobile-label="規則" className="catalog-game-count">{game.ruleCount}{canEdit && Boolean(pendingRuleCounts[game.id]) && <small>・待審核 {pendingRuleCounts[game.id]}</small>}{canEdit && pendingGameIds.includes(game.id) && <small>・新遊戲待審核</small>}</td>
               <td data-label="最後更新" data-mobile-label="更新" className="catalog-game-updated">{formatDate(game.latestRuleUpdatedAt ?? game.updatedAt)}</td>
             </tr>
-            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={setActiveTags} onEdit={(rule) => void beginRuleEdit(rule)} canEditRule={canEditRule} /> : null}</td></tr>}
+            {expandedGameId === game.id && <tr className="catalog-detail-row"><td colSpan={5} className="catalog-detail-cell">{loadingGameId === game.id ? <p className="catalog-loading">正在載入規則…</p> : expandedGame?.id === game.id ? <RulesSheet game={expandedGame} publicTags={classificationTags} activeTags={activeTags} onTagsChange={tag => updateView({ tag })} onEdit={(rule) => void beginRuleEdit(rule)} canEditRule={canEditRule} /> : null}</td></tr>}
           </Fragment>)}
         </tbody>
       </table>

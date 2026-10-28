@@ -13,6 +13,8 @@ import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
+import { hasRuleDraftContent, ruleDraftSummary } from '../lib/ruleDraftSummary';
+import { useRuleDraftAutosave } from './useRuleDraftAutosave';
 import zhTWCopy from '../content/zh-TW.json';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 import { uiHistory } from '../workspace/uiHistory';
@@ -49,7 +51,9 @@ export const AddPage = () => {
   const [activeRuleId, setActiveRuleId] = useState(() => rules[0].id);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [savedAt, setSavedAt] = useState<number>();
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftReadAttempt, setDraftReadAttempt] = useState(0);
+  const [draftReadError, setDraftReadError] = useState(false);
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string; englishName?: string }>>([]);
   const [quota, setQuota] = useState<ContributionQuota>();
   const [pasteImportOpen, setPasteImportOpen] = useState(false);
@@ -61,7 +65,13 @@ export const AddPage = () => {
   };
   useWorkspaceBrowserBack({ active: pasteImportOpen, onBack: closePasteImport });
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const draftSaveTimer = useRef<number | undefined>(undefined);
+  const draftSnapshot = useMemo<Omit<DraftRecord, 'id'>>(() => ({
+    game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
+    gameQuery, englishName, rules, updatedAt: Date.now(),
+  }), [game, gameQuery, englishName, rules]);
+  const draftStorage = useRuleDraftAutosave(draftSnapshot, Boolean(user) && draftReady);
+  const draftReadyRef = useRef(draftReady);
+  draftReadyRef.current = draftReady;
   const selectedGameId = game?.id;
   const isGeneralContributor = Boolean(user && !canEdit);
   const remainingRules = quota?.remainingRules ?? 0;
@@ -88,36 +98,90 @@ export const AddPage = () => {
   }, [user?.id, canEdit]);
 
   useEffect(() => {
+    if (!user) return;
     let active = true;
-    void Promise.all([localDb.getDraft(), localDb.recentGames()]).then(async ([draft, recent]) => {
-      if (!active) return;
-      setRecentGames(recent);
-      const hasDraft = Boolean(draft && (draft.game || draft.rules.some((rule) => rule.statement.trim())));
-      if (draft && hasDraft) {
-        setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
-        setGameQuery(draft.gameQuery);
-        setEnglishName(draft.game?.englishName ?? draft.englishName ?? '');
-        const restored = draft.rules.length ? draft.rules.map((rule) => ({
-          ...rule,
-          tagSelections: rule.tagSelections ?? rule.tagNames?.map((name) => ({ name })) ?? [],
-          tagNames: undefined,
-          editionNotes: rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []),
-          sourceLabel: rule.sourceLabel ?? draft.sourceLabel,
-          sourceUrl: rule.sourceUrl ?? draft.sourceUrl,
-        })) : [blankRule()];
-        setRules(restored);
-        setActiveRuleId(restored[0].id);
-        return;
+    setDraftReady(false);
+    setDraftReadError(false);
+    const restore = (draft: DraftRecord) => {
+      setGame(draft.game ? { ...draft.game, ruleCount: 0, updatedAt: draft.updatedAt } : undefined);
+      setGameQuery(draft.gameQuery);
+      setEnglishName(draft.game?.englishName ?? draft.englishName ?? '');
+      const restored = draft.rules.length ? draft.rules.map(rule => ({
+        ...rule, tagSelections: rule.tagSelections ?? rule.tagNames?.map(name => ({ name })) ?? [], tagNames: undefined,
+        editionNotes: rule.editionNotes ?? (rule.editionNote ? [rule.editionNote] : []),
+        sourceLabel: rule.sourceLabel ?? draft.sourceLabel, sourceUrl: rule.sourceUrl ?? draft.sourceUrl,
+      })) : [blankRule()];
+      setRules(restored);
+      setActiveRuleId(restored[0].id);
+    };
+    const readDraft = async () => {
+      // A search-parameter navigation can reuse this editor before its debounce fires.
+      if (draftReadyRef.current && !await draftStorage.saveNow()) {
+        if (active) {
+          setError('最新草稿尚未儲存，已保留目前編輯內容，請先重試儲存。');
+          setDraftReady(true);
+        }
+        return null;
       }
+      return localDb.getDraft();
+    };
+    void Promise.all([readDraft(), localDb.recentGames().catch(() => [])]).then(async ([draft, recent]) => {
+      if (!active || draft === null) return;
+      setRecentGames(recent);
       const requestedGame = searchParams.get('game');
       const nameParam = searchParams.get('name') || searchParams.get('gameName');
-      if (requestedGame) {
-        const response = await api.game(requestedGame, false);
-        if (active) selectGame(response.game);
-      } else if (nameParam) setGameQuery(nameParam);
+      const hasDraft = draft && (draft.game || draft.gameQuery.trim() || hasRuleDraftContent(draft));
+      const sameIdentifier = requestedGame && [draft?.game?.id, draft?.game?.slug].includes(requestedGame);
+      if (hasDraft && (!requestedGame && !nameParam || sameIdentifier)) {
+        restore(draft);
+        setDraftReady(true);
+        return;
+      }
+      let requested: GameDetail | undefined;
+      try { if (requestedGame) requested = (await api.game(requestedGame, false)).game; }
+      catch {
+        if (!active) return;
+        if (hasDraft) restore(draft);
+        setError('暫時無法讀取指定遊戲，原草稿已保留。');
+        setDraftReady(true);
+        return;
+      }
+      if (!active) return;
+      const sameGame = requested ? requested.id === draft?.game?.id
+        : nameParam?.trim().toLocaleLowerCase() === (draft?.game?.displayName || draft?.gameQuery)?.trim().toLocaleLowerCase();
+      if (hasDraft && !sameGame && hasRuleDraftContent(draft)) {
+        const discard = await confirm({ title: '已有其他遊戲的草稿',
+          message: `${ruleDraftSummary(draft)}\n\n要捨棄這份草稿，改記錄「${requested?.displayName || nameParam}」嗎？`,
+          confirmLabel: '捨棄舊稿並記錄', cancelLabel: '繼續舊稿', tone: 'danger' });
+        if (!active) return;
+        if (!discard) {
+          restore(draft); setDraftReady(true);
+          uiHistory.navigate(() => navigate('/add', { replace: true }));
+          return;
+        }
+        try { await draftStorage.clear(); }
+        catch {
+          if (!active) return;
+          restore(draft);
+          setError('無法捨棄舊稿，已保留原內容。');
+          setDraftReady(true);
+          return;
+        }
+      } else if (hasDraft && sameGame) {
+        restore(draft); setDraftReady(true); return;
+      }
+      if (!active) return;
+      setGame(requested);
+      setGameQuery(requested?.displayName || nameParam || '');
+      setEnglishName(requested?.englishName || '');
+      const firstRule = blankRule();
+      setRules([firstRule]); setActiveRuleId(firstRule.id);
+      setDraftReady(true);
+    }).catch(() => {
+      if (active) setDraftReadError(true);
     });
     return () => { active = false; };
-  }, [searchParams]);
+  }, [searchParams, user?.id, draftReadAttempt, confirm, draftStorage.clear, draftStorage.saveNow, navigate]);
 
   useEffect(() => {
     if (!selectedGameId) { setGameEditionOptions(undefined); return; }
@@ -129,17 +193,6 @@ export const AddPage = () => {
     void api.game(gameId, canEdit, applyOptions).then(applyOptions).catch(() => undefined);
     return () => { active = false; };
   }, [selectedGameId, canEdit]);
-
-  useEffect(() => {
-    draftSaveTimer.current = window.setTimeout(() => {
-      const draft: Omit<DraftRecord, 'id'> = {
-        game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
-        gameQuery, englishName, rules, updatedAt: Date.now(),
-      };
-      void localDb.saveDraft(draft).then(() => setSavedAt(Date.now()));
-    }, 250);
-    return () => window.clearTimeout(draftSaveTimer.current);
-  }, [game, gameQuery, englishName, rules]);
 
   useEffect(() => {
     if (!pasteImportOpen) return;
@@ -232,10 +285,12 @@ export const AddPage = () => {
         newTagNames: rule.tagSelections?.flatMap((tag) => tag.id ? [] : [tag.name]),
       })),
     };
+    let queued = false;
     try {
       await localDb.addPending(user.id, payload);
+      queued = true;
       const result = await api.submit(payload);
-      await Promise.all([localDb.removePending(payload.idempotencyKey), localDb.clearDraft(), localDb.invalidateHome(), localDb.invalidateGame(result.gameId)]);
+      await Promise.all([localDb.removePending(payload.idempotencyKey), draftStorage.clear(), localDb.invalidateHome(), localDb.invalidateGame(result.gameId)]);
       clearSearchCache();
       if (result.quota) setQuota(result.quota);
       const firstRule = result.ruleIds?.[0];
@@ -244,7 +299,7 @@ export const AddPage = () => {
       if (caught instanceof ApiError && caught.code === 'PENDING_RULE_LIMIT_REACHED') setError(quotaLimitMessage);
       else if (caught instanceof ApiError && caught.code === 'PENDING_GAME_LIMIT_REACHED') setError(gameSelectionMessage);
       else if (caught instanceof ApiError && caught.status === 401) setError('登入狀態已失效，請重新登入後再送出。');
-      else setError('尚未成功同步，內容已保留在這台裝置，請稍後再試。');
+      else setError(queued ? '尚未成功同步，內容已保留在這台裝置，請稍後再試。' : '目前無法儲存本機備份，尚未送出。請保留此頁或先複製內容。');
     } finally { setSaving(false); }
   };
 
@@ -256,16 +311,20 @@ export const AddPage = () => {
   const handleCancel = async () => {
     const hasContent = validRules.some((rule) => rule.statement.trim() || rule.commonMistake?.trim()) || Boolean(game || gameQuery.trim());
     if (hasContent) {
-      const result = await confirm({ title: '離開草稿？', message: '草稿已自動儲存在這台裝置。', confirmLabel: '離開', cancelLabel: '繼續編輯', discardLabel: '捨棄草稿' });
+      const result = await confirm({ title: '離開草稿？', message: draftStorage.status === 'saved' ? '草稿已自動儲存在這台裝置。' : '離開前會先儲存最新草稿；儲存失敗時會保留目前編輯畫面。', confirmLabel: '離開', cancelLabel: '繼續編輯', discardLabel: '捨棄草稿' });
       if (!result) return;
       if (result === 'discard') {
-        window.clearTimeout(draftSaveTimer.current);
+        setDraftReady(false);
         try {
-          await localDb.clearDraft();
+          await draftStorage.clear();
         } catch {
           setError('無法清除草稿，請稍後再試。');
+          setDraftReady(true);
           return;
         }
+      } else if (!await draftStorage.saveNow()) {
+        setError('草稿儲存失敗，請先重試或複製內容後再離開。');
+        return;
       }
     }
     uiHistory.navigate(() => navigate('/', { replace: true }));
@@ -274,6 +333,11 @@ export const AddPage = () => {
   if (!loading && !user) return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1></header>
     <div className="account-card"><h2 style={{ marginTop: 0 }}>使用Google帳戶登入後即可填寫</h2><p>登入後可有限度地建立規則。</p><Link className="button primary" to={loginHref(location)} replace>登入</Link></div>
+  </section>;
+
+  if (!draftReady) return <section className="add-page narrow-page" aria-busy={!draftReadError}>
+    <header className="add-page-heading"><h1>記錄玩錯的規則</h1></header>
+    {draftReadError ? <div role="alert"><p>無法讀取這台裝置的草稿，尚未寫入任何新內容。</p><button type="button" className="button secondary" onClick={() => setDraftReadAttempt(value => value + 1)}>重新讀取草稿</button></div> : <p>正在讀取草稿…</p>}
   </section>;
 
   return <section className="add-page narrow-page">
@@ -329,6 +393,6 @@ export const AddPage = () => {
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
     <p className="submission-privacy-note">投稿會公開；帳號資料處理請見 <Link to="/privacy">隱私與資料說明</Link>。</p>
-    <div className="sticky-submit"><button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button><p className="submit-info-text">{savedAt ? `草稿已儲存於 ${new Date(savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}` : `目前 ${validRules.length} 條規則`}</p><button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving || ruleEntryLocked} onClick={() => void requestSubmit()}>{saving ? '送出中…' : `送出 ${validRules.length} 條規則`}</button></div>
+    <div className="sticky-submit"><button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button><p className={`submit-info-text draft-status-${draftStorage.status}`} role="status" aria-label="草稿儲存狀態">{draftStorage.status === 'error' ? <>草稿儲存失敗，最新內容尚未保留。<button type="button" className="text-action" onClick={() => void draftStorage.saveNow()}>重試儲存</button></> : draftStorage.status === 'saving' ? '草稿儲存中…' : `草稿已儲存於 ${new Date(draftStorage.savedAt!).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`}</p><button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving || ruleEntryLocked} onClick={() => void requestSubmit()}>{saving ? '送出中…' : `送出 ${validRules.length} 條規則`}</button></div>
   </section>;
 };

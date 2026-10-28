@@ -90,6 +90,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const [resultQuery, setResultQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{
@@ -152,7 +153,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         setLoading(false);
     });
     return () => { active = false; };
-  }, [includeGamesWithoutPublishedRules, includeRules, query, selectedId]);
+  }, [includeGamesWithoutPublishedRules, includeRules, query, selectedId, searchAttempt]);
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
       if (!inlineResults && !containerRef.current?.contains(event.target as Node) && !resultsRef.current?.contains(event.target as Node)) {
@@ -220,7 +221,10 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     {rawQuery && inlineResults && !open && <p className="muted">繼續輸入以搜尋</p>}
     {(!inlineResults || open) && <>
       {rawQuery && isEnglishOnly && rawQuery.length === 1 && <p className="search-hint muted">請輸入至少 2 個英文字母進行搜尋</p>}
-      {visibleLoading && <p className="muted">尋找遊戲中…</p>}{visibleError && <p className="search-error">搜尋發生錯誤，請稍後重試</p>}
+      {visibleLoading && <p className="muted">尋找遊戲中…</p>}{visibleError && <div className="search-error" role="alert"><p>搜尋暫時無法使用，請再試一次。</p><button type="button" className="search-retry" onPointerDown={event => event.preventDefault()} onClick={() => {
+        if (loading || !visibleError) return;
+        setSearchError(false); setLoading(true); setSearchAttempt(value => value + 1);
+      }}>重試搜尋</button></div>}
       {rawQuery && !visibleLoading && !visibleError && !(isEnglishOnly && rawQuery.length === 1) && !visibleGames.length && !visibleRules.length && <p className="empty-search-message">找不到相符的遊戲</p>}
       {visibleGames.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}
       {visibleGames.map((game, index) => { const display = formatGameSearchDisplay(game, rawQuery); return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option" tabIndex={-1}><strong>{display.primary}</strong>{display.secondary && <span>({display.secondary})</span>}</button>; })}

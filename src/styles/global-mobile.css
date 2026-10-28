@@ -134,7 +134,8 @@
     align-items: center;
     gap: 10px;
   }
-  .sticky-submit p.submit-info-text { display: none; }
+  .sticky-submit { flex-wrap: wrap; }
+  .sticky-submit p.submit-info-text { display: flex; flex: 1 0 100%; order: -1; margin: 0; font-size: 12px; }
   .sticky-submit .mobile-cancel-btn { display: inline-flex; min-height: 44px; padding: 0 16px; flex-shrink: 0; }
   .sticky-submit .save-button { flex: 1; width: 100%; min-height: 44px; }
   .review-page { padding: 42px 14px 110px; }

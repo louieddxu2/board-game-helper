@@ -361,6 +361,12 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .confirm-dialog-copy { display: grid; gap: 10px; }
 .confirm-dialog-copy h2, .confirm-dialog-copy p { margin: 0; }
 .confirm-dialog-copy p { color: var(--muted); line-height: 1.7; }
+.confirm-dialog-copy p { white-space: pre-line; overflow-wrap: anywhere; }
+.content-load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; color: #842d20; }
+.content-load-error p { margin: 0; }
+.content-load-error button, .search-retry { min-height: 44px; }
+.submit-info-text { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.submit-info-text.draft-status-error { color: #842d20; }
 .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .external-link-button { border: 0; padding: 0; background: none; color: var(--orange); font: inherit; cursor: pointer; text-align: left; }
 .external-link-button:hover { text-decoration: underline; }

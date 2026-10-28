@@ -2,6 +2,7 @@ import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifie
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
+import { withReadTimeout } from './readTimeout';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -26,7 +27,10 @@ const transportResponse = async <T>(path: string, init: RequestInit | undefined,
       ...init?.headers,
     },
   });
-  const body = await response.json().catch(() => ({})) as T & { error?: string };
+  const body = await response.json().catch(error => {
+    if (init?.signal?.aborted) throw error;
+    return {};
+  }) as T & { error?: string };
   if (!response.ok) throw new ApiError(body.error ?? 'request_failed', response.status);
   return { data: body, response };
 };
@@ -78,12 +82,12 @@ export const GAME_CATALOG_SNAPSHOT_FRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const isGameCatalogSnapshotExpired = (record: GameCatalogCacheRecord, currentTime = Date.now()) =>
   currentTime - (record.snapshotFetchedAt ?? record.data.generatedAt) >= GAME_CATALOG_SNAPSHOT_FRESH_MS;
 
-const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<GameCatalogPayload> => {
+const synchronizeGameCatalog = async (catalog: GameCatalogPayload, signal: AbortSignal): Promise<GameCatalogPayload> => {
   let afterVersion = catalog.throughVersion;
   while (true) {
     const changes = await transportRequest<GameCatalogChangesPayload>(
       `/api/game-catalog/changes?after=${afterVersion}`,
-      undefined,
+      { signal },
       'cache-miss',
     );
     if (changes.hasMore && changes.throughVersion <= afterVersion) throw new Error('game_catalog_sync_stalled');
@@ -96,15 +100,15 @@ const synchronizeGameCatalog = async (catalog: GameCatalogPayload): Promise<Game
 
 const refreshGameCatalog = async (knownBase?: GameCatalogCacheRecord | null): Promise<GameCatalogPayload> => {
   if (gameCatalogRequest) return gameCatalogRequest;
-  gameCatalogRequest = (async () => {
+  gameCatalogRequest = withReadTimeout(async signal => {
     const existing = knownBase === null ? undefined : knownBase ?? await localDb.getLatestGameCatalog().catch(() => undefined);
     let base = existing?.data;
     if (!base || (existing && isGameCatalogSnapshotExpired(existing))) {
-      base = await transportRequest<GameCatalogPayload>('/api/game-catalog', undefined, 'cache-miss');
+      base = await transportRequest<GameCatalogPayload>('/api/game-catalog', { signal }, 'cache-miss');
       await localDb.cacheGameCatalog(base);
     }
-    return synchronizeGameCatalog(base);
-  })();
+    return synchronizeGameCatalog(base, signal);
+  });
   try { return await gameCatalogRequest; }
   finally { gameCatalogRequest = undefined; }
 };
@@ -318,7 +322,7 @@ let homeRefreshRequest: Promise<HomePayload> | undefined;
 const refreshHome = async (): Promise<HomePayload> => {
   if (homeRefreshRequest) return homeRefreshRequest;
   homeRefreshRequest = (async () => {
-    const result = await transportResponse<HomePayload>('/api/home', undefined, 'cache-miss');
+    const result = await withReadTimeout(signal => transportResponse<HomePayload>('/api/home', { signal }, 'cache-miss'));
     if (result.response.headers.get('X-Offline-Fallback') !== '1') {
       await localDb.cacheHome(result.data).catch(() => undefined);
     }

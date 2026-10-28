@@ -26,6 +26,9 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvingHome, setResolvingHome] = useState(false);
+  const [homeError, setHomeError] = useState(false);
+  const [homeLoading, setHomeLoading] = useState(false);
+  const [homeAttempt, setHomeAttempt] = useState(0);
   const [votedRuleIds, setVotedRuleIds] = useState<Set<string>>(new Set());
   const [savingRuleIds, setSavingRuleIds] = useState<Set<string>>(new Set());
   const homeGeneratedAt = useRef(0);
@@ -33,6 +36,8 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
   useEffect(() => {
     let active = true;
+    setHomeLoading(true);
+    setHomeError(false);
     const adoptHome = (data: HomePayload, rendered = false) => {
       if (!active || data.generatedAt < homeGeneratedAt.current) return;
       const nextKey = homeContentKey(data);
@@ -50,9 +55,14 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       if (rendered) adoptHome(rendered.data, true);
       const current = await api.home((updated) => adoptHome(updated));
       adoptHome(current);
-    })().catch(() => undefined);
-    void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); });
-    void localDb.recentGames().then((games) => { if (active) setRecentGames(games); });
+    })().catch(() => { if (active) setHomeError(true); }).finally(() => { if (active) setHomeLoading(false); });
+    return () => { active = false; };
+  }, [homeAttempt]);
+
+  useEffect(() => {
+    let active = true;
+    void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); }).catch(() => undefined);
+    void localDb.recentGames().then((games) => { if (active) setRecentGames(games); }).catch(() => undefined);
     return () => { active = false; };
   }, []);
 
@@ -211,10 +221,11 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     </section>}
     <section id="discover" className="content-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
+      {homeError && <div className="content-load-error" role="alert"><p>{home ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
       <div className="rule-grid">
         {displayedFeaturedRules.map((rule) =>
           <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}
-        {!home && Array.from({ length: 3 }, (_, index) => (
+        {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />
             <div className="skeleton-line" />
