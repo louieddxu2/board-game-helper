@@ -18,6 +18,7 @@ import {
   type OnlineAttributeState
 } from './attributeScoring';
 import type { Database, DatabaseStatement } from './database';
+import { attributeVoteWeight } from './attributeVoteWeights';
 
 const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
   if (!lock.names.length) return;
@@ -74,22 +75,23 @@ const saveAttributeResponseLocked = async (
     && Math.max(Number(context.state_a_updated_at ?? 0), Number(context.state_b_updated_at ?? 0)) >= input.timestamp;
   if (input.highPole === 'low' && context.scale_type !== 'bipolar') throw new Error('attribute_question_invalid');
   input = canonicalAttributeAnswer(input);
+  const weight = attributeVoteWeight(input.actorId, input.actorIsAuthorized);
   let stateA = stateMap.get(input.subjectAId) ?? emptyAttributeState();
   let stateB = stateMap.get(input.subjectBId) ?? emptyAttributeState();
   const touchedSubjects = new Set<string>();
 
   if (input.ratingA != null) {
-    stateA = applyDirectRating(stateA, input.ratingA).next;
+    stateA = applyDirectRating(stateA, input.ratingA, weight).next;
     touchedSubjects.add(input.subjectAId);
   }
   if (input.ratingB != null) {
-    stateB = applyDirectRating(stateB, input.ratingB).next;
+    stateB = applyDirectRating(stateB, input.ratingB, weight).next;
     touchedSubjects.add(input.subjectBId);
   }
 
   const canonical = input.comparison == null ? undefined : canonicalizeComparison(input.subjectAId, input.subjectBId, input.comparison);
   if (input.comparison != null) {
-    const updated = applyComparison(stateA, stateB, input.comparison);
+    const updated = applyComparison(stateA, stateB, input.comparison, weight);
     stateA = updated.a.next;
     stateB = updated.b.next;
     touchedSubjects.add(input.subjectAId);

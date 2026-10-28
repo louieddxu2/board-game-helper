@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { requireAttributeReplayAfterChange } from '../data/attributeVoteWeights';
 import { type FlowStage, type UserRole } from '../../src/shared/types';
 import { requireRole, type AppContext, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
@@ -151,6 +152,7 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
         VALUES (?, ?, ?, ?, NULL)
         ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
       `).bind(existingUser.id, body.data.role, c.get('user')!.id, timestamp),
+      requireAttributeReplayAfterChange(getDatabase(c)),
     ]);
     return c.json({ ok: true, userId: existingUser.id });
   }
@@ -209,9 +211,9 @@ adminRoutes.delete('/api/admin/editors/:userId', requireRole('admin'), async (c)
     if (targetIsAdmin && !anotherAdmin) return c.json({ error: 'last_admin_role' }, 409);
   }
   try {
-    await getDatabase(c).statement(`
+    await getDatabase(c).batch([getDatabase(c).statement(`
       UPDATE user_roles SET revoked_at = ? WHERE user_id = ? AND role = ? AND revoked_at IS NULL
-    `).bind(now(), userId, role).run();
+    `).bind(now(), userId, role), requireAttributeReplayAfterChange(getDatabase(c))]);
   } catch (caught) {
     if (caught instanceof Error && caught.message.includes('last_admin_role')) {
       return c.json({ error: 'last_admin_role' }, 409);

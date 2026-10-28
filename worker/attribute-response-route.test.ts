@@ -1,4 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import { Hono } from 'hono';
+import type { AppVariables } from './auth';
+import type { RouteEnv } from './env';
 import { attributesRoutes } from './routes/attributes';
 import { saveAttributeResponse } from './data/attributes';
 
@@ -20,5 +23,30 @@ test('accepts locally selected offline votes without a question token', async ()
   expect(response.status).toBe(200);
   expect(saveAttributeResponse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
     subjectAId: 'a', subjectBId: 'b', attributeId: 'score', comparison: 'SIMILAR',
+  }));
+});
+
+test('derives actor weight authority from the server session, not JSON fields', async () => {
+  vi.mocked(saveAttributeResponse).mockResolvedValue({ updatedValues: [], activities: [] });
+  const app = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
+  app.use('*', async (c, next) => {
+    c.set('user', { id: 'editor-1', roles: ['editor'] });
+    await next();
+  });
+  app.route('/', attributesRoutes);
+
+  const response = await app.request('https://example.test/api/attributes/responses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      subjectAId: 'a', subjectBId: 'b', attributeId: 'score', responseId: 'response-456',
+      sessionId: 'session-456', comparison: 'A_HIGHER', actorId: 'guest-spoof', actorIsAuthorized: false,
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(saveAttributeResponse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    actorId: 'editor-1',
+    actorIsAuthorized: true,
   }));
 });

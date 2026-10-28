@@ -18,7 +18,7 @@ const scoreFor = (scores: ReturnType<typeof calculateAttributeScores>, subjectId
   return score;
 };
 
-describe('glicko-rd-v1', () => {
+describe('glicko-rd-v2', () => {
   test('replays each response once and rejects conflicting duplicates', () => {
     const answer = { responseId: 'answer', createdAt: 1, attributeId: 'win', subjectAId: 'source', subjectBId: null, ratingA: 9, ratingB: null, comparison: null };
     const replay = replayAttributeResponses([answer, answer], (id) => id === 'source' ? 'target' : id);
@@ -29,6 +29,27 @@ describe('glicko-rd-v1', () => {
     const result = applyDirectRating(emptyAttributeState(), 8);
 
     expect(result.next).toMatchObject({ score: 8, ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD, directSum: 8, directCount: 1, evidenceCount: 1 });
+  });
+
+  test('weights direct evidence while retaining raw sums and counts', () => {
+    const guest = applyDirectRating(emptyAttributeState(), 8, 1).next;
+    const member = applyDirectRating(guest, 2, 1.5).next;
+    const editor = applyDirectRating(guest, 2, 2).next;
+
+    expect(member.score).not.toBe(editor.score);
+    expect(Math.abs(editor.score - guest.score)).toBeGreaterThan(Math.abs(member.score - guest.score));
+    expect(member).toMatchObject({ directSum: 10, directCount: 2, evidenceCount: 2 });
+    expect(editor).toMatchObject({ directSum: 10, directCount: 2, evidenceCount: 2 });
+  });
+
+  test('weights comparison push without multiplying raw comparison counts', () => {
+    const guest = applyComparison(emptyAttributeState(), emptyAttributeState(), 'A_HIGHER', 1);
+    const editor = applyComparison(emptyAttributeState(), emptyAttributeState(), 'A_HIGHER', 2);
+
+    expect(editor.a.next.score - 5).toBeGreaterThan(guest.a.next.score - 5);
+    expect(5 - editor.b.next.score).toBeGreaterThan(5 - guest.b.next.score);
+    expect(editor.a.next).toMatchObject({ comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 1 });
+    expect(editor.b.next).toMatchObject({ comparisonCount: 1, decisiveComparisonCount: 1, evidenceCount: 1 });
   });
 
   test('uses later direct scores as draws against fixed numeric anchors', () => {

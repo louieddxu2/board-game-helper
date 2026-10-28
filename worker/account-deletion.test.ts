@@ -58,13 +58,16 @@ describe('account deletion data boundary', () => {
     } as unknown as Database;
 
     await deleteAccount(db, 'u1', false);
-    const calls = vi.mocked(db.statement).mock.calls.map(([query]) => query).join('\n');
+    const callQueries = vi.mocked(db.statement).mock.calls.map(([query]) => query);
+    const calls = callQueries.join('\n');
     expect(calls).toContain('UPDATE rule_revisions SET edited_by = ? WHERE edited_by = ?');
     expect(calls).toContain('UPDATE review_batches SET created_by = ? WHERE created_by = ?');
     expect(calls).toContain('UPDATE rules SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
     expect(calls).toContain('UPDATE games SET reviewed_by = ?, reviewed_by_nickname = ? WHERE reviewed_by = ?');
     expect(calls).toContain('UPDATE submissions SET author_id = ?, idempotency_key = NULL WHERE author_id = ?');
     expect(calls).toContain('DELETE FROM users WHERE id = ?');
+    const deleteIndex = callQueries.findIndex((query) => query === 'DELETE FROM users WHERE id = ?');
+    expect(callQueries[deleteIndex + 1]).toMatch(/UPDATE\s+attribute_replay_status[\s\S]*changes\(\)\s*>\s*0/);
     expect(DELETED_ACCOUNT_ID).toBe('usr_deleted');
   });
 });

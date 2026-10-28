@@ -10,6 +10,8 @@ import {
 } from '../worker/data/attributeCatalog';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
 import { saveAttributeResponse } from '../worker/data/attributes';
+import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../worker/data/attributeScoring';
+import { requireAttributeReplayAfterChange } from '../worker/data/attributeVoteWeights';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 import { runWeeklyAttributeRebuild } from '../worker/workflows/attributeWeeklyRebuild';
 
@@ -173,8 +175,88 @@ test('numeric responses force one full replay and acknowledge the revision', asy
     expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
     const after = status(harness);
     expect(after.required_revision).toBe(after.replayed_revision);
-    expect(after.replayed_model_version).toBe('glicko-rd-v1');
+    expect(after.replayed_model_version).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
     expect(harness.sqlite.prepare("SELECT lock_name FROM attribute_vote_lock WHERE lock_name = 'attribute-replay'").get()).toBeUndefined();
+  } finally { close(harness); }
+});
+
+test('role grants and revocations replay existing numeric history, while no-op mutations stay clean', async () => {
+  const { harness, timestamp } = await establishBaseline();
+  try {
+    const [, second] = subjects(harness);
+    const gameId = 'game-weight-role-history';
+    harness.sqlite.prepare(`
+      INSERT INTO games (
+        id, slug, display_name, english_name, normalized_name, merged_into_game_id,
+        created_by, created_at, updated_at, visibility, review_status, reviewed_at,
+        attribute_enabled, bgg_id, entity_kind
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, 'public', 'pending', NULL, 1, ?, 'base')
+    `).run(gameId, gameId, '權重角色歷史', '權重角色歷史', timestamp + 1, timestamp + 1, 995001);
+    const first = { id: `attribute_subject_game:${gameId}` };
+    harness.sqlite.prepare(`
+      INSERT INTO users (id, google_sub, email, email_normalized, created_at, last_login_at)
+      VALUES ('weight-role-user', 'weight-role-sub', 'weight-role@example.test', 'weight-role@example.test', ?, ?)
+    `).run(timestamp, timestamp);
+    harness.sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, rating_a,
+         activity_json, actor_id, session_id, created_at, updated_at, recorded_online)
+      VALUES ('weight-role-history', 'attribute_win_method', ?, ?, 8, '[]',
+        'weight-role-user', 'weight-role-session', ?, ?, 0)
+    `).run(first.id, second.id, timestamp + 1, timestamp + 1);
+    await runCompleteAttributeReplay(harness.gateway, timestamp + 2);
+    const beforeGrant = harness.sqlite.prepare(`
+      SELECT rating_deviation, direct_sum, direct_count
+      FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(first.id) as Record<string, number>;
+    const revision = status(harness).required_revision;
+
+    await harness.gateway.batch([
+      harness.gateway.statement(`
+        INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+        VALUES (?, 'editor', NULL, ?, NULL)
+      `).bind('weight-role-user', timestamp + 3),
+      requireAttributeReplayAfterChange(harness.gateway),
+    ]);
+    expect(status(harness).required_revision).toBe(revision + 1);
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 4)).resolves.toBe('replay');
+    const afterGrant = harness.sqlite.prepare(`
+      SELECT rating_deviation, direct_sum, direct_count
+      FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(first.id) as Record<string, number>;
+    expect(afterGrant.direct_sum).toBe(beforeGrant.direct_sum);
+    expect(afterGrant.direct_count).toBe(beforeGrant.direct_count);
+    expect(afterGrant.rating_deviation).toBeLessThan(beforeGrant.rating_deviation);
+
+    await harness.gateway.batch([
+      harness.gateway.statement(`
+        UPDATE user_roles SET revoked_at = ?
+        WHERE user_id = ? AND role = 'editor' AND revoked_at IS NULL
+      `).bind(timestamp + 5, 'weight-role-user'),
+      requireAttributeReplayAfterChange(harness.gateway),
+    ]);
+    expect(status(harness).required_revision).toBe(status(harness).replayed_revision + 1);
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 6)).resolves.toBe('replay');
+    const afterRevoke = harness.sqlite.prepare(`
+      SELECT rating_deviation, direct_sum, direct_count
+      FROM attribute_score_states
+      WHERE subject_id = ? AND attribute_id = 'attribute_win_method'
+    `).get(first.id) as Record<string, number>;
+    expect(afterRevoke.direct_sum).toBe(beforeGrant.direct_sum);
+    expect(afterRevoke.direct_count).toBe(beforeGrant.direct_count);
+    expect(afterRevoke.rating_deviation).toBeGreaterThan(afterGrant.rating_deviation);
+
+    const stableRevision = status(harness).required_revision;
+    await harness.gateway.batch([
+      harness.gateway.statement(`
+        UPDATE user_roles SET revoked_at = ?
+        WHERE user_id = ? AND role = 'editor' AND revoked_at IS NULL
+      `).bind(timestamp + 7, 'weight-role-user'),
+      requireAttributeReplayAfterChange(harness.gateway),
+    ]);
+    expect(status(harness).required_revision).toBe(stableRevision);
   } finally { close(harness); }
 });
 

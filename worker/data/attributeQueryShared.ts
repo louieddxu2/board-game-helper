@@ -282,6 +282,7 @@ export interface AttributeResponseInput {
   ratingB?: number | null;
   sessionId: string;
   actorId: string | null;
+  actorIsAuthorized?: boolean;
   timestamp: number;
 }
 

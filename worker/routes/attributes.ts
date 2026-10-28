@@ -133,6 +133,7 @@ attributesRoutes.post('/api/attributes/responses', async (c) => {
     const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
       actorId: c.get('user')?.id ?? null,
+      actorIsAuthorized: c.get('user')?.roles.some((role) => role === 'admin' || role === 'editor') ?? false,
       timestamp: now(),
     });
     setD1MetricsHeader(c, db);

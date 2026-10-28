@@ -6,7 +6,7 @@ import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/
  * represented by 40 classic points. Volatility is intentionally not part of
  * this model: RD is the only uncertainty state we persist.
  */
-export const ATTRIBUTE_SCORE_MODEL_VERSION = 'glicko-rd-v1';
+export const ATTRIBUTE_SCORE_MODEL_VERSION = 'glicko-rd-v2';
 export const ATTRIBUTE_INITIAL_SCORE = 5;
 export const ATTRIBUTE_MIN_SCORE = 0;
 export const ATTRIBUTE_MAX_SCORE = 10;
@@ -39,6 +39,7 @@ export interface AttributeComparisonEvidence {
   subjectBId: string;
   attributeId: string;
   result: AttributeComparisonResult;
+  weight?: number;
 }
 
 export interface AttributeVoteReplayEvent {
@@ -103,13 +104,14 @@ const updateAgainst = (
   actualScore: number,
   kind: 'rating' | 'comparison',
   result?: AttributeComparisonResult,
+  weight = 1,
 ): AttributeUpdateResult => {
   const g = gForRd(opponent.ratingDeviation);
   const expected = expectedForRatings(state.score, opponent.score, opponent.ratingDeviation);
   const variance = 1 / (ATTRIBUTE_GLICKO_Q ** 2 * g ** 2 * expected * (1 - expected));
   const currentRd = classicRd(state.ratingDeviation);
-  const updatedClassicRd = Math.sqrt(1 / (1 / currentRd ** 2 + 1 / variance));
-  const updateFactor = ATTRIBUTE_GLICKO_Q / (1 / currentRd ** 2 + 1 / variance);
+  const updatedClassicRd = Math.sqrt(1 / (1 / currentRd ** 2 + weight / variance));
+  const updateFactor = weight * ATTRIBUTE_GLICKO_Q / (1 / currentRd ** 2 + weight / variance);
   const updatedClassicRating = classicRating(state.score) + updateFactor * g * (actualScore - expected);
   const next: OnlineAttributeState = {
     ...state,
@@ -165,7 +167,7 @@ const actualScoreForComparison = (result: AttributeComparisonResult): number => 
  * opponent's default RD is tighter than an unscored subject, so an anchor at
  * 8 influences a high-RD subject more than a well-established subject.
  */
-export const applyDirectRating = (state: OnlineAttributeState, value: number): AttributeUpdateResult => {
+export const applyDirectRating = (state: OnlineAttributeState, value: number, weight = 1): AttributeUpdateResult => {
   const boundedValue = boundedScore(value);
   const directSum = state.directSum + boundedValue;
   const directCount = state.directCount + 1;
@@ -173,7 +175,7 @@ export const applyDirectRating = (state: OnlineAttributeState, value: number): A
     const next: OnlineAttributeState = {
       ...state,
       score: boundedValue,
-      ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD,
+      ratingDeviation: boundedRd(ATTRIBUTE_DIRECT_RATING_RD / Math.sqrt(weight)),
       directSum,
       directCount,
       evidenceCount: 1,
@@ -186,6 +188,8 @@ export const applyDirectRating = (state: OnlineAttributeState, value: number): A
     { score: boundedValue, ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD },
     0.5,
     'rating',
+    undefined,
+    weight,
   );
   return { next: { ...updated.next, directSum, directCount }, delta: updated.delta };
 };
@@ -195,11 +199,12 @@ export const applyComparison = (
   stateA: OnlineAttributeState,
   stateB: OnlineAttributeState,
   result: AttributeComparisonResult,
+  weight = 1,
 ): { a: AttributeUpdateResult; b: AttributeUpdateResult } => {
   const actualA = actualScoreForComparison(result);
   return {
-    a: updateAgainst(stateA, stateB, actualA, 'comparison', result),
-    b: updateAgainst(stateB, stateA, 1 - actualA, 'comparison', result),
+    a: updateAgainst(stateA, stateB, actualA, 'comparison', result, weight),
+    b: updateAgainst(stateB, stateA, 1 - actualA, 'comparison', result, weight),
   };
 };
 
@@ -247,7 +252,7 @@ export const calculateAttributeScores = (
   comparisons.forEach((comparison) => {
     const a = getState(comparison.subjectAId, comparison.attributeId);
     const b = getState(comparison.subjectBId, comparison.attributeId);
-    const updated = applyComparison(a.state, b.state, comparison.result);
+    const updated = applyComparison(a.state, b.state, comparison.result, comparison.weight);
     states.set(a.key, updated.a.next);
     states.set(b.key, updated.b.next);
   });

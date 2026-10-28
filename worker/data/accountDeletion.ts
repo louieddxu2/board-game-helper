@@ -1,4 +1,5 @@
 import type { Database, D1Result } from './database';
+import { requireAttributeReplayAfterChange } from './attributeVoteWeights';
 
 export const DELETED_ACCOUNT_ID = 'usr_deleted';
 
@@ -113,6 +114,7 @@ export const deleteAccount = async (
     statement(db, 'UPDATE review_proposals SET claimed_by = NULL, claimed_until = NULL WHERE claimed_by = ?', userId),
     statement(db, 'UPDATE review_proposals SET reviewed_by = NULL WHERE reviewed_by = ?', userId),
     statement(db, 'DELETE FROM users WHERE id = ?', userId),
+    requireAttributeReplayAfterChange(db),
   );
 
   const results = await db.batch(statements) as D1Result[];

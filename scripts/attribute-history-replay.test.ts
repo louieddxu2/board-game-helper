@@ -11,6 +11,11 @@ import {
   saveAttributeResponse,
 } from '../worker/data/attributes';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
+import {
+  ATTRIBUTE_SCORE_MODEL_VERSION,
+  applyComparison,
+  emptyAttributeState,
+} from '../worker/data/attributeScoring';
 
 const setup = (
   beforeHistoryConversion?: (sqlite: DatabaseSync) => void,
@@ -438,6 +443,91 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       .toEqual({ active_generation: timestamp + 7, generated_at: timestamp + 7 });
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
+  } finally { sqlite.close(); }
+});
+
+test('full replay applies three vote weights once, keeps raw counts, and ignores model-only drift', async () => {
+  const timestamp = Date.now();
+  const { sqlite, gateway, executedSql } = setup();
+  const attributeId = 'attribute_weight_contract';
+  try {
+    sqlite.prepare(`
+      INSERT INTO attributes (id, key, category, min_value, max_value, is_active, sort_order)
+      VALUES (?, ?, NULL, 0, 10, 1, 99)
+    `).run(attributeId, 'weight_contract');
+    sqlite.prepare(`
+      INSERT INTO attribute_translations (attribute_id, locale, name)
+      VALUES (?, 'zh-TW', '權重契約測試')
+    `).run(attributeId);
+    const [first, second] = sqlite.prepare(`
+      SELECT s.id
+      FROM attribute_subjects s JOIN games g ON g.id = s.game_id
+      WHERE s.kind = 'game' AND g.entity_kind = 'base' AND g.visibility = 'public'
+        AND g.merged_into_game_id IS NULL AND g.bgg_id IS NOT NULL
+      ORDER BY s.id LIMIT 2
+    `).all() as Array<{ id: string }>;
+    expect(first?.id).toBeTruthy();
+    expect(second?.id).toBeTruthy();
+    sqlite.prepare(`
+      INSERT INTO users (id, google_sub, email, email_normalized, created_at, last_login_at)
+      VALUES ('weight-member', 'weight-member-sub', 'weight-member@example.test', 'weight-member@example.test', ?, ?),
+             ('weight-editor', 'weight-editor-sub', 'weight-editor@example.test', 'weight-editor@example.test', ?, ?)
+    `).run(timestamp, timestamp, timestamp, timestamp);
+    sqlite.prepare(`
+      INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+      VALUES ('weight-editor', 'editor', NULL, ?, NULL)
+    `).run(timestamp);
+    const insert = sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, comparison,
+         activity_json, actor_id, session_id, created_at, updated_at, recorded_online)
+      VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, 0)
+    `);
+    insert.run('weight-guest-rating', attributeId, first.id, second.id, 10, null, null, 'weight-guest-session', timestamp + 1, timestamp + 1);
+    insert.run('weight-member-rating', attributeId, first.id, second.id, 0, null, 'weight-member', 'weight-member-session', timestamp + 2, timestamp + 2);
+    insert.run('weight-editor-rating', attributeId, first.id, second.id, 0, null, 'weight-editor', 'weight-editor-session', timestamp + 3, timestamp + 3);
+    insert.run('weight-guest-comparison', attributeId, first.id, second.id, null, 'A_HIGHER', null, 'weight-guest-comparison-session', timestamp + 4, timestamp + 4);
+    insert.run('weight-editor-comparison', attributeId, first.id, second.id, null, 'A_HIGHER', 'weight-editor', 'weight-editor-comparison-session', timestamp + 5, timestamp + 5);
+
+    const replay = await replayAllAttributeScores(gateway, timestamp + 10);
+    let expectedA = {
+      ...emptyAttributeState(),
+      score: 10 / 4.5,
+      ratingDeviation: 1.5 / Math.sqrt(4.5),
+      directSum: 10,
+      directCount: 3,
+      evidenceCount: 3,
+    };
+    let expectedB = emptyAttributeState();
+    ({ a: { next: expectedA }, b: { next: expectedB } } = applyComparison(expectedA, expectedB, 'A_HIGHER', 1));
+    ({ a: { next: expectedA }, b: { next: expectedB } } = applyComparison(expectedA, expectedB, 'A_HIGHER', 2));
+    const actual = sqlite.prepare(`
+      SELECT score, rating_deviation, direct_sum, direct_count,
+        comparison_count, decisive_comparison_count, evidence_count, model_version
+      FROM attribute_score_states WHERE subject_id = ? AND attribute_id = ?
+    `).get(first.id, attributeId) as Record<string, number | string>;
+    expect(actual.score).toBeCloseTo(expectedA.score, 10);
+    expect(actual.rating_deviation).toBeCloseTo(expectedA.ratingDeviation, 10);
+    expect(actual.direct_sum).toBe(10);
+    expect(actual.direct_count).toBe(3);
+    expect(actual.comparison_count).toBe(2);
+    expect(actual.decisive_comparison_count).toBe(2);
+    expect(actual.evidence_count).toBe(5);
+    expect(actual.model_version).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
+    expect(replay.catalogPayload.scoreModelVersion).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
+    expect(executedSql.filter((sql) => /SELECT user_id[\s\S]*FROM\s+user_roles/i.test(sql))).toHaveLength(1);
+    expect(executedSql.filter((sql) => /SELECT response_id[\s\S]*FROM\s+attribute_vote_responses/i.test(sql))).toHaveLength(1);
+
+    const untouched = sqlite.prepare(`
+      SELECT subject_id, model_version FROM attribute_score_states
+      WHERE attribute_id = ? AND direct_count = 0 LIMIT 1
+    `).get(attributeId) as { subject_id: string; model_version: string };
+    sqlite.prepare(`UPDATE attribute_score_states SET model_version = 'legacy-v1' WHERE subject_id = ? AND attribute_id = ?`)
+      .run(untouched.subject_id, attributeId);
+    const secondReplay = await replayAllAttributeScores(gateway, timestamp + 11);
+    expect(secondReplay.changed).toBe(false);
+    expect(sqlite.prepare(`SELECT model_version FROM attribute_score_states WHERE subject_id = ? AND attribute_id = ?`)
+      .get(untouched.subject_id, attributeId)).toEqual({ model_version: 'legacy-v1' });
   } finally { sqlite.close(); }
 });
 

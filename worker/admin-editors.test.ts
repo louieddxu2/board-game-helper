@@ -76,4 +76,42 @@ describe('editor invitations', () => {
     expect(await response.json()).toEqual({ error: 'last_admin_role' });
     expect(calls.some((call) => call.sql.includes('UPDATE user_roles SET revoked_at'))).toBe(false);
   });
+
+  test('appends replay invalidation immediately after a successful role revoke', async () => {
+    const calls: Array<{ sql: string; values: unknown[] }> = [];
+    const batches: DatabaseStatement[][] = [];
+    const database: Database = {
+      statement(sql: string): DatabaseStatement {
+        const call = { sql, values: [] as unknown[] };
+        calls.push(call);
+        return {
+          bind(...values: unknown[]) { call.values = values; return this; },
+          first: async <T>() => {
+            if (sql.includes("role = 'admin' AND revoked_at IS NULL AND user_id <> ?")) return { present: 1 } as T;
+            if (sql.includes("WHERE user_id = ? AND role = 'admin'")) return { present: 1 } as T;
+            return null;
+          },
+          all: async <T>() => ({ success: true, results: [] as T[] }),
+          run: async <T>() => ({ success: true, results: [] as T[] }),
+        };
+      },
+      batch: async (statements) => { batches.push(statements); return []; },
+    };
+    const app = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
+    app.use('*', async (c, next) => {
+      c.set('database', database);
+      c.set('user', { id: 'admin-1', roles: ['admin'] });
+      await next();
+    });
+    app.route('/', adminRoutes);
+
+    const response = await app.request('/api/admin/editors/editor-1?role=editor', { method: 'DELETE' });
+
+    expect(response.status).toBe(200);
+    expect(batches).toHaveLength(1);
+    const mutationIndex = calls.findIndex((call) => call.sql.includes('UPDATE user_roles SET revoked_at'));
+    const replayIndex = calls.findIndex((call) => call.sql.includes('UPDATE attribute_replay_status'));
+    expect(replayIndex).toBe(mutationIndex + 1);
+    expect(calls[replayIndex].sql).toMatch(/changes\(\)\s*>\s*0/);
+  });
 });

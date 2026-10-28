@@ -5,6 +5,7 @@ import type { SessionUser, UserRole } from '../src/shared/types';
 import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
 import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
+import { requireAttributeReplayAfterChange } from './data/attributeVoteWeights';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const SESSION_COOKIE = 'wbr_session';
@@ -180,11 +181,11 @@ const upsertGoogleUser = async (c: AppContext, profile: {
       `SELECT 1 FROM user_roles WHERE role = 'admin' AND revoked_at IS NULL LIMIT 1`
     ).first();
     if (!existingAdmin) {
-      await getDatabase(c).statement(`
+      await getDatabase(c).batch([getDatabase(c).statement(`
         INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
         VALUES (?, 'admin', ?, ?, NULL)
         ON CONFLICT(user_id, role) DO NOTHING
-      `).bind(userId, userId, timestamp).run();
+      `).bind(userId, userId, timestamp), requireAttributeReplayAfterChange(getDatabase(c))]);
     }
   }
 
@@ -199,6 +200,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
         SELECT ?, role, invited_by, ?, NULL FROM editor_invitations WHERE id = ?
         ON CONFLICT(user_id, role) DO NOTHING
       `).bind(userId, timestamp, invite.id),
+      requireAttributeReplayAfterChange(getDatabase(c)),
       getDatabase(c).statement(`
         UPDATE editor_invitations
         SET claimed_by = ?, claimed_at = ?, email_hash = NULL, masked_email = NULL
