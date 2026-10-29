@@ -5,19 +5,19 @@
 .content-page section h2 { font-size: 22px; margin-bottom: 9px; }
 .content-page section p { margin: 0; line-height: 1.8; color: var(--muted); }
 
-.hero { padding: 12px max(24px, calc((100vw - 1180px) / 2)) 20px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; position: relative; z-index: 10; background: var(--green); color: #fffdf8; }
+.hero { padding: 12px max(24px, calc((100vw - 1180px) / 2)) 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; position: relative; z-index: 10; background: var(--green); color: #fffdf8; }
 .hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .hero-bg::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
 .eyebrow { color: var(--orange); font-size: 12px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; margin-bottom: 14px; }
 .hero .eyebrow { color: var(--yellow); text-align: center; }
-.hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 12px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
-.hero-inner { grid-column: 1 / -1; width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+.hero h1 { grid-column: 1; grid-row: 1; min-width: 0; margin: 0; font-size: clamp(24px, 2.8vw, 34px); font-weight: 800; line-height: 1.3; white-space: nowrap; text-align: left; position: relative; z-index: 2; }
+.hero-inner { grid-column: 1 / -1; min-width: 0; width: 100%; position: relative; z-index: 2; }
 .hero-main { width: 100%; max-width: 760px; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
-.hero-recents { margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; text-align: center; }
-.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
+.hero-recents { margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; }
+.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
 .recent-game-chips button, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
@@ -60,6 +60,7 @@
 .content-section { max-width: 1180px; margin: 0 auto; padding: 90px 24px; }
 .home-rule-section { padding: 28px 24px; }
 .home-rule-section .section-heading { margin-bottom: 16px; }
+.home-rule-section .section-heading h2 { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.35; }
 .content-section + .content-section { padding-top: 20px; }
 .ad-slot { min-height: 34px; display: grid; place-items: center; color: var(--color-text-subtle); background: rgba(255,253,248,.55); border: 1px dashed #c9c3b7; border-radius: 10px; text-align: center; }
 .ad-slot small { min-height: auto; font-size: 10px; letter-spacing: .08em; }
@@ -90,7 +91,7 @@
 .personal-home-content { padding: 24px 0 12px; }
 .personal-home-section { width: 100%; }
 .personal-home-heading { margin-bottom: 16px; }
-.personal-home-heading h2 { margin: 0; font-size: clamp(27px, 3.5vw, 36px); }
+.personal-home-heading h2 { margin: 0; font-size: clamp(20px, 2.1vw, 26px); line-height: 1.35; }
 .personal-home-heading span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; background: var(--white); color: var(--muted); font-size: 11px; font-weight: 800; }
 .personal-home-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .personal-home-card { position: relative; min-width: 0; min-height: 104px; display: grid; align-content: center; gap: 7px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; padding: 15px 42px 15px 17px; background: var(--white); color: inherit; text-decoration: none; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; }

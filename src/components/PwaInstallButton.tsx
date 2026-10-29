@@ -17,10 +17,10 @@ export const PwaInstallButton = () => {
 
   if (state === 'installed') return null;
   return <>
-    <button type="button" className="pwa-install-button" disabled={state === 'prompting'} onClick={() => {
+    <button type="button" className="pwa-install-button" aria-label="加入主畫面" title="加入主畫面" disabled={state === 'prompting'} onClick={() => {
       void requestPwaInstall().then((outcome) => { if (outcome === 'manual') setHelpOpen(true); });
     }}>
-      <span aria-hidden="true">＋</span>加入主畫面
+      安裝
     </button>
     <dialog ref={dialogRef} className="pwa-install-help" aria-labelledby="pwa-install-title"
       onCancel={(event) => { event.preventDefault(); setHelpOpen(false); }}

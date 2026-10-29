@@ -14,7 +14,7 @@ const routeHome = async (page: import('@playwright/test').Page, getUser: () => o
   } }));
 };
 
-test('places install at the hero top right outside the unchanged mobile header in both home modes', async ({ page }) => {
+test('aligns a compact install action beside the slogan with smaller section headings in both home modes', async ({ page }) => {
   let user: object | null = null;
   await routeHome(page, () => user);
   const header = page.locator('.site-header');
@@ -27,14 +27,31 @@ test('places install at the hero top right outside the unchanged mobile header i
     const installBox = (await install.boundingBox())!;
     const headerBox = (await header.boundingBox())!;
     const contentBox = (await hero.locator('h1, .personal-home-search').first().boundingBox())!;
-    expect(headerBox.height).toBe(66);
+    expect(headerBox.height).toBe(page.viewportSize()!.width <= 800 ? 66 : 78);
     expect(heroBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
-    expect(installBox.y).toBeCloseTo(heroBox.y + 8, 0);
-    expect(heroBox.x + heroBox.width - installBox.x - installBox.width).toBeCloseTo(12, 0);
-    expect(installBox.y + installBox.height).toBeLessThanOrEqual(contentBox.y);
+    expect(installBox.y).toBeGreaterThanOrEqual(heroBox.y);
+    expect(installBox.y - heroBox.y).toBeLessThanOrEqual(24);
+    expect(installBox.width).toBeLessThanOrEqual(52);
+    expect(installBox.x + installBox.width).toBeLessThanOrEqual(heroBox.x + heroBox.width);
+    await expect(install).toHaveText('安裝');
+    if (await hero.locator('h1').count()) {
+      expect(Math.abs(installBox.y + installBox.height / 2 - contentBox.y - contentBox.height / 2)).toBeLessThan(1);
+      expect(contentBox.x + contentBox.width).toBeLessThan(installBox.x);
+      const titleSize = await hero.locator('h1').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+      const titleLineHeight = await hero.locator('h1').evaluate(element => parseFloat(getComputedStyle(element).lineHeight));
+      expect(contentBox.height).toBeLessThanOrEqual(titleLineHeight + 1);
+      const headingSize = await page.locator('.home-rule-section h2').first().evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+      expect(headingSize).toBeLessThan(titleSize);
+      const searchBox = (await hero.locator('.hero-search').boundingBox())!;
+      expect(searchBox.x).toBeCloseTo(contentBox.x, 0);
+      expect(searchBox.y).toBeGreaterThanOrEqual(Math.max(contentBox.y + contentBox.height, installBox.y + installBox.height));
+    } else {
+      expect(installBox.y + installBox.height).toBeLessThanOrEqual(contentBox.y);
+    }
     expect(await page.locator('body').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   };
-  for (const width of [320, 393]) {
+  for (const width of [320, 393, 1280]) {
+    const activate = (target: import('@playwright/test').Locator) => width <= 800 ? target.tap() : target.click();
     await page.setViewportSize({ width, height: 851 });
     await page.goto('/');
     await expect(install).toBeVisible();
@@ -45,10 +62,10 @@ test('places install at the hero top right outside the unchanged mobile header i
     await expect(page.getByRole('button', { name: '我的收藏' })).toBeVisible();
     await expect(install).toBeVisible();
     await checkHeroPosition();
-    await header.getByRole('button', { name: '我的收藏' }).tap();
+    await activate(page.getByRole('button', { name: '我的收藏', exact: true }));
     await expect(page.locator('.personal-home-hero')).toBeVisible();
     await checkHeroPosition();
-    await header.getByRole('button', { name: '探索', exact: true }).tap();
+    await activate(page.getByRole('button', { name: '探索', exact: true }));
     await expect(page.locator('.hero')).toBeVisible();
     user = null;
   }
