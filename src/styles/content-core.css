@@ -185,12 +185,16 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .rule-card-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; flex-wrap: wrap; }
 .importance-button { display: inline-flex; align-items: stretch; min-height: 40px; border: 1px solid #d9c59d; border-radius: 12px; padding: 0; overflow: hidden; background: #fffaf0; color: #765716; font: inherit; cursor: pointer; }
 .importance-button:hover { border-color: var(--orange); background: #fdf0d2; }
-.importance-button.active { border-color: #d49a22; background: #f5dfad; color: #5f481a; }
+.importance-button.active { border-color: var(--green); background: var(--green); color: var(--white); }
 .importance-button:disabled { opacity: .65; cursor: wait; }
-.importance-action-copy { display: grid; align-content: center; justify-items: start; padding: 4px 9px; }
+.importance-action-copy { position: relative; display: flex; align-items: center; gap: 3px; padding: 4px 9px; }
 .importance-action-copy strong { font-size: 13px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+.importance-increment { min-width: 2ch; font-size: 12px; font-weight: 800; line-height: 1; }
+.importance-button.active .importance-increment { visibility: hidden; }
+.importance-selection-mark { position: absolute; top: 3px; right: 6px; width: 34px; height: 28px; fill: none; stroke: var(--yellow); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 0 var(--green)); pointer-events: none; }
 .importance-tally { display: grid; min-width: 32px; align-content: center; justify-items: center; padding: 4px 8px; border-left: 1px solid #d9c59d; background: rgba(255,255,255,.72); line-height: 1; }
-.importance-tally strong { font-size: 14px; font-weight: 800; }
+.importance-tally strong { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.importance-button.active .importance-tally { border-left-color: rgba(255,255,255,.3); background: transparent; }
 .importance-count { display: inline-grid; place-items: center; min-width: 32px; padding: 4px 8px; border: 1px solid #d9c59d; border-radius: 10px; background: #fffaf0; color: #765716; }
 .importance-count strong { font-size: 13px; font-weight: 800; }
 
