@@ -208,7 +208,6 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <div className="hero-inner"><div className="hero-main">
         <h1>這次玩對，或是下次玩對。</h1>
         <div className="hero-search" id="home-search">
-          <span className="hero-search-label">查詢玩錯規則</span>
           <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
         </div>
         {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
@@ -219,7 +218,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <div><small>未完成草稿</small><strong>{draft.game?.displayName ?? '尚未選擇遊戲'}・{draft.rules.length} 個輸入格</strong></div>
       <Link to="/add">繼續記錄 →</Link>
     </section>}
-    <section id="discover" className="content-section home-discover-section">
+    <section id="discover" className="content-section home-rule-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       {homeError && <div className="content-load-error" role="alert"><p>{home ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
       <div className="rule-grid">
@@ -244,7 +243,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       </div>
     </section>
     <AdSlot placement="home-after-game-exploration" />
-    {resolvedRecentCards.length > 0 && <section className="content-section">
+    {resolvedRecentCards.length > 0 && <section className="content-section home-rule-section">
       <div className="section-heading"><div><h2>近期被玩錯的規則</h2></div></div>
       <div className="rule-grid compact">{resolvedRecentCards.map((rule) =>
         <RuleCard key={rule.id} rule={rule} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}</div>

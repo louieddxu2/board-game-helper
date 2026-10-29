@@ -18,9 +18,9 @@
   .mobile-nav a.active { background: var(--cream); color: var(--green); font-weight: 800; }
   .mobile-nav a span, .mobile-nav button span { font-size: 18px; line-height: 1; }
   footer { padding-bottom: 90px; }
-  .hero { min-height: auto; padding: 50px 18px 40px; }
-  .hero-inner { grid-template-columns: 1fr; gap: 30px; }
-  .hero h1 { font-size: clamp(20px, 6.2vw, 24px); margin-bottom: 14px; text-wrap: balance; word-break: keep-all; max-width: 100%; }
+  .hero { padding: 8px 12px 16px; }
+  .hero-inner { padding: 0 6px; }
+  .hero h1 { font-size: clamp(20px, 6.2vw, 24px); margin-bottom: 10px; text-wrap: balance; word-break: keep-all; max-width: 100%; }
   .hero-main { width: 100%; }
   .hero-bg::after { width: 320px; height: 320px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   .hero-copy { font-size: 17px; line-height: 1.6; text-align: center; margin-bottom: 30px; }
@@ -28,17 +28,16 @@
   .hero-actions .button { flex: 1; white-space: nowrap; max-width: 240px; }
   .hero-search .search-input input { padding: 14px 18px; font-size: 16px; }
   .hero-search .search-input span { font-size: 18px; padding: 0 16px; }
-  .hero-search-label { margin-bottom: 6px; }
   .hero-preview { display: none; }
-  .hero-recents { display: flex; margin-top: 14px; }
+  .hero-recents { display: flex; margin-top: 10px; }
   .rule-grid, .rule-grid.compact, .admin-grid { grid-template-columns: 1fr; }
   .game-grid { flex-direction: column; align-items: stretch; }
   .content-section { padding: 65px 18px; }
-  .home-discover-section { padding-top: 44px; }
+  .home-rule-section { padding: 20px 18px; }
+  .home-rule-section .section-heading { margin-bottom: 12px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }
-  .ad-slot-home-after-game-exploration { width: calc(100% - 36px); margin: -36px auto 42px; }
-  .ad-slot-personal-home-after-favorites { width: calc(100% - 24px); margin: 4px auto 28px; }
-  .explore-mode-button { top: 10px; right: 12px; }
+  .ad-slot-home-after-game-exploration { width: calc(100% - 36px); margin: 0 auto; }
+  .ad-slot-personal-home-after-favorites { width: calc(100% - 24px); margin: 4px auto 16px; }
   .personal-home { padding-bottom: 86px; }
   .personal-home-hero { padding: 17px 12px 16px; }
   .personal-home-toolbar { margin-bottom: 10px; }
@@ -48,7 +47,7 @@
   .personal-home-recents { overflow: visible; }
   .personal-home-recents > div { flex-wrap: wrap; overflow: visible; }
   .personal-home-recents a { white-space: normal; }
-  .personal-home-content { padding: 23px 12px 12px; }
+  .personal-home-content { padding: 16px 12px 8px; }
   .personal-home-heading { margin-bottom: 10px; }
   .personal-home-heading h2 { font-size: 22px; }
   .personal-home-heading span { padding: 4px 8px; font-size: 10px; }

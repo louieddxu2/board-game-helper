@@ -5,17 +5,17 @@
 .content-page section h2 { font-size: 22px; margin-bottom: 9px; }
 .content-page section p { margin: 0; line-height: 1.8; color: var(--muted); }
 
-.hero { min-height: 55vh; padding: 0 24px; display: flex; flex-direction: column; justify-content: center; position: relative; z-index: 10; background: var(--green); color: #fffdf8; }
+.hero { padding: 12px max(24px, calc((100vw - 1180px) / 2)) 20px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; position: relative; z-index: 10; background: var(--green); color: #fffdf8; }
 .hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .hero-bg::after { content: ''; position: absolute; width: 600px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 80px solid rgba(233,180,76,.1); border-radius: 50%; pointer-events: none; }
 .eyebrow { color: var(--orange); font-size: 12px; letter-spacing: .2em; font-weight: 800; text-transform: uppercase; margin-bottom: 14px; }
 .hero .eyebrow { color: var(--yellow); text-align: center; }
-.hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 20px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
-.hero-inner { width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+.hero h1 { font-size: clamp(1.75rem, 5.5vw, 3.25rem); font-weight: 800; line-height: 1.25; margin-bottom: 12px; text-wrap: balance; word-break: keep-all; max-width: 32ch; margin-left: auto; margin-right: auto; text-align: center; }
+.hero-inner { grid-column: 1 / -1; width: 100%; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
 .hero-main { width: 100%; max-width: 760px; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
-.hero-recents { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hero-recents { margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; text-align: center; }
 .hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
@@ -31,8 +31,7 @@
 .button.primary { background: var(--orange); color: white; }
 .button.secondary { background: transparent; border-color: currentColor; color: inherit; }
 .button.danger { background: #a52f23; color: white; }
-.hero-search { width: 100%; max-width: 760px; position: relative; z-index: 2; margin-bottom: 24px; }
-.hero-search-label { display: block; margin: 0 0 8px 4px; color: #dfe8e4; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.hero-search { width: 100%; max-width: 760px; position: relative; z-index: 2; }
 .hero-search label { color: #dfe8e4; }
 .hero-search .search-input { background: white; border-radius: 24px; }
 .hero-search .search-input input { padding: 24px 30px; font-size: 22px; }
@@ -59,20 +58,21 @@
 .create-result-login:hover { background: var(--cream); color: var(--ink); }
 
 .content-section { max-width: 1180px; margin: 0 auto; padding: 90px 24px; }
-.home-discover-section { padding-top: 70px; }
+.home-rule-section { padding: 28px 24px; }
+.home-rule-section .section-heading { margin-bottom: 16px; }
 .content-section + .content-section { padding-top: 20px; }
 .ad-slot { min-height: 34px; display: grid; place-items: center; color: var(--color-text-subtle); background: rgba(255,253,248,.55); border: 1px dashed #c9c3b7; border-radius: 10px; text-align: center; }
 .ad-slot small { min-height: auto; font-size: 10px; letter-spacing: .08em; }
-.ad-slot-home-after-game-exploration { width: min(1132px, calc(100% - 48px)); margin: -48px auto 54px; }
-.ad-slot-personal-home-after-favorites { width: min(1132px, calc(100% - 48px)); margin: 8px auto 46px; }
+.ad-slot-home-after-game-exploration { width: min(1132px, calc(100% - 48px)); margin: 0 auto; }
+.ad-slot-personal-home-after-favorites { width: min(1132px, calc(100% - 48px)); margin: 8px auto 24px; }
 .ad-slot-game-rule-list { margin: 4px 0; }
 
 .home-mode-button { min-height: 36px; border: 1px solid var(--green); border-radius: 999px; padding: 6px 15px; background: var(--white); color: var(--green); font-weight: 800; cursor: pointer; outline: none; }
 .home-mode-button:focus, .home-mode-button:focus-visible, .home-mode-button:active { outline: none; box-shadow: none; }
-.explore-mode-button { position: absolute; z-index: 3; top: 20px; right: max(24px, calc((100% - 1180px) / 2)); border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.18); color: white; }
+.explore-mode-button { grid-column: 2; grid-row: 1; justify-self: end; z-index: 3; border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.18); color: white; }
 .explore-mode-button:hover, .explore-mode-button:focus, .explore-mode-button:focus-visible, .explore-mode-button:active { background: rgba(255,255,255,.25); color: white; outline: none; box-shadow: none; }
 .personal-home { min-height: 70vh; padding-bottom: 74px; background: var(--paper); }
-.personal-home-hero { position: relative; z-index: 10; padding: 30px 24px 28px; background: var(--green); color: var(--white); }
+.personal-home-hero { position: relative; z-index: 10; padding: 20px 24px 16px; background: var(--green); color: var(--white); }
 .personal-home-hero-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .personal-home-hero-bg::after { content: ''; position: absolute; width: 360px; height: 360px; right: max(-150px, calc((100% - 1480px) / 2)); top: -210px; border: 52px solid rgba(233,180,76,.09); border-radius: 50%; pointer-events: none; }
 .personal-home-search, .personal-home-content { width: min(1132px, 100%); margin: 0 auto; }
@@ -87,7 +87,7 @@
 .personal-home-recents > div { display: flex; flex-wrap: wrap; min-width: 0; gap: 6px; }
 .personal-home-recents a { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; min-height: 26px; padding: 4px 10px; line-height: 1.2; overflow-wrap: anywhere; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; white-space: normal; }
 .personal-home-recents a:hover { background: rgba(255,255,255,.22); }
-.personal-home-content { padding: 38px 0 18px; }
+.personal-home-content { padding: 24px 0 12px; }
 .personal-home-section { width: 100%; }
 .personal-home-heading { margin-bottom: 16px; }
 .personal-home-heading h2 { margin: 0; font-size: clamp(27px, 3.5vw, 36px); }
