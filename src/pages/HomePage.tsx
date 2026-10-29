@@ -152,7 +152,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
 
   const toggleRuleImportance = async (rule: RuleCardModel & { gameName: string; gameSlug: string }) => {
     if (!user) {
-      showToast?.('登入後即可標記「我也玩錯過」！', 'info');
+      showToast?.('登入後即可將規則標為重要。', 'info');
       return;
     }
     if (savingRuleIds.has(rule.id)) return;

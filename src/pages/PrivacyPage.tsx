@@ -160,8 +160,8 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
   </section>
 
   <section>
-    <h2>「重要！／我也玩錯過」投票</h2>
-    <p>按下規則上的「重要！／我也玩錯過」時，本站會保存帳號與該規則之間的對應關係。</p>
+    <h2>「重要！」投票</h2>
+    <p>按下規則上的「重要！」時，本站會保存帳號與該規則之間的對應關係。</p>
     <p>保存這項資料是為了：</p>
     <ul>
       <li>防止同一帳號對同一規則重複計票</li>

@@ -282,10 +282,9 @@ describe('RuleCard', () => {
       }}
     /></MemoryRouter>);
 
-    const button = screen.getByRole('button', { name: '取消「我也玩錯過」，目前 3' });
+    const button = screen.getByRole('button', { name: '取消重要標記，目前 3' });
     expect(button).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('重要！')).toBeInTheDocument();
-    expect(screen.getByText('✓ 我也玩錯過')).toBeInTheDocument();
     fireEvent.click(button);
     expect(onToggleImportance).toHaveBeenCalledOnce();
   });
