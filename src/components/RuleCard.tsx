@@ -242,10 +242,11 @@ export const RuleCard = ({
           >
             <span className="importance-action-copy" aria-hidden="true">
               <strong>重要！</strong>
-              <span className="importance-increment">+1</span>
-              {importanceVoted && <svg className="importance-selection-mark" viewBox="0 0 34 28" focusable="false">
-                <path d="m4 14 7 7L29 3" />
-              </svg>}
+              <span className="importance-feedback">
+                {importanceVoted ? <svg className="importance-selection-mark" viewBox="0 0 18 16" focusable="false">
+                  <path d="m2 8 5 5L16 2" />
+                </svg> : <span className="importance-increment">+1</span>}
+              </span>
             </span>
             <span className="importance-tally" aria-hidden="true"><strong>{rule.importanceCount ?? 0}</strong></span>
           </button> : <span className="importance-count" aria-label={`標記數量 ${rule.importanceCount ?? 0}`}>
