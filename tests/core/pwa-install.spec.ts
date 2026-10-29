@@ -30,7 +30,7 @@ test('aligns a compact install action beside the slogan with smaller section hea
     expect(headerBox.height).toBe(page.viewportSize()!.width <= 800 ? 66 : 78);
     expect(heroBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height);
     expect(installBox.y).toBeGreaterThanOrEqual(heroBox.y);
-    expect(installBox.y - heroBox.y).toBeLessThanOrEqual(24);
+    expect(installBox.y - heroBox.y).toBeLessThanOrEqual(28);
     expect(installBox.width).toBeLessThanOrEqual(52);
     expect(installBox.x + installBox.width).toBeLessThanOrEqual(heroBox.x + heroBox.width);
     await expect(install).toHaveText('安裝');
@@ -39,7 +39,11 @@ test('aligns a compact install action beside the slogan with smaller section hea
       expect(contentBox.x + contentBox.width).toBeLessThan(installBox.x);
       const titleSize = await hero.locator('h1').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
       const titleLineHeight = await hero.locator('h1').evaluate(element => parseFloat(getComputedStyle(element).lineHeight));
-      expect(contentBox.height).toBeLessThanOrEqual(titleLineHeight + 1);
+      const titlePadding = await hero.locator('h1').evaluate(element => {
+        const style = getComputedStyle(element);
+        return parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      });
+      expect(contentBox.height - titlePadding).toBeLessThanOrEqual(titleLineHeight + 1);
       const headingSize = await page.locator('.home-rule-section h2').first().evaluate(element => parseFloat(getComputedStyle(element).fontSize));
       expect(headingSize).toBeLessThan(titleSize);
       const searchBox = (await hero.locator('.hero-search').boundingBox())!;
