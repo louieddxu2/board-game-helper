@@ -49,18 +49,16 @@
 .rule-quick-index {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
 }
 
 .rule-quick-index button {
   min-width: 0;
   min-height: 44px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
+  border: 1px solid var(--green);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--green);
   padding: 0 2px;
   font-size: clamp(11px, 3.2vw, 14px);
   font-weight: 500;
@@ -69,11 +67,13 @@
   cursor: pointer;
 }
 
-.rule-quick-index button:hover,
-.rule-quick-index button.active {
-  color: var(--green);
-  border-bottom-color: var(--green);
+.rule-quick-index button:hover {
   background: var(--cream);
+}
+
+.rule-quick-index button.active {
+  color: var(--white);
+  background: var(--green);
 }
 
 .rule-category-input {
