@@ -1,0 +1,8 @@
+{
+  "method": "POST",
+  "path": "/api/games/game_047e8e6f174f4bb485e09f7689ae1602/merge",
+  "body": {
+    "targetGameId": "game_bgg_460712",
+    "reason": "同名 Mountain Goats: Legacy 重複列；BGG 460712 已由保留列及其外部 ID 使用。"
+  }
+}

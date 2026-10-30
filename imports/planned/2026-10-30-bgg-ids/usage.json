@@ -1,0 +1,51 @@
+{
+  "capturedAt": "2026-10-30T11:40:00.458Z",
+  "database": "board-game-rules-prod",
+  "mode": "read-only",
+  "queries": [
+    {
+      "name": "games",
+      "sql": "SELECT id, slug, display_name, english_name, bgg_id, entity_kind, created_at, updated_at, visibility, merged_into_game_id, attribute_enabled FROM games NOT INDEXED",
+      "returnedRows": 311,
+      "rowsRead": 311,
+      "rowsWritten": 0,
+      "changedDb": false,
+      "changes": 0,
+      "totalAttempts": 1
+    },
+    {
+      "name": "externalIds",
+      "sql": "SELECT game_id, source, external_id, relation FROM game_external_ids WHERE game_id IN ('game_047e8e6f174f4bb485e09f7689ae1602','game_3f158a0c614e443599aaf8fd1046c943','game_16d1b43a0d7b499085fee8c58a9e6768','game_e66b81bb84a143098f7e827686e487e8','game_653a292c67d245daa39c56b2d480fe56','game_d1dcb4d7c7184b1b90464c817482442b','game_41452006d1c849278addfd595877558c')",
+      "returnedRows": 0,
+      "rowsRead": 7,
+      "rowsWritten": 0,
+      "changedDb": false,
+      "changes": 0,
+      "totalAttempts": 1
+    },
+    {
+      "name": "aliases",
+      "sql": "SELECT game_id, alias FROM game_aliases WHERE game_id IN ('game_047e8e6f174f4bb485e09f7689ae1602','game_3f158a0c614e443599aaf8fd1046c943','game_16d1b43a0d7b499085fee8c58a9e6768','game_e66b81bb84a143098f7e827686e487e8','game_653a292c67d245daa39c56b2d480fe56','game_d1dcb4d7c7184b1b90464c817482442b','game_41452006d1c849278addfd595877558c')",
+      "returnedRows": 1,
+      "rowsRead": 106,
+      "rowsWritten": 0,
+      "changedDb": false,
+      "changes": 0,
+      "totalAttempts": 1
+    },
+    {
+      "name": "bggMappings",
+      "sql": "SELECT game_id, source, external_id, relation FROM game_external_ids WHERE source = 'bgg' AND external_id IN ('460712','13005','470254','473111','399959','375459','425445')",
+      "returnedRows": 1,
+      "rowsRead": 8,
+      "rowsWritten": 0,
+      "changedDb": false,
+      "changes": 0,
+      "totalAttempts": 1
+    }
+  ],
+  "totals": {
+    "rowsRead": 432,
+    "rowsWritten": 0
+  }
+}
