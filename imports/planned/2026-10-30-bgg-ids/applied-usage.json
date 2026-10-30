@@ -1,0 +1,258 @@
+{
+  "database": "board-game-rules-prod",
+  "startedAt": "2026-10-30T14:10:25.941Z",
+  "finishedAt": "2026-10-30T14:10:35.919Z",
+  "timeZone": "Asia/Taipei",
+  "status": "complete",
+  "candidates": [
+    {
+      "id": "game_3f158a0c614e443599aaf8fd1046c943",
+      "bggId": 13005
+    },
+    {
+      "id": "game_16d1b43a0d7b499085fee8c58a9e6768",
+      "bggId": 470254
+    },
+    {
+      "id": "game_e66b81bb84a143098f7e827686e487e8",
+      "bggId": 473111
+    },
+    {
+      "id": "game_653a292c67d245daa39c56b2d480fe56",
+      "bggId": 399959
+    },
+    {
+      "id": "game_d1dcb4d7c7184b1b90464c817482442b",
+      "bggId": 375459
+    },
+    {
+      "id": "game_41452006d1c849278addfd595877558c",
+      "bggId": 425445
+    }
+  ],
+  "verification": {
+    "correctedGames": 6,
+    "otherGameFieldsUnchanged": true,
+    "initializedSubjects": 6,
+    "fullReplay": false,
+    "snapshotRebuild": false
+  },
+  "publication": {
+    "processed": {
+      "attribute-subject": 6
+    }
+  },
+  "queryCount": 23,
+  "phases": {
+    "preflight": {
+      "queries": 3,
+      "rowsRead": 24,
+      "rowsWritten": 0
+    },
+    "apply": {
+      "queries": 6,
+      "rowsRead": 1044,
+      "rowsWritten": 1272
+    },
+    "publish-deltas": {
+      "queries": 12,
+      "rowsRead": 290,
+      "rowsWritten": 25
+    },
+    "verify": {
+      "queries": 2,
+      "rowsRead": 174,
+      "rowsWritten": 0
+    }
+  },
+  "totals": {
+    "rowsRead": 1532,
+    "rowsWritten": 1297
+  },
+  "queries": [
+    {
+      "phase": "preflight",
+      "rowsRead": 6,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "preflight",
+      "rowsRead": 12,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "preflight",
+      "rowsRead": 6,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "apply",
+      "rowsRead": 174,
+      "rowsWritten": 212,
+      "changes": 56,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 6,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 162,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 78,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 18,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 2,
+      "rowsWritten": 1,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 1,
+      "rowsWritten": 3,
+      "changes": 1,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "publish-deltas",
+      "rowsRead": 18,
+      "rowsWritten": 6,
+      "changes": 6,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "verify",
+      "rowsRead": 162,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    },
+    {
+      "phase": "verify",
+      "rowsRead": 12,
+      "rowsWritten": 0,
+      "changes": 0,
+      "servedBy": "v3-prod",
+      "totalAttempts": 1
+    }
+  ]
+}

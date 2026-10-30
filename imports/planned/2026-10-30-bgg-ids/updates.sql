@@ -1,5 +1,5 @@
--- Prepared locally on 2026-10-30. NOT APPLIED to production.
--- Six missing primary IDs; Mountain Goats: Legacy requires the separate merge request.
+-- Applied to production on 2026-10-30 at 22:10 Asia/Taipei after explicit approval.
+-- Six missing primary IDs; Mountain Goats: Legacy was merged separately at 21:20.
 -- Dance of Ibexes: https://boardgamegeek.com/boardgame/13005
 UPDATE games SET bgg_id = 13005
 WHERE id = 'game_3f158a0c614e443599aaf8fd1046c943'
