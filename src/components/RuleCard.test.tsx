@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { CompactRuleCard, RuleCard } from './RuleCard';
 import type { RuleCard as RuleCardType } from '../shared/types';
@@ -218,16 +219,10 @@ describe('RuleCard', () => {
     expect(container).not.toHaveTextContent('...');
   });
 
-  test('supports compact rule expansion and keeps filter attributes interactive', () => {
+  test('expands the entire compact card and renders filter attributes as information', () => {
     const onToggleExpanded = vi.fn();
-    const onTagClick = vi.fn();
-    const onPlayerCountsClick = vi.fn();
-    const onEditionClick = vi.fn();
     const { container } = render(<MemoryRouter><CompactRuleCard
       onToggleExpanded={onToggleExpanded}
-      onTagClick={onTagClick}
-      onPlayerCountsClick={onPlayerCountsClick}
-      onEditionClick={onEditionClick}
       rule={{
         id: 'rule_compact', gameId: 'game_1', statement: '完整正確敘述', commonMistake: '完整玩錯情況',
         details: '有補充說明', playerCounts: [2, 3], editionNotes: ['擴充甲'], status: 'published',
@@ -236,8 +231,10 @@ describe('RuleCard', () => {
     /></MemoryRouter>);
 
     const compact = container.querySelector('.rule-card-compact') as HTMLElement;
-    expect(compact).not.toHaveAttribute('role');
-    expect(within(compact).getByRole('button', { name: '完整正確敘述' })).toHaveAttribute('aria-expanded', 'false');
+    expect(compact.tagName).toBe('BUTTON');
+    expect(compact).toHaveAttribute('aria-expanded', 'false');
+    expect(compact).toHaveAccessibleDescription(/2~3.*擴充甲.*#設置.*完整玩錯情況/);
+    expect(within(container).getAllByRole('button')).toEqual([compact]);
     expect(compact).toHaveTextContent('完整正確敘述');
     expect(compact).toHaveTextContent('完整玩錯情況');
     expect(compact).toHaveTextContent('#設置');
@@ -249,13 +246,11 @@ describe('RuleCard', () => {
     fireEvent.click(within(compact).getByText('完整玩錯情況'));
     expect(onToggleExpanded).toHaveBeenCalledTimes(2);
     fireEvent.click(compact);
-    expect(onToggleExpanded).toHaveBeenCalledTimes(2);
-    fireEvent.click(within(compact).getByRole('button', { name: /2~3/ }));
-    fireEvent.click(within(compact).getByRole('button', { name: /擴充甲/ }));
-    fireEvent.click(within(compact).getByRole('button', { name: '#設置' }));
-    expect(onTagClick).toHaveBeenCalledWith('設置');
-    expect(onPlayerCountsClick).toHaveBeenCalledWith([2, 3]);
-    expect(onEditionClick).toHaveBeenCalledWith('擴充甲');
+    fireEvent.click(within(compact).getByText(/2~3/));
+    fireEvent.click(within(compact).getByText(/擴充甲/));
+    fireEvent.click(within(compact).getByText('#設置'));
+    fireEvent.click(compact.querySelector('.compact-expand-hint')!);
+    expect(onToggleExpanded).toHaveBeenCalledTimes(7);
   });
 
   test('only toggles an expanded card from its text paragraphs', () => {
@@ -279,23 +274,22 @@ describe('RuleCard', () => {
     expect(onToggleExpanded).toHaveBeenCalledTimes(3);
   });
 
-  test('supports keyboard expansion directly from a text paragraph', () => {
+  test('supports native keyboard expansion of the compact card', async () => {
     const onToggleExpanded = vi.fn();
     const { container } = render(<MemoryRouter><CompactRuleCard
       onToggleExpanded={onToggleExpanded}
-      onTagClick={vi.fn()}
       rule={{
         id: 'rule_accessible', gameId: 'game_1', statement: '點擊內文展開', status: 'published',
         tags: [{ id: 'tag-1', slug: 'setup', name: '設置' }], sourceLinks: [],
       }}
     /></MemoryRouter>);
 
-    const toggle = within(container).getByRole('button', { name: '點擊內文展開' });
-    fireEvent.keyDown(toggle, { key: 'Enter' });
-    fireEvent.keyDown(toggle, { key: ' ' });
+    const toggle = within(container).getByRole('button', { name: '展開規則：點擊內文展開' });
+    toggle.focus();
+    await userEvent.setup().keyboard('{Enter} ');
 
     expect(onToggleExpanded).toHaveBeenCalledTimes(2);
-    expect(toggle.tagName).toBe('P');
+    expect(toggle.tagName).toBe('BUTTON');
     expect(container.querySelector('.card-expand-control')).toBeNull();
   });
 

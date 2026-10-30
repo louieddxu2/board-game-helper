@@ -1,6 +1,7 @@
 import { Fragment, type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
+import { GameActionsMenu } from '../components/GameActionsMenu';
 import { clearSearchCache } from '../components/GameSearch';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { useSession } from '../context/SessionContext';
@@ -380,24 +381,29 @@ export const GamePage = () => {
   const titleWidthUnits = estimateTitleWidthUnits(game.displayName);
   return <section className="game-page">
     <header className="game-hero">
-      <div className="game-hero-info"><h1 style={{ '--game-title-units': titleWidthUnits } as CSSProperties}>{game.displayName}</h1>
+      <div className="game-hero-info">
+        <div className="game-title-row">
+          <h1 style={{ '--game-title-units': titleWidthUnits } as CSSProperties}>{game.displayName}</h1>
+          {user && <button type="button" className={favorite ? 'game-favorite active' : 'game-favorite'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} aria-label={favoriteSaving ? '正在處理收藏' : favorite ? '取消收藏' : '收藏遊戲'} title={favorite ? '取消收藏' : '收藏遊戲'} onClick={() => void toggleFavorite()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3L2.9 9.6l6.3-.9Z" /></svg>
+          </button>}
+        </div>
         <div className="game-hero-meta">
           {game.englishName && <p className="english-name">{game.englishName}</p>}
         </div>
       </div>
       <div className="inline-actions game-hero-actions">
-        {user && <button type="button" className={favorite ? 'button favorite-button active game-header-action' : 'button secondary favorite-button game-header-action'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} aria-label={favoriteSaving ? '正在處理收藏' : favorite ? '取消收藏' : '收藏遊戲'} onClick={() => void toggleFavorite()}>
-          <span className="game-header-action-desktop">{favoriteSaving ? '處理中…' : favorite ? '★ 已收藏' : '☆ 收藏'}</span><span className="game-header-action-mobile" aria-hidden="true">{favoriteSaving ? '處理中' : favorite ? '已收藏' : '收藏'}</span>
-        </button>}
-        <button type="button" className="button secondary game-header-action" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}><span className="game-header-action-desktop">外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</span><span className="game-header-action-mobile" aria-hidden="true">資源</span></button>
+        <GameActionsMenu key={game.id}>
+        <button type="button" className="button secondary game-header-action" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</button>
         {(user || canEdit) && <>
-          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary game-header-action" aria-label="編輯遊戲名稱" onClick={() => setEditingGame(true)}><span className="game-header-action-desktop">編輯遊戲名稱</span><span className="game-header-action-mobile" aria-hidden="true">編輯</span></button>}
+          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary game-header-action" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
           {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
-            ? <button type="button" className="button secondary game-header-action" aria-label="編輯遊戲名稱" onClick={() => setEditingGame(true)}><span className="game-header-action-desktop">編輯遊戲名稱</span><span className="game-header-action-mobile" aria-hidden="true">編輯</span></button>
-            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定"><span className="game-header-action-desktop">遊戲名稱已鎖定</span><span className="game-header-action-mobile" aria-hidden="true">鎖定</span></span>}
-            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" aria-label="審核遊戲" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}><span className="game-header-action-desktop">審核遊戲</span><span className="game-header-action-mobile" aria-hidden="true">審核</span></button>}</Fragment>}
-          {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
+            ? <button type="button" className="button secondary game-header-action" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
+            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定">遊戲名稱已鎖定</span>}
+            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
         </>}
+        </GameActionsMenu>
+        {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>
     </header>
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
@@ -508,9 +514,6 @@ export const GamePage = () => {
             key={rule.id}
             rule={rule}
             onToggleExpanded={toggleExpanded}
-            onTagClick={toggleTag}
-            onPlayerCountsClick={togglePlayerCounts}
-            onEditionClick={toggleEdition}
           />;
         }
         return <RuleCard

@@ -70,12 +70,9 @@
   .game-hero h1 { font-size: clamp(24px, calc((80vw - 40px) / var(--game-title-units)), 30px); line-height: 1.12; overflow-wrap: anywhere; }
   .game-hero-meta { display: block; min-height: 0; }
   .game-hero-meta .english-name { margin: 3px 0 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
-  .game-hero-actions { display: grid; grid-auto-rows: 44px; gap: 5px; width: 20vw; margin: 0; }
-  .game-hero-actions .game-header-action,
-  .game-hero-actions .game-name-locked { box-sizing: border-box; width: 20vw; min-width: 20vw; height: 44px; min-height: 44px; margin: 0; padding: 0 2px; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 1; }
-  .game-hero-actions .game-name-locked { display: grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); text-align: center; }
-  .game-header-action-desktop { display: none; }
-  .game-header-action-mobile { display: inline; }
+  .game-hero-actions { display: flex; align-items: flex-start; width: 20vw; margin: 0; }
+  .game-hero-actions .game-actions-menu { width: 100%; }
+  .game-hero-actions .game-actions-menu > summary { width: 100%; min-width: 0; height: 44px; padding: 0 2px; font-size: 12px; }
   .stage-tabs { top: 66px; }
   .game-page { padding: 20px 16px 100px; }
   .game-hero { padding-bottom: 12px; }
@@ -89,7 +86,7 @@
   .compact-rule-meta:empty + .compact-rule-correct { padding-right: 20px; }
   .compact-attribute { min-height: 22px; padding: 2px 6px; }
   .compact-rule-row { grid-template-columns: 20px minmax(0, 1fr); gap: 6px; }
-  .compact-rule-row p { font-size: 16px; line-height: 1.6; }
+  .compact-rule-text { font-size: 16px; line-height: 1.6; }
   .compact-rule-row strong { min-width: 20px; font-size: 16px; }
   .statement-text { font-size: 18px; line-height: 1.5; }
   .mistake .mistake-text, .rule-details-note .details-text { font-size: 16px; line-height: 1.5; }

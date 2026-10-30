@@ -97,6 +97,7 @@ describe('GamePage compact rule view', () => {
       <Route path="/games/:identifier" element={<GamePage />} />
     </Routes>
   </MemoryRouter>);
+  const openGameMenu = async () => userEvent.setup().click(await screen.findByLabelText('更多遊戲操作'));
 
   test('starts compact, toggles the same rule closed, and keeps only one rule expanded', async () => {
     const originalMatchMedia = window.matchMedia;
@@ -245,14 +246,12 @@ describe('GamePage compact rule view', () => {
     expect(favorite).toHaveAttribute('aria-pressed', 'false');
     await user.click(favorite);
     await waitFor(() => expect(screen.getByRole('button', { name: '正在處理收藏' })).toBeDisabled());
-    expect(screen.getByText('處理中…')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '正在處理收藏' }));
     expect(mocks.addFavorite).toHaveBeenCalledOnce();
 
     resolveAdd({ wasFirst: false });
     await waitFor(() => expect(screen.getByRole('button', { name: '取消收藏' })).toHaveAttribute('aria-pressed', 'true'));
-    expect(screen.getByText('★ 已收藏')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '取消收藏' }));
     await waitFor(() => expect(mocks.removeFavorite).toHaveBeenCalledOnce());
@@ -266,6 +265,7 @@ describe('GamePage compact rule view', () => {
     renderGamePage();
 
     await screen.findByRole('button', { name: '收藏遊戲' });
+    await openGameMenu();
     expect(screen.queryByRole('button', { name: '編輯遊戲名稱' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '審核遊戲' })).not.toBeInTheDocument();
   });
@@ -276,6 +276,7 @@ describe('GamePage compact rule view', () => {
     mocks.game.mockResolvedValue({ game: { ...game, reviewStatus: 'pending', renameOwnerId: 'another-user' } });
 
     const { unmount } = renderGamePage();
+    await openGameMenu();
     await screen.findByRole('button', { name: '編輯遊戲名稱' });
     expect(screen.getByRole('button', { name: '審核遊戲' })).toBeInTheDocument();
     unmount();
@@ -283,6 +284,7 @@ describe('GamePage compact rule view', () => {
     mocks.game.mockResolvedValue({ game: { ...game, reviewStatus: 'not_required', renameOwnerId: 'another-user', renameLocked: true } });
     renderGamePage();
     await screen.findByRole('button', { name: '收藏遊戲' });
+    await openGameMenu();
     expect(screen.getByLabelText('遊戲名稱已鎖定')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '編輯遊戲名稱' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '審核遊戲' })).not.toBeInTheDocument();
@@ -296,6 +298,7 @@ describe('GamePage compact rule view', () => {
     } });
     renderGamePage();
 
+    await openGameMenu();
     await userEvent.setup().click(await screen.findByRole('button', { name: /外部資源/ }));
     expect(screen.getByRole('dialog', { name: '外部資源' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '新增外部資源' })).not.toBeInTheDocument();

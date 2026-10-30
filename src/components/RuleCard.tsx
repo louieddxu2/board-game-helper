@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useRef } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
@@ -267,69 +267,70 @@ export const RuleCard = ({
 export interface CompactRuleCardProps {
   rule: RuleCardType;
   onToggleExpanded: () => void;
-  onTagClick?: (tag: string) => void;
-  onPlayerCountsClick?: (counts: number[]) => void;
-  onEditionClick?: (edition: string) => void;
 }
 
 export const CompactRuleCard = ({
   rule,
   onToggleExpanded,
-  onTagClick,
-  onPlayerCountsClick,
-  onEditionClick,
 }: CompactRuleCardProps) => {
   const ruleEditions = getRuleEditions(rule);
-  const compactTextToggleProps = {
-    role: 'button' as const,
-    tabIndex: 0,
-    'aria-expanded': false,
-    onClick: onToggleExpanded,
-    onKeyDown: (event: React.KeyboardEvent<HTMLParagraphElement>) => toggleFromKeyboard(event, onToggleExpanded),
-  };
+  const press = useRef<{ x: number; y: number; started: number; canceled: boolean } | null>(null);
   return (
-    <article
+    <button
+      type="button"
       className="rule-card-compact"
       id={`rule-${rule.id}`}
+      aria-label={`展開規則：${rule.statement}`}
+      aria-describedby={`rule-${rule.id}-meta${rule.commonMistake ? ` rule-${rule.id}-mistake` : ''}`}
+      aria-expanded={false}
+      onPointerDown={(event) => {
+        if (!event.isPrimary || event.button !== 0) {
+          if (press.current) press.current.canceled = true;
+          return;
+        }
+        press.current = { x: event.clientX, y: event.clientY, started: performance.now(), canceled: false };
+      }}
+      onPointerMove={(event) => {
+        if (press.current && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > 10) press.current.canceled = true;
+      }}
+      onPointerUp={() => {
+        if (press.current && performance.now() - press.current.started >= 500) press.current.canceled = true;
+      }}
+      onPointerCancel={() => { if (press.current) press.current.canceled = true; }}
+      onContextMenu={() => { if (press.current) press.current.canceled = true; }}
+      onClick={(event) => {
+        const gesture = press.current;
+        press.current = null;
+        if (event.detail !== 0 && gesture?.canceled) return;
+        onToggleExpanded();
+      }}
     >
       <span className="compact-expand-hint" aria-hidden="true">
         <svg viewBox="0 0 24 24" focusable="false">
           <path d="m7 10 5 5 5-5" />
         </svg>
       </span>
-      <div className="compact-rule-meta">
+      <span className="compact-rule-meta" id={`rule-${rule.id}-meta`}>
         {Boolean(rule.playerCounts?.length) && (
-          onPlayerCountsClick ? (
-            <button type="button" className="compact-attribute" onClick={(event) => { event.stopPropagation(); onPlayerCountsClick(rule.playerCounts!); }}>
-              👥 {formatPlayerCounts(rule.playerCounts!)}
-            </button>
-          ) : <span className="compact-attribute">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
+          <span className="compact-attribute">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
         )}
         {ruleEditions.map((edition) => (
-          onEditionClick ? (
-            <button type="button" className="compact-attribute" key={edition} onClick={(event) => { event.stopPropagation(); onEditionClick(edition); }}>
-              📦 {edition}
-            </button>
-          ) : <span className="compact-attribute" key={edition}>📦 {edition}</span>
+          <span className="compact-attribute" key={edition}>📦 {edition}</span>
         ))}
         {rule.tags.map((tag) => (
-          onTagClick && !tag.unresolved ? (
-            <button type="button" className="compact-attribute compact-tag" key={tag.id} onClick={(event) => { event.stopPropagation(); onTagClick(tag.name); }}>
-              #{tag.name}
-            </button>
-          ) : <span className="compact-attribute compact-tag" key={tag.id}>#{tag.name}</span>
+          <span className="compact-attribute compact-tag" key={tag.id}>#{tag.name}</span>
         ))}
-      </div>
-      <div className="compact-rule-row compact-rule-correct">
+      </span>
+      <span className="compact-rule-row compact-rule-correct">
         <strong aria-label="正確">✅</strong>
-        <p className="rule-toggle-text" {...compactTextToggleProps}>{rule.statement}</p>
-      </div>
+        <span className="compact-rule-text">{rule.statement}</span>
+      </span>
       {rule.commonMistake && (
-        <div className="compact-rule-row compact-rule-mistake">
+        <span className="compact-rule-row compact-rule-mistake" id={`rule-${rule.id}-mistake`}>
           <strong aria-label="玩錯">❌</strong>
-          <p className="rule-toggle-text" {...compactTextToggleProps}>{rule.commonMistake}</p>
-        </div>
+          <span className="compact-rule-text">{rule.commonMistake}</span>
+        </span>
       )}
-    </article>
+    </button>
   );
 };

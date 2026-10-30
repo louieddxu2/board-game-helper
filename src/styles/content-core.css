@@ -119,8 +119,8 @@
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; gap: 8px; }
-.rule-card-compact { min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; position: relative; box-shadow: 0 2px 8px rgba(23,47,40,.025); scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
-.rule-card-compact:has(.rule-toggle-text:hover) { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
+.rule-card-compact { display: block; width: 100%; min-width: 0; max-width: 100%; background: var(--white); color: var(--ink); font: inherit; text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; position: relative; cursor: pointer; box-shadow: 0 2px 8px rgba(23,47,40,.025); scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
+.rule-card-compact:hover { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
 .compact-expand-hint { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 18px; height: 18px; color: var(--orange); pointer-events: none; }
 .compact-expand-hint svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .rule-toggle-text { cursor: pointer; }
@@ -133,10 +133,10 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .compact-rule-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; line-height: 1.45; }
 .compact-rule-row + .compact-rule-row { margin-top: 4px; }
 .compact-rule-row strong { min-width: 20px; font-size: 15px; line-height: 1.5; }
-.compact-rule-row p { min-width: 0; margin: 0; font-size: 16px; line-height: 1.6; white-space: pre-line; word-break: break-word; }
+.compact-rule-text { min-width: 0; margin: 0; font-size: 16px; line-height: 1.6; white-space: pre-line; word-break: break-word; }
 .compact-rule-correct strong { color: var(--green); }
 .compact-rule-mistake { margin-top: 5px; padding: 4px 7px; border: 1px solid rgba(183,70,47,.32); border-left: 3px solid #b7462f; border-radius: 6px; background: #fdf5f3; }
-.compact-rule-mistake strong, .compact-rule-mistake p { color: #7f3025; }
+.compact-rule-mistake strong, .compact-rule-mistake .compact-rule-text { color: #7f3025; }
 .rule-card-footer, .rule-card-footer-actions, .importance-button { min-width: 0; max-width: 100%; }
 .rule-card.clickable { cursor: pointer; }
 .rule-card.clickable:hover, .rule-card:has(.rule-title-link:hover) { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(23,47,40,.1); border-color: var(--green); }
@@ -327,14 +327,28 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .account-settings form .button { justify-self: start; }
 
 .game-page { max-width: 960px; margin: 0 auto; padding: 76px 24px 120px; }
-.game-hero { display: flex; justify-content: space-between; align-items: end; padding-bottom: 35px; border-bottom: 1px solid var(--line); }
+.game-hero { display: flex; justify-content: space-between; align-items: start; gap: 8px; padding-bottom: 35px; border-bottom: 1px solid var(--line); }
 .game-hero-info { min-width: 0; flex: 1; }
+.game-title-row { display: flex; align-items: flex-start; gap: 4px; }
+.game-title-row h1 { min-width: 0; overflow-wrap: anywhere; }
+.game-favorite { display: inline-grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.game-favorite svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.game-favorite:hover { background: var(--cream); }
+.game-favorite.active { color: var(--green); }
+.game-favorite.active svg { fill: var(--yellow); }
+.game-favorite:disabled { opacity: .5; cursor: wait; }
 .game-hero h1 { font-size: clamp(42px, 7vw, 72px); margin-bottom: 5px; }
 .game-hero p { margin-bottom: 5px; color: var(--muted); }
 .game-hero-meta { display: flex; align-items: center; gap: 16px; }
 .english-name { font-size: 18px; }
 .game-hero-actions { align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 0; }
-.game-header-action-mobile { display: none; }
+.game-actions-menu { position: relative; }
+.game-actions-menu > summary { display: grid; place-items: center; min-width: 64px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--green); font-size: 13px; cursor: pointer; list-style: none; -webkit-tap-highlight-color: transparent; }
+.game-actions-menu > summary::-webkit-details-marker { display: none; }
+.game-actions-menu[open] > summary { border-color: var(--green); }
+.game-actions-menu-content { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; display: grid; gap: 2px; width: max-content; min-width: 180px; max-width: calc(100vw - 32px); padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); box-shadow: 0 5px 18px rgba(23,47,40,.12); }
+.game-actions-menu-content .game-header-action, .game-actions-menu-content .game-name-locked { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; font-size: 14px; white-space: nowrap; }
+.game-actions-menu-content .game-header-action:hover { background: var(--cream); }
 .game-load-error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
 .game-load-error p { flex: 1; margin: 0; }
 .game-load-error .button { min-height: 44px; padding: 6px 12px; font-size: 13px; }
