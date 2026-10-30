@@ -1,13 +1,9 @@
 import type { GameCatalogChange, GameSummary } from '../shared/types';
+import { normalizeName as normalizeGameSearchText } from '../shared/nameNormalization';
+export { normalizeGameSearchText };
 
 export const taipeiDateKey = (timestamp = Date.now()): string =>
   new Date(timestamp + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-export const normalizeGameSearchText = (value: string): string => value
-  .normalize('NFKC')
-  .trim()
-  .toLocaleLowerCase('zh-Hant')
-  .replace(/[\s\p{P}\p{S}]+/gu, '');
 
 export interface GameCatalogFilterOptions {
   includeGamesWithoutPublishedRules?: boolean;

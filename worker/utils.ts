@@ -1,12 +1,9 @@
 
+import { normalizeName as normalizeText } from '../src/shared/nameNormalization';
+export { normalizeText };
+
 export const now = () => Date.now();
 export const createId = (prefix: string) => `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`;
-
-export const normalizeText = (value: string): string => value
-  .normalize('NFKC')
-  .trim()
-  .toLocaleLowerCase('zh-Hant')
-  .replace(/[\s\p{P}\p{S}]+/gu, '');
 
 export const cleanAliases = (aliases: string[], displayName: string, englishName?: string): string[] => {
   const canonicalNames = new Set([displayName, englishName]

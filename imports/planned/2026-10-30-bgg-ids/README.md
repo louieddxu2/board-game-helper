@@ -1,6 +1,6 @@
 # 待套用的 BGG ID 補填
 
-狀態：僅在本機準備，尚未寫入正式 D1、發布 Worker、重播或重建快取。SQL 放在 `imports/planned/`，不會隨 migration 或一般部署自動執行。
+狀態：六款 BGG ID 補填仍僅在本機準備，尚未套用。Mountain Goats: Legacy 已於 2026-10-30 21:20 合併，並完成名稱比對鍵修正，詳見[執行紀錄](../../../docs/game-name-identity-repair-2026-10-30.md)。未發布 Worker、重播或重建快取。SQL 放在 `imports/planned/`，不會隨 migration 或一般部署自動執行。
 
 ## 已查證的補填
 
@@ -17,16 +17,16 @@
 
 執行檔：`updates.sql`。每筆使用既有遊戲 ID，並限定目前仍為公開、未合併、缺少 BGG ID 的主遊戲；重複執行不會再寫入已補好的資料。
 
-## 重複遊戲：另走既有合併流程
+## 重複遊戲：已走既有合併流程
 
 [Mountain Goats: Legacy](https://boardgamegeek.com/boardgame/460712/mountain-goats-legacy) 對應 BGG ID `460712`，但它已由另一筆公開主遊戲使用：
 
 - 缺少 ID 的重複列：`game_047e8e6f174f4bb485e09f7689ae1602`，slug 為 `mountain-goats-legacy`。
 - 保留的既有列：`game_bgg_460712`，slug 為 `bgg-460712`；`games.bgg_id` 與 `game_external_ids` 都已對應 `460712`。
 
-不把這筆列入補填 SQL。`merge-request.json` 記錄待執行的既有合併 API 請求，以保留規則、收藏、版本關係及正確的舊投票指向；本次沒有呼叫該 API，也未向正式 D1 讀取規則、收藏或投票歷史。
+不把這筆列入補填 SQL。`merge-request.json` 保留原請求內容；合併已透過與該 API 共用的 `mergeGames()` 執行，以保留規則、收藏、版本關係及正確的舊投票指向。原有一筆規則與投稿已移到保留列，25 筆目標屬性結果完全保留；來源沒有收藏或投票需要搬移。
 
-## 本次正式 D1 實際消耗
+## 最初只讀盤點的正式 D1 實際消耗
 
 來源開始讀取時間：2026-10-30 19:40（Asia/Taipei）。完整原始結果與每次查詢 metadata 留在本機 `.wrangler/bgg-fill-20261030/source.json`；可提交的用量憑據為 `usage.json`。
 
@@ -42,4 +42,4 @@
 
 311 筆遊戲中共有 17 筆缺少主 BGG ID：本次處理其中七款公開主遊戲；另七筆為隱藏版本／擴充／標籤列，三筆已合併，均不納入這次的近期主遊戲補填。
 
-上述數字只計本次已發生的正式 D1 操作。本機查證、準備 SQL 與本機驗證不計入正式 D1 額度；未來真正套用六筆更新、執行合併及發布增量的成本尚未發生。
+上述 432 列只計最初的只讀盤點。後續合併與名稱修正另新增 6,071 列讀取、550 列寫入；兩輪累計 6,503 列讀取、550 列寫入。六筆 BGG ID 更新仍未套用，其寫入成本尚未發生。

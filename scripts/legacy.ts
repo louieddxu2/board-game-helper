@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { normalizeName as normalizeLegacyName } from '../src/shared/nameNormalization';
+export { normalizeLegacyName };
 
 export interface LegacyRecord {
   rowNumber: number;
@@ -11,9 +13,6 @@ export interface LegacyRecord {
   sourceLabel: string;
   sourceUrl: string;
 }
-
-export const normalizeLegacyName = (value: string): string => value
-  .normalize('NFKC').trim().toLocaleLowerCase('zh-Hant').replace(/[\s\p{P}\p{S}]+/gu, '');
 
 export const splitLegacyRules = (text: string): string[] => text
   .replace(/\r\n?/g, '\n')

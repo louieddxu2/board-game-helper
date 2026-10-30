@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type { Database, DatabaseStatement } from './database';
 import { ensureRuleGameVariantStatements } from './gameEntities';
 
-const fakeDatabase = (existing: Array<{ game_id: string; normalized_name: string; entity_kind: 'expansion' | 'version' | 'unknown' }> = []) => {
+const fakeDatabase = (existing: Array<{ game_id: string; display_name: string; entity_kind: 'expansion' | 'version' | 'unknown' }> = []) => {
   const statements: Array<DatabaseStatement & { sql: string; bindings: unknown[] }> = [];
   const statement = (sql: string) => {
     const item = {
@@ -20,6 +20,12 @@ const fakeDatabase = (existing: Array<{ game_id: string; normalized_name: string
 };
 
 describe('game entity promotion', () => {
+  test('stores a canonical name key separately from expansion-label equivalence', async () => {
+    const { db, statements } = fakeDatabase();
+    await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['1.1 擴充'], 100);
+    expect(statements.find((item) => item.sql.includes('INSERT OR IGNORE INTO games'))?.bindings[3]).toBe('11擴充');
+  });
+
   test('keeps ambiguous labels as unclassified variant entities', async () => {
     const first = fakeDatabase();
     const second = fakeDatabase();
@@ -42,7 +48,7 @@ describe('game entity promotion', () => {
 
   test('reuses an existing entity without creating another game row', async () => {
     const { db, statements } = fakeDatabase([
-      { game_id: 'variant-1', normalized_name: '挪威人擴', entity_kind: 'expansion' },
+      { game_id: 'variant-1', display_name: '挪威人擴', entity_kind: 'expansion' },
     ]);
 
     const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['挪威人擴充'], 100);
@@ -55,7 +61,7 @@ describe('game entity promotion', () => {
 
   test('reuses an existing unclassified entity', async () => {
     const { db, statements } = fakeDatabase([
-      { game_id: 'variant-unknown', normalized_name: 'promo', entity_kind: 'unknown' },
+      { game_id: 'variant-unknown', display_name: 'Promo', entity_kind: 'unknown' },
     ]);
 
     const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['Promo'], 100);

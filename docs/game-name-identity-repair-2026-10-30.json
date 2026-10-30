@@ -1,0 +1,70 @@
+{
+  "status": "complete",
+  "startedAt": "2026-10-30T13:20:18.422Z",
+  "finishedAt": "2026-10-30T13:20:26.772Z",
+  "results": {
+    "merge": {
+      "ok": true,
+      "sourceId": "game_047e8e6f174f4bb485e09f7689ae1602",
+      "targetId": "game_bgg_460712",
+      "sourceRulesBefore": 1,
+      "targetRulesBefore": 0
+    },
+    "verification": {
+      "noncanonicalKeys": 0,
+      "rulesPreserved": 1,
+      "submissionsPreserved": 1,
+      "favoritesPreserved": 0,
+      "targetScoreStatesUnchanged": 25,
+      "votesCanonicalized": 0,
+      "otherBggIdsUnchanged": true,
+      "fullReplay": false,
+      "snapshotRebuild": false
+    }
+  },
+  "phases": {
+    "initial-name-read": {
+      "rowsRead": 417,
+      "rowsWritten": 0,
+      "queries": 2
+    },
+    "backup": {
+      "rowsRead": 1920,
+      "rowsWritten": 0,
+      "queries": 12
+    },
+    "normalize": {
+      "rowsRead": 197,
+      "rowsWritten": 228,
+      "queries": 43
+    },
+    "merge": {
+      "rowsRead": 2254,
+      "rowsWritten": 207,
+      "queries": 75
+    },
+    "delta-publication": {
+      "rowsRead": 830,
+      "rowsWritten": 115,
+      "queries": 37
+    },
+    "verify": {
+      "rowsRead": 453,
+      "rowsWritten": 0,
+      "queries": 6
+    }
+  },
+  "totals": {
+    "rowsRead": 6071,
+    "rowsWritten": 550
+  },
+  "previousReadOnlyAudit": {
+    "rowsRead": 432,
+    "rowsWritten": 0
+  },
+  "combinedTotals": {
+    "rowsRead": 6503,
+    "rowsWritten": 550
+  },
+  "rawMetadataAndBackups": ".wrangler/name-merge-20261030/operation.json"
+}

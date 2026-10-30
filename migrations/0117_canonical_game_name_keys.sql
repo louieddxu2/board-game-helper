@@ -1,0 +1,45 @@
+-- Use the shared JavaScript normalizer for persisted game and alias lookup keys.
+-- Visible names, IDs, timestamps, scores and votes are preserved.
+-- Fixed ID/name predicates keep this a one-time bounded repair, without runtime scans.
+UPDATE games SET normalized_name = '馬可波羅ii可汗的託付' WHERE id = 'game_d23674b15c14a9707f4b' AND display_name = '馬可波羅 II：可汗的託付' AND normalized_name <> '馬可波羅ii可汗的託付';
+UPDATE games SET normalized_name = 'money' WHERE id = 'game_bgg_125' AND display_name = 'Money!' AND normalized_name <> 'money';
+UPDATE games SET normalized_name = 'pluckinpairs' WHERE id = 'game_bgg_121041' AND display_name = 'Pluckin'' Pairs' AND normalized_name <> 'pluckinpairs';
+UPDATE games SET normalized_name = 'tramwaysengineersworkbook' WHERE id = 'game_bgg_247935' AND display_name = 'Tramways Engineer''s Workbook' AND normalized_name <> 'tramwaysengineersworkbook';
+UPDATE games SET normalized_name = 'ontourparisandnewyork' WHERE id = 'game_bgg_360706' AND display_name = 'On Tour: Paris and New York' AND normalized_name <> 'ontourparisandnewyork';
+UPDATE games SET normalized_name = 'awkwardguests2theberwickcases' WHERE id = 'game_bgg_378477' AND display_name = 'Awkward Guests 2: The Berwick Cases' AND normalized_name <> 'awkwardguests2theberwickcases';
+UPDATE games SET normalized_name = 'tramwaysengineersworkbook2' WHERE id = 'game_bgg_419070' AND display_name = 'Tramways Engineer''s Workbook 2' AND normalized_name <> 'tramwaysengineersworkbook2';
+UPDATE games SET normalized_name = 'mountaingoatslegacy' WHERE id = 'game_bgg_460712' AND display_name = 'Mountain Goats: Legacy' AND normalized_name <> 'mountaingoatslegacy';
+UPDATE games SET normalized_name = 'agricolarevisededition' WHERE id = 'game_bgg_200680' AND display_name = 'Agricola (Revised Edition)' AND normalized_name <> 'agricolarevisededition';
+UPDATE games SET normalized_name = 'fieldsofarleteatrade' WHERE id = 'game_bgg_226441' AND display_name = 'Fields of Arle: Tea & Trade' AND normalized_name <> 'fieldsofarleteatrade';
+UPDATE games SET normalized_name = 'teotihuacancityofgods' WHERE id = 'game_bgg_229853' AND display_name = 'Teotihuacan: City of Gods' AND normalized_name <> 'teotihuacancityofgods';
+UPDATE games SET normalized_name = 'roadsboats20thanniversaryedition' WHERE id = 'game_bgg_276502' AND display_name = 'Roads & Boats: 20th Anniversary Edition' AND normalized_name <> 'roadsboats20thanniversaryedition';
+UPDATE games SET normalized_name = 'newtongreatdiscoveriesexpansion' WHERE id = 'game_bgg_286287' AND display_name = 'Newton: Great Discoveries Expansion' AND normalized_name <> 'newtongreatdiscoveriesexpansion';
+UPDATE games SET normalized_name = 'thecrewmissiondeepsea' WHERE id = 'game_bgg_324856' AND display_name = 'The Crew: Mission Deep Sea' AND normalized_name <> 'thecrewmissiondeepsea';
+UPDATE games SET normalized_name = '醫學之父希波克拉底' WHERE id = 'game_bgg_327971' AND display_name = '醫學之父－希波克拉底' AND normalized_name <> '醫學之父希波克拉底';
+UPDATE games SET normalized_name = 'galaxytruckersecondedition' WHERE id = 'game_bgg_336794' AND display_name = 'Galaxy Trucker (Second Edition)' AND normalized_name <> 'galaxytruckersecondedition';
+UPDATE games SET normalized_name = 'greatwesterntrailsecondedition' WHERE id = 'game_bgg_341169' AND display_name = 'Great Western Trail: Second Edition' AND normalized_name <> 'greatwesterntrailsecondedition';
+UPDATE games SET normalized_name = 'lagranjadeluxemasterset' WHERE id = 'game_bgg_341945' AND display_name = 'La Granja: Deluxe Master Set' AND normalized_name <> 'lagranjadeluxemasterset';
+UPDATE games SET normalized_name = 'nextstationlondon' WHERE id = 'game_bgg_353545' AND display_name = 'Next Station: London' AND normalized_name <> 'nextstationlondon';
+UPDATE games SET normalized_name = 'greatwesterntrailargentina' WHERE id = 'game_bgg_364011' AND display_name = 'Great Western Trail: Argentina' AND normalized_name <> 'greatwesterntrailargentina';
+UPDATE games SET normalized_name = 'barragethenileaffairexpansion' WHERE id = 'game_bgg_366469' AND display_name = 'Barrage: The Nile Affair Expansion' AND normalized_name <> 'barragethenileaffairexpansion';
+UPDATE games SET normalized_name = 'greatwesterntrailnewzealand' WHERE id = 'game_bgg_380607' AND display_name = 'Great Western Trail: New Zealand' AND normalized_name <> 'greatwesterntrailnewzealand';
+UPDATE games SET normalized_name = 'santorinipantheonedition' WHERE id = 'game_bgg_386166' AND display_name = 'Santorini: Pantheon Edition' AND normalized_name <> 'santorinipantheonedition';
+UPDATE games SET normalized_name = 'factoryinсasmartphoneincgame' WHERE id = 'game_bgg_404183' AND display_name = 'Factory Inс.: A Smartphone Inc. Game' AND normalized_name <> 'factoryinсasmartphoneincgame';
+UPDATE game_aliases SET normalized_alias = '亞勒大地茶與貿易' WHERE id = 'game-alias:bgg:226441:亞勒大地：茶與貿易' AND alias = '亞勒大地：茶與貿易' AND normalized_alias <> '亞勒大地茶與貿易';
+UPDATE game_aliases SET normalized_alias = '阿勒農場茶與貿易' WHERE id = 'game-alias:bgg:226441:阿勒農場：茶與貿易' AND alias = '阿勒農場：茶與貿易' AND normalized_alias <> '阿勒農場茶與貿易';
+UPDATE game_aliases SET normalized_alias = '特奧蒂瓦坎眾神之城' WHERE id = 'game-alias:bgg:229853:特奧蒂瓦坎：眾神之城' AND alias = '特奧蒂瓦坎：眾神之城' AND normalized_alias <> '特奧蒂瓦坎眾神之城';
+UPDATE game_aliases SET normalized_alias = '大魔術師學院擴' WHERE id = 'game-alias:bgg:244358:大魔術師：學院擴' AND alias = '大魔術師：學院擴' AND normalized_alias <> '大魔術師學院擴';
+UPDATE game_aliases SET normalized_alias = '魔幻傳奇學院擴' WHERE id = 'game-alias:bgg:244358:魔幻傳奇：學院擴' AND alias = '魔幻傳奇：學院擴' AND normalized_alias <> '魔幻傳奇學院擴';
+UPDATE game_aliases SET normalized_alias = '馬可波羅ii可汗的託付' WHERE id = 'game-alias:bgg:283948:馬可波羅ii:可汗的託付' AND alias = '馬可波羅 II: 可汗的託付' AND normalized_alias <> '馬可波羅ii可汗的託付';
+UPDATE game_aliases SET normalized_alias = '牛頓偉大發現擴' WHERE id = 'game-alias:bgg:286287:牛頓：偉大發現擴' AND alias = '牛頓：偉大發現擴' AND normalized_alias <> '牛頓偉大發現擴';
+UPDATE game_aliases SET normalized_alias = '小城大案罪惡城市' WHERE id = 'game-alias:bgg:318977:小城大案：罪惡城市' AND alias = '小城大案：罪惡城市' AND normalized_alias <> '小城大案罪惡城市';
+UPDATE game_aliases SET normalized_alias = '小城大案罪惡都市' WHERE id = 'game-alias:bgg:318977:小城大案：罪惡都市' AND alias = '小城大案：罪惡都市' AND normalized_alias <> '小城大案罪惡都市';
+UPDATE game_aliases SET normalized_alias = '星際探險隊深海任務' WHERE id = 'game-alias:bgg:324856:星際探險隊：深海任務' AND alias = '星際探險隊：深海任務' AND normalized_alias <> '星際探險隊深海任務';
+UPDATE game_aliases SET normalized_alias = '大西部開拓者美利堅' WHERE id = 'game-alias:bgg:341169:大西部開拓者：美利堅' AND alias = '大西部開拓者：美利堅' AND normalized_alias <> '大西部開拓者美利堅';
+UPDATE game_aliases SET normalized_alias = '下一站倫敦' WHERE id = 'game-alias:bgg:353545:下一站：倫敦' AND alias = '下一站：倫敦' AND normalized_alias <> '下一站倫敦';
+UPDATE game_aliases SET normalized_alias = '大西部開拓者阿根廷' WHERE id = 'game-alias:bgg:364011:大西部開拓者：阿根廷' AND alias = '大西部開拓者：阿根廷' AND normalized_alias <> '大西部開拓者阿根廷';
+UPDATE game_aliases SET normalized_alias = '大西部開拓者阿根廷開拓史' WHERE id = 'game-alias:bgg:364011:大西部開拓者：阿根廷開拓史' AND alias = '大西部開拓者：阿根廷開拓史' AND normalized_alias <> '大西部開拓者阿根廷開拓史';
+UPDATE game_aliases SET normalized_alias = '大西部開拓者紐西蘭' WHERE id = 'game-alias:bgg:380607:大西部開拓者：紐西蘭' AND alias = '大西部開拓者：紐西蘭' AND normalized_alias <> '大西部開拓者紐西蘭';
+UPDATE game_aliases SET normalized_alias = '大西部開拓者紐西蘭開拓史' WHERE id = 'game-alias:bgg:380607:大西部開拓者：紐西蘭開拓史' AND alias = '大西部開拓者：紐西蘭開拓史' AND normalized_alias <> '大西部開拓者紐西蘭開拓史';
+UPDATE game_aliases SET normalized_alias = '深海迷途傳承版' WHERE id = 'game-alias:bgg:438975:深海迷途：傳承版' AND alias = '深海迷途：傳承版' AND normalized_alias <> '深海迷途傳承版';
+UPDATE games SET normalized_name = '11擴' WHERE id = 'game-variant-18fba9c0d694592b0de90912c5330a4d' AND display_name = '1.1擴' AND normalized_name <> '11擴';

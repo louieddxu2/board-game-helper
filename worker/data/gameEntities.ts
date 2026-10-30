@@ -1,10 +1,11 @@
 import type { GameEntityKind } from '../../src/shared/gameEntity';
 import { classifyGameEntityLabel, normalizeGameEntityLabel } from '../../src/shared/gameEntity';
+import { normalizeName } from '../../src/shared/nameNormalization';
 import type { Database, DatabaseStatement } from './database';
 
 interface ExistingVariantRow {
   game_id: string;
-  normalized_name: string;
+  display_name: string;
   entity_kind: Exclude<GameEntityKind, 'base'>;
 }
 
@@ -43,18 +44,15 @@ export const ensureRuleGameVariantStatements = async (
   ).values());
   if (!normalizedLabels.length) return [];
 
-  const normalizedNames = Array.from(new Set(normalizedLabels.map(({ normalizedName }) => normalizedName)));
-  const normalizedNamePlaceholders = normalizedNames.map(() => '?').join(', ');
   const existing = await db.statement(`
-    SELECT relation.source_game_id AS game_id, game.normalized_name, game.entity_kind
+    SELECT relation.source_game_id AS game_id, game.display_name, game.entity_kind
     FROM game_entity_relations relation
     JOIN games game ON game.id = relation.source_game_id
     WHERE relation.target_game_id = ?
       AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
-      AND game.normalized_name IN (${normalizedNamePlaceholders})
-  `).bind(parentGameId, ...normalizedNames).all<ExistingVariantRow>();
+  `).bind(parentGameId).all<ExistingVariantRow>();
   const existingByKey = new Map(
-    (existing.results ?? []).map((row) => [`${row.entity_kind}:${row.normalized_name}`, row.game_id]),
+    (existing.results ?? []).map((row) => [`${row.entity_kind}:${normalizeGameEntityLabel(row.display_name)}`, row.game_id]),
   );
   const statements: DatabaseStatement[] = [];
   const linkedGameIds = new Set<string>();
@@ -74,7 +72,7 @@ export const ensureRuleGameVariantStatements = async (
         gameId,
         `variant-${suffix}`,
         item.label,
-        item.normalizedName,
+        normalizeName(item.label),
         timestamp,
         timestamp,
         item.kind,

@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
+import { checkGameNameNormalization } from './game-name-normalization.mjs';
 
 const migrationNames = () => readdirSync('migrations').filter((name) => name.endsWith('.sql')).sort();
 const quoteIdentifier = (name) => `"${name.replaceAll('"', '""')}"`;
@@ -105,6 +106,7 @@ export const checkD1TriggerFanout = (pendingNames = []) => {
   try {
     const violations = [...auditTriggerFanout(db), ...auditPendingMigrationDeletes(db, pendingNames)];
     if (violations.length) throw new Error(`D1 fanout guard failed:\n${violations.map((item) => `- ${item}`).join('\n')}`);
+    checkGameNameNormalization(db);
   } finally {
     db.close();
   }
