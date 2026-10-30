@@ -121,20 +121,22 @@ for (const width of [393, 320, 1280]) {
       }
     });
 
-    test('disables empty indexes and keeps other categories available after the first native input', async ({ page }) => {
+    test('hides empty indexes and keeps other categories available after the first native input', async ({ page }) => {
       await showGame(page, { ...game, rules: [game.rules[0], { ...game.rules[1], categories: ['action_effect_detail'] }] });
       const index = page.getByRole('group', { name: '規則快速索引' });
       const empty = index.getByRole('button', { name: '流程、終局、計分', exact: true });
       const action = index.getByRole('button', { name: '行動、效果、細節', exact: true });
       const opening = index.getByRole('button', { name: '教學、設置、開局', exact: true });
-      await expect(empty).toBeDisabled();
-      await expect(empty).toHaveAttribute('aria-pressed', 'false');
-      if (width === 393) await index.screenshot({ path: '.wrangler/game-index-disabled.png' });
-      const rect = (await empty.boundingBox())!;
-      const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-      if (touch) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
+      await expect(empty).toHaveCount(0);
+      await expect(index.getByRole('button')).toHaveCount(2);
+      const geometry = await index.evaluate(el => ({ box: el.getBoundingClientRect().toJSON(),
+        buttons: [...el.querySelectorAll('button')].map(button => button.getBoundingClientRect().toJSON()) }));
+      expect(geometry.buttons[0].y).toBeCloseTo(geometry.buttons[1].y, 0);
+      expect(geometry.buttons[0].width).toBeCloseTo(geometry.buttons[1].width, 0);
+      expect(geometry.buttons[0].x).toBeCloseTo(geometry.box.x, 0);
+      expect(geometry.buttons[1].right).toBeCloseTo(geometry.box.right, 0);
+      if (width === 393) await index.screenshot({ path: '.wrangler/game-index-visible-only.png' });
       await expect(page.locator('.game-rules > *')).toHaveCount(2);
-      await expect(empty).toHaveAttribute('aria-pressed', 'false');
       await activate(action);
       await expect(action).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.game-rules > *')).toHaveCount(1);
@@ -168,6 +170,21 @@ for (const width of [393, 320, 1280]) {
       await expect(card).toHaveClass('rule-card');
       await activate(card.getByRole('button', { name: '#設置', exact: true }));
       await expect(page.getByLabel('已選標籤')).toContainText('#設置');
+      await expect(page.locator('.game-rules > *')).toHaveCount(1);
+    });
+
+    if (width === 393) test('fills the row with the only available concept and toggles on the first tap', async ({ page }) => {
+      await showGame(page, { ...game, ruleCount: 1, rules: [game.rules[0]] });
+      const index = page.getByRole('group', { name: '規則快速索引' });
+      const entry = index.getByRole('button', { name: '教學、設置、開局', exact: true });
+      await expect(index.getByRole('button')).toHaveCount(1);
+      const geometry = await index.evaluate(el => ({ width: el.getBoundingClientRect().width,
+        buttonWidth: el.querySelector('button')!.getBoundingClientRect().width }));
+      expect(geometry.buttonWidth).toBeCloseTo(geometry.width, 0);
+      await activate(entry);
+      await expect(entry).toHaveAttribute('aria-pressed', 'true');
+      await activate(entry);
+      await expect(entry).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('.game-rules > *')).toHaveCount(1);
     });
 

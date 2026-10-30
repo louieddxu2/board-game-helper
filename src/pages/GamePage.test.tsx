@@ -99,7 +99,7 @@ describe('GamePage compact rule view', () => {
   </MemoryRouter>);
 
   test.each(['/games/test-game', '/games/test-game?category=flow_endgame_scoring'])(
-    'disables empty indexes without hiding other rules at %s', async (entry) => {
+    'hides empty indexes without hiding other rules at %s', async (entry) => {
       mocks.game.mockResolvedValue({ game: { ...game, rules: [
         { ...game.rules[0], categories: ['teaching_setup_opening'] },
         { ...game.rules[1], tags: [{ id: 'action-tag', slug: 'action', name: '行動', categoryHints: ['action_effect_detail'] }] },
@@ -108,13 +108,10 @@ describe('GamePage compact rule view', () => {
       const index = await screen.findByRole('group', { name: '規則快速索引' });
       const opening = within(index).getByRole('button', { name: '教學、設置、開局' });
       const action = within(index).getByRole('button', { name: '行動、效果、細節' });
-      const empty = within(index).getByRole('button', { name: '流程、終局、計分' });
       expect(opening).toBeEnabled();
       expect(action).toBeEnabled();
-      expect(empty).toBeDisabled();
-      expect(empty).toHaveAttribute('aria-pressed', 'false');
-      expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
-      await userEvent.setup().click(empty);
+      expect(within(index).queryByRole('button', { name: '流程、終局、計分' })).not.toBeInTheDocument();
+      expect(within(index).getAllByRole('button')).toHaveLength(2);
       expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
       await userEvent.setup().click(opening);
       expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
@@ -124,6 +121,14 @@ describe('GamePage compact rule view', () => {
       expect(opening).toBeEnabled();
     },
   );
+
+  test('omits the index row when no category has any rules', async () => {
+    const { container } = renderGamePage();
+    await screen.findByText('第一條正確規則');
+    expect(screen.queryByRole('group', { name: '規則快速索引' })).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
+    expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toBeInTheDocument();
+  });
 
   test('enables an automatically detected category from the loaded public tag keywords', async () => {
     mocks.tags.mockResolvedValue({ tags: [{ id: 'scoring-tag', slug: 'scoring', name: '計分',
@@ -146,7 +151,7 @@ describe('GamePage compact rule view', () => {
     const index = await screen.findByRole('group', { name: '規則快速索引' });
     const opening = within(index).getByRole('button', { name: '教學、設置、開局' });
     expect(opening).toHaveAttribute('aria-pressed', 'true');
-    expect(within(index).getAllByRole('button')).toHaveLength(3);
+    expect(within(index).getAllByRole('button')).toHaveLength(2);
     await userEvent.setup().click(opening);
     expect(opening).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toHaveValue('第一條');

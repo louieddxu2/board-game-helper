@@ -411,19 +411,18 @@ export const GamePage = () => {
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
     <section className="rule-filters" aria-label="篩選規則">
       {/* 第一列：概念快速索引，再次點選可解除目前索引。 */}
-      <div className="rule-quick-index" role="group" aria-label="規則快速索引">
-        {RULE_CATEGORIES.map((category) => <button
+      {availableCategories.size > 0 && <div className="rule-quick-index" role="group" aria-label="規則快速索引">
+        {RULE_CATEGORIES.filter((category) => availableCategories.has(category)).map((category) => <button
           type="button"
           aria-label={RULE_CATEGORY_LABELS[category]}
           aria-pressed={selectedCategory === category}
           className={selectedCategory === category ? 'active' : ''}
-          disabled={!availableCategories.has(category)}
           key={category}
           onClick={() => setActiveCategory((current) => current === category ? 'all' : category)}
         >
           {RULE_CATEGORY_LABELS[category].replaceAll('、', '·')}
         </button>)}
-      </div>
+      </div>}
 
       {/* 第二列：人數 / 版本 特殊 Tag (若有) */}
       {hasSpecialOptions && (
