@@ -42,6 +42,7 @@ export interface AttributeSubject {
   kind: 'game' | 'configuration';
   displayName: string;
   secondaryName?: string;
+  aliases?: string[];
   year?: number;
   thumbnailUrl?: string;
   externalSource?: string;

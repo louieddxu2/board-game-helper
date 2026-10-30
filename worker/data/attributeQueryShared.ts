@@ -62,6 +62,7 @@ export interface SubjectRow {
   game_id: string | null;
   game_slug: string | null;
   secondary_name: string | null;
+  aliases_json?: string | null;
   bgg_ids_json: string | null;
 }
 
@@ -325,12 +326,14 @@ const parseBggIds = (value: string | null): number[] => {
 
 export const toSubject = (row: SubjectRow, components: Map<string, AttributeSubjectComponent[]>): AttributeSubject => {
   const bggIds = parseBggIds(row.bgg_ids_json);
+  const aliases: string[] = JSON.parse(row.aliases_json ?? '[]');
   return {
     id: row.id,
     slug: row.slug,
     kind: row.kind,
     displayName: row.display_name,
     ...(row.secondary_name ? { secondaryName: row.secondary_name } : {}),
+    aliases,
     gameId: row.game_id ?? undefined,
     gameSlug: row.game_slug ?? undefined,
     ...(bggIds.length ? { bggIds } : {}),

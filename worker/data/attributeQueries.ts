@@ -47,6 +47,17 @@ const querySubjectRows = async (db: Database, subjectIds?: string[], page?: Subj
   const result = await db.statement(`
     SELECT s.id, s.slug, s.kind, s.display_name, s.game_id, g.slug AS game_slug,
       ${subjectSecondaryNameExpression('s', 'g')} AS secondary_name,
+      (
+        SELECT json_group_array(alias) FROM (
+          SELECT alias FROM game_aliases WHERE game_id = s.game_id
+          UNION
+          SELECT game_aliases.alias
+          FROM attribute_subject_components component
+          JOIN game_aliases ON game_aliases.game_id = component.game_id
+          WHERE component.subject_id = s.id AND component.game_id IS NOT s.game_id
+          ORDER BY alias
+        )
+      ) AS aliases_json,
       COALESCE((
         SELECT json_group_array(bgg_id)
         FROM (

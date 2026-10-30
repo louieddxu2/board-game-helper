@@ -23,6 +23,7 @@ const subject = (id = 'subject-a') => ({
   displayName: `遊戲 ${id}`,
   gameId: id,
   gameSlug: `game-${id}`,
+  aliases: ['遊戲別名', 'Other Name'],
   components: [],
 });
 
@@ -55,6 +56,7 @@ describe('versioned attribute table catalog', () => {
       throughVersion: 9,
       subjects: [expect.objectContaining({
         id: 'subject-a',
+        aliases: ['遊戲別名', 'Other Name'],
         bggIds: [326538, 999999],
         components: [expect.objectContaining({ type: 'expansion', bggId: 12345 })],
       })],
@@ -115,7 +117,7 @@ describe('versioned attribute table catalog', () => {
 
     expect(payload.changes).toEqual([expect.objectContaining({
       entryKey: 'subject:subject-a',
-      subject: expect.objectContaining({ id: 'subject-a' }),
+      subject: expect.objectContaining({ id: 'subject-a', aliases: ['遊戲別名', 'Other Name'] }),
       values: [expect.objectContaining({ subjectId: 'subject-a', attributeId: 'attribute-luck' })],
     })]);
   });

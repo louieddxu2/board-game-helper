@@ -5,6 +5,7 @@ import { AttributeTablePage } from './AttributeTablePage';
 import { api } from '../lib/api';
 import { ToastProvider } from '../context/ToastContext';
 import type { AttributeCatalogPayload } from '../shared/types';
+import { attributeCatalogPayload } from '../../worker/data/attributeCatalog';
 
 const payload: AttributeCatalogPayload = {
   attributes: [{ id: 'attribute-luck', key: 'luck', name: '運氣成分', fullDescription: '測試說明', minValue: 0, maxValue: 10, sortOrder: 0 }],
@@ -85,6 +86,36 @@ describe('AttributeTablePage', () => {
     expect(rows()).toEqual(['遊戲甲已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲乙已對應遊戲']);
     fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由小到大' }));
     expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
+  });
+
+  test('searches snapshot aliases, secondary names and configuration components without requesting more data', async () => {
+    const subjects = [
+      { ...payload.subjects[0], displayName: '神奇果汁', secondaryName: 'Juicy Fruits', aliases: ['Juice Fruit', '果汁大亨'] },
+      { id: 'subject-config', slug: 'game-config', kind: 'configuration' as const, displayName: '主遊戲＋擴充',
+        aliases: ['果汁加料'], components: [{ order: 0, type: 'expansion' as const, label: '小盒擴充', englishName: 'Extra Pack' }] },
+    ];
+    const snapshot = attributeCatalogPayload({
+      state: { results: [{ active_generation: 2, through_version: 1, chunk_count: 1,
+        attributes_json: JSON.stringify(payload.attributes), score_model_version: 'glicko-rd-v1', generated_at: 1 }] },
+      chunks: { results: [{ chunk_number: 0, entries_json: JSON.stringify([
+        ...subjects.map((subject) => ({ kind: 'subject', subject, values: [] })),
+        ...payload.candidates.map((candidate) => ({ kind: 'candidate', candidate })),
+      ]) }] },
+    });
+    const load = vi.spyOn(api, 'attributeTable').mockResolvedValue(snapshot);
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+    const search = await screen.findByRole('searchbox');
+    for (const [query, expected] of [
+      ['神奇果汁', ['神奇果汁']], ['juice fruit', ['神奇果汁']], ['JUICY-FRUITS', ['神奇果汁']],
+      ['果汁大亨', ['神奇果汁']], ['果汁加料', ['主遊戲＋擴充']], ['Ｅｘｔｒａ　Ｐａｃｋ', ['主遊戲＋擴充']],
+      ['小盒擴充', ['主遊戲＋擴充']], ['不存在', []], ['尚未對應', ['尚未對應遊戲']],
+    ] as const) {
+      fireEvent.change(search, { target: { value: query } });
+      const names = [...document.querySelectorAll('.attributes-matrix tbody th')]
+        .map((cell) => cell.querySelector('button, span')?.textContent);
+      expect(names, query).toEqual(expected);
+    }
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   test('clears text search and ranks comparable games when a game is selected', async () => {

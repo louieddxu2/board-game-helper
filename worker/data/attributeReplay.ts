@@ -166,7 +166,6 @@ const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]
     db.statement(`
       SELECT game_id, alias
       FROM game_aliases
-      WHERE alias GLOB '*[一-龥]*'
       ORDER BY game_id, alias, id
     `).all<FullReplayGameAliasRow>(),
     db.statement(`
@@ -185,8 +184,12 @@ const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]
   }
 
   const firstChineseAliasByGame = new Map<string, string>();
+  const aliasesByGame = new Map<string, string[]>();
   for (const row of aliasResult.results ?? []) {
-    if (!firstChineseAliasByGame.has(row.game_id)) firstChineseAliasByGame.set(row.game_id, row.alias);
+    const aliases = aliasesByGame.get(row.game_id) ?? [];
+    aliases.push(row.alias);
+    aliasesByGame.set(row.game_id, aliases);
+    if (isChineseName(row.alias) && !firstChineseAliasByGame.has(row.game_id)) firstChineseAliasByGame.set(row.game_id, row.alias);
   }
   const externalBggIdsByGame = new Map<string, Set<number>>();
   for (const row of externalIdResult.results ?? []) {
@@ -258,6 +261,8 @@ const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]
       kind: row.kind,
       displayName: row.display_name,
       ...(secondaryName ? { secondaryName } : {}),
+      aliases: [...new Set([row.game_id, ...components.map((component) => component.gameId)]
+        .flatMap((gameId) => gameId ? aliasesByGame.get(gameId) ?? [] : []))].sort(),
       gameId: row.game_id ?? undefined,
       gameSlug: game?.slug,
       ...(bggIds.size ? { bggIds: [...bggIds].sort((left, right) => left - right) } : {}),

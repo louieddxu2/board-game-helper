@@ -2,6 +2,7 @@ import { useContext, useMemo, useState } from 'react';
 import { ToastContext } from '../context/ToastContext';
 import { useDragPanScroll } from '../hooks/useDragPanScroll';
 import { rankAttributeSimilarity, type AttributeSimilarityMatch } from '../lib/attributeSimilarity';
+import { normalizeGameSearchText } from '../lib/gameCatalog';
 import { attributeDisplayEndpoints } from '../shared/attributeScale';
 import type { AttributeMatrixValue, AttributesPayload } from '../shared/types';
 
@@ -10,6 +11,7 @@ type TableFilter = 'all' | 'processed' | 'pending';
 interface AttributeTableRow {
   id: string;
   displayName: string;
+  searchNames: string[];
   kind: 'processed' | 'pending';
   statusLabel: string;
   values: Array<number | undefined>;
@@ -49,6 +51,9 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
       return {
         id: subject.id,
         displayName: subject.displayName,
+        searchNames: [subject.displayName, subject.secondaryName ?? '', ...(subject.aliases ?? []),
+          ...(subject.components ?? []).flatMap((component) => [component.label, component.englishName ?? ''])]
+          .map(normalizeGameSearchText),
         kind: 'processed',
         statusLabel: subject.kind === 'configuration' ? '已建立配置' : '已對應遊戲',
         values: cells.map((value) => value?.score),
@@ -59,6 +64,7 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
     const pending: AttributeTableRow[] = payload.candidates.map((candidate) => ({
       id: `candidate:${candidate.id}`,
       displayName: candidate.displayName,
+      searchNames: [normalizeGameSearchText(candidate.displayName)],
       kind: 'pending',
       statusLabel: candidate.matchStatus === 'ambiguous' ? '待確認來源' : '待對應遊戲',
       values: payload.attributes.map((_, index) => candidate.values[index] ?? undefined),
@@ -69,11 +75,11 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
   }, [payload, valueMap]);
 
   const visibleRows = useMemo(() => {
-    const normalizedQuery = tableQuery.trim().toLocaleLowerCase();
+    const normalizedQuery = normalizeGameSearchText(tableQuery);
     return tableRows.filter((row) => {
       if (tableFilter === 'processed' && row.kind !== 'processed') return false;
       if (tableFilter === 'pending' && row.kind !== 'pending') return false;
-      return !normalizedQuery || row.displayName.toLocaleLowerCase().includes(normalizedQuery);
+      return !normalizedQuery || row.searchNames.some((name) => name.includes(normalizedQuery));
     });
   }, [tableFilter, tableQuery, tableRows]);
 
@@ -133,7 +139,7 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
   };
 
   return <section className="attributes-table-card" aria-label="完整屬性資料表">
-    <div className="attributes-section-heading"><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => { setTableQuery(event.target.value); setSimilarity(undefined); }} placeholder="輸入名稱" /></label></div>
+    <div className="attributes-section-heading"><label className="attributes-search">搜尋遊戲或來源項目<input type="search" value={tableQuery} onChange={(event) => { setTableQuery(event.target.value); setSimilarity(undefined); }} placeholder="輸入名稱或別名" /></label></div>
     <div className="attributes-table-toolbar"><div className="attributes-table-filters" role="group" aria-label="資料狀態篩選">{([['all', '全部'], ['processed', '已對應'], ['pending', '尚未處理']] as const).map(([filter, label]) => <button type="button" key={filter} className={tableFilter === filter ? 'active' : ''} onClick={() => { setTableFilter(filter); setSimilarity(undefined); }}>{label}</button>)}</div><span>顯示 {sortedRows.length} / {tableRows.length} 個項目・{payload.attributes.length} 個屬性</span></div>
     <div
       className={`attributes-table-scroll ${tablePan.panning ? 'is-panning' : ''}`}

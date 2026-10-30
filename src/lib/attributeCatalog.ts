@@ -16,6 +16,7 @@ export const mergeAttributeSubjectMetadata = (current: AttributeSubject | undefi
   const merged = { ...current, ...incoming };
   if (incoming.components === undefined && current.components !== undefined) merged.components = current.components;
   if (incoming.bggIds === undefined && current.bggIds !== undefined) merged.bggIds = current.bggIds;
+  if (incoming.aliases === undefined && current.aliases !== undefined) merged.aliases = current.aliases;
   return merged;
 };
 

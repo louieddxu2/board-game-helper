@@ -75,6 +75,9 @@ const parseSubject = (value: unknown): AttributeSubject | undefined => {
     kind: row.kind,
     displayName: row.displayName,
     ...(typeof row.secondaryName === 'string' ? { secondaryName: row.secondaryName } : {}),
+    ...(Array.isArray(row.aliases) ? {
+      aliases: [...new Set(row.aliases.filter((alias): alias is string => typeof alias === 'string' && alias.trim().length > 0))],
+    } : {}),
     ...(typeof row.year === 'number' ? { year: row.year } : {}),
     ...(typeof row.thumbnailUrl === 'string' ? { thumbnailUrl: row.thumbnailUrl } : {}),
     ...(typeof row.externalSource === 'string' ? { externalSource: row.externalSource } : {}),

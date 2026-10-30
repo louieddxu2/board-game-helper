@@ -9,7 +9,7 @@ import {
   queryAttributeCatalogSnapshot,
 } from '../worker/data/attributeCatalog';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
-import { saveAttributeResponse } from '../worker/data/attributes';
+import { queryAttributeSubjects, saveAttributeResponse } from '../worker/data/attributes';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../worker/data/attributeScoring';
 import { requireAttributeReplayAfterChange } from '../worker/data/attributeVoteWeights';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
@@ -341,6 +341,57 @@ test('history corrections mark replay pending while metadata-only and no-op edit
       VALUES ('uncertified-comparison', 'attribute_win_method', ?, ?, 'SIMILAR', '[]', 'import-session', ?, ?, 2)
     `).run(first.id, second.id, timestamp + 2, timestamp + 2);
     expect(status(harness).required_revision).toBe(afterEdit.required_revision + 2);
+  } finally { close(harness); }
+});
+
+test('keeps complete game and expansion aliases through replay, metadata deltas and cache-only refresh', async () => {
+  const harness = createHarness();
+  const timestamp = Date.now() + 100_000;
+  const baseId = 'game-alias-base', expansionId = 'game-alias-expansion';
+  const subjectId = `attribute_subject_game:${baseId}`;
+  const configurationId = `attribute_config_expansion:${expansionId}:${baseId}`;
+  try {
+    const insertGame = harness.sqlite.prepare(`
+      INSERT INTO games (id, slug, display_name, english_name, normalized_name,
+        created_at, updated_at, visibility, review_status, attribute_enabled, bgg_id, entity_kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'public', 'pending', 1, ?, ?)
+    `);
+    insertGame.run(baseId, baseId, 'Alias Base', 'Alias Base', 'alias base', timestamp, timestamp, 984001, 'base');
+    insertGame.run(expansionId, expansionId, '別名擴充', 'Alias Expansion', '別名擴充', timestamp, timestamp, 984002, 'expansion');
+    harness.sqlite.prepare(`INSERT INTO game_entity_relations
+      (id, source_game_id, target_game_id, relation_type, created_at)
+      VALUES ('alias-expansion-relation', ?, ?, 'expansion_of', ?)
+    `).run(expansionId, baseId, timestamp);
+    const insertAlias = harness.sqlite.prepare(`INSERT INTO game_aliases
+      (id, game_id, alias, normalized_alias, created_at) VALUES (?, ?, ?, ?, ?)`);
+    for (const [gameId, aliases] of [[baseId, ['A Base Alias', '主遊戲別名']], [expansionId, ['Expansion Alias', '擴充別名']]] as const) {
+      for (const alias of aliases) insertAlias.run(`${gameId}:${alias}`, gameId, alias, alias.toLowerCase(), timestamp);
+    }
+    const expectedBase = ['A Base Alias', '主遊戲別名'];
+    const expectedConfiguration = ['A Base Alias', 'Expansion Alias', '主遊戲別名', '擴充別名'];
+    const targeted = await queryAttributeSubjects(harness.gateway, [subjectId, configurationId]);
+    expect(targeted.find((subject) => subject.id === subjectId)).toMatchObject({ secondaryName: '主遊戲別名', aliases: expectedBase });
+    expect(targeted.find((subject) => subject.id === configurationId)?.aliases).toEqual(expectedConfiguration);
+    const metadataSql = harness.executedSql.find((sql) => sql.includes('AS aliases_json'))!;
+    const plan = harness.sqlite.prepare(`EXPLAIN QUERY PLAN ${metadataSql}`).all(subjectId, configurationId);
+    expect(plan.some((step: { detail: string }) => /SCAN game_aliases\b/iu.test(step.detail)), JSON.stringify(plan)).toBe(false);
+
+    await flushCatalogOutbox(harness.gateway, timestamp + 1);
+    harness.executedSql.length = 0;
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 2)).resolves.toBe('replay');
+    expect(harness.executedSql.filter((sql) => /SELECT game_id, alias\s+FROM game_aliases/u.test(sql))).toHaveLength(1);
+    const replayed = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    expect(replayed.subjects.find((subject) => subject.id === subjectId)?.aliases).toEqual(expectedBase);
+    expect(replayed.subjects.find((subject) => subject.id === configurationId)?.aliases).toEqual(expectedConfiguration);
+
+    harness.sqlite.prepare('DELETE FROM game_aliases WHERE game_id = ?').run(baseId);
+    await flushCatalogOutbox(harness.gateway, timestamp + 3);
+    harness.executedSql.length = 0;
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 4)).resolves.toBe('cache');
+    expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toBe(false);
+    const refreshed = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    expect(refreshed.subjects.find((subject) => subject.id === subjectId)?.aliases).toEqual([]);
+    expect(refreshed.subjects.find((subject) => subject.id === configurationId)?.aliases).toEqual(['Expansion Alias', '擴充別名']);
   } finally { close(harness); }
 });
 

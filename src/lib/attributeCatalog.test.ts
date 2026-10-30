@@ -84,7 +84,7 @@ describe('attribute table catalog delta application', () => {
   test('preserves snapshot metadata when a value delta has a compact subject payload', () => {
     const catalogWithIds = {
       ...base,
-      subjects: [{ ...base.subjects[0], bggIds: [326538, 999999], components: [{ order: 0, type: 'base' as const, label: '舊名稱', bggId: 326538 }] }],
+      subjects: [{ ...base.subjects[0], aliases: ['另一個名稱'], bggIds: [326538, 999999], components: [{ order: 0, type: 'base' as const, label: '舊名稱', bggId: 326538 }] }],
     };
     const updated = applyAttributeCatalogChanges(catalogWithIds, [{
       entryKey: 'value:subject-a:attribute-luck',
@@ -96,9 +96,19 @@ describe('attribute table catalog delta application', () => {
 
     expect(updated.subjects[0]).toMatchObject({
       displayName: '新名稱',
+      aliases: ['另一個名稱'],
       bggIds: [326538, 999999],
       components: [{ bggId: 326538 }],
     });
+  });
+
+  test('removes deleted aliases when a complete subject bundle supplies an empty list', () => {
+    const cached = { ...base, subjects: [{ ...base.subjects[0], aliases: ['已刪除別名'] }] };
+    const updated = applyAttributeCatalogChanges(cached, [{
+      entryKey: 'subject:subject-a', catalogVersion: 11, deleted: false,
+      subject: { ...base.subjects[0], aliases: [] }, values: base.values,
+    }]);
+    expect(updated.subjects[0].aliases).toEqual([]);
   });
 
   test('replaces every value for a subject from one compact bundle', () => {
