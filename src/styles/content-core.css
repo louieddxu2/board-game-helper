@@ -169,13 +169,13 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .details-toggle { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 4px; }
 
 /* 第四行：玩錯情況 (支援換行 pre-line) */
-.mistake { background-color: #fdf5f3; border: 0; border-left: 2px solid var(--orange); padding: 4px 8px; border-radius: 0 6px 6px 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
-.mistake .mistake-badge { color: var(--orange); padding: 0; font-size: 13px; line-height: 24px; font-weight: 700; white-space: nowrap; }
+.mistake { background-color: #fdf5f3; border: 0; border-left: 2px solid var(--orange); padding: 4px 8px; border-radius: 0 6px 6px 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
+.mistake .mistake-badge { color: var(--orange); padding: 0; font-size: 11px; line-height: 12px; font-weight: 700; white-space: nowrap; }
 .mistake .mistake-text { min-width: 0; color: #5a2a22; font-size: 16px; line-height: 1.5; margin: 0; white-space: pre-line; word-break: break-word; }
 
 /* 補充說明：與正文分離，但採中性色避免搶過玩錯情況 */
-.rule-details-note { background: transparent; border: 0; border-left: 2px solid transparent; padding: 4px 8px; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
-.rule-details-note .details-badge { color: var(--muted); padding: 0; font-size: 13px; line-height: 24px; font-weight: 600; white-space: nowrap; }
+.rule-details-note { background: transparent; border: 0; border-left: 2px solid transparent; padding: 4px 8px; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
+.rule-details-note .details-badge { color: var(--muted); padding: 0; font-size: 11px; line-height: 12px; font-weight: 600; white-space: nowrap; }
 .rule-details-note .details-text { min-width: 0; color: var(--muted); font-size: 16px; line-height: 1.5; margin: 0; white-space: pre-line; word-break: break-word; }
 .rule-details-note .details-toggle { color: #54685c; align-self: flex-start; }
 
