@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { GamePage } from './GamePage';
 import { uiHistory } from '../workspace/uiHistory';
 import type { SessionUser } from '../shared/types';
@@ -92,11 +92,69 @@ describe('GamePage compact rule view', () => {
     uiHistory.dispose();
   });
 
+  let currentUrl = '';
+  const LocationProbe = () => {
+    const location = useLocation();
+    currentUrl = decodeURIComponent(`${location.pathname}${location.search}${location.hash}`);
+    return null;
+  };
   const renderGamePage = (entry = '/games/test-game') => render(<MemoryRouter initialEntries={[entry]}>
     <Routes>
-      <Route path="/games/:identifier" element={<GamePage />} />
+      <Route path="/games/:identifier" element={<><GamePage /><LocationProbe /></>} />
     </Routes>
   </MemoryRouter>);
+
+  test('mirrors filters into a replaceable URL and keeps the shared rule hash', async () => {
+    const user = userEvent.setup();
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [
+      { ...game.rules[0], categories: ['teaching_setup_opening'], tags: [{ id: 'tag-setup', slug: 'setup', name: '設置' }], playerCounts: [2] },
+      { ...game.rules[1], categories: ['action_effect_detail'] },
+    ] } });
+    renderGamePage('/games/test-game#rule-rule-9');
+    const index = await screen.findByRole('group', { name: '規則快速索引' });
+
+    await user.click(within(index).getByRole('button', { name: '教學、設置、開局' }));
+    await user.click(screen.getByRole('button', { name: /2人$/ }));
+    await user.click(screen.getByRole('button', { name: '#設置' }));
+    await user.type(screen.getByRole('searchbox', { name: '關鍵字搜尋' }), '第一');
+    expect(currentUrl).toBe('/games/test-game?category=teaching_setup_opening&players=2&tag=設置&find=第一#rule-rule-9');
+
+    await user.click(screen.getByRole('button', { name: /清除篩選/ }));
+    expect(currentUrl).toBe('/games/test-game?category=teaching_setup_opening#rule-rule-9');
+    expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toHaveValue('');
+    expect(mocks.game).toHaveBeenCalledOnce();
+  });
+
+  test('restores filters from a shared URL', async () => {
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [
+      { ...game.rules[0], playerCounts: [2], editionNotes: ['標準版'] },
+      { ...game.rules[1], playerCounts: [4] },
+    ] } });
+    const { container } = renderGamePage('/games/test-game?players=2&edition=標準版');
+    await screen.findByText('第一條正確規則');
+    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+    expect(screen.getByLabelText('已選標籤')).toHaveTextContent('2人');
+    expect(screen.getByLabelText('已選標籤')).toHaveTextContent('標準版');
+  });
+
+  test('offers only indexes that still reach rules under the other filters, keeping the selected one', async () => {
+    const user = userEvent.setup();
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [
+      { ...game.rules[0], categories: ['teaching_setup_opening'], editionNotes: ['標準版'] },
+      { ...game.rules[1], categories: ['action_effect_detail'] },
+    ] } });
+    renderGamePage('/games/test-game?category=action_effect_detail');
+    const index = await screen.findByRole('group', { name: '規則快速索引' });
+    expect(within(index).getAllByRole('button')).toHaveLength(2);
+
+    await user.type(screen.getByRole('searchbox', { name: '關鍵字搜尋' }), '第一條');
+    expect(within(index).getAllByRole('button').map((button) => button.getAttribute('aria-label')))
+      .toEqual(['教學、設置、開局', '行動、效果、細節']);
+    expect(screen.getByText('找不到符合目前條件的規則。')).toBeInTheDocument();
+
+    await user.click(within(index).getByRole('button', { name: '行動、效果、細節' }));
+    expect(within(index).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['教學、設置、開局']);
+  });
 
   test.each(['/games/test-game', '/games/test-game?category=flow_endgame_scoring'])(
     'hides empty indexes without hiding other rules at %s', async (entry) => {
@@ -151,7 +209,8 @@ describe('GamePage compact rule view', () => {
     const index = await screen.findByRole('group', { name: '規則快速索引' });
     const opening = within(index).getByRole('button', { name: '教學、設置、開局' });
     expect(opening).toHaveAttribute('aria-pressed', 'true');
-    expect(within(index).getAllByRole('button')).toHaveLength(2);
+    // The search leaves no action rules, so that index is not offered.
+    expect(within(index).getAllByRole('button')).toHaveLength(1);
     await userEvent.setup().click(opening);
     expect(opening).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toHaveValue('第一條');

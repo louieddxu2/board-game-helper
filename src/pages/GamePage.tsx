@@ -3,22 +3,23 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
 import { clearSearchCache } from '../components/GameSearch';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
+import { RuleFilters } from '../components/RuleFilters';
 import { useSession } from '../context/SessionContext';
+import { useRuleFilters } from '../hooks/useRuleFilters';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError } from '../lib/api';
-import { getRuleEditions } from '../lib/editionOptions';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
-import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
-import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
+import { applyRuleImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { hydrateRuleTags } from '../lib/tagHydration';
 import type { PersonalHomeGame } from '../shared/types';
-import { RULE_CATEGORIES, RULE_CATEGORY_LABELS, type RuleCard as RuleCardType, type RuleCategory, type TagSummary } from '../shared/types';
+import type { RuleCard as RuleCardType, TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
 import { useGameDetail } from './useGameDetail';
 
 const SITE_TITLE = '玩錯的桌遊規則';
+const NO_RULES: RuleCardType[] = [];
 
 const estimateTitleWidthUnits = (title: string) => Math.max(1, Math.ceil(Array.from(title).reduce((total, character) => (
   total + (character === ' ' ? 0.35 : character.charCodeAt(0) <= 0x7f ? 0.6 : 1)
@@ -30,10 +31,6 @@ export const GamePage = () => {
   const { canEdit, user, isAdmin } = useSession();
   const canEditRule = (rule: RuleCardType) => canUserEditRule(rule, user, isAdmin);
   const { showToast } = useToast();
-  const [activeCategory, setActiveCategory] = useState<'all' | RuleCategory>(() => {
-    const category = new URLSearchParams(location.search).get('category');
-    return RULE_CATEGORIES.includes(category as RuleCategory) ? category as RuleCategory : 'all';
-  });
   const { game, setGame, loading, error: gameError, reload: load } = useGameDetail(identifier, (location.state as { justAdded?: number } | null)?.justAdded);
   const [classificationTags, setClassificationTags] = useState<TagSummary[]>([]);
   const [editing, setEditing] = useState<RuleCardType>();
@@ -48,45 +45,6 @@ export const GamePage = () => {
   const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const handledRuleHash = useRef<string | undefined>(undefined);
-  const [activePlayerCounts, setActivePlayerCounts] = useState<number[]>([]);
-  const [activeEditions, setActiveEditions] = useState<string[]>([]);
-  const [activeTags, setActiveTags] = useState<string[]>(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const tagParam = searchParams.get('tag') || searchParams.get('tags');
-    return tagParam ? tagParam.split(',').map((t) => t.trim()).filter(Boolean) : [];
-  });
-
-  const toggleTag = (tag: string) => {
-    setActiveTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  };
-  const togglePlayerCount = (count: number) => {
-    setActivePlayerCounts((prev) =>
-      prev.includes(count) ? prev.filter((c) => c !== count) : [...prev, count]
-    );
-  };
-  const togglePlayerCounts = (counts: number[]) => {
-    const uniqueCounts = Array.from(new Set(counts));
-    if (uniqueCounts.length === 0) return;
-    setActivePlayerCounts((prev) => {
-      const allSelected = uniqueCounts.every((count) => prev.includes(count));
-      return allSelected
-        ? prev.filter((count) => !uniqueCounts.includes(count))
-        : Array.from(new Set([...prev, ...uniqueCounts]));
-    });
-  };
-  const toggleEdition = (edition: string) => {
-    setActiveEditions((prev) =>
-      prev.includes(edition) ? prev.filter((e) => e !== edition) : [...prev, edition]
-    );
-  };
-  const clearAllFilters = () => {
-    setActiveTags([]);
-    setActivePlayerCounts([]);
-    setActiveEditions([]);
-    setRuleQuery('');
-  };
 
   const beginRuleEdit = async (rule: RuleCardType) => {
     const ordinary = Boolean(user && !user.roles.some((role) => role === 'editor' || role === 'admin'));
@@ -121,7 +79,6 @@ export const GamePage = () => {
     }
   };
 
-  const [ruleQuery, setRuleQuery] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   useEffect(() => {
     if (!game) return;
     document.title = `${game.displayName}｜${SITE_TITLE}`;
@@ -209,95 +166,8 @@ export const GamePage = () => {
     return () => { active = false; };
   }, [game?.id, user?.id]);
 
-  const availableCategories = useMemo(() => new Set((game?.rules ?? [])
-    .flatMap((rule) => effectiveRuleCategories(rule, classificationTags))), [game?.rules, classificationTags]);
-  const selectedCategory = activeCategory !== 'all' && availableCategories.has(activeCategory) ? activeCategory : 'all';
-  const rulesByCategory = useMemo(() => {
-    return filterRulesByCategory(game?.rules ?? [], selectedCategory, classificationTags);
-  }, [game?.rules, selectedCategory, classificationTags]);
-
-  const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const rulesByQuery = useMemo(() => {
-    if (!normalizedQuery) return rulesByCategory;
-    return rulesByCategory.filter((rule) => {
-      const haystack = [
-        rule.statement,
-        rule.commonMistake,
-        rule.details,
-        ...(rule.playerCounts ? rule.playerCounts.map((c) => `${c}人`) : []),
-        ...(rule.editionNotes ?? []),
-        ...rule.tags.map((t) => t.name),
-      ].join(' ').toLocaleLowerCase();
-      return haystack.includes(normalizedQuery);
-    });
-  }, [rulesByCategory, normalizedQuery]);
-
-  const rulesBySpecial = useMemo(() => {
-    return rulesByQuery.filter((rule) => {
-      if (activePlayerCounts.length > 0) {
-        const counts = rule.playerCounts ?? [];
-        const hasMatch = activePlayerCounts.some((c) => counts.includes(c));
-        if (counts.length > 0 && !hasMatch) return false;
-      }
-      if (activeEditions.length > 0) {
-        const editions = getRuleEditions(rule);
-        const hasMatch = activeEditions.some((e) => editions.includes(e));
-        if (!hasMatch) return false;
-      }
-      return true;
-    });
-  }, [rulesByQuery, activePlayerCounts, activeEditions]);
-
-  const visibleRules = useMemo(() => {
-    const filtered = rulesBySpecial.filter((rule) => {
-      if (activeTags.length === 0) return true;
-      return activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName));
-    });
-    return sortRulesByImportance(filtered);
-  }, [rulesBySpecial, activeTags]);
-
-  const allGamePlayerCounts = useMemo(() => {
-    const set = new Set<number>();
-    game?.rules.forEach((r) => r.playerCounts?.forEach((c) => set.add(c)));
-    return Array.from(set).sort((a, b) => a - b);
-  }, [game?.rules]);
-
-  const allGameEditions = useMemo(() => {
-    const set = new Set<string>();
-    game?.rules.forEach((rule) => getRuleEditions(rule).forEach((edition) => set.add(edition)));
-    return Array.from(set).sort();
-  }, [game?.rules]);
-
-  const availablePlayerCounts = useMemo(() => {
-    const validSet = new Set<number>();
-    rulesByQuery.forEach((r) => r.playerCounts?.forEach((c) => validSet.add(c)));
-    return allGamePlayerCounts.filter((c) => activePlayerCounts.includes(c) || validSet.has(c));
-  }, [rulesByQuery, allGamePlayerCounts, activePlayerCounts]);
-
-  const availableEditions = useMemo(() => {
-    const validSet = new Set<string>();
-    rulesByQuery.forEach((rule) => getRuleEditions(rule).forEach((edition) => validSet.add(edition)));
-    return allGameEditions.filter((e) => activeEditions.includes(e) || validSet.has(e));
-  }, [rulesByQuery, allGameEditions, activeEditions]);
-
-  const candidateUnselectedTags = useMemo(() => {
-    const set = new Set<string>();
-    visibleRules.forEach((rule) => {
-      rule.tags.forEach((t) => {
-        if (!activeTags.includes(t.name)) {
-          set.add(t.name);
-        }
-      });
-    });
-    let list = Array.from(set).sort();
-    if (normalizedQuery) {
-      list = list.filter((tag) => tag.toLocaleLowerCase().includes(normalizedQuery));
-    }
-    return list.slice(0, 6);
-  }, [visibleRules, activeTags, normalizedQuery]);
-
-  const hasSpecialOptions = availablePlayerCounts.length > 0 || availableEditions.length > 0;
-  const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0;
+  const filters = useRuleFilters(game?.rules ?? NO_RULES, classificationTags);
+  const { togglePlayerCounts, toggleEdition, toggleTag, visibleRules } = filters;
   useEffect(() => {
     if (expandedRuleId && !visibleRules.some((rule) => rule.id === expandedRuleId)) {
       setExpandedRuleId(null);
@@ -409,102 +279,7 @@ export const GamePage = () => {
       </div>
     </header>
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
-    <section className="rule-filters" aria-label="篩選規則">
-      {/* 第一列：概念快速索引，再次點選可解除目前索引。 */}
-      {availableCategories.size > 0 && <div className="rule-quick-index" role="group" aria-label="規則快速索引">
-        {RULE_CATEGORIES.filter((category) => availableCategories.has(category)).map((category) => <button
-          type="button"
-          aria-label={RULE_CATEGORY_LABELS[category]}
-          aria-pressed={selectedCategory === category}
-          className={selectedCategory === category ? 'active' : ''}
-          key={category}
-          onClick={() => setActiveCategory((current) => current === category ? 'all' : category)}
-        >
-          {RULE_CATEGORY_LABELS[category].replaceAll('、', '·')}
-        </button>)}
-      </div>}
-
-      {/* 第二列：人數 / 版本 特殊 Tag (若有) */}
-      {hasSpecialOptions && (
-        <div className="special-tag-filter" aria-label="依人數或版本篩選">
-          {availablePlayerCounts.map((count) => {
-            const isSelected = activePlayerCounts.includes(count);
-            return (
-              <button
-                type="button"
-                key={`player-${count}`}
-                aria-pressed={isSelected}
-                className={isSelected ? 'tag-chip active special-chip' : 'tag-chip special-chip'}
-                onClick={() => togglePlayerCount(count)}
-              >
-                {isSelected ? '✓ ' : ''}👥 {count}人
-              </button>
-            );
-          })}
-          {availableEditions.map((edition) => {
-            const isSelected = activeEditions.includes(edition);
-            return (
-              <button
-                type="button"
-                key={`edition-${edition}`}
-                aria-pressed={isSelected}
-                className={isSelected ? 'tag-chip active special-chip' : 'tag-chip special-chip'}
-                onClick={() => toggleEdition(edition)}
-              >
-                {isSelected ? '✓ ' : ''}📦 {edition}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 第三列：搜尋框 */}
-      <div className="rule-search">
-        <input
-          type="search"
-          value={ruleQuery}
-          onChange={(event) => setRuleQuery(event.target.value)}
-          placeholder="輸入關鍵字搜尋"
-          aria-label="關鍵字搜尋"
-        />
-      </div>
-
-      {/* 第四列：已選取的 Tag (獨立成一行) */}
-      {hasActiveFilters && (
-        <div className="selected-tags-row" aria-label="已選標籤">
-          <span className="selected-tags-label">已選：</span>
-          {activePlayerCounts.map((count) => (
-            <button type="button" key={`sel-player-${count}`} className="tag-chip active" onClick={() => togglePlayerCount(count)}>
-              👥 {count}人 ✕
-            </button>
-          ))}
-          {activeEditions.map((edition) => (
-            <button type="button" key={`sel-edition-${edition}`} className="tag-chip active" onClick={() => toggleEdition(edition)}>
-              📦 {edition} ✕
-            </button>
-          ))}
-          {activeTags.map((tag) => (
-            <button type="button" key={`sel-tag-${tag}`} className="tag-chip active" onClick={() => toggleTag(tag)}>
-              #{tag} ✕
-            </button>
-          ))}
-          <button type="button" className="clear-tags-btn" onClick={clearAllFilters}>
-            清除篩選 ✕
-          </button>
-        </div>
-      )}
-
-      {/* 第五列：剩餘標籤 Tag (上限 6 個，隨搜尋文字與目前相容規則過濾) */}
-      {candidateUnselectedTags.length > 0 && (
-        <div className="tag-filter" aria-label="候選標籤">
-          {candidateUnselectedTags.map((tag) => (
-            <button type="button" className="tag-chip" key={tag} onClick={() => toggleTag(tag)}>
-              #{tag}
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
+    <RuleFilters filters={filters} />
     <div className="game-rules compact-rules">
       {visibleRules.map((rule) => {
         const toggleExpanded = () => toggleExpandedRule(rule.id);
