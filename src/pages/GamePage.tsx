@@ -1,7 +1,6 @@
-import { Fragment, type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
-import { GameActionsMenu } from '../components/GameActionsMenu';
 import { clearSearchCache } from '../components/GameSearch';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { useSession } from '../context/SessionContext';
@@ -10,7 +9,7 @@ import { api, ApiError } from '../lib/api';
 import { getRuleEditions } from '../lib/editionOptions';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
-import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
+import { filterRulesByCategory } from '../lib/ruleCategories';
 import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { hydrateRuleTags } from '../lib/tagHydration';
@@ -21,7 +20,7 @@ import { useGameDetail } from './useGameDetail';
 
 const SITE_TITLE = '玩錯的桌遊規則';
 
-const estimateTitleWidthUnits = (title: string) => Math.max(8, Math.ceil(Array.from(title).reduce((total, character) => (
+const estimateTitleWidthUnits = (title: string) => Math.max(1, Math.ceil(Array.from(title).reduce((total, character) => (
   total + (character === ' ' ? 0.35 : character.charCodeAt(0) <= 0x7f ? 0.6 : 1)
 ), 0)));
 
@@ -379,49 +378,46 @@ export const GamePage = () => {
   </section>;
   const addRuleHref = `/add?game=${encodeURIComponent(game.slug)}`;
   const titleWidthUnits = estimateTitleWidthUnits(game.displayName);
+  const canRenameGame = canEdit
+    ? isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id)
+    : Boolean(user && game.reviewStatus === 'pending' && game.renameOwnerId === user.id);
+  const titleActionWidth = (Number(Boolean(user)) + Number(canRenameGame)) * 48;
   return <section className="game-page">
     <header className="game-hero">
       <div className="game-hero-info">
-        <div className="game-title-row">
-          <h1 style={{ '--game-title-units': titleWidthUnits } as CSSProperties}>{game.displayName}</h1>
+        <div className="game-title-row" style={{ '--game-title-units': titleWidthUnits, '--game-title-actions': `${titleActionWidth}px` } as CSSProperties}>
+          <h1>{game.displayName}</h1>
           {user && <button type="button" className={favorite ? 'game-favorite active' : 'game-favorite'} disabled={favoriteSaving} aria-pressed={Boolean(favorite)} aria-label={favoriteSaving ? '正在處理收藏' : favorite ? '取消收藏' : '收藏遊戲'} title={favorite ? '取消收藏' : '收藏遊戲'} onClick={() => void toggleFavorite()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 2.8 5.7 6.3.9-4.6 4.5 1.1 6.3-5.6-3-5.6 3 1.1-6.3L2.9 9.6l6.3-.9Z" /></svg>
+          </button>}
+          {canRenameGame && <button type="button" className="game-name-edit" aria-label="編輯遊戲名稱" title="編輯遊戲名稱" onClick={() => setEditingGame(true)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5 4 4M5 19l4-1 11-11a2.8 2.8 0 0 0-4-4L5 14Z" /></svg>
           </button>}
         </div>
         <div className="game-hero-meta">
           {game.englishName && <p className="english-name">{game.englishName}</p>}
+          {canEdit && !canRenameGame && <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定">名稱已鎖定</span>}
+          {canEdit && game.reviewStatus === 'pending' && <button type="button" className="game-review-action" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}
         </div>
       </div>
       <div className="inline-actions game-hero-actions">
-        <GameActionsMenu key={game.id}>
-        <button type="button" className="button secondary game-header-action" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>外部資源{(game.externalResources?.length ?? 0) > 0 ? ` · ${game.externalResources?.length}` : ''}</button>
-        {(user || canEdit) && <>
-          {!canEdit && game.reviewStatus === 'pending' && game.renameOwnerId === user?.id && <button type="button" className="button secondary game-header-action" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>}
-          {canEdit && <Fragment>{(isAdmin || game.reviewStatus !== 'not_required' || (!game.renameLocked && game.renameOwnerId === user?.id))
-            ? <button type="button" className="button secondary game-header-action" onClick={() => setEditingGame(true)}>編輯遊戲名稱</button>
-            : <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定">遊戲名稱已鎖定</span>}
-            {game.reviewStatus === 'pending' && <button type="button" className="button secondary game-header-action" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}</Fragment>}
-        </>}
-        </GameActionsMenu>
+        <button type="button" className="button secondary game-resources-button" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>資源</button>
         {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>
     </header>
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
     <section className="rule-filters" aria-label="篩選規則">
-      {/* 第一列：規則分類 (Category Tabs) */}
-      <div className="rule-category-filter" role="tablist" aria-label="規則分類">
-        <button type="button" role="tab" aria-selected={activeCategory === 'all'} className={activeCategory === 'all' ? 'active' : ''} onClick={() => setActiveCategory('all')}>
-          全部 <small>{game.rules.length}</small>
-        </button>
+      {/* 第一列：概念快速索引，再次點選可解除目前索引。 */}
+      <div className="rule-quick-index" role="group" aria-label="規則快速索引">
         {RULE_CATEGORIES.map((category) => <button
           type="button"
-          role="tab"
-          aria-selected={activeCategory === category}
+          aria-label={RULE_CATEGORY_LABELS[category]}
+          aria-pressed={activeCategory === category}
           className={activeCategory === category ? 'active' : ''}
           key={category}
-          onClick={() => setActiveCategory(category)}
+          onClick={() => setActiveCategory((current) => current === category ? 'all' : category)}
         >
-          {RULE_CATEGORY_LABELS[category]} <small>{game.rules.filter((rule) => effectiveRuleCategories(rule, classificationTags).includes(category)).length}</small>
+          {RULE_CATEGORY_LABELS[category].replaceAll('、', '·')}
         </button>)}
       </div>
 

@@ -67,12 +67,11 @@
   .draft-banner { margin: 14px; }
   .game-hero { display: grid; grid-template-columns: minmax(0, 1fr) 20vw; align-items: start; column-gap: 8px; }
   .game-hero-info { min-width: 0; }
-  .game-hero h1 { font-size: clamp(24px, calc((80vw - 40px) / var(--game-title-units)), 30px); line-height: 1.12; overflow-wrap: anywhere; }
-  .game-hero-meta { display: block; min-height: 0; }
-  .game-hero-meta .english-name { margin: 3px 0 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  .game-title-row { --game-title-size: clamp(24px, calc((80vw - 40px - var(--game-title-actions, 0px)) / var(--game-title-units)), 30px); }
+  .game-hero-meta { min-height: 0; }
+  .game-hero-meta .english-name { min-width: 0; margin: 0; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
   .game-hero-actions { display: flex; align-items: flex-start; width: 20vw; margin: 0; }
-  .game-hero-actions .game-actions-menu { width: 100%; }
-  .game-hero-actions .game-actions-menu > summary { width: 100%; min-width: 0; height: 44px; padding: 0 2px; font-size: 12px; }
+  .game-hero-actions .game-resources-button { width: 100%; min-width: 0; height: 44px; min-height: 44px; padding: 0 2px; font-size: 12px; }
   .stage-tabs { top: 66px; }
   .game-page { padding: 20px 16px 100px; }
   .game-hero { padding-bottom: 12px; }

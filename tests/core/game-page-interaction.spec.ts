@@ -6,9 +6,9 @@ const game: GameDetail = {
   ruleCount: 2, updatedAt: 1, aliases: [], reviewStatus: 'not_required', renameOwnerId: 'interaction-admin',
   rules: [
     { id: 'interaction-rule-1', gameId: 'interaction-game', statement: '起始板塊不算城市。',
-      commonMistake: '將它當作城市計分', details: '起始板塊與城市的顏色不同。', status: 'published',
+      commonMistake: '將它當作城市計分', details: '起始板塊與城市的顏色不同。', status: 'published', categories: ['teaching_setup_opening'],
       tags: [{ id: 'interaction-tag', slug: 'setup', name: '設置' }], tagIds: ['interaction-tag'], playerCounts: [2, 3], editionNotes: ['基本版'], sourceLinks: [] },
-    { id: 'interaction-rule-2', gameId: 'interaction-game', statement: '第二條規則保留在列表中。', status: 'published', tags: [], sourceLinks: [] },
+    { id: 'interaction-rule-2', gameId: 'interaction-game', statement: '第二條規則保留在列表中。', status: 'published', categories: ['action_effect_detail', 'flow_endgame_scoring'], tags: [], sourceLinks: [] },
   ],
 };
 
@@ -37,12 +37,24 @@ for (const width of [393, 320, 1280]) {
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
-    test('keeps favorite beside the title and opens each menu action on its first input', async ({ page }) => {
+    test('aligns title actions with the first line and opens resources and editing directly', async ({ page }) => {
       const state = await showGame(page);
       const favorite = page.getByRole('button', { name: '收藏遊戲', exact: true });
       await expect(favorite).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('.game-title-row')).toContainText(game.displayName);
       expect(await favorite.evaluate(el => Boolean(el.closest('.game-title-row')))).toBe(true);
+      const titleGeometry = await page.locator('.game-hero').evaluate(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el.querySelector('h1')!);
+        return { firstLine: range.getClientRects()[0].toJSON(),
+          favorite: el.querySelector('.game-favorite')!.getBoundingClientRect().toJSON(),
+          edit: el.querySelector('.game-name-edit')!.getBoundingClientRect().toJSON(),
+          info: el.querySelector('.game-hero-info')!.getBoundingClientRect().toJSON() };
+      });
+      for (const icon of [titleGeometry.favorite, titleGeometry.edit]) {
+        expect(Math.abs(icon.y + icon.height / 2 - titleGeometry.firstLine.y - titleGeometry.firstLine.height / 2)).toBeLessThan(2);
+        expect(icon.x + icon.width).toBeLessThanOrEqual(titleGeometry.info.x + titleGeometry.info.width + 1);
+      }
       const actions = await page.locator('.game-hero-actions').boundingBox();
       if (touch) {
         expect(actions!.height).toBe(44);
@@ -50,33 +62,63 @@ for (const width of [393, 320, 1280]) {
         expect((await page.locator('.game-hero').boundingBox())!.height).toBeLessThan(90);
       }
       if (width === 393) {
-        await page.locator('.game-page').screenshot({ path: '.wrangler/game-page-compact-header.png' });
-        await page.locator('.game-hero').screenshot({ path: '.wrangler/game-page-header-only.png' });
+        const hero = (await page.locator('.game-hero').boundingBox())!;
+        const index = (await page.getByRole('group', { name: '規則快速索引' }).boundingBox())!;
+        await page.screenshot({ path: '.wrangler/game-page-quick-index.png', clip: {
+          x: hero.x - 2, y: hero.y - 8, width: hero.width + 4, height: index.y + index.height - hero.y + 13,
+        } });
       }
       await activate(favorite);
       await expect(page.getByRole('button', { name: '取消收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
       expect(state.writes()).toBe(1);
-      const menu = page.getByLabel('更多遊戲操作');
-      await activate(menu);
       const resources = page.getByRole('button', { name: '外部資源', exact: true });
       await expect(resources).toBeVisible();
+      await expect(resources).toHaveText('資源');
       await activate(resources);
       const resourceDialog = page.getByRole('dialog', { name: '外部資源', exact: true });
       await expect(resourceDialog).toBeVisible();
-      await expect(page.locator('.game-actions-menu')).not.toHaveAttribute('open');
       await activate(resourceDialog.getByRole('button', { name: '關閉外部資源', exact: true }));
       await expect(resourceDialog).toHaveCount(0);
-      await activate(menu);
       await activate(page.getByRole('button', { name: '編輯遊戲名稱', exact: true }));
       const editor = page.getByRole('dialog', { name: '編輯遊戲名稱', exact: true });
       await expect(editor).toBeVisible();
       await activate(editor.getByRole('button', { name: '關閉編輯視窗', exact: true }));
       await expect(editor).toHaveCount(0);
-      await activate(menu);
-      await menu.press('Escape');
-      await expect(page.locator('.game-actions-menu')).not.toHaveAttribute('open');
-      await expect(menu).toBeFocused();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+
+    test('fits three complete concept indexes on one row and toggles each selection off', async ({ page }) => {
+      await showGame(page);
+      const index = page.getByRole('group', { name: '規則快速索引' });
+      const entries = index.getByRole('button');
+      await expect(entries).toHaveCount(3);
+      await expect(index.getByRole('button', { name: /全部/ })).toHaveCount(0);
+      const geometry = await entries.evaluateAll(elements => elements.map(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return { box: el.getBoundingClientRect().toJSON(), lines: range.getClientRects().length,
+          overflow: el.scrollWidth > el.clientWidth + 1 };
+      }));
+      for (const { box, lines, overflow } of geometry) {
+        expect(Math.abs(box.y - geometry[0].box.y)).toBeLessThan(1);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(lines).toBe(1);
+        expect(overflow).toBe(false);
+      }
+      for (const [label, ruleId] of [
+        ['教學、設置、開局', 'interaction-rule-1'], ['行動、效果、細節', 'interaction-rule-2'],
+        ['流程、終局、計分', 'interaction-rule-2'],
+      ]) {
+        const entry = index.getByRole('button', { name: label, exact: true });
+        await expect(entry).toHaveAttribute('aria-pressed', 'false');
+        await activate(entry);
+        await expect(entry).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('.game-rules > *')).toHaveCount(1);
+        await expect(page.locator(`#rule-${ruleId}`)).toBeVisible();
+        await activate(entry);
+        await expect(entry).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('.game-rules > *')).toHaveCount(2);
+      }
     });
 
     test('expands from metadata, the corner and blank padding without applying a filter', async ({ page }) => {
@@ -90,13 +132,10 @@ for (const width of [393, 320, 1280]) {
         await expect(page.locator('.game-rules > *')).toHaveCount(2);
         await activate(card.locator('.statement-text'));
       }
-      await activate(page.getByLabel('更多遊戲操作'));
-      await expect(page.locator('.game-actions-menu')).toHaveAttribute('open', '');
       const cardBox = await card.boundingBox();
       const corner = { x: cardBox!.width - 15, y: 15 };
       if (touch) await card.tap({ position: corner }); else await card.click({ position: corner });
       await expect(card).toHaveClass('rule-card');
-      await expect(page.locator('.game-actions-menu')).not.toHaveAttribute('open');
       await activate(card.locator('.statement-text'));
       const padding = { x: 4, y: (await card.boundingBox())!.height / 2 };
       if (touch) await card.tap({ position: padding }); else await card.click({ position: padding });
@@ -159,15 +198,20 @@ for (const width of [393, 320, 1280]) {
 
     if (width === 393) test('keeps a long title complete without expanding the action column', async ({ page }) => {
       await showGame(page, { ...game, displayName: '聖瑪利亞號：這是一個很長而且必須完整顯示的遊戲名稱' });
-      const geometry = await page.locator('.game-hero').evaluate(el => ({
+      const geometry = await page.locator('.game-hero').evaluate(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el.querySelector('h1')!);
+        return {
         info: el.querySelector('.game-hero-info')!.getBoundingClientRect().toJSON(),
         actions: el.querySelector('.game-hero-actions')!.getBoundingClientRect().toJSON(),
         favorite: el.querySelector('.game-favorite')!.getBoundingClientRect().toJSON(),
         title: el.querySelector('h1')!.getBoundingClientRect().toJSON(),
-      }));
+        firstLine: range.getClientRects()[0].toJSON(),
+      }; });
       expect(geometry.info.x + geometry.info.width).toBeLessThanOrEqual(geometry.actions.x);
       expect(geometry.favorite.width).toBe(44);
       expect(geometry.title.height).toBeGreaterThan(40);
+      expect(Math.abs(geometry.favorite.y + geometry.favorite.height / 2 - geometry.firstLine.y - geometry.firstLine.height / 2)).toBeLessThan(2);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
   });
