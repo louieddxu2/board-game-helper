@@ -60,7 +60,10 @@ for (const width of [393, 320, 1280]) {
       if (width === 393) expect(cardBox.height).toBeLessThan(315);
       const geometry = await card.evaluate(el => {
         const rect = (selector: string) => el.querySelector(selector)!.getBoundingClientRect().toJSON();
+        const sourceRange = document.createRange();
+        sourceRange.selectNodeContents(el.querySelector('.rule-source-value')!);
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
+          sourceText: sourceRange.getBoundingClientRect().toJSON(),
           title: rect('.rule-game-title'), tags: rect('.rule-tags'),
           notes: [
             { label: rect('.mistake-badge > span'), text: rect('.mistake-text') },
@@ -69,6 +72,8 @@ for (const width of [393, 320, 1280]) {
           actions: [...el.querySelectorAll('.rule-card-footer button')].map(action => action.getBoundingClientRect().toJSON()) };
       });
       expect(geometry.sourceTitle.y + geometry.sourceTitle.height).toBeLessThanOrEqual(geometry.sourceValue.y + 1);
+      expect(geometry.sourceText.top).toBeGreaterThanOrEqual(geometry.sourceValue.top - .5);
+      expect(geometry.sourceText.bottom).toBeLessThanOrEqual(geometry.sourceValue.bottom + .5);
       await expect(source.locator('.rule-source-title')).toHaveCSS('font-size', '11px');
       await expect(source.locator('.rule-source-value')).toHaveCSS('font-size', '11px');
       for (const { label, text } of geometry.notes) {
