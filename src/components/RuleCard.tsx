@@ -193,14 +193,14 @@ export const RuleCard = ({
       {/* 第四行：常見錯誤欄位 */}
       {rule.commonMistake && (
         <div className="mistake">
-          <strong className="mistake-badge">{zhTWCopy.terms.mistakeSituation.slice(0, 2)}<br />{zhTWCopy.terms.mistakeSituation.slice(2)}</strong>
+          <strong className="mistake-badge"><span>{zhTWCopy.terms.mistakeSituation.slice(0, 2)}<br />{zhTWCopy.terms.mistakeSituation.slice(2)}</span></strong>
           <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} {...expandedTextToggleProps}>{rule.commonMistake}</p>
         </div>
       )}
 
       {rule.details && (
         <div className="rule-details-note">
-          <strong className="details-badge">補充<br />說明</strong>
+          <strong className="details-badge"><span>補充<br />說明</span></strong>
           <p className={onToggleExpanded ? 'details-text rule-toggle-text' : 'details-text'} {...expandedTextToggleProps}>{rule.details}</p>
         </div>
       )}

@@ -63,8 +63,8 @@ for (const width of [393, 320, 1280]) {
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
           title: rect('.rule-game-title'), tags: rect('.rule-tags'),
           notes: [
-            { label: rect('.mistake-badge'), text: rect('.mistake-text') },
-            { label: rect('.details-badge'), text: rect('.details-text') },
+            { label: rect('.mistake-badge > span'), text: rect('.mistake-text') },
+            { label: rect('.details-badge > span'), text: rect('.details-text') },
           ],
           actions: [...el.querySelectorAll('.rule-card-footer button')].map(action => action.getBoundingClientRect().toJSON()) };
       });
@@ -84,6 +84,29 @@ for (const width of [393, 320, 1280]) {
       }
       expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       if (touch) await card.screenshot({ path: `.wrangler/rule-card-compact-${width}.png` });
+    });
+
+    test('keeps both labels near the start of long notes', async ({ page }) => {
+      const commonMistake = ['把起始板塊算作城市', '因此拿取城市獎勵', '又計入城市相關目標',
+        '擴充條件也跟著誤算', '最後再加入結算分數'].join('\n');
+      const longDetails = ['起始板塊的圖案很像', '但顏色與城市不同', '請先確認板塊種類',
+        '再檢查目標的條件', '最後依規則書結算'].join('\n');
+      const card = await showCard(page, { ...sample, commonMistake, details: longDetails });
+      await expect(card.locator('.mistake-text')).toHaveText(commonMistake);
+      await expect(card.locator('.details-text')).toHaveText(longDetails);
+      const notes = await card.evaluate(el => ['.mistake', '.rule-details-note'].map(selector => {
+        const note = el.querySelector(selector)!;
+        const text = note.querySelector('p')!;
+        return { label: note.querySelector('strong > span')!.getBoundingClientRect().toJSON(),
+          text: text.getBoundingClientRect().toJSON(), lineHeight: parseFloat(getComputedStyle(text).lineHeight) };
+      }));
+      for (const { label, text, lineHeight } of notes) {
+        expect(text.height).toBeGreaterThanOrEqual(5 * lineHeight - 1);
+        expect(Math.abs(label.y + label.height / 2 - text.y - lineHeight)).toBeLessThan(1);
+        expect(label.y - text.y).toBeLessThanOrEqual(lineHeight / 2);
+      }
+      expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      if (width === 393) await card.screenshot({ path: '.wrangler/rule-card-long-notes.png' });
     });
 
     if (touch) test('moves two long tags below the game name when the first row is full', async ({ page }) => {
