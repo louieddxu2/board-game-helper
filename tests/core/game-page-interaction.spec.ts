@@ -121,6 +121,32 @@ for (const width of [393, 320, 1280]) {
       }
     });
 
+    test('disables empty indexes and keeps other categories available after the first native input', async ({ page }) => {
+      await showGame(page, { ...game, rules: [game.rules[0], { ...game.rules[1], categories: ['action_effect_detail'] }] });
+      const index = page.getByRole('group', { name: '規則快速索引' });
+      const empty = index.getByRole('button', { name: '流程、終局、計分', exact: true });
+      const action = index.getByRole('button', { name: '行動、效果、細節', exact: true });
+      const opening = index.getByRole('button', { name: '教學、設置、開局', exact: true });
+      await expect(empty).toBeDisabled();
+      await expect(empty).toHaveAttribute('aria-pressed', 'false');
+      if (width === 393) await index.screenshot({ path: '.wrangler/game-index-disabled.png' });
+      const rect = (await empty.boundingBox())!;
+      const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      if (touch) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
+      await expect(page.locator('.game-rules > *')).toHaveCount(2);
+      await expect(empty).toHaveAttribute('aria-pressed', 'false');
+      await activate(action);
+      await expect(action).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('.game-rules > *')).toHaveCount(1);
+      await expect(opening).toBeEnabled();
+      await activate(opening);
+      await expect(opening).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#rule-interaction-rule-1')).toBeVisible();
+      await expect(action).toBeEnabled();
+      await activate(opening);
+      await expect(page.locator('.game-rules > *')).toHaveCount(2);
+    });
+
     test('expands from metadata, the corner and blank padding without applying a filter', async ({ page }) => {
       await showGame(page);
       const card = page.locator('#rule-interaction-rule-1');

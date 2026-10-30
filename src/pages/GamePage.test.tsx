@@ -98,6 +98,45 @@ describe('GamePage compact rule view', () => {
     </Routes>
   </MemoryRouter>);
 
+  test.each(['/games/test-game', '/games/test-game?category=flow_endgame_scoring'])(
+    'disables empty indexes without hiding other rules at %s', async (entry) => {
+      mocks.game.mockResolvedValue({ game: { ...game, rules: [
+        { ...game.rules[0], categories: ['teaching_setup_opening'] },
+        { ...game.rules[1], tags: [{ id: 'action-tag', slug: 'action', name: '行動', categoryHints: ['action_effect_detail'] }] },
+      ] } });
+      const { container } = renderGamePage(entry);
+      const index = await screen.findByRole('group', { name: '規則快速索引' });
+      const opening = within(index).getByRole('button', { name: '教學、設置、開局' });
+      const action = within(index).getByRole('button', { name: '行動、效果、細節' });
+      const empty = within(index).getByRole('button', { name: '流程、終局、計分' });
+      expect(opening).toBeEnabled();
+      expect(action).toBeEnabled();
+      expect(empty).toBeDisabled();
+      expect(empty).toHaveAttribute('aria-pressed', 'false');
+      expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
+      await userEvent.setup().click(empty);
+      expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
+      await userEvent.setup().click(opening);
+      expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+      expect(action).toBeEnabled();
+      await userEvent.setup().click(action);
+      expect(screen.getByText('第二條正確規則')).toBeInTheDocument();
+      expect(opening).toBeEnabled();
+    },
+  );
+
+  test('enables an automatically detected category from the loaded public tag keywords', async () => {
+    mocks.tags.mockResolvedValue({ tags: [{ id: 'scoring-tag', slug: 'scoring', name: '計分',
+      categoryHints: ['flow_endgame_scoring'], detectionKeywords: ['第一條'] }] });
+    const { container } = renderGamePage();
+    const index = await screen.findByRole('group', { name: '規則快速索引' });
+    const scoring = within(index).getByRole('button', { name: '流程、終局、計分' });
+    await waitFor(() => expect(scoring).toBeEnabled());
+    await userEvent.setup().click(scoring);
+    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+    expect(screen.getByText('第一條正確規則')).toBeInTheDocument();
+  });
+
   test('clears a shared category index without clearing the search or rereading the game', async () => {
     mocks.game.mockResolvedValue({ game: { ...game, rules: [
       { ...game.rules[0], categories: ['teaching_setup_opening'] },

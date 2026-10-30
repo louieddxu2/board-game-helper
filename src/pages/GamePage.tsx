@@ -9,7 +9,7 @@ import { api, ApiError } from '../lib/api';
 import { getRuleEditions } from '../lib/editionOptions';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
-import { filterRulesByCategory } from '../lib/ruleCategories';
+import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 import { applyRuleImportance, sortRulesByImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
 import { hydrateRuleTags } from '../lib/tagHydration';
@@ -209,9 +209,12 @@ export const GamePage = () => {
     return () => { active = false; };
   }, [game?.id, user?.id]);
 
+  const availableCategories = useMemo(() => new Set((game?.rules ?? [])
+    .flatMap((rule) => effectiveRuleCategories(rule, classificationTags))), [game?.rules, classificationTags]);
+  const selectedCategory = activeCategory !== 'all' && availableCategories.has(activeCategory) ? activeCategory : 'all';
   const rulesByCategory = useMemo(() => {
-    return filterRulesByCategory(game?.rules ?? [], activeCategory, classificationTags);
-  }, [game?.rules, activeCategory, classificationTags]);
+    return filterRulesByCategory(game?.rules ?? [], selectedCategory, classificationTags);
+  }, [game?.rules, selectedCategory, classificationTags]);
 
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
   const rulesByQuery = useMemo(() => {
@@ -412,8 +415,9 @@ export const GamePage = () => {
         {RULE_CATEGORIES.map((category) => <button
           type="button"
           aria-label={RULE_CATEGORY_LABELS[category]}
-          aria-pressed={activeCategory === category}
-          className={activeCategory === category ? 'active' : ''}
+          aria-pressed={selectedCategory === category}
+          className={selectedCategory === category ? 'active' : ''}
+          disabled={!availableCategories.has(category)}
           key={category}
           onClick={() => setActiveCategory((current) => current === category ? 'all' : category)}
         >

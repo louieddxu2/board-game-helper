@@ -67,13 +67,21 @@
   cursor: pointer;
 }
 
-.rule-quick-index button:hover {
+.rule-quick-index button:hover:not(:disabled) {
   background: var(--cream);
 }
 
 .rule-quick-index button.active {
   color: var(--white);
   background: var(--green);
+}
+
+.rule-quick-index button:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  opacity: .65;
+  cursor: default;
 }
 
 .rule-category-input {
