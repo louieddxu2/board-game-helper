@@ -42,7 +42,7 @@ const box = async (locator: Locator) => {
 for (const width of [393, 320, 1280]) {
   test.describe(`rule card at ${width}px`, () => {
     const touch = width <= 800;
-    test.use({ viewport: { width, height: 851 }, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
+    test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
     test('keeps the complete rule compact, with a two-line source and usable actions', async ({ page }) => {
@@ -62,11 +62,18 @@ for (const width of [393, 320, 1280]) {
         const rect = (selector: string) => el.querySelector(selector)!.getBoundingClientRect().toJSON();
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
           title: rect('.rule-game-title'), tags: rect('.rule-tags'),
+          notes: [
+            { label: rect('.mistake-badge'), text: rect('.mistake-text') },
+            { label: rect('.details-badge'), text: rect('.details-text') },
+          ],
           actions: [...el.querySelectorAll('.rule-card-footer button')].map(action => action.getBoundingClientRect().toJSON()) };
       });
       expect(geometry.sourceTitle.y + geometry.sourceTitle.height).toBeLessThanOrEqual(geometry.sourceValue.y + 1);
       await expect(source.locator('.rule-source-title')).toHaveCSS('font-size', '11px');
       await expect(source.locator('.rule-source-value')).toHaveCSS('font-size', '11px');
+      for (const { label, text } of geometry.notes) {
+        expect(Math.abs(label.y + label.height / 2 - text.y - text.height / 2)).toBeLessThan(1);
+      }
       for (const actionBox of geometry.actions) {
         expect(actionBox.width).toBeGreaterThanOrEqual(43);
         expect(actionBox.height).toBeGreaterThanOrEqual(43);
