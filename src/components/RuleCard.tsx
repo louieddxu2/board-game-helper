@@ -5,7 +5,7 @@ import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import zhTWCopy from '../content/zh-TW.json';
-import { ExternalLinkGuard } from './ExternalLinkGuard';
+import { RuleCardSource } from './RuleCardSource';
 import { copyRuleContent } from '../lib/ruleClipboard';
 
 export interface RuleCardProps {
@@ -98,6 +98,8 @@ export const RuleCard = ({
   const titleText = effectiveGameHref && effectiveGameName
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
+  const hasHeader = Boolean(titleText || ruleEditions.length || rule.playerCounts?.length
+    || rule.tags?.length || hasCredits || hasReviewMeta || onEdit);
   const expandedTextToggleProps = onToggleExpanded ? {
     role: 'button' as const,
     tabIndex: 0,
@@ -112,8 +114,21 @@ export const RuleCard = ({
       id={`rule-${rule.id}`}
       onClick={onToggleExpanded ? undefined : handleCardClick}
     >
-      {/* 第一行：遊戲名稱(英文名稱)、屬性(擴充、人數)、右上編輯 */}
-      <div className="rule-card-header">
+      {hasHeader && <div className="rule-card-header">
+        {(hasCredits || hasReviewMeta || onEdit) && <div className="rule-card-header-actions">
+          {(hasCredits || hasReviewMeta) && (
+            <small className="rule-credits" aria-label="規則作者資訊">
+              {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
+              {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
+              {rule.reviewStatus === 'pending' && <span>未審核</span>}
+              {rule.reviewStatus === 'reviewed' && <span>{rule.reviewedByNickname ? `審核：${rule.reviewedByNickname}` : '審核完成'}</span>}
+            </small>
+          )}
+          {onEdit && <button type="button" className="text-action edit-btn" onClick={(event) => {
+            event.stopPropagation();
+            onEdit();
+          }}>編輯</button>}
+        </div>}
         <div className="rule-card-title-group">
           {titleText && (
             <h3 className="rule-game-title">
@@ -146,7 +161,7 @@ export const RuleCard = ({
           </div>
 
           {Boolean(rule.tags?.length) && (
-            <div className="rule-tags" aria-label="主題標籤">
+            <div className={rule.tags.length > 2 ? 'rule-tags rule-tags-many' : 'rule-tags'} aria-label="主題標籤">
               {rule.tags.map((tag) => onTagClick && !tag.unresolved ? (
                 <button
                   type="button"
@@ -166,29 +181,7 @@ export const RuleCard = ({
           )}
         </div>
 
-        {(hasCredits || hasReviewMeta) && (
-          <small className="rule-credits" aria-label="規則作者資訊">
-            {rule.createdByNickname && <span>建立：{rule.createdByNickname}</span>}
-            {Boolean(rule.editedByNicknames?.length) && <span>修改：{rule.editedByNicknames!.join('、')}</span>}
-            {rule.reviewStatus === 'pending' && <span>未審核</span>}
-            {rule.reviewStatus === 'reviewed' && <span>{rule.reviewedByNickname ? `審核：${rule.reviewedByNickname}` : '審核完成'}</span>}
-          </small>
-        )}
-
-        {/* 右上角編輯按鈕 (僅當傳入 onEdit 且具有權限時顯示) */}
-        {onEdit && (
-          <button
-            type="button"
-            className="text-action edit-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-          >
-            編輯
-          </button>
-        )}
-      </div>
+      </div>}
 
       {/* 第三行：標準規則欄位 */}
       <div className="rule-statement-section">
@@ -200,7 +193,7 @@ export const RuleCard = ({
       {/* 第四行：常見錯誤欄位 */}
       {rule.commonMistake && (
         <div className="mistake">
-          <strong className="mistake-badge">⚠️ {zhTWCopy.terms.mistakeSituation}</strong>
+          <strong className="mistake-badge">{zhTWCopy.terms.mistakeSituation}</strong>
           <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} {...expandedTextToggleProps}>{rule.commonMistake}</p>
         </div>
       )}
@@ -214,20 +207,7 @@ export const RuleCard = ({
 
       {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">
-        <div className="rule-source">
-          {rule.sourceLabel && <span>來源：{rule.sourceLabel}</span>}
-          {rule.sourceLinks && rule.sourceLinks.map((source, index) => (
-            <ExternalLinkGuard
-              key={source.url}
-              url={source.url}
-            >
-              查看依據{rule.sourceLinks.length > 1 ? ` ${index + 1}` : ''} ↗
-            </ExternalLinkGuard>
-          ))}
-          {!rule.sourceLabel && (!rule.sourceLinks || rule.sourceLinks.length === 0) && (
-            <span className="unverified">未附來源</span>
-          )}
-        </div>
+        <RuleCardSource sourceLabel={rule.sourceLabel} sourceLinks={rule.sourceLinks} />
 
         <div className="rule-card-footer-actions">
           {(onToggleImportance || (rule.importanceCount ?? 0) > 0) && (onToggleImportance ? <button

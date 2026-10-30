@@ -3,7 +3,7 @@
   animation: cardFadeIn 300ms ease-out backwards;
 }
 
-.rule-credits { flex: 0 0 auto; display: grid; justify-items: end; color: var(--muted); opacity: .58; font-size: 11px; line-height: 1.35; }
+.rule-credits { flex: 1 1 auto; min-width: 0; min-height: 44px; display: grid; align-content: center; justify-items: end; color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; text-align: right; }
 .game-name-locked { align-self: center; font-size: 13px; }
 .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .checkbox-row input { width: auto; }

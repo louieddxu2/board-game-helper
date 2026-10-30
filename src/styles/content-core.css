@@ -118,7 +118,7 @@
 .section-heading h2 { font-size: clamp(30px, 4vw, 48px); margin-bottom: 0; }
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; }
+.rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; gap: 8px; }
 .rule-card-compact { min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; position: relative; box-shadow: 0 2px 8px rgba(23,47,40,.025); scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
 .rule-card-compact:has(.rule-toggle-text:hover) { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
 .compact-expand-hint { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 18px; height: 18px; color: var(--orange); pointer-events: none; }
@@ -143,46 +143,59 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .rule-title-link { color: inherit; text-decoration: none; }
 .rule-title-link:hover { text-decoration: underline; }
 
-/* 第一行：標題 + 屬性 + 編輯按鈕 */
-.rule-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.rule-card-title-group { min-width: 0; flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
-.rule-game-title { min-width: 0; font-size: 19px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; color: var(--ink); margin: 0; }
-.rule-attributes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* 右上資訊只佔自己的高度，標籤換行後可使用卡片全寬。 */
+.rule-card-header { display: flow-root; min-width: 0; line-height: 0; }
+.rule-card-header-actions { float: right; display: flex; align-items: flex-start; gap: 6px; max-width: 42%; min-height: 44px; margin-left: 6px; }
+.rule-card-title-group { display: contents; }
+.rule-game-title { float: left; min-width: 0; max-width: 100%; font-size: 17px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; color: var(--ink); margin: 0 6px 0 0; }
+.rule-card-header:has(> .rule-card-header-actions) .rule-game-title { max-width: calc(58% - 12px); }
+.rule-game-title .rule-title-link { display: inline-flex; align-items: center; min-height: 44px; }
+.rule-attributes { display: inline-flex; vertical-align: middle; align-items: center; gap: 4px; flex-wrap: wrap; max-width: 100%; margin-right: 6px; line-height: 1.3; }
+.rule-attributes:empty { display: none; }
 .attr-chip { display: inline-flex; align-items: center; min-height: 0; background: var(--cream); color: var(--green); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 .attr-chip:where(button) { cursor: pointer; }
 .attr-chip:where(button):hover { background: #e3dccf; }
+.rule-card .attr-chip { min-width: 0; max-width: 100%; min-height: 44px; overflow-wrap: anywhere; }
+.rule-card .edit-btn { min-height: 44px; line-height: 1.3; }
 
 /* 標籤與作者、編輯按鈕共用卡片標頭 */
-.rule-card .rule-tags { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.rule-card .rule-tags { margin: 0; display: inline-flex; vertical-align: middle; align-items: center; flex-wrap: wrap; gap: 0; max-width: 100%; }
+.rule-card .rule-tags-many { display: flex; clear: both; width: 100%; }
+.rule-card .rule-tags .tag-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; max-width: 100%; min-height: 44px; padding: 0 3px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 
 /* 第三行：正確規則 (支援換行 pre-line) */
-.rule-statement-section { margin-bottom: 12px; }
-.statement-text { font-size: 17px; line-height: 1.7; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
+.rule-statement-section { margin: 0; }
+.statement-text { font-size: 18px; font-weight: 500; line-height: 1.5; color: var(--ink); margin: 0; white-space: pre-line; word-break: break-word; }
 .details-toggle { border: 0; background: none; color: var(--orange); padding: 4px 0; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 4px; }
 
 /* 第四行：玩錯情況 (支援換行 pre-line) */
-.mistake { background-color: #fdf5f3; border: 1px solid rgba(183, 70, 47, 0.3); border-left: 4px solid var(--orange); padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 10px 0 12px 0; }
-.mistake .mistake-badge { background-color: var(--orange); color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; align-self: flex-start; font-weight: 700; }
-.mistake .mistake-text { color: #5a2a22; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; word-break: break-word; }
+.mistake { background-color: #fdf5f3; border: 0; border-left: 2px solid var(--orange); padding: 4px 8px; border-radius: 0 6px 6px 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
+.mistake .mistake-badge { color: var(--orange); padding: 0; font-size: 13px; line-height: 24px; font-weight: 700; white-space: nowrap; }
+.mistake .mistake-text { min-width: 0; color: #5a2a22; font-size: 16px; line-height: 1.5; margin: 0; white-space: pre-line; word-break: break-word; }
 
 /* 補充說明：與正文分離，但採中性色避免搶過玩錯情況 */
-.rule-details-note { background: #f6f8f6; border: 1px solid var(--line); border-left: 4px solid #a8b5ad; padding: 10px 14px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; }
-.rule-details-note .details-badge { align-self: flex-start; background: #e7ece8; color: #52645a; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: 700; }
-.rule-details-note .details-text { color: #4f5d55; font-size: 16px; line-height: 1.65; margin: 0; white-space: pre-line; word-break: break-word; }
+.rule-details-note { background: transparent; border: 0; border-left: 2px solid transparent; padding: 4px 8px; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 0; }
+.rule-details-note .details-badge { color: var(--muted); padding: 0; font-size: 13px; line-height: 24px; font-weight: 600; white-space: nowrap; }
+.rule-details-note .details-text { min-width: 0; color: var(--muted); font-size: 16px; line-height: 1.5; margin: 0; white-space: pre-line; word-break: break-word; }
 .rule-details-note .details-toggle { color: #54685c; align-self: flex-start; }
 
 /* 第五行：來源與右下角分享按鈕 */
-.rule-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.rule-source { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.rule-source a, .rule-source .external-link-button { color: var(--green); font-weight: 700; text-decoration: none; }
-.rule-source a:hover, .rule-source .external-link-button:hover { text-decoration: underline; }
+.rule-card-footer { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; margin-top: auto; padding-top: 6px; border-top: 1px solid #e7e1d5; font-size: 12px; color: var(--muted); }
+.rule-source { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; flex: 1 1 0; min-width: 44px; }
+.rule-source .rule-source-entry { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 12px 12px; align-content: center; row-gap: 2px; min-width: 0; max-width: 100%; min-height: 44px; padding: 0; color: var(--green); font-size: 11px; line-height: 12px; text-align: left; }
+.rule-source-title { display: flex; align-items: center; gap: 3px; font-weight: 600; }
+.rule-source-title svg { width: 10px; height: 10px; flex: 0 0 10px; }
+.rule-source-value { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 400; }
+.rule-source .external-link-button:hover .rule-source-title { text-decoration: underline; }
+.rule-source .unverified .rule-source-value { color: var(--color-text-warning); }
 .unverified { color: var(--color-text-warning); }
 
-.icon-action-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 40px; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--orange); cursor: pointer; }
-.icon-action-button:hover { border-color: var(--orange); background: var(--cream); }
+.icon-action-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
+.icon-action-button:hover { color: var(--green); background: var(--cream); }
 .icon-action-button:focus-visible { outline: 3px solid rgba(218, 125, 45, .35); outline-offset: 2px; }
 .icon-action-button svg { width: 19px; height: 19px; }
-.rule-card-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+.rule-card-footer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex: 0 1 auto; max-width: calc(100% - 48px); margin-left: auto; flex-wrap: wrap; }
+.rule-card-footer .importance-button, .rule-card-footer .importance-count { min-height: 44px; }
 .importance-button { display: inline-flex; align-items: stretch; min-height: 40px; border: 1px solid #d9c59d; border-radius: 12px; padding: 0; overflow: hidden; background: #fffaf0; color: #765716; font: inherit; cursor: pointer; }
 .importance-button:hover { border-color: var(--orange); background: #fdf0d2; }
 .importance-button.active { border-color: var(--green); background: var(--green); color: var(--white); }

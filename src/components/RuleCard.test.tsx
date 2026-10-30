@@ -61,7 +61,7 @@ describe('RuleCard', () => {
     /></MemoryRouter>);
     expect(screen.getByRole('link', { name: '船廠' })).toHaveAttribute('href', '/games/shipyard');
     const openExternal = vi.spyOn(window, 'open').mockImplementation(() => null);
-    fireEvent.click(screen.getAllByRole('button', { name: /查看依據/ }).at(-1)!);
+    fireEvent.click(screen.getByRole('button', { name: /來源.*example\.com/ }));
     expect(screen.getByRole('alertdialog')).toHaveTextContent('example.com');
     expect(screen.getByRole('alertdialog')).toHaveTextContent('https://example.com/rules');
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '繼續前往' }));
@@ -78,7 +78,7 @@ describe('RuleCard', () => {
       tags: [], sourceLinks: [{ url: 'https://boardgamegeek.com/boardgame/1' }],
     }} /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: /查看依據/ }));
+    fireEvent.click(screen.getByRole('button', { name: /來源.*boardgamegeek\.com/ }));
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(openExternal).toHaveBeenCalledWith('https://boardgamegeek.com/boardgame/1', '_blank', 'noopener,noreferrer');
@@ -94,9 +94,10 @@ describe('RuleCard', () => {
     expect(container.querySelector('[title]')).not.toBeNull();
   });
 
-  test('places tags and public credits before the edit button in one header row', () => {
+  test('keeps public credits, tags and editing together in the card header', () => {
+    const onEdit = vi.fn();
     const { container } = render(<MemoryRouter><RuleCard
-      onEdit={vi.fn()}
+      onEdit={onEdit}
       rule={{
         id: 'rule_credits', gameId: 'game_1', statement: '公開規則', status: 'published',
         createdByNickname: '小明', editedByNicknames: ['小華', '阿德'],
@@ -108,9 +109,36 @@ describe('RuleCard', () => {
     expect(screen.getByText('修改：小華、阿德')).toBeInTheDocument();
     const header = container.querySelector('.rule-card-header');
     expect(header?.querySelector('.rule-tags')).toContainElement(screen.getByText('#設置'));
-    expect(Array.from(header?.children ?? []).map((element) => element.className)).toEqual([
-      'rule-card-title-group', 'rule-credits', 'text-action edit-btn',
-    ]);
+    const edit = within(header as HTMLElement).getByRole('button', { name: '編輯' });
+    fireEvent.click(edit);
+    expect(onEdit).toHaveBeenCalledOnce();
+  });
+
+  test('keeps every source link and its full labels when displaying multiple sources', () => {
+    render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_many_sources', gameId: 'game_1', statement: '規則', status: 'published', tags: [],
+      sourceLabel: '官方規則與補充說明',
+      sourceLinks: [
+        { label: '規則書第十二頁', url: 'https://boardgamegeek.com/filepage/1' },
+        { label: '作者完整答覆', url: 'https://example.com/clarification' },
+      ],
+    }} /></MemoryRouter>);
+
+    expect(screen.getByRole('button', { name: '來源1 官方規則與補充說明・規則書第十二頁' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '來源2 官方規則與補充說明・作者完整答覆' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('https://example.com/clarification');
+    expect(screen.getByTitle('官方規則與補充說明・作者完整答覆')).toHaveTextContent('官方規則與補充說明・作者完整答覆');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '取消' }));
+  });
+
+  test('keeps a source label without a URL as non-interactive text', () => {
+    const { container } = render(<MemoryRouter><RuleCard rule={{
+      id: 'rule_label_only', gameId: 'game_1', statement: '規則', status: 'published', tags: [],
+      sourceLabel: '盒內紙本規則書第十二頁', sourceLinks: [],
+    }} /></MemoryRouter>);
+
+    expect(screen.getByTitle('盒內紙本規則書第十二頁')).toBeVisible();
+    expect(within(container).queryByRole('button', { name: /來源/ })).not.toBeInTheDocument();
   });
 
   test('does not show a game title or zero when a single-game card has no public credits', () => {

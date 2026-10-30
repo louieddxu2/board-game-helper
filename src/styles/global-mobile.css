@@ -91,12 +91,12 @@
   .compact-rule-row { grid-template-columns: 20px minmax(0, 1fr); gap: 6px; }
   .compact-rule-row p { font-size: 16px; line-height: 1.6; }
   .compact-rule-row strong { min-width: 20px; font-size: 16px; }
-  .statement-text { font-size: 18px; line-height: 1.75; }
-  .mistake .mistake-text, .rule-details-note .details-text { font-size: 16px; line-height: 1.7; }
+  .statement-text { font-size: 18px; line-height: 1.5; }
+  .mistake .mistake-text, .rule-details-note .details-text { font-size: 16px; line-height: 1.5; }
   .compact-rule-mistake { padding: 3px 5px; }
   .rule-filters { gap: 8px; padding-top: 14px; }
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
-  .rule-card { padding: 20px; }
+  .rule-card { padding: 10px 12px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
   .add-page-heading { align-items: flex-end; margin-bottom: 28px !important; }
   .add-page-heading h1 { font-size: 34px; }
