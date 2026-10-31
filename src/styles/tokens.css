@@ -52,7 +52,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-page:focus { outline: none; }
 a { color: inherit; }
 h1, h2, h3, p { margin-top: 0; }
-h1, h2 { font-family: "PMingLiU", "Noto Serif TC", Georgia, serif; letter-spacing: -0.035em; }
+h1, h2 { letter-spacing: -0.035em; }
 
 /* iOS PWA Standalone Safety Rules */
 button, .interactive-card, .workspace-table-cell { -webkit-touch-callout: none; }
