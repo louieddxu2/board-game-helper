@@ -326,10 +326,10 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .account-settings form { display: grid; gap: 12px; }
 .account-settings form .button { justify-self: start; }
 
-.game-page { max-width: 960px; margin: 0 auto; padding: 76px 24px 120px; }
-.game-hero { display: flex; justify-content: space-between; align-items: start; gap: 8px; padding-bottom: 35px; border-bottom: 1px solid var(--line); }
+.game-page { max-width: 960px; margin: 0 auto; padding: 32px 24px 120px; }
+.game-hero { display: flex; justify-content: space-between; align-items: start; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .game-hero-info { min-width: 0; flex: 1; }
-.game-title-row { --game-title-size: clamp(42px, 7vw, 72px); display: flex; align-items: flex-start; gap: 4px; font-size: var(--game-title-size); line-height: 1.12; }
+.game-title-row { --game-title-size: clamp(36px, 4.5vw, 52px); display: flex; align-items: flex-start; gap: 4px; font-size: var(--game-title-size); line-height: 1.12; }
 .game-title-row h1 { min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
 .game-favorite, .game-name-edit { display: inline-grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; margin-top: calc((1em * 1.12 - 44px) / 2); padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .game-favorite svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }

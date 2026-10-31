@@ -89,7 +89,6 @@ html[data-standalone='true'] .confirm-dialog-actions {
 .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
 .brand-mark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--green); color: var(--yellow); font-weight: 900; }
 .brand strong { display: block; font-size: 15px; }
-.brand small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
 .site-header-action { display: none; align-items: center; margin-left: auto; margin-right: 16px; }
 .site-header-action .header-mode-button { min-height: 34px; height: 34px; padding: 0 14px; font-size: 13px; border: 1px solid var(--green); background: var(--white); color: var(--green); font-weight: 800; cursor: pointer; border-radius: 999px; outline: none; }
 .site-header-action .header-mode-button:hover,

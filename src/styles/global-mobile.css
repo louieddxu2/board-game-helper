@@ -1,7 +1,6 @@
 @media (max-width: 800px) {
   .site-header { height: 66px; padding: 0 14px; }
   html[data-standalone='true'] .site-header { height: calc(66px + env(safe-area-inset-top, 0px)); }
-  .brand small { display: none; }
   .brand-mark { width: 34px; height: 34px; }
   .desktop-nav { display: none !important; }
   .site-header-action { display: flex !important; margin-left: auto; margin-right: 0; }
@@ -16,7 +15,8 @@
   .mobile-nav { position: fixed; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); left: 0; right: 0; bottom: 0; z-index: 60; background: rgba(255,253,248,.97); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)); backdrop-filter: blur(14px); }
   .mobile-nav a, .mobile-nav button { min-width: 0; min-height: 48px; display: grid; place-items: center; gap: 1px; padding: 0; border: 0; background: transparent; color: var(--muted); text-decoration: none; font-size: 11px; border-radius: 11px; cursor: pointer; appearance: none; -webkit-appearance: none; }
   .mobile-nav a.active { background: var(--cream); color: var(--green); font-weight: 800; }
-  .mobile-nav a span, .mobile-nav button span { font-size: 18px; line-height: 1; }
+  .mobile-nav a span, .mobile-nav button span { display: inline-flex; align-items: center; font-size: 18px; line-height: 1; }
+  .mobile-nav .nav-icon { width: 20px; height: 20px; }
   footer { padding-bottom: 90px; }
   .hero { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 18px 12px; column-gap: 8px; row-gap: 10px; }
   .hero > .pwa-install-button { grid-column: 2; }
