@@ -22,6 +22,7 @@ import reviewRoutes from './routes/review';
 import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
 import { attributesRoutes } from './routes/attributes';
+import { sitemapRoutes } from './routes/sitemap';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -42,6 +43,11 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.use('/api/*', async (c, next) => {
+  c.set('database', createDatabase(c.env));
+  await next();
+});
+
+app.use('/sitemap.xml', async (c, next) => {
   c.set('database', createDatabase(c.env));
   await next();
 });
@@ -164,6 +170,7 @@ app.route('/', reviewRoutes);
 app.route('/', favoriteRoutes);
 app.route('/', contributionRoutes);
 app.route('/', attributesRoutes);
+app.route('/', sitemapRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   const db = createDatabase(env);

@@ -1,6 +1,9 @@
 User-agent: *
 Allow: /
 Disallow: /api/
+# Game pages load their public rules from here; per-game writes and votes stay blocked.
+Allow: /api/games/
+Disallow: /api/games/*/
 Disallow: /admin
 Disallow: /add
 Disallow: /login
@@ -16,3 +19,5 @@ Disallow: /
 
 User-agent: Bytespider
 Disallow: /
+
+Sitemap: https://board-game-helper.louieddxu2.workers.dev/sitemap.xml

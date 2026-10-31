@@ -137,6 +137,19 @@ describe('GamePage compact rule view', () => {
     expect(screen.getByLabelText('已選標籤')).toHaveTextContent('標準版');
   });
 
+  test('describes the game for search results and restores the site defaults on leave', async () => {
+    mocks.game.mockResolvedValue({ game });
+    const { unmount } = renderGamePage('/games/test-game?players=2');
+    await screen.findByText('第一條正確規則');
+    expect(document.title).toBe('測試遊戲｜玩錯的桌遊規則');
+    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute('content', expect.stringMatching(/^測試遊戲.*：2 條容易玩錯的規則/));
+    expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute('href', `${window.location.origin}/games/test-game`);
+    expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
+    unmount();
+    expect(document.title).toBe('玩錯的桌遊規則');
+    expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
+  });
+
   test('offers only indexes that still reach rules under the other filters, keeping the selected one', async () => {
     const user = userEvent.setup();
     mocks.game.mockResolvedValue({ game: { ...game, rules: [

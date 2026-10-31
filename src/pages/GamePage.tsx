@@ -5,6 +5,7 @@ import { clearSearchCache } from '../components/GameSearch';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { RuleFilters } from '../components/RuleFilters';
 import { useSession } from '../context/SessionContext';
+import { useGamePageMeta } from '../hooks/useGamePageMeta';
 import { useRuleFilters } from '../hooks/useRuleFilters';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError } from '../lib/api';
@@ -18,7 +19,6 @@ import type { RuleCard as RuleCardType, TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
 import { useGameDetail } from './useGameDetail';
 
-const SITE_TITLE = '玩錯的桌遊規則';
 const NO_RULES: RuleCardType[] = [];
 
 const estimateTitleWidthUnits = (title: string) => Math.max(1, Math.ceil(Array.from(title).reduce((total, character) => (
@@ -79,11 +79,7 @@ export const GamePage = () => {
     }
   };
 
-  useEffect(() => {
-    if (!game) return;
-    document.title = `${game.displayName}｜${SITE_TITLE}`;
-    return () => { document.title = SITE_TITLE; };
-  }, [game?.displayName]);
+  useGamePageMeta(game);
   useEffect(() => {
     setExpandedRuleId(null);
     setEditing(undefined);

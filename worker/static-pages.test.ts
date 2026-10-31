@@ -10,7 +10,7 @@ test.each(['wrangler.jsonc', 'wrangler.production.jsonc', 'wrangler.core-test.js
     const { config, error } = ts.parseConfigFileTextToJson(filename, readFileSync(filename, 'utf8'));
     expect(error).toBeUndefined();
     expect(config.assets.not_found_handling).toBe('single-page-application');
-    expect(config.assets.run_worker_first).toEqual(['/api/*']);
+    expect(config.assets.run_worker_first).toEqual(['/api/*', '/sitemap.xml']);
     expect(config.assets.binding).toBeUndefined();
   },
 );
