@@ -7,6 +7,7 @@ import { getRuleEditions } from '../lib/editionOptions';
 import zhTWCopy from '../content/zh-TW.json';
 import { RuleCardSource } from './RuleCardSource';
 import { copyRuleContent } from '../lib/ruleClipboard';
+import { useWrappedTitle } from './useWrappedTitle';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -98,6 +99,7 @@ export const RuleCard = ({
   const titleText = effectiveGameHref && effectiveGameName
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
+  const [titleRef, titleWrapped] = useWrappedTitle<HTMLHeadingElement>(titleText);
   const hasHeader = Boolean(titleText || ruleEditions.length || rule.playerCounts?.length
     || rule.tags?.length || hasCredits || hasReviewMeta || onEdit);
   const expandedTextToggleProps = onToggleExpanded ? {
@@ -114,7 +116,7 @@ export const RuleCard = ({
       id={`rule-${rule.id}`}
       onClick={onToggleExpanded ? undefined : handleCardClick}
     >
-      {hasHeader && <div className="rule-card-header">
+      {hasHeader && <div className={titleWrapped ? 'rule-card-header title-wrapped' : 'rule-card-header'}>
         {(hasCredits || hasReviewMeta || onEdit) && <div className="rule-card-header-actions">
           {(hasCredits || hasReviewMeta) && (
             <small className="rule-credits" aria-label="規則作者資訊">
@@ -131,7 +133,7 @@ export const RuleCard = ({
         </div>}
         <div className="rule-card-title-group">
           {titleText && (
-            <h3 className="rule-game-title">
+            <h3 className="rule-game-title" ref={titleRef}>
               {effectiveGameHref ? (
                 <Link className="rule-title-link" to={effectiveGameHref} onClick={(e) => e.stopPropagation()}>
                   {titleText}
