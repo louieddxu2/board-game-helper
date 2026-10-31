@@ -184,6 +184,8 @@ for (const width of [393, 320, 1280]) {
       const dialog = page.getByRole('alertdialog', { name: '即將離開本站' });
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText('https://example.com/rules?edition=2');
+      // A hovered card is transformed; the fixed dialog must not use it as its containing block.
+      expect(await dialog.evaluate(el => Boolean(el.closest('.rule-card')))).toBe(false);
       await activate(dialog.getByRole('button', { name: '取消', exact: true }));
       await expect(dialog).toHaveCount(0);
       expect(await page.evaluate(() => (window as SourceWindow).sourceOpens)).toEqual([]);

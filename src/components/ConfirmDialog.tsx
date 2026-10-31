@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 export interface ConfirmDialogOptions {
@@ -43,7 +44,8 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
   }, [onCancel, open, tone]);
 
   if (!open) return null;
-  return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+  // Portal to body so a transformed ancestor (e.g. a hovered rule card) cannot become the fixed backdrop's containing block.
+  return createPortal(<div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
     <section className="modal confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={messageId}>
       {discardLabel && onDiscard && <div className="confirm-dialog-top">
         <button type="button" className="confirm-discard-btn" onClick={onDiscard}>{discardLabel}</button>
@@ -54,5 +56,5 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
         <button ref={confirmRef} type="button" className={tone === 'danger' ? 'button danger' : 'button primary'} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </section>
-  </div>;
+  </div>, document.body);
 };
