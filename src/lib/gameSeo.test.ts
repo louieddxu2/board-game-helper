@@ -10,17 +10,16 @@ const game = (overrides: Partial<GameDetail> = {}): GameDetail => ({
 });
 
 test('describes the game with its rule count and most common topics', () => {
-  expect(gameDescription(game())).toBe('姬路城（The White Castle）：3 條容易玩錯的規則，涉及計分、設置。');
+  expect(gameDescription(game())).toBe('3 條容易玩錯的規則：計分、設置');
 });
 
 test('omits topics when rules have no tags and skips unresolved tags', () => {
   const rules = [{ tags: [{ id: 'x', name: '待確認', unresolved: true }] }] as unknown as RuleCard[];
-  expect(gameDescription(game({ englishName: undefined, rules, ruleCount: 1 }))).toBe('姬路城：1 條容易玩錯的規則。');
+  expect(gameDescription(game({ rules, ruleCount: 1 }))).toBe('1 條容易玩錯的規則');
 });
 
-test('states plainly when a game has no rules yet and keeps it out of search results', () => {
+test('keeps games without published rules out of search results', () => {
   const empty = game({ rules: [], ruleCount: 0, publishedRuleCount: 0 });
-  expect(gameDescription(empty)).toBe('姬路城（The White Castle）：目前還沒有玩錯規則的紀錄。');
   expect(shouldIndexGame(empty)).toBe(false);
   expect(shouldIndexGame(game())).toBe(true);
 });

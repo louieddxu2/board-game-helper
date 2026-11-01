@@ -79,7 +79,7 @@ export const GamePage = () => {
     }
   };
 
-  useGamePageMeta(game);
+  useGamePageMeta(game, gameError === 'not-found');
   useEffect(() => {
     setExpandedRuleId(null);
     setEditing(undefined);

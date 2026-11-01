@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { GamePage } from './GamePage';
+import { ApiError } from '../lib/api';
 import { uiHistory } from '../workspace/uiHistory';
 import type { SessionUser } from '../shared/types';
 
@@ -35,7 +36,7 @@ vi.mock('../context/ToastContext', async (importOriginal) => {
 });
 vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
 vi.mock('../lib/api', () => ({
-  ApiError: class ApiError extends Error {},
+  ApiError: class ApiError extends Error { constructor(code: string, public readonly status = 0) { super(code); } },
   api: {
     game: mocks.game,
     ruleFresh: mocks.ruleFresh,
@@ -142,12 +143,26 @@ describe('GamePage compact rule view', () => {
     const { unmount } = renderGamePage('/games/test-game?players=2');
     await screen.findByText('第一條正確規則');
     expect(document.title).toBe('測試遊戲｜玩錯的桌遊規則');
-    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute('content', expect.stringMatching(/^測試遊戲.*：2 條容易玩錯的規則/));
+    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute('content', expect.stringMatching(/^2 條容易玩錯的規則/));
     expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute('href', `${window.location.origin}/games/test-game`);
     expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
     unmount();
     expect(document.title).toBe('玩錯的桌遊規則');
     expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
+  });
+
+  test('keeps games without published rules and missing games out of search results', async () => {
+    mocks.game.mockResolvedValue({ game: { ...game, ruleCount: 0, publishedRuleCount: 0, rules: [] } });
+    const { unmount } = renderGamePage();
+    await waitFor(() => expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex'));
+    expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
+    unmount();
+    expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
+
+    mocks.game.mockRejectedValue(new ApiError('game_not_found', 404));
+    renderGamePage('/games/missing');
+    await screen.findByText('找不到這款遊戲');
+    expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
   });
 
   test('offers only indexes that still reach rules under the other filters, keeping the selected one', async () => {
