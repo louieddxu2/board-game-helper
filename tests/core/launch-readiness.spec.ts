@@ -33,7 +33,7 @@ for (const touch of [false, true]) {
     test('returns the first login action to its selected game', async ({ page }) => {
       await page.goto(`/games/${encodeURIComponent(gameSlug)}`);
       await expect(page.getByRole('heading', { name: gameName, exact: true })).toBeVisible();
-      await expect(page).toHaveTitle(`${gameName}｜玩錯的桌遊規則`);
+      await expect(page).toHaveTitle(`${gameName}：玩錯的1條規則`);
       const record = page.getByRole('link', { name: /記錄/u });
       if (touch) await record.tap(); else await record.click();
       await expect(page.locator('.add-page')).toBeVisible();
