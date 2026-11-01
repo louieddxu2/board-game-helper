@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { GameDetail, RuleCard } from '../shared/types';
-import { canonicalGameUrl, gameDescription, shouldIndexGame } from './gameSeo';
+import { canonicalGameUrl, gameDescription, gameTitle, shouldIndexGame } from './gameSeo';
 
 const rule = (tags: string[]) => ({ tags: tags.map((name, index) => ({ id: `${name}-${index}`, name })) }) as unknown as RuleCard;
 const game = (overrides: Partial<GameDetail> = {}): GameDetail => ({
@@ -9,13 +9,14 @@ const game = (overrides: Partial<GameDetail> = {}): GameDetail => ({
   ...overrides,
 });
 
-test('describes the game with its rule count and most common topics', () => {
-  expect(gameDescription(game())).toBe('3 條容易玩錯的規則：計分、設置');
+test('titles the game with its rule count and describes only its most common topics', () => {
+  expect(gameTitle(game())).toBe('姬路城：玩錯的3條規則');
+  expect(gameDescription(game())).toBe('計分、設置');
 });
 
-test('omits topics when rules have no tags and skips unresolved tags', () => {
+test('leaves the description to the site default when rules have no resolved tags', () => {
   const rules = [{ tags: [{ id: 'x', name: '待確認', unresolved: true }] }] as unknown as RuleCard[];
-  expect(gameDescription(game({ rules, ruleCount: 1 }))).toBe('1 條容易玩錯的規則');
+  expect(gameDescription(game({ rules, ruleCount: 1 }))).toBeUndefined();
 });
 
 test('keeps games without published rules out of search results', () => {

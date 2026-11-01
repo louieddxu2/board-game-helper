@@ -142,8 +142,7 @@ describe('GamePage compact rule view', () => {
     mocks.game.mockResolvedValue({ game });
     const { unmount } = renderGamePage('/games/test-game?players=2');
     await screen.findByText('第一條正確規則');
-    expect(document.title).toBe('測試遊戲｜玩錯的桌遊規則');
-    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute('content', expect.stringMatching(/^2 條容易玩錯的規則/));
+    expect(document.title).toBe('測試遊戲：玩錯的2條規則');
     expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute('href', `${window.location.origin}/games/test-game`);
     expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
     unmount();

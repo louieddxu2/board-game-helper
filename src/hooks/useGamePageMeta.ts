@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { GameDetail } from '../shared/types';
-import { canonicalGameUrl, gameDescription, shouldIndexGame, SITE_TITLE } from '../lib/gameSeo';
+import { canonicalGameUrl, gameDescription, gameTitle, shouldIndexGame, SITE_TITLE } from '../lib/gameSeo';
 
 const headElement = <T extends HTMLElement>(selector: string, create: () => T) => {
   const existing = document.head.querySelector<T>(selector);
@@ -15,12 +15,13 @@ const createMeta = (name: string) => () => Object.assign(document.createElement(
 // Per-game title, description and canonical URL; rule-less and missing games get noindex. Restored on leave.
 export const useGamePageMeta = (game: GameDetail | undefined, notFound: boolean) => {
   const indexable = game ? shouldIndexGame(game) : !notFound;
+  const title = game ? (indexable ? gameTitle(game) : `${game.displayName}｜${SITE_TITLE}`) : undefined;
   const description = game && indexable ? gameDescription(game) : undefined;
   const canonical = game && indexable ? canonicalGameUrl(window.location.origin, game) : undefined;
   useEffect(() => {
     const cleanups: Array<() => void> = [];
-    if (game) {
-      document.title = `${game.displayName}｜${SITE_TITLE}`;
+    if (title) {
+      document.title = title;
       cleanups.push(() => { document.title = SITE_TITLE; });
     }
     if (description) {
@@ -40,5 +41,5 @@ export const useGamePageMeta = (game: GameDetail | undefined, notFound: boolean)
       cleanups.push(() => robots.element.remove());
     }
     return () => cleanups.forEach((cleanup) => cleanup());
-  }, [game?.displayName, description, canonical, indexable]);
+  }, [title, description, canonical, indexable]);
 };
