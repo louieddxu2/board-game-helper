@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { AdminTagEditor } from '../components/AdminTagEditor';
+import { candidateName, EditorCandidates } from '../components/EditorCandidates';
 import { clearPublicTagCache } from '../components/TagInput';
 import { useSession } from '../context/SessionContext';
 import { ApiError, api } from '../lib/api';
 import { localDb } from '../lib/localDb';
-import type { EditorAccessUser, EditorAdminPayload, GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
+import type { EditorAccessUser, EditorAdminPayload, EditorCandidate, GameSummary, RuleCard, RuleCategory, TagSummary } from '../shared/types';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 
@@ -14,7 +15,7 @@ export const AdminPage = () => {
   const { realIsAdmin, mockRole, setMockRole, loading } = useSession();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const [editors, setEditors] = useState<EditorAdminPayload>({ users: [], invitations: [] });
+  const [editors, setEditors] = useState<EditorAdminPayload>({ users: [], invitations: [], candidates: [] });
   const [editorLoadError, setEditorLoadError] = useState<string>();
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [hiddenRules, setHiddenRules] = useState<RuleCard[]>([]);
@@ -63,6 +64,18 @@ export const AdminPage = () => {
       showToast(message, 'error');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const grantEditorAccess = async (candidate: EditorCandidate) => {
+    const name = candidateName(candidate);
+    if (!await confirm({ title: '授予編輯權限？', message: `讓 ${name} 成為 Editor？對方可直接發布與審核規則，不再受投稿額度限制；之後可在名單中撤銷。`, confirmLabel: '授予權限' })) return;
+    try {
+      await api.grantEditor(candidate.id, 'editor');
+      await load();
+      showToast(`已授予 ${name} Editor 權限。`);
+    } catch {
+      showToast('無法授予權限，請稍後再試。', 'error');
     }
   };
 
@@ -224,7 +237,7 @@ export const AdminPage = () => {
     <div className="admin-grid">
       <section className="admin-card">
         <div className="list-heading"><h2>編輯權限管理</h2><span>{editors.users.length + editors.invitations.length} 人</span></div>
-        <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
+        <p className="muted">所有編輯者與管理員權限皆透過此頁面管理。已登入過的使用者可在下方直接授權；尚未登入的人，輸入對方的 Google 信箱即可授予權限，對方首次登入後自動生效。</p>
         {editorLoadError && <p className="form-error">{editorLoadError} <button type="button" className="text-action" onClick={() => void load()}>重試</button></p>}
         <form onSubmit={(event) => { event.preventDefault(); void inviteEditor(); }}>
           <label>Google 信箱<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@gmail.com" /></label>
@@ -253,6 +266,7 @@ export const AdminPage = () => {
             <button type="button" className="danger-link" onClick={() => void revokeInvitation(row.id)}>取消</button>
           </div>)}
         </div>
+        <EditorCandidates candidates={editors.candidates} onGrant={(candidate) => void grantEditorAccess(candidate)} />
       </section>
 
       <section className="admin-card">

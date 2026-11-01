@@ -532,6 +532,7 @@ export const api = {
   inviteEditor: (email: string, role: 'admin' | 'editor', note?: string) => mutation<{ ok: true }>('/api/admin/editors/invite', {
     method: 'POST', body: JSON.stringify({ email, role, note }),
   }),
+  grantEditor: (userId: string, role: 'admin' | 'editor') => mutation<{ ok: true }>(`/api/admin/editors/${userId}/grant`, { method: 'POST', body: JSON.stringify({ role }) }),
   revokeEditor: (userId: string, role: 'admin' | 'editor') => mutation<{ ok: true }>(`/api/admin/editors/${userId}?role=${role}`, { method: 'DELETE', body: '{}' }),
   revokeInvitation: (id: string) => mutation<{ ok: true }>(`/api/admin/editors/invitations/${id}`, { method: 'DELETE', body: '{}' }),
   importRows: (status = 'pending') => uncachedRead<{ rows: Array<Record<string, unknown>> }>(`/api/admin/import-rows?status=${status}`, 'import queue is a private admin workspace'),

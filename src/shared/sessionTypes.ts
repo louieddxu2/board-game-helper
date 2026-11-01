@@ -28,9 +28,21 @@ export interface EditorInvitation {
   invitedAt: number;
 }
 
+// A signed-in account without an active role, shown so an admin can grant access directly.
+export interface EditorCandidate {
+  id: string;
+  maskedEmail: string;
+  nickname?: string;
+  displayName?: string;
+  ruleCount: number;
+  pendingRuleCount: number;
+  lastLoginAt?: number;
+}
+
 export interface EditorAdminPayload {
   users: EditorAccessUser[];
   invitations: EditorInvitation[];
+  candidates: EditorCandidate[];
 }
 
 export interface AccountRuleSummary {

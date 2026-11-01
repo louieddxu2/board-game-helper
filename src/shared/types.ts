@@ -10,6 +10,6 @@ export { FLOW_STAGES, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from './ruleTypes'
 
 export type { ContributionReviewStatus, FlowStage, RuleCategory, UserRole } from './ruleTypes';
 
-export type { AccountCreatedRulesPayload, AccountModifiedRulesPayload, AccountPayload, AccountRevisionSummary, AccountRuleSummary, EditorAccessUser, EditorAdminPayload, EditorInvitation, SessionUser } from './sessionTypes';
+export type { AccountCreatedRulesPayload, AccountModifiedRulesPayload, AccountPayload, AccountRevisionSummary, AccountRuleSummary, EditorAccessUser, EditorAdminPayload, EditorCandidate, EditorInvitation, SessionUser } from './sessionTypes';
 
 export type { ContributionGameSummary, ContributionQuota, ContributionRuleSummary, ContributionsPayload, FavoriteMutationPayload, PersonalHomeGame, PersonalHomePayload, ReviewBatch, ReviewContent, ReviewProposal, RuleImportanceMutationPayload, RuleImportancePayload, SubmissionInput, SubmissionRuleInput } from './submissionTypes';

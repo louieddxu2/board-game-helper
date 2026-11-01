@@ -8,6 +8,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeText, now, slugify } from '../utils';
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 import { ensureRuleGameVariantStatements } from '../data/gameEntities';
+import { DELETED_ACCOUNT_ID } from '../data/accountDeletion';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -93,7 +94,7 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
 });
 
 adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
-  const [users, invites] = await Promise.all([
+  const [users, invites, candidates] = await Promise.all([
     getDatabase(c).statement(`
       SELECT u.id, u.masked_email, u.display_name, ur.role, ur.granted_at, ur.revoked_at
       FROM user_roles ur JOIN users u ON u.id = ur.user_id
@@ -105,6 +106,16 @@ adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
       WHERE claimed_at IS NULL AND revoked_at IS NULL
       ORDER BY invited_at DESC
     `).all<{ id: string; masked_email: string | null; note: string | null; role: string; invited_at: number; claimed_at: number | null; revoked_at: number | null }>(),
+    // Admin-only and bounded: rule counts use the created_by indexes.
+    getDatabase(c).statement(`
+      SELECT u.id, u.masked_email, u.nickname, u.display_name, u.last_login_at,
+        (SELECT COUNT(*) FROM rules r WHERE r.created_by = u.id AND r.hidden_at IS NULL) AS rule_count,
+        (SELECT COUNT(*) FROM rules r WHERE r.created_by = u.id AND r.review_status = 'pending' AND r.hidden_at IS NULL) AS pending_rule_count
+      FROM users u
+      WHERE u.id <> ? AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.revoked_at IS NULL)
+      ORDER BY rule_count DESC, u.last_login_at DESC
+      LIMIT 50
+    `).bind(DELETED_ACCOUNT_ID).all<{ id: string; masked_email: string | null; nickname: string | null; display_name: string | null; last_login_at: number | null; rule_count: number; pending_rule_count: number }>(),
   ]);
 
   return c.json({
@@ -123,7 +134,37 @@ adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
       role: inv.role,
       invitedAt: inv.invited_at,
     })),
+    candidates: (candidates.results ?? []).map((u) => ({
+      id: u.id,
+      maskedEmail: u.masked_email ?? '已保護個資',
+      nickname: u.nickname ?? undefined,
+      displayName: u.display_name ?? undefined,
+      ruleCount: Number(u.rule_count ?? 0),
+      pendingRuleCount: Number(u.pending_rule_count ?? 0),
+      lastLoginAt: u.last_login_at ?? undefined,
+    })),
   });
+});
+
+const grantSchema = z.object({ role: z.enum(['admin', 'editor']) });
+
+// Grants a role to an existing account by id, so an admin can trust a contributor without their email.
+adminRoutes.post('/api/admin/editors/:userId/grant', requireRole('admin'), async (c) => {
+  const body = grantSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: 'invalid_role' }, 400);
+  const userId = c.req.param('userId');
+  const user = userId === DELETED_ACCOUNT_ID ? null
+    : await getDatabase(c).statement('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+  if (!user) return c.json({ error: 'user_not_found' }, 404);
+  await getDatabase(c).batch([
+    getDatabase(c).statement(`
+      INSERT INTO user_roles (user_id, role, granted_by, granted_at, revoked_at)
+      VALUES (?, ?, ?, ?, NULL)
+      ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
+    `).bind(userId, body.data.role, c.get('user')!.id, now()),
+    requireAttributeReplayAfterChange(getDatabase(c)),
+  ]);
+  return c.json({ ok: true });
 });
 
 const inviteSchema = z.object({
