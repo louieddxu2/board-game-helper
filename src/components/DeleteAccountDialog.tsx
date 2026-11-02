@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { AccountDeletionSummary } from '../shared/types';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
@@ -30,21 +30,25 @@ export const DeleteAccountDialog = ({
     setConfirmation('');
   }, [open]);
 
-  useEffect(() => {
+  const escapeRef = useRef({ busy, onCancel });
+  escapeRef.current = { busy, onCancel };
+  // Focus once per opening; loading the summary or toggling busy must not move focus out of the field mid-typing.
+  useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || busy) return;
+      if (event.key !== 'Escape' || escapeRef.current.busy) return;
       event.preventDefault();
-      onCancel();
+      escapeRef.current.onCancel();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => {
-      window.removeEventListener('keydown', closeOnEscape, true);
-      previousFocus?.focus();
-    };
-  }, [busy, onCancel, open]);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
+  }, [open]);
 
   if (!open) return null;
   const blocked = Boolean(summary?.isLastAdmin);

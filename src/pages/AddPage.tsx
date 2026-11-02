@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GameSearch, clearSearchCache } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
@@ -67,6 +67,14 @@ export const AddPage = () => {
   };
   useWorkspaceBrowserBack({ active: pasteImportOpen, onBack: closePasteImport });
   const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  // A new or reopened rule field only exists after the next render; focus it in that commit, still inside the tap.
+  const focusRuleAfterRender = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = focusRuleAfterRender.current;
+    if (!id) return;
+    focusRuleAfterRender.current = null;
+    inputRefs.current[id]?.focus();
+  });
   const draftSnapshot = useMemo<Omit<DraftRecord, 'id'>>(() => ({
     game: game ? { id: game.id, slug: game.slug, displayName: game.displayName, englishName: game.englishName } : undefined,
     gameQuery, englishName, rules, updatedAt: Date.now(),
@@ -226,7 +234,7 @@ export const AddPage = () => {
       return [...current.slice(0, index + 1), next, ...current.slice(index + 1)];
     });
     setActiveRuleId(next.id);
-    window.setTimeout(() => inputRefs.current[next.id]?.focus(), 0);
+    focusRuleAfterRender.current = next.id;
   };
   const removeRule = (id: string) => {
     const remaining = rules.filter((rule) => rule.id !== id);
@@ -394,7 +402,7 @@ export const AddPage = () => {
               variants={selectedGameId && gameEditionOptions?.gameId === selectedGameId ? gameEditionOptions.variants : []}
               onChange={(editionNotes) => setRule(rule.id, { editionNotes })} />
             <div className="two-columns"><label>來源名稱<input value={rule.sourceLabel ?? ''} onChange={(event) => setRule(rule.id, { sourceLabel: event.target.value })} /></label><label>資料網址<input type="url" value={rule.sourceUrl ?? ''} onChange={(event) => setRule(rule.id, { sourceUrl: event.target.value })} /></label></div>
-          </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); window.setTimeout(() => inputRefs.current[rule.id]?.focus(), 0); }}>{rule.statement.trim() || `新增${zhTWCopy.terms.correctRule}`}</button>}
+          </div> : <button type="button" className="rule-input-summary" onClick={() => { setActiveRuleId(rule.id); focusRuleAfterRender.current = rule.id; }}>{rule.statement.trim() || `新增${zhTWCopy.terms.correctRule}`}</button>}
           <button type="button" className="remove-button" onClick={() => removeRule(rule.id)} aria-label={`移除第 ${index + 1} 條`}>×</button>
         </div>;
       })}

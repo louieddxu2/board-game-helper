@@ -75,17 +75,14 @@ const NumericCellEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const result = calculateNumericAdjustment(originalDraft, draft, mode);
   const fractionDigits = Math.max(2, decimalScale(originalDraft), decimalScale(draft), result ? decimalScale(result) : 0);
 
-  const focusInput = (select = false) => {
-    window.requestAnimationFrame(() => {
-      const input = inputRef.current;
-      input?.focus();
-      if (select) input?.select();
-    });
-  };
+  // Focus (and select) right after the render that swaps the value, before any further keystroke can land;
+  // a deferred frame could select text the user already started typing.
+  const [focusRequest, setFocusRequest] = useState({ count: 0, select: true });
+  const focusInput = (select = false) => setFocusRequest((current) => ({ count: current.count + 1, select }));
   useLayoutEffect(() => {
     inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
+    if (focusRequest.select) inputRef.current?.select();
+  }, [focusRequest]);
 
   const chooseMode = (nextMode: Exclude<NumericEditMode, 'direct'>) => {
     const enteringAdjustment = mode === 'direct';

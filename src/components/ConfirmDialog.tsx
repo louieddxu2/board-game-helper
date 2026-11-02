@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
@@ -23,25 +23,28 @@ export const ConfirmDialog = ({ open, title, message, confirmLabel = '確定', c
   const messageId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
   useWorkspaceBrowserBack({ active: open, onBack: onCancel });
 
-  useEffect(() => {
+  // Focus once per opening; a parent re-render must not send Enter back to the button that opened this dialog.
+  useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
+    (tone === 'danger' ? cancelRef : confirmRef).current?.focus();
+    return () => previousFocus?.focus();
+  }, [open, tone]);
+  useEffect(() => {
+    if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      onCancel();
+      onCancelRef.current();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    const timer = window.setTimeout(() => (tone === 'danger' ? cancelRef : confirmRef).current?.focus(), 0);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('keydown', closeOnEscape, true);
-      previousFocus?.focus();
-    };
-  }, [onCancel, open, tone]);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
+  }, [open]);
 
   if (!open) return null;
   // Portal to body so a transformed ancestor (e.g. a hovered rule card) cannot become the fixed backdrop's containing block.

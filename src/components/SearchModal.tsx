@@ -55,12 +55,10 @@ export const SearchModal = ({ open, onClose }: Props) => {
     viewport?.addEventListener('resize', updateViewport);
     viewport?.addEventListener('scroll', updateViewport);
     window.addEventListener('resize', updateViewport);
-    const focusTimer = window.setTimeout(() => {
-      modalRef.current?.querySelector<HTMLInputElement>('.search-input input')?.focus({ preventScroll: true });
-    }, 0);
+    // Focus within the opening tap so mobile keyboards open and the first typed letters land in the field.
+    modalRef.current?.querySelector<HTMLInputElement>('.search-input input')?.focus({ preventScroll: true });
     return () => {
       active = false;
-      window.clearTimeout(focusTimer);
       viewport?.removeEventListener('resize', updateViewport);
       viewport?.removeEventListener('scroll', updateViewport);
       window.removeEventListener('resize', updateViewport);

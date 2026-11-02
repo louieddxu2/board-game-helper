@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 interface TextInputDialogProps {
@@ -17,24 +17,28 @@ export const TextInputDialog = ({ open, title, label, value, confirmLabel = '新
   const titleId = useId();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
   useWorkspaceBrowserBack({ active: open, onBack: onCancel });
 
-  useEffect(() => {
+  // Focus within the opening tap (so mobile keyboards open) and only once per opening.
+  useLayoutEffect(() => {
     if (!open) return;
     const previousFocus = document.activeElement as HTMLElement | null;
+    inputRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      onCancel();
+      onCancelRef.current();
     };
     window.addEventListener('keydown', closeOnEscape, true);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => {
-      window.removeEventListener('keydown', closeOnEscape, true);
-      previousFocus?.focus();
-    };
-  }, [onCancel, open]);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
+  }, [open]);
 
   if (!open) return null;
   return <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
