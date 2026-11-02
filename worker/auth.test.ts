@@ -39,8 +39,8 @@ describe('public read authentication boundary', () => {
             if (sql.includes('SELECT id, google_sub FROM users')) return null;
             if (sql.includes("SELECT 1 FROM user_roles WHERE role = 'admin'")) return null;
             if (sql.includes('SELECT u.id, u.masked_email')) return {
-              id: 'usr-bootstrap', masked_email: null, display_name: '本機管理員', nickname: null,
-              show_nickname: 0, avatar_url: null,
+              id: 'usr-bootstrap', masked_email: null, nickname: null,
+              show_nickname: 0,
             } as T;
             return null;
           },

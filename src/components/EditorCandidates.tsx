@@ -1,6 +1,6 @@
 import type { EditorCandidate } from '../shared/types';
 
-const candidateName = (candidate: EditorCandidate) => candidate.nickname || candidate.displayName || candidate.maskedEmail;
+const candidateName = (candidate: EditorCandidate) => candidate.nickname || candidate.maskedEmail;
 
 // Signed-in accounts without a role, most active contributors first; granting needs no email.
 export const EditorCandidates = ({ candidates, onGrant }: { candidates: EditorCandidate[]; onGrant: (candidate: EditorCandidate) => void }) => (

@@ -4,17 +4,15 @@ import type { UserRole } from './ruleTypes';
 export interface SessionUser {
   id: string;
   maskedEmail?: string;
-  displayName?: string;
   nickname?: string;
   showNickname?: boolean;
-  avatarUrl?: string;
   roles: UserRole[];
 }
 
 export interface EditorAccessUser {
   id: string;
   maskedEmail: string;
-  displayName?: string;
+  nickname?: string;
   role: UserRole;
   grantedAt: number;
   revokedAt?: number;
@@ -33,7 +31,6 @@ export interface EditorCandidate {
   id: string;
   maskedEmail: string;
   nickname?: string;
-  displayName?: string;
   ruleCount: number;
   pendingRuleCount: number;
   lastLoginAt?: number;

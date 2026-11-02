@@ -13,7 +13,8 @@ interface SessionState {
   localDevLogin: boolean;
   refresh(): Promise<void>;
   devLogin(): Promise<void>;
-  googleLogin(credential: string): Promise<void>;
+  /** Resolves true when this sign-in created the account. */
+  googleLogin(credential: string): Promise<boolean>;
   logout(): Promise<void>;
   canEdit: boolean;
   isAdmin: boolean;
@@ -97,7 +98,7 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
     mockRole: activeMockRole,
     setMockRole,
     devLogin: async () => { const response = await api.devLogin(); setUser(response.user); },
-    googleLogin: async (credential) => { const response = await api.googleLogin(credential); setUser(response.user); },
+    googleLogin: async (credential) => { const response = await api.googleLogin(credential); setUser(response.user); return Boolean(response.firstLogin); },
     logout: async () => {
       setMockRole(null);
       try {

@@ -47,7 +47,7 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
 
     <h3>個人資料類別</h3>
     <ul>
-      <li>Google 帳號識別碼、電子信箱雜湊識別值與遮罩顯示值、Google 名稱與頭像</li>
+      <li>Google 帳號識別碼、電子信箱雜湊識別值與遮罩顯示值</li>
       <li>帳號角色、權限、Session 與登入時間</li>
       <li>收藏、已讀版本、投票及投稿活動</li>
       <li>投稿、修訂、審核，以及使用者選擇公開的暱稱</li>
@@ -99,8 +99,6 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
     <ul>
       <li>Google 帳號識別碼</li>
       <li>已驗證電子信箱的雜湊識別值與遮罩顯示值；本站不保存完整電子信箱</li>
-      <li>Google 提供的名稱</li>
-      <li>Google 提供的頭像</li>
       <li>帳號建立時間</li>
       <li>最後登入時間</li>
       <li>本站角色與權限</li>
@@ -297,8 +295,7 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
     <ul>
       <li>Google 帳號識別碼</li>
       <li>電子信箱</li>
-      <li>名稱</li>
-      <li>頭像</li>
+      <li>暱稱</li>
       <li>登入 session</li>
       <li>角色與權限</li>
       <li>收藏</li>

@@ -51,16 +51,14 @@ const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> =
 
 const userById = async (db: Database, userId: string): Promise<SessionUser | undefined> => {
   const row = await db.statement(`
-    SELECT id, masked_email, display_name, nickname, show_nickname, avatar_url FROM users WHERE id = ?
-  `).bind(userId).first<{ id: string; masked_email: string | null; display_name: string | null; nickname: string | null; show_nickname: number; avatar_url: string | null }>();
+    SELECT id, masked_email, nickname, show_nickname FROM users WHERE id = ?
+  `).bind(userId).first<{ id: string; masked_email: string | null; nickname: string | null; show_nickname: number }>();
   if (!row) return undefined;
   return {
     id: row.id,
     maskedEmail: row.masked_email ?? undefined,
-    displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
-    avatarUrl: row.avatar_url ?? undefined,
     roles: await rolesForUser(db, row.id),
   };
 };
@@ -68,16 +66,14 @@ const userById = async (db: Database, userId: string): Promise<SessionUser | und
 const sessionUser = async (db: Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
   const row = await db.statement(`
-    SELECT u.id, u.masked_email, u.display_name, u.nickname, u.show_nickname, u.avatar_url, s.expires_at
+    SELECT u.id, u.masked_email, u.nickname, u.show_nickname, s.expires_at
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.id_hash = ?
   `).bind(tokenHash).first<{
     id: string;
     masked_email: string | null;
-    display_name: string | null;
     nickname: string | null;
     show_nickname: number;
-    avatar_url: string | null;
     expires_at: number;
   }>();
   if (!row) return undefined;
@@ -89,10 +85,8 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
   return {
     id: row.id,
     maskedEmail: row.masked_email ?? undefined,
-    displayName: row.display_name ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
-    avatarUrl: row.avatar_url ?? undefined,
     roles,
   };
 };
@@ -140,9 +134,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   sub: string;
   email: string;
   emailVerified: boolean;
-  name?: string;
-  picture?: string;
-}): Promise<string> => {
+}): Promise<{ userId: string; created: boolean }> => {
   const timestamp = now();
   const emailHash = await hashEmail(profile.email, c.env.EMAIL_HASH_SECRET);
   const legacyEmailHash = await legacyHashEmail(profile.email);
@@ -158,8 +150,8 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   await getDatabase(c).statement(`
     INSERT INTO users (
       id, google_sub, email, email_normalized, email_hash, masked_email, email_verified,
-      display_name, avatar_url, created_at, last_login_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, last_login_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       google_sub = excluded.google_sub,
       email = excluded.email,
@@ -167,12 +159,10 @@ const upsertGoogleUser = async (c: AppContext, profile: {
       email_hash = excluded.email_hash,
       masked_email = excluded.masked_email,
       email_verified = excluded.email_verified,
-      display_name = excluded.display_name,
-      avatar_url = excluded.avatar_url,
       last_login_at = excluded.last_login_at
   `).bind(
     userId, profile.sub, legacyPlaceholder, legacyPlaceholder, emailHash, maskedEmail, profile.emailVerified ? 1 : 0,
-    profile.name ?? null, profile.picture ?? null, timestamp, timestamp,
+    timestamp, timestamp,
   ).run();
 
   const bootstrapAdminHash = await hashEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? '', c.env.EMAIL_HASH_SECRET);
@@ -208,14 +198,14 @@ const upsertGoogleUser = async (c: AppContext, profile: {
       `).bind(userId, timestamp, invite.id),
     ]);
   }
-  return userId;
+  return { userId, created: !existing };
 };
 
 export const verifyGoogleIdentity = async (
   credential: string,
   env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_IDS'>,
   verificationKey: JWTVerifyGetKey = GOOGLE_JWKS,
-): Promise<{ sub: string; email: string; emailVerified: true; name?: string; picture?: string }> => {
+): Promise<{ sub: string; email: string; emailVerified: true }> => {
   const audiences = googleAudiences(env);
   if (!audiences.length) throw new Error('google_auth_not_configured');
   const verified = await jwtVerify(credential, verificationKey, {
@@ -230,25 +220,23 @@ export const verifyGoogleIdentity = async (
     sub: payload.sub,
     email: payload.email,
     emailVerified: true,
-    name: typeof payload.name === 'string' ? payload.name : undefined,
-    picture: typeof payload.picture === 'string' ? payload.picture : undefined,
   };
 };
 
-const authenticateGoogleCredential = async (c: AppContext, credential: string): Promise<{ userId: string; user: SessionUser }> => {
+const authenticateGoogleCredential = async (c: AppContext, credential: string): Promise<{ userId: string; user: SessionUser; firstLogin: boolean }> => {
   const profile = await verifyGoogleIdentity(credential, c.env);
-  const userId = await upsertGoogleUser(c, profile);
+  const { userId, created } = await upsertGoogleUser(c, profile);
   const user = await userById(getDatabase(c), userId);
   if (!user) throw new Error('session_creation_failed');
-  return { userId, user };
+  return { userId, user, firstLogin: created };
 };
 
-export const signInWithGoogle = async (c: AppContext, credential: string): Promise<SessionUser> => {
-  const { userId, user } = await authenticateGoogleCredential(c, credential);
+export const signInWithGoogle = async (c: AppContext, credential: string): Promise<{ user: SessionUser; firstLogin: boolean }> => {
+  const { userId, user, firstLogin } = await authenticateGoogleCredential(c, credential);
   await saveSession(c, userId, {
     kind: 'web', ttlMs: SESSION_DAYS * 24 * 60 * 60 * 1000, setCookie: true,
   });
-  return user;
+  return { user, firstLogin };
 };
 
 export const exchangeGoogleCredential = async (c: AppContext, credential: string): Promise<IntegrationSession> => {
@@ -265,11 +253,10 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
   const url = new URL(c.req.url);
   if (!['localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('not_found');
   const email = normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@localhost');
-  const userId = await upsertGoogleUser(c, {
+  const { userId } = await upsertGoogleUser(c, {
     sub: `local:${email}`,
     email,
     emailVerified: true,
-    name: '本機管理員',
   });
   await saveSession(c, userId, {
     kind: 'web', ttlMs: SESSION_DAYS * 24 * 60 * 60 * 1000, setCookie: true,
@@ -277,7 +264,6 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
   return {
     id: userId,
     maskedEmail: maskEmail(email),
-    displayName: '本機管理員',
     roles: await rolesForUser(getDatabase(c), userId),
   };
 };

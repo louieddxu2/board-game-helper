@@ -413,6 +413,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .login-benefits { padding-left: 24px; margin: 0 0 32px; line-height: 1.8; color: var(--ink); font-size: 16px; }
 .login-benefits li { margin-bottom: 6px; }
 .login-action-container { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 32px 0 16px; }
+.nickname-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .login-action-container .google-button { min-height: 48px; display: flex; justify-content: center; margin-bottom: 12px; }
 .login-disclaimer { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.5; text-align: center; max-width: 440px; }
 .admin-page { max-width: 1180px; padding: 70px 24px 120px; margin: 0 auto; }

@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { ApiError } from '../lib/api';
 import { loginReturnTo } from '../lib/loginNavigation';
+import { NICKNAME_RULES, NicknameForm } from '../components/NicknameForm';
 
 declare global {
   interface Window {
@@ -24,12 +25,27 @@ export const googleLoginErrorMessage = (caught: unknown) => {
   return 'Google 登入服務暫時發生錯誤，請稍後再試。';
 };
 
+// Reads the name from Google's ID token in the browser, only to suggest it as a nickname; the server never keeps it.
+export const googleNameFromCredential = (credential: string): string | undefined => {
+  try {
+    const payload = credential.split('.')[1].replace(/-/gu, '+').replace(/_/gu, '/');
+    const bytes = Uint8Array.from(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')), (character) => character.charCodeAt(0));
+    const name: unknown = JSON.parse(new TextDecoder().decode(bytes)).name;
+    return typeof name === 'string' ? name.normalize('NFKC').replace(/\s+/gu, '') || undefined : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const LoginPage = () => {
   const { user, loading, googleClientId, localDevLogin, devLogin, googleLogin } = useSession();
   const buttonRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const returnTo = loginReturnTo(useLocation().search);
   const [error, setError] = useState('');
+  // After a first sign-in, offer the Google name as an optional nickname before continuing.
+  const [nicknameStep, setNicknameStep] = useState<{ googleName?: string } | null>(null);
+  const continueToReturn = () => navigate(returnTo, { replace: true });
   useEffect(() => {
     if (loading || user || !googleClientId || !buttonRef.current) return;
     const setup = () => {
@@ -43,7 +59,7 @@ export const LoginPage = () => {
           auto_select: false,
           callback: (response) => {
             setError('');
-            void googleLogin(response.credential).then(() => navigate(returnTo, { replace: true })).catch((caught) => setError(googleLoginErrorMessage(caught)));
+            void googleLogin(response.credential).then((firstLogin) => { if (firstLogin) setNicknameStep({ googleName: googleNameFromCredential(response.credential) }); else navigate(returnTo, { replace: true }); }).catch((caught) => setError(googleLoginErrorMessage(caught)));
           },
         });
         google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });
@@ -61,6 +77,13 @@ export const LoginPage = () => {
     document.head.append(script);
     return () => script.removeEventListener('load', setup);
   }, [googleClientId, googleLogin, loading, navigate, returnTo, user]);
+  if (nicknameStep) return <section className="login-page narrow-page">
+    <p className="eyebrow">帳號</p>
+    <h1>登入完成</h1>
+    <p>{nicknameStep.googleName && !user?.nickname ? `要用 Google 名稱「${nicknameStep.googleName}」當暱稱嗎？` : '要設定暱稱嗎？'}</p>
+    <p className="muted">{NICKNAME_RULES}之後可在 <Link to="/account">帳號頁</Link> 修改。</p>
+    <NicknameForm submitLabel="儲存並繼續" anonymousLabel="以匿名繼續" initialNickname={nicknameStep.googleName} onSaved={continueToReturn} />
+  </section>;
   if (loading) return <section className="login-page narrow-page"><h1>正在確認登入狀態…</h1></section>;
   if (user) return <Navigate to={returnTo} replace />;
   return <section className="login-page narrow-page">

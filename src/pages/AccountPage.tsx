@@ -9,6 +9,7 @@ import { localDb } from '../lib/localDb';
 import { clearSearchCache } from '../components/GameSearch';
 import { LoginPage } from './LoginPage';
 import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
+import { NICKNAME_RULES, NicknameForm } from '../components/NicknameForm';
 import { uiHistory } from '../workspace/uiHistory';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-TW', {
@@ -51,11 +52,6 @@ export const AccountPage = () => {
   const { confirm } = useConfirm();
   const { user, realUser, loading, logout, canEdit, refresh } = useSession();
   const [error, setError] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [showNickname, setShowNickname] = useState(false);
-  const [nicknameSaving, setNicknameSaving] = useState(false);
-  const [nicknameError, setNicknameError] = useState('');
-  const [nicknameSaved, setNicknameSaved] = useState(false);
   const [favoritesClearing, setFavoritesClearing] = useState(false);
   const [favoritesCleared, setFavoritesCleared] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -74,11 +70,6 @@ export const AccountPage = () => {
   const [modifiedRulesError, setModifiedRulesError] = useState('');
 
   useEffect(() => {
-    setNickname(user?.nickname ?? '');
-    setShowNickname(Boolean(user?.showNickname));
-  }, [user?.nickname, user?.showNickname]);
-
-  useEffect(() => {
     setDeleteDialogOpen(false);
     setDeletionSummary(undefined);
     setAccountDeletionError('');
@@ -87,26 +78,6 @@ export const AccountPage = () => {
     setModifiedRules(undefined);
     setModifiedRulesOpen(false);
   }, [user?.id]);
-
-  const saveNickname = async () => {
-    if (!canEdit || nicknameSaving) return;
-    setNicknameSaving(true);
-    setNicknameError('');
-    setNicknameSaved(false);
-    try {
-      const response = await api.updateNickname(nickname, showNickname);
-      setNickname(response.user.nickname ?? '');
-      setShowNickname(Boolean(response.user.showNickname));
-      await Promise.all([refresh(), localDb.invalidateHome(), localDb.invalidateAllGames()]);
-      setNicknameSaved(true);
-    } catch (caught) {
-      if (caught instanceof ApiError && caught.code === 'nickname_taken') setNicknameError('這個暱稱已被使用。');
-      else if (caught instanceof ApiError && caught.code === 'invalid_nickname') setNicknameError('暱稱只能使用中文字或英文字母，中文字最多 6 個、英文字母最多 12 個。');
-      else setNicknameError('暱稱暫時無法儲存，請稍後再試。');
-    } finally {
-      setNicknameSaving(false);
-    }
-  };
 
   const toggleCreatedRules = async () => {
     if (createdRulesOpen) { setCreatedRulesOpen(false); return; }
@@ -210,7 +181,7 @@ export const AccountPage = () => {
     <header className="account-header">
       <div>
         <p className="eyebrow">帳號</p>
-        <h1>{user?.nickname || user?.displayName || '我的帳號'}</h1>
+        <h1>{user?.nickname || '我的帳號'}</h1>
         <p className="muted">{user?.maskedEmail}</p>
       </div>
       <button type="button" className="button secondary" onClick={() => void logout().then(() => uiHistory.navigate(() => navigate('/')))}>登出</button>
@@ -222,20 +193,11 @@ export const AccountPage = () => {
       <p className="account-help">你可以投稿規則與建立遊戲，並在這裡查看額度和處理狀態。</p>
       <Link className="button secondary" to="/contributions">查看投稿狀態與完整的編輯/審核權限說明</Link>
     </section>}
-    {canEdit && <section className="account-card account-settings">
+    <section className="account-card account-settings">
       <div className="account-section-heading"><h2>帳號設定</h2></div>
-      <p className="account-help">設定規則卡片使用的公開暱稱。限中文字或英文字母，中文字最多 6 個、英文字母最多 12 個，且不可與他人重複。</p>
-      <form onSubmit={(event) => { event.preventDefault(); void saveNickname(); }}>
-        <label htmlFor="account-nickname">暱稱<input id="account-nickname" value={nickname} maxLength={12} onChange={(event) => setNickname(event.target.value)} placeholder="輸入暱稱" /></label>
-        <label className="checkbox-row" htmlFor="account-show-nickname">
-          <input id="account-show-nickname" type="checkbox" checked={showNickname} disabled={!nickname.trim()} onChange={(event) => setShowNickname(event.target.checked)} />
-          公開顯示暱稱（規則卡片會標示你建立、修改或審核過）
-        </label>
-        {nicknameError && <p className="form-error" role="alert">{nicknameError}</p>}
-        {nicknameSaved && <p className="form-success" role="status">暱稱已更新。</p>}
-        <button className="button primary" type="submit" disabled={!nickname.trim() || nicknameSaving}>{nicknameSaving ? '儲存中…' : '儲存暱稱'}</button>
-      </form>
-    </section>}
+      <p className="account-help">設定規則卡片使用的公開暱稱。{NICKNAME_RULES}</p>
+      <NicknameForm submitLabel="儲存暱稱" />
+    </section>
     <section className="account-card account-settings">
       <div className="account-section-heading"><h2>收藏資料</h2></div>
       <p className="account-help">收藏的遊戲與已讀版本會跟著帳號同步。最近查看與首頁顯示模式只保存在目前裝置。</p>

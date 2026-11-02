@@ -96,10 +96,10 @@ adminRoutes.get('/api/export/public', requireRole('admin'), async (c) => {
 adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
   const [users, invites, candidates] = await Promise.all([
     getDatabase(c).statement(`
-      SELECT u.id, u.masked_email, u.display_name, ur.role, ur.granted_at, ur.revoked_at
+      SELECT u.id, u.masked_email, u.nickname, ur.role, ur.granted_at, ur.revoked_at
       FROM user_roles ur JOIN users u ON u.id = ur.user_id
       ORDER BY ur.revoked_at IS NOT NULL, ur.granted_at DESC
-    `).all<{ id: string; masked_email: string | null; display_name: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
+    `).all<{ id: string; masked_email: string | null; nickname: string | null; role: string; granted_at: number; revoked_at: number | null }>(),
     getDatabase(c).statement(`
       SELECT id, masked_email, note, role, invited_at, claimed_at, revoked_at
       FROM editor_invitations
@@ -108,21 +108,21 @@ adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
     `).all<{ id: string; masked_email: string | null; note: string | null; role: string; invited_at: number; claimed_at: number | null; revoked_at: number | null }>(),
     // Admin-only and bounded: rule counts use the created_by indexes.
     getDatabase(c).statement(`
-      SELECT u.id, u.masked_email, u.nickname, u.display_name, u.last_login_at,
+      SELECT u.id, u.masked_email, u.nickname, u.last_login_at,
         (SELECT COUNT(*) FROM rules r WHERE r.created_by = u.id AND r.hidden_at IS NULL) AS rule_count,
         (SELECT COUNT(*) FROM rules r WHERE r.created_by = u.id AND r.review_status = 'pending' AND r.hidden_at IS NULL) AS pending_rule_count
       FROM users u
       WHERE u.id <> ? AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.revoked_at IS NULL)
       ORDER BY rule_count DESC, u.last_login_at DESC
       LIMIT 50
-    `).bind(DELETED_ACCOUNT_ID).all<{ id: string; masked_email: string | null; nickname: string | null; display_name: string | null; last_login_at: number | null; rule_count: number; pending_rule_count: number }>(),
+    `).bind(DELETED_ACCOUNT_ID).all<{ id: string; masked_email: string | null; nickname: string | null; last_login_at: number | null; rule_count: number; pending_rule_count: number }>(),
   ]);
 
   return c.json({
     users: (users.results ?? []).map((u) => ({
       id: u.id,
       maskedEmail: u.masked_email ?? '已保護個資',
-      displayName: u.display_name ?? undefined,
+      nickname: u.nickname ?? undefined,
       role: u.role,
       grantedAt: u.granted_at,
       revokedAt: u.revoked_at ?? undefined,
@@ -138,7 +138,6 @@ adminRoutes.get('/api/admin/editors', requireRole('admin'), async (c) => {
       id: u.id,
       maskedEmail: u.masked_email ?? '已保護個資',
       nickname: u.nickname ?? undefined,
-      displayName: u.display_name ?? undefined,
       ruleCount: Number(u.rule_count ?? 0),
       pendingRuleCount: Number(u.pending_rule_count ?? 0),
       lastLoginAt: u.last_login_at ?? undefined,

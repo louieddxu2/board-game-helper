@@ -377,7 +377,7 @@ export const api = {
   updateNickname: (nickname: string, showNickname = false) => mutation<{ user: SessionUser }>('/api/account/nickname', {
     method: 'PATCH', body: JSON.stringify({ nickname, showNickname }),
   }),
-  googleLogin: (credential: string) => mutation<{ user: SessionUser }>('/api/auth/google', {
+  googleLogin: (credential: string) => mutation<{ user: SessionUser; firstLogin?: boolean }>('/api/auth/google', {
     method: 'POST', body: JSON.stringify({ credential }),
   }),
   devLogin: () => mutation<{ user: SessionUser }>('/api/auth/dev', { method: 'POST', body: '{}' }),

@@ -100,7 +100,7 @@ authRoutes.get('/api/account/modified-rules', requireUser, async (c) => {
   }) });
 });
 
-authRoutes.patch('/api/account/nickname', requireRole('editor'), async (c) => {
+authRoutes.patch('/api/account/nickname', requireUser, async (c) => {
   const parsed = nicknameSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_nickname' }, 400);
   const user = c.get('user')!;
@@ -155,8 +155,7 @@ authRoutes.post('/api/auth/google', async (c) => {
   if (typeof body.credential !== 'string' || body.credential.length > 10_000) {
     return c.json({ error: 'invalid_credential' }, 400);
   }
-  const user = await signInWithGoogle(c, body.credential);
-  return c.json({ user });
+  return c.json(await signInWithGoogle(c, body.credential));
 });
 
 authRoutes.post('/api/auth/google/exchange', async (c) => {

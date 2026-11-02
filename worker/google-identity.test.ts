@@ -34,8 +34,9 @@ describe('Google identity contract', () => {
       sub: 'google-user-1',
       email: 'tester@example.com',
       emailVerified: true,
-      name: '核心流程測試者',
     }));
+    // The token carries a Google name, but the site never keeps it.
+    expect(identity).not.toHaveProperty('name');
     expect(googleAudiences({ GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_IDS: CLIENT_ID })).toEqual([CLIENT_ID]);
   });
 

@@ -248,13 +248,13 @@ export const AdminPage = () => {
         <div className="admin-list">
           {editors.users.map((row, index) => <div key={`${row.id}-${row.role}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
-              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{row.displayName || row.maskedEmail || '編輯者'}</strong>
-              {row.maskedEmail && row.displayName && <small style={{ marginRight: '0.5rem', color: 'var(--muted)' }}>({row.maskedEmail})</small>}
+              <strong style={{ marginRight: '0.5rem', color: 'var(--text)' }}>{row.nickname || row.maskedEmail || '編輯者'}</strong>
+              {row.maskedEmail && row.nickname && <small style={{ marginRight: '0.5rem', color: 'var(--muted)' }}>({row.maskedEmail})</small>}
               <small style={{ background: 'var(--accent-dim, #f0f4f8)', padding: '2px 8px', borderRadius: '4px', textTransform: 'capitalize' }}>
                 {row.role}{row.revokedAt ? '・已撤銷' : ''}
               </small>
             </span>
-            {!row.revokedAt && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${row.displayName || row.maskedEmail} 的 ${row.role} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return revokeEditorAccess(row); })}>撤銷</button>}
+            {!row.revokedAt && <button type="button" className="danger-link" onClick={() => void confirm({ title: '撤銷權限？', message: `撤銷 ${row.nickname || row.maskedEmail} 的 ${row.role} 權限？`, confirmLabel: '撤銷權限', tone: 'danger' }).then((confirmed) => { if (confirmed) return revokeEditorAccess(row); })}>撤銷</button>}
           </div>)}
           {editors.invitations.map((row) => <div key={String(row.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
