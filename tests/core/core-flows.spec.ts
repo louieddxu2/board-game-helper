@@ -25,10 +25,9 @@ test('登入、建立規則、編輯規則與登出皆實際持久化', async ({
 
   const signedIn = await page.request.get('/api/session');
   expect(signedIn.ok()).toBeTruthy();
-  expect((await signedIn.json()).user).toEqual(expect.objectContaining({
-    displayName: '本機管理員',
-    roles: expect.arrayContaining(['admin']),
-  }));
+  const sessionUser = (await signedIn.json()).user;
+  expect(sessionUser).toEqual(expect.objectContaining({ roles: expect.arrayContaining(['admin']) }));
+  expect(sessionUser).not.toHaveProperty('displayName');
   const cookies = await context.cookies();
   expect(cookies.find((cookie) => cookie.name === 'wbr_session')).toEqual(expect.objectContaining({
     httpOnly: true,
