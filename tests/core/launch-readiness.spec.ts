@@ -37,10 +37,8 @@ for (const touch of [false, true]) {
       const record = page.getByRole('link', { name: /記錄/u });
       if (touch) await record.tap(); else await record.click();
       await expect(page.locator('.add-page')).toBeVisible();
-      const login = page.locator('.add-page').getByRole('link', { name: '登入', exact: true });
-      if (touch) await login.tap(); else await login.click();
-      await expect(page).toHaveURL(url => url.pathname === '/login' && url.searchParams.get('returnTo') === `/add?game=${encodeURIComponent(gameSlug)}`);
-      const localLogin = page.getByRole('button', { name: '以本機管理員登入' });
+      // The sign-in button sits on the record page itself, so one action signs in and keeps the selected game.
+      const localLogin = page.locator('.add-page').getByRole('button', { name: '以本機管理員登入' });
       await expect(localLogin).toBeVisible();
       if (touch) await localLogin.tap(); else await localLogin.click();
       await expect(page).toHaveURL(url => url.pathname === '/add' && url.searchParams.get('game') === gameSlug);

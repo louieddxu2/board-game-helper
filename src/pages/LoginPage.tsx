@@ -1,88 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
-import { ApiError } from '../lib/api';
 import { loginReturnTo } from '../lib/loginNavigation';
-import { NICKNAME_RULES, NicknameForm } from '../components/NicknameForm';
+import { FirstLoginNickname } from '../components/FirstLoginNickname';
+import { GoogleSignIn } from '../components/GoogleSignIn';
 
-declare global {
-  interface Window {
-    google?: { accounts: { id: {
-      initialize(options: { client_id: string; callback(response: { credential: string }): void; auto_select?: boolean; use_fedcm_for_prompt?: boolean }): void;
-      renderButton(element: HTMLElement, options: Record<string, unknown>): void;
-      prompt(): void;
-      disableAutoSelect(): void;
-    } } };
-  }
-}
-
-export const googleLoginErrorMessage = (caught: unknown) => {
-  if (!(caught instanceof ApiError)) return 'Google 登入失敗，請再試一次。';
-  if (caught.code === 'google_identity_conflict') return '這個 Google 信箱已連結到另一個 Google 身分，請聯絡網站管理者處理。';
-  if (caught.code === 'invalid_google_identity') return 'Google 沒有回傳可驗證的信箱身分，請改用已驗證信箱的帳戶。';
-  if (caught.code === 'google_auth_not_configured') return '網站的 Google 登入目前尚未正確設定。';
-  if (caught.code === 'forbidden_origin') return '目前網址未獲准使用 Google 登入。';
-  return 'Google 登入服務暫時發生錯誤，請稍後再試。';
-};
-
-// Reads the name from Google's ID token in the browser, only to suggest it as a nickname; the server never keeps it.
-export const googleNameFromCredential = (credential: string): string | undefined => {
-  try {
-    const payload = credential.split('.')[1].replace(/-/gu, '+').replace(/_/gu, '/');
-    const bytes = Uint8Array.from(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')), (character) => character.charCodeAt(0));
-    const name: unknown = JSON.parse(new TextDecoder().decode(bytes)).name;
-    return typeof name === 'string' ? name.normalize('NFKC').replace(/\s+/gu, '') || undefined : undefined;
-  } catch {
-    return undefined;
-  }
-};
+export { googleLoginErrorMessage, googleNameFromCredential } from '../components/GoogleSignIn';
 
 export const LoginPage = () => {
-  const { user, loading, googleClientId, localDevLogin, devLogin, googleLogin } = useSession();
-  const buttonRef = useRef<HTMLDivElement>(null);
+  const { user, loading } = useSession();
   const navigate = useNavigate();
   const returnTo = loginReturnTo(useLocation().search);
-  const [error, setError] = useState('');
   // After a first sign-in, offer the Google name as an optional nickname before continuing.
   const [nicknameStep, setNicknameStep] = useState<{ googleName?: string } | null>(null);
   const continueToReturn = () => navigate(returnTo, { replace: true });
-  useEffect(() => {
-    if (loading || user || !googleClientId || !buttonRef.current) return;
-    const setup = () => {
-      const google = window.google;
-      const target = buttonRef.current;
-      if (!google || !target) return;
-      try {
-        google.accounts.id.initialize({
-          client_id: googleClientId,
-          use_fedcm_for_prompt: false,
-          auto_select: false,
-          callback: (response) => {
-            setError('');
-            void googleLogin(response.credential).then((firstLogin) => { if (firstLogin) setNicknameStep({ googleName: googleNameFromCredential(response.credential) }); else navigate(returnTo, { replace: true }); }).catch((caught) => setError(googleLoginErrorMessage(caught)));
-          },
-        });
-        google.accounts.id.renderButton(target, { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'zh_TW' });
-      } catch {
-        /* ignore Google SDK prompt error on mobile safari */
-      }
-    };
-    const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity]');
-    if (existing) {
-      if (window.google) setup(); else existing.addEventListener('load', setup, { once: true });
-      return () => existing.removeEventListener('load', setup);
-    }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.dataset.googleIdentity = 'true'; script.addEventListener('load', setup, { once: true });
-    document.head.append(script);
-    return () => script.removeEventListener('load', setup);
-  }, [googleClientId, googleLogin, loading, navigate, returnTo, user]);
   if (nicknameStep) return <section className="login-page narrow-page">
     <p className="eyebrow">帳號</p>
     <h1>登入完成</h1>
-    <p>{nicknameStep.googleName && !user?.nickname ? `要用 Google 名稱「${nicknameStep.googleName}」當暱稱嗎？` : '要設定暱稱嗎？'}</p>
-    <p className="muted">{NICKNAME_RULES}之後可在 <Link to="/account">帳號頁</Link> 修改。</p>
-    <NicknameForm submitLabel="儲存並繼續" anonymousLabel="以匿名繼續" initialNickname={nicknameStep.googleName} onSaved={continueToReturn} />
+    <FirstLoginNickname googleName={nicknameStep.googleName} onDone={continueToReturn} />
   </section>;
   if (loading) return <section className="login-page narrow-page"><h1>正在確認登入狀態…</h1></section>;
   if (user) return <Navigate to={returnTo} replace />;
@@ -95,12 +30,6 @@ export const LoginPage = () => {
       <li>有限度地新增玩錯的規則記錄。</li>
       <li>投票玩錯的規則。</li>
     </ol>
-    <div className="login-action-container">
-      <div ref={buttonRef} className="google-button" />
-      <p className="login-disclaimer">Google 登入僅用來識別身分，本站不會要求存取 Drive、Gmail 等其他權限。登入前請先閱讀本站的 <Link to="/privacy">隱私與資料說明</Link>。</p>
-    </div>
-    {!googleClientId && !localDevLogin && <p className="muted">Google 登入尚未設定。</p>}
-    {localDevLogin && <button type="button" className="button primary" onClick={() => { setError(''); void devLogin().then(() => navigate(returnTo, { replace: true })).catch(() => setError('本機登入失敗，請確認 migrations 已套用。')); }}>以本機管理員登入</button>}
-    {error && <p className="form-error" role="alert">{error}</p>}
+    <GoogleSignIn onSignedIn={(firstLogin, googleName) => { if (firstLogin) setNicknameStep({ googleName }); else continueToReturn(); }} />
   </section>;
 };
