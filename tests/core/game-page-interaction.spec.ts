@@ -37,6 +37,28 @@ for (const width of [393, 320, 1280]) {
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
+    test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', async ({ page }) => {
+      const tags = ['行動', '褐色框', '關鍵字', '這個標籤名稱特別長仍然必須完整顯示'].map((name, index) => ({ id: `wrap-tag-${index}`, slug: `wrap-tag-${index}`, name }));
+      const rule = { ...game.rules[0], categories: ['action_effect_detail'], playerCounts: [], editionNotes: [], createdByNickname: '東東', tags, tagIds: tags.map(tag => tag.id) };
+      await showGame(page, { ...game, rules: [rule] });
+      const card = page.locator('#rule-interaction-rule-1');
+      await activate(card.locator('.compact-rule-text').first());
+      await expect(card).toHaveClass('rule-card');
+      const geometry = await card.evaluate(el => {
+        const header = el.querySelector('.rule-card-header')!.getBoundingClientRect();
+        const credits = el.querySelector('.rule-card-header-actions')!.getBoundingClientRect();
+        const chips = Array.from(el.querySelectorAll('.rule-tags .tag-chip'), chip => chip.getBoundingClientRect());
+        return { headerX: header.x, headerRight: header.right, creditsY: credits.y, chips: chips.map(chip => ({ x: chip.x, y: chip.y, right: chip.right })),
+          overflow: el.scrollWidth > el.clientWidth + 1 };
+      });
+      expect(Math.abs(geometry.chips[0].x - geometry.headerX)).toBeLessThan(1);
+      expect(Math.abs(geometry.chips[0].y - geometry.creditsY)).toBeLessThan(3);
+      for (const chip of geometry.chips) expect(chip.right).toBeLessThanOrEqual(geometry.headerRight + 1);
+      expect(geometry.overflow).toBe(false);
+      for (const tag of tags) await expect(card.getByRole('button', { name: `#${tag.name}`, exact: true })).toBeVisible();
+      if (width === 393) await card.screenshot({ path: '.wrangler/game-rule-card-many-tags.png' });
+    });
+
     test('aligns title actions with the first line and opens resources and editing directly', async ({ page }) => {
       const state = await showGame(page);
       const favorite = page.getByRole('button', { name: '收藏遊戲', exact: true });

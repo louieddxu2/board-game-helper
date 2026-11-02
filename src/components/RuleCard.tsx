@@ -8,6 +8,7 @@ import zhTWCopy from '../content/zh-TW.json';
 import { RuleCardSource } from './RuleCardSource';
 import { copyRuleContent } from '../lib/ruleClipboard';
 import { useWrappedTitle } from './useWrappedTitle';
+import { useTagsOwnRow } from './useTagsOwnRow';
 
 export interface RuleCardProps {
   rule: RuleCardType;
@@ -100,6 +101,7 @@ export const RuleCard = ({
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
   const [titleRef, titleWrapped] = useWrappedTitle<HTMLHeadingElement>(titleText);
+  const [tagsRef, tagsOwnRow] = useTagsOwnRow<HTMLDivElement>(titleRef, `${titleText ?? ''}|${rule.tags?.map((tag) => tag.name).join('|') ?? ''}`);
   const hasHeader = Boolean(titleText || ruleEditions.length || rule.playerCounts?.length
     || rule.tags?.length || hasCredits || hasReviewMeta || onEdit);
   const expandedTextToggleProps = onToggleExpanded ? {
@@ -163,7 +165,7 @@ export const RuleCard = ({
           </div>
 
           {Boolean(rule.tags?.length) && (
-            <div className={rule.tags.length > 2 ? 'rule-tags rule-tags-many' : 'rule-tags'} aria-label="主題標籤">
+            <div ref={tagsRef} className={tagsOwnRow ? 'rule-tags rule-tags-own-row' : 'rule-tags'} aria-label="主題標籤">
               {rule.tags.map((tag) => onTagClick && !tag.unresolved ? (
                 <button
                   type="button"

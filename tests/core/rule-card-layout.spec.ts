@@ -64,7 +64,7 @@ for (const width of [393, 320, 1280]) {
         sourceRange.selectNodeContents(el.querySelector('.rule-source-value')!);
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
           sourceText: sourceRange.getBoundingClientRect().toJSON(),
-          title: rect('.rule-game-title'), tags: rect('.rule-tags'),
+          title: rect('.rule-game-title'), tags: rect('.rule-tags .tag-chip'),
           notes: [
             { label: rect('.mistake-badge > span'), text: rect('.mistake-text') },
             { label: rect('.details-badge > span'), text: rect('.details-text') },
@@ -114,17 +114,24 @@ for (const width of [393, 320, 1280]) {
       if (width === 393) await card.screenshot({ path: '.wrangler/rule-card-long-notes.png' });
     });
 
-    if (touch) test('moves two long tags below the game name when the first row is full', async ({ page }) => {
+    if (touch) test('moves every tag onto its own row when they cannot all fit beside the game name', async ({ page }) => {
       const tags = makeTags(['需要保留完整名稱的計分標籤', '另外一個很長的城市判定標籤']);
       const card = await showCard(page, { ...sample, tags, tagIds: tags.map(tag => tag.id) });
       const geometry = await card.evaluate(el => {
-        const title = el.querySelector('.rule-game-title')!.getBoundingClientRect();
-        const tags = el.querySelector('.rule-tags')!.getBoundingClientRect();
-        return { titleBottom: title.bottom, tagsTop: tags.top, tagsX: tags.x, contentX: title.x,
+        const rect = (node: Element) => node.getBoundingClientRect().toJSON();
+        return { title: rect(el.querySelector('.rule-game-title')!), credits: rect(el.querySelector('.rule-card-header-actions')!),
+          header: rect(el.querySelector('.rule-card-header')!), chips: Array.from(el.querySelectorAll('.rule-tags .tag-chip'), rect),
           overflow: el.scrollWidth > el.clientWidth + 1 };
       });
-      expect(geometry.tagsTop).toBeGreaterThanOrEqual(geometry.titleBottom - 1);
-      expect(geometry.tagsX).toBeCloseTo(geometry.contentX, 0);
+      const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+      expect(Math.abs(geometry.chips[0].left - geometry.header.left)).toBeLessThan(1);
+      for (const chip of geometry.chips) {
+        expect(chip.top).toBeGreaterThanOrEqual(Math.max(geometry.title.bottom, geometry.credits.bottom) - 1);
+        expect(overlaps(chip, geometry.title)).toBe(false);
+        expect(overlaps(chip, geometry.credits)).toBe(false);
+        expect(chip.left).toBeGreaterThanOrEqual(geometry.header.left - 1);
+        expect(chip.right).toBeLessThanOrEqual(geometry.header.right + 1);
+      }
       expect(geometry.overflow).toBe(false);
       for (const tag of tags) await expect(card.getByRole('button', { name: `#${tag.name}`, exact: true })).toBeVisible();
     });

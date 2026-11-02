@@ -159,8 +159,10 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .rule-card .edit-btn { min-height: 44px; line-height: 1.3; }
 
 /* 標籤與作者、編輯按鈕共用卡片標頭 */
-.rule-card .rule-tags { margin: 0; display: inline-flex; vertical-align: middle; align-items: center; flex-wrap: wrap; gap: 0; max-width: 100%; }
-.rule-card .rule-tags-many { display: flex; clear: both; width: 100%; }
+/* Tags flow chip by chip into the room beside the credits; when they cannot all fit beside a game title (measured, not counted), they move together onto their own row. */
+.rule-card .rule-tags { margin: 0; display: inline; max-width: 100%; }
+.rule-card .rule-tags.rule-tags-own-row { display: block; clear: both; }
+.rule-card .rule-tags .tag-chip { vertical-align: top; }
 /* A wrapped title keeps its chips on their own left-aligned row instead of beside the credits. */
 .rule-card-header.title-wrapped .rule-attributes:not(:empty), .rule-card-header.title-wrapped .rule-tags { float: left; }
 .rule-card-header.title-wrapped .rule-attributes:not(:empty), .rule-card-header.title-wrapped .rule-attributes:empty + .rule-tags { clear: left; }
