@@ -102,6 +102,27 @@ for (const width of [320, 393, 1280]) {
         return element.clientHeight / parseFloat(getComputedStyle(element).lineHeight);
       })).toBeGreaterThan(8);
     });
+
+    test('redistributes eight lines and updates the hint when font size changes at a fixed width and line height', async ({ page }) => {
+      await showHome(page, [makeRule(9, {
+        statement: '回合結束後先計分再補牌。', commonMistake: lines(6, '玩錯情況'), details: '補充說明',
+      })]);
+      const card = page.locator('#rule-preview-rule-9');
+      await expect(card.locator('.rule-card-preview-hint')).toHaveCount(0);
+      await expect(card.locator('.details-text')).toBeVisible();
+      const beforeWidth = await card.evaluate(element => element.getBoundingClientRect().width);
+      const style = await page.addStyleTag({ content: '.rule-card-preview .statement-text { font-size: 64px; line-height: 27px; }' });
+      await expect(card.locator('.rule-card-preview-hint')).toHaveCount(1);
+      await expect(card.locator('.details-text')).toBeHidden();
+      const visibleLines = await card.locator('.rule-card-preview p').evaluateAll(elements => elements.reduce((sum, element) => {
+        return sum + Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight));
+      }, 0));
+      expect(visibleLines).toBe(8);
+      expect(await card.evaluate(element => element.getBoundingClientRect().width)).toBe(beforeWidth);
+      await style.evaluate(element => element.remove());
+      await expect(card.locator('.rule-card-preview-hint')).toHaveCount(0);
+      await expect(card.locator('.details-text')).toBeVisible();
+    });
   });
 }
 

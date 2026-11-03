@@ -27,6 +27,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvingHome, setResolvingHome] = useState(false);
   const [homeError, setHomeError] = useState(false);
+  const [rulesError, setRulesError] = useState(false);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeAttempt, setHomeAttempt] = useState(0);
   const [votedRuleIds, setVotedRuleIds] = useState<Set<string>>(new Set());
@@ -122,19 +123,22 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       const expectedRecent = home.recentRules?.length || (home.recentRuleIds ?? []).filter(Boolean).length;
       const featuredComplete = featuredRules.length === expectedFeatured;
       const recentComplete = recentRules.length === expectedRecent;
+      setRulesError(!featuredComplete || !recentComplete);
       if (featuredComplete) setResolvedCards(featuredRules);
       if (recentComplete) setResolvedRecentCards(recentRules);
-      await Promise.all([...featuredRules, ...recentRules].map((rule) => localDb.cacheRuleEntity(rule)));
-      if (featuredComplete && recentComplete) await localDb.cacheHomeView({ ...home, featuredRules, recentRules });
-    }).catch(() => undefined).finally(() => { if (active) setResolvingHome(false); });
+      await Promise.all([...featuredRules, ...recentRules].map((rule) => localDb.cacheRuleEntity(rule).catch(() => undefined)));
+      if (featuredComplete && recentComplete) await localDb.cacheHomeView({ ...home, featuredRules, recentRules }).catch(() => undefined);
+    }).catch(() => { if (active) setRulesError(true); }).finally(() => { if (active) setResolvingHome(false); });
     return () => { active = false; };
-  }, [home]);
+  }, [home, homeAttempt]);
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
+  const hasHomeError = homeError || rulesError;
+  const hasVisibleHome = displayedFeaturedRules.length > 0 || resolvedRecentCards.length > 0;
 
   // Only the featured cards carry the importance button; recent rules are plain links.
   const gameIdsKey = Array.from(new Set(displayedFeaturedRules.map((r) => r.gameId).filter(Boolean))).sort().join(',');
-  const hideFeatured = Boolean(home) && !homeError && !resolvingHome && displayedFeaturedRules.length === 0;
+  const hideFeatured = Boolean(home) && !hasHomeError && !resolvingHome && displayedFeaturedRules.length === 0;
 
   useEffect(() => {
     if (!user || !gameIdsKey) {
@@ -217,7 +221,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     </section>}
     {!hideFeatured && <section id="discover" className="content-section home-rule-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
-      {homeError && <div className="content-load-error" role="alert"><p>{home ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
+      {hasHomeError && <div className="content-load-error" role="alert"><p>{hasVisibleHome ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading || resolvingHome} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
       <div className="rule-grid home-featured-rail" onScroll={(event) => {
         const rail = event.currentTarget;
         const step = (rail.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0;

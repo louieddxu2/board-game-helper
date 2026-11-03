@@ -8,7 +8,13 @@ export const useRulePreview = (maxLines: number | undefined, contentKey: string)
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (!body || !maxLines) return;
-    let width = 0;
+    const probes = Array.from(body.querySelectorAll<HTMLElement>('.rule-preview-metrics'));
+    const dimensions = () => [body.getBoundingClientRect().width, ...probes.flatMap(probe => {
+      const box = probe.getBoundingClientRect();
+      return [box.width, box.height];
+    })].join(',');
+    let measuredDimensions = '';
+    let frame = 0;
     const measure = () => {
       const sections = Array.from(body.children) as HTMLElement[];
       const paragraphs = sections.map(section => section.querySelector('p')!);
@@ -28,17 +34,22 @@ export const useRulePreview = (maxLines: number | undefined, contentKey: string)
         if (lines < lineCounts[index]) clipped = true;
         remaining -= lines;
       });
-      width = body.getBoundingClientRect().width;
+      measuredDimensions = dimensions();
       setTruncated(clipped);
     };
     measure();
     const observer = new ResizeObserver(() => {
-      if (body.getBoundingClientRect().width !== width) measure();
+      // Font size/line height may change without changing the card width or clamped height.
+      if (dimensions() === measuredDimensions) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
     });
     observer.observe(body);
+    probes.forEach(probe => observer.observe(probe));
     document.fonts?.addEventListener('loadingdone', measure);
     return () => {
       observer.disconnect();
+      cancelAnimationFrame(frame);
       document.fonts?.removeEventListener('loadingdone', measure);
     };
   }, [maxLines, contentKey]);

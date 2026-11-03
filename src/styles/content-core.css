@@ -64,6 +64,7 @@
 .home-rail-dots { display: none; }
 .rule-card-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .rule-card-preview p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
+.rule-preview-metrics { position: absolute; inset: 0 auto auto 0; display: block; width: 1em; height: 1lh; visibility: hidden; pointer-events: none; }
 .rule-card-preview-hint { color: var(--green); font-size: 12px; line-height: 1.5; }
 .home-recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .home-recent-list a { display: grid; gap: 4px; height: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--color-bg-surface); color: var(--ink); text-decoration: none; }
