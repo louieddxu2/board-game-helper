@@ -53,9 +53,6 @@
   .personal-home-toolbar h1 { font-size: 25px; }
   .personal-home-search .search-input input { padding: 12px 14px; font-size: 16px; }
   .personal-home-search .search-input span { padding: 0 12px; }
-  .personal-home-recents { overflow: visible; }
-  .personal-home-recents > div { flex-wrap: wrap; overflow: visible; }
-  .personal-home-recents a { white-space: normal; }
   .personal-home-content { padding: 16px 12px 8px; }
   .personal-home-heading { margin-bottom: 10px; }
   .personal-home-heading h2 { font-size: 17px; }

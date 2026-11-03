@@ -11,6 +11,7 @@ import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
 import { PersonalHomeCard } from '../components/PersonalHomeCard';
 import { PwaInstallButton } from '../components/PwaInstallButton';
+import { RecentGamesRail } from '../components/RecentGamesRail';
 import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
 import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
@@ -211,7 +212,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         <div className="hero-search" id="home-search">
           <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
         </div>
-        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><div className="hero-recents-list">{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div></div>}
+        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><RecentGamesRail games={recentGames} className="hero-recents-list" /></div>}
       </div>
       </div>
     </section>
@@ -289,7 +290,7 @@ const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onS
         <button type="button" className="home-mode-button personal-explore-btn" onClick={onShowExplore}>探索</button>
       </div>
       {recentGames.length > 0 && <div className="personal-home-recents">
-        <div>{recentGames.slice(0, 6).map((game) => <Link key={game.id} to={`/games/${game.slug}`}>{game.displayName}</Link>)}</div>
+        <RecentGamesRail games={recentGames} />
       </div>}
       </div>
     </section>
