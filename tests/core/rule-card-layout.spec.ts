@@ -33,6 +33,21 @@ const showCard = async (page: Page, rule: FeaturedRule) => {
   return card;
 };
 
+// The homepage previews at most eight lines, so full-length notes are measured on the game page.
+const showFullCard = async (page: Page, rule: FeaturedRule) => {
+  await page.route('**/api/**', route => route.fulfill({ json: {} }));
+  await page.route('**/api/session', route => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
+  await page.route('**/api/games/santa-maria', route => route.fulfill({ json: { game: {
+    id: 'layout-game', slug: 'santa-maria', displayName: '聖瑪利亞號', ruleCount: 1, updatedAt: 1, aliases: [],
+    reviewStatus: 'not_required', rules: [rule],
+  } } }));
+  await page.route('**/api/tags?*', route => route.fulfill({ json: { tags: rule.tags } }));
+  await page.goto(`/games/santa-maria#rule-${rule.id}`);
+  const card = page.locator(`#rule-${rule.id}`);
+  await expect(card).toHaveClass('rule-card');
+  return card;
+};
+
 const box = async (locator: Locator) => {
   const result = await locator.boundingBox();
   expect(result).not.toBeNull();
@@ -96,7 +111,7 @@ for (const width of [393, 320, 1280]) {
         '擴充條件也跟著誤算', '最後再加入結算分數'].join('\n');
       const longDetails = ['起始板塊的圖案很像', '但顏色與城市不同', '請先確認板塊種類',
         '再檢查目標的條件', '最後依規則書結算'].join('\n');
-      const card = await showCard(page, { ...sample, commonMistake, details: longDetails });
+      const card = await showFullCard(page, { ...sample, commonMistake, details: longDetails });
       await expect(card.locator('.mistake-text')).toHaveText(commonMistake);
       await expect(card.locator('.details-text')).toHaveText(longDetails);
       const notes = await card.evaluate(el => ['.mistake', '.rule-details-note'].map(selector => {
