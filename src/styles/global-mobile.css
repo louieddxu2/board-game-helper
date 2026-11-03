@@ -30,6 +30,10 @@
   .hero-search .search-input span { font-size: 18px; padding: 0 16px; }
   .hero-preview { display: none; }
   .hero-recents { display: flex; margin-top: 10px; }
+  .hero-recents-list, .personal-home-recents > .recent-games-rail { flex-wrap: nowrap; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: 2px; }
+  .recent-games-rail::-webkit-scrollbar { display: none; }
+  .recent-games-rail > a { flex: 0 0 auto; max-width: none; min-height: 44px; white-space: nowrap; overflow-wrap: normal; }
+  .recent-games-rail > a:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
   .rule-grid, .rule-grid.compact, .admin-grid { grid-template-columns: 1fr; }
   .game-grid { flex-direction: column; align-items: stretch; }
   .content-section { padding: 65px 18px; }

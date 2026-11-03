@@ -78,7 +78,7 @@ for (const mode of ['explore', 'personal'] as const) {
     test.describe(`${mode} recent games at ${width}px`, () => {
       test.use({ viewport: { width, height: 851 }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
 
-      test('keeps full names on one row and opens a game on the first input after scrolling', async ({ page }) => {
+      test(mobile ? 'keeps full names on one row and accepts the first tap after scrolling' : 'preserves the desktop wrapped layout and opens a game on the first click', async ({ page }) => {
         const rail = await showHome(page, mode);
         const geometry = await rail.evaluate(element => ({
           width: element.clientWidth, scrollWidth: element.scrollWidth,
@@ -88,12 +88,18 @@ for (const mode of ['explore', 'personal'] as const) {
             return { y: box.y, height: box.height, scrollWidth: link.scrollWidth, clientWidth: link.clientWidth, whiteSpace: style.whiteSpace };
           }),
         }));
-        expect(geometry.scrollWidth).toBeGreaterThan(geometry.width);
+        if (mobile) expect(geometry.scrollWidth).toBeGreaterThan(geometry.width);
+        else {
+          expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width + 1);
+          expect(geometry.links.at(-1)!.y).toBeGreaterThan(geometry.links[0].y);
+        }
         for (const link of geometry.links) {
-          expect(link.y).toBeCloseTo(geometry.links[0].y, 0);
-          expect(link.height).toBeGreaterThanOrEqual(44);
+          if (mobile) {
+            expect(link.y).toBeCloseTo(geometry.links[0].y, 0);
+            expect(link.height).toBeGreaterThanOrEqual(44);
+          }
           expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth + 1);
-          expect(link.whiteSpace).toBe('nowrap');
+          expect(link.whiteSpace).toBe(mobile ? 'nowrap' : 'normal');
         }
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         const box = (await rail.boundingBox())!;
@@ -113,13 +119,9 @@ for (const mode of ['explore', 'personal'] as const) {
           await touch('touchEnd');
           await expect(rail).toHaveAttribute('data-scroll-ended', 'true');
           await client.detach();
-        } else {
-          await page.mouse.move(box.x + box.width - 20, y);
-          await page.mouse.down();
-          await page.mouse.move(box.x + box.width - 250, y, { steps: 10 });
-          await page.mouse.up();
         }
-        expect(await rail.evaluate(element => element.scrollLeft)).toBeGreaterThan(50);
+        if (mobile) expect(await rail.evaluate(element => element.scrollLeft)).toBeGreaterThan(50);
+        else expect(await rail.evaluate(element => element.scrollLeft)).toBe(0);
         expect(new URL(page.url()).pathname).toBe('/');
         expect(await navigationCount(page)).toBe(0);
         if (width === 393) await page.screenshot({ path: `.wrangler/home-recents-${mode}.png`, animations: 'disabled' });
@@ -138,7 +140,7 @@ for (const mode of ['explore', 'personal'] as const) {
         await openVisibleGame(page, rail, true);
       });
 
-      if (!mobile) test('scrolls an offscreen link into view through keyboard navigation', async ({ page }) => {
+      if (!mobile) test('keeps wrapped links reachable through keyboard navigation', async ({ page }) => {
         const rail = await showHome(page, mode);
         const links = rail.getByRole('link');
         await links.first().focus();

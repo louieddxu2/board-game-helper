@@ -17,7 +17,7 @@
 .hero-preview-label { display: none; }
 .hero-recents { margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; }
-.hero-recents-list { gap: 8px; width: min(680px, 100%); max-width: 680px; }
+.hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
 .recent-game-chips button, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
@@ -95,17 +95,9 @@
 .personal-home-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .personal-home-search .search-input { box-shadow: 0 12px 32px rgba(4,22,17,.22); }
 .personal-home-recents { margin-top: 10px; color: #b9c9c3; font-size: 12px; }
-.personal-home-recents > div { gap: 6px; }
+.personal-home-recents > div { display: flex; flex-wrap: wrap; min-width: 0; gap: 6px; }
 .personal-home-recents a { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; min-height: 26px; padding: 4px 10px; line-height: 1.2; overflow-wrap: anywhere; background: rgba(255,255,255,.1); color: var(--white); text-decoration: none; white-space: normal; }
 .personal-home-recents a:hover { background: rgba(255,255,255,.22); }
-.recent-games-rail { display: flex; flex-wrap: nowrap; align-items: center; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: 2px; }
-.recent-games-rail::-webkit-scrollbar { display: none; }
-.recent-games-rail > a { flex: 0 0 auto; max-width: none; min-height: 44px; white-space: nowrap; overflow-wrap: normal; }
-.recent-games-rail > a:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
-@media (hover: hover) and (pointer: fine) {
-  .recent-games-rail, .recent-games-rail > a { cursor: grab; user-select: none; }
-  .recent-games-rail[data-dragging], .recent-games-rail[data-dragging] > a { cursor: grabbing; }
-}
 .personal-home-content { padding: 24px 0 12px; }
 .personal-home-section { width: 100%; }
 .personal-home-heading { margin-bottom: 16px; }
