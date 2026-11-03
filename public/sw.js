@@ -3,6 +3,51 @@ const PUBLIC_CACHE = 'wrong-rules-public-v6';
 const BUILD_ASSETS = /* BUILD_ASSETS */ [];
 const INDEX_SHA256 = '__INDEX_SHA256__';
 const SHELL = ['/', '/standalone-mode.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', ...BUILD_ASSETS];
+const SHELL_PREFIX = 'wrong-rules-shell-';
+// Which shell each open tab runs, kept in a cache so it survives worker restarts and updates.
+const CLIENT_SHELLS = 'wrong-rules-client-shells';
+const CLIENT_SHELL_PATH = '/__client-shell/';
+
+const shellCacheNames = async () => (await caches.keys()).filter((key) => key.startsWith(SHELL_PREFIX));
+
+// A tab still running a previous build loads its lazy chunks from that build's shell.
+const matchAnyShell = async (request) => {
+  const older = (await shellCacheNames()).filter((name) => name !== SHELL_CACHE);
+  for (const name of [SHELL_CACHE, ...older]) {
+    const cached = await (await caches.open(name)).match(request);
+    if (cached) return cached;
+  }
+  return undefined;
+};
+
+const recordClientShell = async (clientId, entry) => {
+  let owner = '';
+  for (const name of await shellCacheNames()) {
+    if (!await (await caches.open(name)).match(entry)) continue;
+    owner = name;
+    if (name === SHELL_CACHE) break;
+  }
+  await (await caches.open(CLIENT_SHELLS)).put(CLIENT_SHELL_PATH + encodeURIComponent(clientId), new Response(owner));
+};
+
+// Deletes each previous shell once no open tab runs it; a tab that has not reported its build keeps them all.
+const pruneShells = async () => {
+  const registry = await caches.open(CLIENT_SHELLS);
+  const open = new Set((await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).map((client) => client.id));
+  const reported = new Set();
+  const inUse = new Set([SHELL_CACHE]);
+  for (const key of await registry.keys()) {
+    const id = decodeURIComponent(new URL(key.url, self.location.origin).pathname.slice(CLIENT_SHELL_PATH.length));
+    if (!open.has(id)) {
+      await registry.delete(key);
+      continue;
+    }
+    reported.add(id);
+    inUse.add(await (await registry.match(key)).text());
+  }
+  if ([...open].some((id) => !reported.has(id))) return;
+  await Promise.all((await shellCacheNames()).filter((name) => !inUse.has(name)).map((name) => caches.delete(name)));
+};
 
 const expectedAssetType = (url) => {
   if (url.pathname.endsWith('.js')) return 'javascript';
@@ -35,18 +80,21 @@ self.addEventListener('install', (event) => {
       return [path, new Response(body, { status: response.status, headers })];
     }));
     await Promise.all(responses.map(([path, response]) => cache.put(path, response)));
-    // Updates wait for existing tabs to close so an editing session keeps its matching shell.
+    // The next page load gets this build; open tabs keep running theirs from its retained shell.
+    await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys
-      .filter((key) => key.startsWith('wrong-rules-shell-') && key !== SHELL_CACHE)
-      .map((key) => caches.delete(key)));
     await self.clients.claim();
+    await pruneShells();
   })());
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'shell-in-use' || typeof event.data.entry !== 'string' || !event.source?.id) return;
+  event.waitUntil(recordClientShell(event.source.id, event.data.entry).then(pruneShells));
 });
 
 self.addEventListener('fetch', (event) => {
@@ -87,7 +135,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
       const expectedType = expectedAssetType(url);
-      const cached = await cache.match(request);
+      const cached = await matchAnyShell(request);
       if (cached?.ok && (!expectedType || isValidAsset(cached, expectedType))) return cached;
       if (cached) await cache.delete(request);
 

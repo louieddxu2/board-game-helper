@@ -32,6 +32,10 @@ class FakeCache {
     return this.entries.delete(requestPath(request));
   }
 
+  async keys() {
+    return [...this.entries.keys()].map((path) => ({ url: `${ORIGIN}${path}` }));
+  }
+
   paths() {
     return [...this.entries.keys()];
   }
@@ -90,6 +94,7 @@ const createWorker = (fetchImpl: (input: unknown) => Promise<Response>, source =
   const listeners = new Map<string, (event: any) => void>();
   const skipWaiting = vi.fn();
   const fetchMock = vi.fn(fetchImpl);
+  const openClients = new Set<string>();
   const context = {
     URL,
     Request,
@@ -100,7 +105,7 @@ const createWorker = (fetchImpl: (input: unknown) => Promise<Response>, source =
     self: {
       location: { origin: ORIGIN },
       skipWaiting,
-      clients: { claim: vi.fn() },
+      clients: { claim: vi.fn(), matchAll: vi.fn(async () => [...openClients].map((id) => ({ id }))) },
       addEventListener(type: string, handler: (event: any) => void) { listeners.set(type, handler); },
     },
     console,
@@ -125,7 +130,21 @@ const createWorker = (fetchImpl: (input: unknown) => Promise<Response>, source =
     return Promise.all(waits);
   };
 
-  return { caches, fetchMock, runFetch, runInstall, skipWaiting };
+  const runActivate = () => {
+    const waits: Promise<unknown>[] = [];
+    listeners.get('activate')?.({ waitUntil(value: Promise<unknown>) { waits.push(value); } });
+    return Promise.all(waits);
+  };
+
+  // A tab opens and reports the entry module of the build it runs.
+  const openTab = (id: string, entry: string) => {
+    openClients.add(id);
+    const waits: Promise<unknown>[] = [];
+    listeners.get('message')?.({ data: { type: 'shell-in-use', entry }, source: { id }, waitUntil(value: Promise<unknown>) { waits.push(value); } });
+    return Promise.all(waits);
+  };
+
+  return { caches, fetchMock, openClients, openTab, runActivate, runFetch, runInstall, skipWaiting };
 };
 
 const request = (path: string, mode = 'same-origin'): RequestLike => ({ url: `${ORIGIN}${path}`, method: 'GET', mode });
@@ -137,7 +156,7 @@ describe('offline service worker shell', () => {
     expect(worker.caches.entries(SHELL_CACHE)).toContain('/');
     expect(worker.caches.entries(SHELL_CACHE)).toContain('/standalone-mode.js');
     expect(worker.caches.entries(SHELL_CACHE)).toHaveLength(6);
-    expect(worker.skipWaiting).not.toHaveBeenCalled();
+    expect(worker.skipWaiting).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an HTML document from a different deployment without publishing it', async () => {
@@ -183,6 +202,44 @@ describe('offline service worker shell', () => {
     await expect(worker.runInstall()).rejects.toThrow('Cannot cache');
     expect(worker.caches.entries(SHELL_CACHE)).toEqual([]);
     expect(worker.skipWaiting).not.toHaveBeenCalled();
+  });
+
+  it('serves a lazy chunk from the previous shell to a tab still running that build', async () => {
+    const worker = createWorker(() => Promise.reject(new Error('offline')));
+    const previous = await worker.caches.open('wrong-rules-shell-previous');
+    await previous.put('/assets/Admin-old.js', responseForPath('/assets/Admin-old.js', 'previous chunk'));
+    await worker.caches.open(SHELL_CACHE);
+
+    expect(await worker.runFetch(request('/assets/Admin-old.js'))!.then((value) => value.text())).toBe('previous chunk');
+    expect(worker.fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a previous shell while a tab runs it and clears it once that tab closes', async () => {
+    const worker = createWorker(async (input) => responseForPath(requestPath(input as RequestLike)));
+    const previous = await worker.caches.open('wrong-rules-shell-previous');
+    await previous.put('/assets/index-old.js', responseForPath('/assets/index-old.js'));
+    await worker.openTab('editing-tab', '/assets/index-old.js');
+    await worker.runInstall();
+    await worker.runActivate();
+    expect(await worker.caches.keys()).toContain('wrong-rules-shell-previous');
+
+    worker.openClients.delete('editing-tab');
+    await worker.openTab('new-tab', '/');
+    expect(await worker.caches.keys()).not.toContain('wrong-rules-shell-previous');
+    expect(await worker.caches.keys()).toContain(SHELL_CACHE);
+  });
+
+  it('keeps previous shells while an open tab has not reported its build', async () => {
+    const worker = createWorker(async (input) => responseForPath(requestPath(input as RequestLike)));
+    await worker.caches.open('wrong-rules-shell-previous');
+    worker.openClients.add('tab-from-older-release');
+    await worker.runInstall();
+    await worker.runActivate();
+    expect(await worker.caches.keys()).toContain('wrong-rules-shell-previous');
+
+    worker.openClients.delete('tab-from-older-release');
+    await worker.runActivate();
+    expect(await worker.caches.keys()).not.toContain('wrong-rules-shell-previous');
   });
 
   it('does not substitute another module when a hashed JavaScript asset is missing', async () => {
