@@ -44,21 +44,13 @@ homeRoutes.get('/api/home', async (c) => {
   const popularGameIdsResult = track('home:popular-games', popularGameIdsRaw);
   const recentResult = track('home:recent-rules', recentRaw);
 
-  let popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
-
-  if (popularGameIds.length < 6) {
-    const fallbackGameIdsResult = track('home:fallback-games', await getDatabase(c).statement(`
-      SELECT g.id FROM games g
-      WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
-      ORDER BY g.updated_at DESC LIMIT 6
-    `).all<{ id: string }>());
-    const extraIds = (fallbackGameIdsResult.results ?? []).map((g) => g.id);
-    popularGameIds = Array.from(new Set([...popularGameIds, ...extraIds])).slice(0, 6);
-  }
+  // Only games people actually viewed; the section shrinks or hides rather than filling with unviewed games.
+  const popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
+  const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
 
   if (popularGameIds.length === 0) {
     setNoCache(c);
-    return c.json({ generatedAt: now(), featured: [], featuredRules: [], recentRules: [], popularGames: [], debugD1Metrics: d1Logs });
+    return c.json({ generatedAt: now(), popularGameIds, recentRuleIds, featuredRuleIds: [], featured: [], debugD1Metrics: d1Logs });
   }
 
   // 3. 點對點極速解析內容 (WHERE id IN)
@@ -86,15 +78,32 @@ homeRoutes.get('/api/home', async (c) => {
     }
   });
 
-  const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
-  const featured = popularGameIds.map((id) => {
-    const ruleId = featuredRuleIdByGame.get(id) ?? '';
-    return {
-      gameSlug: gameMap.get(id)?.slug ?? '',
-      gameName: gameMap.get(id)?.displayName ?? '',
-      ruleId,
-    };
-  });
+  // A game's newest rule is often already in the recent list, so show its next rule instead.
+  // Only those games are queried; each walks idx_rules_game_public_updated newest-first and stops at the
+  // first rule not listed, reading at most one row more than that game's rules in the recent list.
+  const recentRuleIdSet = new Set(recentRuleIds);
+  const gamesNeedingAnotherRule = popularGameIds.filter((id) => recentRuleIdSet.has(featuredRuleIdByGame.get(id) ?? ''));
+  if (gamesNeedingAnotherRule.length > 0) {
+    const excluded = recentRuleIds.map(() => '?').join(',');
+    const alternatives = await getDatabase(c).batch(gamesNeedingAnotherRule.map((gameId) => getDatabase(c).statement(`
+      SELECT game_id, id FROM rules
+      WHERE game_id = ? AND status = 'published' AND id NOT IN (${excluded})
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 1
+    `).bind(gameId, ...recentRuleIds)));
+    gamesNeedingAnotherRule.forEach((gameId, index) => {
+      const row = (track(`home:featured-alternative-${index}`, alternatives[index]).results as Array<{ id: string }> | undefined)?.[0];
+      if (row) featuredRuleIdByGame.set(gameId, row.id); else featuredRuleIdByGame.delete(gameId);
+    });
+  }
+
+  const featured = popularGameIds
+    .filter((id) => gameMap.has(id) && featuredRuleIdByGame.has(id))
+    .map((id) => ({
+      gameSlug: gameMap.get(id)!.slug,
+      gameName: gameMap.get(id)!.displayName,
+      ruleId: featuredRuleIdByGame.get(id)!,
+    }));
 
   const featuredRuleIds = featured.map((f) => f.ruleId).filter(Boolean);
 
