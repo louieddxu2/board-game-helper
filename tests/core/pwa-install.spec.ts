@@ -2,7 +2,10 @@ import { expect, test } from '@playwright/test';
 
 test.use({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-const emptyHome = { generatedAt: Date.now(), featured: [], recentRuleIds: [], popularGames: [], recentGames: [] };
+// One featured rule keeps the section heading on the page; an empty featured list hides that section.
+const emptyHome = { generatedAt: Date.now(), featured: [], recentRuleIds: [], popularGames: [], recentGames: [], featuredRules: [{
+  id: 'pwa-rule', gameId: 'pwa-game', gameName: '測試遊戲', gameSlug: 'pwa-game', statement: '測試規則。', status: 'published', sourceLinks: [],
+}] };
 
 const routeHome = async (page: import('@playwright/test').Page, getUser: () => object | null) => {
   await page.route('**/api/session', (route) => route.fulfill({ json: {

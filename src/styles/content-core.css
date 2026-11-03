@@ -61,6 +61,15 @@
 .home-rule-section { padding: 28px 24px; }
 .home-rule-section .section-heading { margin-bottom: 16px; }
 .home-rule-section .section-heading h2 { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.35; }
+.home-rail-dots { display: none; }
+.rule-card-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rule-card-preview p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
+.rule-card-preview-hint { color: var(--green); font-size: 12px; line-height: 1.5; }
+.home-recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.home-recent-list a { display: grid; gap: 4px; height: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--color-bg-surface); color: var(--ink); text-decoration: none; }
+.home-recent-list a:hover { border-color: var(--green); }
+.home-recent-game { font-size: 13px; font-weight: 800; color: var(--green); }
+.home-recent-statement { font-size: 15px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .content-section + .content-section { padding-top: 20px; }
 .ad-slot { min-height: 34px; display: grid; place-items: center; color: var(--color-text-subtle); background: rgba(255,253,248,.55); border: 1px dashed #c9c3b7; border-radius: 10px; text-align: center; }
 .ad-slot small { min-height: auto; font-size: 10px; letter-spacing: .08em; }

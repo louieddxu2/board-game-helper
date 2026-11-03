@@ -36,6 +36,14 @@
   .home-rule-section { padding: 20px 18px; }
   .home-rule-section .section-heading { margin-bottom: 12px; }
   .home-rule-section .section-heading h2 { font-size: 17px; }
+  /* One full-width card tall: swipe sideways through the featured games; the dots show there are more. */
+  .rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; scroll-padding-inline: 18px; }
+  .rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
+  .rule-grid.home-featured-rail > * { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+  .home-rail-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+  .home-rail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--line); transition: width .2s, background .2s; }
+  .home-rail-dots span.active { width: 16px; background: var(--green); }
+  .home-recent-list { grid-template-columns: 1fr; gap: 8px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }
   .ad-slot-home-after-game-exploration { width: calc(100% - 36px); margin: 0 auto; }
   .ad-slot-personal-home-after-favorites { width: calc(100% - 24px); margin: 4px auto 16px; }

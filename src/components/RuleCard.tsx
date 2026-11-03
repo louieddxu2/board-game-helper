@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
-import zhTWCopy from '../content/zh-TW.json';
+import { RuleCardBody } from './RuleCardBody';
 import { RuleCardSource } from './RuleCardSource';
 import { copyRuleContent } from '../lib/ruleClipboard';
 import { useWrappedTitle } from './useWrappedTitle';
@@ -24,6 +24,7 @@ export interface RuleCardProps {
   importanceVoted?: boolean;
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
+  previewLines?: number;
 }
 
 const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, onToggle: () => void) => {
@@ -46,6 +47,7 @@ export const RuleCard = ({
   importanceVoted = false,
   importanceSaving = false,
   onToggleImportance,
+  previewLines,
 }: RuleCardProps) => {
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
@@ -187,27 +189,7 @@ export const RuleCard = ({
 
       </div>}
 
-      {/* 第三行：標準規則欄位 */}
-      <div className="rule-statement-section">
-        <p className={onToggleExpanded ? 'statement-text rule-toggle-text' : 'statement-text'} {...expandedTextToggleProps}>
-          {rule.statement}
-        </p>
-      </div>
-
-      {/* 第四行：常見錯誤欄位 */}
-      {rule.commonMistake && (
-        <div className="mistake">
-          <strong className="mistake-badge"><span>{zhTWCopy.terms.mistakeSituation.slice(0, 2)}<br />{zhTWCopy.terms.mistakeSituation.slice(2)}</span></strong>
-          <p className={onToggleExpanded ? 'mistake-text rule-toggle-text' : 'mistake-text'} {...expandedTextToggleProps}>{rule.commonMistake}</p>
-        </div>
-      )}
-
-      {rule.details && (
-        <div className="rule-details-note">
-          <strong className="details-badge"><span>補充<br />說明</span></strong>
-          <p className={onToggleExpanded ? 'details-text rule-toggle-text' : 'details-text'} {...expandedTextToggleProps}>{rule.details}</p>
-        </div>
-      )}
+      <RuleCardBody rule={rule} previewLines={previewLines} toggleProps={expandedTextToggleProps} />
 
       {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">

@@ -1,0 +1,59 @@
+import { expect, test, type Page } from '@playwright/test';
+import type { RuleCard } from '../../src/shared/types';
+
+test.use({ viewport: { width: 393, height: 851 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+
+type HomeRule = RuleCard & { gameName: string; gameSlug: string };
+const rule = (index: number): HomeRule => ({
+  id: `rail-rule-${index}`, gameId: `rail-game-${index}`, gameName: `測試遊戲 ${index}`, gameSlug: `rail-game-${index}`,
+  statement: `第 ${index} 款遊戲常被玩錯的規則。`, commonMistake: '玩錯的方式', status: 'published', importanceCount: 0, sourceLinks: [],
+});
+
+const showHome = async (page: Page) => {
+  await page.route('**/api/session', (route) => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
+  await page.route('**/api/home', (route) => route.fulfill({ json: {
+    generatedAt: Date.now(), featured: [], featuredRules: [1, 2, 3].map(rule), recentRules: [rule(4), rule(5)], recentRuleIds: [],
+  } }));
+  await page.goto('/');
+  await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(3);
+};
+
+test('swipes through featured games one card tall, then takes the first tap on a card once', async ({ page }) => {
+  await showHome(page);
+  const rail = page.locator('.home-featured-rail');
+  const geometry = await rail.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, height: element.getBoundingClientRect().height }));
+  expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+  const firstCard = await page.locator('#rule-rail-rule-1').boundingBox();
+  expect(geometry.height).toBeLessThan(firstCard!.height + 40);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
+
+  const client = await page.context().newCDPSession(page);
+  const box = (await rail.boundingBox())!;
+  const y = box.y + 40;
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) => client.send('Input.dispatchTouchEvent', {
+    type, touchPoints: x === undefined ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
+  });
+  await touch('touchStart', box.x + box.width - 30);
+  await touch('touchMove', box.x + box.width - 150);
+  await touch('touchMove', box.x + 40);
+  await touch('touchEnd');
+  await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(100);
+  await expect(page.locator('.home-rail-dots span').nth(1)).toHaveClass('active');
+  expect(await page.evaluate(() => scrollX)).toBe(0);
+
+  const second = page.locator('#rule-rail-rule-2').getByRole('button', { name: /將這條規則標為重要/ });
+  await expect(second).toBeInViewport({ ratio: 1 });
+  await second.tap();
+  await expect(page.getByRole('status')).toContainText('登入後即可將規則標為重要。');
+  await expect(page.getByRole('status')).toHaveCount(1);
+});
+
+for (const input of ['tap', 'click'] as const) {
+  test(`opens a recent rule on its game page with one ${input}`, async ({ page }) => {
+    await showHome(page);
+    const row = page.locator('.home-recent-list').getByRole('link', { name: /測試遊戲 5/ });
+    await expect(row).toHaveAttribute('href', '/games/rail-game-5#rule-rail-rule-5');
+    if (input === 'tap') await row.tap(); else await row.click();
+    await expect(page).toHaveURL(/\/games\/rail-game-5#rule-rail-rule-5$/);
+  });
+}

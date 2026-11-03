@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { HomePage } from './HomePage';
@@ -32,7 +32,8 @@ test('replaces cold-load skeletons with a manual retry and leaves search availab
   expect(screen.getByText('搜尋介面')).toBeInTheDocument();
   expect(mocks.home).toHaveBeenCalledTimes(1);
   fireEvent.click(retry);
-  await screen.findByText('內容正在整理中。');
+  // With no viewed games the featured section is left out instead of filled with other games.
+  await waitFor(() => expect(screen.queryByRole('heading', { name: '近期常被查閱的遊戲' })).not.toBeInTheDocument());
   expect(mocks.home).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
@@ -45,4 +46,11 @@ test('retains the previously rendered home content when refreshing fails', async
   expect(await screen.findByText('先前可閱讀的規則')).toBeInTheDocument();
   expect(await screen.findByRole('alert')).toHaveTextContent('已保留目前內容');
   expect(mocks.home).toHaveBeenCalledTimes(1);
+});
+
+test('lists recent rules as links that open the rule on its game page', async () => {
+  mocks.home.mockResolvedValueOnce({ ...emptyHome, recentRules: [{ id: 'rule 7', statement: '產業軌所有人都可以走到最後一格。', gameId: 'game-2', gameName: '甜蜜國度', gameSlug: 'sweet', updatedAt: 1, status: 'published', sourceLinks: [] }] });
+  render(<MemoryRouter><HomePage /></MemoryRouter>);
+  const link = await screen.findByRole('link', { name: /甜蜜國度\s*產業軌所有人都可以走到最後一格。/ });
+  expect(link).toHaveAttribute('href', '/games/sweet#rule-rule%207');
 });
