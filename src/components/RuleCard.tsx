@@ -25,6 +25,7 @@ export interface RuleCardProps {
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
   previewLines?: number;
+  mobilePreviewLinesPerSection?: number;
 }
 
 const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, onToggle: () => void) => {
@@ -48,6 +49,7 @@ export const RuleCard = ({
   importanceSaving = false,
   onToggleImportance,
   previewLines,
+  mobilePreviewLinesPerSection,
 }: RuleCardProps) => {
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
@@ -189,7 +191,7 @@ export const RuleCard = ({
 
       </div>}
 
-      <RuleCardBody rule={rule} previewLines={previewLines} toggleProps={expandedTextToggleProps} />
+      <RuleCardBody rule={rule} previewLines={previewLines} mobilePreviewLinesPerSection={mobilePreviewLinesPerSection} toggleProps={expandedTextToggleProps} />
 
       {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">

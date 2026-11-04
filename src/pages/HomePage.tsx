@@ -229,7 +229,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         if (step > 0) setRailIndex(Math.round(rail.scrollLeft / (step + parseFloat(getComputedStyle(rail).columnGap || '0'))));
       }}>
         {displayedFeaturedRules.map((rule) =>
-          <RuleCard key={rule.id} rule={rule} previewLines={8} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}
+          <RuleCard key={rule.id} rule={rule} previewLines={8} mobilePreviewLinesPerSection={2} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}
         {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />

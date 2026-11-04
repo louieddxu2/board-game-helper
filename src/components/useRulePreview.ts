@@ -1,13 +1,14 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 
-// Measure the actual wrapped text: the three sections share one line budget.
-export const useRulePreview = (maxLines: number | undefined, contentKey: string) => {
+// Measure wrapped text against the shared budget and optional per-section mobile cap.
+export const useRulePreview = (maxLines: number | undefined, contentKey: string, mobileLinesPerSection?: number) => {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [truncated, setTruncated] = useState(false);
 
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (!body || !maxLines) return;
+    const mobile = window.matchMedia('(max-width: 800px)');
     const probes = Array.from(body.querySelectorAll<HTMLElement>('.rule-preview-metrics'));
     const dimensions = () => [body.getBoundingClientRect().width, ...probes.flatMap(probe => {
       const box = probe.getBoundingClientRect();
@@ -26,9 +27,10 @@ export const useRulePreview = (maxLines: number | undefined, contentKey: string)
         return Math.max(1, Math.ceil((paragraph.getBoundingClientRect().height - 0.5) / lineHeight));
       });
       let remaining = maxLines;
+      const sectionLimit = mobile.matches ? mobileLinesPerSection ?? maxLines : maxLines;
       let clipped = false;
       sections.forEach((section, index) => {
-        const lines = Math.min(lineCounts[index], remaining);
+        const lines = Math.min(lineCounts[index], remaining, sectionLimit);
         paragraphs[index].style.webkitLineClamp = String(Math.max(1, lines));
         if (lines === 0) section.style.display = 'none';
         if (lines < lineCounts[index]) clipped = true;
@@ -46,13 +48,15 @@ export const useRulePreview = (maxLines: number | undefined, contentKey: string)
     });
     observer.observe(body);
     probes.forEach(probe => observer.observe(probe));
+    mobile.addEventListener('change', measure);
     document.fonts?.addEventListener('loadingdone', measure);
     return () => {
       observer.disconnect();
       cancelAnimationFrame(frame);
+      mobile.removeEventListener('change', measure);
       document.fonts?.removeEventListener('loadingdone', measure);
     };
-  }, [maxLines, contentKey]);
+  }, [maxLines, contentKey, mobileLinesPerSection]);
 
   return { bodyRef, truncated };
 };
