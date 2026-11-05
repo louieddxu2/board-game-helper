@@ -62,6 +62,7 @@
 .home-rule-section .section-heading { margin-bottom: 16px; }
 .home-rule-section .section-heading h2 { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.35; }
 .home-rail-dots { display: none; }
+.home-rule-stack, .home-rule-stack-entry, .home-rule-stack-content { min-width: 0; height: 100%; }
 .rule-card-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .rule-card-preview p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
 .rule-preview-metrics { position: absolute; inset: 0 auto auto 0; display: block; width: 1em; height: 1lh; visibility: hidden; pointer-events: none; }

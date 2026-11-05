@@ -4,13 +4,12 @@ import { useRulePreview } from './useRulePreview';
 
 type TextToggleProps = React.HTMLAttributes<HTMLParagraphElement>;
 
-export const RuleCardBody = ({ rule, previewLines, mobilePreviewLinesPerSection, toggleProps = {} }: {
+export const RuleCardBody = ({ rule, previewLines, toggleProps = {} }: {
   rule: RuleCard;
   previewLines?: number;
-  mobilePreviewLinesPerSection?: number;
   toggleProps?: TextToggleProps;
 }) => {
-  const { bodyRef, truncated } = useRulePreview(previewLines, JSON.stringify([rule.statement, rule.commonMistake, rule.details]), mobilePreviewLinesPerSection);
+  const { bodyRef, truncated } = useRulePreview(previewLines, JSON.stringify([rule.statement, rule.commonMistake, rule.details]));
   const textClass = toggleProps.onClick ? ' rule-toggle-text' : '';
   const metrics = previewLines ? <span className="rule-preview-metrics" aria-hidden="true" /> : null;
   const content = <>

@@ -12,19 +12,18 @@ const rule = (index: number): HomeRule => ({
 const showHome = async (page: Page) => {
   await page.route('**/api/session', (route) => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
   await page.route('**/api/home', (route) => route.fulfill({ json: {
-    generatedAt: Date.now(), featured: [], featuredRules: [1, 2, 3].map(rule), recentRules: [rule(4), rule(5)], recentRuleIds: [],
+    generatedAt: Date.now(), featured: [], featuredRules: [1, 2].map(rule), recentRules: [rule(4), rule(5)], recentRuleIds: [],
   } }));
   await page.goto('/');
-  await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(3);
+  await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(2);
 };
 
-test('swipes through featured games one card tall, then takes the first tap on a card once', async ({ page }) => {
+test('swipes through fixed height featured games, then takes the first tap on a card once', async ({ page }) => {
   await showHome(page);
   const rail = page.locator('.home-featured-rail');
   const geometry = await rail.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, height: element.getBoundingClientRect().height }));
   expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
-  const firstCard = await page.locator('#rule-rail-rule-1').boundingBox();
-  expect(geometry.height).toBeLessThan(firstCard!.height + 40);
+  expect(geometry.height).toBe(320);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
 
   const client = await page.context().newCDPSession(page);

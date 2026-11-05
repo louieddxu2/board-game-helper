@@ -1,8 +1,9 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
+import { HomeRuleStack } from '../components/HomeRuleStack';
 import { useSession } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
 import { api } from '../lib/api';
@@ -36,6 +37,17 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const homeGeneratedAt = useRef(0);
   const homeKey = useRef('');
   const [railIndex, setRailIndex] = useState(0);
+  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 800px)').matches ?? false);
+  const railRef = useRef<HTMLDivElement>(null);
+  const recentHeadingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 800px)');
+    if (!media) return;
+    const update = () => setMobile(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -140,6 +152,29 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   // Only the featured cards carry the importance button; recent rules are plain links.
   const gameIdsKey = Array.from(new Set(displayedFeaturedRules.map((r) => r.gameId).filter(Boolean))).sort().join(',');
   const hideFeatured = Boolean(home) && !hasHomeError && !resolvingHome && displayedFeaturedRules.length === 0;
+  const hasRecent = resolvedRecentCards.length > 0;
+
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    if (!mobile || !rail || typeof ResizeObserver === 'undefined') return;
+    const nav = document.querySelector('.mobile-nav');
+    const measure = () => {
+      const bounds = rail.getBoundingClientRect();
+      const heading = recentHeadingRef.current;
+      const below = heading ? heading.getBoundingClientRect().bottom - bounds.bottom : 0;
+      const reserved = bounds.top + window.scrollY + (nav?.getBoundingClientRect().height ?? 0) + below;
+      rail.style.setProperty('--home-rail-reserved', `${Math.ceil(reserved)}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    observer.observe(rail);
+    if (nav) observer.observe(nav);
+    measure();
+    return () => observer.disconnect();
+  }, [mobile, hideFeatured, hasRecent]);
+
+  const featuredGames = mobile ? displayedFeaturedRules.filter((rule, index, rules) =>
+    rules.findIndex(candidate => candidate.gameId === rule.gameId) === index) : displayedFeaturedRules;
 
   useEffect(() => {
     if (!user || !gameIdsKey) {
@@ -165,13 +200,19 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     const nextVoted = !wasVoted;
     const previousCount = rule.importanceCount ?? 0;
     const optimisticCount = Math.max(0, previousCount + (nextVoted ? 1 : -1));
+    const updateCount = (importanceCount: number) => {
+      const update = (current: typeof resolvedCards) =>
+        current.map(item => item.id === rule.id ? { ...item, importanceCount } : item);
+      setResolvedCards(update);
+      setResolvedRecentCards(update);
+    };
 
     setVotedRuleIds((current) => {
       const next = new Set(current);
       if (nextVoted) next.add(rule.id); else next.delete(rule.id);
       return next;
     });
-    setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: optimisticCount } : item));
+    updateCount(optimisticCount);
     setSavingRuleIds((current) => new Set(current).add(rule.id));
 
     try {
@@ -181,7 +222,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         if (result.important) next.add(rule.id); else next.delete(rule.id);
         return next;
       });
-      setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: result.count } : item));
+      updateCount(result.count);
       if (rule.gameId) {
         await localDb.updateRuleImportanceCount(rule.id, result.count).catch(() => undefined);
       }
@@ -191,7 +232,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         if (wasVoted) next.add(rule.id); else next.delete(rule.id);
         return next;
       });
-      setResolvedCards((current) => current.map((item) => item.id === rule.id ? { ...item, importanceCount: previousCount } : item));
+      updateCount(previousCount);
       showToast?.('投票狀態暫時無法更新，請稍後再試。');
     } finally {
       setSavingRuleIds((current) => {
@@ -223,13 +264,24 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     {!hideFeatured && <section id="discover" className="content-section home-rule-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       {hasHomeError && <div className="content-load-error" role="alert"><p>{hasVisibleHome ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading || resolvingHome} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
-      <div className="rule-grid home-featured-rail" onScroll={(event) => {
+      <div ref={railRef} className={`rule-grid home-featured-rail${featuredGames.length ? ' has-cards' : ''}`} onScroll={(event) => {
         const rail = event.currentTarget;
         const step = (rail.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0;
         if (step > 0) setRailIndex(Math.round(rail.scrollLeft / (step + parseFloat(getComputedStyle(rail).columnGap || '0'))));
       }}>
-        {displayedFeaturedRules.map((rule) =>
-          <RuleCard key={rule.id} rule={rule} previewLines={8} mobilePreviewLinesPerSection={2} gameName={rule.gameName} gameHref={`/games/${rule.gameSlug}`} onTagClick={(tag) => navigate(`/games/${rule.gameSlug}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />)}
+        {featuredGames.map(primary => {
+          const gameHref = `/games/${primary.gameSlug}`;
+          const candidates = mobile ? [...displayedFeaturedRules, ...resolvedRecentCards] : [];
+          const rules = [primary, ...candidates.filter((rule, index) =>
+            rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
+            && candidates.findIndex(candidate => candidate.id === rule.id) === index)];
+          return <HomeRuleStack key={primary.id} mobile={mobile} cards={rules.map(rule => ({
+            id: rule.id,
+            href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
+            label: `查看完整規則：${rule.statement}`,
+            content: <RuleCard rule={rule} previewLines={mobile ? undefined : 8} titleOpensRule={mobile} gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
+          }))} />;
+        })}
         {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>
             <div className="skeleton-line title" />
@@ -246,13 +298,13 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
           </div>
         ))}
       </div>
-      {displayedFeaturedRules.length > 1 && <div className="home-rail-dots" aria-hidden="true">
-        {displayedFeaturedRules.map((rule, index) => <span key={rule.id} className={index === railIndex ? 'active' : undefined} />)}
+      {featuredGames.length > 1 && <div className="home-rail-dots" aria-hidden="true">
+        {featuredGames.map((rule, index) => <span key={rule.id} className={index === railIndex ? 'active' : undefined} />)}
       </div>}
     </section>}
     <AdSlot placement="home-after-game-exploration" />
     {resolvedRecentCards.length > 0 && <section className="content-section home-rule-section">
-      <div className="section-heading"><div><h2>近期新增的玩錯規則</h2></div></div>
+      <div ref={recentHeadingRef} className="section-heading"><div><h2>近期新增的玩錯規則</h2></div></div>
       <ul className="home-recent-list">{resolvedRecentCards.map((rule) =>
         <li key={rule.id}><Link to={`/games/${rule.gameSlug}#rule-${encodeURIComponent(rule.id)}`}>
           <span className="home-recent-game">{rule.gameName}</span>

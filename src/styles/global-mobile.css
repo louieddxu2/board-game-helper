@@ -40,10 +40,18 @@
   .home-rule-section { padding: 20px 18px; }
   .home-rule-section .section-heading { margin-bottom: 12px; }
   .home-rule-section .section-heading h2 { font-size: 17px; }
-  /* One full-width card tall: swipe sideways through the featured games; the dots show there are more. */
+  /* Each game has one horizontally snapped window onto its rules. */
   .rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; scroll-padding-inline: 18px; }
   .rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
   .rule-grid.home-featured-rail > * { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+  .home-featured-rail.has-cards { height: clamp(160px, calc(100svh - var(--home-rail-reserved, 0px)), 320px); }
+  .home-rule-stack { display: flex; flex-direction: column; gap: 12px; overflow: clip; }
+  .home-rule-stack-entry { position: relative; flex: none; height: auto; }
+  .home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
+  .home-rule-stack-content, .home-rule-stack-content > .rule-card { height: auto; }
+  .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
+  .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+  .home-rule-title-link > span { margin-inline-start: 5px; color: var(--green); }
   .home-rail-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
   .home-rail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--line); transition: width .2s, background .2s; }
   .home-rail-dots span.active { width: 16px; background: var(--green); }

@@ -25,7 +25,7 @@ export interface RuleCardProps {
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
   previewLines?: number;
-  mobilePreviewLinesPerSection?: number;
+  titleOpensRule?: boolean;
 }
 
 const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, onToggle: () => void) => {
@@ -49,7 +49,7 @@ export const RuleCard = ({
   importanceSaving = false,
   onToggleImportance,
   previewLines,
-  mobilePreviewLinesPerSection,
+  titleOpensRule = false,
 }: RuleCardProps) => {
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
@@ -67,6 +67,7 @@ export const RuleCard = ({
     ? gameHref || (effectiveGameSlug ? `/games/${effectiveGameSlug}` : undefined)
     : undefined;
   const effectiveEnglishName = shouldShowGameContext ? englishName || (rule as any).englishName : undefined;
+  const ruleHref = effectiveGameHref ? `${effectiveGameHref}#rule-${encodeURIComponent(rule.id)}` : undefined;
 
   const getRuleUrl = () => {
     const targetPath = effectiveGameHref ? `${effectiveGameHref}#rule-${rule.id}` : `${window.location.pathname}#rule-${rule.id}`;
@@ -96,8 +97,8 @@ export const RuleCard = ({
     if (target.closest('button, a, input, textarea, select, label')) {
       return;
     }
-    if (effectiveGameHref) {
-      navigate(`${effectiveGameHref}#rule-${rule.id}`);
+    if (ruleHref) {
+      navigate(ruleHref);
     }
   };
 
@@ -141,8 +142,9 @@ export const RuleCard = ({
           {titleText && (
             <h3 className="rule-game-title" ref={titleRef}>
               {effectiveGameHref ? (
-                <Link className="rule-title-link" to={effectiveGameHref} onClick={(e) => e.stopPropagation()}>
+                <Link className={titleOpensRule ? 'rule-title-link home-rule-title-link' : 'rule-title-link'} to={titleOpensRule ? ruleHref! : effectiveGameHref} aria-label={titleOpensRule ? `查看完整規則：${titleText}，${rule.statement}` : undefined} onClick={(e) => e.stopPropagation()}>
                   {titleText}
+                  {titleOpensRule && <span aria-hidden="true">›</span>}
                 </Link>
               ) : (
                 <span>{titleText}</span>
@@ -191,7 +193,7 @@ export const RuleCard = ({
 
       </div>}
 
-      <RuleCardBody rule={rule} previewLines={previewLines} mobilePreviewLinesPerSection={mobilePreviewLinesPerSection} toggleProps={expandedTextToggleProps} />
+      <RuleCardBody rule={rule} previewLines={previewLines} toggleProps={expandedTextToggleProps} />
 
       {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">
