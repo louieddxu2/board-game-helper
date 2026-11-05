@@ -106,7 +106,7 @@ export interface GameExternalResource {
 
 export interface HomePayload {
   generatedAt: number;
-  featured: { gameSlug: string; gameName: string; ruleId: string }[];
+  featured: { gameSlug: string; gameName: string; ruleId: string; publishedRuleCount?: number }[];
   featuredRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   recentRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   popularGames: GameSummary[];

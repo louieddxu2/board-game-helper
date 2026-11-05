@@ -144,6 +144,7 @@ test.describe('two rules of the same game in the mobile window', () => {
       const clippedLink = secondEntry.locator('.home-rule-stack-link');
       await expect(clippedLink).toBeVisible();
       await expect(secondEntry.locator('.home-rule-stack-content')).toHaveJSProperty('inert', true);
+      await expect(rail.getByRole('link', { name: '看更多' })).toHaveAttribute('href', '/games/preview-game-2#rule-preview-rule-2');
       const stack = (await rail.locator('.home-rule-stack').boundingBox())!;
       const secondBox = (await secondEntry.boundingBox())!;
       expect(secondBox.y).toBeLessThan(stack.y + stack.height - 20);

@@ -275,7 +275,8 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
           const rules = [primary, ...candidates.filter((rule, index) =>
             rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
             && candidates.findIndex(candidate => candidate.id === rule.id) === index)];
-          return <HomeRuleStack key={primary.id} mobile={mobile} cards={rules.map(rule => ({
+          const publishedRuleCount = home?.featured?.find(ref => ref.gameSlug === primary.gameSlug)?.publishedRuleCount;
+          return <HomeRuleStack key={primary.id} mobile={mobile} gameHref={gameHref} publishedRuleCount={publishedRuleCount} cards={rules.map(rule => ({
             id: rule.id,
             href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
             label: `查看完整規則：${rule.statement}`,

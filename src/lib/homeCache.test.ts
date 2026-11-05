@@ -23,6 +23,14 @@ const home = (): HomePayload => ({
 });
 
 describe('home cache content key', () => {
+  test('refreshes the home snapshot when only a featured game’s published rule count changes', () => {
+    const featured = { gameSlug: 'emberleaf', gameName: 'Emberleaf', ruleId: 'featured-0', publishedRuleCount: 1 };
+    const before = { ...home(), featured: [featured] };
+    const after = { ...before, featured: [{ ...featured, publishedRuleCount: 2 }] };
+
+    expect(homeContentKey(after)).not.toBe(homeContentKey(before));
+  });
+
   test('changes when any of the twelve rendered rule snapshots is updated', () => {
     const before = home();
     const after = home();

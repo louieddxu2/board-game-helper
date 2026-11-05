@@ -58,7 +58,7 @@ homeRoutes.get('/api/home', async (c) => {
 
   const gamesResult = track('home:games-meta', await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
-      0 AS rule_count
+      g.published_rule_count
     FROM games g
     WHERE g.id IN (${placeholders}) AND g.merged_into_game_id IS NULL AND g.visibility = 'public'
   `).bind(...popularGameIds).all<GameRow>());
@@ -103,6 +103,7 @@ homeRoutes.get('/api/home', async (c) => {
       gameSlug: gameMap.get(id)!.slug,
       gameName: gameMap.get(id)!.displayName,
       ruleId: featuredRuleIdByGame.get(id)!,
+      publishedRuleCount: gameMap.get(id)!.publishedRuleCount,
     }));
 
   const featuredRuleIds = featured.map((f) => f.ruleId).filter(Boolean);
