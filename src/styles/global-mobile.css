@@ -52,8 +52,19 @@
   .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
   .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
   .home-rule-title-link > span { margin-inline-start: 5px; color: var(--green); }
-  .home-rule-stack-more { position: absolute; z-index: 1; inset-inline: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; background: linear-gradient(transparent 25%, var(--paper)); pointer-events: none; }
-  .home-rule-stack-more a {
+  .home-rule-stack-more {
+    position: absolute;
+    z-index: 1;
+    inset-inline: 0;
+    height: 44px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: linear-gradient(transparent 25%, var(--paper));
+    color: var(--green);
+    text-decoration: none;
+  }
+  .home-rule-stack-more-label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -62,13 +73,10 @@
     border: 1px solid var(--green);
     border-radius: 22px;
     background: var(--white);
-    color: var(--green);
     font-size: 14px;
     font-weight: 700;
-    text-decoration: none;
-    pointer-events: auto;
   }
-  .home-rule-stack-more a:focus-visible { outline: 2px solid var(--green); outline-offset: -4px; }
+  .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
   .home-rail-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
   .home-rail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--line); transition: width .2s, background .2s; }
   .home-rail-dots span.active { width: 16px; background: var(--green); }

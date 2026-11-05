@@ -63,8 +63,8 @@ export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
       <div className="home-rule-stack-content">{card.content}</div>
       <Link className="home-rule-stack-link" hidden to={card.href} aria-label={card.label} />
     </div>)}
-    {moreHref && <div className="home-rule-stack-more" style={{ bottom: visible?.hintBottom }}>
-      <Link to={moreHref}>看更多 <span aria-hidden="true">›</span></Link>
-    </div>}
+    {moreHref && <Link className="home-rule-stack-more" style={{ bottom: visible?.hintBottom }} to={moreHref}>
+      <span className="home-rule-stack-more-label">看更多 <span aria-hidden="true">›</span></span>
+    </Link>}
   </div>;
 }

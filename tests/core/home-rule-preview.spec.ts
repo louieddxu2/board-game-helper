@@ -133,6 +133,31 @@ for (const width of [320, 393, 1280]) {
 test.describe('two rules of the same game in the mobile window', () => {
   test.use({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
+  test('treats a tap over a covered card button as opening more rules', async ({ page }) => {
+    const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
+    await showHome(page, [first], [rules[1]]);
+    const rail = page.locator('.home-featured-rail');
+    const card = rail.locator('#rule-short-rule');
+    const share = card.getByRole('button', { name: '分享此規則' });
+    const cardHeight = (await card.boundingBox())!.height;
+    await rail.evaluate((element, height) => { element.style.height = `${height + 12}px`; }, cardHeight);
+
+    const more = rail.getByRole('link', { name: '看更多' });
+    await expect(more).toBeVisible();
+    const rowBox = (await more.boundingBox())!;
+    const labelBox = (await more.locator('.home-rule-stack-more-label').boundingBox())!;
+    const shareBox = (await share.boundingBox())!;
+    const x = shareBox.x + shareBox.width / 2;
+    const y = shareBox.y + shareBox.height - 4;
+    expect(x).toBeGreaterThan(labelBox.x + labelBox.width);
+    expect(y).toBeGreaterThan(rowBox.y);
+    expect(y).toBeLessThan(rowBox.y + rowBox.height);
+    const previousLength = await page.evaluate(() => history.length);
+    await page.touchscreen.tap(x, y);
+    await expect(page).toHaveURL(/\/games\/preview-game-2#rule-preview-rule-2$/);
+    expect(await page.evaluate(() => history.length)).toBe(previousLength + 1);
+  });
+
   for (const which of ['first', 'second'] as const) {
     test(`opens the ${which} rule from the first tap on its own visible area`, async ({ page }) => {
       const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
