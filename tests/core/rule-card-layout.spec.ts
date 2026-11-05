@@ -13,20 +13,22 @@ const sample: FeaturedRule = {
   sourceLabel: 'Bgg作者答覆', sourceLinks: [{ url: 'https://boardgamegeek.com/thread/123' }],
 };
 
+const recordSourceOpens = (page: Page) => page.addInitScript(() => {
+  const target = window as SourceWindow;
+  target.sourceOpens = [];
+  target.open = (url, name, features) => {
+    target.sourceOpens!.push([String(url), name, features]);
+    return null;
+  };
+});
+
 const showCard = async (page: Page, rule: FeaturedRule) => {
   await page.route('**/api/session', route => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
   await page.route('**/api/home', route => route.fulfill({ json: {
     generatedAt: Date.now(), featured: [], featuredRules: [rule], recentRules: [], recentRuleIds: [], popularGames: [],
   } }));
   await page.route('**/api/tags?*', route => route.fulfill({ json: { tags: rule.tags } }));
-  await page.addInitScript(() => {
-    const target = window as SourceWindow;
-    target.sourceOpens = [];
-    target.open = (url, name, features) => {
-      target.sourceOpens!.push([String(url), name, features]);
-      return null;
-    };
-  });
+  await recordSourceOpens(page);
   await page.goto('/');
   const card = page.locator('#rule-layout-rule');
   await expect(card).toBeVisible();
@@ -42,6 +44,7 @@ const showFullCard = async (page: Page, rule: FeaturedRule) => {
     reviewStatus: 'not_required', rules: [rule],
   } } }));
   await page.route('**/api/tags?*', route => route.fulfill({ json: { tags: rule.tags } }));
+  await recordSourceOpens(page);
   await page.goto(`/games/santa-maria#rule-${rule.id}`);
   const card = page.locator(`#rule-${rule.id}`);
   await expect(card).toHaveClass('rule-card');
@@ -54,14 +57,18 @@ const box = async (locator: Locator) => {
   return result!;
 };
 
-for (const width of [393, 320, 1280]) {
+// Phones show the full card only on its game page, without a game name; wider screens show titled cards on the homepage.
+for (const width of [393, 320, 768, 1280]) {
   test.describe(`rule card at ${width}px`, () => {
     const touch = width <= 800;
+    const titled = width >= 768;
+    const host = (page: Page, rule: FeaturedRule) => titled ? showCard(page, rule) : showFullCard(page, rule);
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
     test('keeps the complete rule compact, with a two-line source and usable actions', async ({ page }) => {
-      const card = await showCard(page, sample);
+      const card = await host(page, sample);
+      const pathname = new URL(page.url()).pathname;
       await expect(card.locator('.statement-text')).toHaveText(statement);
       await expect(card.locator('.mistake-text')).toHaveText(sample.commonMistake!);
       await expect(card.locator('.details-text')).toHaveText(details);
@@ -70,16 +77,16 @@ for (const width of [393, 320, 1280]) {
       expect(await page.evaluate(() => (window as SourceWindow).sourceOpens)).toEqual([
         ['https://boardgamegeek.com/thread/123', '_blank', 'noopener,noreferrer'],
       ]);
-      expect(new URL(page.url()).pathname).toBe('/');
+      expect(new URL(page.url()).pathname).toBe(pathname);
       const cardBox = await box(card);
-      if (width === 393) expect(cardBox.height).toBeLessThan(315);
+      if (width === 768) expect(cardBox.height).toBeLessThan(315);
       const geometry = await card.evaluate(el => {
         const rect = (selector: string) => el.querySelector(selector)!.getBoundingClientRect().toJSON();
         const sourceRange = document.createRange();
         sourceRange.selectNodeContents(el.querySelector('.rule-source-value')!);
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
           sourceText: sourceRange.getBoundingClientRect().toJSON(),
-          title: rect('.rule-game-title'), tags: rect('.rule-tags .tag-chip'),
+          title: el.querySelector('.rule-game-title')?.getBoundingClientRect().toJSON(), tags: rect('.rule-tags .tag-chip'),
           notes: [
             { label: rect('.mistake-badge > span'), text: rect('.mistake-text') },
             { label: rect('.details-badge > span'), text: rect('.details-text') },
@@ -99,8 +106,8 @@ for (const width of [393, 320, 1280]) {
         expect(actionBox.height).toBeGreaterThanOrEqual(43);
         expect(Math.abs(actionBox.y - geometry.actions[0].y)).toBeLessThan(1);
       }
-      if (width === 393) {
-        expect(Math.abs(geometry.tags.y - geometry.title.y)).toBeLessThan(1);
+      if (width === 768) {
+        expect(Math.abs(geometry.tags.y - geometry.title!.y)).toBeLessThan(1);
       }
       expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       if (touch) await card.screenshot({ path: `.wrangler/rule-card-compact-${width}.png` });
@@ -129,7 +136,7 @@ for (const width of [393, 320, 1280]) {
       if (width === 393) await card.screenshot({ path: '.wrangler/rule-card-long-notes.png' });
     });
 
-    if (touch) test('moves every tag onto its own row when they cannot all fit beside the game name', async ({ page }) => {
+    if (width === 768) test('moves every tag onto its own row when they cannot all fit beside the game name', async ({ page }) => {
       const tags = makeTags(['需要保留完整名稱的計分標籤', '另外一個很長的城市判定標籤']);
       const card = await showCard(page, { ...sample, tags, tagIds: tags.map(tag => tag.id) });
       const geometry = await card.evaluate(el => {
@@ -151,7 +158,7 @@ for (const width of [393, 320, 1280]) {
       for (const tag of tags) await expect(card.getByRole('button', { name: `#${tag.name}`, exact: true })).toBeVisible();
     });
 
-    test('wraps all tags below long game and author information without hiding text', async ({ page }) => {
+    if (titled) test('wraps all tags below long game and author information without hiding text', async ({ page }) => {
       const tags = makeTags(['計分', '城市', '遊戲結束', '資源轉換', '擴充模組', '玩家順序', '回合結算',
         '這個標籤名稱特別長仍然必須完整顯示並且保持原本的字級與點按範圍']);
       const rule = { ...sample, gameName: '聖瑪利亞號：這是一個很長且必須完整顯示的遊戲名稱',
@@ -189,10 +196,11 @@ for (const width of [393, 320, 1280]) {
 
     test('retains full source names, every link and the first cancel and confirm actions', async ({ page }) => {
       const sourceLabel = '官方規則書與作者提供的完整補充說明，超長名稱保留於來源提示';
-      const card = await showCard(page, { ...sample, sourceLabel, sourceLinks: [
+      const card = await host(page, { ...sample, sourceLabel, sourceLinks: [
         { label: '原始答覆', url: 'https://boardgamegeek.com/thread/123' },
         { label: '補充原文', url: 'https://example.com/rules?edition=2' },
       ] });
+      const pathname = new URL(page.url()).pathname;
       const sources = card.locator('.rule-source-entry');
       await expect(sources).toHaveCount(2);
       for (const value of await card.locator('.rule-source-value').all()) {
@@ -218,7 +226,7 @@ for (const width of [393, 320, 1280]) {
       expect(await page.evaluate(() => (window as SourceWindow).sourceOpens)).toEqual([
         ['https://example.com/rules?edition=2', '_blank', 'noopener,noreferrer'],
       ]);
-      expect(new URL(page.url()).pathname).toBe('/');
+      expect(new URL(page.url()).pathname).toBe(pathname);
     });
   });
 }

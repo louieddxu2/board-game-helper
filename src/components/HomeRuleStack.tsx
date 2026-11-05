@@ -22,9 +22,10 @@ export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
       for (const entry of entries) {
         const bounds = entry.getBoundingClientRect();
         const clipped = bounds.bottom > bottom + 0.5;
-        const cue = entry.querySelector('.home-rule-title-link > span');
-        const hidden = bounds.top >= bottom - 0.5
-          || (entry !== entries[0] && !!cue && cue.getBoundingClientRect().bottom > bottom);
+        // A later rule counts as shown only once the first line of its statement fits.
+        const statement = entry.querySelector<HTMLElement>('.statement-text');
+        const firstLineBottom = statement ? statement.getBoundingClientRect().top + (parseFloat(getComputedStyle(statement).lineHeight) || 24) : bounds.top;
+        const hidden = bounds.top >= bottom - 0.5 || (entry !== entries[0] && firstLineBottom > bottom + 0.5);
         const content = entry.firstElementChild as HTMLElement;
         const link = entry.lastElementChild as HTMLElement;
         entry.dataset.outsideStack = String(hidden);

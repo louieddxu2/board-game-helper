@@ -40,46 +40,6 @@
   .home-rule-section { padding: 20px 18px; }
   .home-rule-section .section-heading { margin-bottom: 12px; }
   .home-rule-section .section-heading h2 { font-size: 17px; }
-  /* Each game has one horizontally snapped window onto its rules. */
-  .rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; scroll-padding-inline: 18px; }
-  .rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
-  .rule-grid.home-featured-rail > * { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
-  .home-featured-rail.has-cards { height: clamp(160px, calc(100svh - var(--home-rail-reserved, 0px)), 320px); }
-  .home-rule-stack { position: relative; display: flex; flex-direction: column; gap: 12px; overflow: clip; }
-  .home-rule-stack-entry { position: relative; flex: none; height: auto; }
-  .home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
-  .home-rule-stack-content, .home-rule-stack-content > .rule-card { height: auto; }
-  .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
-  .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-  .home-rule-title-link > span { margin-inline-start: 5px; color: var(--green); }
-  .home-rule-stack-more {
-    position: absolute;
-    z-index: 1;
-    inset-inline: 0;
-    height: 44px;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    background: linear-gradient(transparent 25%, var(--paper));
-    color: var(--green);
-    text-decoration: none;
-  }
-  .home-rule-stack-more-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 38px;
-    padding-inline: 18px;
-    border: 1px solid var(--green);
-    border-radius: 22px;
-    background: var(--white);
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-  .home-rail-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
-  .home-rail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--line); transition: width .2s, background .2s; }
-  .home-rail-dots span.active { width: 16px; background: var(--green); }
   .home-recent-list { grid-template-columns: 1fr; gap: 8px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }
   .ad-slot-home-after-game-exploration { width: calc(100% - 36px); margin: 0 auto; }
@@ -247,6 +207,57 @@
 
 @media (max-width: 360px) {
   .catalog-game-updated::before { display: block; }
+}
+
+/* Tablets keep the touch navigation but show two featured cards side by side. */
+@media (min-width: 768px) and (max-width: 800px) {
+  .rule-grid.home-featured-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Phones swipe through the featured games; the tabs above name each one. */
+@media (max-width: 767px) {
+  /* Each game has one horizontally snapped window onto its rules. */
+  .rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; scroll-padding-inline: 18px; }
+  .rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
+  .rule-grid.home-featured-rail > * { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
+  .home-featured-rail.has-cards { height: clamp(160px, calc(100svh - var(--home-rail-reserved, 0px)), 320px); }
+  .home-rule-stack { position: relative; display: flex; flex-direction: column; gap: 12px; overflow: clip; }
+  .home-rule-stack-entry { position: relative; flex: none; height: auto; }
+  .home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
+  .home-rule-stack-content, .home-rule-stack-content > .rule-card { height: auto; }
+  .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
+  .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+  .home-rule-stack-more {
+    position: absolute;
+    z-index: 1;
+    inset-inline: 0;
+    height: 44px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: linear-gradient(transparent 25%, var(--paper));
+    color: var(--green);
+    text-decoration: none;
+  }
+  .home-rule-stack-more-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    padding-inline: 18px;
+    border: 1px solid var(--green);
+    border-radius: 22px;
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+  .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -18px 12px; padding: 2px 18px; position: relative; }
+  .home-game-tabs::-webkit-scrollbar { display: none; }
+  .home-game-tabs > button { flex: none; min-height: 44px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 22px; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .home-game-tabs > button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-game-tabs > button.active { max-width: calc(100vw - 36px); background: var(--green); color: var(--white); }
+  .home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

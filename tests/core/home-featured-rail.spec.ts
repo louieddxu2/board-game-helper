@@ -37,7 +37,7 @@ test('swipes through fixed height featured games, then takes the first tap on a 
   await touch('touchMove', box.x + 40);
   await touch('touchEnd');
   await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(100);
-  await expect(page.locator('.home-rail-dots span').nth(1)).toHaveClass('active');
+  await expect(page.getByRole('tab', { name: '測試遊戲 2' })).toHaveAttribute('aria-selected', 'true');
   expect(await page.evaluate(() => scrollX)).toBe(0);
 
   const second = page.locator('#rule-rail-rule-2').getByRole('button', { name: /將這條規則標為重要/ });

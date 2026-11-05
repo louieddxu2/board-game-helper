@@ -75,13 +75,13 @@ for (const width of [320, 393, 1280]) {
         const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) => client.send('Input.dispatchTouchEvent', {
           type, touchPoints: x === undefined ? [] : [{ x, y, id: 1 }],
         });
-        const recentTop = await page.locator('.home-rail-dots').evaluate(element => element.getBoundingClientRect().top);
+        const railBottom = await rail.evaluate(element => element.getBoundingClientRect().bottom);
         await touch('touchStart', box.x + box.width - 25);
         await touch('touchMove', box.x + box.width / 2);
         await touch('touchMove', box.x + 25);
         await touch('touchEnd');
-        await expect(page.locator('.home-rail-dots span').nth(1)).toHaveClass('active');
-        expect(await page.locator('.home-rail-dots').evaluate(element => element.getBoundingClientRect().top)).toBeCloseTo(recentTop, 0);
+        await expect(page.getByRole('tab', { name: '展示遊戲 2' })).toHaveAttribute('aria-selected', 'true');
+        expect(await rail.evaluate(element => element.getBoundingClientRect().bottom)).toBeCloseTo(railBottom, 0);
         await client.detach();
       }
       await page.evaluate(() => {
@@ -176,7 +176,7 @@ test.describe('two rules of the same game in the mobile window', () => {
       expect(secondBox.y + secondBox.height).toBeGreaterThan(stack.y + stack.height);
       const previousLength = await page.evaluate(() => history.length);
       if (which === 'first') {
-        await firstCard.locator('.rule-title-link').tap();
+        await firstCard.locator('.statement-text').tap();
         await expect(page).toHaveURL(/\/games\/preview-game-2#rule-short-rule$/);
         await expect(page.locator('#rule-short-rule.rule-card .statement-text')).toHaveText(first.statement);
       } else {

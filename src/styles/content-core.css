@@ -61,7 +61,6 @@
 .home-rule-section { padding: 28px 24px; }
 .home-rule-section .section-heading { margin-bottom: 16px; }
 .home-rule-section .section-heading h2 { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.35; }
-.home-rail-dots { display: none; }
 .home-rule-stack, .home-rule-stack-entry, .home-rule-stack-content { min-width: 0; height: 100%; }
 .rule-card-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .rule-card-preview p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
@@ -130,6 +129,9 @@
 .rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .rule-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .rule-card { height: 100%; min-width: 0; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 16px; padding: 10px 12px; position: relative; scroll-margin-top: 96px; box-shadow: 0 3px 10px rgba(23,47,40,.03); transition: transform .18s, box-shadow .18s, border-color .18s; display: flex; flex-direction: column; gap: 8px; }
+/* A card without its game name keeps a keyboard way in; taps fall through to the card itself. */
+.rule-card .rule-open-link { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.rule-card .rule-open-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 .rule-card-compact { display: block; width: 100%; min-width: 0; max-width: 100%; background: var(--white); color: var(--ink); font: inherit; text-align: left; border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; position: relative; cursor: pointer; box-shadow: 0 2px 8px rgba(23,47,40,.025); scroll-margin-top: 96px; transition: border-color .18s, box-shadow .18s, background-color .18s; }
 .rule-card-compact:hover { border-color: var(--green); box-shadow: 0 6px 18px rgba(23,47,40,.08); }
 .compact-expand-hint { position: absolute; top: 9px; right: 10px; display: grid; place-items: center; width: 18px; height: 18px; color: var(--orange); pointer-events: none; }

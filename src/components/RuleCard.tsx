@@ -25,7 +25,8 @@ export interface RuleCardProps {
   importanceSaving?: boolean;
   onToggleImportance?: () => void;
   previewLines?: number;
-  titleOpensRule?: boolean;
+  /** Leaves the game name to the surrounding game tabs; a link that appears on keyboard focus still opens the rule. */
+  hideTitle?: boolean;
 }
 
 const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, onToggle: () => void) => {
@@ -49,7 +50,7 @@ export const RuleCard = ({
   importanceSaving = false,
   onToggleImportance,
   previewLines,
-  titleOpensRule = false,
+  hideTitle = false,
 }: RuleCardProps) => {
   const navigate = useNavigate();
   const toastState = useContext(ToastContext);
@@ -102,7 +103,7 @@ export const RuleCard = ({
     }
   };
 
-  const titleText = effectiveGameHref && effectiveGameName
+  const titleText = !hideTitle && effectiveGameHref && effectiveGameName
     ? `${effectiveGameName}${effectiveEnglishName ? ` (${effectiveEnglishName})` : ''}`
     : undefined;
   const [titleRef, titleWrapped] = useWrappedTitle<HTMLHeadingElement>(titleText);
@@ -123,6 +124,7 @@ export const RuleCard = ({
       id={`rule-${rule.id}`}
       onClick={onToggleExpanded ? undefined : handleCardClick}
     >
+      {hideTitle && ruleHref && <Link className="rule-open-link" to={ruleHref} aria-label={`查看完整規則：${effectiveGameName ? `${effectiveGameName}，` : ''}${rule.statement}`} onClick={(e) => e.stopPropagation()} />}
       {hasHeader && <div className={titleWrapped ? 'rule-card-header title-wrapped' : 'rule-card-header'}>
         {(hasCredits || hasReviewMeta || onEdit) && <div className="rule-card-header-actions">
           {(hasCredits || hasReviewMeta) && (
@@ -142,9 +144,8 @@ export const RuleCard = ({
           {titleText && (
             <h3 className="rule-game-title" ref={titleRef}>
               {effectiveGameHref ? (
-                <Link className={titleOpensRule ? 'rule-title-link home-rule-title-link' : 'rule-title-link'} to={titleOpensRule ? ruleHref! : effectiveGameHref} aria-label={titleOpensRule ? `查看完整規則：${titleText}，${rule.statement}` : undefined} onClick={(e) => e.stopPropagation()}>
+                <Link className="rule-title-link" to={effectiveGameHref} onClick={(e) => e.stopPropagation()}>
                   {titleText}
-                  {titleOpensRule && <span aria-hidden="true">›</span>}
                 </Link>
               ) : (
                 <span>{titleText}</span>
