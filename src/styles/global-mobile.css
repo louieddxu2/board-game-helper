@@ -52,8 +52,23 @@
   .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
   .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
   .home-rule-title-link > span { margin-inline-start: 5px; color: var(--green); }
-  .home-rule-stack-more { position: absolute; z-index: 1; inset-inline: 0; height: 44px; display: flex; justify-content: flex-end; background: linear-gradient(transparent 50%, var(--paper)); pointer-events: none; }
-  .home-rule-stack-more a { display: inline-flex; align-items: flex-end; gap: 5px; padding: 0 12px 5px; background: linear-gradient(transparent 45%, var(--paper) 82%); color: var(--green); font-size: 13px; font-weight: 700; text-decoration: none; pointer-events: auto; }
+  .home-rule-stack-more { position: absolute; z-index: 1; inset-inline: 0; height: 44px; display: flex; align-items: flex-end; justify-content: center; background: linear-gradient(transparent 25%, var(--paper)); pointer-events: none; }
+  .home-rule-stack-more a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    padding-inline: 18px;
+    border: 1px solid var(--green);
+    border-radius: 22px;
+    background: var(--white);
+    color: var(--green);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    pointer-events: auto;
+  }
+  .home-rule-stack-more a:focus-visible { outline: 2px solid var(--green); outline-offset: -4px; }
   .home-rail-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
   .home-rail-dots span { width: 6px; height: 6px; border-radius: 3px; background: var(--line); transition: width .2s, background .2s; }
   .home-rail-dots span.active { width: 16px; background: var(--green); }
