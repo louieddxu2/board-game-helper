@@ -3,20 +3,11 @@ import { Hono } from 'hono';
 import type { AppVariables } from './auth';
 import type { RouteEnv } from './env';
 import { attributesRoutes } from './routes/attributes';
-import { queryRecentActivities, saveAttributeResponse } from './data/attributes';
+import { saveAttributeResponse } from './data/attributes';
 
 vi.mock('./data/database', () => ({ getDatabase: () => ({}) }));
-vi.mock('./data/attributes', () => ({ saveAttributeResponse: vi.fn(), queryRecentActivities: vi.fn() }));
+vi.mock('./data/attributes', () => ({ saveAttributeResponse: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
-
-test('serves the recent activity feed without caching', async () => {
-  vi.mocked(queryRecentActivities).mockResolvedValue([]);
-  const response = await attributesRoutes.request('https://example.test/api/attributes/activities');
-  expect(response.status).toBe(200);
-  expect(response.headers.get('cache-control')).toBe('no-store');
-  expect(await response.json()).toEqual({ activities: [] });
-  expect(queryRecentActivities).toHaveBeenCalledOnce();
-});
 
 test('accepts locally selected offline votes without a question token', async () => {
   vi.mocked(saveAttributeResponse).mockResolvedValue({ updatedValues: [], activities: [] });

@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
 import {
-  queryRecentActivities,
   saveAttributeResponse,
 } from '../data/attributes';
 import {
@@ -49,14 +48,6 @@ const setD1MetricsHeader = (c: any, db: ReturnType<typeof getDatabase>) => {
   c.header('X-D1-Rows-Read', String(metrics.rowsRead));
   c.header('X-D1-Rows-Written', String(metrics.rowsWritten));
 };
-
-attributesRoutes.get('/api/attributes/activities', async (c) => {
-  const db = getDatabase(c);
-  c.header('Cache-Control', 'no-store');
-  const activities = await queryRecentActivities(db);
-  setD1MetricsHeader(c, db);
-  return c.json({ activities });
-});
 
 attributesRoutes.get('/api/attributes', (c) => {
   // This was the pre-snapshot table endpoint. Keep the path reserved so old
