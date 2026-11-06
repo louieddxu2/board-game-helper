@@ -314,15 +314,14 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
   const proposalIds = body.data.decisions.map((decision) => decision.proposalId);
   const result = await getDatabase(c).statement(`
     SELECT p.id, p.batch_id, p.target_id, p.operation, p.status, p.base_updated_at,
-      p.proposed_json, p.version, r.game_id, r.updated_at rule_updated_at, g.slug game_slug
+      p.proposed_json, p.version, r.game_id, r.updated_at rule_updated_at
     FROM review_proposals p
     JOIN rules r ON r.id = p.target_id
-    JOIN games g ON g.id = r.game_id
     WHERE p.id IN (${proposalIds.map(() => '?').join(',')})
   `).bind(...proposalIds).all<{
     id: string; batch_id: string; target_id: string; operation: 'edit' | 'hide'; status: ReviewProposal['status'];
     base_updated_at: number; proposed_json: string; version: number; game_id: string;
-    rule_updated_at: number; game_slug: string;
+    rule_updated_at: number;
   }>();
 
   const proposals = new Map((result.results ?? []).map((row) => [row.id, row]));
@@ -330,7 +329,6 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
   const timestamp = now();
   const statements: DatabaseStatement[] = [];
   const affectedBatches = new Set<string>();
-  const affectedGameSlugs = new Set<string>();
   const outcomes: Array<{ proposalId: string; status: string }> = [];
 
   for (const decision of body.data.decisions) {
@@ -363,7 +361,6 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
       continue;
     }
 
-    affectedGameSlugs.add(row.game_slug);
     if (row.operation === 'hide') {
       statements.push(
         getDatabase(c).statement(`
@@ -449,13 +446,6 @@ reviewRoutes.post('/api/admin/review/decisions', requireRole('admin'), async (c)
     }
   }
 
-  if (affectedGameSlugs.size) {
-    const cache = (caches as any).default;
-    c.executionCtx.waitUntil(Promise.all([
-      ...[...affectedGameSlugs].map((slug) => cache.delete(new Request(new URL(`/api/games/${slug}`, c.req.url)))),
-      cache.delete(new Request(new URL('/api/home', c.req.url))),
-    ]));
-  }
   return c.json({ outcomes });
 });
 

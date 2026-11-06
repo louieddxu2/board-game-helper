@@ -61,24 +61,17 @@ app.use('/api/*', async (c, next) => {
   const origin = c.req.header('Origin')?.replace(/\/$/, '');
   const isTrusted = origin ? trustedOrigins(c.env, c.req.url).has(origin) : false;
   if (c.req.method === 'OPTIONS') {
-    const path = new URL(c.req.url).pathname;
-    const publicRead = c.req.header('Access-Control-Request-Method') === 'GET'
-      && isPublicCacheableRequest('GET', path);
-    if (!origin || (!isTrusted && !publicRead)) return c.json({ error: 'forbidden_origin' }, 403);
-    c.header('Access-Control-Allow-Origin', publicRead ? '*' : origin);
+    if (!origin || !isTrusted) return c.json({ error: 'forbidden_origin' }, 403);
+    c.header('Access-Control-Allow-Origin', origin);
     c.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, If-None-Match');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, If-None-Match');
     c.header('Access-Control-Max-Age', '86400');
     c.header('Vary', 'Origin');
     c.header('Cache-Control', 'public, max-age=86400');
     return c.body(null, 204);
   }
   await next();
-  const path = new URL(c.req.url).pathname;
-  if (isPublicCacheableRequest(c.req.method, path)) {
-    c.header('Access-Control-Allow-Origin', '*');
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read, X-D1-Rows-Written');
-  } else if (origin && isTrusted) {
+  if (origin && isTrusted) {
     c.header('Access-Control-Allow-Origin', origin);
     c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read, X-D1-Rows-Written');
     c.header('Vary', 'Origin');

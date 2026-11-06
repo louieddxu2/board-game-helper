@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, type FlowStage, type GameDetail, type GameSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
-import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
+import { assertMutationOrigin, cleanOptional, createId, isValidNickname, normalizeEmail, normalizeNickname, normalizeText, now, sha256Hex, slugify } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
@@ -156,19 +156,6 @@ authRoutes.post('/api/auth/google', async (c) => {
     return c.json({ error: 'invalid_credential' }, 400);
   }
   return c.json(await signInWithGoogle(c, body.credential));
-});
-
-authRoutes.post('/api/auth/google/exchange', async (c) => {
-  const origin = c.req.header('Origin')?.replace(/\/$/, '');
-  if (!origin || !trustedOrigins(c.env, c.req.url).has(origin)) {
-    return c.json({ error: 'forbidden_origin' }, 403);
-  }
-  const body = await c.req.json<{ credential?: unknown }>();
-  if (typeof body.credential !== 'string' || body.credential.length > 10_000) {
-    return c.json({ error: 'invalid_credential' }, 400);
-  }
-  const session = await exchangeGoogleCredential(c, body.credential);
-  return c.json({ ...session, tokenType: 'Bearer' as const });
 });
 
 authRoutes.post('/api/auth/dev', async (c) => {

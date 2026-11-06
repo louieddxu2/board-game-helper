@@ -73,7 +73,6 @@ describe('rule mutation URL validation', () => {
 
   test('applies an ordinary reviewed-rule edit and marks the row pending', async () => {
     const { db, batch, statements } = fakeDatabase();
-    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
     const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -91,7 +90,6 @@ describe('rule mutation URL validation', () => {
     expect(batchedStatements.some((item) => item.sql?.includes('review_proposals'))).toBe(false);
     expect(batchedStatements.some((item) => item.sql?.includes('review_batches'))).toBe(false);
     expect((update as (DatabaseStatement & { bindings?: unknown[] }) | undefined)?.bindings).toContain('ordinary-1');
-    vi.unstubAllGlobals();
   });
 
   test('rejects an ordinary user editing a rule created by someone else', async () => {
@@ -122,7 +120,6 @@ describe('rule mutation URL validation', () => {
   test('does not report a conflict when trigger changes accompany a successful update', async () => {
     const updatedRow = { ...row };
     const { db, batch } = fakeDatabase(0, false, updatedRow, 3, true);
-    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
     const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -132,7 +129,6 @@ describe('rule mutation URL validation', () => {
     expect(response.status).toBe(200);
     expect(updatedRow.statement).toBe('修正後規則');
     expect(batch).toHaveBeenCalledOnce();
-    vi.unstubAllGlobals();
   });
 
   test('rejects an edit when the contributor has no pending-rule quota left', async () => {
@@ -163,14 +159,12 @@ describe('rule mutation URL validation', () => {
 
   test('allows an ordinary user to restore a rule they hid themselves', async () => {
     const { db, batch } = fakeDatabase(0, false, hiddenOwnRow);
-    vi.stubGlobal('caches', { default: { delete: vi.fn(async () => true) } });
     const response = await appFor({ id: 'ordinary-1', roles: [] }, db).request('https://rules.example/api/rules/rule-1/restore', {
       method: 'POST',
     });
 
     expect(response.status).toBe(200);
     expect(batch).toHaveBeenCalledOnce();
-    vi.unstubAllGlobals();
   });
 
   test('does not let an ordinary user restore a rule hidden by someone else', async () => {

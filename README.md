@@ -76,22 +76,12 @@ Google 登入只驗證身分，不要求 Drive、Sheets、Gmail 或其他 Google
 
 ## 快取與公開 API
 
-- 首頁最多回傳三組各 10 筆內容，瀏覽器與 Cloudflare CDN 分層快取。
+- 首頁與規則內容快取在瀏覽器的 IndexedDB（一小時內直接使用，過期後先顯示舊資料再背景更新）。伺服器端沒有快取：本站沒有自訂網域，無法使用 Cloudflare 快取，每個 API 請求都會查詢 D1。
 - 遊戲搜尋有前端防抖、結果快取、筆數上限及 API 限速。
 - 遊戲名稱透過 canonical game 與 aliases 檢索。
-- 公開 API 可跨來源唯讀；寫入必須使用受信任來源與有效 Bearer session。
-- `GET /api/export/public` 提供精簡公開快照，支援 CDN、ETag 與 304。
+- API 只供本站頁面使用：跨網站請求只回應本站來源，寫入需要本站登入 cookie。計分板若要讀取規則，見 [計分板整合方向](docs/scorepad-integration.md)。
+- `GET /api/export/public` 僅限管理員，提供精簡公開快照，支援 ETag 與 304。
 - IndexedDB 只保存可重建的閱讀快取，以及尚未送出的草稿／佇列。
-
-## 計分板整合
-
-整合文件：
-
-- [計分板整合路線](docs/scorepad-integration.md)
-- [OpenAPI v1](docs/openapi.yaml)
-- [TypeScript client](integration/board-game-rules-client.ts)
-
-計分板以遊戲名稱或別名呼叫 resolve API，取得此服務的 `gameId` 後再讀規則。兩個網站可各自使用同一個 Google 身分；規則服務驗證 Google ID token 後簽發自己的 Bearer session，不共用另一個網站的 cookie。
 
 ## 校稿交換
 

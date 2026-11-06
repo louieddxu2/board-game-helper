@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { FLOW_STAGES, RULE_CATEGORIES } from '../../src/shared/types';
-import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
@@ -202,14 +202,6 @@ rulesRoutes.patch('/api/rules/:id', requireUser, async (c) => {
     }
     throw error;
   }
-  const cache = (caches as any).default;
-  const gameSlug = await getDatabase(c).statement('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(c.req.param('id')).first<{ slug: string }>();
-  if (gameSlug) {
-    c.executionCtx.waitUntil(Promise.all([
-      cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
-      cache.delete(new Request(new URL('/api/home', c.req.url))),
-    ]));
-  }
   const updatedRow = await getDatabase(c).statement(`
     SELECT r.*, g.display_name AS game_name, g.slug AS game_slug
     FROM rules r JOIN games g ON g.id = r.game_id
@@ -262,14 +254,6 @@ const changeRuleVisibility = async (c: AppContext, status: 'hidden' | 'published
     `).bind(timestamp, row.game_id as string, row.game_id as string)] : []),
     getDatabase(c).statement('UPDATE games SET updated_at = ? WHERE id = ?').bind(timestamp, row.game_id as string),
   ]);
-  const cache = (caches as any).default;
-  const gameSlug = await getDatabase(c).statement('SELECT g.slug FROM games g JOIN rules r ON r.game_id = g.id WHERE r.id = ?').bind(id).first<{ slug: string }>();
-  if (gameSlug) {
-    c.executionCtx.waitUntil(Promise.all([
-      cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
-      cache.delete(new Request(new URL('/api/home', c.req.url))),
-    ]));
-  }
   return c.json({ ok: true });
 };
 
@@ -294,13 +278,6 @@ rulesRoutes.post('/api/rules/:id/review', requireRole('editor'), async (c) => {
       reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
     WHERE id = ? AND review_status = 'pending'
   `).bind(user.id, reviewer.nickname, timestamp, rule.id).run();
-  const gameSlug = await getDatabase(c).statement('SELECT slug FROM games WHERE id = ?')
-    .bind(rule.game_id).first<{ slug: string }>();
-  const cache = (caches as any).default;
-  if (gameSlug) c.executionCtx.waitUntil(Promise.all([
-    cache.delete(new Request(new URL(`/api/games/${gameSlug.slug}`, c.req.url))),
-    cache.delete(new Request(new URL('/api/home', c.req.url))),
-  ]));
   return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
 });
 

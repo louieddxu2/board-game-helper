@@ -10,7 +10,6 @@ import { requireAttributeReplayAfterChange } from './data/attributeVoteWeights';
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const SESSION_COOKIE = 'wbr_session';
 const SESSION_DAYS = 30;
-const INTEGRATION_SESSION_MINUTES = 60;
 
 export interface AppVariables {
   user?: SessionUser;
@@ -19,12 +18,6 @@ export interface AppVariables {
 }
 
 export type AppContext = Context<{ Bindings: RouteEnv; Variables: AppVariables }>;
-
-export interface IntegrationSession {
-  accessToken: string;
-  expiresAt: number;
-  user: SessionUser;
-}
 
 export const isPublicReadRequest = (method: string, requestUrl: string): boolean => {
   if (method !== 'GET') return false;
@@ -97,37 +90,28 @@ export const sessionMiddleware: MiddlewareHandler<{
 }> = async (c, next) => {
   const isPublicRead = isPublicReadRequest(c.req.method, c.req.url);
   if (isPublicRead) { await next(); return; }
-  const authorization = c.req.header('Authorization');
-  const bearer = authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
-  const token = bearer ?? getCookie(c, SESSION_COOKIE);
+  const token = getCookie(c, SESSION_COOKIE);
   if (token) c.set('user', await sessionUser(getDatabase(c), token));
   await next();
 };
 
-const saveSession = async (c: AppContext, userId: string, options: {
-  kind: 'web' | 'integration';
-  ttlMs: number;
-  setCookie?: boolean;
-  clientOrigin?: string;
-}): Promise<{ accessToken: string; expiresAt: number }> => {
+// Sessions live only in the site's own cookie.
+const saveSession = async (c: AppContext, userId: string): Promise<void> => {
   const token = `${createId('session')}.${crypto.randomUUID()}`;
   const timestamp = now();
-  const expiresAt = timestamp + options.ttlMs;
+  const ttlMs = SESSION_DAYS * 24 * 60 * 60 * 1000;
   await getDatabase(c).statement(`
     INSERT INTO sessions (id_hash, user_id, created_at, expires_at, last_seen_at, session_kind, client_origin)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(await sha256Hex(token), userId, timestamp, expiresAt, timestamp, options.kind, options.clientOrigin ?? null).run();
-  if (options.setCookie) {
-    const isLocalhost = ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname);
-    setCookie(c, SESSION_COOKIE, token, {
-      httpOnly: true,
-      secure: !isLocalhost,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: Math.floor(options.ttlMs / 1000),
-    });
-  }
-  return { accessToken: token, expiresAt };
+    VALUES (?, ?, ?, ?, ?, 'web', NULL)
+  `).bind(await sha256Hex(token), userId, timestamp, timestamp + ttlMs, timestamp).run();
+  const isLocalhost = ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname);
+  setCookie(c, SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: !isLocalhost,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: Math.floor(ttlMs / 1000),
+  });
 };
 
 const upsertGoogleUser = async (c: AppContext, profile: {
@@ -233,20 +217,8 @@ const authenticateGoogleCredential = async (c: AppContext, credential: string): 
 
 export const signInWithGoogle = async (c: AppContext, credential: string): Promise<{ user: SessionUser; firstLogin: boolean }> => {
   const { userId, user, firstLogin } = await authenticateGoogleCredential(c, credential);
-  await saveSession(c, userId, {
-    kind: 'web', ttlMs: SESSION_DAYS * 24 * 60 * 60 * 1000, setCookie: true,
-  });
+  await saveSession(c, userId);
   return { user, firstLogin };
-};
-
-export const exchangeGoogleCredential = async (c: AppContext, credential: string): Promise<IntegrationSession> => {
-  const { userId, user } = await authenticateGoogleCredential(c, credential);
-  const session = await saveSession(c, userId, {
-    kind: 'integration',
-    ttlMs: INTEGRATION_SESSION_MINUTES * 60 * 1000,
-    clientOrigin: c.req.header('Origin'),
-  });
-  return { ...session, user };
 };
 
 export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> => {
@@ -258,9 +230,7 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
     email,
     emailVerified: true,
   });
-  await saveSession(c, userId, {
-    kind: 'web', ttlMs: SESSION_DAYS * 24 * 60 * 60 * 1000, setCookie: true,
-  });
+  await saveSession(c, userId);
   return {
     id: userId,
     maskedEmail: maskEmail(email),
@@ -269,8 +239,7 @@ export const signInAsLocalAdmin = async (c: AppContext): Promise<SessionUser> =>
 };
 
 export const signOut = async (c: AppContext): Promise<void> => {
-  const bearer = c.req.header('Authorization')?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
-  const token = bearer ?? getCookie(c, SESSION_COOKIE);
+  const token = getCookie(c, SESSION_COOKIE);
   if (token) await getDatabase(c).statement('DELETE FROM sessions WHERE id_hash = ?').bind(await sha256Hex(token)).run();
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
 };

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { FLOW_STAGES, GAME_EXTERNAL_RESOURCE_CATEGORIES, type FlowStage, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type GameSummary, type GameVariantSummary, type HomePayload, type HomeIDPayload, type ReviewBatch, type ReviewContent as SharedReviewContent, type ReviewProposal, type RuleCard, type UserRole } from '../../src/shared/types';
-import { requireRole, requireUser, type AppContext, type AppVariables, exchangeGoogleCredential, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
+import { requireRole, requireUser, type AppContext, type AppVariables, signInAsLocalAdmin, signInWithGoogle, signOut } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, trustedOrigins } from '../utils';
@@ -258,11 +258,6 @@ gamesRoutes.patch('/api/games/:id', requireUser, async (c) => {
     `).bind(createId('alias'), c.req.param('id'), alias, normalizeText(alias), alias === parsed.data.displayName ? 'official' : 'alias', timestamp));
   }
   await getDatabase(c).batch(statements);
-  const cache = (caches as any).default;
-  c.executionCtx.waitUntil(Promise.all([
-    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
-    cache.delete(new Request(new URL('/api/home', c.req.url))),
-  ]));
   const updatedGame = await getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       g.published_rule_count AS rule_count, g.published_rule_count,
@@ -290,7 +285,7 @@ const externalResourceSchema = z.object({
 gamesRoutes.post('/api/games/:id/external-resources', requireRole('editor'), async (c) => {
   const parsed = externalResourceSchema.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_external_resource', issues: parsed.error.issues }, 400);
-  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string; slug: string }>();
+  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const timestamp = now();
   const resourceId = createId('resource');
@@ -298,27 +293,17 @@ gamesRoutes.post('/api/games/:id/external-resources', requireRole('editor'), asy
     INSERT INTO game_external_resources (id, game_id, name, category, url, created_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(resourceId, game.id, parsed.data.name, parsed.data.category, parsed.data.url, c.get('user')!.id, timestamp, timestamp).run();
-  const cache = (caches as any).default;
-  c.executionCtx.waitUntil(Promise.all([
-    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
-    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
-  ]));
   return c.json({ resource: { id: resourceId, gameId: game.id, ...parsed.data, createdAt: timestamp, updatedAt: timestamp } satisfies GameExternalResource }, 201);
 });
 
 gamesRoutes.delete('/api/games/:id/external-resources/:resourceId', requireRole('editor'), async (c) => {
-  const game = await getDatabase(c).statement('SELECT id, slug FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string; slug: string }>();
+  const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   const deleted = await getDatabase(c).statement(`
     DELETE FROM game_external_resources
     WHERE id = ? AND game_id = ?
   `).bind(c.req.param('resourceId'), c.req.param('id')).run();
   if (!deleted.meta?.changes) return c.json({ error: 'external_resource_not_found' }, 404);
-  const cache = (caches as any).default;
-  c.executionCtx.waitUntil(Promise.all([
-    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
-    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
-  ]));
   return c.json({ ok: true });
 });
 
@@ -330,8 +315,8 @@ gamesRoutes.post('/api/games/:id/review', requireRole('editor'), async (c) => {
   `).bind(user.id).first<{ nickname: string }>();
   if (!reviewer) return c.json({ error: 'reviewer_nickname_required' }, 409);
   const game = await getDatabase(c).statement(`
-    SELECT id, slug, review_status FROM games WHERE id = ? AND merged_into_game_id IS NULL
-  `).bind(c.req.param('id')).first<{ id: string; slug: string; review_status: string }>();
+    SELECT id, review_status FROM games WHERE id = ? AND merged_into_game_id IS NULL
+  `).bind(c.req.param('id')).first<{ id: string; review_status: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
   if (game.review_status !== 'pending') return c.json({ error: 'game_not_pending_review' }, 409);
   const timestamp = now();
@@ -339,12 +324,6 @@ gamesRoutes.post('/api/games/:id/review', requireRole('editor'), async (c) => {
     UPDATE games SET review_status = 'reviewed', reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
     WHERE id = ? AND review_status = 'pending'
   `).bind(user.id, reviewer.nickname, timestamp, game.id).run();
-  const cache = (caches as any).default;
-  c.executionCtx.waitUntil(Promise.all([
-    cache.delete(new Request(new URL(`/api/games/${game.id}`, c.req.url))),
-    cache.delete(new Request(new URL(`/api/games/${game.slug}`, c.req.url))),
-    cache.delete(new Request(new URL('/api/home', c.req.url))),
-  ]));
   return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
 });
 
