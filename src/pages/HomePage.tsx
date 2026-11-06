@@ -37,6 +37,8 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
+  // Each featured game's next rules, loaded only for the phone's rule window.
+  const [resolvedMoreCards, setResolvedMoreCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvingHome, setResolvingHome] = useState(false);
   const [homeError, setHomeError] = useState(false);
   const [rulesError, setRulesError] = useState(false);
@@ -165,6 +167,24 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     }).catch(() => { if (active) setRulesError(true); }).finally(() => { if (active) setResolvingHome(false); });
     return () => { active = false; };
   }, [home, homeAttempt]);
+
+  useEffect(() => {
+    if (!home || !mobile) return;
+    let active = true;
+    const refs = (home.featured ?? []).flatMap((ref) => (ref.moreRuleIds ?? []).map((ruleId) => ({ ref, ruleId })));
+    void Promise.all(refs.map(async ({ ref, ruleId }) => {
+      try {
+        const rule = (await api.rule(ruleId))?.rule;
+        return rule ? { ...rule, gameName: ref.gameName, gameSlug: ref.gameSlug } : undefined;
+      } catch { return undefined; /* an extra rule that fails to load is simply left out */ }
+    })).then(async (loaded) => {
+      const rules = await hydrateRuleTags(loaded.filter((rule): rule is NonNullable<typeof rule> => Boolean(rule)));
+      if (!active) return;
+      setResolvedMoreCards(rules);
+      await Promise.all(rules.map((rule) => localDb.cacheRuleEntity(rule).catch(() => undefined)));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [home, mobile]);
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
   const hasHomeError = homeError || rulesError;
@@ -321,7 +341,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         }}>
         {featuredGames.map(primary => {
           const gameHref = `/games/${primary.gameSlug}`;
-          const candidates = mobile ? [...displayedFeaturedRules, ...resolvedRecentCards] : [];
+          const candidates = mobile ? [...resolvedMoreCards, ...displayedFeaturedRules, ...resolvedRecentCards] : [];
           const rules = [primary, ...candidates.filter((rule, index) =>
             rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
             && candidates.findIndex(candidate => candidate.id === rule.id) === index)];

@@ -12,6 +12,8 @@ import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWrite
 
 const homeRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
+const HOME_RULES_PER_GAME = 3;
+
 homeRoutes.get('/api/home', async (c) => {
   const d1Logs: Array<{ name: string; rowsRead: number; meta: unknown }> = [];
   const track = <T extends D1Result<unknown>>(name: string, res: T): T => {
@@ -65,25 +67,26 @@ homeRoutes.get('/api/home', async (c) => {
 
   const gameMap = new Map((gamesResult.results ?? []).map((g) => [g.id, toGame(g)]));
 
-  const featuredRuleIdsResult = track('home:featured-rule-ids', await getDatabase(c).statement(`
-    SELECT game_id, rule_id
-    FROM game_public_rule_heads
-    WHERE game_id IN (${placeholders})
-  `).bind(...popularGameIds).all<{ game_id: string; rule_id: string }>());
-
-  const featuredRuleIdByGame = new Map<string, string>();
-  (featuredRuleIdsResult.results ?? []).forEach((row) => {
-    if (!featuredRuleIdByGame.has(row.game_id)) {
-      featuredRuleIdByGame.set(row.game_id, row.rule_id);
-    }
-  });
+  // A phone's rule window fits at most three rules of one game, so each game walks
+  // idx_rules_game_public_updated newest-first and stops after three rows.
+  const ruleIdsResults = await getDatabase(c).batch(popularGameIds.map((gameId) => getDatabase(c).statement(`
+    SELECT id FROM rules
+    WHERE game_id = ? AND status = 'published'
+    ORDER BY updated_at DESC, id DESC
+    LIMIT ${HOME_RULES_PER_GAME}
+  `).bind(gameId)));
+  const ruleIdsByGame = new Map(popularGameIds.map((gameId, index) => [
+    gameId,
+    ((track(`home:game-rule-ids-${index}`, ruleIdsResults[index]).results ?? []) as Array<{ id: string }>).map((row) => row.id),
+  ]));
 
   const featured = popularGameIds
-    .filter((id) => gameMap.has(id) && featuredRuleIdByGame.has(id))
+    .filter((id) => gameMap.has(id) && ruleIdsByGame.get(id)!.length > 0)
     .map((id) => ({
       gameSlug: gameMap.get(id)!.slug,
       gameName: gameMap.get(id)!.displayName,
-      ruleId: featuredRuleIdByGame.get(id)!,
+      ruleId: ruleIdsByGame.get(id)![0],
+      moreRuleIds: ruleIdsByGame.get(id)!.slice(1),
       publishedRuleCount: gameMap.get(id)!.publishedRuleCount,
     }));
 

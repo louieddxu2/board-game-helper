@@ -106,7 +106,8 @@ export interface GameExternalResource {
 
 export interface HomePayload {
   generatedAt: number;
-  featured: { gameSlug: string; gameName: string; ruleId: string; publishedRuleCount?: number }[];
+  /** moreRuleIds: the game's next newest rules, for the phone's rule window. */
+  featured: { gameSlug: string; gameName: string; ruleId: string; moreRuleIds?: string[]; publishedRuleCount?: number }[];
   featuredRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   recentRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   popularGames: GameSummary[];

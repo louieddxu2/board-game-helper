@@ -62,3 +62,21 @@ for (const input of ['tap', 'click'] as const) {
     await expect(page).toHaveURL(/\/games\/rail-game-5#rule-rail-rule-5$/);
   });
 }
+
+test('stacks a featured game\'s next rule from the home payload under its card', async ({ page }) => {
+  const next = { ...rule(9), gameId: 'rail-game-1', gameName: '測試遊戲 1', gameSlug: 'rail-game-1', statement: '同一款遊戲的下一條規則。' };
+  let extraReads = 0;
+  await page.route('**/api/session', (route) => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
+  await page.route('**/api/home', (route) => route.fulfill({ json: {
+    generatedAt: Date.now(),
+    featured: [{ gameSlug: 'rail-game-1', gameName: '測試遊戲 1', ruleId: 'rail-rule-1', moreRuleIds: [next.id], publishedRuleCount: 2 }],
+    featuredRules: [rule(1)], recentRules: [rule(5)], recentRuleIds: [],
+  } }));
+  await page.route(`**/api/rules/${next.id}`, (route) => { extraReads++; return route.fulfill({ json: { rule: next } }); });
+  await page.goto('/');
+  const stack = page.locator('.home-rule-stack').first();
+  await expect(stack.locator('.home-rule-stack-entry')).toHaveCount(2);
+  await expect(stack.locator(`#rule-${next.id} .statement-text`)).toHaveText(next.statement);
+  await expect(stack.locator('.home-rule-stack-entry').nth(1)).toHaveAttribute('data-outside-stack', 'false');
+  expect(extraReads).toBe(1);
+});
