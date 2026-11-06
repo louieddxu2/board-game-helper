@@ -104,6 +104,6 @@ describe('Layout navigation', () => {
     const recordLinks = screen.getAllByRole('link', { name: /記錄/ });
     expect(recordLinks).toHaveLength(2);
     expect(recordLinks.every((link) => link.getAttribute('href') === '/add?game=seize-the-bean')).toBe(true);
-    expect(document.querySelector('.mobile-primary')).toHaveClass('game-page-primary');
+    expect(recordLinks.every((link) => link.querySelector('svg title')?.textContent !== '登入後可有限地記錄')).toBe(true);
   });
 });

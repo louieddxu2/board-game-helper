@@ -377,10 +377,11 @@ export const AddPage = () => {
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); }}>重新選擇</button>}</div>
         {game ? <input value={game.displayName} readOnly aria-label="遊戲名稱" /> : <GameSearch value={gameQuery} onChange={setGameQuery} onSelect={selectGame} placeholder="搜尋或輸入遊戲名稱" />}
+        {/* Offered only while the name is empty; once anything is typed or chosen the row is no longer useful. */}
+        {!game && !gameQuery.trim() && recentGames.length > 0 && <div className="recent-game-chips"><span>最近：</span><div className="recent-game-chips-list">{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => selectGame({ ...recent, ruleCount: 0, updatedAt: Date.now() })}>{recent.displayName}</button>)}</div></div>}
       </div>
       <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>
     </div>
-    {!game && recentGames.length > 0 && <div className="recent-game-chips"><span>最近查看</span>{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => selectGame({ ...recent, ruleCount: 0, updatedAt: Date.now() })}>{recent.displayName}</button>)}</div>}
     <div className="rule-input-list">
       <div className="list-heading"><h2>這次玩錯的規則</h2><span>{validRules.length} 條</span></div>
       {ruleEntryLocked ? <button type="button" className="rule-entry-gate" onClick={() => showToast(ruleEntryMessage, 'info')}>

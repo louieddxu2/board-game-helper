@@ -35,6 +35,27 @@ test.describe('mobile game tabs', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
   });
 
+  test('stops scrolling exactly when the first or last game is centred, and enlarges only the selected tab', async ({ page }) => {
+    await showHome(page);
+    const row = page.locator('[role="tablist"]');
+    const offset = (index: number) => row.evaluate((element, index) => {
+      const box = element.getBoundingClientRect();
+      const tab = element.children[index].getBoundingClientRect();
+      return tab.left + tab.width / 2 - (box.left + box.width / 2);
+    }, index);
+    await row.evaluate(element => { element.scrollLeft = -500; });
+    expect(Math.abs(await offset(0))).toBeLessThan(1);
+    await row.evaluate(element => { element.scrollLeft = element.scrollWidth; });
+    expect(Math.abs(await offset(names.length - 1))).toBeLessThan(1);
+
+    const heights = await row.evaluate(element => Array.from(element.children, tab => tab.getBoundingClientRect().height));
+    expect(heights[0]).toBeGreaterThan(heights[1]);
+    expect(heights.slice(1).every(height => height === heights[1])).toBe(true);
+    // The larger selected tab fits inside the row without making it taller than before.
+    expect(await row.evaluate(element => element.getBoundingClientRect().height)).toBeLessThanOrEqual(42);
+    expect(heights[0]).toBeLessThanOrEqual(await row.evaluate(element => element.clientHeight));
+  });
+
   test('moves to a tapped game without passing through the others, then opens its rule with the first tap', async ({ page }) => {
     await showHome(page);
     await page.locator('[role="tablist"]').evaluate(list => {

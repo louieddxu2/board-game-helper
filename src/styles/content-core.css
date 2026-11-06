@@ -19,8 +19,12 @@
 .hero-recents { margin-top: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .hero-recents > span { flex: none; color: #b9c9c3; font-size: 12px; font-weight: 600; }
 .hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
-.recent-game-chips { margin: -18px 0 28px; justify-content: center; }
-.recent-game-chips > span { color: var(--muted); font-size: 12px; }
+/* One swipeable line under the game name field. */
+.recent-game-chips { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.recent-game-chips > span { flex: none; color: var(--muted); font-size: 12px; }
+.recent-game-chips-list { display: flex; gap: 6px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.recent-game-chips-list::-webkit-scrollbar { display: none; }
+.recent-game-chips-list > button { flex: none; white-space: nowrap; }
 .recent-game-chips button, .tag-chip, .tag-filter button { border: 1px solid var(--line); border-radius: 100px; background: var(--white); color: var(--green); padding: 6px 12px; font-size: 12px; text-decoration: none; cursor: pointer; }
 .hero-recents a { display: inline-flex; align-items: center; justify-content: center; max-width: 100%; min-width: 0; text-align: center; border: 1px solid rgba(255,255,255,.25); border-radius: 100px; background: rgba(255,255,255,.12); color: white; padding: 6px 14px; font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; text-decoration: none; cursor: pointer; white-space: normal; transition: background 150ms ease, border-color 150ms ease; }
 .hero-recents a:hover { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }

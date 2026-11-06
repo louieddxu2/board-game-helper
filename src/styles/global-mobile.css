@@ -85,7 +85,8 @@
   .game-page { padding: 20px 16px 100px; }
   .game-hero { padding-bottom: 12px; }
   .game-hero-actions .game-add-rule-button { display: none; }
-  .mobile-nav .mobile-primary.game-page-primary { background: var(--orange); color: white; font-weight: 900; box-shadow: 0 3px 12px rgba(229, 115, 0, .28); }
+  /* Recording a rule is the site's main action, so it stands out on every page; signing in happens on the record page itself. */
+  .mobile-nav .mobile-primary { background: var(--orange); color: white; font-weight: 900; box-shadow: 0 3px 12px rgba(229, 115, 0, .28); }
   .rule-card, .rule-card-compact { scroll-margin-top: 16px; }
   .rule-card-compact { padding: 7px 11px; }
   .compact-expand-hint { top: 8px; right: 8px; width: 16px; height: 16px; }
@@ -263,12 +264,13 @@
     font-weight: 700;
   }
   .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-  /* Half-width side padding lets every tab, the first and last too, scroll to the centre. */
-  .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -18px 10px; padding: 2px 50%; position: relative; }
+  /* Side padding is set from the end tabs so the row stops when the first or last tab is centred. */
+  .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -18px 8px; padding: 2px 0; position: relative; }
   .home-game-tabs::-webkit-scrollbar { display: none; }
-  .home-game-tabs > button { flex: none; min-height: 40px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 20px; transition: max-width .25s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .home-game-tabs > button { flex: none; min-height: 36px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 18px; transition: max-width .25s ease, transform .2s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
   .home-game-tabs > button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .home-game-tabs > button.active { max-width: calc(100vw - 36px); background: var(--green); color: var(--white); }
+  /* The selected tab grows slightly without taking more room in the row. */
+  .home-game-tabs > button.active { max-width: calc(100vw - 36px); transform: scale(1.08); background: var(--green); color: var(--white); }
   .home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 }
 

@@ -33,7 +33,10 @@ vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: mock
 vi.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 vi.mock('../components/GameSearch', () => ({
   clearSearchCache: vi.fn(),
-  GameSearch: ({ onSelect, includeGamesWithoutPublishedRules }: { onSelect(game: { id: string; slug: string; displayName: string; ruleCount: number; updatedAt: number }): void; includeGamesWithoutPublishedRules?: boolean }) => <button type="button" data-includes-zero-rule-games={String(Boolean(includeGamesWithoutPublishedRules))} onClick={() => onSelect({ id: 'game-1', slug: 'known-game', displayName: '既有遊戲', ruleCount: 0, updatedAt: 1 })}>選擇既有遊戲</button>,
+  GameSearch: ({ value, onChange, onSelect, includeGamesWithoutPublishedRules }: { value: string; onChange(value: string): void; onSelect(game: { id: string; slug: string; displayName: string; ruleCount: number; updatedAt: number }): void; includeGamesWithoutPublishedRules?: boolean }) => <>
+    <input aria-label="遊戲名稱搜尋" value={value} onChange={(event) => onChange(event.target.value)} />
+    <button type="button" data-includes-zero-rule-games={String(Boolean(includeGamesWithoutPublishedRules))} onClick={() => onSelect({ id: 'game-1', slug: 'known-game', displayName: '既有遊戲', ruleCount: 0, updatedAt: 1 })}>選擇既有遊戲</button>
+  </>,
 }));
 vi.mock('../components/EditionInput', () => ({ EditionInput: () => null }));
 vi.mock('../components/PlayerCountInput', () => ({ PlayerCountInput: () => null }));
@@ -87,6 +90,18 @@ describe('AddPage contribution constraints', () => {
     expect(screen.getByRole('heading', { name: '登入後可（有限度地）建立規則' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '隱私與資料說明' })).toHaveAttribute('href', '/privacy');
     expect(screen.queryByText('新增一條規則')).not.toBeInTheDocument();
+  });
+
+  test('offers recent games on one line under an empty game name and hides them once a name is typed', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.recentGames.mockResolvedValue([{ id: 'game-2', slug: 'recent-game', displayName: '最近的遊戲' }]);
+    await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
+
+    const recent = await screen.findByRole('button', { name: '最近的遊戲' });
+    expect(recent.closest('.record-game-name-field')).not.toBeNull();
+    expect(screen.getByText('最近：')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('遊戲名稱搜尋'), { target: { value: '石' } });
+    expect(screen.queryByRole('button', { name: '最近的遊戲' })).not.toBeInTheDocument();
   });
 
   test('does not offer games without published rules for a wrong-rule report', async () => {
