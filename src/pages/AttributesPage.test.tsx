@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributesPage } from './AttributesPage';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
 
@@ -47,6 +47,9 @@ describe('AttributesPage question flow', () => {
   beforeEach(() => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
+    vi.spyOn(api, 'attributeActivities').mockRejectedValue(new Error('offline'));
+    vi.spyOn(localDb, 'getAttributeActivities').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'updateAttributeActivities').mockRejectedValue(new Error('offline'));
     vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
@@ -266,6 +269,36 @@ describe('AttributesPage question flow', () => {
     await waitFor(() => expect(localDb.invalidateAttributeQuestion).toHaveBeenCalled());
     expect(localDb.updateAttributeCatalogValues).toHaveBeenCalledWith([updatedValue]);
     expect(tableSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows a confirmed vote again after reopening the page', async () => {
+    let stored: Awaited<ReturnType<typeof localDb.getAttributeActivities>> = {
+      key: 'attributes:activities:v1', cachedAt: Date.now(), data: { server: [], confirmed: [] },
+    };
+    vi.mocked(localDb.getAttributeActivities).mockImplementation(async () => stored);
+    vi.mocked(localDb.updateAttributeActivities).mockImplementation(async (update) => {
+      stored = { ...stored!, data: { ...stored!.data, confirmed: update.confirmed ? [update.confirmed] : stored!.data.confirmed } };
+      return stored;
+    });
+    vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [], activities: [{
+      id: 'saved', kind: 'comparison', actorName: '玩家', attributeId: attribute.id, attributeName: attribute.name,
+      subjectA, subjectB, result: 'A_HIGHER', createdAt: Date.now(),
+    }] });
+    const page = render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
+    await waitFor(() => expect(stored?.data.confirmed).toHaveLength(1));
+    page.unmount();
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent('玩家'));
+    expect(api.attributeActivities).not.toHaveBeenCalled();
+  });
+
+  test('does not save a rejected vote in the confirmed activity cache', async () => {
+    vi.spyOn(api, 'saveAttributeResponse').mockRejectedValue(new ApiError('attribute_not_found', 404));
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲較高' }));
+    await waitFor(() => expect(screen.getByText('上一筆回答已失效，請重新回答。')).toBeInTheDocument());
+    expect(localDb.updateAttributeActivities).not.toHaveBeenCalledWith(expect.objectContaining({ confirmed: expect.anything() }));
   });
 
   test('does not carry a comparison highlight when the next question reuses a game', async () => {

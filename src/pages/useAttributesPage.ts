@@ -10,10 +10,12 @@ import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonRes
 import type { AttributeResponseDraft, AttributeVoteScope, ConnectionState, QuestionMotion, VoteFeedback } from './attributesPageShared';
 import { ATTRIBUTE_QUESTION_CACHE_FRESH_MS, attributeQuestionKey, browserIsOffline, comparisonChoiceText, connectionStateAfterFailure, OPTIMISTIC_ACTIVITY_LIMIT, optimisticComparisonActivity, QUESTION_ENTER_MS, QUESTION_EXIT_MS, questionOptions, reducedMotion, SAVED_FEEDBACK_MS, wait } from './attributesPageShared';
 import { useAttributeCollectionImport } from './useAttributeCollectionImport';
+import { useAttributeActivities } from './useAttributeActivities';
 
 export const useAttributesPage = () => {
   const session = useContext(SessionContext);
   const [payload, setPayload] = useState<AttributeQuestionPayload>();
+  const { activities: recentActivities, confirm: confirmActivity } = useAttributeActivities();
   const [question, setQuestion] = useState<AttributeQuestion>();
   const [optimisticActivities, setOptimisticActivities] = useState<AttributeActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,6 +274,9 @@ export const useAttributesPage = () => {
       for (const item of pending) {
         try {
           const saved = await api.saveAttributeResponse(item);
+          if (await confirmActivity(saved.activities, item.responseId)) {
+            setOptimisticActivities((current) => current.filter((activity) => activity.responseId !== item.responseId));
+          }
           await localDb.recordAttributeDirectRatings(sessionId, item, item.createdAt).catch(() => undefined);
           await localDb.updateAttributeCatalogValues(saved.updatedValues).catch(() => undefined);
           await localDb.removePendingAttributeResponse(item.id);
@@ -311,7 +316,7 @@ export const useAttributesPage = () => {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [applyQuestionPayload, question, refreshPendingCount, requestQuestion, sessionId]);
+  }, [applyQuestionPayload, confirmActivity, question, refreshPendingCount, requestQuestion, sessionId]);
 
   const persistResponse = useCallback(async (draft: AttributeResponseDraft) => {
     if (inFlightResponseIdsRef.current.has(draft.responseId)) return;
@@ -332,6 +337,9 @@ export const useAttributesPage = () => {
 
     try {
       const [saved, queued] = await Promise.all([savePromise, queuePromise]);
+      if (await confirmActivity(saved.activities, draft.responseId)) {
+        setOptimisticActivities((current) => current.filter((activity) => activity.responseId !== draft.responseId));
+      }
       await localDb.recordAttributeDirectRatings(sessionId, pendingItem, pendingItem.createdAt).catch(() => undefined);
       if (votingCatalogRef.current) {
         votingCatalogRef.current = applyAttributeValueUpdates(votingCatalogRef.current, saved.updatedValues);
@@ -366,7 +374,7 @@ export const useAttributesPage = () => {
       inFlightResponseIdsRef.current.delete(draft.responseId);
       if (typeof navigator === 'undefined' || navigator.onLine) void syncPendingResponses();
     }
-  }, [refreshPendingCount, sessionId, syncPendingResponses]);
+  }, [confirmActivity, refreshPendingCount, sessionId, syncPendingResponses]);
 
   useEffect(() => {
     let active = true;
@@ -538,7 +546,7 @@ export const useAttributesPage = () => {
     scopeLoading,
     loading,
     error,
-    payload,
+    payload: payload && recentActivities ? { ...payload, activities: recentActivities } : payload,
     question,
     collectionMessage,
     optimisticActivities,

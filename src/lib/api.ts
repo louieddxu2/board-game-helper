@@ -463,12 +463,13 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
+  attributeActivities: () => transportRequest<{ activities: import('../shared/types').AttributeActivity[] }>('/api/attributes/activities', undefined, 'cache-miss'),
   saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => {
     // Drop questionToken from older IndexedDB outbox rows. The server now
     // validates the submitted attribute and subjects against active records.
     const response = { ...input };
     delete response.questionToken;
-    return mutation<{ ok: true; updatedValues: AttributeMatrixValue[] }>('/api/attributes/responses', {
+    return mutation<{ ok: true; updatedValues: AttributeMatrixValue[]; activities?: import('../shared/types').AttributeActivity[] }>('/api/attributes/responses', {
       method: 'POST', body: JSON.stringify(response),
     });
   },

@@ -12,6 +12,7 @@ describe('public read authentication boundary', () => {
 
   test('keeps the weekly catalog snapshot and version changes on the public fast path', () => {
     expect(isPublicReadRequest('GET', 'https://rules.example/api/game-catalog')).toBe(true);
+    expect(isPublicReadRequest('GET', 'https://rules.example/api/attributes/activities')).toBe(true);
     expect(isPublicReadRequest('GET', 'https://rules.example/api/game-catalog/changes?after=12')).toBe(true);
   });
 
