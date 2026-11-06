@@ -14,6 +14,7 @@ import { useAttributeCollectionImport } from './useAttributeCollectionImport';
 export const useAttributesPage = () => {
   const session = useContext(SessionContext);
   const [payload, setPayload] = useState<AttributeQuestionPayload>();
+  const [liveActivities, setLiveActivities] = useState<AttributeActivity[]>();
   const [question, setQuestion] = useState<AttributeQuestion>();
   const [optimisticActivities, setOptimisticActivities] = useState<AttributeActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +114,22 @@ export const useAttributesPage = () => {
       mountedRef.current = false;
       if (motionTimerRef.current !== undefined) window.clearTimeout(motionTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      void api.attributeActivities().then(({ activities }) => {
+        if (!active) return;
+        setLiveActivities(activities);
+        recentActivitiesRef.current = activities;
+        const confirmed = new Set(activities.map((activity) => activity.responseId).filter(Boolean));
+        setOptimisticActivities((current) => current.filter((activity) => !confirmed.has(activity.responseId)));
+      }).catch(() => undefined);
+    };
+    refresh();
+    window.addEventListener('online', refresh);
+    return () => { active = false; window.removeEventListener('online', refresh); };
   }, []);
 
   const refreshPendingCount = useCallback(async () => {
@@ -538,7 +555,7 @@ export const useAttributesPage = () => {
     scopeLoading,
     loading,
     error,
-    payload,
+    payload: payload && liveActivities ? { ...payload, activities: liveActivities } : payload,
     question,
     collectionMessage,
     optimisticActivities,

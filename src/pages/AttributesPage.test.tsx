@@ -47,6 +47,7 @@ describe('AttributesPage question flow', () => {
   beforeEach(() => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     vi.spyOn(api, 'attributeTable').mockResolvedValue(sharedAttributeCatalog);
+    vi.spyOn(api, 'attributeActivities').mockRejectedValue(new Error('offline'));
     vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
@@ -68,6 +69,20 @@ describe('AttributesPage question flow', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  test('reloads recent votes even when the unanswered question is cached', async () => {
+    const activity = { ...recentActivities[1], responseId: 'saved-vote' };
+    vi.mocked(api.attributeActivities).mockResolvedValue({ activities: [activity] });
+    vi.mocked(localDb.getLatestAttributeQuestion).mockResolvedValue({
+      key: 'attributes:question:v1', data: { question, activities: [] }, scope: 'all', cachedAt: Date.now(),
+    });
+    const view = render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent('遊戲甲（8）'));
+    view.unmount();
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('最近投票記錄')).toHaveTextContent('遊戲甲（8）'));
+    expect(api.attributeActivities).toHaveBeenCalledTimes(2);
   });
 
   test.each(['low', 'high'] as const)('bipolar %s direction aligns question, explanation, examples, direct scores and submission', async (highPole) => {

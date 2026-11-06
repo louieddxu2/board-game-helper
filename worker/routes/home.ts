@@ -78,25 +78,6 @@ homeRoutes.get('/api/home', async (c) => {
     }
   });
 
-  // A game's newest rule is often already in the recent list, so show its next rule instead.
-  // Only those games are queried; each walks idx_rules_game_public_updated newest-first and stops at the
-  // first rule not listed, reading at most one row more than that game's rules in the recent list.
-  const recentRuleIdSet = new Set(recentRuleIds);
-  const gamesNeedingAnotherRule = popularGameIds.filter((id) => recentRuleIdSet.has(featuredRuleIdByGame.get(id) ?? ''));
-  if (gamesNeedingAnotherRule.length > 0) {
-    const excluded = recentRuleIds.map(() => '?').join(',');
-    const alternatives = await getDatabase(c).batch(gamesNeedingAnotherRule.map((gameId) => getDatabase(c).statement(`
-      SELECT game_id, id FROM rules
-      WHERE game_id = ? AND status = 'published' AND id NOT IN (${excluded})
-      ORDER BY updated_at DESC, id DESC
-      LIMIT 1
-    `).bind(gameId, ...recentRuleIds)));
-    gamesNeedingAnotherRule.forEach((gameId, index) => {
-      const row = (track(`home:featured-alternative-${index}`, alternatives[index]).results as Array<{ id: string }> | undefined)?.[0];
-      if (row) featuredRuleIdByGame.set(gameId, row.id); else featuredRuleIdByGame.delete(gameId);
-    });
-  }
-
   const featured = popularGameIds
     .filter((id) => gameMap.has(id) && featuredRuleIdByGame.has(id))
     .map((id) => ({

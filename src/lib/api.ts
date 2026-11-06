@@ -463,6 +463,7 @@ export const api = {
   syncCatalogGames,
   attributeTable,
   syncAttributeTable,
+  attributeActivities: () => uncachedRead<{ activities: import('../shared/types').AttributeActivity[] }>('/api/attributes/activities', 'recent votes change independently of the catalog cache'),
   saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => {
     // Drop questionToken from older IndexedDB outbox rows. The server now
     // validates the submitted attribute and subjects against active records.
