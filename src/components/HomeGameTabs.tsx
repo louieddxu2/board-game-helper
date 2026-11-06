@@ -2,21 +2,31 @@ import { useLayoutEffect, useRef } from 'react';
 
 type GameTab = { id: string; name: string };
 
-// Names the game each featured card belongs to and switches between them; the selected name is shown in full.
+const centerTab = (row: HTMLElement, index: number, behavior: ScrollBehavior) => {
+  const tab = row.children[index] as HTMLElement | undefined;
+  if (!tab) return;
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  row.scrollTo({ left: tab.offsetLeft + tab.offsetWidth / 2 - row.clientWidth / 2, behavior: reduceMotion ? 'auto' : behavior });
+};
+
+// Names the game each featured card belongs to and switches between them. The selected tab sits in the
+// centre with its full name, and the row glides there so the change of game is visible.
 export const HomeGameTabs = ({ games, active, onSelect }: { games: GameTab[]; active: number; onSelect(index: number): void }) => {
   const rowRef = useRef<HTMLDivElement>(null);
+  const placed = useRef(false);
 
-  // Keep the selected tab inside the row after a swipe or a tap; it widens once its full name shows.
   useLayoutEffect(() => {
     const row = rowRef.current;
-    const tab = row?.children[active] as HTMLElement | undefined;
-    if (!row || !tab) return;
-    const inset = 18;
-    if (tab.offsetLeft - inset < row.scrollLeft) row.scrollLeft = Math.max(0, tab.offsetLeft - inset);
-    else if (tab.offsetLeft + tab.offsetWidth + inset > row.scrollLeft + row.clientWidth) row.scrollLeft = tab.offsetLeft + tab.offsetWidth + inset - row.clientWidth;
+    if (!row) return;
+    centerTab(row, active, placed.current ? 'smooth' : 'auto');
+    placed.current = true;
   }, [active, games.length]);
 
-  return <div ref={rowRef} className="home-game-tabs" role="tablist" aria-label="近期常被查閱的遊戲">
+  return <div ref={rowRef} className="home-game-tabs" role="tablist" aria-label="近期常被查閱的遊戲"
+    // The selected tab widens to its full name; centre it again once it has its final width.
+    onTransitionEnd={(event) => {
+      if (event.propertyName === 'max-width' && event.target === rowRef.current?.children[active]) centerTab(rowRef.current, active, 'smooth');
+    }}>
     {games.map((game, index) => <button
       key={game.id}
       type="button"

@@ -394,7 +394,7 @@ export const AddPage = () => {
             <label htmlFor={`rule-${rule.id}`}>{zhTWCopy.terms.correctRule} *</label>
             <textarea id={`rule-${rule.id}`} ref={(node) => { inputRefs.current[rule.id] = node; }} rows={2} value={rule.statement} onChange={(event) => setRule(rule.id, { statement: event.target.value })} />
             <label>{zhTWCopy.terms.mistakeSituation}<textarea rows={2} value={rule.commonMistake ?? ''} onChange={(event) => setRule(rule.id, { commonMistake: event.target.value })} /></label>
-            <label>補充說明<textarea rows={3} value={rule.details ?? ''} onChange={(event) => setRule(rule.id, { details: event.target.value })} /></label>
+            <label>補充說明<textarea rows={2} value={rule.details ?? ''} onChange={(event) => setRule(rule.id, { details: event.target.value })} /></label>
             <TagInput value={rule.tagSelections ?? []} onChange={(tagSelections) => setRule(rule.id, { tagSelections })} canCreate={isAdmin} label="標籤" detectionInput={{ statement: rule.statement, commonMistake: rule.commonMistake, details: rule.details }} />
             <RuleCategoryInput value={rule.categories ?? []} onChange={(categories) => setRule(rule.id, { categories })} />
             <PlayerCountInput value={rule.playerCounts ?? []} onChange={(playerCounts) => setRule(rule.id, { playerCounts })} />

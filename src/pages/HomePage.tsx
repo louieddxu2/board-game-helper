@@ -3,7 +3,7 @@ import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { AdSlot } from '../components/AdSlot';
 import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
-import { HomeRuleStack } from '../components/HomeRuleStack';
+import { HOME_MORE_ROW, HomeRuleStack } from '../components/HomeRuleStack';
 import { HomeGameTabs } from '../components/HomeGameTabs';
 import { useSession } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
@@ -16,6 +16,9 @@ import { PwaInstallButton } from '../components/PwaInstallButton';
 import { RecentGamesRail } from '../components/RecentGamesRail';
 import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
 import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
+
+// Lines of rule text a phone's featured card shows; the rail window is sized to hold exactly that.
+const RULE_WINDOW_LINES = 6;
 
 // One swipe step of the featured rail: a full-width card plus the gap after it.
 const railStep = (rail: HTMLElement) => {
@@ -58,7 +61,6 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     if (pending === null || step <= 0) return;
     if (Math.abs(rail.scrollLeft - pending * step) >= 2) rail.scrollTo({ left: pending * step, behavior: 'auto' });
   };
-  const recentHeadingRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const media = window.matchMedia?.('(max-width: 767px)');
@@ -171,29 +173,33 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   // Only the featured cards carry the importance button; recent rules are plain links.
   const gameIdsKey = Array.from(new Set(displayedFeaturedRules.map((r) => r.gameId).filter(Boolean))).sort().join(',');
   const hideFeatured = Boolean(home) && !hasHomeError && !resolvingHome && displayedFeaturedRules.length === 0;
-  const hasRecent = resolvedRecentCards.length > 0;
-
-  useLayoutEffect(() => {
-    const rail = railRef.current;
-    if (!mobile || !rail || typeof ResizeObserver === 'undefined') return;
-    const nav = document.querySelector('.mobile-nav');
-    const measure = () => {
-      const bounds = rail.getBoundingClientRect();
-      const heading = recentHeadingRef.current;
-      const below = heading ? heading.getBoundingClientRect().bottom - bounds.bottom : 0;
-      const reserved = bounds.top + window.scrollY + (nav?.getBoundingClientRect().height ?? 0) + below;
-      rail.style.setProperty('--home-rail-reserved', `${Math.ceil(reserved)}px`);
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(document.body);
-    observer.observe(rail);
-    if (nav) observer.observe(nav);
-    measure();
-    return () => observer.disconnect();
-  }, [mobile, hideFeatured, hasRecent]);
 
   const featuredGames = mobile ? displayedFeaturedRules.filter((rule, index, rules) =>
     rules.findIndex(candidate => candidate.gameId === rule.gameId) === index) : displayedFeaturedRules;
+  const featuredKey = featuredGames.map(rule => rule.id).join(',');
+
+  // The window holds a card with six lines of rule text, whatever the screen height, plus the 看更多 row below it.
+  // A first card with fewer lines leaves the rest of that space for the game's next rule.
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    if (!mobile || !rail || typeof ResizeObserver === 'undefined') return;
+    const firstCards = Array.from(rail.querySelectorAll<HTMLElement>('.home-rule-stack > .home-rule-stack-entry:first-child'));
+    const measure = () => {
+      let frame = 0;
+      let line = 0;
+      for (const entry of firstCards) {
+        const paragraphs = Array.from(entry.querySelectorAll<HTMLElement>('.rule-card-preview p'));
+        const text = paragraphs.reduce((sum, paragraph) => sum + paragraph.getBoundingClientRect().height, 0);
+        frame = Math.max(frame, entry.getBoundingClientRect().height - text);
+        for (const paragraph of paragraphs) line = Math.max(line, parseFloat(getComputedStyle(paragraph).lineHeight) || 0);
+      }
+      rail.style.setProperty('--home-rail-height', `${Math.ceil(frame + RULE_WINDOW_LINES * line + HOME_MORE_ROW)}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    firstCards.forEach(entry => observer.observe(entry));
+    measure();
+    return () => observer.disconnect();
+  }, [mobile, featuredKey]);
 
   useEffect(() => {
     if (!user || !gameIdsKey) {
@@ -272,7 +278,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         <div className="hero-search" id="home-search">
           <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
         </div>
-        {recentGames.length > 0 && <div className="hero-recents"><span>最近看過</span><RecentGamesRail games={recentGames} className="hero-recents-list" /></div>}
+        {recentGames.length > 0 && <div className="hero-recents"><span>最近：</span><RecentGamesRail games={recentGames} className="hero-recents-list" /></div>}
       </div>
       </div>
     </section>
@@ -324,7 +330,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
             id: rule.id,
             href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
             label: `查看完整規則：${rule.statement}`,
-            content: <RuleCard rule={rule} previewLines={mobile ? undefined : 8} hideTitle={mobile} gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
+            content: <RuleCard rule={rule} previewLines={mobile ? RULE_WINDOW_LINES : 8} hideTitle={mobile} gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
           }))} />;
         })}
         {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
@@ -346,7 +352,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     </section>}
     <AdSlot placement="home-after-game-exploration" />
     {resolvedRecentCards.length > 0 && <section className="content-section home-rule-section">
-      <div ref={recentHeadingRef} className="section-heading"><div><h2>近期新增的玩錯規則</h2></div></div>
+      <div className="section-heading"><div><h2>近期新增的玩錯規則</h2></div></div>
       <ul className="home-recent-list">{resolvedRecentCards.map((rule) =>
         <li key={rule.id}><Link to={`/games/${rule.gameSlug}#rule-${encodeURIComponent(rule.id)}`}>
           <span className="home-recent-game">{rule.gameName}</span>

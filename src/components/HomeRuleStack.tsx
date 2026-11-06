@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+/** Room kept under the last whole card for the 看更多 row, so the row never covers a card that fits. */
+export const HOME_MORE_ROW = 56;
+
 export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
   mobile: boolean;
   gameHref: string;
@@ -17,15 +20,14 @@ export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
     const entries = Array.from(stack.querySelectorAll<HTMLElement>('.home-rule-stack-entry'));
     const measure = () => {
       const bottom = stack.getBoundingClientRect().bottom;
+      const limit = bottom - HOME_MORE_ROW;
       let complete = 0;
       let visibleEnd = 0;
       for (const entry of entries) {
         const bounds = entry.getBoundingClientRect();
-        const clipped = bounds.bottom > bottom + 0.5;
-        // A later rule counts as shown only once the first line of its statement fits.
-        const statement = entry.querySelector<HTMLElement>('.statement-text');
-        const firstLineBottom = statement ? statement.getBoundingClientRect().top + (parseFloat(getComputedStyle(statement).lineHeight) || 24) : bounds.top;
-        const hidden = bounds.top >= bottom - 0.5 || (entry !== entries[0] && firstLineBottom > bottom + 0.5);
+        const clipped = bounds.bottom > limit + 0.5;
+        // A later rule peeks above the 44px 看更多 row whenever at least a sliver of it fits there.
+        const hidden = entry !== entries[0] && bounds.top > bottom - 44 - 12;
         const content = entry.firstElementChild as HTMLElement;
         const link = entry.lastElementChild as HTMLElement;
         entry.dataset.outsideStack = String(hidden);

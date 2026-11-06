@@ -49,7 +49,7 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數', disa
   };
 
   return <fieldset className="player-count-input">
-    <legend>{label}</legend>
+    <legend>{label}<output aria-live="polite">{normalized.length ? formatPlayerCounts(normalized) : '未指定人數'}</output></legend>
     <div className="player-count-track"
       onPointerDown={(event) => {
         if (disabled) return;
@@ -119,6 +119,5 @@ export const PlayerCountInput = ({ value, onChange, label = '適用人數', disa
           toggle(count);
         }}>{count}</button>)}
     </div>
-    <output aria-live="polite">{normalized.length ? formatPlayerCounts(normalized) : '未指定人數'}</output>
   </fieldset>;
 };

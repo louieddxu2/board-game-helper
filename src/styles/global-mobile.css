@@ -18,7 +18,7 @@
   .mobile-nav a span, .mobile-nav button span { display: inline-flex; align-items: center; font-size: 18px; line-height: 1; }
   .mobile-nav .nav-icon { width: 20px; height: 20px; }
   footer { padding-bottom: 90px; }
-  .hero { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 18px 12px; column-gap: 8px; row-gap: 10px; }
+  .hero { grid-template-columns: minmax(0, 1fr) auto; padding: 6px 18px 10px; column-gap: 8px; row-gap: 8px; }
   .hero > .pwa-install-button { grid-column: 2; }
   .hero h1 { font-size: clamp(18px, calc(18px + (100vw - 320px) / 17.5), 24px); }
   .hero-main { width: 100%; }
@@ -26,19 +26,26 @@
   .hero-copy { font-size: 17px; line-height: 1.6; text-align: center; margin-bottom: 30px; }
   .hero-actions { flex-wrap: wrap; margin: 18px 0 22px; justify-content: center; }
   .hero-actions .button { flex: 1; white-space: nowrap; max-width: 240px; }
-  .hero-search .search-input input { padding: 14px 18px; font-size: 16px; }
+  .hero-search .search-input input { padding: 10px 16px; font-size: 16px; }
   .hero-search .search-input span { font-size: 18px; padding: 0 16px; }
   .hero-preview { display: none; }
-  .hero-recents { display: flex; margin-top: 10px; }
+  .hero-recents { margin-top: 8px; gap: 6px; }
   .hero-recents-list, .personal-home-recents > .recent-games-rail { flex-wrap: nowrap; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: 2px; }
   .recent-games-rail::-webkit-scrollbar { display: none; }
   .recent-games-rail > a { flex: 0 0 auto; max-width: none; min-height: 44px; white-space: nowrap; overflow-wrap: normal; }
+  /* Each recent game is a full 44px tap target that draws only a 30px pill; the row's negative margins keep the hero compact. */
+  .hero-recents-list { padding-block: 0; margin-block: -7px; }
+  .hero-recents-list > a { position: relative; isolation: isolate; min-height: 44px; padding: 11px 11px; border-color: transparent; background: none; font-size: 13px; }
+  .hero-recents-list > a::before { content: ''; position: absolute; inset: 7px 0; z-index: -1; border: 1px solid rgba(255,255,255,.25); border-radius: 100px; background: rgba(255,255,255,.12); }
+  .hero-recents-list > a:hover { background: none; }
+  .hero-recents-list > a:hover::before { background: rgba(255,255,255,.25); }
   .recent-games-rail > a:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
   .rule-grid, .rule-grid.compact, .admin-grid { grid-template-columns: 1fr; }
   .game-grid { flex-direction: column; align-items: stretch; }
   .content-section { padding: 65px 18px; }
-  .home-rule-section { padding: 20px 18px; }
-  .home-rule-section .section-heading { margin-bottom: 12px; }
+  .home-rule-section { padding: 12px 18px 14px; }
+  .home-rule-section .section-heading { margin-bottom: 8px; }
+  .home-discover-section .section-heading { justify-content: center; text-align: center; }
   .home-rule-section .section-heading h2 { font-size: 17px; }
   .home-recent-list { grid-template-columns: 1fr; gap: 8px; }
   .ad-slot { min-height: 30px; border-radius: 8px; }
@@ -96,8 +103,12 @@
   .stage-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: none; }
   .rule-card { padding: 10px 12px; }
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
-  .add-page-heading { align-items: flex-end; margin-bottom: 28px !important; }
-  .add-page-heading h1 { font-size: 34px; }
+  .add-page-heading { align-items: center; margin-bottom: 14px !important; }
+  .add-page-heading h1 { font-size: 26px; }
+  .add-page.narrow-page { padding-top: 18px; }
+  .record-game-fields { margin-bottom: 18px; }
+  .rule-input-fields textarea { padding: 9px 11px; }
+  .tag-input { margin-top: 4px; }
   .rule-draft-import { min-height: 42px; padding: 0 13px; white-space: nowrap; }
   .record-game-fields { grid-template-columns: 1fr; }
   .record-game-fields.two-columns { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -220,7 +231,7 @@
   .rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: -18px; padding-inline: 18px; scroll-padding-inline: 18px; }
   .rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
   .rule-grid.home-featured-rail > * { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; }
-  .home-featured-rail.has-cards { height: clamp(160px, calc(100svh - var(--home-rail-reserved, 0px)), 320px); }
+  .home-featured-rail.has-cards { height: var(--home-rail-height, auto); }
   .home-rule-stack { position: relative; display: flex; flex-direction: column; gap: 12px; overflow: clip; }
   .home-rule-stack-entry { position: relative; flex: none; height: auto; }
   .home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
@@ -252,9 +263,10 @@
     font-weight: 700;
   }
   .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-  .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -18px 12px; padding: 2px 18px; position: relative; }
+  /* Half-width side padding lets every tab, the first and last too, scroll to the centre. */
+  .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 -18px 10px; padding: 2px 50%; position: relative; }
   .home-game-tabs::-webkit-scrollbar { display: none; }
-  .home-game-tabs > button { flex: none; min-height: 44px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 22px; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .home-game-tabs > button { flex: none; min-height: 40px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 20px; transition: max-width .25s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
   .home-game-tabs > button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .home-game-tabs > button.active { max-width: calc(100vw - 36px); background: var(--green); color: var(--white); }
   .home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }

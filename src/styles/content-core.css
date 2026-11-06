@@ -15,8 +15,9 @@
 .hero-main { width: 100%; max-width: 760px; }
 .hero-preview { display: none; }
 .hero-preview-label { display: none; }
-.hero-recents { margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.hero-recents > span { display: block; color: #b9c9c3; font-size: 12px; font-weight: 600; }
+/* One line: the label sits in front of the recent games. */
+.hero-recents { margin-top: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hero-recents > span { flex: none; color: #b9c9c3; font-size: 12px; font-weight: 600; }
 .hero-recents-list { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: min(680px, 100%); max-width: 680px; min-width: 0; }
 .recent-game-chips { margin: -18px 0 28px; justify-content: center; }
 .recent-game-chips > span { color: var(--muted); font-size: 12px; }
@@ -271,11 +272,12 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .rule-entry-gate { width: 100%; min-height: 104px; border: 1px dashed #9ba69e; border-radius: 12px; background: var(--cream); color: var(--green); font: inherit; font-weight: 700; cursor: pointer; padding: 18px; text-align: left; }
 .rule-entry-gate small { display: block; margin-top: 7px; color: var(--muted); font-weight: 400; }
 .narrow-page header > p:last-child, .login-page > p { color: var(--muted); line-height: 1.7; }
-.record-game-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 15px; margin-bottom: 34px; }
-.record-game-name-field { min-width: 0; }
-.field-label-row { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+.record-game-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 15px; margin-bottom: 34px; }
+.record-game-name-field { display: grid; gap: 7px; min-width: 0; }
+.field-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 18px; }
 .field-label-row > span { font-size: 13px; font-weight: 700; }
-.field-label-row .text-action { padding: 0; }
+/* A label-row action keeps its 44px tap area without making the label row taller. */
+.field-label-row .text-action { padding: 0; margin-block: -13px; font-size: 13px; }
 .record-game-fields input[readonly] { background: var(--cream); color: var(--muted); }
 .rule-input-list { border-top: 1px solid var(--line); padding-top: 25px; }
 .list-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -294,16 +296,17 @@ textarea, input, select { width: 100%; border: 1px solid var(--line); border-rad
 textarea { resize: vertical; line-height: 1.6; }
 textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
 .player-count-input { min-width: 0; margin: 0; padding: 0; border: 0; }
-.player-count-input legend { margin-bottom: 7px; font-size: 13px; font-weight: 700; }
+/* The selected counts read on the legend line instead of taking a row below the buttons. */
+.player-count-input legend { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
+.player-count-input legend output { color: var(--muted); font-size: 12px; font-weight: 400; }
 .player-count-track { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; padding: 5px; border: 1px solid var(--line); border-radius: 13px; background: var(--cream); touch-action: pan-y; user-select: none; }
 .player-count-track button { min-width: 0; min-height: 44px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: var(--white); color: var(--green); font-weight: 800; cursor: pointer; }
 .player-count-track button.selected { border-color: var(--green); background: var(--green); color: var(--white); }
 .player-count-track button:focus-visible { outline: 3px solid rgba(233,180,76,.45); outline-offset: 1px; }
-.player-count-input output { display: block; min-height: 20px; margin-top: 6px; color: var(--muted); font-size: 12px; }
 .edition-input { display: grid; gap: 8px; min-width: 0; }
 .edition-input-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
 .edition-input-heading > span { font-size: 13px; font-weight: 700; }
-.edition-input-heading .text-action { flex: 0 0 auto; padding: 0; white-space: nowrap; }
+.edition-input-heading .text-action { flex: 0 0 auto; padding: 0; font-size: 13px; white-space: nowrap; }
 .edition-options { display: flex; flex-wrap: wrap; gap: 7px; }
 .edition-option { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; max-width: 100%; padding: 7px 12px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 10px; background: var(--white); color: var(--green); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
 .edition-option small { color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
@@ -311,6 +314,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .edition-option.active { border-color: var(--green); background: var(--green); color: var(--white); }
 .edition-option.active small { color: rgba(255,255,255,.78); }
 .tag-input { position: relative; display: grid; gap: 8px; margin-top: 10px; }
+.tag-input > label { display: flex; align-items: baseline; gap: 6px; }
 .tag-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
 .tag-composer:focus-within { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(233,180,76,.2); }
 .tag-composer input { min-width: 140px; flex: 1; border: 0; box-shadow: none; padding: 7px; }
@@ -321,7 +325,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .tag-suggestions button { border: 0; background: none; text-align: left; border-radius: 8px; padding: 9px 10px; cursor: pointer; display: flex; justify-content: space-between; }
 .tag-suggestions button:hover { background: var(--cream); }
 .remove-button { border: 0; background: none; color: #9b8f82; font-size: 24px; cursor: pointer; align-self: start; padding-top: 6px; }
-.add-row-button { width: calc(100% - 42px); margin-left: 42px; padding: 13px; border: 1px dashed #9ba69e; border-radius: 12px; background: transparent; color: var(--green); font-weight: 700; cursor: pointer; }
+.add-row-button { width: 100%; margin-left: 0; padding: 13px; border: 1px dashed #9ba69e; border-radius: 12px; background: transparent; color: var(--green); font-weight: 700; cursor: pointer; }
 .shared-fields { display: grid; gap: 16px; padding: 34px 0; }
 .more-fields, .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .sticky-submit { position: sticky; bottom: 14px; z-index: 10; margin-top: 28px; background: rgba(255,253,248,.95); backdrop-filter: blur(10px); border: 1px solid var(--line); box-shadow: 0 15px 50px rgba(15,34,29,.15); border-radius: 18px; padding: 13px 15px 13px 20px; display: flex; align-items: center; justify-content: space-between; }

@@ -132,48 +132,46 @@ for (const width of [320, 393, 1280]) {
 
 test.describe('two rules of the same game in the mobile window', () => {
   test.use({ viewport: { width: 393, height: 851 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  // A taller card from another game sets the window height, leaving room under the short card for its game's next rule.
+  const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
+  const tall = rules[2];
 
-  test('treats a tap over a covered card button as opening more rules', async ({ page }) => {
-    const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
-    await showHome(page, [first], [rules[1]]);
+  test('keeps a fitting card whole and usable, with 看更多 below it', async ({ page }) => {
+    await showHome(page, [first, tall], [rules[1]]);
     const rail = page.locator('.home-featured-rail');
     const card = rail.locator('#rule-short-rule');
-    const share = card.getByRole('button', { name: '分享此規則' });
-    const cardHeight = (await card.boundingBox())!.height;
-    await rail.evaluate((element, height) => { element.style.height = `${height + 12}px`; }, cardHeight);
-
-    const more = rail.getByRole('link', { name: '看更多' });
+    const stack = rail.locator('.home-rule-stack').first();
+    const more = stack.getByRole('link', { name: '看更多' });
     await expect(more).toBeVisible();
-    const rowBox = (await more.boundingBox())!;
-    const labelBox = (await more.locator('.home-rule-stack-more-label').boundingBox())!;
-    const shareBox = (await share.boundingBox())!;
-    const x = shareBox.x + shareBox.width / 2;
-    const y = shareBox.y + shareBox.height - 4;
-    expect(x).toBeGreaterThan(labelBox.x + labelBox.width);
-    expect(y).toBeGreaterThan(rowBox.y);
-    expect(y).toBeLessThan(rowBox.y + rowBox.height);
+    const cardBox = (await card.boundingBox())!;
+    const moreBox = (await more.boundingBox())!;
+    expect(moreBox.y).toBeGreaterThanOrEqual(cardBox.y + cardBox.height);
+    expect(await card.evaluate(element => (element.closest('.home-rule-stack-content') as HTMLElement).inert)).toBe(false);
+    for (const button of await card.getByRole('button').all()) {
+      const box = (await button.boundingBox())!;
+      expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label') ?? document.elementFromPoint(x, y)?.closest('button')?.textContent,
+        [box.x + box.width / 2, box.y + box.height / 2])).toBe(await button.getAttribute('aria-label') ?? await button.textContent());
+    }
     const previousLength = await page.evaluate(() => history.length);
-    await page.touchscreen.tap(x, y);
+    await more.tap();
     await expect(page).toHaveURL(/\/games\/preview-game-2#rule-preview-rule-2$/);
     expect(await page.evaluate(() => history.length)).toBe(previousLength + 1);
   });
 
   for (const which of ['first', 'second'] as const) {
     test(`opens the ${which} rule from the first tap on its own visible area`, async ({ page }) => {
-      const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
       const second = rules[1];
-      await showHome(page, [first], [second]);
+      await showHome(page, [first, tall], [second]);
       const rail = page.locator('.home-featured-rail');
+      const stack = rail.locator('.home-rule-stack').first();
       const firstCard = rail.locator('#rule-short-rule');
-      const secondEntry = rail.locator('.home-rule-stack-entry').nth(1);
-      const clippedLink = secondEntry.locator('.home-rule-stack-link');
-      await expect(clippedLink).toBeVisible();
+      const secondEntry = stack.locator('.home-rule-stack-entry').nth(1);
+      await expect(secondEntry.locator('.home-rule-stack-link')).toBeVisible();
       await expect(secondEntry.locator('.home-rule-stack-content')).toHaveJSProperty('inert', true);
-      await expect(rail.getByRole('link', { name: '看更多' })).toHaveAttribute('href', '/games/preview-game-2#rule-preview-rule-2');
-      const stack = (await rail.locator('.home-rule-stack').boundingBox())!;
+      const stackBox = (await stack.boundingBox())!;
       const secondBox = (await secondEntry.boundingBox())!;
-      expect(secondBox.y).toBeLessThan(stack.y + stack.height - 20);
-      expect(secondBox.y + secondBox.height).toBeGreaterThan(stack.y + stack.height);
+      expect(secondBox.y).toBeLessThan(stackBox.y + stackBox.height - 56);
+      expect(secondBox.y + secondBox.height).toBeGreaterThan(stackBox.y + stackBox.height - 56);
       const previousLength = await page.evaluate(() => history.length);
       if (which === 'first') {
         await firstCard.locator('.statement-text').tap();

@@ -21,9 +21,15 @@ const showHome = async (page: Page) => {
 test('swipes through fixed height featured games, then takes the first tap on a card once', async ({ page }) => {
   await showHome(page);
   const rail = page.locator('.home-featured-rail');
-  const geometry = await rail.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, height: element.getBoundingClientRect().height }));
+  const geometry = await rail.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, height: element.getBoundingClientRect().height,
+    cards: Array.from(element.querySelectorAll('.rule-card'), card => card.getBoundingClientRect().height) }));
   expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
-  expect(geometry.height).toBe(320);
+  // The window holds a six-line card plus the 看更多 row, so these shorter first cards show whole.
+  for (const card of geometry.cards) expect(card + 56).toBeLessThanOrEqual(geometry.height + 0.5);
+  // Its height follows the six-line design, not the screen.
+  await page.setViewportSize({ width: 393, height: 600 });
+  await expect.poll(() => rail.evaluate(element => element.getBoundingClientRect().height)).toBeCloseTo(geometry.height, 0);
+  await page.setViewportSize({ width: 393, height: 851 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
 
   const client = await page.context().newCDPSession(page);
