@@ -5,6 +5,7 @@ import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
 import { RuleCategoryInput } from '../components/RuleCategoryInput';
+import { ExistingRulesDrawer } from '../components/ExistingRulesDrawer';
 import { useSession } from '../context/SessionContext';
 import { FirstLoginNickname } from '../components/FirstLoginNickname';
 import { GoogleSignIn } from '../components/GoogleSignIn';
@@ -14,12 +15,15 @@ import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
+import { hydrateRuleTags } from '../lib/tagHydration';
 import { hasRuleDraftContent, ruleDraftSummary } from '../lib/ruleDraftSummary';
 import { useRuleDraftAutosave } from './useRuleDraftAutosave';
 import zhTWCopy from '../content/zh-TW.json';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 import { uiHistory } from '../workspace/uiHistory';
-import type { ContributionQuota, FlowStage, GameDetail, GameSummary, GameVariantSummary, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
+import type { ContributionQuota, FlowStage, GameDetail, GameSummary, GameVariantSummary, RuleCard, RuleCategory, SubmissionInput, TagSelection } from '../shared/types';
+
+const NO_EXISTING_RULES: RuleCard[] = [];
 
 type RuleInput = {
   id: string;
@@ -46,6 +50,9 @@ export const AddPage = () => {
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
   const [gameEditionOptions, setGameEditionOptions] = useState<{ gameId: string; options: string[]; variants: GameVariantSummary[] }>();
+  // The selected game's published rules, already loaded with it, for the side panel that compares drafts against them.
+  const [existingRules, setExistingRules] = useState<{ gameId: string; rules: RuleCard[] }>();
+  const [existingRulesOpen, setExistingRulesOpen] = useState(false);
   const [englishName, setEnglishName] = useState('');
   const [rules, setRules] = useState<RuleInput[]>([blankRule()]);
   const [activeRuleId, setActiveRuleId] = useState(() => rules[0].id);
@@ -83,6 +90,10 @@ export const AddPage = () => {
   const draftReadyRef = useRef(draftReady);
   draftReadyRef.current = draftReady;
   const selectedGameId = game?.id;
+  const shownExistingRules = existingRules && existingRules.gameId === selectedGameId ? existingRules.rules : NO_EXISTING_RULES;
+  const draftsForComparison = useMemo(() => rules.map((rule) => ({
+    statement: rule.statement, tags: (rule.tagSelections ?? []).map((tag) => tag.name),
+  })), [rules]);
   const isGeneralContributor = Boolean(user && !canEdit);
   const remainingRules = quota?.remainingRules ?? 0;
   const remainingGames = quota?.remainingGames ?? 0;
@@ -198,7 +209,11 @@ export const AddPage = () => {
     let active = true;
     const gameId = selectedGameId;
     const applyOptions = ({ game: detail }: { game: GameDetail }) => {
-      if (active) setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules), variants: detail.variants ?? [] });
+      if (!active) return;
+      setGameEditionOptions({ gameId, options: collectEditionOptions(detail.rules), variants: detail.variants ?? [] });
+      void hydrateRuleTags(detail.rules.filter((rule) => rule.status === 'published')).then((rules) => {
+        if (active) setExistingRules({ gameId, rules });
+      }).catch(() => undefined);
     };
     void api.game(gameId, canEdit, applyOptions).then(applyOptions).catch(() => undefined);
     return () => { active = false; };
@@ -383,7 +398,7 @@ export const AddPage = () => {
       <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>
     </div>
     <div className="rule-input-list">
-      <div className="list-heading"><h2>這次玩錯的規則</h2><span>{validRules.length} 條</span></div>
+      <div className="list-heading"><h2>這次玩錯的規則</h2>{shownExistingRules.length > 0 && <button type="button" className="existing-rules-open" onClick={() => setExistingRulesOpen(true)}>對照既有規則 <b>{shownExistingRules.length}</b></button>}<span>{validRules.length} 條</span></div>
       {ruleEntryLocked ? <button type="button" className="rule-entry-gate" onClick={() => showToast(ruleEntryMessage, 'info')}>
         {remainingRules === 0 ? '目前沒有可投稿的規則額度' : '請先選擇一款既有遊戲'}
         <small>{remainingRules === 0 ? '請查看右上方的投稿說明。' : '目前無法建立新遊戲；詳情請查看右上方的投稿說明。'}</small>
@@ -411,6 +426,8 @@ export const AddPage = () => {
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
     <p className="submission-privacy-note">投稿會公開；帳號資料處理請見 <Link to="/privacy">隱私與資料說明</Link>。</p>
+    <ExistingRulesDrawer open={existingRulesOpen && shownExistingRules.length > 0} gameName={game?.displayName ?? ''} rules={shownExistingRules}
+      drafts={draftsForComparison} onClose={() => setExistingRulesOpen(false)} />
     <div className="sticky-submit"><button type="button" className="button secondary mobile-cancel-btn" onClick={() => void handleCancel()}>取消</button><p className={`submit-info-text draft-status-${draftStorage.status}`} role="status" aria-label="草稿儲存狀態">{draftStorage.status === 'error' ? <>草稿儲存失敗，最新內容尚未保留。<button type="button" className="text-action" onClick={() => void draftStorage.saveNow()}>重試儲存</button></> : draftStorage.status === 'saving' ? '草稿儲存中…' : `草稿已儲存於 ${new Date(draftStorage.savedAt!).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`}</p><button className="button primary save-button" type="button" disabled={(!game && !gameQuery.trim()) || validRules.length === 0 || saving || ruleEntryLocked} onClick={() => void requestSubmit()}>{saving ? '送出中…' : `送出 ${validRules.length} 條規則`}</button></div>
   </section>;
 };

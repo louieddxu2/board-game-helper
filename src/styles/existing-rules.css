@@ -1,0 +1,28 @@
+/* Record page: the button beside the draft count keeps its tap height without making the heading taller. */
+.list-heading { gap: 8px; }
+.list-heading h2 { flex: 1; min-width: 0; }
+.existing-rules-open { display: inline-flex; align-items: center; gap: 5px; margin-block: -10px; padding: 0 11px; border: 1.5px solid var(--green); border-radius: 99px; background: var(--white); color: var(--green); font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.existing-rules-open b { min-width: 18px; padding: 0 6px; border-radius: 99px; background: var(--green); color: var(--white); font-size: 11px; line-height: 18px; text-align: center; }
+
+/* The side panel over the record form: 85% of a phone's width, 380px on wider screens.
+   Vertical scrolling and pinch zoom stay native; a sideways swipe is left to the close gesture. */
+.existing-rules-layer { position: fixed; inset: 0; z-index: 110; }
+.existing-rules-backdrop { position: absolute; inset: 0; background: rgba(24, 51, 45, .38); }
+.existing-rules-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 85vw); display: flex; flex-direction: column; background: var(--paper); box-shadow: -8px 0 24px rgba(0, 0, 0, .18); animation: existing-rules-in .2s ease-out; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
+@keyframes existing-rules-in { from { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .existing-rules-drawer { animation: none; } }
+.existing-rules-header { display: grid; gap: 6px; padding: 10px 12px 6px; border-bottom: 1px solid var(--line); }
+.existing-rules-title { display: flex; align-items: center; gap: 4px; }
+.existing-rules-title h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; line-height: 1.35; }
+.existing-rules-title h2:focus { outline: none; }
+.existing-rules-close { flex: none; width: 44px; margin-right: -10px; border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+.existing-rules-hint { margin: 0; color: var(--muted); font-size: 12px; }
+.existing-rules-search { padding: 8px 14px; border-radius: 99px; font-size: 14px; }
+.existing-rules-list { flex: 1; display: grid; align-content: start; gap: 8px; margin: 0; padding: 10px; overflow-y: auto; list-style: none; }
+.existing-rule { display: grid; gap: 4px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.existing-rule:has(.existing-rule-similar) { border-color: #e3a15b; box-shadow: 0 0 0 2px rgba(233, 180, 76, .22); }
+.existing-rule-statement { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 14px; line-height: 1.5; white-space: pre-line; }
+.existing-rule[aria-expanded="true"] .existing-rule-statement { display: block; -webkit-line-clamp: unset; }
+.existing-rule-tags { color: var(--muted); font-size: 12px; }
+.existing-rule-similar { justify-self: start; padding: 1px 6px; border-radius: 6px; background: #fdf0dc; color: #9a5a12; font-size: 11px; font-weight: 800; }
+.existing-rules-empty { padding: 12px; color: var(--muted); font-size: 13px; }

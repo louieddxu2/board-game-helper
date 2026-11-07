@@ -87,7 +87,7 @@
 .filter-row > button { flex: none; white-space: nowrap; }
 
 /* Icon-only clear button: a 28px circle that keeps the full-height tap area without widening the row. */
-.filter-clear {
+.filter-row .filter-clear {
   position: relative;
   width: 28px;
   padding: 0;
@@ -96,7 +96,7 @@
   color: var(--white);
   cursor: pointer;
 }
-.filter-clear::before {
+.filter-row .filter-clear::before {
   content: '';
   position: absolute;
   left: 0;
@@ -107,8 +107,8 @@
   border-radius: 50%;
   background: var(--orange);
 }
-.filter-clear > span { position: relative; font-size: 13px; font-weight: 800; }
-.filter-clear:focus-visible { outline-offset: -2px; }
+.filter-row .filter-clear > span { position: relative; font-size: 13px; font-weight: 800; }
+.filter-row .filter-clear:focus-visible { outline-offset: -2px; }
 
 .workspace-multi-chip-list {
   display: block;

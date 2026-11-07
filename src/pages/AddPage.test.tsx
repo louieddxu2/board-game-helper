@@ -104,7 +104,31 @@ describe('AddPage contribution constraints', () => {
     expect(screen.queryByRole('button', { name: '最近的遊戲' })).not.toBeInTheDocument();
   });
 
-  test('does not offer games without published rules for a wrong-rule report', async () => {
+  test('compares drafts against the selected game\'s published rules in a side panel', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    mocks.game.mockResolvedValue({ game: { id: 'game-1', slug: 'known-game', displayName: '既有遊戲', aliases: [], ruleCount: 3, updatedAt: 1, rules: [
+      { id: 'old-1', gameId: 'game-1', statement: '大教堂只能蓋在自己的城市旁邊。', status: 'published', importanceCount: 1, tags: [], sourceLinks: [] },
+      { id: 'old-2', gameId: 'game-1', statement: '船隻移動時不能穿越其他玩家的船。', status: 'published', importanceCount: 3, tags: [], sourceLinks: [] },
+      { id: 'old-3', gameId: 'game-1', statement: '已隱藏的規則', status: 'hidden', tags: [], sourceLinks: [] },
+    ] } });
+    await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
+    expect(screen.queryByRole('button', { name: /對照既有規則/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '選擇既有遊戲' }));
+    fireEvent.change(await screen.findByLabelText('正確規則 *'), { target: { value: '大教堂只能蓋在自己城市旁' } });
+    fireEvent.click(await screen.findByRole('button', { name: '對照既有規則 2' }));
+
+    const drawer = screen.getByRole('dialog', { name: '既有遊戲・既有 2 條規則' });
+    const statements = within(drawer).getAllByRole('button', { expanded: false }).map((item) => item.textContent);
+    // The rule resembling draft 1 comes first even though the other has more votes; hidden rules stay out.
+    expect(statements[0]).toBe('可能與第 1 條相似大教堂只能蓋在自己的城市旁邊。');
+    expect(statements[1]).toBe('船隻移動時不能穿越其他玩家的船。');
+    fireEvent.click(within(drawer).getByRole('button', { name: '關閉' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('正確規則 *')).toHaveValue('大教堂只能蓋在自己城市旁');
+  });
+
+    test('does not offer games without published rules for a wrong-rule report', async () => {
     mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
     await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
 
