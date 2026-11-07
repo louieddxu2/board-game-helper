@@ -555,7 +555,9 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-name-ellipsis { display: none; }
 .catalog-expand-cell { width: 48px; padding-right: 8px !important; padding-left: 8px !important; text-align: center; }
 .catalog-expand-icon { display: inline-grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); font-size: 18px; line-height: 1; }
-.catalog-detail-cell { padding: 0 !important; background: var(--paper); }
+/* An expanded game and its rules read as one block: the same tint and a green edge down both. */
+.catalog-game-row.expanded td:first-child, .catalog-detail-cell { box-shadow: inset 3px 0 0 var(--green); }
+.catalog-detail-cell { padding: 0 !important; background: var(--cream); }
 .catalog-detail-wrap { padding: 16px; }
 /* An expanded game lists its rules as compact rows, like the homepage's recent rules. */
 .catalog-rule-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

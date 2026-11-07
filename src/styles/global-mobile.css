@@ -175,6 +175,9 @@
   .catalog-game-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) clamp(78px, 22vw, 96px); gap: 4px 8px; margin-bottom: 8px; padding: 13px 12px 13px 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
   .catalog-game-row td { display: block; padding: 0 !important; border: 0 !important; background: transparent !important; }
   .catalog-game-row:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+  /* Expanded, the game card opens downward into its rules: one green outline around both. */
+  .catalog-game-row.expanded { margin-bottom: 0; border-color: var(--green); border-bottom-color: var(--line); border-radius: 12px 12px 0 0; background: var(--cream); }
+  .catalog-game-row.expanded td:first-child { box-shadow: none; }
   .catalog-game-name, .catalog-game-english { grid-column: 1; min-width: 0; overflow: hidden; }
   .catalog-game-name { grid-row: 1; font-size: 15px; }
   .catalog-game-english { grid-row: 2; color: var(--muted); }
@@ -189,9 +192,9 @@
   .catalog-name-ellipsis { position: absolute; display: block; right: 0; top: 0; padding-left: 10px; background: linear-gradient(90deg, transparent, var(--white) 45%); pointer-events: none; }
   .catalog-name-viewport:focus-within .catalog-name-ellipsis { opacity: 0; }
   .catalog-expand-cell { position: absolute; left: 12px; top: 14px; width: 26px; }
-  .catalog-detail-row { display: block; margin: -2px 0 12px; }
-  .catalog-detail-row > td { display: block; border: 0 !important; }
-  .catalog-detail-wrap { padding: 12px 0; }
+  .catalog-detail-row { display: block; margin: 0 0 12px; }
+  .catalog-detail-row > td { display: block; border: 1px solid var(--green) !important; border-top: 0 !important; border-radius: 0 0 12px 12px; box-shadow: none; }
+  .catalog-detail-wrap { padding: 10px; }
 }
 
 @media (max-width: 360px) {
