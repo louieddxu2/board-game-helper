@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { localDb } from '../lib/localDb';
 import { SearchModal } from './SearchModal';
+import { HomeStats } from './HomeStats';
 import { ScrollToTop } from './ScrollToTop';
 
 const mockLabels: Record<string, string> = {
@@ -100,6 +101,7 @@ export const Layout = () => {
       <NavLink to={user ? '/account' : '/login'}><span aria-hidden="true"><NavIcon name="account" /></span><small>{user ? '帳號' : '登入'}</small></NavLink>
     </nav>}
     <footer>
+      {location.pathname === '/' && <HomeStats />}
       <span>把踩過的坑，化為下次的提醒。</span>
       <NavLink to="/privacy">隱私與資料</NavLink>
     </footer>

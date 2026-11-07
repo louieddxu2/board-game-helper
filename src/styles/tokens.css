@@ -106,3 +106,6 @@ main { flex: 1; }
 .mobile-nav { display: none; }
 footer { padding: 34px 24px; text-align: center; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; }
 footer a { color: inherit; }
+/* The home totals take their own line above the motto; empty until the numbers arrive. */
+.home-stats { flex-basis: 100%; margin: 0; min-height: 1.5em; }
+.home-stats b { color: var(--green); }
