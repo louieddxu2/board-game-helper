@@ -93,9 +93,10 @@ test.describe('mobile game tabs', () => {
       type, touchPoints: x === undefined ? [] : [{ x, y: box.y + 60, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
     });
     for (const expected of [1, 2]) {
+      // Moves in small steps like a finger: with a page that also scrolls vertically, two long jumps
+      // give the browser too little to tell a sideways swipe from a vertical one.
       await touch('touchStart', box.x + box.width - 25);
-      await touch('touchMove', box.x + box.width / 2);
-      await touch('touchMove', box.x + 25);
+      for (let step = 1; step <= 10; step++) await touch('touchMove', box.x + box.width - 25 - (box.width - 50) * step / 10);
       await touch('touchEnd');
       await expect(page.getByRole('tab', { exact: true, name: names[expected] })).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('tab', { exact: true, name: names[expected] })).toBeInViewport({ ratio: 1 });
