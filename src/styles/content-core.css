@@ -255,10 +255,10 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .narrow-page > header { margin-bottom: 38px; }
 .narrow-page h1 { font-size: clamp(38px, 6vw, 62px); }
 .add-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.add-page-heading h1 { margin: 0; }
+.add-page-heading h1 { margin: 0; white-space: nowrap; }
 .add-page { position: relative; }
 .add-page-help-link { flex: none; white-space: nowrap; }
-.add-page-quota { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.add-page-quota { display: flex; flex-wrap: wrap; gap: 7px; margin: -24px 0 30px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .add-page-quota span { padding: 5px 9px; border-radius: 999px; background: var(--cream); }
 .rule-draft-import { flex: none; cursor: pointer; }
 .add-page-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }

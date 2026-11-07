@@ -128,11 +128,20 @@ describe('AddPage contribution constraints', () => {
     expect(screen.getByLabelText('正確規則 *')).toHaveValue('大教堂只能蓋在自己城市旁');
   });
 
-    test('does not offer games without published rules for a wrong-rule report', async () => {
+    test('offers existing games without published rules, such as attribute-voting games, for a wrong-rule report', async () => {
     mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
     await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
 
-    expect(screen.getByRole('button', { name: '選擇既有遊戲' })).toHaveAttribute('data-includes-zero-rule-games', 'false');
+    expect(screen.getByRole('button', { name: '選擇既有遊戲' })).toHaveAttribute('data-includes-zero-rule-games', 'true');
+  });
+
+  test('asks for the English name of no new game and shows it read-only once a game is chosen', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'editor-1', roles: ['editor'] }, canEdit: true, isAdmin: false, loading: false });
+    await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('遊戲名稱搜尋'), { target: { value: '新遊戲' } });
+    expect(screen.queryByLabelText('英文名稱')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '選擇既有遊戲' }));
+    expect(await screen.findByLabelText('英文名稱')).toHaveAttribute('readonly');
   });
 
   test('blocks rule entry until a user without game quota selects an existing game', async () => {
@@ -142,7 +151,8 @@ describe('AddPage contribution constraints', () => {
 
     const quota = await screen.findByLabelText('投稿額度');
     expect(screen.getByRole('link', { name: '投稿說明' })).toHaveAttribute('href', '/contributions');
-    expect(screen.getByRole('heading', { name: '記錄玩錯的規則' }).parentElement).toContainElement(quota);
+    // The quota sits on its own line under the title row so the title stays on one line for every role.
+    expect(screen.getByRole('heading', { name: '記錄玩錯的規則' }).parentElement?.nextElementSibling).toBe(quota);
     expect(screen.getByText('未審核規則 3 / 6')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /請先選擇一款既有遊戲/ }));
     expect(mocks.showToast).toHaveBeenCalledWith('你目前無法建立新遊戲，請先選擇一款既有遊戲。詳情請查看右上方的投稿說明。', 'info');

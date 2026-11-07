@@ -48,13 +48,13 @@ describe('versioned weekly game catalog', () => {
     expect(payload).toMatchObject({ generation: 7, throughVersion: 12, games: [{ id: 'g1' }] });
   });
 
-  test('does not send zero-rule games in the public snapshot', () => {
+  test('sends zero-rule games so the record page can find them', () => {
     const payload = gameCatalogPayload({
       state: { results: [{ active_generation: 7, through_version: 12, chunk_count: 1, generated_at: 123 }] },
       chunks: { results: [{ chunk_number: 0, games_json: JSON.stringify([game(1), { ...game(2), ruleCount: 0, publishedRuleCount: 0 }]) }] },
     });
 
-    expect(payload.games.map((item) => item.id)).toEqual(['g1']);
+    expect(payload.games.map((item) => item.id)).toEqual(['g1', 'g2']);
   });
 
   test('reads only versions newer than the client cursor', async () => {

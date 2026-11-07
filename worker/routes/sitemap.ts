@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { RouteEnv } from '../env';
 import type { AppVariables } from '../auth';
 import { getDatabase } from '../data/database';
-import { gameCatalogPayload, queryGameCatalogSnapshot } from '../data/gameCatalog';
+import { gameCatalogPayload, hasPublishedRules, queryGameCatalogSnapshot } from '../data/gameCatalog';
 
 const sitemapRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -18,7 +18,8 @@ sitemapRoutes.get('/sitemap.xml', async (c) => {
     return c.text('rate_limited', 429);
   }
   const origin = new URL(c.req.url).origin;
-  const { games } = gameCatalogPayload(await queryGameCatalogSnapshot(getDatabase(c)));
+  // A game without public rules has nothing to index.
+  const games = gameCatalogPayload(await queryGameCatalogSnapshot(getDatabase(c))).games.filter(hasPublishedRules);
   const urls = [`<url><loc>${origin}/</loc></url>`, ...games.map((game) => {
     const lastmod = isoDate(Math.max(game.latestRuleUpdatedAt ?? 0, game.updatedAt ?? 0));
     return `<url><loc>${escapeXml(`${origin}/games/${encodeURIComponent(game.slug)}`)}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</url>`;

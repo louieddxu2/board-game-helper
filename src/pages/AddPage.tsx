@@ -374,10 +374,11 @@ export const AddPage = () => {
 
   return <section className="add-page narrow-page">
     <header className="add-page-heading"><h1>記錄玩錯的規則</h1><div className="add-page-actions">
-      {isGeneralContributor && quota && <div className="add-page-quota" aria-label="投稿額度"><span>未審核規則 {quota.pendingRules} / {quota.ruleLimit}</span><span>未審核遊戲 {quota.pendingGames} / {quota.gameLimit}</span></div>}
       {isGeneralContributor && <Link className="text-action add-page-help-link" to="/contributions">投稿說明</Link>}
       {isAdmin && <button type="button" className="button secondary rule-draft-import" onClick={() => { setError(''); setPasteImportOpen(true); }}>匯入 JSON</button>}
     </div></header>
+    {/* The title row is the same for every role; a contributor's quota sits on its own line beneath it. */}
+    {isGeneralContributor && quota && <div className="add-page-quota" aria-label="投稿額度"><span>未審核規則 {quota.pendingRules} / {quota.ruleLimit}</span><span>未審核遊戲 {quota.pendingGames} / {quota.gameLimit}</span></div>}
     {isAdmin && pasteImportOpen && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rule-draft-paste-title" onClick={(event) => { if (event.target === event.currentTarget) closePasteImport(); }}>
       <div className="modal rule-draft-import-modal">
         <div className="modal-heading"><h2 id="rule-draft-paste-title">貼上 JSON</h2><button type="button" onClick={closePasteImport} aria-label="關閉">×</button></div>
@@ -391,17 +392,18 @@ export const AddPage = () => {
     <div className={game ? 'record-game-fields two-columns' : 'record-game-fields'}>
       <div className="record-game-name-field">
         <div className="field-label-row"><span>遊戲名稱 *</span>{game && <button type="button" className="text-action" onClick={() => { setGame(undefined); setEnglishName(''); }}>重新選擇</button>}</div>
-        {game ? <input value={game.displayName} readOnly aria-label="遊戲名稱" /> : <GameSearch value={gameQuery} onChange={setGameQuery} onSelect={selectGame} placeholder="搜尋或輸入遊戲名稱" />}
+        {game ? <input value={game.displayName} readOnly aria-label="遊戲名稱" /> : <GameSearch value={gameQuery} onChange={setGameQuery} onSelect={selectGame} includeGamesWithoutPublishedRules placeholder="搜尋或輸入遊戲名稱" />}
         {/* Offered only while the name is empty; once anything is typed or chosen the row is no longer useful. */}
         {!game && !gameQuery.trim() && recentGames.length > 0 && <div className="recent-game-chips"><span>最近：</span><div className="recent-game-chips-list">{recentGames.slice(0, 6).map((recent) => <button type="button" key={recent.id} onClick={() => selectGame({ ...recent, ruleCount: 0, updatedAt: Date.now() })}>{recent.displayName}</button>)}</div></div>}
       </div>
-      <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>
+      {/* A new game is named once; the English name shows for a chosen game, or when an import or older draft already carries one so nothing is sent unseen. */}
+      {(game || englishName) && <label>英文名稱<input value={englishName} readOnly={Boolean(game)} onChange={(event) => setEnglishName(event.target.value)} /></label>}
     </div>
     <div className="rule-input-list">
       <div className="list-heading"><h2>這次玩錯的規則</h2>{shownExistingRules.length > 0 && <button type="button" className="existing-rules-open" onClick={() => setExistingRulesOpen(true)}>對照既有規則 <b>{shownExistingRules.length}</b></button>}<span>{validRules.length} 條</span></div>
       {ruleEntryLocked ? <button type="button" className="rule-entry-gate" onClick={() => showToast(ruleEntryMessage, 'info')}>
         {remainingRules === 0 ? '目前沒有可投稿的規則額度' : '請先選擇一款既有遊戲'}
-        <small>{remainingRules === 0 ? '請查看右上方的投稿說明。' : '目前無法建立新遊戲；詳情請查看右上方的投稿說明。'}</small>
+        <small>{remainingRules === 0 ? '請查看右上方的投稿說明。' : '目前無法建立新遊戲，詳見右上方的投稿說明。'}</small>
       </button> : rules.map((rule, index) => {
         const active = activeRuleId === rule.id;
         return <div className={`rule-input ${active ? 'active' : 'collapsed'}`} key={rule.id}>

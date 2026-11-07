@@ -33,6 +33,16 @@ describe('GameSearch mobile keyboard behavior', () => {
     });
   });
 
+  test('marks existing games without rules only where they are offered', async () => {
+    const empty = { ...game, id: 'game-2', displayName: '範例空遊戲', ruleCount: 0, publishedRuleCount: 0 };
+    mocks.searchGames.mockResolvedValue({ games: [game, empty], rules: [] });
+    const Offering = () => { const [value, setValue] = useState(''); return <GameSearch value={value} onChange={setValue} onSelect={vi.fn()} includeGamesWithoutPublishedRules />; };
+    render(<MemoryRouter><Offering /></MemoryRouter>);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '範例' } });
+    expect(await screen.findByRole('option', { name: /範例空遊戲/ })).toHaveTextContent('尚無規則');
+    expect(screen.getByRole('option', { name: '範例遊戲' })).not.toHaveTextContent('尚無規則');
+  });
+
   test('reopens results when the user taps the focused input after dismissing the keyboard', async () => {
     render(<MemoryRouter><Harness /></MemoryRouter>);
     const input = screen.getByRole('combobox');

@@ -106,6 +106,7 @@
   .rule-input { grid-template-columns: 30px minmax(0,1fr) 32px; }
   .add-page-heading { align-items: center; margin-bottom: 14px !important; }
   .add-page-heading h1 { font-size: 26px; }
+  .add-page-quota { margin: -4px 0 14px; }
   .add-page.narrow-page { padding-top: 18px; }
   .record-game-fields { margin-bottom: 18px; }
   .rule-input-fields textarea { padding: 9px 11px; }
