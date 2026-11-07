@@ -146,7 +146,7 @@ for (const touch of [false, true]) {
       const row = page.getByRole('button', { name: new RegExp(gameA.name, 'u') });
       await expect(row).toBeVisible();
       await activate(row);
-      const open = page.getByRole('link', { name: '開啟一般遊戲頁 ↗' });
+      const open = page.getByRole('link', { name: existingStatement });
       await expect(open).toBeVisible();
       await activate(open);
       await expect(page.getByRole('heading', { name: gameA.name, exact: true })).toBeVisible();
@@ -154,7 +154,6 @@ for (const touch of [false, true]) {
       await expect(search).toHaveValue(gameA.name);
       await expect(row).toHaveAttribute('aria-expanded', 'true');
       await expect(open).toBeVisible();
-      await expect(page.locator(touch ? '.catalog-mobile-rule-statement' : '.catalog-rules-table strong').filter({ hasText: existingStatement })).toBeVisible();
     });
   });
 }

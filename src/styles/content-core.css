@@ -535,18 +535,18 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-game-filter { width: min(420px, 100%); }
 .catalog-game-filter input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); padding: 10px 12px; color: var(--ink); font: inherit; }
 .catalog-game-filter input:focus { outline: 3px solid rgba(233,180,76,.28); border-color: var(--yellow); }
-.catalog-sheet-scroll, .catalog-detail-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--white); }
-.catalog-table, .catalog-rules-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.catalog-sheet-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--white); }
+.catalog-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
 .catalog-table { table-layout: fixed; }
 .catalog-col-expand { width: 48px; }
 .catalog-col-game { width: 41%; }
 .catalog-col-english { width: 32%; }
 .catalog-col-count { width: 92px; }
 .catalog-col-date { width: 140px; }
-.catalog-table th, .catalog-table td, .catalog-rules-table th, .catalog-rules-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
-.catalog-table th, .catalog-rules-table th { background: var(--cream); color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
-.catalog-table tr:last-child td, .catalog-rules-table tr:last-child td { border-bottom: 0; }
-.catalog-table th:last-child, .catalog-table td:last-child, .catalog-rules-table th:last-child, .catalog-rules-table td:last-child { border-right: 0; }
+.catalog-table th, .catalog-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+.catalog-table th { background: var(--cream); color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.catalog-table tr:last-child td { border-bottom: 0; }
+.catalog-table th:last-child, .catalog-table td:last-child { border-right: 0; }
 .catalog-game-row { cursor: pointer; }
 .catalog-game-row:focus-visible td { outline: 2px solid var(--orange); outline-offset: -2px; }
 .catalog-game-row:hover td { background: #fffaf0; }
@@ -557,31 +557,13 @@ textarea:focus, input:focus, select:focus { border-color: var(--yellow); box-sha
 .catalog-expand-icon { display: inline-grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: var(--white); color: var(--orange); font-size: 18px; line-height: 1; }
 .catalog-detail-cell { padding: 0 !important; background: var(--paper); }
 .catalog-detail-wrap { padding: 16px; }
-.catalog-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.catalog-detail-heading a { color: var(--orange); font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
-.catalog-tag-filters { display: flex; flex-wrap: wrap; gap: 6px; min-height: 29px; }
-.catalog-tag-filters button { border: 1px solid var(--line); border-radius: 999px; background: var(--white); padding: 5px 9px; color: var(--muted); cursor: pointer; font-size: 12px; }
-.catalog-tag-filters button:hover, .catalog-tag-filters button.active { border-color: var(--green); background: var(--green); color: var(--white); }
-.catalog-rules-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; }
-.catalog-mobile-rules { display: none; }
-.catalog-col-status { width: 7%; }
-.catalog-col-rule { width: 28%; }
-.catalog-col-mistake { width: 19%; }
-.catalog-col-details { width: 14%; }
-.catalog-col-source { width: 10%; }
-.catalog-col-category { width: 9%; }
-.catalog-col-tags { width: 9%; }
-.catalog-col-updated { width: 8%; }
-.catalog-rules-table th { position: static; white-space: nowrap; padding: 10px 8px; font-size: 13px; box-sizing: border-box; }
-.catalog-rules-table td { line-height: 1.4; vertical-align: top; padding: 10px 8px; font-size: 13px; box-sizing: border-box; overflow: hidden; }
-.catalog-text-cell { white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
-.catalog-rules-table td:first-child { white-space: nowrap; }
-.catalog-rules-table a, .catalog-rules-table .external-link-button { color: var(--orange); font-weight: 700; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-update-cell > span { display: block; white-space: nowrap; }
-.catalog-update-cell .text-action { display: block; margin-top: 5px; padding: 0; }
-.catalog-rule-category-list, .catalog-rule-tag-list { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; }
-.catalog-rule-category-list span, .catalog-rule-tag-list span { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding: 2px 5px; border-radius: 4px; background: rgba(22, 53, 47, 0.07); color: var(--green); font-size: 11px; font-weight: 600; white-space: nowrap; }
-.catalog-rule-tag-list span { background: rgba(233, 180, 76, 0.15); color: #7a5814; }
+/* An expanded game lists its rules as compact rows, like the homepage's recent rules. */
+.catalog-rule-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.catalog-rule-list a { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--color-bg-surface); color: var(--ink); text-decoration: none; }
+.catalog-rule-list a:hover { border-color: var(--green); }
+.catalog-rule-text { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 14px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.catalog-rule-list .catalog-status { flex: none; margin-top: 2px; }
+.catalog-rules-empty { margin: 0; padding: 12px; color: var(--muted); }
 .catalog-status { display: inline-flex; border-radius: 5px; padding: 3px 7px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .catalog-status-published { background: #d9e9e1; color: var(--green); }
 .catalog-status-hidden { background: #f7d8d1; color: #842d20; }

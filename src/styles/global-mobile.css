@@ -168,9 +168,9 @@
   .catalog-sync-button { flex: 0 0 20vw; width: 20vw; min-width: 20vw; height: 44px; min-height: 44px; margin: 0; padding: 0 2px; white-space: nowrap; font-size: 12px; }
   .catalog-toolbar { align-items: stretch; flex-direction: column; gap: 4px; }
   .catalog-game-filter { width: 100%; }
-  .catalog-sheet-scroll, .catalog-detail-scroll { overflow: visible; border: 0; background: transparent; }
-  .catalog-table, .catalog-rules-table { min-width: 0; table-layout: auto; }
-  .catalog-table colgroup, .catalog-rules-table colgroup, .catalog-table thead, .catalog-rules-table thead { display: none; }
+  .catalog-sheet-scroll { overflow: visible; border: 0; background: transparent; }
+  .catalog-table { min-width: 0; table-layout: auto; }
+  .catalog-table colgroup, .catalog-table thead { display: none; }
   .catalog-table, .catalog-table tbody { display: block; }
   .catalog-game-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) clamp(78px, 22vw, 96px); gap: 4px 8px; margin-bottom: 8px; padding: 13px 12px 13px 52px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
   .catalog-game-row td { display: block; padding: 0 !important; border: 0 !important; background: transparent !important; }
@@ -192,29 +192,6 @@
   .catalog-detail-row { display: block; margin: -2px 0 12px; }
   .catalog-detail-row > td { display: block; border: 0 !important; }
   .catalog-detail-wrap { padding: 12px 0; }
-  .catalog-detail-heading { align-items: stretch; flex-direction: column-reverse; gap: 10px; }
-  .catalog-detail-heading > a { align-self: flex-end; }
-  .catalog-tag-filters { flex-wrap: nowrap; margin: 0 -14px; padding: 0 14px 4px; overflow-x: auto; scrollbar-width: none; }
-  .catalog-tag-filters button { flex: 0 0 auto; }
-  .catalog-rules-table { display: none; }
-  .catalog-mobile-rules { display: grid; gap: 10px; }
-  .catalog-mobile-empty { margin: 0; padding: 14px; color: var(--muted); }
-  .catalog-mobile-rule-card { display: grid; grid-template-columns: minmax(0, 1fr) clamp(88px, 27vw, 108px); align-items: start; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--white); }
-  .catalog-mobile-rule-main, .catalog-mobile-rule-meta { min-width: 0; }
-  .catalog-mobile-rule-main { display: grid; align-content: start; gap: 12px; }
-  .catalog-mobile-rule-statement { font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .catalog-mobile-rule-section { padding-top: 8px; border-top: 1px solid var(--line); }
-  .catalog-mobile-rule-section > span, .catalog-mobile-rule-meta > div > span { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 800; }
-  .catalog-mobile-rule-section p, .catalog-mobile-rule-meta p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .catalog-mobile-rule-meta .catalog-rule-tag-list { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: 2px; }
-  .catalog-mobile-rule-meta { display: grid; align-content: start; gap: 10px; padding-left: 9px; border-left: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
-  .catalog-mobile-rule-meta > div, .catalog-mobile-rule-meta p { min-width: 0; max-width: 100%; }
-  .catalog-mobile-rule-meta .catalog-rule-category-list, .catalog-mobile-rule-meta .catalog-rule-tag-list { width: 100%; min-width: 0; }
-  .catalog-mobile-rule-meta .catalog-rule-category-list span, .catalog-mobile-rule-meta .catalog-rule-tag-list span { box-sizing: border-box; }
-  .catalog-mobile-rule-actions { display: flex; align-items: flex-start; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
-  .catalog-mobile-rule-actions .catalog-status { font-size: 10px; }
-  .catalog-mobile-rule-actions .text-action { padding: 0; }
-  .catalog-mobile-rule-meta time { display: block; line-height: 1.35; overflow-wrap: anywhere; }
 }
 
 @media (max-width: 360px) {
