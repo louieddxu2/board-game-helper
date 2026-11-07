@@ -12,6 +12,9 @@ const showHome = async (page: Page, mode: 'explore' | 'personal') => {
     if (path === '/api/session') return route.fulfill({ json: { user: { id: 'recent-user', roles: [] }, googleClientId: null } });
     if (path === '/api/home') return route.fulfill({ json: { generatedAt: Date.now(), featured: [], recentRuleIds: [] } });
     if (path === '/api/account/home') return route.fulfill({ json: { favorites: [], recentUpdates: [], generatedAt: Date.now() } });
+    // The home footer counts games from the search list once it nears the screen.
+    if (path === '/api/game-catalog') return route.fulfill({ json: { generation: 1, throughVersion: 0, generatedAt: Date.now(), games: [] } });
+    if (path === '/api/game-catalog/changes') return route.fulfill({ json: { changes: [], throughVersion: 0, hasMore: false } });
     if (path === '/api/tags/changes') return route.fulfill({ json: { changes: [], throughVersion: 0, hasMore: false } });
     if (path.endsWith('/rule-importance')) return route.fulfill({ json: { ruleIds: [] } });
     if (path.endsWith('/view')) return route.fulfill({ json: { success: true, counted: false } });

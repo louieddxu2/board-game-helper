@@ -118,10 +118,12 @@ for (const touch of [false, true]) {
     });
 
     test('keeps the search query and retries its failed catalog read on the first action', async ({ page }) => {
+      // Every read fails until the retry: the home footer may make the first one before the search does.
       let snapshots = 0;
+      let retried = false;
       await page.route('**/api/game-catalog', route => {
         snapshots++;
-        return snapshots === 1 ? route.fulfill({ status: 503, json: { error: 'unavailable' } }) : route.continue();
+        return retried ? route.continue() : route.fulfill({ status: 503, json: { error: 'unavailable' } });
       });
       await page.goto('/');
       const search = page.getByRole('combobox', { name: '搜尋遊戲名稱' });
@@ -129,11 +131,12 @@ for (const touch of [false, true]) {
       await search.pressSequentially(gameA.name);
       const retry = page.getByRole('button', { name: '重試搜尋', exact: true });
       await expect(retry).toBeVisible();
-      expect(snapshots).toBe(1);
+      const failedReads = snapshots;
+      retried = true;
       await activate(retry);
       await expect(page.getByRole('option', { name: gameA.name, exact: true })).toBeVisible();
       await expect(search).toHaveValue(gameA.name);
-      expect(snapshots).toBe(2);
+      expect(snapshots).toBe(failedReads + 1);
     });
 
     test('restores the list filter and expanded game after returning from the game page', async ({ page, context }) => {
