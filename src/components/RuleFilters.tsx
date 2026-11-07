@@ -1,14 +1,17 @@
+import { useRef } from 'react';
 import type { RuleFilterState } from '../hooks/useRuleFilters';
 import { RULE_CATEGORY_LABELS } from '../shared/types';
+import { TagFilterRow, useScrollEndFade } from './FilterRows';
 
 export const RuleFilters = ({ filters }: { filters: RuleFilterState }) => {
   const {
-    activeEditions, activePlayerCounts, activeTags, availableCategories, availableEditions, availablePlayerCounts,
-    candidateUnselectedTags, clearAllFilters, ruleQuery, selectedCategory, setRuleQuery,
+    activeEditions, activePlayerCounts, availableCategories, availableEditions, availablePlayerCounts,
+    clearAllFilters, hasActiveFilters, ruleQuery, selectedCategory, setRuleQuery, tagOptions,
     toggleCategory, toggleEdition, togglePlayerCount, toggleTag,
   } = filters;
+  const specialRef = useRef<HTMLDivElement>(null);
+  useScrollEndFade(specialRef, `${availablePlayerCounts.join(',')}|${availableEditions.join('\u0000')}`);
   const hasSpecialOptions = availablePlayerCounts.length > 0 || availableEditions.length > 0;
-  const hasActiveFilters = activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0;
   return <section className="rule-filters" aria-label="篩選規則">
     {/* 第一列：概念快速索引，再次點選可解除目前索引。 */}
     {availableCategories.length > 0 && <div className="rule-quick-index" role="group" aria-label="規則快速索引">
@@ -24,9 +27,9 @@ export const RuleFilters = ({ filters }: { filters: RuleFilterState }) => {
       </button>)}
     </div>}
 
-    {/* 第二列：人數 / 版本 特殊 Tag (若有) */}
+    {/* 第二列：人數 / 版本，一列橫滑；已選的就地標示，不改變順序。 */}
     {hasSpecialOptions && (
-      <div className="special-tag-filter" aria-label="依人數或版本篩選">
+      <div ref={specialRef} className="filter-row special-tag-filter" role="group" aria-label="依人數或版本篩選">
         {availablePlayerCounts.map((count) => {
           const isSelected = activePlayerCounts.includes(count);
           return (
@@ -69,40 +72,7 @@ export const RuleFilters = ({ filters }: { filters: RuleFilterState }) => {
       />
     </div>
 
-    {/* 第四列：已選取的 Tag (獨立成一行) */}
-    {hasActiveFilters && (
-      <div className="selected-tags-row" aria-label="已選標籤">
-        <span className="selected-tags-label">已選：</span>
-        {activePlayerCounts.map((count) => (
-          <button type="button" key={`sel-player-${count}`} className="tag-chip active" onClick={() => togglePlayerCount(count)}>
-            👥 {count}人 ✕
-          </button>
-        ))}
-        {activeEditions.map((edition) => (
-          <button type="button" key={`sel-edition-${edition}`} className="tag-chip active" onClick={() => toggleEdition(edition)}>
-            📦 {edition} ✕
-          </button>
-        ))}
-        {activeTags.map((tag) => (
-          <button type="button" key={`sel-tag-${tag}`} className="tag-chip active" onClick={() => toggleTag(tag)}>
-            #{tag} ✕
-          </button>
-        ))}
-        <button type="button" className="clear-tags-btn" onClick={clearAllFilters}>
-          清除篩選 ✕
-        </button>
-      </div>
-    )}
-
-    {/* 第五列：剩餘標籤 Tag (上限 6 個，隨搜尋文字與目前相容規則過濾) */}
-    {candidateUnselectedTags.length > 0 && (
-      <div className="tag-filter" aria-label="候選標籤">
-        {candidateUnselectedTags.map((tag) => (
-          <button type="button" className="tag-chip" key={tag} onClick={() => toggleTag(tag)}>
-            #{tag}
-          </button>
-        ))}
-      </div>
-    )}
+    {/* 第四列：標籤，一列橫滑；有篩選時最前面是清除鈕，已選標籤在前，其餘依規則數排序。 */}
+    <TagFilterRow options={tagOptions} hasActiveFilters={hasActiveFilters} onToggle={toggleTag} onClear={clearAllFilters} />
   </section>;
 };

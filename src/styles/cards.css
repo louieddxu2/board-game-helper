@@ -69,26 +69,46 @@
   transform: translateY(-1px) scale(1.03);
 }
 
-.clear-tags-btn {
+/* One-line filter rows scroll sideways; a fade at the right edge shows there is more until the end. */
+.filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding-block: 3px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+.filter-row::-webkit-scrollbar { display: none; }
+.filter-row[data-at-end="true"] { -webkit-mask-image: none; mask-image: none; }
+.filter-row > button { flex: none; white-space: nowrap; }
+
+/* Icon-only clear button: a 28px circle that keeps the full-height tap area without widening the row. */
+.filter-clear {
+  position: relative;
+  width: 28px;
+  padding: 0;
   border: 0;
   background: none;
-  color: var(--orange);
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--white);
   cursor: pointer;
-  padding: 6px 10px;
-  margin-left: auto;
-  align-self: center;
 }
-.clear-tags-btn:hover {
-  text-decoration: underline;
+.filter-clear::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 50%;
+  background: var(--orange);
 }
-
-.special-tag-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
+.filter-clear > span { position: relative; font-size: 13px; font-weight: 800; }
+.filter-clear:focus-visible { outline-offset: -2px; }
 
 .workspace-multi-chip-list {
   display: block;
@@ -134,20 +154,4 @@
 }
 .special-chip:hover {
   background: #e3dccf;
-}
-.selected-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--cream);
-  border-radius: 12px;
-  border: 1px solid var(--line);
-}
-.selected-tags-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--muted);
-  margin-right: 2px;
 }

@@ -120,7 +120,7 @@ describe('GamePage compact rule view', () => {
     await user.type(screen.getByRole('searchbox', { name: '關鍵字搜尋' }), '第一');
     expect(currentUrl).toBe('/games/test-game?category=teaching_setup_opening&players=2&tag=設置&find=第一#rule-rule-9');
 
-    await user.click(screen.getByRole('button', { name: /清除篩選/ }));
+    await user.click(screen.getByRole('button', { name: '清除所有篩選' }));
     expect(currentUrl).toBe('/games/test-game?category=teaching_setup_opening#rule-rule-9');
     expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toHaveValue('');
     expect(mocks.game).toHaveBeenCalledOnce();
@@ -134,8 +134,9 @@ describe('GamePage compact rule view', () => {
     const { container } = renderGamePage('/games/test-game?players=2&edition=標準版');
     await screen.findByText('第一條正確規則');
     expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
-    expect(screen.getByLabelText('已選標籤')).toHaveTextContent('2人');
-    expect(screen.getByLabelText('已選標籤')).toHaveTextContent('標準版');
+    expect(screen.getByRole('button', { name: /2人$/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /標準版$/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '清除所有篩選' })).toBeInTheDocument();
   });
 
   test('describes the game for search results and restores the site defaults on leave', async () => {
@@ -300,25 +301,23 @@ describe('GamePage compact rule view', () => {
     }
   });
 
-  test('keeps search-only states free of the selected-filter row and reset action', async () => {
+  test('keeps search-only states free of the clear action', async () => {
     const user = userEvent.setup();
     renderGamePage();
 
     const search = await screen.findByRole('searchbox', { name: '關鍵字搜尋' });
-    expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.type(search, '第一條');
     await waitFor(() => expect(screen.getByText('第一條正確規則')).toBeInTheDocument());
-    expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /清除篩選/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.clear(search);
     await waitFor(() => expect(screen.getByText('第二條正確規則')).toBeInTheDocument());
 
     await user.type(search, '完全不存在的關鍵字');
     await waitFor(() => expect(screen.getByText('找不到符合目前條件的規則。')).toBeInTheDocument());
-    expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /清除篩選/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.clear(search);
     await waitFor(() => expect(screen.getByText('第一條正確規則')).toBeInTheDocument());
@@ -331,8 +330,7 @@ describe('GamePage compact rule view', () => {
     const search = await screen.findByRole('searchbox', { name: '關鍵字搜尋' });
     expect(search).toHaveValue('第一條');
     expect(screen.getByText('第一條正確規則')).toBeInTheDocument();
-    expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /清除篩選/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
   });
 
   test.each(['tag', 'player', 'edition'] as const)('keeps a selected %s filter visible while searching', async (filterKind) => {
@@ -363,20 +361,23 @@ describe('GamePage compact rule view', () => {
       await user.click(within(specialFilter).getByRole('button', { name: /標準版$/ }));
     }
 
-    const selectedRow = screen.getByLabelText('已選標籤');
-    expect(selectedRow).toBeInTheDocument();
-    expect(selectedRow).toHaveTextContent(filterKind === 'tag' ? '#設置' : filterKind === 'player' ? '2人' : '標準版');
-    expect(screen.getByRole('button', { name: /清除篩選/ })).toBeInTheDocument();
+    const selectedFilterPattern = filterKind === 'tag' ? /#設置 ✕/ : filterKind === 'player' ? /2人$/ : /標準版$/;
+    const selectedChip = () => screen.getByRole('button', { name: selectedFilterPattern });
+    expect(selectedChip()).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '清除所有篩選' })).toBeInTheDocument();
+    if (filterKind === 'tag') {
+      // The selected tag moves to the front of its row, right after the clear button.
+      const row = screen.getByRole('group', { name: '依標籤篩選' });
+      expect(within(row).getAllByRole('button').map((button) => button.textContent)).toEqual(['✕', '#設置 ✕']);
+    }
 
     const search = screen.getByRole('searchbox', { name: '關鍵字搜尋' });
     await user.type(search, '第一條');
-    expect(screen.getByLabelText('已選標籤')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /清除篩選/ })).toBeInTheDocument();
+    expect(selectedChip()).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '清除所有篩選' })).toBeInTheDocument();
 
-    const selectedFilterPattern = filterKind === 'tag' ? /#設置.*✕/ : filterKind === 'player' ? /2人.*✕/ : /標準版.*✕/;
-    await user.click(within(screen.getByLabelText('已選標籤')).getByRole('button', { name: selectedFilterPattern }));
-    await waitFor(() => expect(screen.queryByLabelText('已選標籤')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /清除篩選/ })).not.toBeInTheDocument();
+    await user.click(selectedChip());
+    await waitFor(() => expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument());
     expect(search).toHaveValue('第一條');
   });
 

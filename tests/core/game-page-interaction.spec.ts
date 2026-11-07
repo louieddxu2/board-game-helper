@@ -178,7 +178,7 @@ for (const width of [393, 320, 1280]) {
         await expect(card).toHaveClass('rule-card-compact');
         await activate(card.locator(selector).first());
         await expect(card).toHaveClass('rule-card');
-        await expect(page.getByLabel('已選標籤')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '清除所有篩選' })).toHaveCount(0);
         await expect(page.locator('.game-rules > *')).toHaveCount(2);
         await activate(card.locator('.statement-text'));
       }
@@ -191,7 +191,7 @@ for (const width of [393, 320, 1280]) {
       if (touch) await card.tap({ position: padding }); else await card.click({ position: padding });
       await expect(card).toHaveClass('rule-card');
       await activate(card.getByRole('button', { name: '#設置', exact: true }));
-      await expect(page.getByLabel('已選標籤')).toContainText('#設置');
+      await expect(page.getByRole('group', { name: '依標籤篩選' }).getByRole('button', { name: '#設置 ✕' })).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.game-rules > *')).toHaveCount(1);
     });
 
