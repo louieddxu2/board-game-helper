@@ -6,7 +6,7 @@ Classify layout separately from interaction. Use browser evidence only when it a
 
 高頻率連續操作的介面（Workspace 表格、屬性投票）涉及滑動、切頁或彈窗時，應驗證畫面可操作後的首次原生輸入立即且只生效一次，不以額外等待或重試掩蓋漏點。發生漏點時先追蹤事件傳遞、命中目標與狀態清理，修正時保留滑動、縮放、長按與取消的防誤觸。其他頁面（首頁、遊戲頁、記錄頁等）只需確認畫面停穩後的點擊有效，不必如此嚴格。
 
-The release gate covers data persistence, contracts, recovery from data loss and first-input behaviour on high-frequency interfaces (Workspace, attribute voting). Tag every other browser test, including layout, appearance and interaction tests on other pages, with `{ tag: '@ui' }`; the gate skips it and `npm run test:ui:e2e` runs it while working on that page.
+Tag every browser test other than data persistence, contracts, recovery from data loss and the high-frequency interfaces (Workspace, attribute voting) with `{ tag: '@ui' }`. A local `npm run deploy` runs all of them and must pass; CI skips @ui tests because it cannot stop a push and Linux fonts shift their layout. `npm run test:ui:e2e` runs only the @ui tests while working on those pages.
 
 輸入框須用手機原生 tap 與桌面 click 驗證開窗聚焦、進入欄位全選及首字直接取代原值；須涵蓋觸控補發的滑鼠事件，不以 focus/select 呼叫紀錄或 fill 取代操作驗證。
 

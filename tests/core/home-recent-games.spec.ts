@@ -57,13 +57,14 @@ const showHome = async (page: Page, mode: 'explore' | 'personal') => {
 const navigationCount = (page: Page) => page.evaluate(() => (window as Window & { recentNavigations: number }).recentNavigations);
 
 const openVisibleGame = async (page: Page, rail: Locator, mobile: boolean) => {
+  // The game showing most within the row: a scroll can stop between two names, leaving neither centre inside.
   const index = await rail.getByRole('link').evaluateAll(links => {
     const rail = links[0].parentElement!.getBoundingClientRect();
-    return links.findIndex(link => {
+    const shown = links.map(link => {
       const box = link.getBoundingClientRect();
-      const center = box.x + box.width / 2;
-      return center > rail.left + 8 && center < rail.right - 8;
+      return Math.min(box.right, rail.right) - Math.max(box.left, rail.left);
     });
+    return shown.indexOf(Math.max(...shown));
   });
   expect(index).toBeGreaterThanOrEqual(0);
   const link = rail.getByRole('link').nth(index);
