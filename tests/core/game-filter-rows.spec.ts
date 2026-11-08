@@ -39,7 +39,7 @@ test('keeps tags and player counts on one swipeable line each, ordered by how ma
   await expect(page.getByRole('button', { name: '清除所有篩選' })).toHaveCount(0);
 });
 
-test('takes the first tap after a swipe, moves the chosen tag beside the clear button, and clears with one tap', async ({ page }) => {
+test('takes the first tap after a swipe, moves the chosen tag beside the clear button, and clears with one tap', { tag: '@ui' }, async ({ page }) => {
   await showGame(page);
   const tagRow = page.getByRole('group', { name: '依標籤篩選' });
   const box = (await tagRow.boundingBox())!;

@@ -83,7 +83,7 @@ test('aligns a compact install action beside the slogan with smaller section hea
   await page.screenshot({ path: '.wrangler/pwa-install-mobile.png', fullPage: false });
 });
 
-test('opens manual install help on the first native tap and closes on the first dialog action', async ({ page }) => {
+test('opens manual install help on the first native tap and closes on the first dialog action', { tag: '@ui' }, async ({ page }) => {
   await routeHome(page, () => null);
   await page.goto('/');
   const install = page.getByRole('button', { name: '加入主畫面' });
@@ -96,7 +96,7 @@ test('opens manual install help on the first native tap and closes on the first 
   await expect(help).toBeVisible();
 });
 
-test('uses one browser install prompt and hides the action after appinstalled', async ({ page }) => {
+test('uses one browser install prompt and hides the action after appinstalled', { tag: '@ui' }, async ({ page }) => {
   await routeHome(page, () => null);
   await page.goto('/');
   const install = page.getByRole('button', { name: '加入主畫面' });

@@ -81,7 +81,7 @@ for (const mode of ['explore', 'personal'] as const) {
     test.describe(`${mode} recent games at ${width}px`, () => {
       test.use({ viewport: { width, height: 851 }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
 
-      test(mobile ? 'keeps full names on one row and accepts the first tap after scrolling' : 'preserves the desktop wrapped layout and opens a game on the first click', async ({ page }) => {
+      test(mobile ? 'keeps full names on one row and accepts the first tap after scrolling' : 'preserves the desktop wrapped layout and opens a game on the first click', { tag: '@ui' }, async ({ page }) => {
         const rail = await showHome(page, mode);
         const geometry = await rail.evaluate(element => ({
           width: element.clientWidth, scrollWidth: element.scrollWidth,
@@ -131,7 +131,7 @@ for (const mode of ['explore', 'personal'] as const) {
         await openVisibleGame(page, rail, mobile);
       });
 
-      if (width === 393) test('accepts the first tap after a cancelled native touch', async ({ page }) => {
+      if (width === 393) test('accepts the first tap after a cancelled native touch', { tag: '@ui' }, async ({ page }) => {
         const rail = await showHome(page, mode);
         const box = (await rail.boundingBox())!;
         const client = await page.context().newCDPSession(page);
@@ -143,7 +143,7 @@ for (const mode of ['explore', 'personal'] as const) {
         await openVisibleGame(page, rail, true);
       });
 
-      if (!mobile) test('keeps wrapped links reachable through keyboard navigation', async ({ page }) => {
+      if (!mobile) test('keeps wrapped links reachable through keyboard navigation', { tag: '@ui' }, async ({ page }) => {
         const rail = await showHome(page, mode);
         const links = rail.getByRole('link');
         await links.first().focus();

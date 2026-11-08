@@ -18,7 +18,7 @@ const showHome = async (page: Page) => {
   await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(2);
 };
 
-test('swipes through fixed height featured games, then takes the first tap on a card once', async ({ page }) => {
+test('swipes through fixed height featured games, then takes the first tap on a card once', { tag: '@ui' }, async ({ page }) => {
   await showHome(page);
   const rail = page.locator('.home-featured-rail');
   const geometry = await rail.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, height: element.getBoundingClientRect().height,
@@ -54,7 +54,7 @@ test('swipes through fixed height featured games, then takes the first tap on a 
 });
 
 for (const input of ['tap', 'click'] as const) {
-  test(`opens a recent rule on its game page with one ${input}`, async ({ page }) => {
+  test(`opens a recent rule on its game page with one ${input}`, { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     const row = page.locator('.home-recent-list').getByRole('link', { name: /測試遊戲 5/ });
     await expect(row).toHaveAttribute('href', '/games/rail-game-5#rule-rail-rule-5');

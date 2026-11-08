@@ -6,7 +6,7 @@ for (const width of [393, 1280]) {
     test.use({ viewport: { width, height: 851 }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
 
     for (const section of ['featured', 'recent'] as const) {
-      test(`recovers failed ${section} rules from the unchanged home cache on the first input`, async ({ page }) => {
+      test(`recovers failed ${section} rules from the unchanged home cache on the first input`, { tag: '@ui' }, async ({ page }) => {
         let homeRequests = 0;
         let ruleRequests = 0;
         let releaseSecondAttempt!: () => void;

@@ -136,7 +136,7 @@ for (const width of [393, 320, 768, 1280]) {
       if (width === 393) await card.screenshot({ path: '.wrangler/rule-card-long-notes.png' });
     });
 
-    if (width === 768) test('moves every tag onto its own row when they cannot all fit beside the game name', async ({ page }) => {
+    if (width === 768) test('moves every tag onto its own row when they cannot all fit beside the game name', { tag: '@ui' }, async ({ page }) => {
       const tags = makeTags(['需要保留完整名稱的計分標籤', '另外一個很長的城市判定標籤']);
       const card = await showCard(page, { ...sample, tags, tagIds: tags.map(tag => tag.id) });
       const geometry = await card.evaluate(el => {
@@ -158,7 +158,7 @@ for (const width of [393, 320, 768, 1280]) {
       for (const tag of tags) await expect(card.getByRole('button', { name: `#${tag.name}`, exact: true })).toBeVisible();
     });
 
-    if (titled) test('wraps all tags below long game and author information without hiding text', async ({ page }) => {
+    if (titled) test('wraps all tags below long game and author information without hiding text', { tag: '@ui' }, async ({ page }) => {
       const tags = makeTags(['計分', '城市', '遊戲結束', '資源轉換', '擴充模組', '玩家順序', '回合結算',
         '這個標籤名稱特別長仍然必須完整顯示並且保持原本的字級與點按範圍']);
       const rule = { ...sample, gameName: '聖瑪利亞號：這是一個很長且必須完整顯示的遊戲名稱',
@@ -194,7 +194,7 @@ for (const width of [393, 320, 768, 1280]) {
       await expect(page).toHaveURL(url => url.pathname === '/games/santa-maria' && url.searchParams.get('tag') === '計分' && !url.hash);
     });
 
-    test('retains full source names, every link and the first cancel and confirm actions', async ({ page }) => {
+    test('retains full source names, every link and the first cancel and confirm actions', { tag: '@ui' }, async ({ page }) => {
       const sourceLabel = '官方規則書與作者提供的完整補充說明，超長名稱保留於來源提示';
       const card = await host(page, { ...sample, sourceLabel, sourceLinks: [
         { label: '原始答覆', url: 'https://boardgamegeek.com/thread/123' },

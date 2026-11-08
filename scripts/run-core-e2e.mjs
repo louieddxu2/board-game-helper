@@ -7,8 +7,9 @@ const stateName = `core-test-state-${process.pid}`;
 const port = 42000 + (process.pid % 10_000);
 const env = { ...process.env, CORE_TEST_STATE_DIR: stateName, CORE_TEST_PORT: String(port) };
 const run = (command, args) => execFileSync(command, args, { cwd: workspaceRoot, stdio: 'inherit', env });
-// The release gate covers data, contracts and first-input behaviour. Tests tagged @ui pin page layout,
-// which changes often; run them with --ui while working on those pages instead of on every release.
+// The release gate covers data, contracts and first-input behaviour on Workspace and attribute voting.
+// Tests tagged @ui cover layout and the less frequently used pages,
+// which change often; run them with --ui while working on those pages instead of on every release.
 const uiOnly = process.argv.includes('--ui');
 
 try {

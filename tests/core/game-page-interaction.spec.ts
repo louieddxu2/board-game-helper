@@ -143,7 +143,7 @@ for (const width of [393, 320, 1280]) {
       }
     });
 
-    test('hides empty indexes and keeps other categories available after the first native input', async ({ page }) => {
+    test('hides empty indexes and keeps other categories available after the first native input', { tag: '@ui' }, async ({ page }) => {
       await showGame(page, { ...game, rules: [game.rules[0], { ...game.rules[1], categories: ['action_effect_detail'] }] });
       const index = page.getByRole('group', { name: '規則快速索引' });
       const empty = index.getByRole('button', { name: '流程、終局、計分', exact: true });
@@ -171,7 +171,7 @@ for (const width of [393, 320, 1280]) {
       await expect(page.locator('.game-rules > *')).toHaveCount(2);
     });
 
-    test('expands from metadata, the corner and blank padding without applying a filter', async ({ page }) => {
+    test('expands from metadata, the corner and blank padding without applying a filter', { tag: '@ui' }, async ({ page }) => {
       await showGame(page);
       const card = page.locator('#rule-interaction-rule-1');
       for (const selector of ['.compact-tag', '.compact-attribute', '.compact-attribute:nth-child(2)', '.compact-rule-text']) {
@@ -195,7 +195,7 @@ for (const width of [393, 320, 1280]) {
       await expect(page.locator('.game-rules > *')).toHaveCount(1);
     });
 
-    if (width === 393) test('fills the row with the only available concept and toggles on the first tap', async ({ page }) => {
+    if (width === 393) test('fills the row with the only available concept and toggles on the first tap', { tag: '@ui' }, async ({ page }) => {
       await showGame(page, { ...game, ruleCount: 1, rules: [game.rules[0]] });
       const index = page.getByRole('group', { name: '規則快速索引' });
       const entry = index.getByRole('button', { name: '教學、設置、開局', exact: true });
@@ -210,7 +210,7 @@ for (const width of [393, 320, 1280]) {
       await expect(page.locator('.game-rules > *')).toHaveCount(1);
     });
 
-    if (width === 393) test('ignores swipe, cancel, long press and pinch, then accepts the first fresh tap', async ({ page }) => {
+    if (width === 393) test('ignores swipe, cancel, long press and pinch, then accepts the first fresh tap', { tag: '@ui' }, async ({ page }) => {
       await showGame(page, { ...game, rules: [...game.rules, ...Array.from({ length: 6 }, (_, index) => ({
         ...game.rules[1], id: `extra-rule-${index}`, statement: `額外規則 ${index + 1}，用於確認頁面可以正常捲動。`,
       }))] });
@@ -261,7 +261,7 @@ for (const width of [393, 320, 1280]) {
       await client.detach();
     });
 
-    if (width === 393) test('keeps a long title complete without expanding the action column', async ({ page }) => {
+    if (width === 393) test('keeps a long title complete without expanding the action column', { tag: '@ui' }, async ({ page }) => {
       await showGame(page, { ...game, displayName: '聖瑪利亞號：這是一個很長而且必須完整顯示的遊戲名稱' });
       const geometry = await page.locator('.game-hero').evaluate(el => {
         const range = document.createRange();

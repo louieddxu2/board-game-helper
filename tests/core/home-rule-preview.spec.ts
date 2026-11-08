@@ -35,7 +35,7 @@ for (const width of [320, 393, 1280]) {
     const mobile = width < 800;
     test.use({ viewport: { width, height: 851 }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
 
-    if (!mobile) test('preserves the desktop line budget', async ({ page }) => {
+    if (!mobile) test('preserves the desktop line budget', { tag: '@ui' }, async ({ page }) => {
       await showHome(page);
       const cards = page.locator('.home-featured-rail .rule-card');
       const geometry = await cards.evaluateAll(elements => elements.map(card => {
@@ -65,7 +65,7 @@ for (const width of [320, 393, 1280]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     });
 
-    test('opens the full rule exactly once with the first input after a swipe', async ({ page }) => {
+    test('opens the full rule exactly once with the first input after a swipe', { tag: '@ui' }, async ({ page }) => {
       await showHome(page);
       if (mobile) {
         const rail = page.locator('.home-featured-rail');
@@ -120,7 +120,7 @@ for (const width of [320, 393, 1280]) {
       })).toBeGreaterThan(8);
     });
 
-    if (!mobile) test('updates line limits and hints when font size changes at a fixed width and line height', async ({ page }) => {
+    if (!mobile) test('updates line limits and hints when font size changes at a fixed width and line height', { tag: '@ui' }, async ({ page }) => {
       await showHome(page, [makeRule(9, {
         statement: '回合結束後先計分再補牌。', commonMistake: lines(6, '玩錯情況'), details: '補充說明',
       })]);
@@ -172,7 +172,7 @@ test.describe('two rules of the same game in the mobile window', () => {
   });
 
   for (const which of ['first', 'second'] as const) {
-    test(`opens the ${which} rule from the first tap on its own visible area`, async ({ page }) => {
+    test(`opens the ${which} rule from the first tap on its own visible area`, { tag: '@ui' }, async ({ page }) => {
       const second = rules[1];
       await showHome(page, [first, tall], [second]);
       const rail = page.locator('.home-featured-rail');

@@ -53,7 +53,7 @@ test('opens beside the draft at 85% width, ranks the resembling rule first and e
 });
 
 for (const way of ['swipe', 'backdrop', 'back'] as const) {
-  test(`closes with a ${way} and takes the first tap on the form right after`, async ({ page }) => {
+  test(`closes with a ${way} and takes the first tap on the form right after`, { tag: '@ui' }, async ({ page }) => {
     const open = await openRecordPage(page);
     await open.tap();
     const panel = await settled(page);
@@ -80,7 +80,7 @@ for (const way of ['swipe', 'backdrop', 'back'] as const) {
   });
 }
 
-test('keeps a vertical scroll of the list from closing the drawer', async ({ page }) => {
+test('keeps a vertical scroll of the list from closing the drawer', { tag: '@ui' }, async ({ page }) => {
   const open = await openRecordPage(page);
   await open.tap();
   const panel = await settled(page);

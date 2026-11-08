@@ -56,7 +56,7 @@ test.describe('mobile game tabs', () => {
     expect(heights[0]).toBeLessThanOrEqual(await row.evaluate(element => element.clientHeight));
   });
 
-  test('moves to a tapped game without passing through the others, then opens its rule with the first tap', async ({ page }) => {
+  test('moves to a tapped game without passing through the others, then opens its rule with the first tap', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     await page.locator('[role="tablist"]').evaluate(list => {
       const seen: string[] = [];
@@ -84,7 +84,7 @@ test.describe('mobile game tabs', () => {
     expect(await page.evaluate(() => history.length)).toBe(previousLength + 1);
   });
 
-  test('follows a swipe with the tab selection and keeps it in view', async ({ page }) => {
+  test('follows a swipe with the tab selection and keeps it in view', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     const rail = page.locator('.home-featured-rail');
     const box = (await rail.boundingBox())!;
@@ -107,7 +107,7 @@ test.describe('mobile game tabs', () => {
     await expect.poll(() => rail.evaluate(element => element.scrollLeft)).toBe(0);
   });
 
-  test('opens a rule from the keyboard although the card has no game name', async ({ page }) => {
+  test('opens a rule from the keyboard although the card has no game name', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     const link = page.locator('#rule-tab-rule-0 .rule-open-link');
     await expect(link).toHaveAttribute('aria-label', `查看完整規則：${names[0]}，${rules[0].statement}`);
