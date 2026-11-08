@@ -152,3 +152,24 @@ test('a drag started during the previous glide follows the pointer without jumpi
     expect(trace[index].left - trace[index - 1].left).toBeLessThan(60);
   }
 });
+
+// Pressing on a card's text must not start a text selection: once the pointer leaves the rail past an arrow,
+// Chrome would scroll the rail itself to extend the selection and fight the drag, so the rail flickers.
+// (Headless Chrome does not autoscroll, so this checks the cause rather than the flicker.)
+test('a drag that starts on card text starts no text selection', { tag: '@ui' }, async ({ page }) => {
+  const rail = await showHome(page);
+  await page.evaluate(() => {
+    (window as Window & { selectionStarts?: boolean[] }).selectionStarts = [];
+    document.addEventListener('selectstart', (event) => (window as Window & { selectionStarts: boolean[] }).selectionStarts.push(event.defaultPrevented));
+  });
+  const text = (await rail.locator('#rule-drag-rule-1 .statement-text').boundingBox())!;
+  const y = text.y + text.height / 2;
+  await page.mouse.move(text.x + 10, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 10; step++) await page.mouse.move(text.x + 10 - step * 30, y);
+  const starts = await page.evaluate(() => (window as Window & { selectionStarts: boolean[] }).selectionStarts);
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
+  await page.mouse.up();
+  expect(starts.length).toBeGreaterThan(0);
+  expect(starts.every((prevented) => prevented)).toBe(true);
+});

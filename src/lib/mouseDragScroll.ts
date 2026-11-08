@@ -110,6 +110,10 @@ export const startMouseDragScroll = (doc: Document = document) => {
     suppressClick = false;
   }, true);
 
+  // A mouse press in a row does not start a text selection: once the pointer left the row, the browser would
+  // scroll the row itself to extend the selection, fighting the drag and making the row flicker.
+  doc.addEventListener('selectstart', (event) => { if (drag) event.preventDefault(); }, true);
+
   // A link or image inside a row would otherwise start the browser's own drag and cancel the pointer.
   doc.addEventListener('dragstart', (event) => {
     if ((event.target as Element | null)?.closest?.('[data-drag-scroll]')) event.preventDefault();
