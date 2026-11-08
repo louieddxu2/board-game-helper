@@ -35,7 +35,8 @@ for (const width of [320, 393, 1280]) {
     const mobile = width < 800;
     test.use({ viewport: { width, height: 851 }, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
 
-    if (!mobile) test('preserves the desktop line budget', { tag: '@ui' }, async ({ page }) => {
+    // Desktop uses the phone's six-line window, three games side by side.
+    if (!mobile) test('keeps the six-line budget on desktop', { tag: '@ui' }, async ({ page }) => {
       await showHome(page);
       const cards = page.locator('.home-featured-rail .rule-card');
       const geometry = await cards.evaluateAll(elements => elements.map(card => {
@@ -47,13 +48,13 @@ for (const width of [320, 393, 1280]) {
         const footer = card.querySelector('.rule-card-footer')!.getBoundingClientRect();
         return { rows, height: card.getBoundingClientRect().height, bodyBottom: body.getBoundingClientRect().bottom, footerTop: footer.top };
       }));
-      expect(geometry[0].rows).toEqual([3, 3, 2]);
-      expect(geometry[1].rows).toEqual([8, 0, 0]);
+      expect(geometry[0].rows).toEqual([3, 3, 0]);
+      expect(geometry[1].rows).toEqual([6, 0, 0]);
       expect(geometry[2].rows).toEqual([2, 2, 2]);
       expect(geometry[3].rows).toEqual([1]);
-      expect(geometry[4].rows).toEqual([8]);
+      expect(geometry[4].rows).toEqual([6]);
       for (const card of geometry) {
-        expect(card.rows.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(8);
+        expect(card.rows.reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(6);
         expect(card.footerTop).toBeGreaterThanOrEqual(card.bodyBottom);
       }
       await expect(cards.nth(0).locator('.rule-card-preview-hint')).toHaveText('內容未完，點按卡片查看完整規則');
@@ -117,7 +118,7 @@ for (const width of [320, 393, 1280]) {
 
     if (!mobile) test('updates line limits and hints when font size changes at a fixed width and line height', { tag: '@ui' }, async ({ page }) => {
       await showHome(page, [makeRule(9, {
-        statement: '回合結束後先計分再補牌。', commonMistake: lines(6, '玩錯情況'), details: '補充說明',
+        statement: '回合結束後先計分再補牌。', commonMistake: lines(4, '玩錯情況'), details: '補充說明',
       })]);
       const card = page.locator('#rule-preview-rule-9');
       await expect(card.locator('.rule-card-preview-hint')).toHaveCount(0);
@@ -129,7 +130,7 @@ for (const width of [320, 393, 1280]) {
       const visibleLines = await card.locator('.rule-card-preview p').evaluateAll(elements => elements.reduce((sum, element) => {
         return sum + Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight));
       }, 0));
-      expect(visibleLines).toBe(8);
+      expect(visibleLines).toBe(6);
       expect(await card.evaluate(element => element.getBoundingClientRect().width)).toBe(beforeWidth);
       await style.evaluate(element => element.remove());
       await expect(card.locator('.rule-card-preview-hint')).toHaveCount(0);

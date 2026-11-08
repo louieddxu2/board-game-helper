@@ -4,9 +4,11 @@ import { App } from './App';
 import './styles.css';
 import { startPwaInstallTracking } from './lib/pwaInstall';
 import { startTextInputSelection } from './lib/textInputSelection';
+import { startMouseDragScroll } from './lib/mouseDragScroll';
 
 startPwaInstallTracking();
 startTextInputSelection();
+startMouseDragScroll();
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

@@ -57,12 +57,13 @@ const box = async (locator: Locator) => {
   return result!;
 };
 
-// Phones show the full card only on its game page, without a game name; wider screens show titled cards on the homepage.
+// Phones show the full card only on its game page; wider screens show the homepage preview. Neither names the game,
+// which the page or the tabs above the homepage rail already do.
 for (const width of [393, 320, 768, 1280]) {
   test.describe(`rule card at ${width}px`, () => {
     const touch = width <= 800;
-    const titled = width >= 768;
-    const host = (page: Page, rule: FeaturedRule) => titled ? showCard(page, rule) : showFullCard(page, rule);
+    const onHome = width >= 768;
+    const host = (page: Page, rule: FeaturedRule) => onHome ? showCard(page, rule) : showFullCard(page, rule);
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
@@ -79,14 +80,15 @@ for (const width of [393, 320, 768, 1280]) {
       ]);
       expect(new URL(page.url()).pathname).toBe(pathname);
       const cardBox = await box(card);
-      if (width === 768) expect(cardBox.height).toBeLessThan(315);
+      // At 768px two games share the row with the next one peeking in, so the card is a narrower column.
+      if (width === 768) expect(cardBox.height).toBeLessThan(335);
       const geometry = await card.evaluate(el => {
         const rect = (selector: string) => el.querySelector(selector)!.getBoundingClientRect().toJSON();
         const sourceRange = document.createRange();
         sourceRange.selectNodeContents(el.querySelector('.rule-source-value')!);
         return { sourceTitle: rect('.rule-source-title'), sourceValue: rect('.rule-source-value'),
           sourceText: sourceRange.getBoundingClientRect().toJSON(),
-          title: el.querySelector('.rule-game-title')?.getBoundingClientRect().toJSON(), tags: rect('.rule-tags .tag-chip'),
+          tags: rect('.rule-tags .tag-chip'),
           notes: [
             { label: rect('.mistake-badge > span'), text: rect('.mistake-text') },
             { label: rect('.details-badge > span'), text: rect('.details-text') },
@@ -105,9 +107,6 @@ for (const width of [393, 320, 768, 1280]) {
         expect(actionBox.width).toBeGreaterThanOrEqual(43);
         expect(actionBox.height).toBeGreaterThanOrEqual(43);
         expect(Math.abs(actionBox.y - geometry.actions[0].y)).toBeLessThan(1);
-      }
-      if (width === 768) {
-        expect(Math.abs(geometry.tags.y - geometry.title!.y)).toBeLessThan(1);
       }
       expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
       if (touch) await card.screenshot({ path: `.wrangler/rule-card-compact-${width}.png` });
@@ -136,29 +135,7 @@ for (const width of [393, 320, 768, 1280]) {
       if (width === 393) await card.screenshot({ path: '.wrangler/rule-card-long-notes.png' });
     });
 
-    if (width === 768) test('moves every tag onto its own row when they cannot all fit beside the game name', { tag: '@ui' }, async ({ page }) => {
-      const tags = makeTags(['需要保留完整名稱的計分標籤', '另外一個很長的城市判定標籤']);
-      const card = await showCard(page, { ...sample, tags, tagIds: tags.map(tag => tag.id) });
-      const geometry = await card.evaluate(el => {
-        const rect = (node: Element) => node.getBoundingClientRect().toJSON();
-        return { title: rect(el.querySelector('.rule-game-title')!), credits: rect(el.querySelector('.rule-card-header-actions')!),
-          header: rect(el.querySelector('.rule-card-header')!), chips: Array.from(el.querySelectorAll('.rule-tags .tag-chip'), rect),
-          overflow: el.scrollWidth > el.clientWidth + 1 };
-      });
-      const overlaps = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-      expect(Math.abs(geometry.chips[0].left - geometry.header.left)).toBeLessThan(1);
-      for (const chip of geometry.chips) {
-        expect(chip.top).toBeGreaterThanOrEqual(Math.max(geometry.title.bottom, geometry.credits.bottom) - 1);
-        expect(overlaps(chip, geometry.title)).toBe(false);
-        expect(overlaps(chip, geometry.credits)).toBe(false);
-        expect(chip.left).toBeGreaterThanOrEqual(geometry.header.left - 1);
-        expect(chip.right).toBeLessThanOrEqual(geometry.header.right + 1);
-      }
-      expect(geometry.overflow).toBe(false);
-      for (const tag of tags) await expect(card.getByRole('button', { name: `#${tag.name}`, exact: true })).toBeVisible();
-    });
-
-    if (titled) test('wraps all tags below long game and author information without hiding text', { tag: '@ui' }, async ({ page }) => {
+    if (onHome) test('wraps all tags below long author information without hiding text', { tag: '@ui' }, async ({ page }) => {
       const tags = makeTags(['計分', '城市', '遊戲結束', '資源轉換', '擴充模組', '玩家順序', '回合結算',
         '這個標籤名稱特別長仍然必須完整顯示並且保持原本的字級與點按範圍']);
       const rule = { ...sample, gameName: '聖瑪利亞號：這是一個很長且必須完整顯示的遊戲名稱',
@@ -168,14 +145,10 @@ for (const width of [393, 320, 768, 1280]) {
       const cardBox = await box(card);
       const tagGroup = card.getByLabel('主題標籤');
       const groupBox = await box(tagGroup);
-      const nameBox = await box(card.locator('.rule-game-title'));
       const creditsBox = await box(card.locator('.rule-card-header-actions'));
-      const sameRow = await card.evaluate(el => ({ titleY: el.querySelector('.rule-game-title')!.getBoundingClientRect().y,
-        creditsY: el.querySelector('.rule-card-header-actions')!.getBoundingClientRect().y }));
-      expect(Math.abs(sameRow.titleY - sameRow.creditsY)).toBeLessThan(1);
-      expect(groupBox.y).toBeGreaterThanOrEqual(Math.max(nameBox.y + nameBox.height, creditsBox.y + creditsBox.height) - 1);
+      expect(groupBox.y).toBeGreaterThanOrEqual(creditsBox.y + creditsBox.height - 1);
       expect(groupBox.width).toBeGreaterThan(cardBox.width - 28);
-      await expect(card.getByRole('heading', { name: rule.gameName })).toBeVisible();
+      await expect(card.locator('.rule-game-title')).toHaveCount(0);
       await expect(card.getByText(`建立：${rule.createdByNickname}`)).toBeVisible();
       await expect(card.getByText('修改：另一位修改者、第三位修改者')).toBeVisible();
       for (const tag of tags) {

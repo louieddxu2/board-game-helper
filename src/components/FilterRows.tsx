@@ -41,7 +41,7 @@ export const TagFilterRow = ({ options, hasActiveFilters, onToggle, onClear }: {
   }, [selectedKey]);
 
   if (options.length === 0 && !hasActiveFilters) return null;
-  return <div ref={rowRef} className="filter-row tag-filter" role="group" aria-label="依標籤篩選">
+  return <div ref={rowRef} className="filter-row tag-filter" data-drag-scroll role="group" aria-label="依標籤篩選">
     {hasActiveFilters && <button type="button" className="filter-clear" aria-label="清除所有篩選" onClick={onClear}>
       <span aria-hidden="true">✕</span>
     </button>}

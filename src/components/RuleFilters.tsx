@@ -29,7 +29,7 @@ export const RuleFilters = ({ filters }: { filters: RuleFilterState }) => {
 
     {/* 第二列：人數 / 版本，一列橫滑；已選的就地標示，不改變順序。 */}
     {hasSpecialOptions && (
-      <div ref={specialRef} className="filter-row special-tag-filter" role="group" aria-label="依人數或版本篩選">
+      <div ref={specialRef} className="filter-row special-tag-filter" data-drag-scroll role="group" aria-label="依人數或版本篩選">
         {availablePlayerCounts.map((count) => {
           const isSelected = activePlayerCounts.includes(count);
           return (

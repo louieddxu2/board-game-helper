@@ -5,6 +5,7 @@ import { GameSearch } from '../components/GameSearch';
 import { RuleCard } from '../components/RuleCard';
 import { HOME_MORE_ROW, HomeRuleStack } from '../components/HomeRuleStack';
 import { HomeGameTabs } from '../components/HomeGameTabs';
+import { HomeRailArrows } from '../components/HomeRailArrows';
 import { useSession } from '../context/SessionContext';
 import { ToastContext } from '../context/ToastContext';
 import { api } from '../lib/api';
@@ -17,10 +18,10 @@ import { RecentGamesRail } from '../components/RecentGamesRail';
 import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
 import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
-// Lines of rule text a phone's featured card shows; the rail window is sized to hold exactly that.
+// Lines of rule text a featured card shows; the rail window is sized to hold exactly that.
 const RULE_WINDOW_LINES = 6;
 
-// One swipe step of the featured rail: a full-width card plus the gap after it.
+// One swipe step of the featured rail: one game's card plus the gap after it.
 const railStep = (rail: HTMLElement) => {
   const width = (rail.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0;
   return width > 0 ? width + parseFloat(getComputedStyle(rail).columnGap || '0') : 0;
@@ -37,7 +38,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
-  // Each featured game's next rules, loaded only for the phone's rule window.
+  // Each featured game's next rules, stacked under its card in the rule window.
   const [resolvedMoreCards, setResolvedMoreCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvingHome, setResolvingHome] = useState(false);
   const [homeError, setHomeError] = useState(false);
@@ -49,7 +50,8 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const homeGeneratedAt = useRef(0);
   const homeKey = useRef('');
   const [railIndex, setRailIndex] = useState(0);
-  const [mobile, setMobile] = useState(() => window.matchMedia?.('(max-width: 767px)').matches ?? false);
+  // How many games the rail shows at once: one on a phone, two or three on wider screens.
+  const [railVisible, setRailVisible] = useState(1);
   const railRef = useRef<HTMLDivElement>(null);
   // While a tapped game tab scrolls the rail there, the games it passes must not take the selection.
   const pendingRailIndex = useRef<number | null>(null);
@@ -63,14 +65,6 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     if (pending === null || step <= 0) return;
     if (Math.abs(rail.scrollLeft - pending * step) >= 2) rail.scrollTo({ left: pending * step, behavior: 'auto' });
   };
-
-  useEffect(() => {
-    const media = window.matchMedia?.('(max-width: 767px)');
-    if (!media) return;
-    const update = () => setMobile(media.matches);
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -169,7 +163,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   }, [home, homeAttempt]);
 
   useEffect(() => {
-    if (!home || !mobile) return;
+    if (!home) return;
     let active = true;
     const refs = (home.featured ?? []).flatMap((ref) => (ref.moreRuleIds ?? []).map((ruleId) => ({ ref, ruleId })));
     void Promise.all(refs.map(async ({ ref, ruleId }) => {
@@ -184,7 +178,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       await Promise.all(rules.map((rule) => localDb.cacheRuleEntity(rule).catch(() => undefined)));
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [home, mobile]);
+  }, [home]);
 
   const displayedFeaturedRules = resolvedCards.length > 0 ? resolvedCards : (home?.featuredRules ?? []);
   const hasHomeError = homeError || rulesError;
@@ -194,15 +188,16 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const gameIdsKey = Array.from(new Set(displayedFeaturedRules.map((r) => r.gameId).filter(Boolean))).sort().join(',');
   const hideFeatured = Boolean(home) && !hasHomeError && !resolvingHome && displayedFeaturedRules.length === 0;
 
-  const featuredGames = mobile ? displayedFeaturedRules.filter((rule, index, rules) =>
-    rules.findIndex(candidate => candidate.gameId === rule.gameId) === index) : displayedFeaturedRules;
+  // Every width shows one window per game, as on a phone; wider screens show two or three side by side.
+  const featuredGames = displayedFeaturedRules.filter((rule, index, rules) =>
+    rules.findIndex(candidate => candidate.gameId === rule.gameId) === index);
   const featuredKey = featuredGames.map(rule => rule.id).join(',');
 
   // The window holds a card with six lines of rule text, whatever the screen height, plus the 看更多 row below it.
   // A first card with fewer lines leaves the rest of that space for the game's next rule.
   useLayoutEffect(() => {
     const rail = railRef.current;
-    if (!mobile || !rail || typeof ResizeObserver === 'undefined') return;
+    if (!rail || typeof ResizeObserver === 'undefined') return;
     const firstCards = Array.from(rail.querySelectorAll<HTMLElement>('.home-rule-stack > .home-rule-stack-entry:first-child'));
     const measure = () => {
       let frame = 0;
@@ -214,12 +209,28 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         for (const paragraph of paragraphs) line = Math.max(line, parseFloat(getComputedStyle(paragraph).lineHeight) || 0);
       }
       rail.style.setProperty('--home-rail-height', `${Math.ceil(frame + RULE_WINDOW_LINES * line + HOME_MORE_ROW)}px`);
+      const step = railStep(rail);
+      // A peeking next game does not count as shown.
+      if (step > 0) setRailVisible(Math.max(1, Math.floor((rail.clientWidth - parseFloat(getComputedStyle(rail).paddingLeft || '0') + parseFloat(getComputedStyle(rail).columnGap || '0')) / step)));
     };
     const observer = new ResizeObserver(measure);
+    observer.observe(rail);
     firstCards.forEach(entry => observer.observe(entry));
     measure();
     return () => observer.disconnect();
-  }, [mobile, featuredKey]);
+  }, [featuredKey]);
+
+  // Brings a featured game into view from its tab or an arrow. The last games cannot reach the left edge;
+  // they come into view with the rail scrolled to its end.
+  const showRailGame = (wanted: number) => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const index = Math.max(0, Math.min(wanted, featuredGames.length - railVisible));
+    pendingRailIndex.current = index;
+    setRailIndex(index);
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    rail.scrollTo({ left: index * railStep(rail), behavior: reduceMotion ? 'auto' : 'smooth' });
+  };
 
   useEffect(() => {
     if (!user || !gameIdsKey) {
@@ -309,19 +320,15 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     {!hideFeatured && <section id="discover" className="content-section home-rule-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       {hasHomeError && <div className="content-load-error" role="alert"><p>{hasVisibleHome ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading || resolvingHome} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
-      {mobile && featuredGames.length > 1 && <HomeGameTabs
+      {/* The games are named in one row above the rail at every width; the ones on screen are highlighted. */}
+      {featuredGames.length > 1 && <HomeGameTabs
         games={featuredGames.map(rule => ({ id: rule.gameId, name: rule.gameName }))}
         active={railIndex}
-        onSelect={(index) => {
-          const rail = railRef.current;
-          if (!rail) return;
-          pendingRailIndex.current = index;
-          setRailIndex(index);
-          const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-          rail.scrollTo({ left: index * railStep(rail), behavior: reduceMotion ? 'auto' : 'smooth' });
-        }}
+        count={Math.min(railVisible, featuredGames.length)}
+        onSelect={showRailGame}
       />}
-      <div ref={railRef} className={`rule-grid home-featured-rail${featuredGames.length ? ' has-cards' : ''}`}
+      <div className="home-rail-frame">
+      <div ref={railRef} className={`rule-grid home-featured-rail${featuredGames.length ? ' has-cards' : ''}`} data-drag-scroll
         onTouchStart={() => { pendingRailIndex.current = null; }}
         onPointerDown={() => { pendingRailIndex.current = null; }}
         onWheel={() => { pendingRailIndex.current = null; }}
@@ -341,16 +348,16 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         }}>
         {featuredGames.map(primary => {
           const gameHref = `/games/${primary.gameSlug}`;
-          const candidates = mobile ? [...resolvedMoreCards, ...displayedFeaturedRules, ...resolvedRecentCards] : [];
+          const candidates = [...resolvedMoreCards, ...displayedFeaturedRules, ...resolvedRecentCards];
           const rules = [primary, ...candidates.filter((rule, index) =>
             rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
             && candidates.findIndex(candidate => candidate.id === rule.id) === index)];
           const publishedRuleCount = home?.featured?.find(ref => ref.gameSlug === primary.gameSlug)?.publishedRuleCount;
-          return <HomeRuleStack key={primary.id} mobile={mobile} gameHref={gameHref} publishedRuleCount={publishedRuleCount} cards={rules.map(rule => ({
+          return <HomeRuleStack key={primary.id} gameHref={gameHref} publishedRuleCount={publishedRuleCount} cards={rules.map((rule, index) => ({
             id: rule.id,
             href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
             label: `查看完整規則：${rule.statement}`,
-            content: <RuleCard rule={rule} previewLines={mobile ? RULE_WINDOW_LINES : 8} hideTitle={mobile} gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
+            content: <RuleCard rule={rule} previewLines={RULE_WINDOW_LINES} hideTitle gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
           }))} />;
         })}
         {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
@@ -368,6 +375,9 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
             <div className="skeleton-line medium" />
           </div>
         ))}
+      </div>
+      <HomeRailArrows canPrev={railIndex > 0} canNext={railIndex < featuredGames.length - railVisible}
+        onPrev={() => showRailGame(railIndex - 1)} onNext={() => showRailGame(railIndex + 1)} />
       </div>
     </section>}
     <AdSlot placement="home-after-game-exploration" />

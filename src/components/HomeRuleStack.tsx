@@ -4,8 +4,7 @@ import { Link } from 'react-router-dom';
 /** Room kept under the last whole card for the 看更多 row, so the row never covers a card that fits. */
 export const HOME_MORE_ROW = 56;
 
-export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
-  mobile: boolean;
+export function HomeRuleStack({ gameHref, publishedRuleCount, cards }: {
   gameHref: string;
   publishedRuleCount?: number;
   cards: { id: string; href: string; label: string; content: ReactNode }[];
@@ -16,7 +15,7 @@ export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
 
   useLayoutEffect(() => {
     const stack = stackRef.current;
-    if (!mobile || !stack || typeof ResizeObserver === 'undefined') return;
+    if (!stack || typeof ResizeObserver === 'undefined') return;
     const entries = Array.from(stack.querySelectorAll<HTMLElement>('.home-rule-stack-entry'));
     const measure = () => {
       const bottom = stack.getBoundingClientRect().bottom;
@@ -55,9 +54,9 @@ export function HomeRuleStack({ mobile, gameHref, publishedRuleCount, cards }: {
         (entry.lastElementChild as HTMLElement).style.height = '';
       }
     };
-  }, [mobile, cardIds]);
+  }, [cardIds]);
 
-  const moreHref = mobile && visible && (visible.complete < cards.length || visible.complete < (publishedRuleCount ?? 0))
+  const moreHref = visible && (visible.complete < cards.length || visible.complete < (publishedRuleCount ?? 0))
     ? cards[visible.complete]?.href ?? gameHref
     : undefined;
 

@@ -120,13 +120,14 @@ test.describe('mobile game tabs', () => {
 test.describe('tablet portrait', () => {
   test.use({ viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-  test('shows two featured games side by side with their names on the cards and the touch navigation kept', { tag: '@ui' }, async ({ page }) => {
+  test('shows two featured games side by side, names both in the tabs and keeps the touch navigation', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
-    await expect(page.getByRole('tab')).toHaveCount(0);
+    await expect(page.getByRole('tab')).toHaveCount(4);
+    await expect(page.getByRole('tab', { selected: true })).toHaveCount(2);
     const [first, second] = await page.locator('.home-featured-rail .rule-card').evaluateAll(cards => cards.slice(0, 2).map(card => card.getBoundingClientRect().toJSON()));
     expect(second.top).toBeCloseTo(first.top, 0);
     expect(second.left).toBeGreaterThan(first.right);
-    await expect(page.locator('.home-featured-rail .rule-game-title')).toHaveCount(4);
+    await expect(page.locator('.home-featured-rail .rule-game-title')).toHaveCount(0);
     await expect(page.locator('.mobile-nav')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(768);
   });

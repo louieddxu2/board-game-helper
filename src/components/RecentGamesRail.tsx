@@ -5,6 +5,7 @@ type RecentGame = { id: string; slug: string; displayName: string };
 export const RecentGamesRail = ({ games, className = '' }: { games: RecentGame[]; className?: string }) => {
   return <div
     className={`recent-games-rail ${className}`}
+    data-drag-scroll
     role="navigation"
     aria-label="最近看過的遊戲"
   >

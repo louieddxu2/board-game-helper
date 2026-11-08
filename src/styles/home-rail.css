@@ -1,0 +1,68 @@
+/* The featured games on the home page: one snapped window per game at every width, like the phone. */
+.home-discover-section .section-heading { justify-content: center; text-align: center; }
+.rule-grid.home-featured-rail { display: flex; align-items: flex-start; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.rule-grid.home-featured-rail::-webkit-scrollbar { display: none; }
+/* Two games show side by side, three on wide screens, with the next one peeking in to show the row moves. */
+.rule-grid.home-featured-rail > * { flex: 0 0 calc((100% - 14px) / 2 - 24px); min-width: 0; scroll-snap-align: start; }
+@media (min-width: 1100px) {
+  .rule-grid.home-featured-rail > * { flex-basis: calc((100% - 28px) / 3 - 18px); }
+}
+.home-featured-rail.has-cards { height: var(--home-rail-height, auto); }
+.home-rule-stack { position: relative; display: flex; flex-direction: column; gap: 12px; overflow: clip; }
+.home-rule-stack-entry { position: relative; flex: none; height: auto; }
+.home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
+.home-rule-stack-content, .home-rule-stack-content > .rule-card { height: auto; }
+.home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
+.home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.home-rule-stack-more {
+  position: absolute;
+  z-index: 1;
+  inset-inline: 0;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: linear-gradient(transparent 25%, var(--paper));
+  color: var(--green);
+  text-decoration: none;
+}
+.home-rule-stack-more-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding-inline: 18px;
+  border: 1px solid var(--green);
+  border-radius: 22px;
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 700;
+}
+.home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+
+/* The tabs above the rail name each game at every width. */
+/* Side padding is set from the end tabs so the row stops when the first or last tab is centred. */
+.home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 0 8px; padding: 2px 0; position: relative; }
+.home-game-tabs::-webkit-scrollbar { display: none; }
+.home-game-tabs > button { flex: none; min-height: 36px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 18px; transition: max-width .25s ease, transform .2s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.home-game-tabs > button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The selected tab grows slightly without taking more room in the row. */
+.home-game-tabs > button.active { max-width: calc(100vw - 36px); transform: scale(1.08); background: var(--green); color: var(--white); }
+.home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+/* With several games on screen their tabs sit side by side, so none grows into its neighbour. */
+.home-game-tabs[aria-multiselectable="true"] > button.active { transform: none; }
+
+/* Arrows beside the rail on tablets and desktops; phones rely on the swipe and the tabs. */
+.home-rail-frame { position: relative; }
+.home-rail-arrow { display: none; }
+@media (min-width: 768px) {
+  .home-rail-arrow { position: absolute; top: 50%; z-index: 2; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0 0 3px; border: 1px solid var(--green); border-radius: 50%; background: var(--white); box-shadow: 0 4px 12px rgba(0, 0, 0, .12); color: var(--green); font: inherit; font-size: 26px; line-height: 1; cursor: pointer; transform: translateY(-50%); }
+  .home-rail-arrow:hover { background: var(--green); color: var(--white); }
+  .home-rail-arrow:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+  /* Just inside the page gutter, so no width gains a sideways scroll. */
+  .home-rail-arrow.prev { left: -16px; }
+  .home-rail-arrow.next { right: -16px; }
+  .home-rail-arrow[hidden] { display: none; }
+}
+/* While a mouse drags a row it follows the pointer; snapping returns when the drag is released. */
+[data-drag-scroll][data-dragging] { scroll-snap-type: none !important; scroll-behavior: auto !important; cursor: grabbing; user-select: none; }
