@@ -54,6 +54,17 @@ test('takes the first tap after a swipe, moves the chosen tag beside the clear b
   for (let step = 1; step <= 10; step++) await touch('touchMove', start + (end - start) * step / 10);
   await touch('touchEnd');
   await expect.poll(() => tagRow.evaluate((element) => element.scrollLeft)).toBeGreaterThan(40);
+  // The screen is usable once the row stops moving: the swipe's snap can still be carrying it.
+  await tagRow.evaluate((element) => new Promise<void>((resolve) => {
+    let last = -1;
+    let still = 0;
+    const frame = () => {
+      still = element.scrollLeft === last ? still + 1 : 0;
+      last = element.scrollLeft;
+      if (still >= 3) resolve(); else requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }));
 
   // Tap the right-most tag the swipe brought fully into view.
   const name = await tagRow.getByRole('button').evaluateAll((buttons, edge) => buttons
