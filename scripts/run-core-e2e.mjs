@@ -11,8 +11,10 @@ const run = (command, args) => execFileSync(command, args, { cwd: workspaceRoot,
 // attribute voting): it cannot stop a push, and Linux fonts shift the layout-sensitive @ui tests.
 // --ui runs only the @ui tests, for work on the home, game and record pages.
 const uiOnly = process.argv.includes('--ui');
-const gateOnly = Boolean(process.env.CI);
+// Only the GitHub workflow sets RELEASE_GATE_ONLY; a generic CI flag set by some local tool must not skip tests.
+const gateOnly = process.env.RELEASE_GATE_ONLY === '1';
 const selection = uiOnly ? ['--grep', '@ui'] : gateOnly ? ['--grep-invert', '@ui'] : [];
+console.log(uiOnly ? 'Browser tests: @ui only' : gateOnly ? 'Browser tests: release gate only (RELEASE_GATE_ONLY=1), @ui skipped' : 'Browser tests: all, including @ui');
 
 try {
   execSync('npm run build', { cwd: workspaceRoot, stdio: 'inherit', env });

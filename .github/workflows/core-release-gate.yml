@@ -32,4 +32,6 @@ jobs:
       - name: Install isolated browser
         run: npx playwright install --with-deps chromium
       - name: Verify release invariants
+        env:
+          RELEASE_GATE_ONLY: '1'
         run: npm run test:release

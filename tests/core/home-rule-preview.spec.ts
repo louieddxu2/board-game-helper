@@ -79,20 +79,15 @@ for (const width of [320, 393, 1280]) {
         // A finger moves in small steps; two long jumps read as a fling that can carry past the next game.
         const start = box.x + box.width - 25;
         const end = box.x + 25;
+        await rail.evaluate((element) => {
+          element.dataset.scrollEnded = 'false';
+          element.addEventListener('scrollend', () => { (element as HTMLElement).dataset.scrollEnded = 'true'; }, { once: true });
+        });
         await touch('touchStart', start);
         for (let step = 1; step <= 10; step++) await touch('touchMove', start + (end - start) * step / 10);
         await touch('touchEnd');
-        // The screen is usable once the row stops moving: the swipe's snap can still be carrying it.
-        await rail.evaluate((element) => new Promise<void>((resolve) => {
-          let last = -1;
-          let still = 0;
-          const frame = () => {
-            still = element.scrollLeft === last ? still + 1 : 0;
-            last = element.scrollLeft;
-            if (still >= 3) resolve(); else requestAnimationFrame(frame);
-          };
-          requestAnimationFrame(frame);
-        }));
+        // The screen is usable once the browser reports the scroll, snap included, has ended.
+        await expect(rail).toHaveAttribute('data-scroll-ended', 'true');
         await expect(page.getByRole('tab', { name: '展示遊戲 2' })).toHaveAttribute('aria-selected', 'true');
         expect(await rail.evaluate(element => element.getBoundingClientRect().bottom)).toBeCloseTo(railBottom, 0);
         await client.detach();
