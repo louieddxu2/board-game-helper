@@ -87,3 +87,68 @@ test('shows arrows beside the rail that move one game at a time and hide at eith
   await expect.poll(() => namesInView(rail)).toEqual(['拖曳遊戲 2', '拖曳遊戲 3', '拖曳遊戲 4']);
   expect(await rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });
+
+// A drag across most of the rail, the pointer passing the arrows, keeps its distance on release
+// instead of springing back to one game from where it began.
+test('a long drag past the arrows lands near where it was let go, never moving back', { tag: '@ui' }, async ({ page }) => {
+  const rail = await showHome(page);
+  const box = (await rail.boundingBox())!;
+  const y = box.y + 150;
+  const glide = async (from: number, to: number) => {
+    await page.mouse.move(box.x + box.width * from, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 30; step++) await page.mouse.move(box.x + box.width * (from + (to - from) * step / 30), y);
+    const released = await rail.evaluate((element) => element.scrollLeft);
+    // Record every position from the release until the row settles.
+    await rail.evaluate((element) => {
+      const seen: number[] = [];
+      (window as Window & { seen?: number[] }).seen = seen;
+      element.addEventListener('scroll', () => seen.push(element.scrollLeft));
+    });
+    await page.mouse.up();
+    await expect(rail).not.toHaveAttribute('data-dragging', /.*/);
+    return { released, seen: await page.evaluate(() => (window as Window & { seen: number[] }).seen) };
+  };
+  const max = await rail.evaluate((element) => element.scrollWidth - element.clientWidth);
+
+  const forward = await glide(0.8, -0.05);
+  expect(forward.released).toBeGreaterThan(max / 2);
+  expect(await rail.evaluate((element) => element.scrollLeft)).toBeCloseTo(max, 0);
+  for (const position of forward.seen) expect(position).toBeGreaterThanOrEqual(forward.released - 1);
+
+  const back = await glide(0.2, 1.05);
+  expect(await rail.evaluate((element) => element.scrollLeft)).toBe(0);
+  for (const position of back.seen) expect(position).toBeLessThanOrEqual(back.released + 1);
+});
+
+// A second drag that starts while the first release is still gliding keeps snapping off until it is let go;
+// otherwise the row jerks between the pointer and a snap point mid-drag.
+test('a drag started during the previous glide follows the pointer without jumping', { tag: '@ui' }, async ({ page }) => {
+  const rail = await showHome(page);
+  const box = (await rail.boundingBox())!;
+  const y = box.y + 150;
+  await page.mouse.move(box.x + box.width * 0.6, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 5; step++) await page.mouse.move(box.x + box.width * 0.6 - step * 40, y);
+  await page.mouse.up();
+  await rail.evaluate((element) => {
+    const trace: Array<{ left: number; dragging: boolean }> = [];
+    (window as Window & { trace?: typeof trace }).trace = trace;
+    element.addEventListener('scroll', () => trace.push({ left: element.scrollLeft, dragging: Boolean(element.dataset.dragging) }));
+  });
+  await page.mouse.move(box.x + box.width * 0.8, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 40; step++) {
+    await page.mouse.move(box.x + box.width * (0.8 - 0.85 * step / 40), y);
+    await page.waitForTimeout(25);
+  }
+  const trace = await page.evaluate(() => (window as Window & { trace: Array<{ left: number; dragging: boolean }> }).trace);
+  await page.mouse.up();
+  expect(trace.length).toBeGreaterThan(10);
+  expect(trace.every((entry) => entry.dragging)).toBe(true);
+  // While held, the row only moves the way the pointer does, in steps no bigger than the pointer's.
+  for (let index = 1; index < trace.length; index++) {
+    expect(trace[index].left).toBeGreaterThanOrEqual(trace[index - 1].left - 1);
+    expect(trace[index].left - trace[index - 1].left).toBeLessThan(60);
+  }
+});
