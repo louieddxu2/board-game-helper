@@ -47,19 +47,26 @@ test('takes the first tap after a swipe, moves the chosen tag beside the clear b
   const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) => client.send('Input.dispatchTouchEvent', {
     type, touchPoints: x === undefined ? [] : [{ x, y: box.y + box.height / 2, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
   });
-  await touch('touchStart', box.x + box.width - 20);
-  await touch('touchMove', box.x + box.width / 2);
-  await touch('touchMove', box.x + 30);
+  // A finger moves in small steps; how far one swipe scrolls depends on the fonts' widths.
+  const start = box.x + box.width - 20;
+  const end = box.x + 30;
+  await touch('touchStart', start);
+  for (let step = 1; step <= 10; step++) await touch('touchMove', start + (end - start) * step / 10);
   await touch('touchEnd');
   await expect.poll(() => tagRow.evaluate((element) => element.scrollLeft)).toBeGreaterThan(40);
 
-  const target = tagRow.getByRole('button', { name: '#玩家順序' });
-  await expect(target).toBeInViewport();
+  // Tap the right-most tag the swipe brought fully into view.
+  const name = await tagRow.getByRole('button').evaluateAll((buttons, edge) => buttons
+    .filter((button) => { const rect = button.getBoundingClientRect(); return rect.left >= edge.left && rect.right <= edge.right; })
+    .map((button) => button.textContent ?? '').at(-1) ?? '', { left: box.x, right: box.x + box.width });
+  expect(name).toMatch(/^#/);
+  expect(['#設置', '#計分']).not.toContain(name);
+  const target = tagRow.getByRole('button', { name, exact: true });
   await target.tap();
-  await expect(tagRow.getByRole('button', { name: '#玩家順序 ✕' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(tagRow.getByRole('button', { name: `${name} ✕` })).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => tagRow.evaluate((element) => element.scrollLeft)).toBe(0);
-  expect((await tagRow.getByRole('button').allTextContents()).slice(0, 2)).toEqual(['✕', '#玩家順序 ✕']);
-  expect(new URL(page.url()).searchParams.getAll('tag')).toEqual(['玩家順序']);
+  expect((await tagRow.getByRole('button').allTextContents()).slice(0, 2)).toEqual(['✕', `${name} ✕`]);
+  expect(new URL(page.url()).searchParams.getAll('tag')).toEqual([name.slice(1)]);
 
   const clear = page.getByRole('button', { name: '清除所有篩選' });
   expect((await clear.boundingBox())!.width).toBeLessThanOrEqual(28);
