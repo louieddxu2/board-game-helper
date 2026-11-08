@@ -136,7 +136,7 @@ test.describe('two rules of the same game in the mobile window', () => {
   const first = { ...rules[1], id: 'short-rule', statement: '本回合先移動。', commonMistake: undefined, details: undefined };
   const tall = rules[2];
 
-  test('keeps a fitting card whole and usable, with 看更多 below it', async ({ page }) => {
+  test('keeps a fitting card whole and usable, with 看更多 below it', { tag: '@ui' }, async ({ page }) => {
     await showHome(page, [first, tall], [rules[1]]);
     const rail = page.locator('.home-featured-rail');
     const card = rail.locator('#rule-short-rule');

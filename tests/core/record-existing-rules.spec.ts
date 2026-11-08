@@ -34,7 +34,7 @@ const settled = async (page: Page) => {
   return panel;
 };
 
-test('opens beside the draft at 85% width, ranks the resembling rule first and expands a rule in place', async ({ page }) => {
+test('opens beside the draft at 85% width, ranks the resembling rule first and expands a rule in place', { tag: '@ui' }, async ({ page }) => {
   const open = await openRecordPage(page);
   const headingHeight = await page.locator('.list-heading').evaluate((element) => element.getBoundingClientRect().height);
   expect(headingHeight).toBeLessThan(44);

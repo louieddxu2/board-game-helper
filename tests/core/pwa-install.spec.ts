@@ -17,7 +17,7 @@ const routeHome = async (page: import('@playwright/test').Page, getUser: () => o
   } }));
 };
 
-test('aligns a compact install action beside the slogan with smaller section headings in both home modes', async ({ page }) => {
+test('aligns a compact install action beside the slogan with smaller section headings in both home modes', { tag: '@ui' }, async ({ page }) => {
   let user: object | null = null;
   await routeHome(page, () => user);
   const header = page.locator('.site-header');

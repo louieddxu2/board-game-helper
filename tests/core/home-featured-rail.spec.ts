@@ -63,7 +63,7 @@ for (const input of ['tap', 'click'] as const) {
   });
 }
 
-test('stacks a featured game\'s next rule from the home payload under its card', async ({ page }) => {
+test('stacks a featured game\'s next rule from the home payload under its card', { tag: '@ui' }, async ({ page }) => {
   const next = { ...rule(9), gameId: 'rail-game-1', gameName: '測試遊戲 1', gameSlug: 'rail-game-1', statement: '同一款遊戲的下一條規則。' };
   let extraReads = 0;
   await page.route('**/api/session', (route) => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));

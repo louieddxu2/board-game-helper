@@ -23,7 +23,7 @@ const showGame = async (page: Page) => {
   await expect(page.getByRole('heading', { name: game.displayName, exact: true })).toBeVisible();
 };
 
-test('keeps tags and player counts on one swipeable line each, ordered by how many rules carry a tag', async ({ page }) => {
+test('keeps tags and player counts on one swipeable line each, ordered by how many rules carry a tag', { tag: '@ui' }, async ({ page }) => {
   await showGame(page);
   const tagRow = page.getByRole('group', { name: '依標籤篩選' });
   const specialRow = page.getByRole('group', { name: '依人數或版本篩選' });

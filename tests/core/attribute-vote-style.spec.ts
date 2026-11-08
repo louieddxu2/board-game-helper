@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readCssSource } from '../../scripts/read-css-source';
 for (const side of ['left', 'right'] as const) {
-  test(`reused ${side} game does not retain selected color under the pointer`, async ({ page }) => {
+  test(`reused ${side} game does not retain selected color under the pointer`, { tag: '@ui' }, async ({ page }) => {
     const card = `<button class="attribute-game-card is-${side}" aria-label="重複遊戲較高" aria-pressed="false">重複遊戲</button>`;
     await page.setContent(`<section class="attribute-vote-page">${card}</section>`);
     await page.addStyleTag({ content: readCssSource('src/styles.css') });

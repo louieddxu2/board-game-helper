@@ -24,6 +24,7 @@
     "test:migrations:fresh": "cross-env CORE_TEST_DATABASE_MODE=fresh node scripts/prepare-core-test.mjs",
     "test:core:serve": "node scripts/serve-core-test.mjs",
     "test:core:e2e": "node scripts/run-core-e2e.mjs",
+    "test:ui:e2e": "node scripts/run-core-e2e.mjs --ui",
     "test:release": "npm run check:d1-fanout && npm test && npm run typecheck && npm run test:core:e2e",
     "smoke:production": "node scripts/production-smoke.mjs",
     "typecheck": "npm run check:protected-copy && npm run check:d1-boundary && npm run check:file-size && tsc --noEmit",

@@ -25,7 +25,7 @@ const truncated = (page: Page, name: string) => page.getByRole('tab', { name, ex
 test.describe('mobile game tabs', () => {
   test.use({ viewport: { width: 393, height: 851 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-  test('names each game above its card instead of on it, and shows the selected name in full', async ({ page }) => {
+  test('names each game above its card instead of on it, and shows the selected name in full', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     await expect(page.getByRole('tab')).toHaveCount(4);
     await expect(page.getByRole('tab', { exact: true, name: names[0] })).toHaveAttribute('aria-selected', 'true');
@@ -35,7 +35,7 @@ test.describe('mobile game tabs', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
   });
 
-  test('stops scrolling exactly when the first or last game is centred, and enlarges only the selected tab', async ({ page }) => {
+  test('stops scrolling exactly when the first or last game is centred, and enlarges only the selected tab', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     const row = page.locator('[role="tablist"]');
     const offset = (index: number) => row.evaluate((element, index) => {
@@ -120,7 +120,7 @@ test.describe('mobile game tabs', () => {
 test.describe('tablet portrait', () => {
   test.use({ viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-  test('shows two featured games side by side with their names on the cards and the touch navigation kept', async ({ page }) => {
+  test('shows two featured games side by side with their names on the cards and the touch navigation kept', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     await expect(page.getByRole('tab')).toHaveCount(0);
     const [first, second] = await page.locator('.home-featured-rail .rule-card').evaluateAll(cards => cards.slice(0, 2).map(card => card.getBoundingClientRect().toJSON()));

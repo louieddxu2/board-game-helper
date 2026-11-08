@@ -37,7 +37,7 @@ for (const width of [393, 320, 1280]) {
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
-    test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', async ({ page }) => {
+    test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', { tag: '@ui' }, async ({ page }) => {
       const tags = ['行動', '褐色框', '關鍵字', '這個標籤名稱特別長仍然必須完整顯示'].map((name, index) => ({ id: `wrap-tag-${index}`, slug: `wrap-tag-${index}`, name }));
       const rule = { ...game.rules[0], categories: ['action_effect_detail'], playerCounts: [], editionNotes: [], createdByNickname: '東東', tags, tagIds: tags.map(tag => tag.id) };
       await showGame(page, { ...game, rules: [rule] });
@@ -59,7 +59,7 @@ for (const width of [393, 320, 1280]) {
       if (width === 393) await card.screenshot({ path: '.wrangler/game-rule-card-many-tags.png' });
     });
 
-    test('aligns title actions with the first line and opens resources and editing directly', async ({ page }) => {
+    test('aligns title actions with the first line and opens resources and editing directly', { tag: '@ui' }, async ({ page }) => {
       const state = await showGame(page);
       const favorite = page.getByRole('button', { name: '收藏遊戲', exact: true });
       await expect(favorite).toHaveAttribute('aria-pressed', 'false');
@@ -109,7 +109,7 @@ for (const width of [393, 320, 1280]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 
-    test('fits three complete concept indexes on one row and toggles each selection off', async ({ page }) => {
+    test('fits three complete concept indexes on one row and toggles each selection off', { tag: '@ui' }, async ({ page }) => {
       await showGame(page);
       const index = page.getByRole('group', { name: '規則快速索引' });
       const entries = index.getByRole('button');

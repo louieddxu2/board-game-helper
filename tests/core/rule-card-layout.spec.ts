@@ -66,7 +66,7 @@ for (const width of [393, 320, 768, 1280]) {
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
-    test('keeps the complete rule compact, with a two-line source and usable actions', async ({ page }) => {
+    test('keeps the complete rule compact, with a two-line source and usable actions', { tag: '@ui' }, async ({ page }) => {
       const card = await host(page, sample);
       const pathname = new URL(page.url()).pathname;
       await expect(card.locator('.statement-text')).toHaveText(statement);
@@ -113,7 +113,7 @@ for (const width of [393, 320, 768, 1280]) {
       if (touch) await card.screenshot({ path: `.wrangler/rule-card-compact-${width}.png` });
     });
 
-    test('keeps both labels near the start of long notes', async ({ page }) => {
+    test('keeps both labels near the start of long notes', { tag: '@ui' }, async ({ page }) => {
       const commonMistake = ['把起始板塊算作城市', '因此拿取城市獎勵', '又計入城市相關目標',
         '擴充條件也跟著誤算', '最後再加入結算分數'].join('\n');
       const longDetails = ['起始板塊的圖案很像', '但顏色與城市不同', '請先確認板塊種類',

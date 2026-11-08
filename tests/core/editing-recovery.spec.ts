@@ -99,7 +99,7 @@ for (const touch of [false, true]) {
       await expect(statement).toHaveValue('Draft safety');
     });
 
-    test('retries a failed home read once without reloading the page', async ({ page }) => {
+    test('retries a failed home read once without reloading the page', { tag: '@ui' }, async ({ page }) => {
       let reads = 0;
       await page.route('**/api/home', route => {
         reads++;
@@ -117,7 +117,7 @@ for (const touch of [false, true]) {
       expect(reads).toBe(2);
     });
 
-    test('keeps the search query and retries its failed catalog read on the first action', async ({ page }) => {
+    test('keeps the search query and retries its failed catalog read on the first action', { tag: '@ui' }, async ({ page }) => {
       // Every read fails until the retry: the home footer may make the first one before the search does.
       let snapshots = 0;
       let retried = false;
@@ -139,7 +139,7 @@ for (const touch of [false, true]) {
       expect(snapshots).toBe(failedReads + 1);
     });
 
-    test('restores the list filter and expanded game after returning from the game page', async ({ page, context }) => {
+    test('restores the list filter and expanded game after returning from the game page', { tag: '@ui' }, async ({ page, context }) => {
       expect((await context.request.post('/api/auth/dev', { data: {} })).ok()).toBe(true);
       await page.goto('/catalog');
       const search = page.getByRole('searchbox', { name: '篩選遊戲名稱' });

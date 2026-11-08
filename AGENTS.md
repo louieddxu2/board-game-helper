@@ -4,6 +4,8 @@ GPT-6 Astra owns scope, integration, review, commits, and releases. Keep one imp
 
 Classify layout separately from interaction. Use browser evidence only when it answers the question; use the target mobile viewport for mobile geometry or touch work. Honor skipped verification for low-risk reversible work. Keep validation proportional.
 
+The release gate covers data persistence, contracts, recovery from data loss and first-input behaviour. Tag a browser test that pins layout or appearance (positions, sizes, alignment, colours) with `{ tag: '@ui' }`; the gate skips it and `npm run test:ui:e2e` runs it while working on that page.
+
 涉及滑動、切頁或彈窗的測試，應驗證畫面可操作後的首次原生輸入立即且只生效一次，不以額外等待或重試掩蓋漏點。發生漏點時先追蹤事件傳遞、命中目標與狀態清理，修正時保留滑動、縮放、長按與取消的防誤觸。
 
 輸入框須用手機原生 tap 與桌面 click 驗證開窗聚焦、進入欄位全選及首字直接取代原值；須涵蓋觸控補發的滑鼠事件，不以 focus/select 呼叫紀錄或 fill 取代操作驗證。
