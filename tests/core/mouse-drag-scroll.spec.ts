@@ -20,6 +20,13 @@ const showHome = async (page: Page) => {
   return rail;
 };
 
+// The games named above the cards that are fully on screen; each name sits over its own card.
+const namesInView = (rail: Locator) => rail.locator('.home-rail-game-title').evaluateAll((names) => {
+  const edge = names[0].closest('.home-featured-rail')!.getBoundingClientRect();
+  return names.filter((name) => { const box = name.getBoundingClientRect(); return box.left >= edge.left - 1 && box.right <= edge.right + 1; })
+    .map((name) => name.textContent);
+});
+
 const dragBy = async (page: Page, row: Locator, distance: number) => {
   const box = (await row.boundingBox())!;
   const x = box.x + box.width / 2;
@@ -40,8 +47,8 @@ test('drags the featured games to the next one without opening a card, then open
   expect(await rail.evaluate((element) => element.scrollLeft)).toBeCloseTo(step, 0);
   await expect(rail).not.toHaveAttribute('data-dragging', /.*/);
   expect(new URL(page.url()).pathname).toBe('/');
-  // The tabs above follow: the three games now on screen are the selected ones.
-  await expect(page.getByRole('tab', { selected: true })).toHaveText(['拖曳遊戲 1', '拖曳遊戲 2', '拖曳遊戲 3']);
+  // The names move with their cards: the three games now on screen are named above them.
+  await expect.poll(() => namesInView(rail)).toEqual(['拖曳遊戲 1', '拖曳遊戲 2', '拖曳遊戲 3']);
 
   await dragBy(page, rail, 120);
   expect(await rail.evaluate((element) => element.scrollLeft)).toBe(0);
@@ -69,14 +76,14 @@ test('shows arrows beside the rail that move one game at a time and hide at eith
   await expect(prev).toBeHidden();
   await expect(next).toBeVisible();
   await next.click();
-  await expect(page.getByRole('tab', { selected: true })).toHaveText(['拖曳遊戲 1', '拖曳遊戲 2', '拖曳遊戲 3']);
+  await expect.poll(() => namesInView(rail)).toEqual(['拖曳遊戲 1', '拖曳遊戲 2', '拖曳遊戲 3']);
   await expect(prev).toBeVisible();
   // Six games, three on screen: three steps reach the end, where the next arrow goes away.
   await next.click();
   await next.click();
   await expect(next).toBeHidden();
-  await expect(page.getByRole('tab', { selected: true })).toHaveText(['拖曳遊戲 3', '拖曳遊戲 4', '拖曳遊戲 5']);
+  await expect.poll(() => namesInView(rail)).toEqual(['拖曳遊戲 3', '拖曳遊戲 4', '拖曳遊戲 5']);
   await prev.click();
-  await expect(page.getByRole('tab', { selected: true })).toHaveText(['拖曳遊戲 2', '拖曳遊戲 3', '拖曳遊戲 4']);
+  await expect.poll(() => namesInView(rail)).toEqual(['拖曳遊戲 2', '拖曳遊戲 3', '拖曳遊戲 4']);
   expect(await rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });

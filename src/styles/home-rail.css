@@ -40,7 +40,7 @@
 }
 .home-rule-stack-more:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 
-/* The tabs above the rail name each game at every width. */
+/* A phone names the games in a tab row above the rail (hidden on wider screens below). */
 /* Side padding is set from the end tabs so the row stops when the first or last tab is centred. */
 .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 0 8px; padding: 2px 0; position: relative; }
 .home-game-tabs::-webkit-scrollbar { display: none; }
@@ -49,8 +49,21 @@
 /* The selected tab grows slightly without taking more room in the row. */
 .home-game-tabs > button.active { max-width: calc(100vw - 36px); transform: scale(1.08); background: var(--green); color: var(--white); }
 .home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
-/* With several games on screen their tabs sit side by side, so none grows into its neighbour. */
-.home-game-tabs[aria-multiselectable="true"] > button.active { transform: none; }
+/* Each game's column: its name, then its window of rules filling the rest of the rail's height. */
+.home-rail-game { display: flex; flex-direction: column; gap: 8px; height: 100%; min-width: 0; }
+.home-rail-game > .home-rule-stack { flex: 1; min-height: 0; height: auto; }
+.home-rail-game-name { display: none; }
+/* Tablets and desktops show two or three games, so each name sits right above its own card and moves with it. */
+@media (min-width: 768px) {
+  .home-game-tabs { display: none; }
+  /* A plain heading for the column, in line with the card's text: the name, how many rules it has, and a link cue. */
+  .home-rail-game-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 4px 14px 0; color: var(--ink); text-decoration: none; }
+  .home-rail-game-title { overflow: hidden; min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+  .home-rail-game-count { flex: none; color: var(--muted); font-size: 13px; }
+  .home-rail-game-arrow { flex: none; margin-left: auto; color: var(--green); font-size: 18px; line-height: 1; }
+  .home-rail-game-name:hover .home-rail-game-title { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
+  .home-rail-game-name:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 6px; }
+}
 
 /* Arrows beside the rail on tablets and desktops; phones rely on the swipe and the tabs. */
 .home-rail-frame { position: relative; }

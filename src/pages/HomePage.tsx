@@ -209,6 +209,10 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
         for (const paragraph of paragraphs) line = Math.max(line, parseFloat(getComputedStyle(paragraph).lineHeight) || 0);
       }
       rail.style.setProperty('--home-rail-height', `${Math.ceil(frame + RULE_WINDOW_LINES * line + HOME_MORE_ROW)}px`);
+      // Tablets and desktops name each game just above its card, inside the window.
+      const name = rail.querySelector<HTMLElement>('.home-rail-game-name');
+      const nameRow = name && name.offsetHeight > 0 ? name.offsetHeight + parseFloat(getComputedStyle(name.parentElement!).rowGap || '0') : 0;
+      rail.style.setProperty('--home-rail-height', `${Math.ceil(nameRow + frame + RULE_WINDOW_LINES * line + HOME_MORE_ROW)}px`);
       const step = railStep(rail);
       // A peeking next game does not count as shown.
       if (step > 0) setRailVisible(Math.max(1, Math.floor((rail.clientWidth - parseFloat(getComputedStyle(rail).paddingLeft || '0') + parseFloat(getComputedStyle(rail).columnGap || '0')) / step)));
@@ -320,11 +324,10 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     {!hideFeatured && <section id="discover" className="content-section home-rule-section home-discover-section">
       <div className="section-heading"><div><h2>近期常被查閱的遊戲</h2></div></div>
       {hasHomeError && <div className="content-load-error" role="alert"><p>{hasVisibleHome ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading || resolvingHome} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
-      {/* The games are named in one row above the rail at every width; the ones on screen are highlighted. */}
+      {/* A phone, one game at a time, names the games in a tab row; wider screens name each game above its own card. */}
       {featuredGames.length > 1 && <HomeGameTabs
         games={featuredGames.map(rule => ({ id: rule.gameId, name: rule.gameName }))}
         active={railIndex}
-        count={Math.min(railVisible, featuredGames.length)}
         onSelect={showRailGame}
       />}
       <div className="home-rail-frame">
@@ -353,12 +356,19 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
             rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
             && candidates.findIndex(candidate => candidate.id === rule.id) === index)];
           const publishedRuleCount = home?.featured?.find(ref => ref.gameSlug === primary.gameSlug)?.publishedRuleCount;
-          return <HomeRuleStack key={primary.id} gameHref={gameHref} publishedRuleCount={publishedRuleCount} cards={rules.map((rule, index) => ({
+          return <div className="home-rail-game" key={primary.id}>
+            <Link className="home-rail-game-name" to={gameHref}>
+              <span className="home-rail-game-title">{primary.gameName}</span>
+              {publishedRuleCount !== undefined && <span className="home-rail-game-count">{publishedRuleCount} 條規則</span>}
+              <span className="home-rail-game-arrow" aria-hidden="true">›</span>
+            </Link>
+            <HomeRuleStack gameHref={gameHref} publishedRuleCount={publishedRuleCount} cards={rules.map(rule => ({
             id: rule.id,
             href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
             label: `查看完整規則：${rule.statement}`,
             content: <RuleCard rule={rule} previewLines={RULE_WINDOW_LINES} hideTitle gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
-          }))} />;
+          }))} />
+          </div>;
         })}
         {!home && !homeError && Array.from({ length: 3 }, (_, index) => (
           <div className="skeleton-card" key={index}>

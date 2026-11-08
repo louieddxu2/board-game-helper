@@ -120,10 +120,19 @@ test.describe('mobile game tabs', () => {
 test.describe('tablet portrait', () => {
   test.use({ viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-  test('shows two featured games side by side, names both in the tabs and keeps the touch navigation', { tag: '@ui' }, async ({ page }) => {
+  test('shows two featured games side by side, each named above its own card, and keeps the touch navigation', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
-    await expect(page.getByRole('tab')).toHaveCount(4);
-    await expect(page.getByRole('tab', { selected: true })).toHaveCount(2);
+    await expect(page.getByRole('tab')).toHaveCount(0);
+    const names = page.locator('.home-rail-game-name');
+    await expect(names).toHaveCount(4);
+    // Each name heads its own card, starting in line with the card's text.
+    for (const index of [0, 1]) {
+      const name = (await names.nth(index).locator('.home-rail-game-title').boundingBox())!;
+      const card = (await page.locator('.home-rail-game').nth(index).locator('.rule-card').first().boundingBox())!;
+      expect(name.x - card.x).toBeGreaterThanOrEqual(8);
+      expect(name.x - card.x).toBeLessThanOrEqual(20);
+      expect(name.y + name.height).toBeLessThanOrEqual(card.y);
+    }
     const [first, second] = await page.locator('.home-featured-rail .rule-card').evaluateAll(cards => cards.slice(0, 2).map(card => card.getBoundingClientRect().toJSON()));
     expect(second.top).toBeCloseTo(first.top, 0);
     expect(second.left).toBeGreaterThan(first.right);
