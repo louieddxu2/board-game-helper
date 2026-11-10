@@ -1,5 +1,6 @@
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock, type AttributeReplayLock } from '../data/attributeLocks';
 import { prepareCalculatedAttributeReplay, queryFullReplayMetadata } from '../data/attributeReplay';
+import { queryOrderedCalculationInProgress } from '../data/attributeReplayOrdering';
 import {
   assertReplayCatalogVersion, assertReplayHistoryHead, ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE, prepareCalculateReplayAttribute, prepareCaptureReplayHistory,
   prepareClearReplayWork, prepareExtendReplayWork, prepareStartReplayWork, queryAttributeReplayWork, queryCalculatedReplayWork,
@@ -18,7 +19,8 @@ export interface ReplayWorkBudget {
 
 export type ResumableReplayOutcome = 'pending' | 'replay';
 
-const MAX_REPLAY_STEPS_PER_RUN = 32;
+const MAX_REPLAY_STEPS_PER_RUN = 128;
+const MAX_REPLAY_STATEMENTS_PER_RUN = 700;
 const REPLAY_RUN_BUDGET_MS = 20_000;
 
 const replayScope = (metadata: Awaited<ReturnType<typeof queryFullReplayMetadata>>): ReplayScope =>
@@ -45,6 +47,7 @@ export const runAttributeReplayWorkLocked = async (
   initialHead?: ReplayHistoryHead,
 ): Promise<ResumableReplayOutcome> => {
   const startedAt = Date.now();
+  const initialQueries = db.metrics?.().queries ?? 0;
   const [historyRevision, currentHead] = await Promise.all([
     queryReplayHistoryRevision(db), initialHead ?? queryReplayHistoryHead(db),
   ]);
@@ -53,7 +56,7 @@ export const runAttributeReplayWorkLocked = async (
     || !await queryReplayAnchorMatches(db, work)) {
     const metadata = await queryFullReplayMetadata(db);
     work = await startReplayWork(db, lock, revision, historyRevision, currentHead, replayScope(metadata));
-  } else if (currentHead.rowid > work.target_rowid) {
+  } else if (currentHead.rowid > work.target_rowid && !await queryOrderedCalculationInProgress(db)) {
     await commitAttributeReplay(db, lock, [prepareExtendReplayWork(db, currentHead)], revision);
     work.target_rowid = currentHead.rowid;
     work.target_response_id = currentHead.response_id;
@@ -63,7 +66,8 @@ export const runAttributeReplayWorkLocked = async (
   const maxSteps = budget.maxSteps ?? MAX_REPLAY_STEPS_PER_RUN;
   const pageSize = budget.pageSize ?? ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE;
   for (let step = 0; step < maxSteps; step += 1) {
-    if (step > 0 && Date.now() - startedAt >= REPLAY_RUN_BUDGET_MS) return 'pending';
+    if (step > 0 && (Date.now() - startedAt >= REPLAY_RUN_BUDGET_MS
+      || (db.metrics?.().queries ?? 0) - initialQueries >= MAX_REPLAY_STATEMENTS_PER_RUN)) return 'pending';
     if (work.scanned_rowid < work.target_rowid) {
       const { cursor, statements, invalidated } = await prepareCaptureReplayHistory(db, work, scope, completed, pageSize);
       await commitAttributeReplay(db, lock, statements, revision);
@@ -74,9 +78,9 @@ export const runAttributeReplayWorkLocked = async (
 
     const attributeId = scope[1].find((id) => !completed.has(id));
     if (attributeId) {
-      const statements = await prepareCalculateReplayAttribute(db, scope, attributeId);
+      const { completed: attributeCompleted, statements } = await prepareCalculateReplayAttribute(db, scope, attributeId);
       await commitAttributeReplay(db, lock, statements, revision);
-      completed.add(attributeId);
+      if (attributeCompleted) completed.add(attributeId);
       continue;
     }
 

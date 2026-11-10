@@ -1,8 +1,13 @@
 import { encodeAttributeReplayChunks } from './attributeReplayChunks';
 import {
-  calculateAttributeReplay, mergeStateKey, pairStatKey,
-  type CalculatedAttributeReplay, type FullReplayResponseRow, type ReplayPair,
+  accumulateAttributeReplayRatings, applyAttributeReplayComparisons, calculateAttributeReplay, decodeAttributeReplayVotes,
+  expandAttributeReplayHistory, initializeAttributeReplayStates, mergeStateKey, pairStatKey, unpackAttributeReplayVotes,
+  type CalculatedAttributeReplay, type DirectRatingTotals, type FullReplayResponseRow, type ReplayPair, type ReplayVoteEntry,
 } from './attributeReplayCalculation';
+import {
+  initialOrderingCursor, prepareCalculationCursor, prepareOrderReplayStep, queryCalculationCursor, queryOrderedReplayEvents,
+  type ScoringCursor,
+} from './attributeReplayOrdering';
 import type { OnlineAttributeState } from './attributeScoring';
 import { attributeVoteWeight, queryAuthorizedAttributeVoters } from './attributeVoteWeights';
 import type { Database } from './database';
@@ -26,11 +31,6 @@ export interface ReplayWork {
 export type ReplayScope = [subjectIds: string[], attributeIds: string[]];
 type WorkKind = 'history' | 'states' | 'pairs';
 type VoteRow = Omit<FullReplayResponseRow, 'weight'> & { actor_id: string | null; replay_rowid: number };
-type VoteEntry = [
-  responseId: string, subjectAId: string, subjectBId: string | null,
-  ratingA: number | null, ratingB: number | null, comparison: FullReplayResponseRow['comparison'],
-  createdAt: number, weight: number,
-];
 
 export const queryAttributeReplayWork = (db: Database) => db.statement(`
   SELECT history_revision, model_version, scope_json, target_rowid, target_response_id, scanned_rowid
@@ -81,6 +81,8 @@ export const assertReplayCatalogVersion = (db: Database, version: number) => db.
 `).bind(version);
 
 export const prepareClearReplayWork = (db: Database) => [
+  db.statement('DELETE FROM attribute_replay_calculation'),
+  db.statement('DELETE FROM attribute_replay_ordered_chunks'),
   db.statement('DELETE FROM attribute_replay_work_chunks'),
   db.statement('DELETE FROM attribute_replay_work WHERE id = 1'),
 ];
@@ -118,7 +120,7 @@ export const prepareCaptureReplayHistory = async (
   const rows = result.results ?? [];
   if (!rows.length) throw new Error('attribute_replay_history_anchor_missing');
   const attributeIds = new Set(scope[1]);
-  const pages = new Map<string, VoteEntry[]>();
+  const pages = new Map<string, ReplayVoteEntry[]>();
   for (const row of rows) {
     if (!attributeIds.has(row.attribute_id)) continue;
     const entries = pages.get(row.attribute_id) ?? [];
@@ -130,17 +132,23 @@ export const prepareCaptureReplayHistory = async (
   }
   const cursor = rows.at(-1)!.replay_rowid;
   const statements = [...pages].flatMap(([attributeId, entries]) => prepareChunks(db, 'history', attributeId, cursor, entries));
-  const invalidated = [...pages.keys()].filter((attributeId) => completed.has(attributeId));
-  if (invalidated.length) {
-    // A comparison can arrive behind the chronological cursor. Recalculate
-    // only the attributes touched by the newly captured input.
-    statements.push(db.statement(`
-      DELETE FROM attribute_replay_work_chunks
-      WHERE kind IN ('states', 'pairs') AND attribute_id IN (SELECT value FROM json_each(?))
-    `).bind(JSON.stringify(invalidated)));
+  const recalculate: string[] = [];
+  for (const [attributeId, entries] of pages) {
+    const append = completed.has(attributeId) && await prepareAppendReplayComparisons(db, scope, attributeId, cursor, entries);
+    if (append) statements.push(...append);
+    else recalculate.push(attributeId);
+  }
+  if (recalculate.length) {
+    const touched = JSON.stringify(recalculate);
+    statements.push(
+      db.statement(`DELETE FROM attribute_replay_work_chunks
+        WHERE kind IN ('states', 'pairs') AND attribute_id IN (SELECT value FROM json_each(?))`).bind(touched),
+      db.statement('DELETE FROM attribute_replay_calculation WHERE attribute_id IN (SELECT value FROM json_each(?))').bind(touched),
+      db.statement('DELETE FROM attribute_replay_ordered_chunks WHERE attribute_id IN (SELECT value FROM json_each(?))').bind(touched),
+    );
   }
   statements.push(db.statement('UPDATE attribute_replay_work SET scanned_rowid = ? WHERE id = 1').bind(cursor));
-  return { cursor, statements, invalidated };
+  return { cursor, statements, invalidated: recalculate.filter((attributeId) => completed.has(attributeId)) };
 };
 
 export const queryCompletedReplayAttributes = async (db: Database) => {
@@ -151,28 +159,133 @@ export const queryCompletedReplayAttributes = async (db: Database) => {
   return new Set((result.results ?? []).map(({ attribute_id }) => attribute_id));
 };
 
-export const prepareCalculateReplayAttribute = async (db: Database, scope: ReplayScope, attributeId: string) => {
+const encodePairs = (pairs: Map<string, ReplayPair>) => [...pairs.values()].map(
+  ({ subjectAId, subjectBId, count }) => [subjectAId, subjectBId, count],
+);
+
+const PARTIAL_STATE_PAGE = -1;
+const INLINE_HISTORY_MAX_CHUNKS = 8;
+const INLINE_HISTORY_MAX_BYTES = 1_000_000;
+
+const queryStagedReplayStates = async <T>(db: Database, attributeId: string, page: number) => {
   const result = await db.statement(`
-    SELECT payload FROM attribute_replay_work_chunks
-    WHERE kind = 'history' AND attribute_id = ? ORDER BY page, chunk_number
-  `).bind(attributeId).all<{ payload: string }>();
-  const votes = (result.results ?? []).flatMap(({ payload }) => JSON.parse(payload) as VoteEntry[]).map(
-    ([response_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight]): FullReplayResponseRow =>
-      ({ response_id, attribute_id: attributeId, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight }),
-  );
-  const { states, pairCounts } = calculateAttributeReplay(new Set(scope[0]), new Set([attributeId]), votes);
+    SELECT payload FROM attribute_replay_work_chunks WHERE kind = 'states' AND attribute_id = ? AND page = ?
+    ORDER BY chunk_number
+  `).bind(attributeId, page).all<{ payload: string }>();
+  return (result.results ?? []).flatMap(({ payload }) => JSON.parse(payload) as Array<[string, T]>);
+};
+
+// New comparisons strictly after a completed long history can use its final
+// state. Equal/earlier times and direct ratings still invalidate that result.
+const prepareAppendReplayComparisons = async (db: Database, scope: ReplayScope, attributeId: string, page: number, entries: ReplayVoteEntry[]) => {
+  if (entries.some((entry) => entry[3] != null || entry[4] != null)) return null;
+  const cursor = await queryCalculationCursor(db, attributeId);
+  if (cursor?.phase !== 'complete') return null;
+  const { lastEventAt } = cursor;
+  if (lastEventAt != null && entries.some((entry) => entry[6] <= lastEventAt)) return null;
+  const history = expandAttributeReplayHistory(unpackAttributeReplayVotes(attributeId, entries));
+  if (!history.length) return [];
+  const states = new Map(await queryStagedReplayStates<OnlineAttributeState>(db, attributeId, 0));
+  const pairs = new Map<string, ReplayPair>();
+  applyAttributeReplayComparisons(history, new Set(scope[0]), new Set([attributeId]), states, pairs);
   return [
+    db.statement("DELETE FROM attribute_replay_work_chunks WHERE kind = 'states' AND attribute_id = ? AND page = 0").bind(attributeId),
     ...prepareChunks(db, 'states', attributeId, 0, [...states]),
-    ...prepareChunks(db, 'pairs', attributeId, 0, [...pairCounts.values()].map(
-      ({ subjectAId, subjectBId, count }) => [subjectAId, subjectBId, count],
-    )),
+    ...prepareChunks(db, 'pairs', attributeId, -page, encodePairs(pairs)),
+    prepareCalculationCursor(db, attributeId, { phase: 'complete', lastEventAt: history.at(-1)!.created_at }),
   ];
+};
+
+const prepareScoringStep = async (db: Database, scope: ReplayScope, attributeId: string, cursor: ScoringCursor) => {
+  const history = await queryOrderedReplayEvents(db, attributeId, cursor.pass, 0, cursor.chunk);
+  const clearPartial = db.statement(`
+    DELETE FROM attribute_replay_work_chunks WHERE kind = 'states' AND attribute_id = ? AND page = ?
+  `).bind(attributeId, PARTIAL_STATE_PAGE);
+  if (cursor.phase === 'comparisons' && !history.length) {
+    return {
+      completed: true,
+      statements: [
+        db.statement(`
+          INSERT INTO attribute_replay_work_chunks (kind, attribute_id, page, chunk_number, payload)
+          SELECT kind, attribute_id, 0, chunk_number, payload FROM attribute_replay_work_chunks
+          WHERE kind = 'states' AND attribute_id = ? AND page = ?
+        `).bind(attributeId, PARTIAL_STATE_PAGE),
+        clearPartial,
+        prepareCalculationCursor(db, attributeId, { phase: 'complete', lastEventAt: cursor.lastEventAt }),
+        db.statement('DELETE FROM attribute_replay_ordered_chunks WHERE attribute_id = ?').bind(attributeId),
+      ],
+    };
+  }
+  const subjectIds = new Set(scope[0]);
+  const attributeIds = new Set([attributeId]);
+  const rows = await queryStagedReplayStates<DirectRatingTotals | OnlineAttributeState>(db, attributeId, PARTIAL_STATE_PAGE);
+  const next = { ...cursor, chunk: cursor.chunk + 1, lastEventAt: history.at(-1)?.created_at ?? cursor.lastEventAt };
+  const pairCounts = new Map<string, ReplayPair>();
+  let state: Array<[string, DirectRatingTotals | OnlineAttributeState]>;
+  if (cursor.phase === 'ratings') {
+    const totals = new Map(rows as Array<[string, DirectRatingTotals]>);
+    accumulateAttributeReplayRatings(history, subjectIds, attributeIds, totals);
+    state = history.length ? [...totals] : [...initializeAttributeReplayStates(subjectIds, attributeIds, totals)];
+    if (!history.length) {
+      next.phase = 'comparisons';
+      next.chunk = 0;
+    }
+  } else {
+    const scores = new Map(rows as Array<[string, OnlineAttributeState]>);
+    applyAttributeReplayComparisons(history, subjectIds, attributeIds, scores, pairCounts);
+    state = [...scores];
+  }
+  return {
+    completed: false,
+    statements: [
+      clearPartial,
+      ...prepareChunks(db, 'states', attributeId, PARTIAL_STATE_PAGE, state),
+      ...(pairCounts.size ? prepareChunks(db, 'pairs', attributeId, cursor.chunk, encodePairs(pairCounts)) : []),
+      prepareCalculationCursor(db, attributeId, next),
+    ],
+  };
+};
+
+export const prepareCalculateReplayAttribute = async (db: Database, scope: ReplayScope, attributeId: string) => {
+  const cursor = await queryCalculationCursor(db, attributeId);
+  if (cursor) {
+    if (cursor.phase === 'complete') throw new Error('incomplete_attribute_replay_work');
+    return cursor.phase === 'sort' || cursor.phase === 'merge'
+      ? { completed: false, statements: await prepareOrderReplayStep(db, attributeId, cursor) }
+      : prepareScoringStep(db, scope, attributeId, cursor);
+  }
+  const result = await db.statement(`
+    WITH sample AS MATERIALIZED (
+      SELECT payload, page, chunk_number FROM attribute_replay_work_chunks
+      WHERE kind = 'history' AND attribute_id = ? ORDER BY page, chunk_number LIMIT ?
+    ), budget AS (
+      SELECT COUNT(*) <= ? AND COALESCE(SUM(length(CAST(payload AS BLOB))), 0) <= ? AS fits FROM sample
+    )
+    SELECT payload, page, chunk_number FROM sample, budget WHERE fits
+    UNION ALL SELECT NULL, 0, 0 FROM budget WHERE NOT fits
+    ORDER BY page, chunk_number
+  `).bind(attributeId, INLINE_HISTORY_MAX_CHUNKS + 1, INLINE_HISTORY_MAX_CHUNKS, INLINE_HISTORY_MAX_BYTES)
+    .all<{ payload: string | null }>();
+  const chunks = result.results ?? [];
+  if (chunks[0]?.payload === null) {
+    return { completed: false, statements: await prepareOrderReplayStep(db, attributeId, initialOrderingCursor) };
+  }
+  const votes = chunks.flatMap(({ payload }) => payload === null ? [] : decodeAttributeReplayVotes(attributeId, payload));
+  const { states, pairCounts } = calculateAttributeReplay(new Set(scope[0]), new Set([attributeId]), votes);
+  return {
+    completed: true,
+    statements: [
+      ...prepareChunks(db, 'states', attributeId, 0, [...states]),
+      ...prepareChunks(db, 'pairs', attributeId, 0, encodePairs(pairCounts)),
+    ],
+  };
 };
 
 export const queryCalculatedReplayWork = async (db: Database, subjectIds: Iterable<string>, attributeIds: Iterable<string>): Promise<CalculatedAttributeReplay> => {
   const result = await db.statement(`
     SELECT kind, attribute_id, payload FROM attribute_replay_work_chunks
-    WHERE kind IN ('states', 'pairs') ORDER BY kind, attribute_id, page, chunk_number
+    WHERE kind = 'pairs' OR (kind = 'states' AND page = 0)
+    ORDER BY kind, attribute_id, page, chunk_number
   `).all<{ kind: 'states' | 'pairs'; attribute_id: string; payload: string }>();
   const capturedStates = new Map<string, OnlineAttributeState>();
   const pairCounts = new Map<string, ReplayPair>();
@@ -182,7 +295,10 @@ export const queryCalculatedReplayWork = async (db: Database, subjectIds: Iterab
     } else {
       for (const [subjectAId, subjectBId, count] of JSON.parse(row.payload) as Array<[string, string, number]>) {
         const attributeId = row.attribute_id;
-        pairCounts.set(pairStatKey(subjectAId, subjectBId, attributeId), { subjectAId, subjectBId, attributeId, count });
+        const key = pairStatKey(subjectAId, subjectBId, attributeId);
+        const pair = pairCounts.get(key);
+        if (pair) pair.count += count;
+        else pairCounts.set(key, { subjectAId, subjectBId, attributeId, count });
       }
     }
   }

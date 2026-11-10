@@ -137,3 +137,82 @@ test('rejects a late history change before publication and restarts against the 
       .toMatchObject({ directCount: 2, directAverage: 6 });
   } finally { close(harness); }
 });
+
+test('merges a large attribute across passes and retries the same block after a failed checkpoint', async () => {
+  const { harness, timestamp } = await establishEmptyBaseline();
+  try {
+    const { gateway, sqlite } = harness;
+    const [first, second] = subjects(harness);
+    const insert = sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison,
+         activity_json, session_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', 'merge-replay', ?, ?)
+    `);
+    for (let index = 0; index < 23; index += 1) {
+      const at = timestamp + (index % 3);
+      const id = `ordered-${['_', 'A', '-', 'z'][index % 4]}-${23 - index}`;
+      insert.run(id, attributeId, first.id, second.id, index % 3 ? 2.125 + index / 13 : null,
+        index % 2 ? null : 9 - index / 11, index % 5 ? 'A_HIGHER' : 'B_HIGHER', at, at);
+    }
+    const catalog = async () => attributeCatalogPayload(await queryAttributeCatalogSnapshot(gateway));
+    const previous = await catalog();
+    const checkpoint = () => sqlite.prepare('SELECT cursor_json FROM attribute_replay_calculation WHERE attribute_id = ?')
+      .get(attributeId) as { cursor_json: string } | undefined;
+    const stagedChunks = () => sqlite.prepare('SELECT * FROM attribute_replay_ordered_chunks ORDER BY attribute_id, pass, run, chunk_number').all();
+    const pairRows = () => sqlite.prepare(`
+      SELECT subject_a_id, subject_b_id, attribute_id, comparison_count
+      FROM attribute_pair_stats ORDER BY subject_a_id, subject_b_id, attribute_id
+    `).all();
+    await expect(runWeeklyAttributeRebuild(gateway, timestamp + 20, { workBudget })).resolves.toBe('pending');
+    const phases = new Set<string>();
+    let mergePasses = 0;
+    let sortStarts = 0;
+    let verifiedRetry = false;
+    let result = 'pending';
+    for (let step = 0; step < 170 && result === 'pending'; step += 1) {
+      const before = checkpoint();
+      if (before) {
+        const cursor = JSON.parse(before.cursor_json) as { phase: string; pass?: number; page?: number };
+        if (cursor.phase !== 'complete') phases.add(cursor.phase);
+        if (cursor.phase === 'sort' && cursor.page === 2) sortStarts += 1;
+        if (cursor.phase === 'merge') {
+          mergePasses = Math.max(mergePasses, (cursor.pass ?? 0) + 1);
+          if (!verifiedRetry) {
+            const chunks = stagedChunks();
+            sqlite.exec(`
+              CREATE TRIGGER fail_ordered_checkpoint BEFORE UPDATE ON attribute_replay_calculation
+              BEGIN SELECT RAISE(ABORT, 'injected ordered checkpoint failure'); END;
+            `);
+            await expect(resumePendingAttributeReplay(gateway, timestamp + 21 + step, workBudget))
+              .rejects.toThrow('injected ordered checkpoint failure');
+            expect(checkpoint()).toEqual(before);
+            expect(stagedChunks()).toEqual(chunks);
+            expect((await catalog()).generation).toBe(previous.generation);
+            sqlite.exec('DROP TRIGGER fail_ordered_checkpoint');
+            await expect(resumePendingAttributeReplay(gateway, timestamp + 21 + step, workBudget)).resolves.toBe('pending');
+            expect(checkpoint()).not.toEqual(before);
+            insert.run('ordered-late', attributeId, first.id, second.id, null, null, 'SIMILAR', timestamp + 30, timestamp + 30);
+            await expect(resumePendingAttributeReplay(gateway, timestamp + 21 + step, workBudget)).resolves.toBe('pending');
+            expect(checkpoint()).toBeDefined();
+            expect(await queryAttributeReplayWork(gateway)).toMatchObject({ target_rowid: 23 });
+            verifiedRetry = true;
+          }
+        }
+      }
+      result = (await resumePendingAttributeReplay(gateway, timestamp + 21 + step, workBudget)) ?? '';
+    }
+    expect(result).toBe('replay');
+    expect(phases).toEqual(new Set(['sort', 'merge', 'ratings', 'comparisons']));
+    expect(mergePasses).toBeGreaterThan(1);
+    expect(sortStarts).toBe(1);
+    expect(verifiedRetry).toBe(true);
+    expect(checkpoint()).toBeUndefined();
+    expect(stagedChunks()).toEqual([]);
+    const published = await catalog();
+    const pairs = pairRows();
+    await runCompleteAttributeReplay(gateway, timestamp + 200);
+    expect((await catalog()).values).toEqual(published.values);
+    expect(pairRows()).toEqual(pairs);
+  } finally { close(harness); }
+});
