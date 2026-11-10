@@ -13,3 +13,5 @@ Google Drive 授權與網站登入分離。公開 `/api/workspace-config` 提供
 本機匯出仍使用 ZIP，包含索引與逐表 XLSX；一般表格的欄位設定、公式及修訂格式維持相容。既有單一 Workspace XLSX 與 v1／v2 備份仍可還原。
 
 維護時執行 `npm run typecheck`、相關測試及 `npm run test:core:e2e`。後者同時包含手機備份進度與還原 E2E；發布透過 `npm run deploy` 執行相同檢查。
+
+[隨機故障模擬](simulation.md) 以隨機操作歷史檢查資料遺失防護，並記錄它找到的問題與重播方式。

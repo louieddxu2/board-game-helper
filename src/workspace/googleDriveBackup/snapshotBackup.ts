@@ -68,18 +68,19 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
       || (b.createdTime ?? '').localeCompare(a.createdTime ?? ''));
     return valid;
   };
+  /** The id of this device's own upload when `file` is one whose reply never reached the backup record. */
+  const ownPendingId = (accountKey: string, file: DriveFile | null | undefined) => {
+    const id = file?.appProperties?.[operationProperty];
+    const saved = journal.read(accountKey);
+    return id && saved && (id === saved.id || id === saved.previous) && !acknowledged.has(id) ? id : undefined;
+  };
+  const markOwnPending = (accountKey: string, file: DriveFile) => ownPendingId(accountKey, file)
+    ? { ...file, appProperties: { ...file.appProperties, [SNAPSHOT_PENDING_COMMIT_PROPERTY]: 'true' } }
+    : file;
   const findRemoteFile = async () => {
     const root = await ensureFolder();
     const manifests = await findManifests(root);
-    if (manifests[0]) {
-      const file = manifests[0];
-      const accountKey = `drive:${root}`;
-      const saved = journal.read(accountKey);
-      if (saved && file.appProperties?.[operationProperty] === saved.id && !acknowledged.has(saved.id)) {
-        return { ...file, appProperties: { ...file.appProperties, [SNAPSHOT_PENDING_COMMIT_PROPERTY]: 'true' } };
-      }
-      return file;
-    }
+    if (manifests[0]) return markOwnPending(`drive:${root}`, manifests[0]);
     return legacyFile();
   };
 
@@ -153,7 +154,10 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     const root = await ensureFolder();
     const accountKey = `drive:${root}`;
     const manifests = await findManifests(root);
-    const previous = manifests[0] ?? await legacyFile();
+    // A head this device published itself, whose reply was lost, is not another device's change:
+    // it was built from this device's data on top of the version the record still names.
+    const ownPending = ownPendingId(accountKey, manifests[0]);
+    const previous = manifests[0] ? markOwnPending(accountKey, manifests[0]) : await legacyFile();
     run.validateRemote?.(previous);
 
     if (run.expectedLegacyStamp && previous?.appProperties?.legacyStamp !== run.expectedLegacyStamp) {
@@ -161,16 +165,19 @@ export const createGoogleDriveSnapshotBackup = (options: FolderBackupOptions & {
     }
 
     // Conflict detection before creating folders or uploading files
-    if ('expectedRemoteFileId' in run && (previous?.id ?? null) !== (run.expectedRemoteFileId ?? null)) {
-      throw new RemoteBackupConflictError(previous);
-    }
-    if (run.expectedRemoteModifiedTime && previous?.modifiedTime !== run.expectedRemoteModifiedTime) {
-      throw new RemoteBackupConflictError(previous);
+    if (!ownPending) {
+      if ('expectedRemoteFileId' in run && (previous?.id ?? null) !== (run.expectedRemoteFileId ?? null)) {
+        throw new RemoteBackupConflictError(previous);
+      }
+      if (run.expectedRemoteModifiedTime && previous?.modifiedTime !== run.expectedRemoteModifiedTime) {
+        throw new RemoteBackupConflictError(previous);
+      }
     }
 
     const snapshotId = crypto.randomUUID();
     // The local journal identifies this upload; no coordinator revision digest is needed.
-    journal.write(accountKey, { id: snapshotId });
+    // It keeps the unconfirmed head too, so a failure of this attempt does not disown it.
+    journal.write(accountKey, { id: snapshotId, ...(ownPending ? { previous: ownPending } : {}) });
 
     const sourceUpdatedAt = Number(metadata.sourceUpdatedAt ?? Math.max(data.updatedAt ?? 0, ...summaries.map(table => table.updatedAt)));
     const snapshotFolder = await api.createFolder(`備份-${snapshotId}`, root, tags('snapshot', snapshotId));

@@ -1,4 +1,5 @@
-interface PendingSnapshot { id: string }
+/** `previous` is an earlier upload of this device that Drive holds but the backup record never confirmed. */
+interface PendingSnapshot { id: string; previous?: string }
 const prefix = 'board-game-helper-drive-snapshot-pending:';
 
 /** The local upload identity survives reloads until its backup record is acknowledged. */
@@ -7,7 +8,7 @@ export const createSnapshotJournal = (storage?: Pick<Storage, 'getItem' | 'setIt
   const read = (account: string): PendingSnapshot | null => {
     try {
       const value = JSON.parse(storage?.getItem(prefix + account) ?? 'null');
-      if (typeof value?.id === 'string') return { id: value.id };
+      if (typeof value?.id === 'string') return { id: value.id, ...(typeof value.previous === 'string' ? { previous: value.previous } : {}) };
     } catch { /* The in-memory journal also supports blocked browser storage. */ }
     return memory.get(account) ?? null;
   };
