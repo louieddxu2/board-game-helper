@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import { attributeCatalogPayload, queryAttributeCatalogSnapshot } from '../worker/data/attributeCatalog';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
 import { queryAttributeReplayWork, queryCompletedReplayAttributes } from '../worker/data/attributeReplayWork';
+import { applyComparison, applyDirectRating, type OnlineAttributeState } from '../worker/data/attributeScoring';
 import { saveAttributeResponse } from '../worker/data/attributes';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 import { resumePendingAttributeReplay } from '../worker/workflows/attributeResumableReplay';
@@ -15,7 +16,7 @@ const establishEmptyBaseline = () => establishBaseline(({ sqlite }) => {
   sqlite.exec('DELETE FROM attribute_vote_responses;');
 });
 
-test('resumes committed pages, catches up with a live vote, and matches a complete replay', async () => {
+test('resumes committed pages and defers new direct ratings without losing their live effect', async () => {
   const { harness, timestamp } = await establishEmptyBaseline();
   try {
     const { gateway, sqlite } = harness;
@@ -55,8 +56,16 @@ test('resumes committed pages, catches up with a live vote, and matches a comple
     expect((await catalog()).generation).toBe(previous.generation);
 
     const revision = status(harness).required_revision;
-    // The online timestamp is newer than the live state but earlier than the
-    // staged comparisons. It must be inserted into the old sort order.
+    const staged = sqlite.prepare(`
+      SELECT payload FROM attribute_replay_work_chunks
+      WHERE kind = 'states' AND page = 0 AND attribute_id = ?
+      ORDER BY chunk_number
+    `).all(attributeId) as Array<{ payload: string }>;
+    const base = new Map(staged.flatMap(({ payload }) => JSON.parse(payload) as Array<[string, OnlineAttributeState]>));
+    const baseA = base.get(`${first.id}\u0000${attributeId}`)!;
+    const baseB = base.get(`${second.id}\u0000${attributeId}`)!;
+    // This comparison is older than some staged votes. During catch-up it
+    // keeps online save order and the newer direct vote stays pending.
     await saveAttributeResponse(gateway, {
       subjectAId: first.id, subjectBId: second.id, attributeId, actorId: null,
       responseId: 'live-catchup', sessionId: 'staged-replay', comparison: 'A_HIGHER', timestamp: timestamp + 4,
@@ -69,9 +78,26 @@ test('resumes committed pages, catches up with a live vote, and matches a comple
     expect(status(harness).required_revision).toBeGreaterThan(revision);
     await flushCatalogOutbox(gateway, timestamp + 6);
     await expect(resumePendingAttributeReplay(gateway, timestamp + 6, workBudget)).resolves.toBe('pending');
-    expect(await queryAttributeReplayWork(gateway)).toMatchObject({ scanned_rowid: 7, target_rowid: 7 });
-    expect((await queryCompletedReplayAttributes(gateway)).size).toBe(previous.attributes.length - 1);
+    expect(await queryAttributeReplayWork(gateway)).toMatchObject({ scanned_rowid: 5, target_rowid: 5, online_rowid: 7 });
+    expect((await queryCompletedReplayAttributes(gateway)).size).toBe(previous.attributes.length);
+
+    await saveAttributeResponse(gateway, {
+      subjectAId: first.id, subjectBId: second.id, attributeId, actorId: null,
+      responseId: 'another-live-direct-rating', sessionId: 'staged-replay', ratingA: 9, timestamp: timestamp + 7,
+    });
+    insert.run('deferred-import', attributeId, first.id, second.id, 4, null, timestamp + 7, timestamp + 7);
+    await flushCatalogOutbox(gateway, timestamp + 7);
+    sqlite.exec(`
+      CREATE TRIGGER fail_online_catchup BEFORE UPDATE OF online_rowid ON attribute_replay_work
+      BEGIN SELECT RAISE(ABORT, 'injected online checkpoint failure'); END;
+    `);
+    await expect(resumePendingAttributeReplay(gateway, timestamp + 7, workBudget))
+      .rejects.toThrow('injected online checkpoint failure');
+    expect(await queryAttributeReplayWork(gateway)).toMatchObject({ target_rowid: 5, online_rowid: 7 });
+    sqlite.exec('DROP TRIGGER fail_online_catchup');
     await expect(resumePendingAttributeReplay(gateway, timestamp + 7, workBudget)).resolves.toBe('pending');
+    expect(await queryAttributeReplayWork(gateway)).toMatchObject({ scanned_rowid: 5, target_rowid: 5, online_rowid: 9 });
+    expect((await queryCompletedReplayAttributes(gateway)).size).toBe(previous.attributes.length);
 
     const batch = gateway.batch.bind(gateway);
     vi.spyOn(gateway, 'batch').mockImplementationOnce((statements) => {
@@ -90,10 +116,20 @@ test('resumes committed pages, catches up with a live vote, and matches a comple
     expect(await queryAttributeReplayWork(gateway)).toBeNull();
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_replay_work_chunks').get()).toEqual({ count: 0 });
     const published = await catalog();
-    const liveScores = scoreRows(harness);
-    await runCompleteAttributeReplay(gateway, timestamp + 10);
-    expect((await catalog()).values).toEqual(published.values);
-    expect(scoreRows(harness)).toEqual(liveScores);
+    const online = applyComparison(baseA, baseB, 'A_HIGHER');
+    const expected = applyComparison(applyDirectRating(online.a.next, 9).next, applyDirectRating(online.b.next, 7).next, 'SIMILAR');
+    for (const [subjectId, state] of [[first.id, expected.a.next], [second.id, expected.b.next]] as const) {
+      expect(published.values.find((row) => row.subjectId === subjectId && row.attributeId === attributeId)).toMatchObject({
+        score: Number(state.score.toFixed(2)), ratingDeviation: Number(state.ratingDeviation.toFixed(3)),
+        directCount: state.directCount, comparisonCount: state.comparisonCount,
+      });
+    }
+    expect(status(harness).replayed_revision).toBe(revision);
+    expect(status(harness).required_revision).toBeGreaterThan(revision);
+    await expect(runWeeklyAttributeRebuild(gateway, timestamp + 10)).resolves.toBe('replay');
+    expect(status(harness).replayed_revision).toBe(status(harness).required_revision);
+    expect((await catalog()).values.find((row) => row.subjectId === first.id && row.attributeId === attributeId))
+      .toMatchObject({ directCount: baseA.directCount + 2 });
   } finally { close(harness); }
 });
 

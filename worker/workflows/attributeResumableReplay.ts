@@ -3,13 +3,14 @@ import { prepareCalculatedAttributeReplay, queryFullReplayMetadata } from '../da
 import { queryOrderedCalculationInProgress } from '../data/attributeReplayOrdering';
 import {
   assertReplayCatalogVersion, assertReplayHistoryHead, ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE, prepareCalculateReplayAttribute, prepareCaptureReplayHistory,
-  prepareClearReplayWork, prepareExtendReplayWork, prepareStartReplayWork, queryAttributeReplayWork, queryCalculatedReplayWork,
-  queryCompletedReplayAttributes, queryReplayAnchorMatches, queryReplayCatalogPending, queryReplayHistoryHead, queryReplayHistoryRevision,
+  prepareCatchUpOnlineReplay, prepareClearReplayWork, prepareDeferDirectRatings, prepareExtendReplayWork, prepareStartReplayWork,
+  queryAttributeReplayWork, queryCalculatedReplayWork, queryCompletedReplayAttributes, queryReplayAnchorMatches,
+  queryReplayCatalogPending, queryReplayHasNewDirectRating, queryReplayHistoryHead, queryReplayHistoryRevision,
   type ReplayHistoryHead, type ReplayScope, type ReplayWork,
 } from '../data/attributeReplayWork';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../data/attributeScoring';
 import type { Database } from '../data/database';
-import { publishPreparedAttributeReplay, queryAttributeReplayStatus } from './attributeReplay';
+import { publishPreparedAttributeReplay, queryAttributeReplayStatus, type AttributeReplayStatus } from './attributeReplay';
 
 export interface ReplayWorkBudget {
   maxSteps?: number;
@@ -30,36 +31,48 @@ const startReplayWork = async (
   db: Database, lock: AttributeReplayLock, revision: number, historyRevision: number, head: ReplayHistoryHead, scope: ReplayScope,
 ): Promise<ReplayWork> => {
   const work: ReplayWork = {
-    history_revision: historyRevision, model_version: ATTRIBUTE_SCORE_MODEL_VERSION, scope_json: JSON.stringify(scope),
-    target_rowid: head.rowid, target_response_id: head.response_id, scanned_rowid: 0,
+    history_revision: historyRevision, input_revision: revision, model_version: ATTRIBUTE_SCORE_MODEL_VERSION, scope_json: JSON.stringify(scope),
+    target_rowid: head.rowid, target_response_id: head.response_id, scanned_rowid: 0, online_rowid: null, online_response_id: null,
   };
   await commitAttributeReplay(db, lock, prepareStartReplayWork(db, work), revision);
   return work;
+};
+
+const extendReplayWork = async (db: Database, lock: AttributeReplayLock, work: ReplayWork, head: ReplayHistoryHead, revision: number) => {
+  if (await queryReplayHasNewDirectRating(db, work.target_rowid, head.rowid)) {
+    await commitAttributeReplay(db, lock, [prepareDeferDirectRatings(db, work)], revision);
+    work.online_rowid = work.target_rowid;
+    work.online_response_id = work.target_response_id;
+    return;
+  }
+  await commitAttributeReplay(db, lock, [prepareExtendReplayWork(db, head)], revision);
+  work.target_rowid = head.rowid;
+  work.target_response_id = head.response_id;
 };
 
 export const runAttributeReplayWorkLocked = async (
   db: Database,
   lock: AttributeReplayLock,
   timestamp: number,
-  revision: number,
+  status: AttributeReplayStatus | null,
   existing: ReplayWork | null,
   budget: ReplayWorkBudget,
   initialHead?: ReplayHistoryHead,
 ): Promise<ResumableReplayOutcome> => {
   const startedAt = Date.now();
   const initialQueries = db.metrics?.().queries ?? 0;
+  const revision = status?.required_revision ?? 0;
   const [historyRevision, currentHead] = await Promise.all([
     queryReplayHistoryRevision(db), initialHead ?? queryReplayHistoryHead(db),
   ]);
   let work = existing;
-  if (!work || work.history_revision !== historyRevision || work.model_version !== ATTRIBUTE_SCORE_MODEL_VERSION
+  if (!work || work.input_revision == null || (status?.replayed_revision ?? 0) > work.input_revision
+    || work.history_revision !== historyRevision || work.model_version !== ATTRIBUTE_SCORE_MODEL_VERSION
     || !await queryReplayAnchorMatches(db, work)) {
     const metadata = await queryFullReplayMetadata(db);
     work = await startReplayWork(db, lock, revision, historyRevision, currentHead, replayScope(metadata));
-  } else if (currentHead.rowid > work.target_rowid && !await queryOrderedCalculationInProgress(db)) {
-    await commitAttributeReplay(db, lock, [prepareExtendReplayWork(db, currentHead)], revision);
-    work.target_rowid = currentHead.rowid;
-    work.target_response_id = currentHead.response_id;
+  } else if (work.online_rowid == null && currentHead.rowid > work.target_rowid && !await queryOrderedCalculationInProgress(db)) {
+    await extendReplayWork(db, lock, work, currentHead, revision);
   }
   let scope = JSON.parse(work.scope_json) as ReplayScope;
   const completed = await queryCompletedReplayAttributes(db);
@@ -92,10 +105,15 @@ export const runAttributeReplayWorkLocked = async (
       completed.clear();
       continue;
     }
-    if (head.rowid > work.target_rowid) {
-      await commitAttributeReplay(db, lock, [prepareExtendReplayWork(db, head)], revision);
-      work.target_rowid = head.rowid;
-      work.target_response_id = head.response_id;
+    if (head.rowid > (work.online_rowid ?? work.target_rowid)) {
+      if (work.online_rowid == null) {
+        await extendReplayWork(db, lock, work, head, revision);
+      } else {
+        const { cursor, statements } = await prepareCatchUpOnlineReplay(db, scope, work.online_rowid, head.rowid, pageSize);
+        await commitAttributeReplay(db, lock, statements, revision);
+        work.online_rowid = cursor.rowid;
+        work.online_response_id = cursor.response_id;
+      }
       continue;
     }
 
@@ -105,6 +123,7 @@ export const runAttributeReplayWorkLocked = async (
     await publishPreparedAttributeReplay(db, lock, timestamp, revision, replay, {}, {
       verify: [assertReplayHistoryHead(db, head), assertReplayCatalogVersion(db, metadata.throughVersion)],
       clear: prepareClearReplayWork(db),
+      replayedRevision: work.online_rowid == null ? revision : work.input_revision ?? undefined,
     });
     return 'replay';
   }
@@ -121,7 +140,7 @@ export const resumePendingAttributeReplay = async (
     const work = await queryAttributeReplayWork(db);
     if (!work) return null;
     const status = await queryAttributeReplayStatus(db);
-    return await runAttributeReplayWorkLocked(db, lock, timestamp, status?.required_revision ?? 0, work, budget);
+    return await runAttributeReplayWorkLocked(db, lock, timestamp, status, work, budget);
   } finally {
     await releaseAttributeReplayLock(db, lock);
   }

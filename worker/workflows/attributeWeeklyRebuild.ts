@@ -73,7 +73,7 @@ export const runWeeklyAttributeRebuild = async (
     const revision = status?.required_revision ?? 0;
     const budget = options.workBudget;
     const work = budget ? await queryAttributeReplayWork(db) : null;
-    if (budget && work) return await runAttributeReplayWorkLocked(db, lock, timestamp, revision, work, budget);
+    if (budget && work) return await runAttributeReplayWorkLocked(db, lock, timestamp, status, work, budget);
     const needsReplay = !status || status.required_revision !== status.replayed_revision
       || status.replayed_model_version !== ATTRIBUTE_SCORE_MODEL_VERSION;
     const catalog = needsReplay ? null : await updatedCatalogFromSnapshot(db);
@@ -85,7 +85,7 @@ export const runWeeklyAttributeRebuild = async (
     if (budget) {
       const head = await queryReplayHistoryHead(db);
       if (head.rowid >= (budget.minimumHistoryRowid ?? ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE)) {
-        return await runAttributeReplayWorkLocked(db, lock, timestamp, revision, null, budget, head);
+        return await runAttributeReplayWorkLocked(db, lock, timestamp, status, null, budget, head);
       }
     }
     await publishCompleteAttributeReplayLocked(db, lock, timestamp, status, options);

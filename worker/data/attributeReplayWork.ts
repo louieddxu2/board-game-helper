@@ -8,7 +8,7 @@ import {
   initialOrderingCursor, prepareCalculationCursor, prepareOrderReplayStep, queryCalculationCursor, queryOrderedReplayEvents,
   type ScoringCursor,
 } from './attributeReplayOrdering';
-import type { OnlineAttributeState } from './attributeScoring';
+import { applyDirectRating, emptyAttributeState, type OnlineAttributeState } from './attributeScoring';
 import { attributeVoteWeight, queryAuthorizedAttributeVoters } from './attributeVoteWeights';
 import type { Database } from './database';
 
@@ -21,11 +21,14 @@ export interface ReplayHistoryHead {
 
 export interface ReplayWork {
   history_revision: number;
+  input_revision: number | null;
   model_version: string;
   scope_json: string;
   target_rowid: number;
   target_response_id: string | null;
   scanned_rowid: number;
+  online_rowid: number | null;
+  online_response_id: string | null;
 }
 
 export type ReplayScope = [subjectIds: string[], attributeIds: string[]];
@@ -33,7 +36,8 @@ type WorkKind = 'history' | 'states' | 'pairs';
 type VoteRow = Omit<FullReplayResponseRow, 'weight'> & { actor_id: string | null; replay_rowid: number };
 
 export const queryAttributeReplayWork = (db: Database) => db.statement(`
-  SELECT history_revision, model_version, scope_json, target_rowid, target_response_id, scanned_rowid
+  SELECT history_revision, input_revision, model_version, scope_json, target_rowid, target_response_id,
+    scanned_rowid, online_rowid, online_response_id
   FROM attribute_replay_work WHERE id = 1
 `).first<ReplayWork>();
 
@@ -51,12 +55,16 @@ export const queryReplayHistoryHead = async (db: Database): Promise<ReplayHistor
 
 // SQLite can renumber implicit rowids during a database rebuild. A changed
 // anchor invalidates the staged input instead of letting a cursor skip votes.
-export const queryReplayAnchorMatches = async (db: Database, work: ReplayWork): Promise<boolean> => {
-  if (!work.target_rowid) return true;
+const replayAnchorMatches = async (db: Database, rowid: number | null, responseId: string | null): Promise<boolean> => {
+  if (!rowid) return true;
   const row = await db.statement('SELECT response_id FROM attribute_vote_responses WHERE rowid = ?')
-    .bind(work.target_rowid).first<{ response_id: string }>();
-  return row?.response_id === work.target_response_id;
+    .bind(rowid).first<{ response_id: string }>();
+  return row?.response_id === responseId;
 };
+
+export const queryReplayAnchorMatches = async (db: Database, work: ReplayWork) =>
+  await replayAnchorMatches(db, work.target_rowid, work.target_response_id)
+    && (work.online_rowid === work.target_rowid || await replayAnchorMatches(db, work.online_rowid, work.online_response_id));
 
 export const assertReplayHistoryHead = (db: Database, head: ReplayHistoryHead) => db.statement(`
   SELECT json_extract('{}', CASE WHEN COALESCE((
@@ -91,14 +99,27 @@ export const prepareStartReplayWork = (db: Database, work: ReplayWork) => [
   ...prepareClearReplayWork(db),
   db.statement(`
     INSERT INTO attribute_replay_work
-      (id, history_revision, model_version, scope_json, target_rowid, target_response_id, scanned_rowid)
-    VALUES (1, ?, ?, ?, ?, ?, 0)
-  `).bind(work.history_revision, work.model_version, work.scope_json, work.target_rowid, work.target_response_id),
+      (id, history_revision, input_revision, model_version, scope_json, target_rowid, target_response_id, scanned_rowid)
+    VALUES (1, ?, ?, ?, ?, ?, ?, 0)
+  `).bind(work.history_revision, work.input_revision, work.model_version, work.scope_json, work.target_rowid, work.target_response_id),
 ];
+
+export const queryReplayHasNewDirectRating = async (db: Database, after: number, through: number) =>
+  Boolean(await db.statement(`
+    SELECT 1 FROM attribute_vote_responses
+    WHERE rowid > ? AND rowid <= ? AND (rating_a IS NOT NULL OR rating_b IS NOT NULL) LIMIT 1
+  `).bind(after, through).first());
 
 export const prepareExtendReplayWork = (db: Database, head: ReplayHistoryHead) => db.statement(`
   UPDATE attribute_replay_work SET target_rowid = ?, target_response_id = ? WHERE id = 1
 `).bind(head.rowid, head.response_id);
+
+const prepareOnlineCursor = (db: Database, cursor: ReplayHistoryHead) => db.statement(`
+  UPDATE attribute_replay_work SET online_rowid = ?, online_response_id = ? WHERE id = 1
+`).bind(cursor.rowid, cursor.response_id);
+
+export const prepareDeferDirectRatings = (db: Database, work: ReplayWork) =>
+  prepareOnlineCursor(db, { rowid: work.target_rowid, response_id: work.target_response_id });
 
 const prepareChunks = (db: Database, kind: WorkKind, attributeId: string, page: number, rows: unknown[][]) =>
   encodeAttributeReplayChunks(rows).map((payload, number) => db.statement(`
@@ -175,6 +196,63 @@ const queryStagedReplayStates = async <T>(db: Database, attributeId: string, pag
   return (result.results ?? []).flatMap(({ payload }) => JSON.parse(payload) as Array<[string, T]>);
 };
 
+const prepareStagedScoreReplacement = (db: Database, attributeId: string, states: Map<string, OnlineAttributeState>) => [
+  db.statement("DELETE FROM attribute_replay_work_chunks WHERE kind = 'states' AND attribute_id = ? AND page = 0").bind(attributeId),
+  ...prepareChunks(db, 'states', attributeId, 0, [...states]),
+];
+
+/** Rebase already-live tail votes in save order without changing the exact history cutoff. */
+export const prepareCatchUpOnlineReplay = async (
+  db: Database, scope: ReplayScope, after: number, through: number, pageSize: number,
+) => {
+  const [result, authorized] = await Promise.all([
+    db.statement(`
+      SELECT rowid AS replay_rowid, response_id, attribute_id, subject_a_id, subject_b_id,
+        rating_a, rating_b, comparison, created_at, actor_id, recorded_online
+      FROM attribute_vote_responses WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
+    `).bind(after, through, pageSize).all<VoteRow & { recorded_online: number }>(),
+    queryAuthorizedAttributeVoters(db),
+  ]);
+  const rows = result.results ?? [];
+  if (!rows.length) throw new Error('attribute_replay_history_anchor_missing');
+  const last = rows.at(-1)!;
+  const cursor = { rowid: last.replay_rowid, response_id: last.response_id };
+  const allowedAttributes = new Set(scope[1]);
+  const subjectIds = new Set(scope[0]);
+  const byAttribute = new Map<string, VoteRow[]>();
+  for (const row of rows) {
+    // Imported answers have never entered live scores. A later full replay
+    // includes them together with the deferred direct ratings.
+    if (row.recorded_online !== 1 || !allowedAttributes.has(row.attribute_id)) continue;
+    const group = byAttribute.get(row.attribute_id) ?? [];
+    group.push(row);
+    byAttribute.set(row.attribute_id, group);
+  }
+  const statements = [];
+  for (const [attributeId, group] of byAttribute) {
+    const states = new Map(await queryStagedReplayStates<OnlineAttributeState>(db, attributeId, 0));
+    const pairs = new Map<string, ReplayPair>();
+    const attributeIds = new Set([attributeId]);
+    for (const { actor_id, ...row } of group) {
+      const weight = attributeVoteWeight(actor_id, authorized.has(actor_id ?? ''));
+      for (const [subjectId, rating] of [[row.subject_a_id, row.rating_a], [row.subject_b_id, row.rating_b]] as const) {
+        if (subjectId == null || rating == null || !subjectIds.has(subjectId)) continue;
+        const key = mergeStateKey(subjectId, attributeId);
+        states.set(key, applyDirectRating(states.get(key) ?? emptyAttributeState(), rating, weight).next);
+      }
+      if (row.comparison) {
+        const history = expandAttributeReplayHistory([{ ...row, rating_a: null, rating_b: null, weight }]);
+        applyAttributeReplayComparisons(history, subjectIds, attributeIds, states, pairs);
+      }
+    }
+    statements.push(
+      ...prepareStagedScoreReplacement(db, attributeId, states),
+      ...(pairs.size ? prepareChunks(db, 'pairs', attributeId, -cursor.rowid, encodePairs(pairs)) : []),
+    );
+  }
+  return { cursor, statements: [...statements, prepareOnlineCursor(db, cursor)] };
+};
+
 // New comparisons strictly after a completed long history can use its final
 // state. Equal/earlier times and direct ratings still invalidate that result.
 const prepareAppendReplayComparisons = async (db: Database, scope: ReplayScope, attributeId: string, page: number, entries: ReplayVoteEntry[]) => {
@@ -189,8 +267,7 @@ const prepareAppendReplayComparisons = async (db: Database, scope: ReplayScope, 
   const pairs = new Map<string, ReplayPair>();
   applyAttributeReplayComparisons(history, new Set(scope[0]), new Set([attributeId]), states, pairs);
   return [
-    db.statement("DELETE FROM attribute_replay_work_chunks WHERE kind = 'states' AND attribute_id = ? AND page = 0").bind(attributeId),
-    ...prepareChunks(db, 'states', attributeId, 0, [...states]),
+    ...prepareStagedScoreReplacement(db, attributeId, states),
     ...prepareChunks(db, 'pairs', attributeId, -page, encodePairs(pairs)),
     prepareCalculationCursor(db, attributeId, { phase: 'complete', lastEventAt: history.at(-1)!.created_at }),
   ];

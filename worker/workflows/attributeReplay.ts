@@ -44,7 +44,7 @@ export const publishPreparedAttributeReplay = async (
   requiredRevision: number,
   replay: Awaited<ReturnType<typeof prepareAttributeReplay>>,
   options: AttributeReplayOptions = {},
-  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[] },
+  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[]; replayedRevision?: number },
 ) => {
   const snapshot = prepareAttributeCatalogSnapshot(
     db, replay.catalogPayload, replay.catalogThroughVersion, timestamp, options,
@@ -58,7 +58,7 @@ export const publishPreparedAttributeReplay = async (
       replayed_model_version = excluded.replayed_model_version
     WHERE attribute_replay_status.replayed_revision <> excluded.replayed_revision
       OR attribute_replay_status.replayed_model_version IS NOT excluded.replayed_model_version
-  `).bind(requiredRevision, requiredRevision, ATTRIBUTE_SCORE_MODEL_VERSION);
+  `).bind(requiredRevision, checkpoint?.replayedRevision ?? requiredRevision, ATTRIBUTE_SCORE_MODEL_VERSION);
   await commitAttributeReplay(db, lock, [
     ...(checkpoint?.verify ?? []),
     ...replay.statements,
