@@ -166,7 +166,7 @@ app.route('/', contributionRoutes);
 app.route('/', attributesRoutes);
 app.route('/', sitemapRoutes);
 
-const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
+const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, 'DB'>) => {
   const db = createDatabase(env);
   await Promise.all([
     cleanupGameViewData(db, controller.scheduledTime),
@@ -176,13 +176,32 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
   // The daily run drains interrupted publications and resumes only an
   // already-started replay. New catalog refreshes start in the weekly window.
   await flushCatalogOutbox(db, controller.scheduledTime);
-  if (isWeeklyCatalogRun(controller.scheduledTime)) {
+  const weekly = isWeeklyCatalogRun(controller.scheduledTime);
+  if (weekly) {
     // Game-list snapshots and attribute refresh are intentionally separate:
     // the game snapshot writes only when its own catalog version changed.
     await rebuildGameCatalog(db, controller.scheduledTime);
-    await runWeeklyAttributeRebuild(db, controller.scheduledTime, { workBudget: {} });
-    await flushCatalogOutbox(db, controller.scheduledTime);
-  } else if (await resumePendingAttributeReplay(db, controller.scheduledTime) === 'replay') {
+  }
+  const beforeReplay = db.metrics();
+  const replayStartedAt = Date.now();
+  let outcome: 'cache' | 'pending' | 'replay' | 'idle' | 'failed' = 'failed';
+  try {
+    outcome = weekly
+      ? await runWeeklyAttributeRebuild(db, controller.scheduledTime, { workBudget: {} })
+      : (await resumePendingAttributeReplay(db, controller.scheduledTime)) ?? 'idle';
+  } finally {
+    const afterReplay = db.metrics();
+    console.info('attribute_replay_scheduled', {
+      scheduledTime: controller.scheduledTime,
+      weekly,
+      outcome,
+      durationMs: Date.now() - replayStartedAt,
+      queries: afterReplay.queries - beforeReplay.queries,
+      rowsRead: afterReplay.rowsRead - beforeReplay.rowsRead,
+      rowsWritten: afterReplay.rowsWritten - beforeReplay.rowsWritten,
+    });
+  }
+  if (weekly || outcome === 'replay') {
     await flushCatalogOutbox(db, controller.scheduledTime);
   }
   // The active snapshot is the authoritative browser baseline. Retire only

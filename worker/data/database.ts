@@ -88,7 +88,7 @@ class D1DatabaseGateway implements Database {
   }
 }
 
-export const createDatabase = (env: Pick<Env, 'DB'>): Database => new D1DatabaseGateway(env.DB);
+export const createDatabase = (env: Pick<Env, 'DB'>) => new D1DatabaseGateway(env.DB);
 
 export const getDatabase = (context: { get(key: string): unknown }): Database => {
   const database = context.get('database');

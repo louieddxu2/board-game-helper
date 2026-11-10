@@ -28,7 +28,7 @@ export const createHarness = () => {
       return { results: [], meta: { changes: Number(result.changes) } };
     },
   });
-  const gateway = createDatabase({ DB: {
+  const env = { DB: {
     prepare,
     batch: async (statements: SqliteStatement[]) => {
       sqlite.exec('BEGIN');
@@ -42,8 +42,9 @@ export const createHarness = () => {
         throw error;
       }
     },
-  } } as unknown as Parameters<typeof createDatabase>[0]);
-  return { sqlite, gateway, executedSql };
+  } } as unknown as Parameters<typeof createDatabase>[0];
+  const gateway = createDatabase(env);
+  return { sqlite, gateway, env, executedSql };
 };
 
 type Harness = ReturnType<typeof createHarness>;
