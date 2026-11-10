@@ -88,43 +88,22 @@ describe('local attribute collection question selection', () => {
   });
 
   test('selects a pair without adding IDs to a server query', () => {
-    expect(chooseScopedAttributeQuestion(catalog(), ['subject-a', 'subject-b'], {}, 0)).toEqual({
+    expect(chooseScopedAttributeQuestion(catalog(), ['subject-a', 'subject-b'], {}, () => 0)).toEqual({
       subjectAId: 'subject-a',
       subjectBId: 'subject-b',
       attributeId: 'attribute-luck',
     });
   });
 
-  test('randomizes the attribute before choosing a low-confidence seed', () => {
+  test('draws the attribute, RD rank, and opponent independently', () => {
     const broad = catalog();
-    broad.attributes = Array.from({ length: 25 }, (_, index) => ({
-      id: `attribute-${index}`,
-      key: `attribute-${index}`,
-      name: `屬性${index}`,
-      minValue: 0,
-      maxValue: 10,
-      sortOrder: index,
-    }));
-    broad.values = broad.subjects.flatMap((subject) => broad.attributes.map((attribute) => ({
-      subjectId: subject.id,
-      attributeId: attribute.id,
-      score: 5,
-      ratingDeviation: 3,
-      directCount: 0,
-      comparisonCount: 0,
-      decisiveComparisonCount: 0,
-      evidenceCount: 0,
-      modelVersion: 'glicko-rd-v1',
-    })));
-
-    const first = chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0);
-    const last = chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0.999);
-
-    expect(first?.subjectAId).toBe('subject-a');
-    expect(last?.subjectAId).toBe('subject-c');
+    broad.attributes.push({ ...broad.attributes[0], id: 'attribute-other' });
+    const draws = [0, 0.1, 0, 0.999];
+    expect(chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, () => draws.shift()!))
+      .toEqual({ attributeId: 'attribute-luck', subjectAId: 'subject-a', subjectBId: 'subject-c' });
   });
 
-  test('keeps every attribute represented in the bounded seed pool', () => {
+  test('allows every tied subject to be selected for every attribute', () => {
     const broad = catalog();
     broad.subjects = Array.from({ length: 20 }, (_, index) => ({
       id: `subject-${index}`,
@@ -141,30 +120,49 @@ describe('local attribute collection question selection', () => {
       maxValue: 10,
       sortOrder: index,
     }));
-    broad.values = broad.subjects.flatMap((subject) => broad.attributes.map((attribute) => ({
-      subjectId: subject.id,
-      attributeId: attribute.id,
-      score: 5,
-      ratingDeviation: 3,
-      directCount: 0,
-      comparisonCount: 0,
-      decisiveComparisonCount: 0,
-      evidenceCount: 0,
-      modelVersion: 'glicko-rd-v1',
-    })));
+    broad.values = [];
+    const subjectIds = broad.subjects.map((subject) => subject.id);
+    broad.attributes.forEach((attribute, attributeIndex) => {
+      subjectIds.forEach((subjectId, subjectIndex) => {
+        const draws = [(attributeIndex + 0.5) / broad.attributes.length, 0, (subjectIndex + 0.5) / subjectIds.length, 0];
+        expect(chooseScopedAttributeQuestion(broad, subjectIds, {}, () => draws.shift()!))
+          .toMatchObject({ attributeId: attribute.id, subjectAId: subjectId });
+      });
+    });
+  });
 
-    const selectedAttributes = new Set(
-      Array.from({ length: 250 }, (_, index) => chooseScopedAttributeQuestion(
-        broad,
-        broad.subjects.map((subject) => subject.id),
-        {},
-        (index + 0.5) / 250,
-      )?.attributeId),
-    );
+  test('shares the remaining ranked positions across a tie at the cutoff', () => {
+    const broad = catalog();
+    broad.subjects = Array.from({ length: 15 }, (_, index) => ({
+      ...broad.subjects[0],
+      id: `subject-${index}`,
+    }));
+    const subjectIds = broad.subjects.map((subject) => subject.id);
+    broad.values = subjectIds.map((subjectId, index) => ({
+      ...broad.values[0],
+      subjectId,
+      ratingDeviation: index < 4 ? 3 : index < 14 ? 2 : 1,
+    }));
+    const counts = new Map<string, number>();
+    const limit = LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE;
+    for (let rank = 0; rank < limit; rank += 1) {
+      for (let index = 0; index < 20; index += 1) {
+        const draws = [0, (rank + 0.5) / limit, (index + 0.5) / 20, 0];
+        const seedId = chooseScopedAttributeQuestion(broad, subjectIds, {}, () => draws.shift()!)!.subjectAId;
+        counts.set(seedId, (counts.get(seedId) ?? 0) + 1);
+      }
+    }
+    expect(subjectIds.map((id) => counts.get(id) ?? 0))
+      .toEqual([...Array(4).fill(20), ...Array(10).fill(12), 0]);
+  });
 
-    expect(selectedAttributes).toEqual(new Set(broad.attributes.map((attribute) => attribute.id)));
-    expect(LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE).toBe(10);
-    expect(chooseScopedAttributeQuestion(broad, broad.subjects.map((subject) => subject.id), {}, 0.999)?.subjectAId).toBe('subject-9');
+  test('redraws locally when an attribute has no eligible seed', () => {
+    const broad = catalog();
+    broad.attributes.push({ ...broad.attributes[0], id: 'attribute-other' });
+    const subjectIds = broad.subjects.map((subject) => subject.id);
+    const excludedDirectRatingKeys = new Set(subjectIds.map((id) => attributeDirectRatingKey(id, 'attribute-luck')));
+    expect(chooseScopedAttributeQuestion(broad, subjectIds, { excludedDirectRatingKeys }, () => 0))
+      .toMatchObject({ attributeId: 'attribute-other' });
   });
 
   test('removes directly rated items before building the seed pool', () => {
@@ -176,7 +174,7 @@ describe('local attribute collection question selection', () => {
       catalog(),
       ['subject-a', 'subject-b', 'subject-c'],
       { excludedDirectRatingKeys },
-      0,
+      () => 0,
     );
 
     expect(selection).toEqual({
@@ -195,7 +193,7 @@ describe('local attribute collection question selection', () => {
       catalog(),
       ['subject-a', 'subject-b', 'subject-c'],
       { fixedSubjectAId: 'subject-a', fixedAttributeId: 'attribute-luck', excludedDirectRatingKeys },
-      0,
+      () => 0,
     );
 
     expect(selection).toEqual({
@@ -212,7 +210,7 @@ describe('local attribute collection question selection', () => {
       excludeAttributeId: 'attribute-luck',
       fixedSubjectBId: 'subject-b',
       fixedAttributeId: 'attribute-luck',
-    }, 0)).toEqual({
+    }, () => 0)).toEqual({
       subjectAId: 'subject-c',
       subjectBId: 'subject-b',
       attributeId: 'attribute-luck',

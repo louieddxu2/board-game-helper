@@ -36,7 +36,7 @@ export interface DeferredAttributeSubjectPreference {
   eligibleAfterAt: number;
 }
 
-/** Number of low-confidence game candidates retained for each attribute. */
+/** Number of RD-ranked positions eligible to select the first game. */
 export const LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE = 10;
 
 type AttributeValueIndex = {
@@ -286,16 +286,13 @@ const isDirectlyRated = (subjectId: string, attributeId: string, options: Scoped
   options.excludedDirectRatingKeys?.has(attributeDirectRatingKey(subjectId, attributeId)) ?? false;
 
 /**
- * Selects a question entirely from the weekly attribute catalog already in
- * IndexedDB. The server is called only afterwards with the selected subject
- * and attribute IDs, so an imported list never becomes a large D1 query
- * parameter.
+ * Selects a question locally from the cached attribute catalog.
  */
 export const chooseScopedAttributeQuestion = (
   catalog: AttributeCatalogPayload,
   subjectIds: string[],
   options: ScopedAttributeQuestionOptions = {},
-  randomValue = Math.random(),
+  random: () => number = Math.random,
 ): ScopedAttributeQuestionSelection | null => {
   const allowedSubjectIds = new Set(subjectIds);
   const availableSubjects = catalog.subjects.filter((subject) => allowedSubjectIds.has(subject.id));
@@ -312,38 +309,36 @@ export const chooseScopedAttributeQuestion = (
 
   let seedId = options.fixedSubjectAId ?? options.fixedSubjectBId;
   let attributeId = options.fixedAttributeId;
-  if (!seedId) {
-    type SeedCandidate = { subjectId: string; attributeId: string; ratingDeviation: number };
-    const groups = new Map<string, SeedCandidate[]>();
-    const candidateLimit = LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE;
-    for (const subject of availableSubjects) {
-      for (const candidateAttributeId of attributeIds) {
-        if (isDirectlyRated(subject.id, candidateAttributeId, options)) continue;
-        const ratingDeviation = state(subject.id, candidateAttributeId).ratingDeviation;
-        let group = groups.get(candidateAttributeId);
-        if (!group) {
-          group = [];
-          groups.set(candidateAttributeId, group);
-        }
-        let insertionIndex = 0;
-        // Keep the previous stable-sort order for ties while retaining only
-        // the candidates that can enter the bounded seed pool.
-        while (insertionIndex < group.length && group[insertionIndex].ratingDeviation >= ratingDeviation) insertionIndex += 1;
-        if (insertionIndex >= candidateLimit) continue;
-        group.splice(insertionIndex, 0, { subjectId: subject.id, attributeId: candidateAttributeId, ratingDeviation });
-        if (group.length > candidateLimit) group.pop();
-      }
+  while (!attributeId && attributeIds.length) {
+    const [candidateAttributeId] = attributeIds.splice(Math.floor(random() * attributeIds.length), 1);
+    if (seedId || availableSubjects.some((subject) => !isDirectlyRated(subject.id, candidateAttributeId, options))) {
+      attributeId = candidateAttributeId;
     }
-    const eligibleAttributeIds = attributeIds.filter((candidateAttributeId) => (groups.get(candidateAttributeId)?.length ?? 0) > 0);
-    if (!eligibleAttributeIds.length) return null;
-    attributeId = eligibleAttributeIds[Math.floor(randomValue * eligibleAttributeIds.length)];
-    const attributeCandidates = groups.get(attributeId) ?? [];
-    const seed = attributeCandidates[Math.floor(randomValue * attributeCandidates.length)] ?? attributeCandidates[0];
-    seedId = seed.subjectId;
-    attributeId = seed.attributeId;
   }
-  if (!attributeId) attributeId = attributeIds[Math.floor(randomValue * attributeIds.length)];
-  if (!seedId || !attributeId) return null;
+  if (!attributeId) return null;
+
+  if (!seedId) {
+    const subjectsByRd = new Map<number, string[]>();
+    let eligibleCount = 0;
+    for (const subject of availableSubjects) {
+      if (isDirectlyRated(subject.id, attributeId, options)) continue;
+      const rd = state(subject.id, attributeId).ratingDeviation;
+      const group = subjectsByRd.get(rd);
+      if (group) group.push(subject.id);
+      else subjectsByRd.set(rd, [subject.id]);
+      eligibleCount += 1;
+    }
+    let rank = Math.floor(random() * Math.min(eligibleCount, LOCAL_ATTRIBUTE_QUESTION_CANDIDATES_PER_ATTRIBUTE));
+    for (const [, group] of [...subjectsByRd].sort(([left], [right]) => right - left)) {
+      if (rank < group.length) {
+        // A group crossing the rank cutoff shares its eligible positions.
+        seedId = group[Math.floor(random() * group.length)];
+        break;
+      }
+      rank -= group.length;
+    }
+  }
+  if (!seedId) return null;
 
   if (options.fixedSubjectAId && options.fixedSubjectBId) {
     if (options.fixedSubjectAId === options.fixedSubjectBId || pairIsExcluded(options.fixedSubjectAId, options.fixedSubjectBId, attributeId, options)) return null;
@@ -366,7 +361,7 @@ export const chooseScopedAttributeQuestion = (
     })
     .filter((candidate) => !pairIsExcluded(seedId!, candidate.subjectId, attributeId!, options));
   if (!candidates.length) return null;
-  const chosen = weightedChoice(candidates.map((candidate) => ({ item: candidate.subjectId, weight: candidate.weight })), randomValue);
+  const chosen = weightedChoice(candidates.map((candidate) => ({ item: candidate.subjectId, weight: candidate.weight })), random());
   if (!chosen) return null;
   return options.fixedSubjectBId
     ? { subjectAId: chosen, subjectBId: seedId, attributeId }

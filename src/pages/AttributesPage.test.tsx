@@ -79,7 +79,8 @@ describe('AttributesPage question flow', () => {
       high: { label: '條件取勝', question: '哪款遊戲的「條件取勝」比重較高？', fullDescription: '條件端原文' },
     } };
     vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
-    vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValue(highPole === 'low' ? 0 : 0.9);
+    const questionDraws = [0, 0, 0, 0]; // Attribute, RD rank, tied game, opponent.
+    vi.mocked(Math.random).mockImplementation(() => questionDraws.shift() ?? (highPole === 'low' ? 0 : 0.9));
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [] });
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
     const high = bipolar.endpoints[highPole];
