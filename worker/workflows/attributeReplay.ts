@@ -1,6 +1,6 @@
-import type { Database } from '../data/database';
+import type { Database, DatabaseStatement } from '../data/database';
 import { prepareAttributeReplay } from '../data/attributeReplay';
-import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
+import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock, type AttributeReplayLock } from '../data/attributeLocks';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../data/attributeScoring';
 import { prepareAttributeCatalogSnapshot } from '../data/attributeCatalog';
 
@@ -23,12 +23,24 @@ export const queryAttributeReplayStatus = (db: Database) => db.statement(`
 /** Caller holds the replay lock for calculation, publication and acknowledgement. */
 export const publishCompleteAttributeReplayLocked = async (
   db: Database,
-  lock: Awaited<ReturnType<typeof acquireAttributeReplayLock>>,
+  lock: AttributeReplayLock,
   timestamp: number,
   requiredRevision: number,
   options: AttributeReplayOptions = {},
 ): Promise<void> => {
   const replay = await prepareAttributeReplay(db, timestamp, options.maxReplayChunkBytes);
+  await publishPreparedAttributeReplay(db, lock, timestamp, requiredRevision, replay, options);
+};
+
+export const publishPreparedAttributeReplay = async (
+  db: Database,
+  lock: AttributeReplayLock,
+  timestamp: number,
+  requiredRevision: number,
+  replay: Awaited<ReturnType<typeof prepareAttributeReplay>>,
+  options: AttributeReplayOptions = {},
+  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[] },
+) => {
   const snapshot = prepareAttributeCatalogSnapshot(
     db, replay.catalogPayload, replay.catalogThroughVersion, timestamp, options,
   );
@@ -43,9 +55,11 @@ export const publishCompleteAttributeReplayLocked = async (
       OR attribute_replay_status.replayed_model_version IS NOT excluded.replayed_model_version
   `).bind(requiredRevision, requiredRevision, ATTRIBUTE_SCORE_MODEL_VERSION);
   await commitAttributeReplay(db, lock, [
+    ...(checkpoint?.verify ?? []),
     ...replay.statements,
     ...snapshot,
     acknowledge,
+    ...(checkpoint?.clear ?? []),
   ], requiredRevision);
 };
 

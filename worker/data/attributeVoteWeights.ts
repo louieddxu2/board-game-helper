@@ -16,6 +16,7 @@ export const queryAuthorizedAttributeVoters = async (db: Database): Promise<Set<
 // Append immediately after the role mutation in the same transaction. This
 // marks only the one global status row and never visits the vote history.
 export const requireAttributeReplayAfterChange = (db: Database) => db.statement(`
-  UPDATE attribute_replay_status SET required_revision = required_revision + 1
+  UPDATE attribute_replay_status
+  SET required_revision = required_revision + 1, history_revision = history_revision + 1
   WHERE id = 1 AND changes() > 0
 `);

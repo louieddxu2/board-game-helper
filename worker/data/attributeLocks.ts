@@ -8,7 +8,7 @@ export interface AttributeWriteLock {
   names: string[];
 }
 
-interface AttributeReplayLock {
+export interface AttributeReplayLock {
   token: string;
 }
 

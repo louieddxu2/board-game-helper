@@ -1,5 +1,4 @@
 import type {
-  AttributeComparisonResult,
   AttributeMatrixValue,
   AttributeSubject,
   AttributeSubjectComponent,
@@ -10,38 +9,13 @@ import { encodeAttributeReplayChunks } from './attributeReplayChunks';
 import { queryAllUnprocessedCandidates, queryAttributeDefinitions } from './attributeQueries';
 import type { AttributeScoreStateRow, ComponentRow, FullReplayExternalIdRow, FullReplayGameAliasRow, FullReplayGameSourceRow, FullReplaySubjectSourceRow } from './attributeQueryShared';
 import { ATTRIBUTE_QUESTION_SLOT_COUNT, toComponent } from './attributeQueryShared';
+import { ATTRIBUTE_SCORE_MODEL_VERSION, type OnlineAttributeState } from './attributeScoring';
 import {
-  ATTRIBUTE_INITIAL_RD,
-  ATTRIBUTE_SCORE_MODEL_VERSION,
-  applyComparison,
-  emptyAttributeState,
-  type OnlineAttributeState
-} from './attributeScoring';
+  calculateAttributeReplay, mergeStateKey, pairStatKey,
+  type CalculatedAttributeReplay, type FullReplayResponseRow, type ReplayPair,
+} from './attributeReplayCalculation';
 import type { Database } from './database';
 import { attributeVoteWeight, queryAuthorizedAttributeVoters } from './attributeVoteWeights';
-
-interface AttributeReplayBaselineRow {
-  direct_sum: number;
-  direct_count: number;
-  weighted_sum?: number;
-  weight_sum?: number;
-}
-
-const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
-
-const stateFromBaseline = (row: AttributeReplayBaselineRow): OnlineAttributeState => {
-  const directCount = Number(row.direct_count);
-  const directSum = Number(row.direct_sum);
-  return {
-    score: directCount ? (row.weighted_sum ?? directSum) / (row.weight_sum ?? directCount) : 5,
-    ratingDeviation: directCount ? 1.5 / Math.sqrt(row.weight_sum ?? directCount) : ATTRIBUTE_INITIAL_RD,
-    directSum,
-    directCount,
-    comparisonCount: 0,
-    decisiveComparisonCount: 0,
-    evidenceCount: directCount,
-  };
-};
 
 const rebuildStateStatement = (
   db: Database,
@@ -98,9 +72,6 @@ interface StoredPairStatRow {
   comparison_count: number;
 }
 
-const pairStatKey = (subjectAId: string, subjectBId: string, attributeId: string) =>
-  `${subjectAId}\u0000${subjectBId}\u0000${attributeId}`;
-
 interface FullReplayPairSnapshotRow { active_generation: number; chunk_count: number; }
 
 interface FullReplayPairSnapshotChunkRow { chunk_number: number; pairs_json: string; }
@@ -108,30 +79,6 @@ interface FullReplayPairSnapshotChunkRow { chunk_number: number; pairs_json: str
 interface FullReplayStateSnapshotRow { active_generation: number; chunk_count: number; }
 
 interface FullReplayStateSnapshotChunkRow { states_json: string; }
-
-interface FullReplayHistoryRow {
-  stream_id: string;
-  kind: 'rating' | 'comparison';
-  attribute_id: string;
-  subject_a_id: string;
-  subject_b_id: string | null;
-  value: number | null;
-  comparison: AttributeComparisonResult | null;
-  created_at: number;
-  weight: number;
-}
-
-interface FullReplayResponseRow {
-  response_id: string;
-  attribute_id: string;
-  subject_a_id: string;
-  subject_b_id: string | null;
-  rating_a: number | null;
-  rating_b: number | null;
-  comparison: AttributeComparisonResult | null;
-  created_at: number;
-  actor_id: string | null;
-}
 
 export interface AttributeReplayResult {
   changed: boolean;
@@ -278,7 +225,7 @@ const queryFullReplaySubjects = async (db: Database): Promise<AttributeSubject[]
   return subjects;
 };
 
-const queryFullReplayMetadata = async (db: Database) => {
+export const queryFullReplayMetadata = async (db: Database) => {
   const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
     .first<{ current_version: number }>();
   if (!clock) throw new Error('attribute_catalog_clock_unavailable');
@@ -370,20 +317,16 @@ const prepareFullReplayStateBaseline = (
   ];
 };
 
-const queryFullReplayHistory = async (db: Database): Promise<FullReplayHistoryRow[]> => {
+const queryFullReplayHistory = async (db: Database): Promise<FullReplayResponseRow[]> => {
   const authorized = await queryAuthorizedAttributeVoters(db);
   // The canonical response table is read exactly once. Filtering active
   // attributes and expanding each response happen in Worker memory.
   const responses = await db.statement(`SELECT response_id, attribute_id, subject_a_id, subject_b_id,
-    rating_a, rating_b, comparison, created_at, actor_id FROM attribute_vote_responses`).all<FullReplayResponseRow>();
-  const history: FullReplayHistoryRow[] = [];
-  for (const row of responses.results ?? []) {
-    const weight = attributeVoteWeight(row.actor_id, authorized.has(row.actor_id ?? ''));
-    if (row.rating_a != null) history.push({ stream_id: `response:${row.response_id}:rating-a`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.rating_a, comparison: null, created_at: row.created_at, weight });
-    if (row.rating_b != null && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:rating-b`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_b_id, subject_b_id: null, value: row.rating_b, comparison: null, created_at: row.created_at, weight });
-    if (row.comparison && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:comparison`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.comparison, created_at: row.created_at, weight });
-  }
-  return history.sort((left, right) => left.created_at - right.created_at || left.stream_id.localeCompare(right.stream_id));
+    rating_a, rating_b, comparison, created_at, actor_id FROM attribute_vote_responses`).all<Omit<FullReplayResponseRow, 'weight'> & { actor_id: string | null }>();
+  return (responses.results ?? []).map(({ actor_id, ...row }) => ({
+    ...row,
+    weight: attributeVoteWeight(actor_id, authorized.has(actor_id ?? '')),
+  }));
 };
 
 const queryFullReplayPairBaseline = async (db: Database) => {
@@ -410,8 +353,6 @@ const queryFullReplayPairBaseline = async (db: Database) => {
   }
   return pairs;
 };
-
-type ReplayPair = { subjectAId: string; subjectBId: string; attributeId: string; count: number };
 
 const prepareFullReplayPairBaseline = (db: Database, pairs: ReplayPair[], generation: number, maxChunkBytes?: number) => {
   const rows = pairs.map((pair) => [pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count]);
@@ -447,38 +388,31 @@ export const prepareAttributeReplay = async (db: Database, timestamp: number, ma
   const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
     queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
   ]);
-  const { subjectIds, attributes, subjects, candidates, throughVersion } = metadata;
+  return prepareCalculatedAttributeReplay(
+    db, timestamp, metadata, calculateAttributeReplay(metadata.subjectIds, new Set(metadata.attributes.keys()), history),
+    { maxChunkBytes, storedPairs, stateBaseline },
+  );
+};
+
+export const prepareCalculatedAttributeReplay = async (
+  db: Database,
+  timestamp: number,
+  metadata: Awaited<ReturnType<typeof queryFullReplayMetadata>>,
+  { states, pairCounts }: CalculatedAttributeReplay,
+  options: {
+    maxChunkBytes?: number;
+    storedPairs?: Awaited<ReturnType<typeof queryFullReplayPairBaseline>>;
+    stateBaseline?: Awaited<ReturnType<typeof queryFullReplayStateBaseline>>;
+    compareLiveStates?: boolean;
+  } = {},
+) => {
+  const { maxChunkBytes, compareLiveStates } = options;
+  const [storedPairs, stateBaseline] = await Promise.all([
+    options.storedPairs ?? queryFullReplayPairBaseline(db),
+    options.stateBaseline ?? (compareLiveStates ? queryLiveReplayStates(db) : queryFullReplayStateBaseline(db)),
+  ]);
+  const { attributes, subjects, candidates, throughVersion } = metadata;
   const stored = stateBaseline.states;
-  const states = new Map<string, OnlineAttributeState>();
-  const directRatings = new Map<string, { total: number; count: number; weightedTotal: number; weight: number }>();
-  for (const row of history) {
-    if (row.kind !== 'rating' || row.value == null || !subjectIds.has(row.subject_a_id) || !attributes.has(row.attribute_id)) continue;
-    const key = mergeStateKey(row.subject_a_id, row.attribute_id);
-    const direct = directRatings.get(key) ?? { total: 0, count: 0, weightedTotal: 0, weight: 0 };
-    direct.total += Number(row.value); direct.count += 1;
-    direct.weightedTotal += Number(row.value) * row.weight; direct.weight += row.weight;
-    directRatings.set(key, direct);
-  }
-  for (const subjectId of subjectIds) for (const attributeId of attributes.keys()) {
-    const direct = directRatings.get(mergeStateKey(subjectId, attributeId));
-    states.set(mergeStateKey(subjectId, attributeId), stateFromBaseline({
-      direct_sum: direct?.total ?? 0, direct_count: direct?.count ?? 0,
-      weighted_sum: direct?.weightedTotal ?? 0, weight_sum: direct?.weight ?? 0,
-    }));
-  }
-  const pairCounts = new Map<string, ReplayPair>();
-  for (const row of history) {
-    if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjectIds.has(row.subject_a_id) || !subjectIds.has(row.subject_b_id) || !attributes.has(row.attribute_id) || row.subject_a_id === row.subject_b_id) continue;
-    const keyA = mergeStateKey(row.subject_a_id, row.attribute_id);
-    const keyB = mergeStateKey(row.subject_b_id, row.attribute_id);
-    const updated = applyComparison(states.get(keyA) ?? emptyAttributeState(), states.get(keyB) ?? emptyAttributeState(), row.comparison, row.weight);
-    states.set(keyA, updated.a.next); states.set(keyB, updated.b.next);
-    const [subjectAId, subjectBId] = row.subject_a_id < row.subject_b_id ? [row.subject_a_id, row.subject_b_id] : [row.subject_b_id, row.subject_a_id];
-    const key = pairStatKey(subjectAId, subjectBId, row.attribute_id);
-    const pair = pairCounts.get(key);
-    if (pair) pair.count += 1;
-    else pairCounts.set(key, { subjectAId, subjectBId, attributeId: row.attribute_id, count: 1 });
-  }
   const changedStates = [...states.entries()].map(([key, state]) => {
     const separator = key.indexOf('\u0000');
     return { subjectId: key.slice(0, separator), attributeId: key.slice(separator + 1), state };
@@ -528,6 +462,20 @@ export const prepareAttributeReplay = async (db: Database, timestamp: number, ma
       values, candidates: [...candidates.values()].sort((left, right) => left.sourceRowNumber - right.sourceRowNumber || left.id.localeCompare(right.id)),
       activities: [], scoreModelVersion: ATTRIBUTE_SCORE_MODEL_VERSION,
     },
+  };
+};
+
+// A resumed run can span many successful live responses. Compare against the
+// actual table so a score equal to the previous checkpoint can still be fixed.
+const queryLiveReplayStates = async (db: Database) => {
+  const result = await db.statement(`
+    SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
+      comparison_count, decisive_comparison_count, evidence_count, model_version
+    FROM attribute_score_states
+  `).all<AttributeScoreStateRow>();
+  return {
+    states: new Map((result.results ?? []).map((state) => [mergeStateKey(state.subject_id, state.attribute_id), state])),
+    available: false,
   };
 };
 

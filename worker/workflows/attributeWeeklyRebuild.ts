@@ -8,9 +8,11 @@ import {
   queryAttributeCatalogSnapshot,
 } from '../data/attributeCatalog';
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
+import { ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE, queryAttributeReplayWork, queryReplayHistoryHead } from '../data/attributeReplayWork';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../data/attributeScoring';
 import type { Database } from '../data/database';
 import { publishCompleteAttributeReplayLocked, queryAttributeReplayStatus } from './attributeReplay';
+import { runAttributeReplayWorkLocked, type ReplayWorkBudget } from './attributeResumableReplay';
 
 const sameIds = (before: Array<{ id: string }>, after: Array<{ id: string }>) => {
   const ids = new Set(before.map((item) => item.id));
@@ -63,20 +65,30 @@ const updatedCatalogFromSnapshot = async (db: Database): Promise<AttributeCatalo
 export const runWeeklyAttributeRebuild = async (
   db: Database,
   timestamp = Date.now(),
-  options: { maxChunkBytes?: number } = {},
-): Promise<'replay' | 'cache'> => {
+  options: { maxChunkBytes?: number; workBudget?: ReplayWorkBudget } = {},
+): Promise<'replay' | 'cache' | 'pending'> => {
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
     const status = await queryAttributeReplayStatus(db);
+    const revision = status?.required_revision ?? 0;
+    const budget = options.workBudget;
+    const work = budget ? await queryAttributeReplayWork(db) : null;
+    if (budget && work) return await runAttributeReplayWorkLocked(db, lock, timestamp, revision, work, budget);
     const needsReplay = !status || status.required_revision !== status.replayed_revision
       || status.replayed_model_version !== ATTRIBUTE_SCORE_MODEL_VERSION;
     const catalog = needsReplay ? null : await updatedCatalogFromSnapshot(db);
     if (catalog) {
       const snapshot = prepareAttributeCatalogSnapshot(db, catalog, catalog.throughVersion, timestamp, options);
-      await commitAttributeReplay(db, lock, snapshot, status?.required_revision ?? 0);
+      await commitAttributeReplay(db, lock, snapshot, revision);
       return 'cache';
     }
-    await publishCompleteAttributeReplayLocked(db, lock, timestamp, status?.required_revision ?? 0, options);
+    if (budget) {
+      const head = await queryReplayHistoryHead(db);
+      if (head.rowid >= (budget.minimumHistoryRowid ?? ATTRIBUTE_REPLAY_HISTORY_PAGE_SIZE)) {
+        return await runAttributeReplayWorkLocked(db, lock, timestamp, revision, null, budget, head);
+      }
+    }
+    await publishCompleteAttributeReplayLocked(db, lock, timestamp, revision, options);
     return 'replay';
   } finally {
     await releaseAttributeReplayLock(db, lock);

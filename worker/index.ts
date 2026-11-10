@@ -10,6 +10,7 @@ import { cleanupExpiredSessions } from './data/retention';
 import { cleanupAttributeActivityFeed } from './data/attributes';
 import { cleanupAttributeCatalogDeltas } from './data/catalogRetention';
 import { runWeeklyAttributeRebuild } from './workflows/attributeWeeklyRebuild';
+import { resumePendingAttributeReplay } from './workflows/attributeResumableReplay';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -172,16 +173,16 @@ const scheduled = async (controller: { scheduledTime: number }, env: Env) => {
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
   ]);
-  // The daily run is recovery-only. It drains interrupted publications but
-  // never recalculates vote scores or rewrites a browser snapshot.
+  // The daily run drains interrupted publications and resumes only an
+  // already-started replay. New catalog refreshes start in the weekly window.
   await flushCatalogOutbox(db, controller.scheduledTime);
   if (isWeeklyCatalogRun(controller.scheduledTime)) {
     // Game-list snapshots and attribute refresh are intentionally separate:
     // the game snapshot writes only when its own catalog version changed.
     await rebuildGameCatalog(db, controller.scheduledTime);
-    await runWeeklyAttributeRebuild(db, controller.scheduledTime);
-    // A full replay suppresses its own per-state outbox notifications. This second
-    // pass publishes only a real mutation that raced with the replay.
+    await runWeeklyAttributeRebuild(db, controller.scheduledTime, { workBudget: {} });
+    await flushCatalogOutbox(db, controller.scheduledTime);
+  } else if (await resumePendingAttributeReplay(db, controller.scheduledTime) === 'replay') {
     await flushCatalogOutbox(db, controller.scheduledTime);
   }
   // The active snapshot is the authoritative browser baseline. Retire only
