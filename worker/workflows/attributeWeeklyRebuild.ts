@@ -3,11 +3,11 @@ import type { AttributeCatalogPayload } from '../../src/shared/types';
 import {
   attributeCatalogChangesPayload,
   attributeCatalogPayload,
-  publishAttributeCatalogSnapshot,
+  prepareAttributeCatalogSnapshot,
   queryAttributeCatalogChanges,
   queryAttributeCatalogSnapshot,
 } from '../data/attributeCatalog';
-import { acquireAttributeReplayLock, releaseAttributeReplayLock } from '../data/attributeLocks';
+import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../data/attributeScoring';
 import type { Database } from '../data/database';
 import { publishCompleteAttributeReplayLocked, queryAttributeReplayStatus } from './attributeReplay';
@@ -72,10 +72,11 @@ export const runWeeklyAttributeRebuild = async (
       || status.replayed_model_version !== ATTRIBUTE_SCORE_MODEL_VERSION;
     const catalog = needsReplay ? null : await updatedCatalogFromSnapshot(db);
     if (catalog) {
-      await publishAttributeCatalogSnapshot(db, catalog, catalog.throughVersion, timestamp, options);
+      const snapshot = prepareAttributeCatalogSnapshot(db, catalog, catalog.throughVersion, timestamp, options);
+      await commitAttributeReplay(db, lock, snapshot, status?.required_revision ?? 0);
       return 'cache';
     }
-    await publishCompleteAttributeReplayLocked(db, timestamp, status?.required_revision ?? 0, options);
+    await publishCompleteAttributeReplayLocked(db, lock, timestamp, status?.required_revision ?? 0, options);
     return 'replay';
   } finally {
     await releaseAttributeReplayLock(db, lock);

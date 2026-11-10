@@ -337,14 +337,14 @@ export const chunkAttributeCatalog = (entries: SnapshotEntry[], maxChunkBytes = 
   return chunks;
 };
 
-/** Write a snapshot from an already materialized payload without rereading D1 source tables. */
-export const publishAttributeCatalogSnapshot = async (
+/** Prepare a snapshot from an already materialized payload for atomic publication. */
+export const prepareAttributeCatalogSnapshot = (
   db: Database,
   source: AttributesPayload,
   throughVersion: number,
   timestamp = Date.now(),
   options: { maxChunkBytes?: number } = {},
-): Promise<AttributeCatalogPayload> => {
+) => {
   const valuesBySubject = new Map<string, AttributeMatrixValue[]>();
   source.values.forEach((value) => {
     const values = valuesBySubject.get(value.subjectId) ?? [];
@@ -377,11 +377,5 @@ export const publishAttributeCatalogSnapshot = async (
       generated_at = excluded.generated_at
   `).bind(generation, throughVersion, chunks.length, JSON.stringify(source.attributes), source.scoreModelVersion ?? 'glicko-rd-v1', timestamp));
   statements.push(db.statement('DELETE FROM attribute_catalog_snapshot_chunks WHERE generation <> ?').bind(generation));
-  await db.batch(statements);
-  return {
-    ...source,
-    generation,
-    throughVersion,
-    generatedAt: timestamp,
-  };
+  return statements;
 };

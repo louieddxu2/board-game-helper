@@ -43,7 +43,7 @@ const db = {
     } finally { unlinkSync(path); rmdirSync(directory); }
   },
 } as Database;
-if (apply) await runCompleteAttributeReplay(db, Date.now());
+if (apply) await runCompleteAttributeReplay(db, Date.now(), { maxChunkBytes: 50_000, maxReplayChunkBytes: 50_000 });
 
 const history = await db.statement(`
   SELECT 'response:' || response_id AS responseId,created_at AS createdAt,attribute_id AS attributeId,

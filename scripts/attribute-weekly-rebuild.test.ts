@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { type SQLInputValue } from 'node:sqlite';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 // @ts-expect-error The migration guard is an intentional JavaScript test helper.
 import { buildMigratedSchema } from './check-d1-trigger-fanout.mjs';
 import { createDatabase } from '../worker/data/database';
@@ -454,9 +454,83 @@ test('failed full publication leaves the revision pending and releases the repla
       VALUES ('publication-failure-import', 'attribute_win_method', ?, ?, 'A_HIGHER', '[]', NULL, 'failure-session', ?, ?)
     `).run(first.id, second.id, timestamp + 1, timestamp + 1);
     const before = status(harness);
+    const beforeScores = scoreRows(harness);
+    const generation = () => harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get();
+    const beforeGeneration = generation();
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 2, { maxChunkBytes: 1 }))
       .rejects.toThrow('attribute_catalog_entry_too_large');
+    expect(scoreRows(harness)).toEqual(beforeScores);
+
+    // Fail after the state and snapshot SQL has already run, but before commit.
+    harness.sqlite.exec(`
+      CREATE TRIGGER fail_replay_acknowledgement BEFORE UPDATE OF replayed_revision ON attribute_replay_status
+      BEGIN SELECT RAISE(ABORT, 'injected replay commit failure'); END;
+    `);
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 2)).rejects.toThrow('injected replay commit failure');
+    expect(scoreRows(harness)).toEqual(beforeScores);
+    expect(generation()).toEqual(beforeGeneration);
     expect(status(harness)).toEqual(before);
+    expect(harness.sqlite.prepare('SELECT id FROM attribute_catalog_rebuild_mode').get()).toBeUndefined();
     expect(harness.sqlite.prepare("SELECT lock_name FROM attribute_vote_lock WHERE lock_name = 'attribute-replay'").get()).toBeUndefined();
+
+    harness.sqlite.exec('DROP TRIGGER fail_replay_acknowledgement');
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 2)).resolves.toBe('replay');
+    expect(generation()).toEqual({ active_generation: timestamp + 2 });
+    expect(status(harness).replayed_revision).toBe(before.required_revision);
+  } finally { close(harness); }
+});
+
+test.each([
+  ['expired lock', "UPDATE attribute_vote_lock SET expires_at = 0 WHERE lock_name = 'attribute-replay'"],
+  ['changed history revision', 'UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1'],
+])('rejects a prepared replay when its %s changes before commit', async (_reason, change) => {
+  const { harness, timestamp } = await establishBaseline();
+  try {
+    const [first, second] = subjects(harness);
+    await saveAttributeResponse(harness.gateway, {
+      subjectAId: first.id, subjectBId: second.id, attributeId: 'attribute_win_method',
+      responseId: 'revision-race', sessionId: 'revision-race', actorId: null, ratingA: 8, timestamp: timestamp + 1,
+    });
+    const before = scoreRows(harness);
+    const batch = harness.gateway.batch.bind(harness.gateway);
+    vi.spyOn(harness.gateway, 'batch').mockImplementationOnce((statements) => {
+      harness.sqlite.exec(change);
+      return batch(statements);
+    });
+    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 2)).rejects.toThrow('attribute_replay_lease_or_revision_changed');
+    expect(scoreRows(harness)).toEqual(before);
+    expect(status(harness).required_revision).toBeGreaterThan(status(harness).replayed_revision);
+  } finally { close(harness); }
+});
+
+test('writes and rereads a byte-bounded replay baseline without changing scores on retry', async () => {
+  const { harness, timestamp } = await establishBaseline();
+  try {
+    const catalog = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    const [first, ...opponents] = catalog.subjects.slice(0, 25);
+    const insert = harness.sqlite.prepare(`
+      INSERT INTO attribute_vote_responses
+        (response_id, attribute_id, subject_a_id, subject_b_id, comparison, activity_json, session_id, created_at, updated_at)
+      VALUES (?, 'attribute_win_method', ?, ?, 'A_HIGHER', '[]', 'chunk-fixture', ?, ?)
+    `);
+    opponents.forEach((opponent, index) => {
+      insert.run(`chunk-fixture-${index}`, first.id, opponent.id, timestamp + 1, timestamp + 1);
+    });
+    const maxReplayChunkBytes = 1_000;
+    await runCompleteAttributeReplay(harness.gateway, timestamp + 2, { maxReplayChunkBytes });
+    const chunks = harness.sqlite.prepare(`
+      SELECT pairs_json FROM attribute_replay_snapshot_chunks
+      WHERE generation = (SELECT active_generation FROM attribute_replay_snapshot_state WHERE id = 1)
+      ORDER BY chunk_number
+    `).all() as Array<{ pairs_json: string }>;
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(({ pairs_json }) => Buffer.byteLength(pairs_json) <= maxReplayChunkBytes)).toBe(true);
+    expect(chunks.flatMap(({ pairs_json }) => JSON.parse(pairs_json))).toHaveLength(opponents.length);
+    const published = await queryAttributeCatalogSnapshot(harness.gateway);
+    const scores = scoreRows(harness);
+    await runCompleteAttributeReplay(harness.gateway, timestamp + 3, { maxReplayChunkBytes });
+    expect(scoreRows(harness)).toEqual(scores);
+    expect(attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway)).values)
+      .toEqual(attributeCatalogPayload(published).values);
   } finally { close(harness); }
 });

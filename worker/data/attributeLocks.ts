@@ -12,6 +12,24 @@ interface AttributeReplayLock {
   token: string;
 }
 
+// Evaluate inside the write transaction, using the database clock. A replay
+// whose lease expired while it was calculating must never publish stale scores.
+// An invalid JSON path aborts the entire D1 batch with a recognizable error.
+const assertAttributeReplayLease = (db: Database, lock: AttributeReplayLock, requiredRevision?: number) => db.statement(`
+  SELECT json_extract('{}', CASE WHEN EXISTS (
+    SELECT 1 FROM attribute_vote_lock
+    WHERE lock_name = ? AND token = ? AND expires_at > unixepoch('subsec') * 1000
+  ) AND (? IS NULL OR COALESCE((SELECT required_revision FROM attribute_replay_status WHERE id = 1), 0) = ?)
+  THEN '$' ELSE 'attribute_replay_lease_or_revision_changed' END)
+`).bind(ATTRIBUTE_REPLAY_LOCK_NAME, lock.token, requiredRevision ?? null, requiredRevision ?? null);
+
+export const commitAttributeReplay = (
+  db: Database,
+  lock: AttributeReplayLock,
+  statements: DatabaseStatement[],
+  requiredRevision?: number,
+) => db.batch([assertAttributeReplayLease(db, lock, requiredRevision), ...statements]);
+
 export const acquireAttributeReplayLock = async (db: Database, timestamp: number): Promise<AttributeReplayLock> => {
   const token = createId('attribute-replay-lock');
   const now = Date.now();

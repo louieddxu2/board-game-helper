@@ -5,10 +5,11 @@ import type {
   AttributeSubjectComponent,
   AttributesPayload
 } from '../../src/shared/types';
-import { acquireAttributeReplayLock, releaseAttributeReplayLock } from './attributeLocks';
+import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from './attributeLocks';
+import { encodeAttributeReplayChunks } from './attributeReplayChunks';
 import { queryAllUnprocessedCandidates, queryAttributeDefinitions } from './attributeQueries';
 import type { AttributeScoreStateRow, ComponentRow, FullReplayExternalIdRow, FullReplayGameAliasRow, FullReplayGameSourceRow, FullReplaySubjectSourceRow } from './attributeQueryShared';
-import { ATTRIBUTE_QUESTION_SLOT_COUNT, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH, ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT, chunk, toComponent } from './attributeQueryShared';
+import { ATTRIBUTE_QUESTION_SLOT_COUNT, toComponent } from './attributeQueryShared';
 import {
   ATTRIBUTE_INITIAL_RD,
   ATTRIBUTE_SCORE_MODEL_VERSION,
@@ -44,14 +45,17 @@ const stateFromBaseline = (row: AttributeReplayBaselineRow): OnlineAttributeStat
 
 const rebuildStateStatement = (
   db: Database,
-  rows: Array<{ subjectId: string; attributeId: string; state: OnlineAttributeState }>,
+  json: string,
   timestamp: number,
 ) => db.statement(`
   INSERT INTO attribute_score_states
     (subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
      comparison_count, decisive_comparison_count, evidence_count, model_version,
      updated_at, random_key, question_slot)
-  VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(hex(randomblob(16))), (abs(random()) % ' + ATTRIBUTE_QUESTION_SLOT_COUNT + ') + 1)').join(', ')}
+  SELECT value ->> 0, value ->> 1, value ->> 2, value ->> 3, value ->> 4, value ->> 5,
+    value ->> 6, value ->> 7, value ->> 8, value ->> 9, ?,
+    lower(hex(randomblob(16))), (abs(random()) % ${ATTRIBUTE_QUESTION_SLOT_COUNT}) + 1
+  FROM json_each(?) WHERE true
   ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
     score = excluded.score,
     rating_deviation = excluded.rating_deviation,
@@ -62,11 +66,13 @@ const rebuildStateStatement = (
     evidence_count = excluded.evidence_count,
     model_version = excluded.model_version,
     updated_at = excluded.updated_at
-`).bind(...rows.flatMap(({ subjectId, attributeId, state }) => [
+`).bind(timestamp, json);
+
+const replayStateRow = (subjectId: string, attributeId: string, state: OnlineAttributeState) => [
   subjectId, attributeId, state.score, state.ratingDeviation, state.directSum,
   state.directCount, state.comparisonCount, state.decisiveComparisonCount,
-  state.evidenceCount, ATTRIBUTE_SCORE_MODEL_VERSION, timestamp,
-]));
+  state.evidenceCount, ATTRIBUTE_SCORE_MODEL_VERSION,
+];
 
 const stateMatches = (stored: AttributeScoreStateRow | undefined, next: OnlineAttributeState): boolean => {
   // Every value is recomputed from raw history. A changed model label alone
@@ -97,7 +103,7 @@ const pairStatKey = (subjectAId: string, subjectBId: string, attributeId: string
 
 interface FullReplayPairSnapshotRow { active_generation: number; chunk_count: number; }
 
-interface FullReplayPairSnapshotChunkRow { pairs_json: string; }
+interface FullReplayPairSnapshotChunkRow { chunk_number: number; pairs_json: string; }
 
 interface FullReplayStateSnapshotRow { active_generation: number; chunk_count: number; }
 
@@ -334,29 +340,23 @@ const queryFullReplayStateBaseline = async (db: Database) => {
   return { states, available: true };
 };
 
-const writeFullReplayStateBaseline = async (
+const prepareFullReplayStateBaseline = (
   db: Database,
   states: Map<string, OnlineAttributeState>,
   generation: number,
+  maxChunkBytes?: number,
 ) => {
   const rows = [...states.entries()].map(([key, state]) => {
     const separator = key.indexOf('\u0000');
-    return [
-      key.slice(0, separator), key.slice(separator + 1), state.score,
-      state.ratingDeviation, state.directSum, state.directCount,
-      state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount,
-      ATTRIBUTE_SCORE_MODEL_VERSION,
-    ];
+    return replayStateRow(key.slice(0, separator), key.slice(separator + 1), state);
   });
-  // Keep each D1 JSON cell comfortably below the 1 MB value ceiling.
-  const chunks = chunk(rows, 1000);
-  if (!chunks.length) chunks.push([]);
-  await db.batch([
+  const chunks = encodeAttributeReplayChunks(rows, maxChunkBytes);
+  return [
     db.statement('DELETE FROM attribute_replay_state_snapshot_chunks WHERE generation = ?').bind(generation),
     ...chunks.map((entries, index) => db.statement(`
       INSERT INTO attribute_replay_state_snapshot_chunks (generation, chunk_number, states_json)
       VALUES (?, ?, ?)
-    `).bind(generation, index, JSON.stringify(entries))),
+    `).bind(generation, index, entries)),
     db.statement(`
       INSERT INTO attribute_replay_state_snapshot_state
         (id, active_generation, chunk_count, generated_at)
@@ -367,7 +367,7 @@ const writeFullReplayStateBaseline = async (
         generated_at = excluded.generated_at
     `).bind(generation, chunks.length, generation),
     db.statement('DELETE FROM attribute_replay_state_snapshot_chunks WHERE generation <> ?').bind(generation),
-  ]);
+  ];
 };
 
 const queryFullReplayHistory = async (db: Database): Promise<FullReplayHistoryRow[]> => {
@@ -390,15 +390,20 @@ const queryFullReplayPairBaseline = async (db: Database) => {
   const state = await db.statement('SELECT active_generation, chunk_count FROM attribute_replay_snapshot_state WHERE id = 1')
     .first<FullReplayPairSnapshotRow>();
   if (!state) throw new Error('attribute_replay_baseline_unavailable');
-  const chunks = await db.statement('SELECT pairs_json FROM attribute_replay_snapshot_chunks WHERE generation = ? ORDER BY chunk_number')
+  const chunks = await db.statement('SELECT chunk_number, pairs_json FROM attribute_replay_snapshot_chunks WHERE generation = ? ORDER BY chunk_number')
     .bind(state.active_generation).all<FullReplayPairSnapshotChunkRow>();
-  if ((chunks.results ?? []).length !== Number(state.chunk_count)) throw new Error('incomplete_attribute_replay_baseline');
+  const rowsByChunk = chunks.results ?? [];
+  if (rowsByChunk.length !== Number(state.chunk_count) || rowsByChunk.some((row, index) => row.chunk_number !== index)) {
+    throw new Error('incomplete_attribute_replay_baseline');
+  }
   const pairs = new Map<string, StoredPairStatRow>();
-  for (const chunk of chunks.results ?? []) {
+  for (const chunk of rowsByChunk) {
     const rows = parseFullReplayJson(chunk.pairs_json);
     if (!Array.isArray(rows)) throw new Error('invalid_attribute_replay_baseline');
     for (const row of rows) {
-      if (!Array.isArray(row) || row.length !== 4 || row.some((value, index) => index < 3 ? typeof value !== 'string' : typeof value !== 'number')) continue;
+      if (!Array.isArray(row) || row.length !== 4 || row.some((value, index) => index < 3 ? typeof value !== 'string' : typeof value !== 'number')) {
+        throw new Error('invalid_attribute_replay_baseline');
+      }
       const [subjectAId, subjectBId, attributeId, comparisonCount] = row as [string, string, string, number];
       pairs.set(pairStatKey(subjectAId, subjectBId, attributeId), { subject_a_id: subjectAId, subject_b_id: subjectBId, attribute_id: attributeId, comparison_count: comparisonCount });
     }
@@ -406,19 +411,39 @@ const queryFullReplayPairBaseline = async (db: Database) => {
   return pairs;
 };
 
-const writeFullReplayPairBaseline = async (db: Database, pairs: Array<{ subjectAId: string; subjectBId: string; attributeId: string; count: number }>, generation: number) => {
+type ReplayPair = { subjectAId: string; subjectBId: string; attributeId: string; count: number };
+
+const prepareFullReplayPairBaseline = (db: Database, pairs: ReplayPair[], generation: number, maxChunkBytes?: number) => {
   const rows = pairs.map((pair) => [pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count]);
-  await db.batch([
+  const chunks = encodeAttributeReplayChunks(rows, maxChunkBytes);
+  return [
     db.statement('DELETE FROM attribute_replay_snapshot_chunks WHERE generation = ?').bind(generation),
-    db.statement('INSERT INTO attribute_replay_snapshot_chunks (generation, chunk_number, pairs_json) VALUES (?, 0, ?)').bind(generation, JSON.stringify(rows)),
-    db.statement(`INSERT INTO attribute_replay_snapshot_state (id, active_generation, chunk_count, generated_at) VALUES (1, ?, 1, ?)
-      ON CONFLICT(id) DO UPDATE SET active_generation = excluded.active_generation, chunk_count = excluded.chunk_count, generated_at = excluded.generated_at`).bind(generation, generation),
+    ...chunks.map((json, index) => db.statement('INSERT INTO attribute_replay_snapshot_chunks (generation, chunk_number, pairs_json) VALUES (?, ?, ?)').bind(generation, index, json)),
+    db.statement(`INSERT INTO attribute_replay_snapshot_state (id, active_generation, chunk_count, generated_at) VALUES (1, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET active_generation = excluded.active_generation, chunk_count = excluded.chunk_count, generated_at = excluded.generated_at`).bind(generation, chunks.length, generation),
     db.statement('DELETE FROM attribute_replay_snapshot_chunks WHERE generation <> ?').bind(generation),
-  ]);
+  ];
 };
 
-/** The caller must hold the global replay lock until its snapshot is published. */
-export const replayAllAttributeScoresLocked = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
+const preparePairUpdates = (db: Database, changed: ReplayPair[], stale: StoredPairStatRow[], timestamp: number, maxChunkBytes?: number) => {
+  const upserts = changed.length ? encodeAttributeReplayChunks(changed.map((pair) => [pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count]), maxChunkBytes) : [];
+  const deletes = stale.length ? encodeAttributeReplayChunks(stale.map((pair) => [pair.subject_a_id, pair.subject_b_id, pair.attribute_id]), maxChunkBytes) : [];
+  return [
+    ...upserts.map((json) => db.statement(`
+      INSERT INTO attribute_pair_stats (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at)
+      SELECT value ->> 0, value ->> 1, value ->> 2, value ->> 3, ? FROM json_each(?) WHERE true
+      ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE
+      SET comparison_count = excluded.comparison_count, updated_at = excluded.updated_at
+    `).bind(timestamp, json)),
+    ...deletes.map((json) => db.statement(`
+      DELETE FROM attribute_pair_stats WHERE (subject_a_id, subject_b_id, attribute_id) IN
+        (SELECT value ->> 0, value ->> 1, value ->> 2 FROM json_each(?))
+    `).bind(json)),
+  ];
+};
+
+/** Calculate under the replay lock. Live tables only change when the caller commits the plan. */
+export const prepareAttributeReplay = async (db: Database, timestamp: number, maxChunkBytes?: number) => {
   const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
     queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
   ]);
@@ -441,7 +466,7 @@ export const replayAllAttributeScoresLocked = async (db: Database, timestamp = D
       weighted_sum: direct?.weightedTotal ?? 0, weight_sum: direct?.weight ?? 0,
     }));
   }
-  const pairCounts = new Map<string, { subjectAId: string; subjectBId: string; attributeId: string; count: number }>();
+  const pairCounts = new Map<string, ReplayPair>();
   for (const row of history) {
     if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjectIds.has(row.subject_a_id) || !subjectIds.has(row.subject_b_id) || !attributes.has(row.attribute_id) || row.subject_a_id === row.subject_b_id) continue;
     const keyA = mergeStateKey(row.subject_a_id, row.attribute_id);
@@ -462,23 +487,24 @@ export const replayAllAttributeScoresLocked = async (db: Database, timestamp = D
   const changedPairs = [...pairCounts.values()].filter((pair) => Number(storedPairs.get(pairStatKey(pair.subjectAId, pair.subjectBId, pair.attributeId))?.comparison_count) !== pair.count);
   const stalePairs = [...storedPairs.values()].filter((pair) => !pairCounts.has(pairStatKey(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)));
   const changed = changedStates.length > 0 || staleStates.length > 0 || changedPairs.length > 0 || stalePairs.length > 0;
-  let rebuildMode = false;
-  try {
-    if (changedStates.length || staleStates.length) { await db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)').run(); rebuildMode = true; }
-    for (const statementBatch of chunk(chunk(changedStates, ATTRIBUTE_REBUILD_STATE_ROWS_PER_STATEMENT).map((rows) => rebuildStateStatement(db, rows, timestamp)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
-    for (const statementBatch of chunk(staleStates.map((state) => db.statement(`
-      DELETE FROM attribute_score_states
-      WHERE subject_id = ? AND attribute_id = ?
-    `).bind(state.subject_id, state.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
-    const pairStatements = changedPairs.map((pair) => db.statement(`INSERT INTO attribute_pair_stats (subject_a_id, subject_b_id, attribute_id, comparison_count, updated_at) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(subject_a_id, subject_b_id, attribute_id) DO UPDATE SET comparison_count = excluded.comparison_count, updated_at = excluded.updated_at`).bind(pair.subjectAId, pair.subjectBId, pair.attributeId, pair.count, timestamp));
-    for (const statementBatch of chunk(pairStatements, ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
-    for (const statementBatch of chunk(stalePairs.map((pair) => db.statement('DELETE FROM attribute_pair_stats WHERE subject_a_id = ? AND subject_b_id = ? AND attribute_id = ?').bind(pair.subject_a_id, pair.subject_b_id, pair.attribute_id)), ATTRIBUTE_REBUILD_STATEMENTS_PER_BATCH)) await db.batch(statementBatch);
-    if (changedPairs.length || stalePairs.length) await writeFullReplayPairBaseline(db, [...pairCounts.values()], timestamp);
-    if (changedStates.length || staleStates.length || !stateBaseline.available) await writeFullReplayStateBaseline(db, states, timestamp);
-  } finally {
-    if (rebuildMode) await db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1').run();
-  }
+  const stateUpserts = changedStates.length ? encodeAttributeReplayChunks(
+    changedStates.map(({ subjectId, attributeId, state }) => replayStateRow(subjectId, attributeId, state)), maxChunkBytes,
+  ) : [];
+  const stateDeletes = staleStates.length ? encodeAttributeReplayChunks(
+    staleStates.map((state) => [state.subject_id, state.attribute_id]), maxChunkBytes,
+  ) : [];
+  const statements = [
+    ...(changedStates.length || staleStates.length ? [db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)')] : []),
+    ...stateUpserts.map((json) => rebuildStateStatement(db, json, timestamp)),
+    ...stateDeletes.map((json) => db.statement(`
+      DELETE FROM attribute_score_states WHERE (subject_id, attribute_id) IN
+        (SELECT value ->> 0, value ->> 1 FROM json_each(?))
+    `).bind(json)),
+    ...preparePairUpdates(db, changedPairs, stalePairs, timestamp, maxChunkBytes),
+    ...(changedPairs.length || stalePairs.length ? prepareFullReplayPairBaseline(db, [...pairCounts.values()], timestamp, maxChunkBytes) : []),
+    ...(changedStates.length || staleStates.length || !stateBaseline.available ? prepareFullReplayStateBaseline(db, states, timestamp, maxChunkBytes) : []),
+    db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1'),
+  ];
   const values: AttributeMatrixValue[] = [...states.entries()].map(([key, state]) => {
     const separator = key.indexOf('\u0000');
     const subjectId = key.slice(0, separator);
@@ -493,6 +519,7 @@ export const replayAllAttributeScoresLocked = async (db: Database, timestamp = D
     } as AttributeMatrixValue;
   });
   return {
+    statements,
     changed,
     catalogThroughVersion: throughVersion,
     catalogPayload: {
@@ -507,7 +534,9 @@ export const replayAllAttributeScoresLocked = async (db: Database, timestamp = D
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
-    return await replayAllAttributeScoresLocked(db, timestamp);
+    const { statements, ...replay } = await prepareAttributeReplay(db, timestamp);
+    await commitAttributeReplay(db, lock, statements);
+    return replay;
   } finally {
     await releaseAttributeReplayLock(db, lock);
   }
