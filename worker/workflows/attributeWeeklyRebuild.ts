@@ -88,7 +88,7 @@ export const runWeeklyAttributeRebuild = async (
         return await runAttributeReplayWorkLocked(db, lock, timestamp, revision, null, budget, head);
       }
     }
-    await publishCompleteAttributeReplayLocked(db, lock, timestamp, revision, options);
+    await publishCompleteAttributeReplayLocked(db, lock, timestamp, status, options);
     return 'replay';
   } finally {
     await releaseAttributeReplayLock(db, lock);

@@ -13,6 +13,7 @@ export interface AttributeReplayStatus {
 interface AttributeReplayOptions {
   maxChunkBytes?: number;
   maxReplayChunkBytes?: number;
+  compareLiveStates?: boolean;
 }
 
 export const queryAttributeReplayStatus = (db: Database) => db.statement(`
@@ -25,11 +26,15 @@ export const publishCompleteAttributeReplayLocked = async (
   db: Database,
   lock: AttributeReplayLock,
   timestamp: number,
-  requiredRevision: number,
+  status: AttributeReplayStatus | null,
   options: AttributeReplayOptions = {},
 ): Promise<void> => {
-  const replay = await prepareAttributeReplay(db, timestamp, options.maxReplayChunkBytes);
-  await publishPreparedAttributeReplay(db, lock, timestamp, requiredRevision, replay, options);
+  const replay = await prepareAttributeReplay(db, timestamp, {
+    maxChunkBytes: options.maxReplayChunkBytes,
+    // Settled replays can still use the compact comparison checkpoint.
+    compareLiveStates: options.compareLiveStates || !status || status.required_revision !== status.replayed_revision,
+  });
+  await publishPreparedAttributeReplay(db, lock, timestamp, status?.required_revision ?? 0, replay, options);
 };
 
 export const publishPreparedAttributeReplay = async (
@@ -72,7 +77,7 @@ export const runCompleteAttributeReplay = async (
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
     const status = await queryAttributeReplayStatus(db);
-    await publishCompleteAttributeReplayLocked(db, lock, timestamp, status?.required_revision ?? 0, options);
+    await publishCompleteAttributeReplayLocked(db, lock, timestamp, status, options);
   } finally {
     await releaseAttributeReplayLock(db, lock);
   }

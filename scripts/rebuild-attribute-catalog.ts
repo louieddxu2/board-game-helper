@@ -68,7 +68,7 @@ const db: Database = {
 
 const timestamp = Date.now();
 // Keep operator SQL statements comfortably below the Wrangler/D1 CLI limit.
-await runCompleteAttributeReplay(db, timestamp, { maxChunkBytes: 50_000, maxReplayChunkBytes: 50_000 });
+await runCompleteAttributeReplay(db, timestamp, { maxChunkBytes: 50_000, maxReplayChunkBytes: 50_000, compareLiveStates: true });
 const state = await db.statement(`
   SELECT active_generation, through_version, chunk_count, generated_at
   FROM attribute_catalog_snapshot_state WHERE id=1

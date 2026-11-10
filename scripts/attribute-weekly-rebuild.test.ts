@@ -100,6 +100,33 @@ test('numeric responses force one full replay and acknowledge the revision', asy
   } finally { close(harness); }
 });
 
+test.each(['weekly', 'manual'])('%s replay reverts an online comparison deleted after the last replay', async (mode) => {
+  const { harness, timestamp } = await establishBaseline();
+  try {
+    const [first, second] = subjects(harness);
+    const before = scoreRows(harness);
+    const responseId = 'deleted-online-comparison';
+    await saveAttributeResponse(harness.gateway, {
+      subjectAId: first.id, subjectBId: second.id, attributeId: 'attribute_win_method',
+      responseId, sessionId: 'weekly-test-session', actorId: null,
+      comparison: 'A_HIGHER', timestamp: timestamp + 1,
+    });
+    expect(scoreRows(harness)).not.toEqual(before);
+    harness.sqlite.prepare('DELETE FROM attribute_vote_responses WHERE response_id = ?').run(responseId);
+    await flushCatalogOutbox(harness.gateway, timestamp + 2);
+    if (mode === 'weekly') {
+      await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3, { workBudget: {} })).resolves.toBe('replay');
+    } else {
+      // An older replay could acknowledge the revision while leaving the
+      // materialized scores stale. Operator rebuilds reconcile this too.
+      harness.sqlite.exec('UPDATE attribute_replay_status SET replayed_revision = required_revision WHERE id = 1');
+      await runCompleteAttributeReplay(harness.gateway, timestamp + 3, { compareLiveStates: true });
+    }
+    expect(scoreRows(harness)).toEqual(before);
+    expect(status(harness).replayed_revision).toBe(status(harness).required_revision);
+  } finally { close(harness); }
+});
+
 test('role grants and revocations replay existing numeric history, while no-op mutations stay clean', async () => {
   const { harness, timestamp } = await establishBaseline();
   try {

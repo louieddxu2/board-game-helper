@@ -384,13 +384,18 @@ const preparePairUpdates = (db: Database, changed: ReplayPair[], stale: StoredPa
 };
 
 /** Calculate under the replay lock. Live tables only change when the caller commits the plan. */
-export const prepareAttributeReplay = async (db: Database, timestamp: number, maxChunkBytes?: number) => {
+export const prepareAttributeReplay = async (
+  db: Database,
+  timestamp: number,
+  options: { maxChunkBytes?: number; compareLiveStates?: boolean } = {},
+) => {
   const [metadata, history, storedPairs, stateBaseline] = await Promise.all([
-    queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db), queryFullReplayStateBaseline(db),
+    queryFullReplayMetadata(db), queryFullReplayHistory(db), queryFullReplayPairBaseline(db),
+    options.compareLiveStates ? queryLiveReplayStates(db) : queryFullReplayStateBaseline(db),
   ]);
   return prepareCalculatedAttributeReplay(
     db, timestamp, metadata, calculateAttributeReplay(metadata.subjectIds, new Set(metadata.attributes.keys()), history),
-    { maxChunkBytes, storedPairs, stateBaseline },
+    { maxChunkBytes: options.maxChunkBytes, storedPairs, stateBaseline },
   );
 };
 
@@ -465,8 +470,8 @@ export const prepareCalculatedAttributeReplay = async (
   };
 };
 
-// A resumed run can span many successful live responses. Compare against the
-// actual table so a score equal to the previous checkpoint can still be fixed.
+// Live responses can change a state after the last checkpoint. A corrected
+// replay can return to the checkpoint's score and still need to undo that change.
 const queryLiveReplayStates = async (db: Database) => {
   const result = await db.statement(`
     SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
