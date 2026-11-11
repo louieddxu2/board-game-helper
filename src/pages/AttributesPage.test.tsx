@@ -52,6 +52,7 @@ describe('AttributesPage question flow', () => {
     vi.spyOn(localDb, 'updateAttributeActivities').mockRejectedValue(new Error('offline'));
     vi.spyOn(localDb, 'getPendingAttributeResponses').mockResolvedValue([]);
     vi.spyOn(localDb, 'getAttributeVoteScope').mockResolvedValue('all');
+    vi.spyOn(localDb, 'getAttributeVoteFilter').mockResolvedValue(null);
     vi.spyOn(localDb, 'getAttributeCollectionIds').mockResolvedValue([]);
     vi.spyOn(localDb, 'getLatestAttributeQuestion').mockResolvedValue(undefined);
     vi.spyOn(localDb, 'cacheAttributeQuestion').mockResolvedValue('attributes:question:v1');
@@ -250,6 +251,24 @@ describe('AttributesPage question flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: '我的收藏 (2)' }));
     await waitFor(() => expect(tableSpy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: '全部遊戲' })).not.toBeDisabled());
+  });
+
+  test('uses the saved attribute filter with the collection scope and bypasses an excluded cached question', async () => {
+    const strategy = { ...attribute, id: 'attribute-strategy', name: '長期規劃' };
+    vi.mocked(localDb.getAttributeVoteFilter).mockResolvedValue(new Set([strategy.id]));
+    vi.mocked(localDb.getAttributeVoteScope).mockResolvedValue('collection');
+    vi.mocked(localDb.getAttributeCollectionIds).mockResolvedValue([789, 101112]);
+    vi.mocked(localDb.getLatestAttributeQuestion).mockResolvedValue({
+      key: 'attributes:question:v1', data: { question, activities: [] }, scope: 'collection', cachedAt: Date.now(),
+    });
+    vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [attribute, strategy] });
+
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: /長期規劃/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '遊戲丙較高' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '遊戲丁較高' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /運氣成分/ })).not.toBeInTheDocument();
   });
 
   test('selects the next question locally after submitting', async () => {

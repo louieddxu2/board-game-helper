@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { matchCollectionSubjects, parseGeekGroupCollectionCsv } from '../lib/attributeCollection';
 import { localDb } from '../lib/localDb';
-import type { AttributeActivity, AttributeCatalogPayload, AttributeExtremeExamples, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
 import type { AttributeVoteScope, ConnectionState } from './attributesPageShared';
 import { browserIsOffline } from './attributesPageShared';
 
@@ -14,7 +14,7 @@ interface AttributeCollectionImportOptions {
   loadVotingCatalog: () => Promise<AttributeCatalogPayload>;
   setCollectionMatchCount: Dispatch<SetStateAction<number>>;
   voteScopeRef: RefObject<AttributeVoteScope>;
-  requestQuestion: (currentQuestion: AttributeQuestion | undefined, mode?: "pair" | "a" | "b") => Promise<{ question: null; activities: AttributeActivity[]; } | { extremeExamples: AttributeExtremeExamples; question: AttributeQuestion | null; activities: AttributeActivity[]; scoreModelVersion?: string; }>;
+  requestQuestion: (currentQuestion: AttributeQuestion | undefined, mode?: 'pair' | 'a' | 'b') => Promise<AttributeQuestionPayload>;
   question: AttributeQuestion | undefined;
   setConnectionState: Dispatch<SetStateAction<ConnectionState>>;
   animateQuestionChange: (nextPayload: AttributeQuestionPayload, mode?: "pair" | "a" | "b") => Promise<void>;

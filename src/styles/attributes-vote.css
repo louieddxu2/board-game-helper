@@ -443,3 +443,118 @@
 .attribute-vote-page .attributes-question-card.is-entering-b .attributes-question-side:last-child {
   animation: attribute-card-enter 230ms ease-out both;
 }
+
+.attributes-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--attribute-line);
+  border-radius: 6px;
+  background: var(--attribute-surface);
+  color: var(--attribute-ink);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.attributes-filter-trigger.is-filtered {
+  border-color: var(--attribute-right);
+  background: var(--attribute-right-soft);
+  color: var(--attribute-right);
+}
+.attributes-filter-count {
+  min-width: 2ch;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.attributes-filter-dialog {
+  box-sizing: border-box;
+  width: min(480px, calc(100% - 24px));
+  max-height: min(74dvh, 680px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--attribute-line);
+  border-radius: 14px;
+  background: var(--attribute-surface);
+  color: var(--attribute-ink);
+  box-shadow: 0 18px 54px #20292735;
+}
+.attributes-filter-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.attributes-filter-dialog::backdrop { background: #20292778; }
+.attributes-filter-heading, .attributes-filter-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+}
+.attributes-filter-heading { justify-content: space-between; border-bottom: 1px solid var(--attribute-line); }
+.attributes-filter-heading h2 { margin: 0; font-size: 18px; }
+.attributes-filter-dialog button {
+  min-height: 42px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--attribute-right);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.attributes-filter-dialog .attributes-filter-close { min-width: 42px; color: var(--attribute-muted); font-size: 23px; }
+.attributes-filter-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+}
+.attributes-filter-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--attribute-line) 50%, transparent);
+  font-size: 15px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.attributes-filter-option:last-child { border-bottom: 0; }
+.attributes-filter-option:has(input:checked) { background: var(--attribute-right-soft); }
+.attributes-filter-option input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--attribute-right);
+}
+.attributes-filter-description {
+  display: block;
+  margin-top: 2px;
+  color: var(--attribute-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.attributes-filter-status { margin: 12px 14px; font-size: 13px; }
+.attributes-filter-footer { border-top: 1px solid var(--attribute-line); }
+.attributes-filter-summary {
+  flex: 1;
+  color: var(--attribute-muted);
+  font-size: 12px;
+  text-align: right;
+}
+.attributes-filter-dialog .attributes-filter-apply { padding-inline: 14px; background: var(--attribute-right); color: white; }
+.attributes-filter-dialog button:disabled, .attributes-filter-trigger[aria-disabled="true"] { opacity: .5; cursor: default; }
+.attributes-filter-dialog :focus-visible, .attributes-filter-trigger:focus-visible {
+  outline: 2px solid var(--attribute-right);
+  outline-offset: 2px;
+}

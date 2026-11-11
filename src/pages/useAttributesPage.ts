@@ -1,12 +1,12 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { SessionContext } from '../context/SessionContext';
 import { api, ApiError } from '../lib/api';
-import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedAttributeQuestion, chooseScopedExtremeExamples, matchCollectionSubjects } from '../lib/attributeCollection';
+import { attributeSubjectBggIds, matchCollectionSubjects } from '../lib/attributeCollection';
 import { attributeDirectRatingKey, attributeDirectRatingKeysFromResponse } from '../lib/attributeDirectRatings';
 import { createAttributeResponseId, getAttributeSessionId } from '../lib/attributeSession';
 import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
-import { chooseAttributeHighPole } from '../shared/attributeScale';
-import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
+import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
+import { drawAttributeVotingQuestion } from './attributeVotingQuestion';
 import type { AttributeResponseDraft, AttributeVoteScope, ConnectionState, QuestionMotion, VoteFeedback } from './attributesPageShared';
 import { ATTRIBUTE_QUESTION_CACHE_FRESH_MS, attributeQuestionKey, browserIsOffline, comparisonChoiceText, connectionStateAfterFailure, OPTIMISTIC_ACTIVITY_LIMIT, optimisticComparisonActivity, QUESTION_ENTER_MS, QUESTION_EXIT_MS, questionOptions, reducedMotion, SAVED_FEEDBACK_MS, wait } from './attributesPageShared';
 import { useAttributeCollectionImport } from './useAttributeCollectionImport';
@@ -38,6 +38,9 @@ export const useAttributesPage = () => {
   const [collectionMatchKnown, setCollectionMatchKnown] = useState(false);
   const [voteScope, setVoteScope] = useState<AttributeVoteScope>('all');
   const [scopeLoading, setScopeLoading] = useState(false);
+  const [attributeOptions, setAttributeOptions] = useState<AttributeDefinition[]>();
+  const [attributeFilter, setAttributeFilter] = useState<ReadonlySet<string> | null>(null);
+  const [attributeFilterMessage, setAttributeFilterMessage] = useState('');
   const [collectionMessage, setCollectionMessage] = useState('');
   const [collectionImporting, setCollectionImporting] = useState(false);
   const [sessionId] = useState(getAttributeSessionId);
@@ -47,6 +50,7 @@ export const useAttributesPage = () => {
   const collectionMatchCacheRef = useRef<{ subjects: AttributeCatalogPayload['subjects']; bggIds: number[]; result: ReturnType<typeof matchCollectionSubjects> } | undefined>(undefined);
   const directRatingKeysRef = useRef(new Set<string>());
   const voteScopeRef = useRef<AttributeVoteScope>('all');
+  const attributeFilterRef = useRef<ReadonlySet<string> | null>(null);
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
@@ -74,6 +78,7 @@ export const useAttributesPage = () => {
   };
 
   const applyQuestionPayload = useCallback((nextPayload: AttributeQuestionPayload, scope: AttributeVoteScope = voteScopeRef.current) => {
+    if (nextPayload.question && attributeFilterRef.current && !attributeFilterRef.current.has(nextPayload.question.attribute.id)) return;
     setPayload(nextPayload);
     recentActivitiesRef.current = nextPayload.activities;
     setQuestion(nextPayload.question ?? undefined);
@@ -127,6 +132,7 @@ export const useAttributesPage = () => {
     if (votingCatalogRef.current) return votingCatalogRef.current;
     const catalog = await api.attributeTable((updated) => {
       votingCatalogRef.current = updated;
+      setAttributeOptions(updated.attributes);
       const ids = collectionIdsRef.current;
       if (ids.length) {
         setCollectionMatchCount(getCollectionMatch(updated, ids).matchedBggIds.length);
@@ -134,6 +140,7 @@ export const useAttributesPage = () => {
       }
     });
     votingCatalogRef.current = catalog;
+    setAttributeOptions(catalog.attributes);
     if (!recentActivitiesRef.current.length) recentActivitiesRef.current = catalog.activities ?? [];
     return catalog;
   }, [getCollectionMatch]);
@@ -152,60 +159,22 @@ export const useAttributesPage = () => {
     setCollectionMatchKnown(true);
   }, [getCollectionMatch, loadVotingCatalog]);
 
-  const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair') => {
+  const requestQuestion = useCallback(async (currentQuestion: AttributeQuestion | undefined, mode: 'pair' | 'a' | 'b' = 'pair', filter?: ReadonlySet<string> | null) => {
     const catalog = await loadVotingCatalog();
     const collectionBggIds = collectionIdsRef.current;
-    if (voteScopeRef.current === 'collection' && !collectionBggIds.length) {
-      return {
-        question: null,
-        activities: [],
-        extremeExamples: { lowest: [], highest: [] },
-      } satisfies AttributeQuestionPayload;
-    }
-    const options = {
-      ...questionOptions(currentQuestion, mode),
-      excludedDirectRatingKeys: directRatingKeysRef.current,
-    };
     const scopedSubjectIds = voteScopeRef.current === 'collection'
       ? getCollectionMatch(catalog, collectionBggIds).subjectIds
       : undefined;
-    const { deferred, questionNumber } = await localDb.getAttributeQuestionContext();
-    const subjectIds = availableAttributeSubjectIds(catalog, scopedSubjectIds, deferred, questionNumber);
-    const selection = chooseScopedAttributeQuestion(catalog, subjectIds, options);
-    if (!selection) {
-      return {
-        question: null,
-        activities: [],
-        extremeExamples: { lowest: [], highest: [] },
-      } satisfies AttributeQuestionPayload;
-    }
-    const subjectA = catalog.subjects.find((subject) => subject.id === selection.subjectAId);
-    const subjectB = catalog.subjects.find((subject) => subject.id === selection.subjectBId);
-    const attribute = catalog.attributes.find((item) => item.id === selection.attributeId);
-    if (!subjectA || !subjectB || !attribute) {
-      return { question: null, activities: recentActivitiesRef.current } satisfies AttributeQuestionPayload;
-    }
-    const next: AttributeQuestionPayload = {
-      question: {
-        subjectA,
-        subjectB,
-        attribute,
-        highPole: attribute.scaleType === 'bipolar' ? chooseAttributeHighPole(attribute, options.highPole) : undefined,
-      },
-      // Keep the last locally available feed; refreshing it is independent
-      // from selecting and displaying the next question.
-      activities: recentActivitiesRef.current,
-      scoreModelVersion: catalog.scoreModelVersion,
-    };
-    await localDb.advanceAttributeQuestionNumber().catch(() => undefined);
-    return {
-      ...next,
-      extremeExamples: chooseScopedExtremeExamples(catalog, selection.attributeId, scopedSubjectIds),
-    };
+    return drawAttributeVotingQuestion(catalog, scopedSubjectIds, {
+      ...questionOptions(currentQuestion, mode),
+      allowedAttributeIds: (filter === undefined ? attributeFilterRef.current : filter) ?? undefined,
+      excludedDirectRatingKeys: directRatingKeysRef.current,
+    }, recentActivitiesRef.current);
   }, [getCollectionMatch, loadVotingCatalog]);
 
   const deferCurrentAndLoad = async (mode: 'pair' | 'a' | 'b') => {
     if (!question || questionLoading || submitting || awaitingNext) return;
+    setQuestionLoading(true);
     try {
       const catalog = votingCatalogRef.current ?? await loadVotingCatalog();
       const questionNumber = await localDb.getAttributeQuestionNumber();
@@ -225,6 +194,10 @@ export const useAttributesPage = () => {
     setQuestionLoading(true);
     try {
       const next = await requestQuestion(question, mode);
+      if (mode !== 'pair' && !next.question) {
+        setResponseError('目前沒有其他可替換的遊戲。');
+        return;
+      }
       setConnectionState(browserIsOffline() ? 'offline' : 'online');
       await animateQuestionChange(next, mode);
     } catch {
@@ -234,6 +207,26 @@ export const useAttributesPage = () => {
       setQuestionLoading(false);
     }
   }, [animateQuestionChange, question, requestQuestion]);
+
+  const changeAttributeFilter = async (nextFilter: ReadonlySet<string> | null) => {
+    setQuestionLoading(true);
+    setAttributeFilterMessage('');
+    try {
+      const keepQuestion = question && !awaitingNext && (!nextFilter || nextFilter.has(question.attribute.id));
+      const nextPayload = keepQuestion ? undefined : await requestQuestion(undefined, 'pair', nextFilter);
+      await localDb.setAttributeVoteFilter(nextFilter);
+      attributeFilterRef.current = nextFilter;
+      setAttributeFilter(nextFilter);
+      if (nextPayload) {
+        setError(false);
+        await animateQuestionChange(nextPayload);
+      }
+    } catch {
+      setAttributeFilterMessage('目前無法套用抽選屬性，請再試一次。');
+    } finally {
+      setQuestionLoading(false);
+    }
+  };
 
   const changeVoteScope = async (nextScope: AttributeVoteScope) => {
     if (nextScope === voteScopeRef.current || scopeLoading) return;
@@ -298,7 +291,9 @@ export const useAttributesPage = () => {
       const remaining = await refreshPendingCount();
       if (remaining.length < pending.length) {
         try {
+          const filter = attributeFilterRef.current;
           const next = await requestQuestion(question, 'pair');
+          if (filter !== attributeFilterRef.current) return;
           setConnectionState(browserIsOffline() ? 'offline' : 'online');
           applyQuestionPayload(next);
           // The question response may have raced the response write.  Mark
@@ -379,11 +374,12 @@ export const useAttributesPage = () => {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [pending, storedScope, importedIds, storedDirectRatingKeys] = await Promise.all([
+      const [pending, storedScope, importedIds, storedDirectRatingKeys, storedFilter] = await Promise.all([
         refreshPendingCount(),
         localDb.getAttributeVoteScope().catch(() => 'all' as AttributeVoteScope),
         localDb.getAttributeCollectionIds().catch(() => [] as number[]),
         localDb.getAttributeDirectRatingKeys(sessionId).catch(() => [] as string[]),
+        localDb.getAttributeVoteFilter().catch(() => null),
       ]);
       directRatingKeysRef.current = new Set([
         ...storedDirectRatingKeys,
@@ -392,8 +388,10 @@ export const useAttributesPage = () => {
       const effectiveScope = storedScope === 'collection' && importedIds.length ? storedScope : 'all';
       voteScopeRef.current = effectiveScope;
       collectionIdsRef.current = importedIds;
+      attributeFilterRef.current = storedFilter;
       if (active) {
         setVoteScope(effectiveScope);
+        setAttributeFilter(storedFilter);
         setCollectionIds(importedIds);
         setCollectionMatchKnown(false);
       }
@@ -405,6 +403,7 @@ export const useAttributesPage = () => {
       ));
       const cachedMatchesScope = cached?.data.question
         && !cachedHasDirectRating
+        && (!storedFilter || storedFilter.has(cached.data.question.attribute.id))
         && (cached.scope ? cached.scope === effectiveScope : effectiveScope === 'all');
       if (cachedMatchesScope && active) {
         applyQuestionPayload(cached.data);
@@ -422,7 +421,7 @@ export const useAttributesPage = () => {
       }
       try {
         const nextPayload = await requestQuestion(undefined);
-        if (!active) return;
+        if (!active || storedFilter !== attributeFilterRef.current) return;
         setConnectionState(browserIsOffline() ? 'offline' : 'online');
         setError(false);
         applyQuestionPayload(nextPayload);
@@ -544,6 +543,11 @@ export const useAttributesPage = () => {
     voteScope,
     changeVoteScope,
     scopeLoading,
+    attributeOptions,
+    attributeFilter,
+    attributeFilterMessage,
+    changeAttributeFilter,
+    loadVotingCatalog,
     loading,
     error,
     payload: payload && recentActivities ? { ...payload, activities: recentActivities } : payload,

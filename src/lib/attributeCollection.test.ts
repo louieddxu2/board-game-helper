@@ -165,6 +165,20 @@ describe('local attribute collection question selection', () => {
       .toMatchObject({ attributeId: 'attribute-other' });
   });
 
+  test('draws only from allowed attributes with an eligible pair', () => {
+    const broad = catalog();
+    broad.attributes.push(
+      { ...broad.attributes[0], id: 'attribute-filtered' },
+      { ...broad.attributes[0], id: 'attribute-available' },
+    );
+    const subjectIds = broad.subjects.map(({ id }) => id);
+    const allowedAttributeIds = new Set(['attribute-filtered', 'attribute-available']);
+    const excludedDirectRatingKeys = new Set(subjectIds.slice(1).map((id) => attributeDirectRatingKey(id, 'attribute-filtered')));
+    expect(chooseScopedAttributeQuestion(broad, subjectIds, { allowedAttributeIds, excludedDirectRatingKeys }, () => 0))
+      .toMatchObject({ attributeId: 'attribute-available' });
+    expect(chooseScopedAttributeQuestion(broad, subjectIds, { allowedAttributeIds, fixedAttributeId: 'attribute-luck' }, () => 0)).toBeNull();
+  });
+
   test('removes directly rated items before building the seed pool', () => {
     const excludedDirectRatingKeys = new Set([
       attributeDirectRatingKey('subject-a', 'attribute-luck'),

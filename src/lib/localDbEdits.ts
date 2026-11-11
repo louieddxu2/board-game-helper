@@ -34,6 +34,13 @@ export const localDbEdits = {
     return cached?.data === 'collection' ? 'collection' : 'all';
   },
   setAttributeVoteScope: async (scope: 'all' | 'collection') => (await getDatabase()).put('cache', { key: 'attributes:vote-scope:v1', data: scope, cachedAt: Date.now() }),
+  getAttributeVoteFilter: async () => {
+    const cached = await (await getDatabase()).get('cache', 'attributes:vote-filter:v1') as CacheRecord<string[] | null> | undefined;
+    return Array.isArray(cached?.data) && cached.data.length ? new Set(cached.data) : null;
+  },
+  setAttributeVoteFilter: async (ids: ReadonlySet<string> | null) => (await getDatabase()).put('cache', {
+    key: 'attributes:vote-filter:v1', data: ids ? [...ids] : null, cachedAt: Date.now(),
+  }),
   replaceAttributeCollectionIds: async (bggIds: number[]) => {
     const db = await getDatabase();
     const transaction = db.transaction('attributeCollectionIds', 'readwrite');

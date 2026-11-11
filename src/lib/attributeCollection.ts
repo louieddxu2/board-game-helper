@@ -18,6 +18,8 @@ export interface ScopedAttributeQuestionOptions {
   fixedSubjectAId?: string;
   fixedSubjectBId?: string;
   fixedAttributeId?: string;
+  allowedAttributeIds?: ReadonlySet<string>;
+  allowPreviousSubjects?: boolean;
   excludedDirectRatingKeys?: ReadonlySet<string>;
 }
 
@@ -285,6 +287,16 @@ const pairIsExcluded = (left: string, right: string, attributeId: string, option
 const isDirectlyRated = (subjectId: string, attributeId: string, options: ScopedAttributeQuestionOptions) =>
   options.excludedDirectRatingKeys?.has(attributeDirectRatingKey(subjectId, attributeId)) ?? false;
 
+const hasEligiblePair = (subjects: AttributeSubject[], attributeId: string, options: ScopedAttributeQuestionOptions) => {
+  let firstId: string | undefined;
+  for (const { id } of subjects) {
+    if (isDirectlyRated(id, attributeId, options)) continue;
+    if (firstId && (!options.allowPreviousSubjects || !pairIsExcluded(firstId, id, attributeId, options))) return true;
+    firstId ??= id;
+  }
+  return false;
+};
+
 /**
  * Selects a question locally from the cached attribute catalog.
  */
@@ -302,16 +314,17 @@ export const chooseScopedAttributeQuestion = (
     const value = valueMap.get(`${subjectId}\u0000${attributeId}`);
     return { score: value?.score ?? 5, ratingDeviation: value?.ratingDeviation ?? 3, comparisonCount: value?.comparisonCount ?? 0 };
   };
-  const attributeIds = options.fixedAttributeId
-    ? catalog.attributes.some((attribute) => attribute.id === options.fixedAttributeId) ? [options.fixedAttributeId] : []
-    : catalog.attributes.map((attribute) => attribute.id);
+  const attributeIds = catalog.attributes
+    .map((attribute) => attribute.id)
+    .filter((id) => (!options.fixedAttributeId || id === options.fixedAttributeId)
+      && (!options.allowedAttributeIds || options.allowedAttributeIds.has(id)));
   if (!attributeIds.length) return null;
 
   let seedId = options.fixedSubjectAId ?? options.fixedSubjectBId;
   let attributeId = options.fixedAttributeId;
   while (!attributeId && attributeIds.length) {
     const [candidateAttributeId] = attributeIds.splice(Math.floor(random() * attributeIds.length), 1);
-    if (seedId || availableSubjects.some((subject) => !isDirectlyRated(subject.id, candidateAttributeId, options))) {
+    if (seedId || hasEligiblePair(availableSubjects, candidateAttributeId, options)) {
       attributeId = candidateAttributeId;
     }
   }
@@ -345,7 +358,7 @@ export const chooseScopedAttributeQuestion = (
     return { subjectAId: options.fixedSubjectAId, subjectBId: options.fixedSubjectBId, attributeId };
   }
 
-  const excluded = new Set([seedId, options.excludeSubjectAId, options.excludeSubjectBId].filter((id): id is string => Boolean(id)));
+  const excluded = new Set(options.allowPreviousSubjects ? [seedId] : [seedId, options.excludeSubjectAId, options.excludeSubjectBId]);
   const seedState = state(seedId, attributeId);
   const candidates = availableSubjects
     .filter((subject) => !excluded.has(subject.id) && !isDirectlyRated(subject.id, attributeId!, options))

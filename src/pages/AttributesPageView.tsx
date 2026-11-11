@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { AttributeFilterDialog } from '../components/AttributeFilterDialog';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
@@ -18,6 +19,11 @@ export const AttributesPageView = ({
   voteScope,
   changeVoteScope,
   scopeLoading,
+  attributeOptions,
+  attributeFilter,
+  attributeFilterMessage,
+  changeAttributeFilter,
+  loadVotingCatalog,
   loading,
   error,
   payload,
@@ -44,10 +50,20 @@ export const AttributesPageView = ({
   setRatingB,
   responseError,
 }: AttributesPageViewModel) => {
+const questionBusy = scopeLoading || questionLoading || submitting || syncing || collectionImporting;
 const collectionImportControl = <label className="attributes-collection-import">
     <span>{collectionImporting ? '讀取中…' : '匯入收藏'}</span>
-    <input ref={collectionInputRef} type="file" accept=".csv,text/csv" onChange={(event) => void handleCollectionImport(event)} disabled={collectionImporting} />
+    <input ref={collectionInputRef} type="file" accept=".csv,text/csv" onChange={(event) => void handleCollectionImport(event)} disabled={questionBusy} />
   </label>;
+
+const voteHeader = <header className="attribute-vote-header">
+    <h1>屬性投票</h1>
+    <div className="attributes-vote-actions">
+      <AttributeFilterDialog options={attributeOptions} filter={attributeFilter} disabled={questionBusy} loadOptions={loadVotingCatalog} onApply={(next) => void changeAttributeFilter(next)} />
+      {collectionImportControl}
+      <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
+    </div>
+  </header>;
 
 const collectionScopeLabel = !collectionIds.length
     ? '我的收藏'
@@ -55,16 +71,21 @@ const collectionScopeLabel = !collectionIds.length
 
 const voteScopeControl = <div className="attributes-vote-scope" role="group" aria-label="投票範圍">
     <span className="attributes-vote-scope-label">投票範圍</span>
-    <button type="button" className={voteScope === 'all' ? 'is-active' : undefined} aria-pressed={voteScope === 'all'} onClick={() => void changeVoteScope('all')} disabled={scopeLoading || voteScope === 'all'}>全部遊戲</button>
-    <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined} aria-pressed={voteScope === 'collection'} onClick={() => void changeVoteScope('collection')} disabled={scopeLoading || voteScope === 'collection' || !collectionIds.length} title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '請先匯入收藏 CSV'}>{scopeLoading ? '切換中…' : collectionScopeLabel}</button>
+    <button type="button" className={voteScope === 'all' ? 'is-active' : undefined} aria-pressed={voteScope === 'all'} onClick={() => void changeVoteScope('all')} disabled={questionBusy || voteScope === 'all'}>全部遊戲</button>
+    <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined} aria-pressed={voteScope === 'collection'} onClick={() => void changeVoteScope('collection')} disabled={questionBusy || voteScope === 'collection' || !collectionIds.length} title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '請先匯入收藏 CSV'}>{scopeLoading ? '切換中…' : collectionScopeLabel}</button>
   </div>;
+
+const filterMessage = attributeFilterMessage && <p className="attributes-collection-message" role="status">{attributeFilterMessage}</p>;
 
 if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
 
 if (error || !payload || !question) return <section className="attribute-vote-page attributes-no-question">
-    <header className="attribute-vote-header"><h1>屬性投票</h1><div className="attributes-vote-actions">{collectionImportControl}<Link className="attributes-table-link" to="/attributes/table">屬性總表</Link></div></header>
+    {voteHeader}
     {voteScopeControl}
-    <p>{voteScope === 'collection' && collectionIds.length ? `我的收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。` : '目前無法取得題目。'}</p>
+    {filterMessage}
+    <p>{voteScope === 'collection' && collectionMatchKnown && collectionMatchCount < 2
+      ? `我的收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。`
+      : attributeFilter ? '目前沒有符合範圍的題目，可調整抽選屬性。' : '目前無法取得題目。'}</p>
     {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
   </section>;
@@ -105,14 +126,9 @@ const ratingSuggestionText = ratingSuggestion === 'A_HIGHER'
       : ratingSuggestion === 'SIMILAR' ? '依照分數，建議選「差不多」' : '';
 
 return <section className="attribute-vote-page">
-    <header className="attribute-vote-header">
-      <h1>屬性投票</h1>
-      <div className="attributes-vote-actions">
-        {collectionImportControl}
-        <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
-      </div>
-    </header>
+    {voteHeader}
     {voteScopeControl}
+    {filterMessage}
     {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <div className="attributes-inline-activity" aria-label="最近投票記錄">
       {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
