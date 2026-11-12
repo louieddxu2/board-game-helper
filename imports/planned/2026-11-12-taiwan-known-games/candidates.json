@@ -20,7 +20,8 @@
   },
   "counts": {
     "existing": 41,
-    "candidate": 159,
+    "candidate": 151,
+    "imported": 8,
     "review": 0,
     "firstBatch": 24
   },
@@ -2380,8 +2381,9 @@
     {
       "rank": 108,
       "bggId": 266507,
-      "displayName": "蠢賊一籮筐：承傳",
-      "displayNameSource": {
+      "displayName": "Clank! Legacy: Acquisitions Incorporated",
+      "traditionalAlias": "蠢賊一籮筐：承傳",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://mj9981168.pixnet.net/blog/posts/8233003677"
       },
@@ -2397,7 +2399,8 @@
           "url": "https://bghut.com/goods-7775.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_266507"
     },
     {
       "rank": 109,
@@ -3134,8 +3137,9 @@
     {
       "rank": 152,
       "bggId": 55690,
-      "displayName": "死亡國度：怪物",
-      "displayNameSource": {
+      "displayName": "Kingdom Death: Monster",
+      "traditionalAlias": "死亡國度：怪物",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://www.youtube.com/watch?v=zurFvTLXspE"
       },
@@ -3147,7 +3151,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_55690"
     },
     {
       "rank": 153,
@@ -3189,8 +3194,9 @@
     {
       "rank": 155,
       "bggId": 233371,
-      "displayName": "蠢賊一籮筐：太空版",
-      "displayNameSource": {
+      "displayName": "Clank! In! Space!: A Deck-Building Adventure",
+      "traditionalAlias": "蠢賊一籮筐：太空版",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://bgnachimu.blogspot.com/2018/01/clank-in-space.html"
       },
@@ -3202,7 +3208,8 @@
           "url": "https://bghut.com/goods-6321.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_233371"
     },
     {
       "rank": 156,
@@ -3374,8 +3381,9 @@
     {
       "rank": 166,
       "bggId": 17133,
-      "displayName": "鐵路大亨",
-      "displayNameSource": {
+      "displayName": "Railways of the World",
+      "traditionalAlias": "鐵路大亨",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://waymau.blogspot.com/2013/07/2013part3-2013-games-will-be-awesome.html"
       },
@@ -3387,7 +3395,8 @@
           "url": "https://bghut.com/goods-6689.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_17133"
     },
     {
       "rank": 167,
@@ -3555,8 +3564,9 @@
     {
       "rank": 178,
       "bggId": 133848,
-      "displayName": "幸福之境",
-      "displayNameSource": {
+      "displayName": "Euphoria: Build a Better Dystopia",
+      "traditionalAlias": "幸福之境",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://boardgame-record.blogspot.com/2013/11/euphoria-build-better-dystopia.html"
       },
@@ -3568,7 +3578,8 @@
           "url": "https://bghut.com/goods-3997.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_133848"
     },
     {
       "rank": 179,
@@ -3615,8 +3626,9 @@
     {
       "rank": 182,
       "bggId": 291572,
-      "displayName": "流離聖誓：帝國與流放者編年史",
-      "displayNameSource": {
+      "displayName": "Oath",
+      "traditionalAlias": "流離聖誓：帝國與流放者編年史",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://crowbox.tw/products/%E6%B5%81%E9%9B%A2%E8%81%96%E8%AA%93-%E6%A1%8C%E9%81%8A%E6%94%B6%E7%B4%8D%E7%9B%92-oath-board-game-insert"
       },
@@ -3628,7 +3640,8 @@
           "url": "https://bghut.com/goods-9082.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_291572"
     },
     {
       "rank": 183,
@@ -3805,8 +3818,9 @@
     {
       "rank": 194,
       "bggId": 224783,
-      "displayName": "孤島贖生",
-      "displayNameSource": {
+      "displayName": "Vindication",
+      "traditionalAlias": "孤島贖生",
+      "traditionalNameSource": {
         "kind": "taiwan_usage",
         "url": "https://eatgether.com/meetups/daaed7f2-bfab-4eec-bc1d-3a1188d297b8"
       },
@@ -3818,7 +3832,8 @@
           "url": "https://bghut.com/goods-8487.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_224783"
     },
     {
       "rank": 195,
@@ -3880,7 +3895,7 @@
       "rank": 199,
       "bggId": 232414,
       "displayName": "新演化論：海洋",
-      "displayNameSource": {
+      "traditionalNameSource": {
         "kind": "publisher",
         "url": "https://2plus.com.tw/product/q983-evolution-oceans/"
       },
@@ -3892,7 +3907,8 @@
           "url": "https://bghut.com/goods-10738.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_232414"
     },
     {
       "rank": 200,
