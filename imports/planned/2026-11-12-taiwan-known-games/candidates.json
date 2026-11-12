@@ -20,8 +20,8 @@
   },
   "counts": {
     "existing": 41,
-    "candidate": 151,
-    "imported": 8,
+    "candidate": 0,
+    "imported": 159,
     "review": 0,
     "firstBatch": 24
   },
@@ -30,6 +30,10 @@
       "rank": 1,
       "bggId": 128882,
       "displayName": "阿瓦隆",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3368.html"
+      },
       "originalName": "The Resistance: Avalon",
       "bggWeight": 1.7397,
       "localEvidence": [
@@ -62,13 +66,18 @@
           "url": "https://bghut.com/goods-3368.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_128882"
     },
     {
       "rank": 2,
       "bggId": 822,
       "displayName": "卡卡頌",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10035.html"
+      },
       "originalName": "Carcassonne",
       "bggWeight": 1.8845,
       "localEvidence": [
@@ -93,13 +102,18 @@
           "url": "https://bghut.com/goods-10035.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_822"
     },
     {
       "rank": 3,
       "bggId": 13,
       "displayName": "卡坦島",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.swanpanasia.com/products/catan"
+      },
       "originalName": "Catan",
       "bggWeight": 2.2809,
       "localEvidence": [
@@ -120,13 +134,18 @@
           "url": "https://bghut.com/goods-2751.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_13"
     },
     {
       "rank": 4,
       "bggId": 148228,
       "displayName": "璀璨寶石",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.asmodee.com.tw/en_US/shop/product/splendor-cnt-937"
+      },
       "originalName": "Splendor",
       "bggWeight": 1.7735,
       "localEvidence": [
@@ -147,13 +166,18 @@
           "url": "https://bghut.com/goods-4421.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_148228"
     },
     {
       "rank": 5,
       "bggId": 811,
       "displayName": "拉密",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3383.html"
+      },
       "originalName": "Rummikub",
       "bggWeight": 1.7047,
       "localEvidence": [
@@ -182,13 +206,18 @@
           "url": "https://bghut.com/goods-3383.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_811"
     },
     {
       "rank": 6,
       "bggId": 10547,
       "displayName": "山中小屋",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7730.html"
+      },
       "originalName": "Betrayal at House on the Hill",
       "bggWeight": 2.399,
       "localEvidence": [
@@ -209,13 +238,18 @@
           "url": "https://www.cacacat.com.tw/products/info.php?id=26635&title_id="
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_10547"
     },
     {
       "rank": 7,
       "bggId": 120677,
       "displayName": "神秘大地",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8037.html"
+      },
       "originalName": "Terra Mystica",
       "bggWeight": 3.9722,
       "localEvidence": [
@@ -236,8 +270,9 @@
           "url": "https://bghut.com/goods-7861.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_120677"
     },
     {
       "rank": 8,
@@ -290,7 +325,12 @@
     {
       "rank": 9,
       "bggId": 25821,
-      "displayName": "米勒山谷狼人",
+      "displayName": "The Werewolves of Miller's Hollow",
+      "traditionalAlias": "米勒山谷狼人",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8534.html"
+      },
       "originalName": "The Werewolves of Miller's Hollow",
       "bggWeight": 1.3114,
       "localEvidence": [
@@ -311,13 +351,18 @@
           "url": "https://bghut.com/goods-8534.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_25821"
     },
     {
       "rank": 10,
       "bggId": 68448,
       "displayName": "七大奇蹟",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11471.html"
+      },
       "originalName": "7 Wonders",
       "bggWeight": 2.315,
       "localEvidence": [
@@ -341,8 +386,9 @@
       "relatedEditionBggIds": [
         316377
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_68448"
     },
     {
       "rank": 11,
@@ -399,13 +445,18 @@
           "url": "https://bghut.com/goods-2463.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_2223"
     },
     {
       "rank": 13,
       "bggId": 9220,
       "displayName": "矮人礦坑",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.swanpanasia.com/products/saboteur"
+      },
       "originalName": "Saboteur",
       "bggWeight": 1.317,
       "localEvidence": [
@@ -422,8 +473,9 @@
           "url": "https://bghut.com/goods-2847.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_9220"
     },
     {
       "rank": 14,
@@ -456,6 +508,10 @@
       "rank": 15,
       "bggId": 2651,
       "displayName": "電力公司",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9140.html"
+      },
       "originalName": "Power Grid",
       "bggWeight": 3.2452,
       "localEvidence": [
@@ -476,13 +532,18 @@
           "url": "https://bghut.com/goods-9140.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_2651"
     },
     {
       "rank": 16,
       "bggId": 129622,
       "displayName": "情書",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3890.html"
+      },
       "originalName": "Love Letter",
       "bggWeight": 1.1843,
       "localEvidence": [
@@ -506,8 +567,9 @@
       "relatedEditionBggIds": [
         277085
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_129622"
     },
     {
       "rank": 17,
@@ -543,7 +605,12 @@
     {
       "rank": 18,
       "bggId": 478,
-      "displayName": "富饒之城",
+      "displayName": "Citadels",
+      "traditionalAlias": "富饒之城",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-9476.html"
+      },
       "originalName": "Citadels",
       "bggWeight": 2.046,
       "localEvidence": [
@@ -567,8 +634,9 @@
       "relatedEditionBggIds": [
         205398
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_478"
     },
     {
       "rank": 19,
@@ -636,6 +704,10 @@
       "rank": 21,
       "bggId": 39856,
       "displayName": "妙語說書人",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2333.html"
+      },
       "originalName": "Dixit",
       "bggWeight": 1.1915,
       "localEvidence": [
@@ -652,12 +724,17 @@
           "url": "https://bghut.com/goods-2333.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_39856"
     },
     {
       "rank": 22,
       "bggId": 293296,
       "displayName": "璀璨寶石：漫威",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8658.html"
+      },
       "originalName": "Splendor: Marvel",
       "bggWeight": 1.7982,
       "localEvidence": [
@@ -670,12 +747,17 @@
           "url": "https://bghut.com/goods-8658.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_293296"
     },
     {
       "rank": 23,
       "bggId": 205059,
       "displayName": "瘋狂詭宅二版",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6466.html"
+      },
       "originalName": "Mansions of Madness: Second Edition",
       "bggWeight": 2.6918,
       "localEvidence": [
@@ -692,13 +774,18 @@
           "url": "https://bghut.com/goods-6466.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_205059"
     },
     {
       "rank": 24,
       "bggId": 174430,
       "displayName": "幽港迷城",
+      "traditionalNameSource": {
+        "kind": "chinese_edition",
+        "url": "https://boardgamegeek.com/boardgameversion/460243/chinese-edition"
+      },
       "originalName": "Gloomhaven",
       "bggWeight": 3.919,
       "localEvidence": [
@@ -711,13 +798,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_174430"
     },
     {
       "rank": 25,
       "bggId": 67919,
       "displayName": "風聲",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6888.html"
+      },
       "originalName": "The Message",
       "bggWeight": 2.425,
       "localEvidence": [
@@ -742,12 +834,17 @@
           "url": "https://bghut.com/goods-6888.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_67919"
     },
     {
       "rank": 26,
       "bggId": 30549,
       "displayName": "瘟疫危機",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-4830.html"
+      },
       "originalName": "Pandemic",
       "bggWeight": 2.3937,
       "localEvidence": [
@@ -760,12 +857,17 @@
           "url": "https://bghut.com/goods-4830.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_30549"
     },
     {
       "rank": 27,
       "bggId": 36218,
       "displayName": "皇輿爭霸",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://m102.nthu.edu.tw/~s102061202/Dominion-cht.pdf"
+      },
       "originalName": "Dominion",
       "bggWeight": 2.344,
       "localEvidence": [
@@ -781,12 +883,17 @@
       "relatedEditionBggIds": [
         209418
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_36218"
     },
     {
       "rank": 28,
       "bggId": 153938,
       "displayName": "駱駝大賽",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8364.html"
+      },
       "originalName": "Camel Up",
       "bggWeight": 1.502,
       "localEvidence": [
@@ -806,12 +913,18 @@
       "relatedEditionBggIds": [
         260605
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_153938"
     },
     {
       "rank": 29,
       "bggId": 3955,
-      "displayName": "砰！西部槍戰",
+      "displayName": "砰！",
+      "traditionalAlias": "砰！西部槍戰",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2464.html"
+      },
       "originalName": "BANG!",
       "bggWeight": 1.633,
       "localEvidence": [
@@ -828,12 +941,17 @@
           "url": "https://bghut.com/goods-2464.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_3955"
     },
     {
       "rank": 30,
       "bggId": 143884,
       "displayName": "骰子街",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-5791.html"
+      },
       "originalName": "Machi Koro",
       "bggWeight": 1.5195,
       "localEvidence": [
@@ -850,12 +968,17 @@
           "url": "https://bghut.com/goods-5791.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_143884"
     },
     {
       "rank": 31,
       "bggId": 84876,
       "displayName": "勃根地城堡",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://www.gokids.com.tw/product/detail1995"
+      },
       "originalName": "The Castles of Burgundy",
       "bggWeight": 2.97,
       "localEvidence": [
@@ -872,8 +995,9 @@
         271320,
         363622
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_84876"
     },
     {
       "rank": 32,
@@ -902,6 +1026,10 @@
       "rank": 33,
       "bggId": 46213,
       "displayName": "傳情畫意",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-4940.html"
+      },
       "originalName": "Telestrations",
       "bggWeight": 1.0693,
       "localEvidence": [
@@ -918,12 +1046,18 @@
           "url": "https://bghut.com/goods-4940.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_46213"
     },
     {
       "rank": 34,
       "bggId": 28143,
-      "displayName": "銀河路跑",
+      "displayName": "Race for the Galaxy",
+      "traditionalAlias": "銀河路跑",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Race for the Galaxy",
       "bggWeight": 2.994,
       "localEvidence": [
@@ -936,13 +1070,19 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_28143"
     },
     {
       "rank": 35,
       "bggId": 40692,
-      "displayName": "小世界",
+      "displayName": "小小世界",
+      "traditionalAlias": "小世界",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://www.gokids.com.tw/product/detail872"
+      },
       "originalName": "Small World",
       "bggWeight": 2.3466,
       "localEvidence": [
@@ -955,12 +1095,17 @@
           "url": "https://bghut.com/goods-2466.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_40692"
     },
     {
       "rank": 36,
       "bggId": 173346,
       "displayName": "七大奇蹟對決",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-4869.html"
+      },
       "originalName": "7 Wonders Duel",
       "bggWeight": 2.227,
       "localEvidence": [
@@ -977,12 +1122,18 @@
           "url": "https://bghut.com/goods-4869.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_173346"
     },
     {
       "rank": 37,
       "bggId": 96848,
-      "displayName": "魔法騎士",
+      "displayName": "Mage Knight Board Game",
+      "traditionalAlias": "魔法騎士",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Mage Knight Board Game",
       "bggWeight": 4.378,
       "localEvidence": [
@@ -995,13 +1146,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_96848"
     },
     {
       "rank": 38,
       "bggId": 11971,
       "displayName": "德國蟑螂",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6045.html"
+      },
       "originalName": "Cockroach Poker",
       "bggWeight": 1.0967,
       "localEvidence": [
@@ -1018,12 +1174,17 @@
           "url": "https://bghut.com/goods-6045.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_11971"
     },
     {
       "rank": 39,
       "bggId": 108745,
       "displayName": "四季物語",
+      "traditionalNameSource": {
+        "kind": "chinese_edition",
+        "url": "https://boardgamegeek.com/boardgameversion/215895/chinese-edition"
+      },
       "originalName": "Seasons",
       "bggWeight": 2.785,
       "localEvidence": [
@@ -1036,13 +1197,18 @@
           "url": "https://www.cacacat.com.tw/products/info.php?id=26478&title_id="
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_108745"
     },
     {
       "rank": 40,
       "bggId": 168839,
       "displayName": "魔城馬車",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2857.html"
+      },
       "originalName": "Die Kutschfahrt zur Teufelsburg",
       "bggWeight": 2.0667,
       "localEvidence": [
@@ -1063,12 +1229,18 @@
           "url": "https://bghut.com/goods-2857.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_168839"
     },
     {
       "rank": 41,
       "bggId": 131357,
-      "displayName": "政變",
+      "displayName": "政變疑雲",
+      "traditionalAlias": "政變",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://shop.diceman.tw/product/product%26product_id%3D1354"
+      },
       "originalName": "Coup",
       "bggWeight": 1.414,
       "localEvidence": [
@@ -1077,7 +1249,8 @@
           "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_131357"
     },
     {
       "rank": 42,
@@ -1114,6 +1287,10 @@
       "rank": 43,
       "bggId": 1406,
       "displayName": "地產大亨",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://www.ruten.com.tw/item/22504682541403/"
+      },
       "originalName": "Monopoly",
       "bggWeight": 1.62,
       "localEvidence": [
@@ -1126,7 +1303,8 @@
           "url": "https://dailyview.tw/popular/detail/1670"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_1406"
     },
     {
       "rank": 44,
@@ -1159,6 +1337,10 @@
       "rank": 45,
       "bggId": 3076,
       "displayName": "波多黎各",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://www.punchboardgame.com/products/puerto-rico"
+      },
       "originalName": "Puerto Rico",
       "bggWeight": 3.266,
       "localEvidence": [
@@ -1171,13 +1353,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_3076"
     },
     {
       "rank": 46,
       "bggId": 169786,
       "displayName": "鐮刀戰爭",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://shopee.tw/i.2034130.3487210491"
+      },
       "originalName": "Scythe",
       "bggWeight": 3.4516,
       "localEvidence": [
@@ -1190,13 +1377,19 @@
           "url": "https://bghut.com/goods-5525.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_169786"
     },
     {
       "rank": 47,
       "bggId": 15987,
-      "displayName": "魔鎮驚魂",
+      "displayName": "Arkham Horror",
+      "traditionalAlias": "魔鎮驚魂",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Arkham Horror",
       "bggWeight": 3.586,
       "localEvidence": [
@@ -1205,13 +1398,18 @@
           "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_15987"
     },
     {
       "rank": 48,
       "bggId": 9209,
       "displayName": "鐵道任務",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.asmodee.com.tw/shop/product/ticket-to-ride-us-cnt-1557"
+      },
       "originalName": "Ticket to Ride",
       "bggWeight": 1.8186,
       "localEvidence": [
@@ -1224,7 +1422,8 @@
           "url": "https://bghut.com/goods-12638.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_9209"
     },
     {
       "rank": 49,
@@ -1257,6 +1456,10 @@
       "rank": 50,
       "bggId": 199792,
       "displayName": "仙境幽谷",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7417.html"
+      },
       "originalName": "Everdell",
       "bggWeight": 2.8341,
       "localEvidence": [
@@ -1269,8 +1472,9 @@
           "url": "https://bghut.com/goods-13116.html"
         }
       ],
-      "status": "candidate",
-      "firstBatch": true
+      "status": "imported",
+      "firstBatch": true,
+      "importedGameId": "game_bgg_199792"
     },
     {
       "rank": 51,
@@ -1302,7 +1506,12 @@
     {
       "rank": 52,
       "bggId": 237182,
-      "displayName": "茂林源記：森林的權力之戰",
+      "displayName": "Root",
+      "traditionalAlias": "茂林源記：森林的權力之戰",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-7096.html"
+      },
       "originalName": "Root",
       "bggWeight": 3.8417,
       "localEvidence": [
@@ -1315,12 +1524,18 @@
           "url": "https://bghut.com/goods-7096.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_237182"
     },
     {
       "rank": 53,
       "bggId": 104162,
-      "displayName": "深入絕地：暗黑世界之旅",
+      "displayName": "Descent: Journeys in the Dark (Second Edition)",
+      "traditionalAlias": "深入絕地：暗黑世界之旅",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Descent: Journeys in the Dark (Second Edition)",
       "bggWeight": 3.217,
       "localEvidence": [
@@ -1329,12 +1544,17 @@
           "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_104162"
     },
     {
       "rank": 54,
       "bggId": 224517,
       "displayName": "工業革命：伯明翰",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8315.html"
+      },
       "originalName": "Brass: Birmingham",
       "bggWeight": 3.86,
       "localEvidence": [
@@ -1347,12 +1567,17 @@
           "url": "https://bghut.com/goods-8315.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_224517"
     },
     {
       "rank": 55,
       "bggId": 236217,
       "displayName": "驚爆倫敦",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6710.html"
+      },
       "originalName": "Time Bomb",
       "bggWeight": 1.0702,
       "localEvidence": [
@@ -1369,12 +1594,17 @@
           "url": "https://bghut.com/goods-6710.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_236217"
     },
     {
       "rank": 56,
       "bggId": 316554,
       "displayName": "沙丘：帝國",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://d19y2ttatozxjp.cloudfront.net/pdfs/TCN_DUNE_IMPERIUM_Rulebook_24-10-22.pdf"
+      },
       "originalName": "Dune: Imperium",
       "bggWeight": 3.0782,
       "localEvidence": [
@@ -1387,12 +1617,17 @@
           "url": "https://bghut.com/goods-8649.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_316554"
     },
     {
       "rank": 57,
       "bggId": 312484,
       "displayName": "阿納克遺跡",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10716.html"
+      },
       "originalName": "Lost Ruins of Arnak",
       "bggWeight": 2.9339,
       "localEvidence": [
@@ -1405,12 +1640,18 @@
           "url": "https://bghut.com/goods-10716.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_312484"
     },
     {
       "rank": 58,
       "bggId": 221194,
-      "displayName": "恐龍島",
+      "displayName": "Dinosaur Island",
+      "traditionalAlias": "恐龍島",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Dinosaur Island",
       "bggWeight": 3.047,
       "localEvidence": [
@@ -1419,12 +1660,17 @@
           "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_221194"
     },
     {
       "rank": 59,
       "bggId": 244521,
       "displayName": "郎中闖江湖",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7734.html"
+      },
       "originalName": "The Quacks of Quedlinburg",
       "bggWeight": 1.9414,
       "localEvidence": [
@@ -1437,12 +1683,18 @@
           "url": "https://bghut.com/goods-7734.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_244521"
     },
     {
       "rank": 60,
       "bggId": 102794,
-      "displayName": "洞穴農夫",
+      "displayName": "Caverna: The Cave Farmers",
+      "traditionalAlias": "洞穴農夫",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+      },
       "originalName": "Caverna: The Cave Farmers",
       "bggWeight": 3.778,
       "localEvidence": [
@@ -1455,12 +1707,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_102794"
     },
     {
       "rank": 61,
       "bggId": 34635,
       "displayName": "石器時代",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10034.html"
+      },
       "originalName": "Stone Age",
       "bggWeight": 2.4554,
       "localEvidence": [
@@ -1473,12 +1730,17 @@
           "url": "https://bghut.com/goods-10034.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_34635"
     },
     {
       "rank": 62,
       "bggId": 170216,
       "displayName": "血色狂怒",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-5374.html"
+      },
       "originalName": "Blood Rage",
       "bggWeight": 2.8835,
       "localEvidence": [
@@ -1491,12 +1753,17 @@
           "url": "https://bghut.com/goods-5374.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_170216"
     },
     {
       "rank": 63,
       "bggId": 284083,
       "displayName": "星際探險隊",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8825.html"
+      },
       "originalName": "The Crew: The Quest for Planet Nine",
       "bggWeight": 1.9663,
       "localEvidence": [
@@ -1509,7 +1776,8 @@
           "url": "https://bghut.com/goods-8825.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_284083"
     },
     {
       "rank": 64,
@@ -1541,7 +1809,12 @@
     {
       "rank": 65,
       "bggId": 147020,
-      "displayName": "星域奇航10周年紀念版",
+      "displayName": "Star Realms",
+      "traditionalAlias": "星域奇航",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12801.html"
+      },
       "originalName": "Star Realms",
       "bggWeight": 1.914,
       "localEvidence": [
@@ -1554,7 +1827,8 @@
           "url": "https://bghut.com/goods-12801.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_147020"
     },
     {
       "rank": 66,
@@ -1586,7 +1860,12 @@
     {
       "rank": 67,
       "bggId": 150376,
-      "displayName": "死亡寒冬",
+      "displayName": "Dead of Winter: A Crossroads Game",
+      "traditionalAlias": "死亡寒冬",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-4324.html"
+      },
       "originalName": "Dead of Winter: A Crossroads Game",
       "bggWeight": 3.0149,
       "localEvidence": [
@@ -1599,12 +1878,18 @@
           "url": "https://bghut.com/goods-4324.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_150376"
     },
     {
       "rank": 68,
       "bggId": 291457,
-      "displayName": "幽港迷城：獅牙小隊/雄獅蠻顎",
+      "displayName": "Gloomhaven: Jaws of the Lion",
+      "traditionalAlias": "幽港迷城：獅牙小隊",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8354.html"
+      },
       "originalName": "Gloomhaven: Jaws of the Lion",
       "bggWeight": 3.6412,
       "localEvidence": [
@@ -1617,7 +1902,8 @@
           "url": "https://bghut.com/goods-8354.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_291457"
     },
     {
       "rank": 69,
@@ -1649,7 +1935,11 @@
     {
       "rank": 70,
       "bggId": 11,
-      "displayName": "種豆2017年版",
+      "displayName": "種豆",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2305.html"
+      },
       "originalName": "Bohnanza",
       "bggWeight": 1.6671,
       "localEvidence": [
@@ -1662,12 +1952,18 @@
           "url": "https://bghut.com/goods-2305.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_11"
     },
     {
       "rank": 71,
       "bggId": 157354,
-      "displayName": "五大部落",
+      "displayName": "Five Tribes: The Djinns of Naqala",
+      "traditionalAlias": "五大部落",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-4275.html"
+      },
       "originalName": "Five Tribes: The Djinns of Naqala",
       "bggWeight": 2.8371,
       "localEvidence": [
@@ -1680,7 +1976,8 @@
           "url": "https://bghut.com/goods-4275.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_157354"
     },
     {
       "rank": 72,
@@ -1713,6 +2010,10 @@
       "rank": 73,
       "bggId": 167355,
       "displayName": "復仇女神號",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://www.gokids.com.tw/product/detail1076"
+      },
       "originalName": "Nemesis",
       "bggWeight": 3.4897,
       "localEvidence": [
@@ -1725,12 +2026,18 @@
           "url": "https://bghut.com/goods-7563.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_167355"
     },
     {
       "rank": 74,
       "bggId": 25554,
-      "displayName": "聖母院",
+      "displayName": "Notre Dame",
+      "traditionalAlias": "聖母院",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+      },
       "originalName": "Notre Dame",
       "bggWeight": 2.738,
       "localEvidence": [
@@ -1739,12 +2046,18 @@
           "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_25554"
     },
     {
       "rank": 75,
       "bggId": 233078,
-      "displayName": "帝國曙光第四版",
+      "displayName": "Twilight Imperium: Fourth Edition",
+      "traditionalAlias": "帝國曙光第四版",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6297.html"
+      },
       "originalName": "Twilight Imperium: Fourth Edition",
       "bggWeight": 4.3593,
       "localEvidence": [
@@ -1757,12 +2070,17 @@
           "url": "https://bghut.com/goods-6297.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_233078"
     },
     {
       "rank": 76,
       "bggId": 148949,
       "displayName": "伊斯坦堡",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-4254.html"
+      },
       "originalName": "Istanbul",
       "bggWeight": 2.5844,
       "localEvidence": [
@@ -1775,12 +2093,17 @@
           "url": "https://bghut.com/goods-4254.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_148949"
     },
     {
       "rank": 77,
       "bggId": 285774,
       "displayName": "漫威傳奇再起",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7863.html"
+      },
       "originalName": "Marvel Champions: The Card Game",
       "bggWeight": 2.9603,
       "localEvidence": [
@@ -1793,12 +2116,18 @@
           "url": "https://bghut.com/goods-7863.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_285774"
     },
     {
       "rank": 78,
       "bggId": 28720,
-      "displayName": "工業革命：蘭開夏",
+      "displayName": "Brass: Lancashire",
+      "traditionalAlias": "工業革命：蘭開夏",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8946.html"
+      },
       "originalName": "Brass: Lancashire",
       "bggWeight": 3.8437,
       "localEvidence": [
@@ -1811,12 +2140,18 @@
           "url": "https://bghut.com/goods-8946.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_28720"
     },
     {
       "rank": 79,
       "bggId": 115746,
-      "displayName": "魔戒聖戰第二版",
+      "displayName": "War of the Ring: Second Edition",
+      "traditionalAlias": "魔戒聖戰第二版",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-10650.html"
+      },
       "originalName": "War of the Ring: Second Edition",
       "bggWeight": 4.228,
       "localEvidence": [
@@ -1829,12 +2164,17 @@
           "url": "https://bghut.com/goods-10650.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_115746"
     },
     {
       "rank": 80,
       "bggId": 146508,
       "displayName": "時間守望",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6288.html"
+      },
       "originalName": "T.I.M.E Stories",
       "bggWeight": 2.5855,
       "localEvidence": [
@@ -1847,12 +2187,17 @@
           "url": "https://bghut.com/goods-6288.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_146508"
     },
     {
       "rank": 81,
       "bggId": 182874,
       "displayName": "奧地利大飯店",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-5766.html"
+      },
       "originalName": "Grand Austria Hotel",
       "bggWeight": 3.1954,
       "localEvidence": [
@@ -1865,12 +2210,18 @@
           "url": "https://bghut.com/goods-5766.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_182874"
     },
     {
       "rank": 82,
       "bggId": 162886,
-      "displayName": "靈跡島",
+      "displayName": "Spirit Island",
+      "traditionalAlias": "靈跡島",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Spirit Island",
       "bggWeight": 4.075,
       "localEvidence": [
@@ -1879,7 +2230,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_162886"
     },
     {
       "rank": 83,
@@ -1911,7 +2263,12 @@
     {
       "rank": 84,
       "bggId": 216132,
-      "displayName": "加勒多尼亞",
+      "displayName": "Clans of Caledonia",
+      "traditionalAlias": "加勒多尼亞",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6765.html"
+      },
       "originalName": "Clans of Caledonia",
       "bggWeight": 3.4666,
       "localEvidence": [
@@ -1924,12 +2281,18 @@
           "url": "https://bghut.com/goods-6765.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_216132"
     },
     {
       "rank": 85,
       "bggId": 418059,
-      "displayName": "搜尋外星智慧",
+      "displayName": "SETI: Search for Extraterrestrial Intelligence",
+      "traditionalAlias": "搜尋外星智慧",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12108.html"
+      },
       "originalName": "SETI: Search for Extraterrestrial Intelligence",
       "bggWeight": 3.8309,
       "localEvidence": [
@@ -1942,7 +2305,8 @@
           "url": "https://bghut.com/goods-12108.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_418059"
     },
     {
       "rank": 86,
@@ -1974,7 +2338,11 @@
     {
       "rank": 87,
       "bggId": 397598,
-      "displayName": "沙丘：帝國－起義",
+      "displayName": "沙丘：帝國 起義",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.youtube.com/watch?v=PDoc9wfX9Mc"
+      },
       "originalName": "Dune: Imperium – Uprising",
       "bggWeight": 3.5254,
       "localEvidence": [
@@ -1987,12 +2355,18 @@
           "url": "https://bghut.com/goods-10955.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_397598"
     },
     {
       "rank": 88,
       "bggId": 161936,
-      "displayName": "瘟疫危機-承傳 第一季",
+      "displayName": "Pandemic Legacy: Season 1",
+      "traditionalAlias": "瘟疫危機-承傳 第一季",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Pandemic Legacy: Season 1",
       "bggWeight": 2.828,
       "localEvidence": [
@@ -2001,12 +2375,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_161936"
     },
     {
       "rank": 89,
       "bggId": 183394,
       "displayName": "葡萄酒莊園：精華版",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://shop.diceman.tw/product/product%26product_id%3D1480"
+      },
       "originalName": "Viticulture Essential Edition",
       "bggWeight": 2.903,
       "localEvidence": [
@@ -2015,12 +2394,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_183394"
     },
     {
       "rank": 90,
       "bggId": 246900,
-      "displayName": "星蝕：黎明重現",
+      "displayName": "Eclipse: Second Dawn for the Galaxy",
+      "traditionalAlias": "星蝕：黎明重現",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-9953.html"
+      },
       "originalName": "Eclipse: Second Dawn for the Galaxy",
       "bggWeight": 3.6677,
       "localEvidence": [
@@ -2033,12 +2418,18 @@
           "url": "https://bghut.com/goods-9953.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_246900"
     },
     {
       "rank": 91,
       "bggId": 12333,
-      "displayName": "冷戰熱鬥豪華版",
+      "displayName": "Twilight Struggle",
+      "traditionalAlias": "冷戰熱鬥",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Twilight Struggle",
       "bggWeight": 3.615,
       "localEvidence": [
@@ -2047,7 +2438,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_12333"
     },
     {
       "rank": 92,
@@ -2079,7 +2471,12 @@
     {
       "rank": 93,
       "bggId": 221107,
-      "displayName": "瘟疫危機：傳承 第二季",
+      "displayName": "Pandemic Legacy: Season 2",
+      "traditionalAlias": "瘟疫危機：傳承 第二季",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://mall.iopenmall.tw/033151/index.php?action=product_detail&prod_no=P3315104752263"
+      },
       "originalName": "Pandemic Legacy: Season 2",
       "bggWeight": 3.2457,
       "localEvidence": [
@@ -2092,12 +2489,18 @@
           "url": "https://bghut.com/goods-6370.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_221107"
     },
     {
       "rank": 94,
       "bggId": 256960,
-      "displayName": "帕米爾和平：第二版",
+      "displayName": "Pax Pamir: Second Edition",
+      "traditionalAlias": "帕米爾和平：第二版",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8681.html"
+      },
       "originalName": "Pax Pamir: Second Edition",
       "bggWeight": 3.8422,
       "localEvidence": [
@@ -2110,12 +2513,18 @@
           "url": "https://bghut.com/goods-8681.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_256960"
     },
     {
       "rank": 95,
       "bggId": 192135,
-      "displayName": "無盡骸骨 / 骸骨險境",
+      "displayName": "Too Many Bones",
+      "traditionalAlias": "無盡骸骨",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8811.html"
+      },
       "originalName": "Too Many Bones",
       "bggWeight": 3.8702,
       "localEvidence": [
@@ -2128,12 +2537,18 @@
           "url": "https://bghut.com/goods-8811.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_192135"
     },
     {
       "rank": 96,
       "bggId": 359871,
-      "displayName": "星弧航記",
+      "displayName": "Arcs",
+      "traditionalAlias": "星弧航記",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11695.html"
+      },
       "originalName": "Arcs",
       "bggWeight": 3.4434,
       "localEvidence": [
@@ -2146,12 +2561,18 @@
           "url": "https://bghut.com/goods-11695.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_359871"
     },
     {
       "rank": 97,
       "bggId": 124708,
-      "displayName": "俠鼠魔途",
+      "displayName": "Mice and Mystics",
+      "traditionalAlias": "俠鼠魔途",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-3196.html"
+      },
       "originalName": "Mice and Mystics",
       "bggWeight": 2.735,
       "localEvidence": [
@@ -2164,12 +2585,18 @@
           "url": "https://bghut.com/goods-3196.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_124708"
     },
     {
       "rank": 98,
       "bggId": 125153,
-      "displayName": "畫廊經紀人/畫廊",
+      "displayName": "The Gallerist",
+      "traditionalAlias": "畫廊經紀人",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-5738.html"
+      },
       "originalName": "The Gallerist",
       "bggWeight": 4.2078,
       "localEvidence": [
@@ -2182,7 +2609,8 @@
           "url": "https://bghut.com/goods-5738.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_125153"
     },
     {
       "rank": 99,
@@ -2276,7 +2704,12 @@
     {
       "rank": 102,
       "bggId": 187645,
-      "displayName": "星際大戰:反抗軍",
+      "displayName": "Star Wars: Rebellion",
+      "traditionalAlias": "星際大戰:反抗軍",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Star Wars: Rebellion",
       "bggWeight": 3.752,
       "localEvidence": [
@@ -2285,7 +2718,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_187645"
     },
     {
       "rank": 103,
@@ -2318,6 +2752,10 @@
       "rank": 104,
       "bggId": 332772,
       "displayName": "黎明新生",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11553.html"
+      },
       "originalName": "Revive",
       "bggWeight": 3.4596,
       "localEvidence": [
@@ -2330,12 +2768,18 @@
           "url": "https://bghut.com/goods-11553.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_332772"
     },
     {
       "rank": 105,
       "bggId": 240980,
-      "displayName": "染．鐘樓謎團",
+      "displayName": "Blood on the Clocktower",
+      "traditionalAlias": "染．鐘樓謎團",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11325.html"
+      },
       "originalName": "Blood on the Clocktower",
       "bggWeight": 3.0217,
       "localEvidence": [
@@ -2348,12 +2792,18 @@
           "url": "https://bghut.com/goods-11325.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_240980"
     },
     {
       "rank": 106,
       "bggId": 182028,
-      "displayName": "歷史巨輪10週年",
+      "displayName": "Through the Ages: A New Story of Civilization",
+      "traditionalAlias": "歷史巨輪",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Through the Ages: A New Story of Civilization",
       "bggWeight": 4.442,
       "localEvidence": [
@@ -2362,12 +2812,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_182028"
     },
     {
       "rank": 107,
       "bggId": 164928,
-      "displayName": "奧爾良",
+      "displayName": "Orléans",
+      "traditionalAlias": "奧爾良",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Orléans",
       "bggWeight": 3.011,
       "localEvidence": [
@@ -2376,7 +2832,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_164928"
     },
     {
       "rank": 108,
@@ -2429,6 +2886,10 @@
       "rank": 110,
       "bggId": 295770,
       "displayName": "寒霜迷城",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11995.html"
+      },
       "originalName": "Frosthaven",
       "bggWeight": 4.4078,
       "localEvidence": [
@@ -2441,12 +2902,18 @@
           "url": "https://bghut.com/goods-11995.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_295770"
     },
     {
       "rank": 111,
       "bggId": 367966,
-      "displayName": "奮進號：深海",
+      "displayName": "Endeavor: Deep Sea",
+      "traditionalAlias": "奮進號：深海",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12559.html"
+      },
       "originalName": "Endeavor: Deep Sea",
       "bggWeight": 2.9281,
       "localEvidence": [
@@ -2459,12 +2926,18 @@
           "url": "https://bghut.com/goods-12559.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_367966"
     },
     {
       "rank": 112,
       "bggId": 35677,
-      "displayName": "港都情濃",
+      "displayName": "Le Havre",
+      "traditionalAlias": "港都情濃",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Le Havre",
       "bggWeight": 3.706,
       "localEvidence": [
@@ -2473,12 +2946,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_35677"
     },
     {
       "rank": 113,
       "bggId": 436217,
       "displayName": "瘟疫危機 魔戒：遠征隊的宿命",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-12249.html"
+      },
       "originalName": "The Lord of the Rings: Fate of the Fellowship",
       "bggWeight": 3.1029,
       "localEvidence": [
@@ -2491,12 +2969,18 @@
           "url": "https://bghut.com/goods-12249.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_436217"
     },
     {
       "rank": 114,
       "bggId": 284378,
-      "displayName": "看板",
+      "displayName": "Kanban EV",
+      "traditionalAlias": "看板",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-10345.html"
+      },
       "originalName": "Kanban EV",
       "bggWeight": 4.2932,
       "localEvidence": [
@@ -2509,12 +2993,18 @@
           "url": "https://bghut.com/goods-10345.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_284378"
     },
     {
       "rank": 115,
       "bggId": 124742,
-      "displayName": "安卓紀元：矩陣潛襲",
+      "displayName": "Android: Netrunner",
+      "traditionalAlias": "安卓紀元：矩陣潛襲",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://boardgamegeek.com/boardgameversion/600760/chinese-edition"
+      },
       "originalName": "Android: Netrunner",
       "bggWeight": 3.416,
       "localEvidence": [
@@ -2523,12 +3013,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_124742"
     },
     {
       "rank": 116,
       "bggId": 383179,
       "displayName": "神秘大地：大創造時代",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11113.html"
+      },
       "originalName": "Age of Innovation",
       "bggWeight": 4.262,
       "localEvidence": [
@@ -2541,12 +3036,17 @@
           "url": "https://bghut.com/goods-11113.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_383179"
     },
     {
       "rank": 117,
       "bggId": 146021,
       "displayName": "全球驚悚",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9308.html"
+      },
       "originalName": "Eldritch Horror",
       "bggWeight": 3.3148,
       "localEvidence": [
@@ -2555,12 +3055,18 @@
           "url": "https://bghut.com/goods-9308.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_146021"
     },
     {
       "rank": 118,
       "bggId": 164153,
-      "displayName": "星際大戰：帝國突襲",
+      "displayName": "Star Wars: Imperial Assault",
+      "traditionalAlias": "星際大戰：帝國突襲",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Star Wars: Imperial Assault",
       "bggWeight": 3.301,
       "localEvidence": [
@@ -2569,12 +3075,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_164153"
     },
     {
       "rank": 119,
       "bggId": 103343,
-      "displayName": "權力的遊戲版圖二版",
+      "displayName": "A Game of Thrones: The Board Game (Second Edition)",
+      "traditionalAlias": "權力的遊戲版圖二版",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6907.html"
+      },
       "originalName": "A Game of Thrones: The Board Game (Second Edition)",
       "bggWeight": 3.7349,
       "localEvidence": [
@@ -2583,7 +3095,8 @@
           "url": "https://bghut.com/goods-6907.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_103343"
     },
     {
       "rank": 120,
@@ -2614,7 +3127,12 @@
     {
       "rank": 121,
       "bggId": 247763,
-      "displayName": "水下城市",
+      "displayName": "Underwater Cities",
+      "traditionalAlias": "水下城市",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Underwater Cities",
       "bggWeight": 3.59,
       "localEvidence": [
@@ -2623,7 +3141,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_247763"
     },
     {
       "rank": 122,
@@ -2656,6 +3175,10 @@
       "rank": 123,
       "bggId": 390092,
       "displayName": "鐵道任務傳承：西部傳奇",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11140.html"
+      },
       "originalName": "Ticket to Ride Legacy: Legends of the West",
       "bggWeight": 2.5616,
       "localEvidence": [
@@ -2668,12 +3191,18 @@
           "url": "https://bghut.com/goods-11140.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_390092"
     },
     {
       "rank": 124,
       "bggId": 185343,
-      "displayName": "時空亂序",
+      "displayName": "Anachrony",
+      "traditionalAlias": "時空亂序",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Anachrony",
       "bggWeight": 3.995,
       "localEvidence": [
@@ -2682,12 +3211,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_185343"
     },
     {
       "rank": 125,
       "bggId": 132531,
-      "displayName": "銀河競骰",
+      "displayName": "Roll for the Galaxy",
+      "traditionalAlias": "銀河競骰",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12564.html"
+      },
       "originalName": "Roll for the Galaxy",
       "bggWeight": 2.7845,
       "localEvidence": [
@@ -2696,12 +3231,17 @@
           "url": "https://bghut.com/goods-12564.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_132531"
     },
     {
       "rank": 126,
       "bggId": 236457,
       "displayName": "西國建築師",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7698.html"
+      },
       "originalName": "Architects of the West Kingdom",
       "bggWeight": 2.7632,
       "localEvidence": [
@@ -2710,7 +3250,8 @@
           "url": "https://bghut.com/goods-7698.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_236457"
     },
     {
       "rank": 127,
@@ -2739,6 +3280,10 @@
       "rank": 128,
       "bggId": 176963,
       "displayName": "翻轉大稻埕",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.zeczec.com/projects/dadaocheng"
+      },
       "originalName": "Dadaocheng",
       "bggWeight": 2.6,
       "localEvidence": [
@@ -2747,12 +3292,17 @@
           "url": "https://www.tbd.com.tw/blogs/articles/83707"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_176963"
     },
     {
       "rank": 129,
       "bggId": 223096,
       "displayName": "台北大空襲",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.zeczec.com/projects/taipei1945"
+      },
       "originalName": "Raid on Taihoku",
       "bggWeight": null,
       "localEvidence": [
@@ -2761,12 +3311,17 @@
           "url": "https://www.zeczec.com/projects/taipei1945"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_223096"
     },
     {
       "rank": 130,
       "bggId": 423178,
       "displayName": "2045",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.zeczec.com/projects/tw2045"
+      },
       "originalName": "2045",
       "bggWeight": null,
       "localEvidence": [
@@ -2775,12 +3330,17 @@
           "url": "https://www.zeczec.com/projects/tw2045"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_423178"
     },
     {
       "rank": 131,
       "bggId": 266652,
       "displayName": "高雄大空襲",
+      "traditionalNameSource": {
+        "kind": "publisher",
+        "url": "https://www.zeczec.com/projects/tw2045"
+      },
       "originalName": "Raid on Takao",
       "bggWeight": 2.33,
       "localEvidence": [
@@ -2789,7 +3349,8 @@
           "url": "https://www.gjtaiwan.com/new/22807"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_266652"
     },
     {
       "rank": 132,
@@ -2817,7 +3378,12 @@
     {
       "rank": 133,
       "bggId": 231733,
-      "displayName": "莊園迷情",
+      "displayName": "Obsession",
+      "traditionalAlias": "莊園迷情",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://king69.pixnet.net/blog/posts/16152009653"
+      },
       "originalName": "Obsession",
       "bggWeight": 3.119,
       "localEvidence": [
@@ -2826,12 +3392,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_231733"
     },
     {
       "rank": 134,
       "bggId": 262712,
       "displayName": "奧法之戰",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8068.html"
+      },
       "originalName": "Res Arcana",
       "bggWeight": 2.655,
       "localEvidence": [
@@ -2840,12 +3411,17 @@
           "url": "https://bghut.com/goods-8068.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_262712"
     },
     {
       "rank": 135,
       "bggId": 123260,
       "displayName": "遠郊建城",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10395.html"
+      },
       "originalName": "Suburbia",
       "bggWeight": 2.7557,
       "localEvidence": [
@@ -2854,7 +3430,8 @@
           "url": "https://bghut.com/goods-10395.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_123260"
     },
     {
       "rank": 136,
@@ -2882,7 +3459,12 @@
     {
       "rank": 137,
       "bggId": 161970,
-      "displayName": "煉金術士",
+      "displayName": "Alchemists",
+      "traditionalAlias": "煉金術士",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6391.html"
+      },
       "originalName": "Alchemists",
       "bggWeight": 3.9241,
       "localEvidence": [
@@ -2891,12 +3473,18 @@
           "url": "https://bghut.com/goods-6391.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_161970"
     },
     {
       "rank": 138,
       "bggId": 338960,
-      "displayName": "殺戮尖塔",
+      "displayName": "Slay the Spire: The Board Game",
+      "traditionalAlias": "殺戮尖塔",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Slay the Spire: The Board Game",
       "bggWeight": 2.911,
       "localEvidence": [
@@ -2905,12 +3493,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_338960"
     },
     {
       "rank": 139,
       "bggId": 205896,
-      "displayName": "旭日：核心盒",
+      "displayName": "Rising Sun",
+      "traditionalAlias": "旭日",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6722.html"
+      },
       "originalName": "Rising Sun",
       "bggWeight": 3.2993,
       "localEvidence": [
@@ -2919,7 +3513,8 @@
           "url": "https://bghut.com/goods-6722.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_205896"
     },
     {
       "rank": 140,
@@ -2947,7 +3542,12 @@
     {
       "rank": 141,
       "bggId": 62219,
-      "displayName": "優勢物種",
+      "displayName": "Dominant Species",
+      "traditionalAlias": "優勢物種",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-3837.html"
+      },
       "originalName": "Dominant Species",
       "bggWeight": 4.0433,
       "localEvidence": [
@@ -2956,7 +3556,8 @@
           "url": "https://bghut.com/goods-3837.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_62219"
     },
     {
       "rank": 142,
@@ -3008,6 +3609,10 @@
       "rank": 144,
       "bggId": 328871,
       "displayName": "重塑火星：阿瑞斯探險隊－卡牌版",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9151.html"
+      },
       "originalName": "Terraforming Mars: Ares Expedition",
       "bggWeight": 2.9229,
       "localEvidence": [
@@ -3016,12 +3621,18 @@
           "url": "https://bghut.com/goods-9151.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_328871"
     },
     {
       "rank": 145,
       "bggId": 161533,
-      "displayName": "里斯本豪華版",
+      "displayName": "Lisboa",
+      "traditionalAlias": "里斯本",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Lisboa",
       "bggWeight": 4.563,
       "localEvidence": [
@@ -3030,7 +3641,8 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_161533"
     },
     {
       "rank": 146,
@@ -3058,7 +3670,12 @@
     {
       "rank": 147,
       "bggId": 63888,
-      "displayName": "創世發明 第四版",
+      "displayName": "Innovation",
+      "traditionalAlias": "創世發明",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12797.html"
+      },
       "originalName": "Innovation",
       "bggWeight": 2.781,
       "localEvidence": [
@@ -3067,7 +3684,8 @@
           "url": "https://bghut.com/goods-12797.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_63888"
     },
     {
       "rank": 148,
@@ -3096,6 +3714,10 @@
       "rank": 149,
       "bggId": 172287,
       "displayName": "維京傳奇",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6732.html"
+      },
       "originalName": "Champions of Midgard",
       "bggWeight": 2.6195,
       "localEvidence": [
@@ -3104,12 +3726,18 @@
           "url": "https://bghut.com/goods-6732.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_172287"
     },
     {
       "rank": 150,
       "bggId": 277659,
-      "displayName": "絕命少女",
+      "displayName": "Final Girl",
+      "traditionalAlias": "絕命少女",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://darkelfbg.blogspot.com/2022/09/2022-international-gamers-award-iga.html"
+      },
       "originalName": "Final Girl",
       "bggWeight": 2.76,
       "localEvidence": [
@@ -3118,12 +3746,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_277659"
     },
     {
       "rank": 151,
       "bggId": 317985,
-      "displayName": "太陽之外",
+      "displayName": "Beyond the Sun",
+      "traditionalAlias": "太陽之外",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11168.html"
+      },
       "originalName": "Beyond the Sun",
       "bggWeight": 3.1525,
       "localEvidence": [
@@ -3132,7 +3766,8 @@
           "url": "https://bghut.com/goods-9980.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_317985"
     },
     {
       "rank": 152,
@@ -3158,6 +3793,10 @@
       "rank": 153,
       "bggId": 410201,
       "displayName": "龍翼翱翔",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11843.html"
+      },
       "originalName": "Wyrmspan",
       "bggWeight": 2.8274,
       "localEvidence": [
@@ -3166,7 +3805,8 @@
           "url": "https://bghut.com/goods-11843.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_410201"
     },
     {
       "rank": 154,
@@ -3215,6 +3855,10 @@
       "rank": 156,
       "bggId": 300531,
       "displayName": "石器時代2.0史前部落",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8878.html"
+      },
       "originalName": "Paleo",
       "bggWeight": 2.6541,
       "localEvidence": [
@@ -3223,12 +3867,17 @@
           "url": "https://bghut.com/goods-8878.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_300531"
     },
     {
       "rank": 157,
       "bggId": 59959,
       "displayName": "白教堂血案",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3535.html"
+      },
       "originalName": "Letters from Whitechapel",
       "bggWeight": 2.6398,
       "localEvidence": [
@@ -3237,12 +3886,17 @@
           "url": "https://bghut.com/goods-3535.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_59959"
     },
     {
       "rank": 158,
       "bggId": 38453,
       "displayName": "太空警報",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-5877.html"
+      },
       "originalName": "Space Alert",
       "bggWeight": 2.9699,
       "localEvidence": [
@@ -3251,12 +3905,17 @@
           "url": "https://bghut.com/goods-5877.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_38453"
     },
     {
       "rank": 159,
       "bggId": 555,
       "displayName": "佛羅倫斯王子",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10991.html"
+      },
       "originalName": "The Princes of Florence",
       "bggWeight": 3.2389,
       "localEvidence": [
@@ -3265,12 +3924,18 @@
           "url": "https://bghut.com/goods-10991.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_555"
     },
     {
       "rank": 160,
       "bggId": 314040,
-      "displayName": "瘟疫危機-傳承 第零季",
+      "displayName": "Pandemic Legacy: Season 0",
+      "traditionalAlias": "瘟疫危機-傳承 第零季",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Pandemic Legacy: Season 0",
       "bggWeight": 3.187,
       "localEvidence": [
@@ -3279,12 +3944,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_314040"
     },
     {
       "rank": 161,
       "bggId": 188920,
-      "displayName": "這是我的戰爭",
+      "displayName": "This War of Mine: The Board Game",
+      "traditionalAlias": "這是我的戰爭",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6206.html"
+      },
       "originalName": "This War of Mine: The Board Game",
       "bggWeight": 3.3333,
       "localEvidence": [
@@ -3293,7 +3964,8 @@
           "url": "https://bghut.com/goods-6206.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_188920"
     },
     {
       "rank": 162,
@@ -3321,7 +3993,12 @@
     {
       "rank": 163,
       "bggId": 25292,
-      "displayName": "商人與掠奪者",
+      "displayName": "Merchants & Marauders",
+      "traditionalAlias": "商人與掠奪者",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-2362.html"
+      },
       "originalName": "Merchants & Marauders",
       "bggWeight": 3.263,
       "localEvidence": [
@@ -3330,7 +4007,8 @@
           "url": "https://bghut.com/goods-2362.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_25292"
     },
     {
       "rank": 164,
@@ -3401,7 +4079,12 @@
     {
       "rank": 167,
       "bggId": 483,
-      "displayName": "強權外交",
+      "displayName": "Diplomacy",
+      "traditionalAlias": "強權外交",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11829.html"
+      },
       "originalName": "Diplomacy",
       "bggWeight": 3.3234,
       "localEvidence": [
@@ -3410,12 +4093,17 @@
           "url": "https://bghut.com/goods-11829.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_483"
     },
     {
       "rank": 168,
       "bggId": 198928,
       "displayName": "瘟疫危機: 伊比利",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10216.html"
+      },
       "originalName": "Iberia",
       "bggWeight": 2.5939,
       "localEvidence": [
@@ -3424,12 +4112,18 @@
           "url": "https://bghut.com/goods-10216.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_198928"
     },
     {
       "rank": 169,
       "bggId": 337627,
-      "displayName": "虛無浩劫",
+      "displayName": "Voidfall",
+      "traditionalAlias": "虛無浩劫",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Voidfall",
       "bggWeight": 4.622,
       "localEvidence": [
@@ -3438,12 +4132,18 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_337627"
     },
     {
       "rank": 170,
       "bggId": 251661,
-      "displayName": "守誓者 : 深入密林集資版",
+      "displayName": "Oathsworn: Into the Deepwood",
+      "traditionalAlias": "守誓者：深入密林",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php"
+      },
       "originalName": "Oathsworn: Into the Deepwood",
       "bggWeight": 3.693,
       "localEvidence": [
@@ -3452,12 +4152,17 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_251661"
     },
     {
       "rank": 171,
       "bggId": 296151,
       "displayName": "西國子爵",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9530.html"
+      },
       "originalName": "Viscounts of the West Kingdom",
       "bggWeight": 3.4557,
       "localEvidence": [
@@ -3466,12 +4171,17 @@
           "url": "https://bghut.com/goods-9530.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_296151"
     },
     {
       "rank": 172,
       "bggId": 146886,
       "displayName": "拉格蘭哈莊園",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6518.html"
+      },
       "originalName": "La Granja",
       "bggWeight": 3.5702,
       "localEvidence": [
@@ -3480,12 +4190,18 @@
           "url": "https://bghut.com/goods-6518.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_146886"
     },
     {
       "rank": 173,
       "bggId": 70149,
-      "displayName": "祈禱與工作",
+      "displayName": "Ora et Labora",
+      "traditionalAlias": "祈禱與工作",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12930.html"
+      },
       "originalName": "Ora et Labora",
       "bggWeight": 3.8875,
       "localEvidence": [
@@ -3494,12 +4210,18 @@
           "url": "https://bghut.com/goods-12930.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_70149"
     },
     {
       "rank": 174,
       "bggId": 203420,
-      "displayName": "大逃脫：廢屋驚魂",
+      "displayName": "EXIT: The Game – The Abandoned Cabin",
+      "traditionalAlias": "大逃脫：廢屋驚魂",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12611.html"
+      },
       "originalName": "EXIT: The Game – The Abandoned Cabin",
       "bggWeight": 2.5377,
       "localEvidence": [
@@ -3508,12 +4230,17 @@
           "url": "https://bghut.com/goods-12611.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_203420"
     },
     {
       "rank": 175,
       "bggId": 227935,
-      "displayName": "仙境戰記 標準版",
+      "displayName": "仙境戰記",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11417.html"
+      },
       "originalName": "Wonderland's War",
       "bggWeight": 3.0374,
       "localEvidence": [
@@ -3522,7 +4249,8 @@
           "url": "https://bghut.com/goods-11417.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_227935"
     },
     {
       "rank": 176,
@@ -3550,7 +4278,12 @@
     {
       "rank": 177,
       "bggId": 308765,
-      "displayName": "王都布拉格",
+      "displayName": "Praga Caput Regni",
+      "traditionalAlias": "王都布拉格",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8597.html"
+      },
       "originalName": "Praga Caput Regni",
       "bggWeight": 3.728,
       "localEvidence": [
@@ -3559,7 +4292,8 @@
           "url": "https://bghut.com/goods-8597.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_308765"
     },
     {
       "rank": 178,
@@ -3584,7 +4318,12 @@
     {
       "rank": 179,
       "bggId": 7854,
-      "displayName": "圈套棋",
+      "displayName": "YINSH",
+      "traditionalAlias": "圈套棋",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8057.html"
+      },
       "originalName": "YINSH",
       "bggWeight": 2.6232,
       "localEvidence": [
@@ -3593,12 +4332,17 @@
           "url": "https://bghut.com/goods-8057.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_7854"
     },
     {
       "rank": 180,
       "bggId": 305096,
       "displayName": "無盡寒冬：美洲原野",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11373.html"
+      },
       "originalName": "Endless Winter: Paleoamericans",
       "bggWeight": 3.3269,
       "localEvidence": [
@@ -3607,12 +4351,18 @@
           "url": "https://bghut.com/goods-11373.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_305096"
     },
     {
       "rank": 181,
       "bggId": 228341,
-      "displayName": "脈衝星2849",
+      "displayName": "Pulsar 2849",
+      "traditionalAlias": "脈衝星2849",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6474.html"
+      },
       "originalName": "Pulsar 2849",
       "bggWeight": 3.3406,
       "localEvidence": [
@@ -3621,7 +4371,8 @@
           "url": "https://bghut.com/goods-6474.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_228341"
     },
     {
       "rank": 182,
@@ -3646,7 +4397,12 @@
     {
       "rank": 183,
       "bggId": 331106,
-      "displayName": "巫師舊世界",
+      "displayName": "The Witcher: Old World",
+      "traditionalAlias": "巫師舊世界",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11973.html"
+      },
       "originalName": "The Witcher: Old World",
       "bggWeight": 2.8744,
       "localEvidence": [
@@ -3655,12 +4411,18 @@
           "url": "https://bghut.com/goods-11973.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_331106"
     },
     {
       "rank": 184,
       "bggId": 66589,
-      "displayName": "領航者傳奇",
+      "displayName": "Navegador",
+      "traditionalAlias": "領航者傳奇",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-2338.html"
+      },
       "originalName": "Navegador",
       "bggWeight": 3.0818,
       "localEvidence": [
@@ -3669,12 +4431,18 @@
           "url": "https://bghut.com/goods-2338.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_66589"
     },
     {
       "rank": 185,
       "bggId": 310100,
-      "displayName": "復仇女神號：全面封鎖",
+      "displayName": "Nemesis: Lockdown",
+      "traditionalAlias": "復仇女神號：全面封鎖",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-10316.html"
+      },
       "originalName": "Nemesis: Lockdown",
       "bggWeight": 3.9175,
       "localEvidence": [
@@ -3683,12 +4451,17 @@
           "url": "https://bghut.com/goods-10316.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_310100"
     },
     {
       "rank": 186,
       "bggId": 234487,
       "displayName": "南美高原",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6806.html"
+      },
       "originalName": "Altiplano",
       "bggWeight": 3.2936,
       "localEvidence": [
@@ -3697,7 +4470,8 @@
           "url": "https://bghut.com/goods-6806.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_234487"
     },
     {
       "rank": 187,
@@ -3726,6 +4500,10 @@
       "rank": 188,
       "bggId": 318184,
       "displayName": "帝國：經典",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10438.html"
+      },
       "originalName": "Imperium: Classics",
       "bggWeight": 3.6231,
       "localEvidence": [
@@ -3734,12 +4512,18 @@
           "url": "https://bghut.com/goods-10438.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_318184"
     },
     {
       "rank": 189,
       "bggId": 24181,
-      "displayName": "霸業",
+      "displayName": "Imperial",
+      "traditionalAlias": "霸業",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-10046.html"
+      },
       "originalName": "Imperial",
       "bggWeight": 3.5576,
       "localEvidence": [
@@ -3748,7 +4532,8 @@
           "url": "https://bghut.com/goods-10046.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_24181"
     },
     {
       "rank": 190,
@@ -3776,7 +4561,12 @@
     {
       "rank": 191,
       "bggId": 379078,
-      "displayName": "殞落天劫",
+      "displayName": "Expeditions",
+      "traditionalAlias": "殞落天劫",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-10964.html"
+      },
       "originalName": "Expeditions",
       "bggWeight": 3.0588,
       "localEvidence": [
@@ -3785,12 +4575,18 @@
           "url": "https://bghut.com/goods-10964.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_379078"
     },
     {
       "rank": 192,
       "bggId": 284742,
-      "displayName": "蜂蜜嗡嗡",
+      "displayName": "Honey Buzz",
+      "traditionalAlias": "蜂蜜嗡嗡",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-11865.html"
+      },
       "originalName": "Honey Buzz",
       "bggWeight": 2.7261,
       "localEvidence": [
@@ -3799,12 +4595,18 @@
           "url": "https://bghut.com/goods-11865.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_284742"
     },
     {
       "rank": 193,
       "bggId": 175640,
-      "displayName": "葡萄酒莊園豪華版",
+      "displayName": "Vinhos: Deluxe Edition",
+      "traditionalAlias": "葡萄酒莊園豪華版",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6626.html"
+      },
       "originalName": "Vinhos: Deluxe Edition",
       "bggWeight": 3.993,
       "localEvidence": [
@@ -3813,7 +4615,8 @@
           "url": "https://bghut.com/goods-6626.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_175640"
     },
     {
       "rank": 194,
@@ -3838,7 +4641,12 @@
     {
       "rank": 195,
       "bggId": 182134,
-      "displayName": "新演化論：氣候",
+      "displayName": "Evolution: Climate",
+      "traditionalAlias": "新演化論：氣候",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-5313.html"
+      },
       "originalName": "Evolution: Climate",
       "bggWeight": 2.7368,
       "localEvidence": [
@@ -3847,12 +4655,17 @@
           "url": "https://bghut.com/goods-5313.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_182134"
     },
     {
       "rank": 196,
       "bggId": 323612,
       "displayName": "森靈之道",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9654.html"
+      },
       "originalName": "Bitoku",
       "bggWeight": 3.7596,
       "localEvidence": [
@@ -3861,12 +4674,18 @@
           "url": "https://bghut.com/goods-9654.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_323612"
     },
     {
       "rank": 197,
       "bggId": 304420,
-      "displayName": "生命之火",
+      "displayName": "Bonfire",
+      "traditionalAlias": "生命之火",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-8601.html"
+      },
       "originalName": "Bonfire",
       "bggWeight": 3.6354,
       "localEvidence": [
@@ -3875,12 +4694,18 @@
           "url": "https://bghut.com/goods-8601.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_304420"
     },
     {
       "rank": 198,
       "bggId": 218417,
-      "displayName": "末日決戰：永恆之戰",
+      "displayName": "Aeon's End: War Eternal",
+      "traditionalAlias": "末日決戰：永恆之戰",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6464.html"
+      },
       "originalName": "Aeon's End: War Eternal",
       "bggWeight": 2.9253,
       "localEvidence": [
@@ -3889,7 +4714,8 @@
           "url": "https://bghut.com/goods-6464.html"
         }
       ],
-      "status": "candidate"
+      "status": "imported",
+      "importedGameId": "game_bgg_218417"
     },
     {
       "rank": 199,
