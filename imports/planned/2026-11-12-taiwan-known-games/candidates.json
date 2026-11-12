@@ -20,8 +20,8 @@
   },
   "counts": {
     "existing": 41,
-    "candidate": 149,
-    "review": 10,
+    "candidate": 151,
+    "review": 8,
     "firstBatch": 24
   },
   "games": [
@@ -2757,10 +2757,7 @@
           "url": "https://www.zeczec.com/projects/taipei1945"
         }
       ],
-      "status": "review",
-      "flags": [
-        "weight_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 130,
@@ -2774,10 +2771,7 @@
           "url": "https://www.zeczec.com/projects/tw2045"
         }
       ],
-      "status": "review",
-      "flags": [
-        "weight_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 131,
