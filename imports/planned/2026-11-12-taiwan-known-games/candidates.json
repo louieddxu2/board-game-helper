@@ -20,8 +20,8 @@
   },
   "counts": {
     "existing": 41,
-    "candidate": 151,
-    "review": 8,
+    "candidate": 159,
+    "review": 0,
     "firstBatch": 24
   },
   "games": [
@@ -2380,7 +2380,11 @@
     {
       "rank": 108,
       "bggId": 266507,
-      "displayName": null,
+      "displayName": "蠢賊一籮筐：承傳",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://mj9981168.pixnet.net/blog/posts/8233003677"
+      },
       "originalName": "Clank! Legacy: Acquisitions Incorporated",
       "bggWeight": 2.7412,
       "localEvidence": [
@@ -2393,10 +2397,7 @@
           "url": "https://bghut.com/goods-7775.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 109,
@@ -3133,7 +3134,11 @@
     {
       "rank": 152,
       "bggId": 55690,
-      "displayName": null,
+      "displayName": "死亡國度：怪物",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://www.youtube.com/watch?v=zurFvTLXspE"
+      },
       "originalName": "Kingdom Death: Monster",
       "bggWeight": 4.276,
       "localEvidence": [
@@ -3142,10 +3147,7 @@
           "url": "https://bghut.com/bgg_top.php"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 153,
@@ -3187,7 +3189,11 @@
     {
       "rank": 155,
       "bggId": 233371,
-      "displayName": null,
+      "displayName": "蠢賊一籮筐：太空版",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bgnachimu.blogspot.com/2018/01/clank-in-space.html"
+      },
       "originalName": "Clank! In! Space!: A Deck-Building Adventure",
       "bggWeight": 2.5719,
       "localEvidence": [
@@ -3196,10 +3202,7 @@
           "url": "https://bghut.com/goods-6321.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 156,
@@ -3371,7 +3374,11 @@
     {
       "rank": 166,
       "bggId": 17133,
-      "displayName": null,
+      "displayName": "鐵路大亨",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://waymau.blogspot.com/2013/07/2013part3-2013-games-will-be-awesome.html"
+      },
       "originalName": "Railways of the World",
       "bggWeight": 3.015,
       "localEvidence": [
@@ -3380,10 +3387,7 @@
           "url": "https://bghut.com/goods-6689.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 167,
@@ -3551,7 +3555,11 @@
     {
       "rank": 178,
       "bggId": 133848,
-      "displayName": null,
+      "displayName": "幸福之境",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://boardgame-record.blogspot.com/2013/11/euphoria-build-better-dystopia.html"
+      },
       "originalName": "Euphoria: Build a Better Dystopia",
       "bggWeight": 3.1109,
       "localEvidence": [
@@ -3560,10 +3568,7 @@
           "url": "https://bghut.com/goods-3997.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 179,
@@ -3610,7 +3615,11 @@
     {
       "rank": 182,
       "bggId": 291572,
-      "displayName": null,
+      "displayName": "流離聖誓：帝國與流放者編年史",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://crowbox.tw/products/%E6%B5%81%E9%9B%A2%E8%81%96%E8%AA%93-%E6%A1%8C%E9%81%8A%E6%94%B6%E7%B4%8D%E7%9B%92-oath-board-game-insert"
+      },
       "originalName": "Oath",
       "bggWeight": 4.1243,
       "localEvidence": [
@@ -3619,10 +3628,7 @@
           "url": "https://bghut.com/goods-9082.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 183,
@@ -3799,7 +3805,11 @@
     {
       "rank": 194,
       "bggId": 224783,
-      "displayName": null,
+      "displayName": "孤島贖生",
+      "displayNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://eatgether.com/meetups/daaed7f2-bfab-4eec-bc1d-3a1188d297b8"
+      },
       "originalName": "Vindication",
       "bggWeight": 3.1045,
       "localEvidence": [
@@ -3808,10 +3818,7 @@
           "url": "https://bghut.com/goods-8487.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 195,
@@ -3872,7 +3879,11 @@
     {
       "rank": 199,
       "bggId": 232414,
-      "displayName": null,
+      "displayName": "新演化論：海洋",
+      "displayNameSource": {
+        "kind": "publisher",
+        "url": "https://2plus.com.tw/product/q983-evolution-oceans/"
+      },
       "originalName": "Oceans",
       "bggWeight": 2.8468,
       "localEvidence": [
@@ -3881,10 +3892,7 @@
           "url": "https://bghut.com/goods-10738.html"
         }
       ],
-      "status": "review",
-      "flags": [
-        "traditional_title_unverified"
-      ]
+      "status": "candidate"
     },
     {
       "rank": 200,
