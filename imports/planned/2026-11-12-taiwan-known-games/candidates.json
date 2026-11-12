@@ -1,0 +1,3919 @@
+{
+  "capturedAt": "2026-11-12T12:16:01.274Z",
+  "attributeCatalogThroughVersion": 12726,
+  "productionReadUsage": {
+    "games": {
+      "returned": 312,
+      "rowsRead": 312,
+      "rowsWritten": 0
+    },
+    "aliases": {
+      "returned": 107,
+      "rowsRead": 107,
+      "rowsWritten": 0
+    },
+    "externalIds": {
+      "returned": 38,
+      "rowsRead": 274,
+      "rowsWritten": 0
+    }
+  },
+  "counts": {
+    "existing": 41,
+    "candidate": 149,
+    "review": 10,
+    "firstBatch": 24
+  },
+  "games": [
+    {
+      "rank": 1,
+      "bggId": 128882,
+      "displayName": "阿瓦隆",
+      "originalName": "The Resistance: Avalon",
+      "bggWeight": 1.7397,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #1",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2026-10/11 #3",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "DailyView 2024 #9",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "DailyView 2018 #1",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26633&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3368.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 2,
+      "bggId": 822,
+      "displayName": "卡卡頌",
+      "originalName": "Carcassonne",
+      "bggWeight": 1.8845,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #7",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2024 #5",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "DailyView 2018 #8",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10035.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 3,
+      "bggId": 13,
+      "displayName": "卡坦島",
+      "originalName": "Catan",
+      "bggWeight": 2.2809,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #14",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2026-10/11 #2",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2751.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 4,
+      "bggId": 148228,
+      "displayName": "璀璨寶石",
+      "originalName": "Splendor",
+      "bggWeight": 1.7735,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #10",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2018 #10",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4421.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 5,
+      "bggId": 811,
+      "displayName": "拉密",
+      "originalName": "Rummikub",
+      "bggWeight": 1.7047,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #22",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2026-10/11 #1",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "DailyView 2024 #6",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26484&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3383.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 6,
+      "bggId": 10547,
+      "displayName": "山中小屋",
+      "originalName": "Betrayal at House on the Hill",
+      "bggWeight": 2.399,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #11",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2026-10/11 #5",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26635&title_id="
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 7,
+      "bggId": 120677,
+      "displayName": "神秘大地",
+      "originalName": "Terra Mystica",
+      "bggWeight": 3.9722,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #3",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7861.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 8,
+      "bggId": 31260,
+      "displayName": "農家樂",
+      "originalName": "Agricola",
+      "bggWeight": 3.636,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #6",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照（版本 200680）",
+          "url": "https://bghut.com/goods-3015.html"
+        }
+      ],
+      "relatedEditionBggIds": [
+        200680,
+        359999
+      ],
+      "status": "existing",
+      "flags": [
+        "other_identity_match"
+      ],
+      "existing": [
+        {
+          "id": "game_72f3ca8f795a40d3ab8df914292cf402",
+          "slug": "農家樂",
+          "name": "農家樂",
+          "primaryBggId": 31260
+        },
+        {
+          "id": "game_bgg_200680",
+          "slug": "bgg-200680",
+          "name": "Agricola (Revised Edition)",
+          "primaryBggId": 200680
+        }
+      ],
+      "ratedAttributeCount": 24
+    },
+    {
+      "rank": 9,
+      "bggId": 25821,
+      "displayName": "米勒山谷狼人",
+      "originalName": "The Werewolves of Miller's Hollow",
+      "bggWeight": 1.3114,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #9",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2018 #9",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8534.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 10,
+      "bggId": 68448,
+      "displayName": "七大奇蹟",
+      "originalName": "7 Wonders",
+      "bggWeight": 2.315,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #21",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26490&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照（版本 316377）",
+          "url": "https://bghut.com/goods-11471.html"
+        }
+      ],
+      "relatedEditionBggIds": [
+        316377
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 11,
+      "bggId": 178900,
+      "displayName": "機密代號",
+      "originalName": "Codenames",
+      "bggWeight": 1.2541,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #4",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5350.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_178900",
+          "slug": "bgg-178900",
+          "name": "Codenames",
+          "primaryBggId": 178900
+        }
+      ],
+      "ratedAttributeCount": 2
+    },
+    {
+      "rank": 12,
+      "bggId": 2223,
+      "displayName": "UNO",
+      "originalName": "UNO",
+      "bggWeight": 1.0998,
+      "localEvidence": [
+        {
+          "label": "DailyView 2026-10/11 #8",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "DailyView 2024 #7",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "DailyView 2018 #5",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2463.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 13,
+      "bggId": 9220,
+      "displayName": "矮人礦坑",
+      "originalName": "Saboteur",
+      "bggWeight": 1.317,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #31",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2018 #6",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2847.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 14,
+      "bggId": 205637,
+      "displayName": "詭鎮奇談卡牌版",
+      "originalName": "Arkham Horror: The Card Game",
+      "bggWeight": 3.568,
+      "localEvidence": [
+        {
+          "label": "DailyView 2026-10/11 #6",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_529afe5dfdbf06141803",
+          "slug": "arkham-horror-the-card-game-詭鎮奇談lcg-141803",
+          "name": "詭鎮奇談LCG",
+          "primaryBggId": 205637
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 15,
+      "bggId": 2651,
+      "displayName": "電力公司",
+      "originalName": "Power Grid",
+      "bggWeight": 3.2452,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #47",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9140.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 16,
+      "bggId": 129622,
+      "displayName": "情書",
+      "originalName": "Love Letter",
+      "bggWeight": 1.1843,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #38",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26623&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3890.html"
+        }
+      ],
+      "relatedEditionBggIds": [
+        277085
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 17,
+      "bggId": 230802,
+      "displayName": "花磚物語",
+      "originalName": "Azul",
+      "bggWeight": 1.7718,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #8",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11156.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_azul",
+          "slug": "azul",
+          "name": "花磚物語",
+          "primaryBggId": 230802
+        }
+      ],
+      "ratedAttributeCount": 9
+    },
+    {
+      "rank": 18,
+      "bggId": 478,
+      "displayName": "富饒之城",
+      "originalName": "Citadels",
+      "bggWeight": 2.046,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #45",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26474&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照（版本 205398）",
+          "url": "https://bghut.com/goods-9476.html"
+        }
+      ],
+      "relatedEditionBggIds": [
+        205398
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 19,
+      "bggId": 167791,
+      "displayName": "重塑火星",
+      "originalName": "Terraforming Mars",
+      "bggWeight": 3.2728,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #23",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9701.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_fa48b9030bdc156c3836",
+          "slug": "殖民火星-6c3836",
+          "name": "重塑火星",
+          "primaryBggId": 167791
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 20,
+      "bggId": 220308,
+      "displayName": "蓋亞計畫",
+      "originalName": "Gaia Project",
+      "bggWeight": 4.4031,
+      "localEvidence": [
+        {
+          "label": "DailyView 2024 #8",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6454.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_gaia_project",
+          "slug": "gaia-project",
+          "name": "蓋亞計劃",
+          "primaryBggId": 220308
+        }
+      ],
+      "ratedAttributeCount": 21
+    },
+    {
+      "rank": 21,
+      "bggId": 39856,
+      "displayName": "妙語說書人",
+      "originalName": "Dixit",
+      "bggWeight": 1.1915,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #13",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2333.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 22,
+      "bggId": 293296,
+      "displayName": "璀璨寶石：漫威",
+      "originalName": "Splendor: Marvel",
+      "bggWeight": 1.7982,
+      "localEvidence": [
+        {
+          "label": "DailyView 2026-10/11 #10",
+          "url": "https://dailyview.tw/top100/topic/95"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8658.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 23,
+      "bggId": 205059,
+      "displayName": "瘋狂詭宅二版",
+      "originalName": "Mansions of Madness: Second Edition",
+      "bggWeight": 2.6918,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #17",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6466.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 24,
+      "bggId": 174430,
+      "displayName": "幽港迷城",
+      "originalName": "Gloomhaven",
+      "bggWeight": 3.919,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #16",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 25,
+      "bggId": 67919,
+      "displayName": "風聲",
+      "originalName": "The Message",
+      "bggWeight": 2.425,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #15",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "DailyView 2024 #10",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "DailyView 2018 #7",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26639&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6888.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 26,
+      "bggId": 30549,
+      "displayName": "瘟疫危機",
+      "originalName": "Pandemic",
+      "bggWeight": 2.3937,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #26",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4830.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 27,
+      "bggId": 36218,
+      "displayName": "皇輿爭霸",
+      "originalName": "Dominion",
+      "bggWeight": 2.344,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #30",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        }
+      ],
+      "relatedEditionBggIds": [
+        209418
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 28,
+      "bggId": 153938,
+      "displayName": "駱駝大賽",
+      "originalName": "Camel Up",
+      "bggWeight": 1.502,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #19",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照（版本 260605）",
+          "url": "https://bghut.com/goods-8364.html"
+        }
+      ],
+      "relatedEditionBggIds": [
+        260605
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 29,
+      "bggId": 3955,
+      "displayName": "砰！西部槍戰",
+      "originalName": "BANG!",
+      "bggWeight": 1.633,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #25",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2464.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 30,
+      "bggId": 143884,
+      "displayName": "骰子街",
+      "originalName": "Machi Koro",
+      "bggWeight": 1.5195,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #49",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26489&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5791.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 31,
+      "bggId": 84876,
+      "displayName": "勃根地城堡",
+      "originalName": "The Castles of Burgundy",
+      "bggWeight": 2.97,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #40",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "relatedEditionBggIds": [
+        271320,
+        363622
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 32,
+      "bggId": 171623,
+      "displayName": "馬可波羅遊記",
+      "originalName": "The Voyages of Marco Polo",
+      "bggWeight": 3.177,
+      "localEvidence": [
+        {
+          "label": "DailyView 2026-10/11 #9",
+          "url": "https://dailyview.tw/top100/topic/95"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_marco_polo",
+          "slug": "the-voyages-of-marco-polo",
+          "name": "馬可波羅",
+          "primaryBggId": 171623
+        }
+      ],
+      "ratedAttributeCount": 24
+    },
+    {
+      "rank": 33,
+      "bggId": 46213,
+      "displayName": "傳情畫意",
+      "originalName": "Telestrations",
+      "bggWeight": 1.0693,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #24",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4940.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 34,
+      "bggId": 28143,
+      "displayName": "銀河路跑",
+      "originalName": "Race for the Galaxy",
+      "bggWeight": 2.994,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #43",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 35,
+      "bggId": 40692,
+      "displayName": "小世界",
+      "originalName": "Small World",
+      "bggWeight": 2.3466,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #29",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2466.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 36,
+      "bggId": 173346,
+      "displayName": "七大奇蹟對決",
+      "originalName": "7 Wonders Duel",
+      "bggWeight": 2.227,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4869.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 37,
+      "bggId": 96848,
+      "displayName": "魔法騎士",
+      "originalName": "Mage Knight Board Game",
+      "bggWeight": 4.378,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #34",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 38,
+      "bggId": 11971,
+      "displayName": "德國蟑螂",
+      "originalName": "Cockroach Poker",
+      "bggWeight": 1.0967,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #50",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6045.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 39,
+      "bggId": 108745,
+      "displayName": "四季物語",
+      "originalName": "Seasons",
+      "bggWeight": 2.785,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #37",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26478&title_id="
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 40,
+      "bggId": 168839,
+      "displayName": "魔城馬車",
+      "originalName": "Die Kutschfahrt zur Teufelsburg",
+      "bggWeight": 2.0667,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #12",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26634&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2857.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 41,
+      "bggId": 131357,
+      "displayName": "政變",
+      "originalName": "Coup",
+      "bggWeight": 1.414,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #33",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 42,
+      "bggId": 158991,
+      "displayName": "犯人在跳舞",
+      "originalName": "Hannin Wa Odoru",
+      "bggWeight": 1.1591,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #5",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4383.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_158991",
+          "slug": "bgg-158991",
+          "name": "犯人在跳舞",
+          "primaryBggId": 158991
+        }
+      ],
+      "ratedAttributeCount": 1
+    },
+    {
+      "rank": 43,
+      "bggId": 1406,
+      "displayName": "地產大亨",
+      "originalName": "Monopoly",
+      "bggWeight": 1.62,
+      "localEvidence": [
+        {
+          "label": "DailyView 2024 #4",
+          "url": "https://dailyview.tw/daily/3996"
+        },
+        {
+          "label": "DailyView 2018 #4",
+          "url": "https://dailyview.tw/popular/detail/1670"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 44,
+      "bggId": 266192,
+      "displayName": "展翅翱翔",
+      "originalName": "Wingspan",
+      "bggWeight": 2.4806,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7379.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_wingspan",
+          "slug": "wingspan",
+          "name": "展翅翱翔",
+          "primaryBggId": 266192
+        }
+      ],
+      "ratedAttributeCount": 12
+    },
+    {
+      "rank": 45,
+      "bggId": 3076,
+      "displayName": "波多黎各",
+      "originalName": "Puerto Rico",
+      "bggWeight": 3.266,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 46,
+      "bggId": 169786,
+      "displayName": "鐮刀戰爭",
+      "originalName": "Scythe",
+      "bggWeight": 3.4516,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5525.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 47,
+      "bggId": 15987,
+      "displayName": "魔鎮驚魂",
+      "originalName": "Arkham Horror",
+      "bggWeight": 3.586,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #46",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 48,
+      "bggId": 9209,
+      "displayName": "鐵道任務",
+      "originalName": "Ticket to Ride",
+      "bggWeight": 1.8186,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12638.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 49,
+      "bggId": 163412,
+      "displayName": "拼布對決",
+      "originalName": "Patchwork",
+      "bggWeight": 1.5967,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8668.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_patchwork",
+          "slug": "patchwork",
+          "name": "拼布藝術",
+          "primaryBggId": 163412
+        }
+      ],
+      "ratedAttributeCount": 16
+    },
+    {
+      "rank": 50,
+      "bggId": 199792,
+      "displayName": "仙境幽谷",
+      "originalName": "Everdell",
+      "bggWeight": 2.8341,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-13116.html"
+        }
+      ],
+      "status": "candidate",
+      "firstBatch": true
+    },
+    {
+      "rank": 51,
+      "bggId": 342942,
+      "displayName": "方舟動物園",
+      "originalName": "Ark Nova",
+      "bggWeight": 3.7974,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9601.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_e9dbfaa19cbab47e2ee8",
+          "slug": "方舟動物園-7e2ee8",
+          "name": "方舟動物園",
+          "primaryBggId": 342942
+        }
+      ],
+      "ratedAttributeCount": 18
+    },
+    {
+      "rank": 52,
+      "bggId": 237182,
+      "displayName": "茂林源記：森林的權力之戰",
+      "originalName": "Root",
+      "bggWeight": 3.8417,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7096.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 53,
+      "bggId": 104162,
+      "displayName": "深入絕地：暗黑世界之旅",
+      "originalName": "Descent: Journeys in the Dark (Second Edition)",
+      "bggWeight": 3.217,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #44",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 54,
+      "bggId": 224517,
+      "displayName": "工業革命：伯明翰",
+      "originalName": "Brass: Birmingham",
+      "bggWeight": 3.86,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8315.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 55,
+      "bggId": 236217,
+      "displayName": "驚爆倫敦",
+      "originalName": "Time Bomb",
+      "bggWeight": 1.0702,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #42",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        },
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26636&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6710.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 56,
+      "bggId": 316554,
+      "displayName": "沙丘：帝國",
+      "originalName": "Dune: Imperium",
+      "bggWeight": 3.0782,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8649.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 57,
+      "bggId": 312484,
+      "displayName": "阿納克遺跡",
+      "originalName": "Lost Ruins of Arnak",
+      "bggWeight": 2.9339,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10716.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 58,
+      "bggId": 221194,
+      "displayName": "恐龍島",
+      "originalName": "Dinosaur Island",
+      "bggWeight": 3.047,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #20",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 59,
+      "bggId": 244521,
+      "displayName": "郎中闖江湖",
+      "originalName": "The Quacks of Quedlinburg",
+      "bggWeight": 1.9414,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7734.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 60,
+      "bggId": 102794,
+      "displayName": "洞穴農夫",
+      "originalName": "Caverna: The Cave Farmers",
+      "bggWeight": 3.778,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 61,
+      "bggId": 34635,
+      "displayName": "石器時代",
+      "originalName": "Stone Age",
+      "bggWeight": 2.4554,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10034.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 62,
+      "bggId": 170216,
+      "displayName": "血色狂怒",
+      "originalName": "Blood Rage",
+      "bggWeight": 2.8835,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5374.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 63,
+      "bggId": 284083,
+      "displayName": "星際探險隊",
+      "originalName": "The Crew: The Quest for Planet Nine",
+      "bggWeight": 1.9663,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8825.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 64,
+      "bggId": 124361,
+      "displayName": "康考迪婭/和諧羅馬",
+      "originalName": "Concordia",
+      "bggWeight": 2.9855,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3998.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_concordia",
+          "slug": "concordia",
+          "name": "康考迪婭",
+          "primaryBggId": 124361
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 65,
+      "bggId": 147020,
+      "displayName": "星域奇航10周年紀念版",
+      "originalName": "Star Realms",
+      "bggWeight": 1.914,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12801.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 66,
+      "bggId": 98778,
+      "displayName": "花火",
+      "originalName": "Hanabi",
+      "bggWeight": 1.6927,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5305.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_hanabi",
+          "slug": "hanabi",
+          "name": "花火",
+          "primaryBggId": 98778
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 67,
+      "bggId": 150376,
+      "displayName": "死亡寒冬",
+      "originalName": "Dead of Winter: A Crossroads Game",
+      "bggWeight": 3.0149,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4324.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 68,
+      "bggId": 291457,
+      "displayName": "幽港迷城：獅牙小隊/雄獅蠻顎",
+      "originalName": "Gloomhaven: Jaws of the Lion",
+      "bggWeight": 3.6412,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8354.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 69,
+      "bggId": 133473,
+      "displayName": "迴轉壽司",
+      "originalName": "Sushi Go!",
+      "bggWeight": 1.1634,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6563.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_133473",
+          "slug": "bgg-133473",
+          "name": "迴轉壽司",
+          "primaryBggId": 133473
+        }
+      ],
+      "ratedAttributeCount": 1
+    },
+    {
+      "rank": 70,
+      "bggId": 11,
+      "displayName": "種豆2017年版",
+      "originalName": "Bohnanza",
+      "bggWeight": 1.6671,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2305.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 71,
+      "bggId": 157354,
+      "displayName": "五大部落",
+      "originalName": "Five Tribes: The Djinns of Naqala",
+      "bggWeight": 2.8371,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4275.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 72,
+      "bggId": 126163,
+      "displayName": "卓爾金歷-瑪雅日曆",
+      "originalName": "Tzolk'in: The Mayan Calendar",
+      "bggWeight": 3.6632,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3280.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_tzolkin",
+          "slug": "tzolkin-the-mayan-calendar",
+          "name": "馬雅曆法",
+          "primaryBggId": 126163
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 73,
+      "bggId": 167355,
+      "displayName": "復仇女神號",
+      "originalName": "Nemesis",
+      "bggWeight": 3.4897,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7563.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 74,
+      "bggId": 25554,
+      "displayName": "聖母院",
+      "originalName": "Notre Dame",
+      "bggWeight": 2.738,
+      "localEvidence": [
+        {
+          "label": "i-Buzz 2019 #41",
+          "url": "https://www.i-buzz.com.tw/article/index.php/article?atype=industry&id=278"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 75,
+      "bggId": 233078,
+      "displayName": "帝國曙光第四版",
+      "originalName": "Twilight Imperium: Fourth Edition",
+      "bggWeight": 4.3593,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6297.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 76,
+      "bggId": 148949,
+      "displayName": "伊斯坦堡",
+      "originalName": "Istanbul",
+      "bggWeight": 2.5844,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-4254.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 77,
+      "bggId": 285774,
+      "displayName": "漫威傳奇再起",
+      "originalName": "Marvel Champions: The Card Game",
+      "bggWeight": 2.9603,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7863.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 78,
+      "bggId": 28720,
+      "displayName": "工業革命：蘭開夏",
+      "originalName": "Brass: Lancashire",
+      "bggWeight": 3.8437,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8946.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 79,
+      "bggId": 115746,
+      "displayName": "魔戒聖戰第二版",
+      "originalName": "War of the Ring: Second Edition",
+      "bggWeight": 4.228,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10650.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 80,
+      "bggId": 146508,
+      "displayName": "時間守望",
+      "originalName": "T.I.M.E Stories",
+      "bggWeight": 2.5855,
+      "localEvidence": [
+        {
+          "label": "卡卡貓店藏",
+          "url": "https://www.cacacat.com.tw/products/info.php?id=26470&title_id="
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6288.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 81,
+      "bggId": 182874,
+      "displayName": "奧地利大飯店",
+      "originalName": "Grand Austria Hotel",
+      "bggWeight": 3.1954,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5766.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 82,
+      "bggId": 162886,
+      "displayName": "靈跡島",
+      "originalName": "Spirit Island",
+      "bggWeight": 4.075,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 83,
+      "bggId": 371942,
+      "displayName": "姬路城",
+      "originalName": "The White Castle",
+      "bggWeight": 3.0612,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11003.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_883377039fd742e4a05aa26dcf4af97c",
+          "slug": "姬路城",
+          "name": "姬路城",
+          "primaryBggId": 371942
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 84,
+      "bggId": 216132,
+      "displayName": "加勒多尼亞",
+      "originalName": "Clans of Caledonia",
+      "bggWeight": 3.4666,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6765.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 85,
+      "bggId": 418059,
+      "displayName": "搜尋外星智慧",
+      "originalName": "SETI: Search for Extraterrestrial Intelligence",
+      "bggWeight": 3.8309,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12108.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 86,
+      "bggId": 251247,
+      "displayName": "強國爭壩",
+      "originalName": "Barrage",
+      "bggWeight": 4.115,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10414.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_f399aaa279bd4d1f5f26",
+          "slug": "barrage-水壩-1f5f26",
+          "name": "強國爭壩",
+          "primaryBggId": 251247
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 87,
+      "bggId": 397598,
+      "displayName": "沙丘：帝國－起義",
+      "originalName": "Dune: Imperium – Uprising",
+      "bggWeight": 3.5254,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10955.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 88,
+      "bggId": 161936,
+      "displayName": "瘟疫危機-承傳 第一季",
+      "originalName": "Pandemic Legacy: Season 1",
+      "bggWeight": 2.828,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 89,
+      "bggId": 183394,
+      "displayName": "葡萄酒莊園：精華版",
+      "originalName": "Viticulture Essential Edition",
+      "bggWeight": 2.903,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 90,
+      "bggId": 246900,
+      "displayName": "星蝕：黎明重現",
+      "originalName": "Eclipse: Second Dawn for the Galaxy",
+      "bggWeight": 3.6677,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9953.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 91,
+      "bggId": 12333,
+      "displayName": "冷戰熱鬥豪華版",
+      "originalName": "Twilight Struggle",
+      "bggWeight": 3.615,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 92,
+      "bggId": 276025,
+      "displayName": "馬拉開波",
+      "originalName": "Maracaibo",
+      "bggWeight": 3.9168,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7728.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_maracaibo",
+          "slug": "maracaibo",
+          "name": "馬拉開波",
+          "primaryBggId": 276025
+        }
+      ],
+      "ratedAttributeCount": 21
+    },
+    {
+      "rank": 93,
+      "bggId": 221107,
+      "displayName": "瘟疫危機：傳承 第二季",
+      "originalName": "Pandemic Legacy: Season 2",
+      "bggWeight": 3.2457,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6370.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 94,
+      "bggId": 256960,
+      "displayName": "帕米爾和平：第二版",
+      "originalName": "Pax Pamir: Second Edition",
+      "bggWeight": 3.8422,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8681.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 95,
+      "bggId": 192135,
+      "displayName": "無盡骸骨 / 骸骨險境",
+      "originalName": "Too Many Bones",
+      "bggWeight": 3.8702,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8811.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 96,
+      "bggId": 359871,
+      "displayName": "星弧航記",
+      "originalName": "Arcs",
+      "bggWeight": 3.4434,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11695.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 97,
+      "bggId": 124708,
+      "displayName": "俠鼠魔途",
+      "originalName": "Mice and Mystics",
+      "bggWeight": 2.735,
+      "localEvidence": [
+        {
+          "label": "卡樂比店藏",
+          "url": "https://killerbeesub.wixsite.com/colorbee/gamelist"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3196.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 98,
+      "bggId": 125153,
+      "displayName": "畫廊經紀人/畫廊",
+      "originalName": "The Gallerist",
+      "bggWeight": 4.2078,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5738.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 99,
+      "bggId": 255984,
+      "displayName": "睡神",
+      "originalName": "Sleeping Gods",
+      "bggWeight": 3.2622,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10195.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_255984",
+          "slug": "bgg-255984",
+          "name": "Sleeping Gods",
+          "primaryBggId": 255984
+        }
+      ],
+      "ratedAttributeCount": 1
+    },
+    {
+      "rank": 100,
+      "bggId": 193738,
+      "displayName": "大西部開拓者",
+      "originalName": "Great Western Trail",
+      "bggWeight": 3.696,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "relatedEditionBggIds": [
+        341169
+      ],
+      "status": "existing",
+      "flags": [
+        "other_identity_match"
+      ],
+      "existing": [
+        {
+          "id": "game_91279ecd97ec9e72afeb",
+          "slug": "great-western-trail-大西部之旅-72afeb",
+          "name": "大西部開拓者：美利堅開拓史",
+          "primaryBggId": 193738
+        },
+        {
+          "id": "game_bgg_341169",
+          "slug": "bgg-341169",
+          "name": "Great Western Trail: Second Edition",
+          "primaryBggId": 341169
+        }
+      ],
+      "ratedAttributeCount": 19
+    },
+    {
+      "rank": 101,
+      "bggId": 184267,
+      "displayName": "火星之上",
+      "originalName": "On Mars",
+      "bggWeight": 4.6252,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8445.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_184267",
+          "slug": "bgg-184267",
+          "name": "On Mars",
+          "primaryBggId": 184267
+        }
+      ],
+      "ratedAttributeCount": 0
+    },
+    {
+      "rank": 102,
+      "bggId": 187645,
+      "displayName": "星際大戰:反抗軍",
+      "originalName": "Star Wars: Rebellion",
+      "bggWeight": 3.752,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 103,
+      "bggId": 321608,
+      "displayName": "領國者",
+      "originalName": "Hegemony: Lead Your Class to Victory",
+      "bggWeight": 4.2576,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10695.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_dd592e70d22552e3aa1c",
+          "slug": "領國者-e3aa1c",
+          "name": "領國者",
+          "primaryBggId": 321608
+        }
+      ],
+      "ratedAttributeCount": 9
+    },
+    {
+      "rank": 104,
+      "bggId": 332772,
+      "displayName": "黎明新生",
+      "originalName": "Revive",
+      "bggWeight": 3.4596,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11553.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 105,
+      "bggId": 240980,
+      "displayName": "染．鐘樓謎團",
+      "originalName": "Blood on the Clocktower",
+      "bggWeight": 3.0217,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11325.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 106,
+      "bggId": 182028,
+      "displayName": "歷史巨輪10週年",
+      "originalName": "Through the Ages: A New Story of Civilization",
+      "bggWeight": 4.442,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 107,
+      "bggId": 164928,
+      "displayName": "奧爾良",
+      "originalName": "Orléans",
+      "bggWeight": 3.011,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 108,
+      "bggId": 266507,
+      "displayName": null,
+      "originalName": "Clank! Legacy: Acquisitions Incorporated",
+      "bggWeight": 2.7412,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7775.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 109,
+      "bggId": 177736,
+      "displayName": "奧丁的盛宴",
+      "originalName": "A Feast for Odin",
+      "bggWeight": 3.868,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_a_feast_for_odin",
+          "slug": "a-feast-for-odin",
+          "name": "奧丁的盛宴",
+          "primaryBggId": 177736
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 110,
+      "bggId": 295770,
+      "displayName": "寒霜迷城",
+      "originalName": "Frosthaven",
+      "bggWeight": 4.4078,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11995.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 111,
+      "bggId": 367966,
+      "displayName": "奮進號：深海",
+      "originalName": "Endeavor: Deep Sea",
+      "bggWeight": 2.9281,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12559.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 112,
+      "bggId": 35677,
+      "displayName": "港都情濃",
+      "originalName": "Le Havre",
+      "bggWeight": 3.706,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 113,
+      "bggId": 436217,
+      "displayName": "瘟疫危機 魔戒：遠征隊的宿命",
+      "originalName": "The Lord of the Rings: Fate of the Fellowship",
+      "bggWeight": 3.1029,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12249.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 114,
+      "bggId": 284378,
+      "displayName": "看板",
+      "originalName": "Kanban EV",
+      "bggWeight": 4.2932,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10345.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 115,
+      "bggId": 124742,
+      "displayName": "安卓紀元：矩陣潛襲",
+      "originalName": "Android: Netrunner",
+      "bggWeight": 3.416,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 116,
+      "bggId": 383179,
+      "displayName": "神秘大地：大創造時代",
+      "originalName": "Age of Innovation",
+      "bggWeight": 4.262,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11113.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 117,
+      "bggId": 146021,
+      "displayName": "全球驚悚",
+      "originalName": "Eldritch Horror",
+      "bggWeight": 3.3148,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9308.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 118,
+      "bggId": 164153,
+      "displayName": "星際大戰：帝國突襲",
+      "originalName": "Star Wars: Imperial Assault",
+      "bggWeight": 3.301,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 119,
+      "bggId": 103343,
+      "displayName": "權力的遊戲版圖二版",
+      "originalName": "A Game of Thrones: The Board Game (Second Edition)",
+      "bggWeight": 3.7349,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6907.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 120,
+      "bggId": 175914,
+      "displayName": "快餐連鎖大亨",
+      "originalName": "Food Chain Magnate",
+      "bggWeight": 4.183,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "existing",
+      "flags": [
+        "other_identity_match"
+      ],
+      "existing": [
+        {
+          "id": "game_188f6b31d9b1b4888025",
+          "slug": "food-chain-magnate-快餐連鎖店-888025",
+          "name": "快餐連鎖大亨",
+          "primaryBggId": 175914
+        }
+      ],
+      "ratedAttributeCount": 25
+    },
+    {
+      "rank": 121,
+      "bggId": 247763,
+      "displayName": "水下城市",
+      "originalName": "Underwater Cities",
+      "bggWeight": 3.59,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 122,
+      "bggId": 380607,
+      "displayName": "大西部開拓者:紐西蘭",
+      "originalName": "Great Western Trail: New Zealand",
+      "bggWeight": 3.991,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11170.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_9ab402e88adc91cf7bc2",
+          "slug": "紐西蘭開拓史-cf7bc2",
+          "name": "大西部開拓者 : 紐西蘭開拓史",
+          "primaryBggId": 380607
+        }
+      ],
+      "ratedAttributeCount": 12
+    },
+    {
+      "rank": 123,
+      "bggId": 390092,
+      "displayName": "鐵道任務傳承：西部傳奇",
+      "originalName": "Ticket to Ride Legacy: Legends of the West",
+      "bggWeight": 2.5616,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        },
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11140.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 124,
+      "bggId": 185343,
+      "displayName": "時空亂序",
+      "originalName": "Anachrony",
+      "bggWeight": 3.995,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 125,
+      "bggId": 132531,
+      "displayName": "銀河競骰",
+      "originalName": "Roll for the Galaxy",
+      "bggWeight": 2.7845,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12564.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 126,
+      "bggId": 236457,
+      "displayName": "西國建築師",
+      "originalName": "Architects of the West Kingdom",
+      "bggWeight": 2.7632,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7698.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 127,
+      "bggId": 266810,
+      "displayName": "西國聖騎士",
+      "originalName": "Paladins of the West Kingdom",
+      "bggWeight": 3.705,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_ed273ed757f26dd483b8",
+          "slug": "paladins-of-the-west-kingdom-西方王國聖騎士-d483b8",
+          "name": "西方王國聖騎士",
+          "primaryBggId": 266810
+        }
+      ],
+      "ratedAttributeCount": 7
+    },
+    {
+      "rank": 128,
+      "bggId": 176963,
+      "displayName": "翻轉大稻埕",
+      "originalName": "Dadaocheng",
+      "bggWeight": 2.6,
+      "localEvidence": [
+        {
+          "label": "臺灣桌遊設計群募回顧",
+          "url": "https://www.tbd.com.tw/blogs/articles/83707"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 129,
+      "bggId": 223096,
+      "displayName": "台北大空襲",
+      "originalName": "Raid on Taihoku",
+      "bggWeight": null,
+      "localEvidence": [
+        {
+          "label": "嘖嘖原案",
+          "url": "https://www.zeczec.com/projects/taipei1945"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "weight_unverified"
+      ]
+    },
+    {
+      "rank": 130,
+      "bggId": 423178,
+      "displayName": "2045",
+      "originalName": "2045",
+      "bggWeight": null,
+      "localEvidence": [
+        {
+          "label": "嘖嘖原案",
+          "url": "https://www.zeczec.com/projects/tw2045"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "weight_unverified"
+      ]
+    },
+    {
+      "rank": 131,
+      "bggId": 266652,
+      "displayName": "高雄大空襲",
+      "originalName": "Raid on Takao",
+      "bggWeight": 2.33,
+      "localEvidence": [
+        {
+          "label": "臺灣通路發行",
+          "url": "https://www.gjtaiwan.com/new/22807"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 132,
+      "bggId": 367201,
+      "displayName": "台灣夜市",
+      "originalName": "Taiwan Night Market",
+      "bggWeight": 2.42,
+      "localEvidence": [
+        {
+          "label": "臺灣發行團隊／本地募資",
+          "url": "https://smoox.cyberbiz.co/products/taiwan-night-market"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_367201",
+          "slug": "bgg-367201",
+          "name": "Taiwan Night Market",
+          "primaryBggId": 367201
+        }
+      ],
+      "ratedAttributeCount": 1
+    },
+    {
+      "rank": 133,
+      "bggId": 231733,
+      "displayName": "莊園迷情",
+      "originalName": "Obsession",
+      "bggWeight": 3.119,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 134,
+      "bggId": 262712,
+      "displayName": "奧法之戰",
+      "originalName": "Res Arcana",
+      "bggWeight": 2.655,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8068.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 135,
+      "bggId": 123260,
+      "displayName": "遠郊建城",
+      "originalName": "Suburbia",
+      "bggWeight": 2.7557,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10395.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 136,
+      "bggId": 122515,
+      "displayName": "大五月花號",
+      "originalName": "Keyflower",
+      "bggWeight": 3.3324,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-7441.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_keyflower",
+          "slug": "keyflower",
+          "name": "五月花號",
+          "primaryBggId": 122515
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 137,
+      "bggId": 161970,
+      "displayName": "煉金術士",
+      "originalName": "Alchemists",
+      "bggWeight": 3.9241,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6391.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 138,
+      "bggId": 338960,
+      "displayName": "殺戮尖塔",
+      "originalName": "Slay the Spire: The Board Game",
+      "bggWeight": 2.911,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 139,
+      "bggId": 205896,
+      "displayName": "旭日：核心盒",
+      "originalName": "Rising Sun",
+      "bggWeight": 3.2993,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6722.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 140,
+      "bggId": 180263,
+      "displayName": "第七大陸",
+      "originalName": "The 7th Continent",
+      "bggWeight": 2.8969,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9651.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_attribute_import_the_7th_continent",
+          "slug": "the-7th-continent",
+          "name": "第七大陸",
+          "primaryBggId": 180263
+        }
+      ],
+      "ratedAttributeCount": 0
+    },
+    {
+      "rank": 141,
+      "bggId": 62219,
+      "displayName": "優勢物種",
+      "originalName": "Dominant Species",
+      "bggWeight": 4.0433,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3837.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 142,
+      "bggId": 229853,
+      "displayName": "特奧蒂瓦坎：眾神之城",
+      "originalName": "Teotihuacan: City of Gods",
+      "bggWeight": 3.7811,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6926.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_229853",
+          "slug": "bgg-229853",
+          "name": "Teotihuacan: City of Gods",
+          "primaryBggId": 229853
+        }
+      ],
+      "ratedAttributeCount": 1
+    },
+    {
+      "rank": 143,
+      "bggId": 350184,
+      "displayName": "藍星",
+      "originalName": "Earth",
+      "bggWeight": 2.9112,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10974.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_350184",
+          "slug": "bgg-350184",
+          "name": "Earth",
+          "primaryBggId": 350184
+        }
+      ],
+      "ratedAttributeCount": 3
+    },
+    {
+      "rank": 144,
+      "bggId": 328871,
+      "displayName": "重塑火星：阿瑞斯探險隊－卡牌版",
+      "originalName": "Terraforming Mars: Ares Expedition",
+      "bggWeight": 2.9229,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9151.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 145,
+      "bggId": 161533,
+      "displayName": "里斯本豪華版",
+      "originalName": "Lisboa",
+      "bggWeight": 4.563,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 146,
+      "bggId": 322289,
+      "displayName": "達爾文的旅程",
+      "originalName": "Darwin's Journey",
+      "bggWeight": 3.902,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_c208fb0d657ac491df4e",
+          "slug": "達爾文之旅-91df4e",
+          "name": "達爾文之旅",
+          "primaryBggId": 322289
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 147,
+      "bggId": 63888,
+      "displayName": "創世發明 第四版",
+      "originalName": "Innovation",
+      "bggWeight": 2.781,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12797.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 148,
+      "bggId": 102680,
+      "displayName": "圖拉真",
+      "originalName": "Trajan",
+      "bggWeight": 3.625,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10684.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bba34ef47e1dccb322e3",
+          "slug": "trajan-圖拉真-b322e3",
+          "name": "圖拉真",
+          "primaryBggId": 102680
+        }
+      ],
+      "ratedAttributeCount": 23
+    },
+    {
+      "rank": 149,
+      "bggId": 172287,
+      "displayName": "維京傳奇",
+      "originalName": "Champions of Midgard",
+      "bggWeight": 2.6195,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6732.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 150,
+      "bggId": 277659,
+      "displayName": "絕命少女",
+      "originalName": "Final Girl",
+      "bggWeight": 2.76,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 151,
+      "bggId": 317985,
+      "displayName": "太陽之外",
+      "originalName": "Beyond the Sun",
+      "bggWeight": 3.1525,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9980.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 152,
+      "bggId": 55690,
+      "displayName": null,
+      "originalName": "Kingdom Death: Monster",
+      "bggWeight": 4.276,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 153,
+      "bggId": 410201,
+      "displayName": "龍翼翱翔",
+      "originalName": "Wyrmspan",
+      "bggWeight": 2.8274,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11843.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 154,
+      "bggId": 269207,
+      "displayName": "深谷酒館",
+      "originalName": "The Taverns of Tiefenthal",
+      "bggWeight": 2.6854,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9972.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_269207",
+          "slug": "bgg-269207",
+          "name": "深谷酒館",
+          "primaryBggId": 269207
+        }
+      ],
+      "ratedAttributeCount": 0
+    },
+    {
+      "rank": 155,
+      "bggId": 233371,
+      "displayName": null,
+      "originalName": "Clank! In! Space!: A Deck-Building Adventure",
+      "bggWeight": 2.5719,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6321.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 156,
+      "bggId": 300531,
+      "displayName": "石器時代2.0史前部落",
+      "originalName": "Paleo",
+      "bggWeight": 2.6541,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8878.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 157,
+      "bggId": 59959,
+      "displayName": "白教堂血案",
+      "originalName": "Letters from Whitechapel",
+      "bggWeight": 2.6398,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3535.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 158,
+      "bggId": 38453,
+      "displayName": "太空警報",
+      "originalName": "Space Alert",
+      "bggWeight": 2.9699,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5877.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 159,
+      "bggId": 555,
+      "displayName": "佛羅倫斯王子",
+      "originalName": "The Princes of Florence",
+      "bggWeight": 3.2389,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10991.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 160,
+      "bggId": 314040,
+      "displayName": "瘟疫危機-傳承 第零季",
+      "originalName": "Pandemic Legacy: Season 0",
+      "bggWeight": 3.187,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 161,
+      "bggId": 188920,
+      "displayName": "這是我的戰爭",
+      "originalName": "This War of Mine: The Board Game",
+      "bggWeight": 3.3333,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6206.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 162,
+      "bggId": 197376,
+      "displayName": "契約石",
+      "originalName": "Charterstone",
+      "bggWeight": 2.8571,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6469.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_239b0d21452b789fb8e6",
+          "slug": "charterstone-契約石-9fb8e6",
+          "name": "契約石",
+          "primaryBggId": 197376
+        }
+      ],
+      "ratedAttributeCount": 17
+    },
+    {
+      "rank": 163,
+      "bggId": 25292,
+      "displayName": "商人與掠奪者",
+      "originalName": "Merchants & Marauders",
+      "bggWeight": 3.263,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2362.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 164,
+      "bggId": 163068,
+      "displayName": "魔幻傳奇",
+      "originalName": "Trickerion: Legends of Illusion",
+      "bggWeight": 4.265,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5102.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_e93681b393644145994dfcf71ee62b67",
+          "slug": "trickerion-legends-of-illusion",
+          "name": "大魔術師",
+          "primaryBggId": 163068
+        }
+      ],
+      "ratedAttributeCount": 15
+    },
+    {
+      "rank": 165,
+      "bggId": 310873,
+      "displayName": "卡內基",
+      "originalName": "Carnegie",
+      "bggWeight": 3.8176,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10779.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_310873",
+          "slug": "bgg-310873",
+          "name": "卡內基",
+          "primaryBggId": 310873
+        }
+      ],
+      "ratedAttributeCount": 5
+    },
+    {
+      "rank": 166,
+      "bggId": 17133,
+      "displayName": null,
+      "originalName": "Railways of the World",
+      "bggWeight": 3.015,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6689.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 167,
+      "bggId": 483,
+      "displayName": "強權外交",
+      "originalName": "Diplomacy",
+      "bggWeight": 3.3234,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11829.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 168,
+      "bggId": 198928,
+      "displayName": "瘟疫危機: 伊比利",
+      "originalName": "Iberia",
+      "bggWeight": 2.5939,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10216.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 169,
+      "bggId": 337627,
+      "displayName": "虛無浩劫",
+      "originalName": "Voidfall",
+      "bggWeight": 4.622,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 170,
+      "bggId": 251661,
+      "displayName": "守誓者 : 深入密林集資版",
+      "originalName": "Oathsworn: Into the Deepwood",
+      "bggWeight": 3.693,
+      "localEvidence": [
+        {
+          "label": "卡牌屋 BGG 對照",
+          "url": "https://bghut.com/bgg_top.php"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 171,
+      "bggId": 296151,
+      "displayName": "西國子爵",
+      "originalName": "Viscounts of the West Kingdom",
+      "bggWeight": 3.4557,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9530.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 172,
+      "bggId": 146886,
+      "displayName": "拉格蘭哈莊園",
+      "originalName": "La Granja",
+      "bggWeight": 3.5702,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6518.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 173,
+      "bggId": 70149,
+      "displayName": "祈禱與工作",
+      "originalName": "Ora et Labora",
+      "bggWeight": 3.8875,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12930.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 174,
+      "bggId": 203420,
+      "displayName": "大逃脫：廢屋驚魂",
+      "originalName": "EXIT: The Game – The Abandoned Cabin",
+      "bggWeight": 2.5377,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12611.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 175,
+      "bggId": 227935,
+      "displayName": "仙境戰記 標準版",
+      "originalName": "Wonderland's War",
+      "bggWeight": 3.0374,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11417.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 176,
+      "bggId": 304783,
+      "displayName": "哈德良長城",
+      "originalName": "Hadrian's Wall",
+      "bggWeight": 3.1746,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9070.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_a650a4e8029c40c5146e",
+          "slug": "hadrian-s-wall-哈德良長城-c5146e",
+          "name": "哈德良長城",
+          "primaryBggId": 304783
+        }
+      ],
+      "ratedAttributeCount": 6
+    },
+    {
+      "rank": 177,
+      "bggId": 308765,
+      "displayName": "王都布拉格",
+      "originalName": "Praga Caput Regni",
+      "bggWeight": 3.728,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8597.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 178,
+      "bggId": 133848,
+      "displayName": null,
+      "originalName": "Euphoria: Build a Better Dystopia",
+      "bggWeight": 3.1109,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-3997.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 179,
+      "bggId": 7854,
+      "displayName": "圈套棋",
+      "originalName": "YINSH",
+      "bggWeight": 2.6232,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8057.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 180,
+      "bggId": 305096,
+      "displayName": "無盡寒冬：美洲原野",
+      "originalName": "Endless Winter: Paleoamericans",
+      "bggWeight": 3.3269,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11373.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 181,
+      "bggId": 228341,
+      "displayName": "脈衝星2849",
+      "originalName": "Pulsar 2849",
+      "bggWeight": 3.3406,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6474.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 182,
+      "bggId": 291572,
+      "displayName": null,
+      "originalName": "Oath",
+      "bggWeight": 4.1243,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9082.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 183,
+      "bggId": 331106,
+      "displayName": "巫師舊世界",
+      "originalName": "The Witcher: Old World",
+      "bggWeight": 2.8744,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11973.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 184,
+      "bggId": 66589,
+      "displayName": "領航者傳奇",
+      "originalName": "Navegador",
+      "bggWeight": 3.0818,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-2338.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 185,
+      "bggId": 310100,
+      "displayName": "復仇女神號：全面封鎖",
+      "originalName": "Nemesis: Lockdown",
+      "bggWeight": 3.9175,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10316.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 186,
+      "bggId": 234487,
+      "displayName": "南美高原",
+      "originalName": "Altiplano",
+      "bggWeight": 3.2936,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6806.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 187,
+      "bggId": 396790,
+      "displayName": "核子激盪",
+      "originalName": "Nucleum",
+      "bggWeight": 4.1943,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-12676.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_bgg_396790",
+          "slug": "bgg-396790",
+          "name": "核子激盪",
+          "primaryBggId": 396790
+        }
+      ],
+      "ratedAttributeCount": 6
+    },
+    {
+      "rank": 188,
+      "bggId": 318184,
+      "displayName": "帝國：經典",
+      "originalName": "Imperium: Classics",
+      "bggWeight": 3.6231,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10438.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 189,
+      "bggId": 24181,
+      "displayName": "霸業",
+      "originalName": "Imperial",
+      "bggWeight": 3.5576,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10046.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 190,
+      "bggId": 283948,
+      "displayName": "馬可波羅 II — 可汗的託付",
+      "originalName": "Marco Polo II: In the Service of the Khan",
+      "bggWeight": 3.3776,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8257.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_d23674b15c14a9707f4b",
+          "slug": "marco-polo-ii-in-the-service-of-the-khan-馬可波羅2-707f4b",
+          "name": "馬可波羅 II：可汗的託付",
+          "primaryBggId": 283948
+        }
+      ],
+      "ratedAttributeCount": 22
+    },
+    {
+      "rank": 191,
+      "bggId": 379078,
+      "displayName": "殞落天劫",
+      "originalName": "Expeditions",
+      "bggWeight": 3.0588,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10964.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 192,
+      "bggId": 284742,
+      "displayName": "蜂蜜嗡嗡",
+      "originalName": "Honey Buzz",
+      "bggWeight": 2.7261,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-11865.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 193,
+      "bggId": 175640,
+      "displayName": "葡萄酒莊園豪華版",
+      "originalName": "Vinhos: Deluxe Edition",
+      "bggWeight": 3.993,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6626.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 194,
+      "bggId": 224783,
+      "displayName": null,
+      "originalName": "Vindication",
+      "bggWeight": 3.1045,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8487.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 195,
+      "bggId": 182134,
+      "displayName": "新演化論：氣候",
+      "originalName": "Evolution: Climate",
+      "bggWeight": 2.7368,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-5313.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 196,
+      "bggId": 323612,
+      "displayName": "森靈之道",
+      "originalName": "Bitoku",
+      "bggWeight": 3.7596,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-9654.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 197,
+      "bggId": 304420,
+      "displayName": "生命之火",
+      "originalName": "Bonfire",
+      "bggWeight": 3.6354,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8601.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 198,
+      "bggId": 218417,
+      "displayName": "末日決戰：永恆之戰",
+      "originalName": "Aeon's End: War Eternal",
+      "bggWeight": 2.9253,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-6464.html"
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "rank": 199,
+      "bggId": 232414,
+      "displayName": null,
+      "originalName": "Oceans",
+      "bggWeight": 2.8468,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-10738.html"
+        }
+      ],
+      "status": "review",
+      "flags": [
+        "traditional_title_unverified"
+      ]
+    },
+    {
+      "rank": 200,
+      "bggId": 246684,
+      "displayName": "手機帝國",
+      "originalName": "Smartphone Inc.",
+      "bggWeight": 2.8158,
+      "localEvidence": [
+        {
+          "label": "卡牌屋現貨快照",
+          "url": "https://bghut.com/goods-8411.html"
+        }
+      ],
+      "status": "existing",
+      "existing": [
+        {
+          "id": "game_ff46bcb10a652f1a1eae",
+          "slug": "smartphone-inc-手機帝國-1a1eae",
+          "name": "手機帝國",
+          "primaryBggId": 246684
+        }
+      ],
+      "ratedAttributeCount": 21
+    }
+  ]
+}
