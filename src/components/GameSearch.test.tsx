@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useState } from 'react';
-import { GameSearch } from './GameSearch';
+import { formatGameSearchDisplay, GameSearch } from './GameSearch';
 
 const mocks = vi.hoisted(() => ({ searchGames: vi.fn() }));
 
@@ -100,5 +100,12 @@ describe('GameSearch mobile keyboard behavior', () => {
     expect(mocks.searchGames).toHaveBeenCalledTimes(2);
     expect(input).toHaveValue('範例');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('formatGameSearchDisplay', () => {
+  test('labels a base game reached through an expansion name', () => {
+    expect(formatGameSearchDisplay({ ...game, matchedVariantName: '範例遊戲：擴充' }, '擴充'))
+      .toEqual({ primary: '範例遊戲', secondary: '擴充：範例遊戲：擴充' });
   });
 });

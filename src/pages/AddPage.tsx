@@ -107,9 +107,14 @@ export const AddPage = () => {
   const maxRuleInputs = canEdit ? 20 : remainingRules;
 
   const selectGame = (selected: GameSummary) => {
-    setGame(selected);
-    setGameQuery(selected.displayName);
-    setEnglishName(selected.englishName ?? '');
+    const { matchedVariantName, ...baseGame } = selected;
+    setGame(baseGame);
+    setGameQuery(baseGame.displayName);
+    setEnglishName(baseGame.englishName ?? '');
+    // Searching an expansion selects its base game; keep the expansion as the rules' edition.
+    if (matchedVariantName) {
+      setRules((current) => current.map((rule) => rule.editionNotes?.length ? rule : { ...rule, editionNotes: [matchedVariantName] }));
+    }
   };
 
   useEffect(() => {

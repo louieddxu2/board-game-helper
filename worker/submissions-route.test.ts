@@ -7,7 +7,7 @@ import { submissionsRoutes } from './routes/submissions';
 
 type Recorded = DatabaseStatement & { sql: string; bindings: unknown[] };
 
-const fakeDatabase = (options: { pendingRules?: number; pendingGames?: number; existingGame?: boolean } = {}) => {
+const fakeDatabase = (options: { pendingRules?: number; pendingGames?: number; existingGame?: boolean; expansion?: boolean } = {}) => {
   const recorded: Recorded[] = [];
   const statement = (sql: string): Recorded => {
     const item: Recorded = {
@@ -18,7 +18,13 @@ const fakeDatabase = (options: { pendingRules?: number; pendingGames?: number; e
         let result: unknown = null;
         if (sql.includes('COUNT(*) count FROM rules')) result = { count: options.pendingRules ?? 0 };
         else if (sql.includes('COUNT(*) count FROM games')) result = { count: options.pendingGames ?? 0 };
-        else if (sql.includes('SELECT id, slug FROM games')) {
+        else if (sql.includes('AS base_id')) {
+          result = options.expansion
+            ? { id: 'expansion-1', slug: 'expansion', display_name: 'Known Game: Expansion', entity_kind: 'expansion', base_id: 'base-1' }
+            : { id: 'game-1', slug: 'known-game', display_name: 'Known Game', entity_kind: 'base', base_id: null };
+        } else if (sql.includes('SELECT id, slug FROM games WHERE id = ?') && options.expansion) {
+          result = { id: 'base-1', slug: 'base-game' };
+        } else if (sql.includes('SELECT id, slug FROM games')) {
           result = options.existingGame === false ? null : { id: 'game-1', slug: 'known-game' };
         }
         return result as T | null;
@@ -86,6 +92,25 @@ describe('contribution submission route', () => {
     expect(batched.findIndex((item) => item.sql.includes('INSERT INTO games')))
       .toBeLessThan(batched.findIndex((item) => item.sql.includes('INSERT INTO submissions')));
     expect(batched.some((item) => item.sql.includes('INSERT INTO rules'))).toBe(true);
+  });
+
+  test('files rules aimed at an expansion under its base game with the expansion as their edition', async () => {
+    const { db, getBatchedStatements } = fakeDatabase({ expansion: true });
+    const app = appFor({ id: 'ordinary', roles: [] }, db);
+    const response = await app.request('https://rules.example/api/submissions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        gameId: 'expansion-1', idempotencyKey: 'request-1234',
+        rules: [{ statement: 'First' }],
+      }),
+    }, env);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ gameId: 'base-1', gameSlug: 'base-game' });
+    const rule = (getBatchedStatements() as Recorded[]).find((item) => item.sql.includes('INSERT INTO rules'));
+    expect(rule?.bindings[2]).toBe('base-1');
+    expect(rule?.bindings[9]).toBe(JSON.stringify(['Known Game: Expansion']));
   });
 
   test('rejects a batch larger than the account remaining rule quota before writing', async () => {

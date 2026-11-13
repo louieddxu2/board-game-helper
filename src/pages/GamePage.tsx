@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { RuleFilters } from '../components/RuleFilters';
@@ -79,6 +79,13 @@ export const GamePage = () => {
   };
 
   useGamePageMeta(game, gameError === 'not-found');
+  const navigate = useNavigate();
+  useEffect(() => {
+    // An expansion's address shows its base game; keep the base game's own address.
+    if (game && identifier !== game.id && identifier !== game.slug) {
+      navigate(`/games/${encodeURIComponent(game.slug)}${location.hash}`, { replace: true, state: location.state });
+    }
+  }, [game, identifier, location.hash, location.state, navigate]);
   useEffect(() => {
     setExpandedRuleId(null);
     setEditing(undefined);

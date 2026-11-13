@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type { Database, DatabaseStatement } from './database';
 import { ensureRuleGameVariantStatements } from './gameEntities';
 
-const fakeDatabase = (existing: Array<{ game_id: string; display_name: string; entity_kind: 'expansion' | 'version' | 'unknown' }> = []) => {
+const fakeDatabase = (existing: Array<{ game_id: string; name: string }> = []) => {
   const statements: Array<DatabaseStatement & { sql: string; bindings: unknown[] }> = [];
   const statement = (sql: string) => {
     const item = {
@@ -48,7 +48,7 @@ describe('game entity promotion', () => {
 
   test('reuses an existing entity without creating another game row', async () => {
     const { db, statements } = fakeDatabase([
-      { game_id: 'variant-1', display_name: '挪威人擴', entity_kind: 'expansion' },
+      { game_id: 'variant-1', name: '挪威人擴' },
     ]);
 
     const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['挪威人擴充'], 100);
@@ -61,7 +61,7 @@ describe('game entity promotion', () => {
 
   test('reuses an existing unclassified entity', async () => {
     const { db, statements } = fakeDatabase([
-      { game_id: 'variant-unknown', display_name: 'Promo', entity_kind: 'unknown' },
+      { game_id: 'variant-unknown', name: 'Promo' },
     ]);
 
     const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['Promo'], 100);
@@ -70,5 +70,17 @@ describe('game entity promotion', () => {
     expect(result).toHaveLength(1);
     expect((result[0] as unknown as { sql: string }).sql).toContain('rule_game_variants');
     expect(details.some((item) => item.sql.includes('INSERT OR IGNORE INTO games'))).toBe(false);
+  });
+
+  test('links an imported expansion by its own name or alias even without an expansion marker', async () => {
+    const { db, statements } = fakeDatabase([
+      { game_id: 'game_bgg_338013', name: '馬拉開波：起義' },
+      { game_id: 'game_bgg_338013', name: 'Maracaibo: The Uprising' },
+    ]);
+
+    const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['馬拉開波：起義', 'Maracaibo: The Uprising'], 100);
+
+    expect(statements.some((item) => item.sql.includes('INSERT OR IGNORE INTO games'))).toBe(false);
+    expect(result.map((item) => (item as unknown as { bindings: unknown[] }).bindings[1])).toEqual(['game_bgg_338013']);
   });
 });

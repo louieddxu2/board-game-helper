@@ -1,6 +1,6 @@
 import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
-import { filterGameCatalog } from './gameCatalog';
+import { filterGameCatalog, isStandaloneGame } from './gameCatalog';
 import { homeContentKey } from './homeCache';
 import { withReadTimeout } from './readTimeout';
 
@@ -130,7 +130,7 @@ const toCatalog = (catalog: GameCatalogPayload, includePrivate: boolean) => ({
       ...game,
       ruleCount: includePrivate ? game.totalRuleCount ?? game.ruleCount : game.publishedRuleCount ?? game.ruleCount,
     }))
-    .filter((game) => (game.publishedRuleCount ?? game.ruleCount) > 0),
+    .filter((game) => isStandaloneGame(game) && (game.publishedRuleCount ?? game.ruleCount) > 0),
 });
 
 const catalogGames = async (includePrivate: boolean, onUpdated?: (data: { games: GameSummary[] }) => void) =>

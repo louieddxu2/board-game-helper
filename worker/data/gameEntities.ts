@@ -5,9 +5,38 @@ import type { Database, DatabaseStatement } from './database';
 
 interface ExistingVariantRow {
   game_id: string;
-  display_name: string;
-  entity_kind: Exclude<GameEntityKind, 'base'>;
+  name: string;
 }
+
+export interface BaseGameTarget {
+  id: string;
+  slug: string;
+  /** The expansion or version the caller pointed at, kept as the rule's edition label. */
+  variantLabel?: string;
+}
+
+/**
+ * On the rules site a rule always belongs to a base game. Resolve an expansion or version
+ * entity to the public base game it belongs to; base games resolve to themselves.
+ */
+export const resolveRuleBaseGame = async (db: Database, gameId: string): Promise<BaseGameTarget | null> => {
+  const row = await db.statement(`
+    SELECT game.id, game.slug, game.display_name, game.entity_kind,
+      (SELECT base.id FROM game_entity_relations relation
+        JOIN games base ON base.id = relation.target_game_id
+        WHERE relation.source_game_id = game.id
+          AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+          AND base.entity_kind = 'base' AND base.merged_into_game_id IS NULL AND base.visibility = 'public'
+        ORDER BY relation.id LIMIT 1) AS base_id
+    FROM games game
+    WHERE game.id = ? AND game.merged_into_game_id IS NULL
+  `).bind(gameId).first<{ id: string; slug: string; display_name: string; entity_kind: GameEntityKind; base_id: string | null }>();
+  if (!row) return null;
+  if (row.entity_kind === 'base') return { id: row.id, slug: row.slug };
+  if (!row.base_id) return null;
+  const base = await db.statement('SELECT id, slug FROM games WHERE id = ?').bind(row.base_id).first<{ id: string; slug: string }>();
+  return base ? { id: base.id, slug: base.slug, variantLabel: row.display_name } : null;
+};
 
 const stableVariantSuffix = (parentGameId: string, kind: GameEntityKind, normalizedName: string): string => {
   const input = `${parentGameId}:${kind}:${normalizedName}`;
@@ -40,28 +69,48 @@ export const ensureRuleGameVariantStatements = async (
     labels
       .map((label) => ({ label: label.trim(), normalizedName: normalizeGameEntityLabel(label), kind: classifyGameEntityLabel(label) }))
       .filter(({ normalizedName }) => Boolean(normalizedName))
-      .map((value) => [`${value.kind}:${value.normalizedName}`, value] as const),
+      .map((value) => [value.normalizedName, value] as const),
   ).values());
   if (!normalizedLabels.length) return [];
 
+  // Match a label to any entity already related to this base game by its name or an alias,
+  // whatever its kind: an imported BGG expansion's name rarely carries an "expansion" marker.
+  // Public catalog entities come first so a label never splits off from the imported expansion.
   const existing = await db.statement(`
-    SELECT relation.source_game_id AS game_id, game.display_name, game.entity_kind
-    FROM game_entity_relations relation
-    JOIN games game ON game.id = relation.source_game_id
-    WHERE relation.target_game_id = ?
-      AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
-  `).bind(parentGameId).all<ExistingVariantRow>();
-  const existingByKey = new Map(
-    (existing.results ?? []).map((row) => [`${row.entity_kind}:${normalizeGameEntityLabel(row.display_name)}`, row.game_id]),
-  );
+    SELECT related.game_id, related.name
+    FROM (
+      SELECT game.id AS game_id, game.display_name AS name, game.visibility, game.entity_kind
+      FROM game_entity_relations relation
+      JOIN games game ON game.id = relation.source_game_id
+      WHERE relation.target_game_id = ?
+        AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+        AND game.merged_into_game_id IS NULL
+      UNION ALL
+      SELECT game.id, alias.alias, game.visibility, game.entity_kind
+      FROM game_entity_relations relation
+      JOIN games game ON game.id = relation.source_game_id
+      JOIN game_aliases alias ON alias.game_id = game.id
+      WHERE relation.target_game_id = ?
+        AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+        AND game.merged_into_game_id IS NULL
+    ) related
+    ORDER BY CASE related.visibility WHEN 'public' THEN 0 ELSE 1 END,
+      CASE related.entity_kind WHEN 'expansion' THEN 0 WHEN 'version' THEN 1 ELSE 2 END,
+      related.game_id
+  `).bind(parentGameId, parentGameId).all<ExistingVariantRow>();
+  const existingByName = new Map<string, string>();
+  for (const row of existing.results ?? []) {
+    const key = normalizeGameEntityLabel(row.name);
+    if (key && !existingByName.has(key)) existingByName.set(key, row.game_id);
+  }
   const statements: DatabaseStatement[] = [];
   const linkedGameIds = new Set<string>();
 
   for (const item of normalizedLabels) {
-    const key = `${item.kind}:${item.normalizedName}`;
     const suffix = stableVariantSuffix(parentGameId, item.kind, item.normalizedName);
-    const gameId = existingByKey.get(key) ?? `game_variant_${suffix}`;
-    if (!existingByKey.has(key)) {
+    const existingGameId = existingByName.get(item.normalizedName);
+    const gameId = existingGameId ?? `game_variant_${suffix}`;
+    if (!existingGameId) {
       statements.push(db.statement(`
         INSERT OR IGNORE INTO games (
           id, slug, display_name, english_name, normalized_name, merged_into_game_id,

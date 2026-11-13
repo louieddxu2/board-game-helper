@@ -24,6 +24,10 @@ export function formatGameSearchDisplay(
   query: string
 ): { primary: string; secondary?: string } {
   const q = query.trim().toLowerCase();
+  if (game.matchedVariantName) {
+    // Reached through an expansion: the selectable unit is still the base game.
+    return { primary: game.displayName, secondary: `擴充：${game.matchedVariantName}` };
+  }
   if (!q) {
     return {
       primary: game.displayName,
@@ -149,7 +153,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     document.addEventListener('pointerdown', closeOutside);
     return () => document.removeEventListener('pointerdown', closeOutside);
   }, [inlineResults]);
-  const hasExactMatch = visibleGames.some((game) => game.displayName.toLowerCase() === rawQuery.toLowerCase() || game.englishName?.toLowerCase() === rawQuery.toLowerCase() || game.aliases?.some((alias) => alias.toLowerCase() === rawQuery.toLowerCase()));
+  const hasExactMatch = visibleGames.some((game) => game.displayName.toLowerCase() === rawQuery.toLowerCase() || game.englishName?.toLowerCase() === rawQuery.toLowerCase() || game.aliases?.some((alias) => alias.toLowerCase() === rawQuery.toLowerCase()) || game.matchedVariantName?.toLowerCase() === rawQuery.toLowerCase());
   const showCreateOption = Boolean(allowCreate && (canEdit || onCreate) && !visibleLoading && !visibleError && rawQuery && meetsMinimum && isCurrentQuery && (onCreate || !hasExactMatch));
   const optionCount = visibleGames.length + (showCreateOption ? 1 : 0);
   const canShowResults = Boolean(!selectedId && rawQuery);

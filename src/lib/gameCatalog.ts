@@ -9,6 +9,12 @@ export interface GameCatalogFilterOptions {
   includeGamesWithoutPublishedRules?: boolean;
 }
 
+/** On the rules site only a base game is a game unit; expansions and versions belong to one. */
+export const isStandaloneGame = (game: Pick<GameSummary, 'entityKind'>): boolean =>
+  !game.entityKind || game.entityKind === 'base';
+
+const gameNames = (game: GameSummary) => [game.displayName, game.englishName, ...(game.aliases ?? [])];
+
 export const filterGameCatalog = (
   games: GameSummary[],
   rawQuery: string,
@@ -17,19 +23,28 @@ export const filterGameCatalog = (
 ): GameSummary[] => {
   const query = normalizeGameSearchText(rawQuery);
   if (!query) return [];
-  return games
-    .filter((game) => options.includeGamesWithoutPublishedRules || (game.publishedRuleCount ?? game.ruleCount) > 0)
-    .filter((game) => [game.displayName, game.englishName, ...(game.aliases ?? [])]
-      .some((name) => name && normalizeGameSearchText(name).includes(query)))
-    .sort((left, right) => {
-      const leftExact = [left.displayName, left.englishName, ...(left.aliases ?? [])]
-        .some((name) => name && normalizeGameSearchText(name) === query);
-      const rightExact = [right.displayName, right.englishName, ...(right.aliases ?? [])]
-        .some((name) => name && normalizeGameSearchText(name) === query);
-      return Number(rightExact) - Number(leftExact)
-        || left.displayName.localeCompare(right.displayName, 'zh-Hant');
-    })
-    .slice(0, limit);
+  const byId = new Map(games.map((game) => [game.id, game]));
+  const matches = new Map<string, { game: GameSummary; exact: boolean; direct: boolean; variantName?: string }>();
+  for (const game of games) {
+    const names = gameNames(game).filter((name): name is string => Boolean(name)).map(normalizeGameSearchText);
+    if (!names.some((name) => name.includes(query))) continue;
+    // An expansion name finds the base game it belongs to, never a separate game.
+    const direct = isStandaloneGame(game);
+    const target = direct ? game : byId.get(game.parentGameId ?? '');
+    if (!target || !isStandaloneGame(target)) continue;
+    if (!options.includeGamesWithoutPublishedRules && (target.publishedRuleCount ?? target.ruleCount) <= 0) continue;
+    const match = matches.get(target.id) ?? { game: target, exact: false, direct: false };
+    match.exact ||= names.includes(query);
+    match.direct ||= direct;
+    if (!direct) match.variantName ??= game.displayName;
+    matches.set(target.id, match);
+  }
+  return Array.from(matches.values())
+    .sort((left, right) => Number(right.exact) - Number(left.exact)
+      || left.game.displayName.localeCompare(right.game.displayName, 'zh-Hant'))
+    .slice(0, limit)
+    // A direct hit on the base game needs no expansion hint.
+    .map(({ game, direct, variantName }) => direct || !variantName ? game : { ...game, matchedVariantName: variantName });
 };
 
 export const upsertGameCatalogEntry = (games: GameSummary[], game: GameSummary): GameSummary[] => {

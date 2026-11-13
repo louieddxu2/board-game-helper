@@ -29,6 +29,22 @@ describe('local versioned game catalog', () => {
     )).toEqual([emptyGame]);
   });
 
+  test('finds the base game, never a separate unit, when an expansion name matches', () => {
+    const base = { id: 'maracaibo', slug: 'maracaibo', displayName: '馬拉開波', englishName: 'Maracaibo', ruleCount: 2, updatedAt: 4 };
+    const expansion = {
+      id: 'uprising', slug: 'bgg-338013', displayName: '馬拉開波：起義', englishName: 'Maracaibo: The Uprising',
+      ruleCount: 0, updatedAt: 5, entityKind: 'expansion' as const, parentGameId: 'maracaibo', parentGameName: '馬拉開波',
+    };
+    const orphan = { id: 'orphan', slug: 'orphan', displayName: '起義擴充包', ruleCount: 0, updatedAt: 6, entityKind: 'expansion' as const };
+    const catalog = [...games, base, expansion, orphan];
+
+    expect(filterGameCatalog(catalog, '起義')).toEqual([{ ...base, matchedVariantName: '馬拉開波：起義' }]);
+    expect(filterGameCatalog(catalog, 'The Uprising', 20, { includeGamesWithoutPublishedRules: true }))
+      .toEqual([{ ...base, matchedVariantName: '馬拉開波：起義' }]);
+    // A direct hit on the base game stays a plain result and appears once.
+    expect(filterGameCatalog(catalog, '馬拉開波')).toEqual([base]);
+  });
+
   test('uses Taipei calendar days instead of a rolling 24-hour age', () => {
     expect(taipeiDateKey(Date.UTC(2026, 6, 28, 15, 59))).toBe('2026-07-28');
     expect(taipeiDateKey(Date.UTC(2026, 6, 28, 16, 0))).toBe('2026-07-29');

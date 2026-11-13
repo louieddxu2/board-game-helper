@@ -14,6 +14,7 @@ import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 import { canEditContributionGame } from '../contributions';
 import { mergeGames } from '../data/gameMerge';
+import { resolveRuleBaseGame } from '../data/gameEntities';
 import {
   anonymousGameViewKey,
   dailyViewToken,
@@ -149,7 +150,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
   const identifier = c.req.param('identifier');
   const includePrivate = c.req.query('includePrivate') === '1'
     && Boolean(c.get('user')?.roles.some((role) => role === 'editor' || role === 'admin'));
-  const game = await getDatabase(c).statement(`
+  const findGame = (key: string) => getDatabase(c).statement(`
     SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
       g.rename_owner_id, g.rename_locked, g.visibility, g.review_status,
       CASE WHEN reviewer.show_nickname = 1 THEN g.reviewed_by_nickname END reviewed_by_nickname,
@@ -161,7 +162,13 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
       AND (g.visibility = 'public' OR ? = 1)
     LIMIT 1
-  `).bind(identifier, identifier, includePrivate ? 1 : 0).first<GameRow>();
+  `).bind(key, key, includePrivate ? 1 : 0).first<GameRow>();
+  let game = await findGame(identifier);
+  // An expansion or version is not a game page of its own; show the base game it belongs to.
+  if (game && game.entity_kind && game.entity_kind !== 'base') {
+    const base = await resolveRuleBaseGame(getDatabase(c), game.id);
+    game = base ? await findGame(base.id) : null;
+  }
   if (!game) return c.json({ error: 'game_not_found' }, 404);
 
   setNoCache(c);

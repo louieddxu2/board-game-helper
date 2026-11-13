@@ -10,7 +10,7 @@ import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { contributionErrorCode, initialReviewStatus, isTrustedEditor, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
-import { ensureRuleGameVariantStatements } from '../data/gameEntities';
+import { ensureRuleGameVariantStatements, resolveRuleBaseGame } from '../data/gameEntities';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -74,15 +74,24 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   let gameId = parsed.data.gameId;
   let gameSlug: string | undefined;
   let gameCreated = false;
+  // Set when the target was an expansion or version: its rules go to the base game instead.
+  let variantLabel: string | undefined;
   const timestamp = now();
   const statements: DatabaseStatement[] = [];
+  const useBaseGame = async (id: string) => {
+    const target = await resolveRuleBaseGame(getDatabase(c), id);
+    if (!target) return false;
+    gameId = target.id;
+    gameSlug = target.slug;
+    variantLabel = target.variantLabel;
+    return true;
+  };
   if (gameId) {
     const game = await getDatabase(c).statement(`
       SELECT id, slug FROM games
       WHERE id = ? AND merged_into_game_id IS NULL AND visibility = 'public'
     `).bind(gameId).first<{ id: string; slug: string }>();
-    if (!game) return c.json({ error: 'game_not_found' }, 404);
-    gameSlug = game.slug;
+    if (!game || !await useBaseGame(game.id)) return c.json({ error: 'game_not_found' }, 404);
   } else {
     const requested = parsed.data.newGame!;
     const normalizedName = normalizeText(requested.displayName);
@@ -94,8 +103,7 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
       LIMIT 1
     `).bind(normalizedName, normalizedName).first<{ id: string; slug: string }>();
     if (existingGame) {
-      gameId = existingGame.id;
-      gameSlug = existingGame.slug;
+      if (!await useBaseGame(existingGame.id)) return c.json({ error: 'game_not_found' }, 404);
     } else {
       if (quota && quota.remainingGames < 1) {
         return c.json({ error: 'PENDING_GAME_LIMIT_REACHED', quota }, 409);
@@ -144,7 +152,10 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   }
   for (const input of parsed.data.rules) {
     const ruleId = createId('rule');
-    const editionNotes = cleanEditionNotes(input.editionNotes ?? (input.editionNote ? [input.editionNote] : []));
+    const editionNotes = cleanEditionNotes([
+      ...(input.editionNotes ?? (input.editionNote ? [input.editionNote] : [])),
+      ...(variantLabel ? [variantLabel] : []),
+    ]);
     ruleIds.push(ruleId);
     statements.push(getDatabase(c).statement(`
       INSERT INTO rules (

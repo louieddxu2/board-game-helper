@@ -23,6 +23,8 @@ export interface GameSummary {
   parentGameId?: string;
   parentGameName?: string;
   parentGameSlug?: string;
+  /** Search-only: the expansion or version name that led to this base game. */
+  matchedVariantName?: string;
 }
 
 export interface GameVariantSummary {
