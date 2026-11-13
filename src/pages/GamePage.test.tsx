@@ -52,7 +52,6 @@ vi.mock('../lib/api', () => ({
   },
 }));
 vi.mock('../lib/localDb', () => ({ localDb: { invalidateGame: mocks.invalidateGame } }));
-vi.mock('../components/GameSearch', () => ({ clearSearchCache: vi.fn() }));
 vi.mock('../lib/tagHydration', () => ({ hydrateGameTags: mocks.hydrateGameTags, hydrateRuleTags: mocks.hydrateRuleTags }));
 vi.mock('../lib/rulePermissions', () => ({ canUserEditRule: vi.fn(() => false), canUserReviewRule: vi.fn(() => false) }));
 vi.mock('../components/FavoriteLimitDialog', () => ({ FavoriteLimitDialog: () => null }));

@@ -2,10 +2,9 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
-import type { GameSummary, RuleSearchResult } from '../shared/types';
+import type { GameSummary } from '../shared/types';
 import { useSession } from '../context/SessionContext';
 import { useNavigate } from 'react-router-dom';
-import zhTWCopy from '../content/zh-TW.json';
 interface Props {
   value: string;
   onChange(value: string): void;
@@ -13,20 +12,13 @@ interface Props {
   selectedId?: string;
   allowCreate?: boolean;
   onCreate?(name: string): void;
-  includeRules?: boolean;
   includeGamesWithoutPublishedRules?: boolean;
-  onRuleSelect?(rule: RuleSearchResult): void;
   placeholder?: string;
   /** Keeps results in flow for a modal; the default keeps the shared floating portal. */
   inlineResults?: boolean;
   emptyResults?: ReactNode;
   clearable?: boolean;
 }
-type SearchResponse = {
-  games: GameSummary[];
-  rules: RuleSearchResult[];
-};
-export const clearSearchCache = () => { void api.invalidateSearchCache(); };
 export function formatGameSearchDisplay(
   game: GameSummary,
   query: string
@@ -78,7 +70,7 @@ export function formatGameSearchDisplay(
   };
 }
 
-export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeRules = false, includeGamesWithoutPublishedRules = false, onRuleSelect, placeholder = '搜尋遊戲名稱...', inlineResults = false, emptyResults, clearable = false }: Props) => {
+export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeGamesWithoutPublishedRules = false, placeholder = '搜尋遊戲名稱...', inlineResults = false, emptyResults, clearable = false }: Props) => {
   const inputId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -86,7 +78,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const rawQuery = value.trim();
   const query = useDebouncedValue(rawQuery);
   const [games, setGames] = useState<GameSummary[]>([]);
-  const [rules, setRules] = useState<RuleSearchResult[]>([]);
   const [resultQuery, setResultQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
@@ -106,14 +97,12 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const waitingForDebounce = Boolean(rawQuery && !isCurrentQuery);
   const hasCurrentResults = Boolean(rawQuery && isCurrentQuery && resultQuery === rawQuery);
   const visibleGames = hasCurrentResults ? games : [];
-  const visibleRules = hasCurrentResults ? rules : [];
   const visibleError = hasCurrentResults && searchError;
   const visibleLoading = Boolean(rawQuery && meetsMinimum
     && (waitingForDebounce || loading || (!hasCurrentResults && !visibleError)));
   useEffect(() => {
     if (!rawQuery) {
       setGames([]);
-      setRules([]);
       setLoading(false);
       setSearchError(false);
       setActiveIndex(-1);
@@ -123,7 +112,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     const minimum = /^[a-zA-Z0-9\s\-_'.]+$/.test(query) ? query.length >= 2 : query.length >= 1;
     if (!query || selectedId || !minimum) {
       setGames([]);
-      setRules([]);
       setLoading(false);
       setSearchError(false);
       return;
@@ -131,20 +119,17 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
     let active = true;
     setLoading(true);
     setSearchError(false);
-    const apply = (response: SearchResponse) => {
+    const apply = (response: { games: GameSummary[] }) => {
       if (active) {
         setGames(response.games);
-        setRules(response.rules);
         setResultQuery(query);
         setActiveIndex(-1);
         setSearchError(false);
       }
     };
-    const request = includeRules ? api.search(query, apply) : api.searchGames(query, (result) => apply({ ...result, rules: [] }), { includeGamesWithoutPublishedRules }).then((result) => ({ ...result, rules: [] }));
-    request.then(apply).catch(() => {
+    api.searchGames(query, apply, { includeGamesWithoutPublishedRules }).then(apply).catch(() => {
       if (active) {
         setGames([]);
-        setRules([]);
         setResultQuery(query);
         setSearchError(true);
       }
@@ -153,7 +138,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         setLoading(false);
     });
     return () => { active = false; };
-  }, [includeGamesWithoutPublishedRules, includeRules, query, selectedId, searchAttempt]);
+  }, [includeGamesWithoutPublishedRules, query, selectedId, searchAttempt]);
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
       if (!inlineResults && !containerRef.current?.contains(event.target as Node) && !resultsRef.current?.contains(event.target as Node)) {
@@ -166,7 +151,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   }, [inlineResults]);
   const hasExactMatch = visibleGames.some((game) => game.displayName.toLowerCase() === rawQuery.toLowerCase() || game.englishName?.toLowerCase() === rawQuery.toLowerCase() || game.aliases?.some((alias) => alias.toLowerCase() === rawQuery.toLowerCase()));
   const showCreateOption = Boolean(allowCreate && (canEdit || onCreate) && !visibleLoading && !visibleError && rawQuery && meetsMinimum && isCurrentQuery && (onCreate || !hasExactMatch));
-  const optionCount = visibleGames.length + visibleRules.length + (showCreateOption ? 1 : 0);
+  const optionCount = visibleGames.length + (showCreateOption ? 1 : 0);
   const canShowResults = Boolean(!selectedId && rawQuery);
   const shouldShowResults = open && canShowResults;
   const updateMenuPosition = useCallback(() => {
@@ -211,9 +196,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
   const chooseActive = () => {
     if (activeIndex < 0) return;
     if (activeIndex < visibleGames.length) return onSelect(visibleGames[activeIndex]);
-    if (activeIndex < visibleGames.length + visibleRules.length) {
-      return onRuleSelect?.(visibleRules[activeIndex - visibleGames.length]);
-    }
     handleCreate();
   };
   const results = <div ref={resultsRef} className={`search-results${inlineResults ? ' search-results-inline' : ' search-results-portal'}`} style={inlineResults ? undefined : menuPosition} id={`${inputId}-results`} role={shouldShowResults ? 'listbox' : undefined}>
@@ -225,12 +207,9 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
         if (loading || !visibleError) return;
         setSearchError(false); setLoading(true); setSearchAttempt(value => value + 1);
       }}>重試搜尋</button></div>}
-      {rawQuery && !visibleLoading && !visibleError && !(isEnglishOnly && rawQuery.length === 1) && !visibleGames.length && !visibleRules.length && <p className="empty-search-message">找不到相符的遊戲</p>}
-      {visibleGames.length > 0 && includeRules && <p className="result-group-label">遊戲</p>}
+      {rawQuery && !visibleLoading && !visibleError && !(isEnglishOnly && rawQuery.length === 1) && !visibleGames.length && <p className="empty-search-message">找不到相符的遊戲</p>}
       {visibleGames.map((game, index) => { const display = formatGameSearchDisplay(game, rawQuery); return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option" tabIndex={-1}><strong>{display.primary}</strong>{display.secondary && <span>({display.secondary})</span>}{includeGamesWithoutPublishedRules && (game.publishedRuleCount ?? game.ruleCount) === 0 && <small>尚無規則</small>}</button>; })}
-      {visibleRules.length > 0 && <p className="result-group-label">{zhTWCopy.terms.correctRule}</p>}
-      {visibleRules.map((rule, ruleIndex) => { const index = visibleGames.length + ruleIndex; return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} className="rule-result" key={rule.ruleId} onClick={() => onRuleSelect?.(rule)} role="option" tabIndex={-1}><strong>{rule.gameName}</strong><span>{rule.statement}</span><small>查看規則 →</small></button>; })}
-      {showCreateOption && <button type="button" id={`${inputId}-option-${visibleGames.length + visibleRules.length}`} aria-selected={activeIndex === visibleGames.length + visibleRules.length} role="option" tabIndex={-1} className="create-result" onClick={handleCreate}>＋ 新增「{rawQuery}」的第一條玩錯規則</button>}
+      {showCreateOption && <button type="button" id={`${inputId}-option-${visibleGames.length}`} aria-selected={activeIndex === visibleGames.length} role="option" tabIndex={-1} className="create-result" onClick={handleCreate}>＋ 新增「{rawQuery}」的第一條玩錯規則</button>}
     </>}
   </div>;
   return <div className={`game-search${inlineResults ? ' game-search-inline' : ''}`} ref={containerRef}>
@@ -253,8 +232,6 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
           chooseActive();
         else if (visibleGames[0])
           onSelect(visibleGames[0]);
-        else if (visibleRules[0])
-          onRuleSelect?.(visibleRules[0]);
         else if (showCreateOption)
           handleCreate();
       }

@@ -75,13 +75,23 @@ export const RuleCard = ({
     return `${window.location.origin}${targetPath}`;
   };
 
-  const copyRuleLink = (e: React.MouseEvent) => {
+  // A phone opens its own share sheet; elsewhere, or when the sheet fails, the link is copied.
+  const shareRule = (e: React.MouseEvent) => {
     e.stopPropagation();
-    void navigator.clipboard.writeText(getRuleUrl()).then(() => {
+    const url = getRuleUrl();
+    const copyLink = () => navigator.clipboard.writeText(url).then(() => {
       showToast('已複製這條規則的直接連結 🔗', 'info');
     }).catch(() => {
       showToast('無法複製，請確認瀏覽器的剪貼簿權限', 'error');
     });
+    if (typeof navigator.share === 'function' && window.matchMedia?.('(pointer: coarse)').matches) {
+      void navigator.share({ title: effectiveGameName ?? document.title, text: rule.statement, url }).catch((error: unknown) => {
+        // Closing the sheet is a choice, not a failure.
+        if ((error as { name?: string } | null)?.name !== 'AbortError') void copyLink();
+      });
+      return;
+    }
+    void copyLink();
   };
 
   const copyContent = (event: React.MouseEvent) => {
@@ -238,8 +248,8 @@ export const RuleCard = ({
           <button
             type="button"
             className="icon-action-button"
-            onClick={copyRuleLink}
-            title="複製這條規則的分享連結"
+            onClick={shareRule}
+            title="分享這條規則"
             aria-label="分享此規則"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

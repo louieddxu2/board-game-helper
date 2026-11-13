@@ -4,15 +4,16 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { Layout } from './Layout';
 
+const session = vi.hoisted(() => ({ user: { id: 'user-1' } as { id: string } | null }));
 vi.mock('../context/SessionContext', () => ({
-  useSession: () => ({ user: { id: 'user-1' }, canEdit: true, isAdmin: false, realIsAdmin: false, mockRole: undefined, logout: vi.fn() }),
+  useSession: () => ({ user: session.user, canEdit: Boolean(session.user), isAdmin: false, realIsAdmin: false, mockRole: undefined, logout: vi.fn() }),
 }));
 vi.mock('../lib/localDb', () => ({ localDb: { getPending: () => Promise.resolve([]) } }));
 vi.mock('./SearchModal', () => ({ SearchModal: () => null }));
 vi.mock('./ScrollToTop', () => ({ ScrollToTop: () => null }));
 
 describe('Layout navigation', () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); session.user = { id: 'user-1' }; });
 
   test.each([
     ['/', '/add'],
@@ -105,5 +106,24 @@ describe('Layout navigation', () => {
     expect(recordLinks).toHaveLength(2);
     expect(recordLinks.every((link) => link.getAttribute('href') === '/add?game=seize-the-bean')).toBe(true);
     expect(recordLinks.every((link) => link.querySelector('svg title')?.textContent !== '登入後可有限地記錄')).toBe(true);
+  });
+  test('gives the record links their accent colour only to signed-in visitors', () => {
+    const renderLayout = () => render(<MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="*" element={<Outlet />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>);
+    renderLayout();
+    expect(screen.getAllByRole('link', { name: /記錄/ }).map((link) => link.className).sort()).toEqual(['mobile-primary', 'nav-primary']);
+    cleanup();
+
+    session.user = null;
+    renderLayout();
+    const recordLinks = screen.getAllByRole('link', { name: /記錄/ });
+    expect(recordLinks).toHaveLength(2);
+    expect(recordLinks.every((link) => !/primary/u.test(link.className))).toBe(true);
+    expect(recordLinks.every((link) => link.getAttribute('href') === '/add')).toBe(true);
   });
 });

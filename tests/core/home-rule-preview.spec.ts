@@ -61,8 +61,8 @@ for (const width of [320, 393, 1280]) {
       await expect(cards.nth(1).locator('.rule-card-preview-hint')).toHaveCount(1);
       await expect(cards.nth(2).locator('.rule-card-preview-hint')).toHaveCount(0);
       await expect(cards.nth(3).locator('.rule-card-preview-hint')).toHaveCount(0);
-      // The hint adds no action: the existing importance/copy/share controls stay intact.
-      await expect(cards.nth(0).getByRole('button')).toHaveCount(3);
+      // The hint adds no action: a signed-out reader keeps exactly the copy and share controls.
+      await expect(cards.nth(0).getByRole('button')).toHaveCount(2);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     });
 

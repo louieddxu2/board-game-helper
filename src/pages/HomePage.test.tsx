@@ -13,7 +13,7 @@ vi.mock('../lib/localDb', () => ({ localDb: {
 } }));
 vi.mock('../lib/tagHydration', () => ({ hydrateRuleTags: async (rules: unknown[]) => rules }));
 vi.mock('../components/GameSearch', () => ({ GameSearch: () => <p>搜尋介面</p> }));
-vi.mock('../components/RuleCard', () => ({ RuleCard: ({ rule }: { rule: { statement: string } }) => <p>{rule.statement}</p> }));
+vi.mock('../components/RuleCard', () => ({ RuleCard: ({ rule, onToggleImportance }: { rule: { statement: string }; onToggleImportance?: () => void }) => <p data-votable={Boolean(onToggleImportance)}>{rule.statement}</p> }));
 vi.mock('../components/AdSlot', () => ({ AdSlot: () => null }));
 vi.mock('../components/PwaInstallButton', () => ({ PwaInstallButton: () => null }));
 
@@ -55,6 +55,12 @@ test('lists recent rules as links that open the rule on its game page', async ()
   render(<MemoryRouter><HomePage /></MemoryRouter>);
   const link = await screen.findByRole('link', { name: /甜蜜國度\s*產業軌所有人都可以走到最後一格。/ });
   expect(link).toHaveAttribute('href', '/games/sweet#rule-rule%207');
+});
+
+test('offers signed-out readers no importance vote on the featured cards', async () => {
+  mocks.home.mockResolvedValueOnce({ ...emptyHome, featuredRules: [{ id: 'featured-rule', statement: '精選的規則', gameId: 'game-1', gameName: '精選遊戲', gameSlug: 'featured', status: 'published', importanceCount: 0, tags: [], sourceLinks: [] }] });
+  render(<MemoryRouter><HomePage /></MemoryRouter>);
+  expect(await screen.findByText('精選的規則')).toHaveAttribute('data-votable', 'false');
 });
 
 const recoveredRule = { id: 'retry-rule', statement: '恢復後的規則', gameId: 'retry-game', gameName: '重試遊戲', gameSlug: 'retry-game', status: 'published', tags: [], sourceLinks: [] };

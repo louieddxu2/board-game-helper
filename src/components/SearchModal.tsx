@@ -109,12 +109,11 @@ export const SearchModal = ({ open, onClose }: Props) => {
         first.focus();
       }
     }}>
-      <div className="search-modal-heading"><h2 id="search-modal-title">搜尋遊戲或規則 <span className="search-modal-shortcut">⌘K</span></h2><button type="button" onClick={onClose} aria-label="關閉搜尋">×</button></div>
+      <div className="search-modal-heading"><h2 id="search-modal-title">搜尋遊戲 <span className="search-modal-shortcut">⌘K</span></h2><button type="button" onClick={onClose} aria-label="關閉搜尋">×</button></div>
       <GameSearch
-        value={searchValue} onChange={setSearchValue} includeRules allowCreate clearable inlineResults emptyResults={recents}
+        value={searchValue} onChange={setSearchValue} allowCreate clearable inlineResults emptyResults={recents}
         onCreate={(name) => navigateFromSearch(`/add?name=${encodeURIComponent(name)}`)}
         onSelect={(game) => navigateFromSearch(`/games/${game.slug}`)}
-        onRuleSelect={(rule) => navigateFromSearch(`/games/${rule.gameSlug}?find=${encodeURIComponent(searchValue)}#rule-${rule.ruleId}`)}
       />
     </div>
   </div>;

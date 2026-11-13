@@ -32,7 +32,6 @@ vi.mock('../context/SessionContext', () => ({ useSession: mocks.useSession }));
 vi.mock('../context/ConfirmContext', () => ({ useConfirm: () => ({ confirm: mocks.confirm }) }));
 vi.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 vi.mock('../components/GameSearch', () => ({
-  clearSearchCache: vi.fn(),
   GameSearch: ({ value, onChange, onSelect, includeGamesWithoutPublishedRules }: { value: string; onChange(value: string): void; onSelect(game: { id: string; slug: string; displayName: string; ruleCount: number; updatedAt: number }): void; includeGamesWithoutPublishedRules?: boolean }) => <>
     <input aria-label="遊戲名稱搜尋" value={value} onChange={(event) => onChange(event.target.value)} />
     <button type="button" data-includes-zero-rule-games={String(Boolean(includeGamesWithoutPublishedRules))} onClick={() => onSelect({ id: 'game-1', slug: 'known-game', displayName: '既有遊戲', ruleCount: 0, updatedAt: 1 })}>選擇既有遊戲</button>

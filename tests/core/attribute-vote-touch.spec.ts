@@ -54,21 +54,31 @@ test('filters voting attributes with the first tap after scrolling and keeps the
     type, touchPoints: y === undefined ? [] : [{ x: bounds.x + 90, y }],
   });
   const start = bounds.y + bounds.height - 60;
+  // A tap during the swipe's momentum only stops the list, as on a phone, so the first tap
+  // that must count is the one after the browser reports the scroll, momentum included, has ended.
+  type Settling = HTMLElement & { scrollSettled?: Promise<void> };
+  await list.evaluate((element: Settling) => {
+    element.scrollSettled = new Promise((resolve) => element.addEventListener('scrollend', () => resolve(), { once: true }));
+  });
   await touch('touchStart', start);
   for (let step = 1; step <= 8; step++) await touch('touchMove', start - 32 * step);
   await touch('touchEnd');
-  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await list.evaluate((element: Settling) => element.scrollSettled);
+  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await expect(dialog.locator('input:checked')).toHaveCount(1);
+  // Tap the middle of the option at the list's centre: a point near the edge between two
+  // options is ambiguous to the browser's touch adjustment, as it is to a finger.
   const point = await list.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
-    const y = bounds.top + bounds.height / 2;
     const x = bounds.left + 120;
-    const input = document.elementFromPoint(x, y)?.closest('label')?.querySelector('input');
-    return { x, y, nameId: input?.getAttribute('aria-labelledby') };
+    const label = document.elementFromPoint(x, bounds.top + bounds.height / 2)?.closest('label');
+    const box = label?.getBoundingClientRect();
+    return { x, y: box ? box.top + box.height / 2 : 0, nameId: label?.querySelector('input')?.getAttribute('aria-labelledby') };
   });
   expect(point.nameId).toBeTruthy();
   await page.touchscreen.tap(point.x, point.y);
   await expect(dialog.locator('input:checked')).toHaveCount(2);
+  await expect(dialog.locator(`[aria-labelledby="${point.nameId}"]`)).toBeChecked();
   const secondName = await dialog.locator(`[id="${point.nameId}"]`).textContent();
   expect(secondName).not.toBe(strategy.name);
   await dialog.getByRole('button', { name: '套用' }).tap();
@@ -86,7 +96,7 @@ test('filters voting attributes with the first tap after scrolling and keeps the
   await page.reload();
   await trigger.tap();
   await expect(dialog.getByRole('checkbox', { name: strategy.name })).toBeChecked();
-  await expect(dialog.getByRole('checkbox', { name: secondName! })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: secondName!, exact: true })).toBeChecked();
   await dialog.getByRole('button', { name: '全選' }).tap();
   await dialog.getByRole('button', { name: '關閉' }).tap();
   await trigger.tap();

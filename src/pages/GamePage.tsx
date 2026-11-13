@@ -1,7 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { FavoriteLimitDialog } from '../components/FavoriteLimitDialog';
-import { clearSearchCache } from '../components/GameSearch';
 import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { RuleFilters } from '../components/RuleFilters';
 import { useSession } from '../context/SessionContext';
@@ -303,8 +302,8 @@ export const GamePage = () => {
       {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p></div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
-    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); clearSearchCache(); await load(); }} />}
-    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); clearSearchCache(); await load(); }} />}
+    {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
+    {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await load(); }} />}
     {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} onClose={() => setExternalResourcesOpen(false)} onChanged={() => load()} />}
     {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
       onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}

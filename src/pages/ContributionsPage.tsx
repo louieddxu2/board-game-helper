@@ -1,3 +1,5 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -23,6 +25,7 @@ const GameItem = ({ game }: { game: ContributionGameSummary }) => (
 );
 
 export const ContributionsPage = () => {
+  usePageTitle(sitePageTitle('投稿狀態與權限'));
   const location = useLocation();
   const { user, loading, canEdit } = useSession();
   const [data, setData] = useState<ContributionsPayload>();

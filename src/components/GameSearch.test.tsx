@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useState } from 'react';
 import { GameSearch } from './GameSearch';
 
-const mocks = vi.hoisted(() => ({ searchGames: vi.fn(), search: vi.fn() }));
+const mocks = vi.hoisted(() => ({ searchGames: vi.fn() }));
 
-vi.mock('../lib/api', () => ({ api: { searchGames: mocks.searchGames, search: mocks.search } }));
+vi.mock('../lib/api', () => ({ api: { searchGames: mocks.searchGames } }));
 vi.mock('../lib/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => value }));
 vi.mock('../context/SessionContext', () => ({ useSession: () => ({ canEdit: false }) }));
 
@@ -25,7 +25,6 @@ describe('GameSearch mobile keyboard behavior', () => {
 
   beforeEach(() => {
     mocks.searchGames.mockReset();
-    mocks.search.mockReset();
     mocks.searchGames.mockImplementation(async (_query: string, onUpdated?: (result: { games: typeof game[]; rules: never[] }) => void) => {
       const result = { games: [game], rules: [] as never[] };
       onUpdated?.(result);

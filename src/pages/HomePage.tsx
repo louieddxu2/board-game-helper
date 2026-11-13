@@ -251,10 +251,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   }, [user?.id, gameIdsKey]);
 
   const toggleRuleImportance = async (rule: RuleCardModel & { gameName: string; gameSlug: string }) => {
-    if (!user) {
-      showToast?.('登入後即可將規則標為重要。', 'info');
-      return;
-    }
+    if (!user) return;
     if (savingRuleIds.has(rule.id)) return;
     const wasVoted = votedRuleIds.has(rule.id);
     const nextVoted = !wasVoted;
@@ -311,7 +308,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       <PwaInstallButton />
       <div className="hero-inner"><div className="hero-main">
         <div className="hero-search" id="home-search">
-          <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
+          <GameSearch value={query} onChange={setQuery} onSelect={(game) => navigate(`/games/${game.slug}`)} allowCreate onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined} />
         </div>
         {recentGames.length > 0 && <div className="hero-recents"><span>最近：</span><RecentGamesRail games={recentGames} className="hero-recents-list" /></div>}
       </div>
@@ -366,7 +363,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
             id: rule.id,
             href: `${gameHref}#rule-${encodeURIComponent(rule.id)}`,
             label: `查看完整規則：${rule.statement}`,
-            content: <RuleCard rule={rule} previewLines={RULE_WINDOW_LINES} hideTitle gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={() => void toggleRuleImportance(rule)} />,
+            content: <RuleCard rule={rule} previewLines={RULE_WINDOW_LINES} hideTitle gameName={primary.gameName} gameHref={gameHref} onTagClick={(tag) => navigate(`${gameHref}?tag=${encodeURIComponent(tag)}`)} importanceVoted={votedRuleIds.has(rule.id)} importanceSaving={savingRuleIds.has(rule.id)} onToggleImportance={user ? () => void toggleRuleImportance(rule) : undefined} />,
           }))} />
           </div>;
         })}
@@ -423,10 +420,9 @@ const PersonalHome = ({ data, onShowExplore }: { data?: PersonalHomePayload; onS
       <PwaInstallButton />
       <div className="personal-home-search">
       <div className="personal-home-search-row">
-        <GameSearch value={query} onChange={setQuery} includeRules allowCreate={Boolean(user)}
+        <GameSearch value={query} onChange={setQuery} allowCreate={Boolean(user)}
           onCreate={user ? (name) => { navigate(`/add?name=${encodeURIComponent(name)}`); } : undefined}
-          onSelect={(game) => navigate(`/games/${game.slug}`)}
-          onRuleSelect={(rule) => navigate(`/games/${rule.gameSlug}?find=${encodeURIComponent(query)}#rule-${rule.ruleId}`)} />
+          onSelect={(game) => navigate(`/games/${game.slug}`)} />
         <button type="button" className="home-mode-button personal-explore-btn" onClick={onShowExplore}>探索</button>
       </div>
       {recentGames.length > 0 && <div className="personal-home-recents">

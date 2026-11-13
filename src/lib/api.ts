@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, RuleSearchResult, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -395,11 +395,6 @@ export const api = {
       options,
     ),
   }),
-  search: async (query: string, onUpdated?: (data: { games: GameSummary[]; rules: RuleSearchResult[] }) => void) => ({
-    games: filterGameCatalog((await gameCatalog((updated) => onUpdated?.({ games: filterGameCatalog(updated.games, query, 8), rules: [] }))).games, query, 8),
-    rules: [] as RuleSearchResult[],
-  }),
-  invalidateSearchCache: () => localDb.invalidateSearch(),
   tags: async (ids?: string[], onUpdated?: (data: { tags: TagSummary[] }) => void) => {
     if (!ids?.length) {
       const cached = await localDb.getCachedPublicTags().catch(() => undefined);

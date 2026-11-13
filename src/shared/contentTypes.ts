@@ -1,14 +1,6 @@
 import type { GameSummary, GameVariantSummary } from './catalogTypes';
 import type { ContributionReviewStatus, FlowStage, RuleCategory } from './ruleTypes';
 
-export interface RuleSearchResult {
-  ruleId: string;
-  gameId: string;
-  gameName: string;
-  gameSlug: string;
-  statement: string;
-}
-
 export interface TagSummary {
   id: string;
   slug: string;

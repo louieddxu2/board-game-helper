@@ -8,17 +8,17 @@ import { uiHistory } from '../workspace/uiHistory';
 
 const mocks = vi.hoisted(() => ({
   recentGames: vi.fn(),
-  search: vi.fn(),
+  searchGames: vi.fn(),
 }));
 
 vi.mock('../lib/localDb', () => ({ localDb: { recentGames: mocks.recentGames } }));
-vi.mock('../lib/api', () => ({ api: { search: mocks.search } }));
+vi.mock('../lib/api', () => ({ api: { searchGames: mocks.searchGames } }));
 vi.mock('../context/SessionContext', () => ({ useSession: () => ({ canEdit: false }) }));
 
 const recentOne = { id: 'recent-1', slug: 'first-game', displayName: '第一款遊戲', englishName: 'First Game' };
 const recentTwo = { id: 'recent-2', slug: 'second-game', displayName: '第二款遊戲', englishName: 'Second Game' };
 const searchGame = { id: 'search-1', slug: 'search-game', displayName: '搜尋結果遊戲', englishName: 'Search Result', aliases: [], ruleCount: 1, updatedAt: 1 };
-type SearchResponse = { games: typeof searchGame[]; rules: never[] };
+type SearchResponse = { games: typeof searchGame[] };
 const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
 const historyKey = '__boardGameHelperWorkspaceUi';
 let baselineHistoryState: unknown;
@@ -60,8 +60,8 @@ describe('SearchModal recent games and inline search', () => {
     baselineHistoryUrl = window.location.href;
     startHistoryCase();
     mocks.recentGames.mockReset().mockResolvedValue([recentOne]);
-    mocks.search.mockReset().mockImplementation(async (_query: string, onUpdated?: (response: SearchResponse) => void) => {
-      const response: SearchResponse = { games: [searchGame], rules: [] };
+    mocks.searchGames.mockReset().mockImplementation(async (_query: string, onUpdated?: (response: SearchResponse) => void) => {
+      const response: SearchResponse = { games: [searchGame] };
       onUpdated?.(response);
       return response;
     });
@@ -154,7 +154,7 @@ describe('SearchModal recent games and inline search', () => {
   test('switches the same inline panel immediately and ignores a pending response after clearing', async () => {
     let resolveSearch!: (response: SearchResponse) => void;
     const pending = new Promise<SearchResponse>((resolve) => { resolveSearch = resolve; });
-    mocks.search.mockImplementation((_query: string, _onUpdated?: (response: SearchResponse) => void) => pending);
+    mocks.searchGames.mockImplementation((_query: string, _onUpdated?: (response: SearchResponse) => void) => pending);
 
     render(<MemoryRouter><Harness /></MemoryRouter>);
     await screen.findByRole('button', { name: /第一款遊戲.*First Game/ });
@@ -168,7 +168,7 @@ describe('SearchModal recent games and inline search', () => {
     expect(document.querySelector('.search-results-portal')).not.toBeInTheDocument();
     expect(document.querySelector('.search-results-inline')).toBe(results);
 
-    await waitFor(() => expect(mocks.search).toHaveBeenCalledWith('甲', expect.any(Function)));
+    await waitFor(() => expect(mocks.searchGames).toHaveBeenCalledWith('甲', expect.any(Function), expect.any(Object)));
     fireEvent.change(input, { target: { value: '   ' } });
     expect(input).toHaveValue('   ');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
@@ -176,7 +176,7 @@ describe('SearchModal recent games and inline search', () => {
     expect(document.querySelector('.search-results-inline')).toBe(results);
 
     await act(async () => {
-      resolveSearch({ games: [searchGame], rules: [] });
+      resolveSearch({ games: [searchGame] });
       await pending;
     });
     expect(screen.queryByRole('option', { name: /搜尋結果遊戲/ })).not.toBeInTheDocument();

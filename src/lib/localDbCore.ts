@@ -1,11 +1,9 @@
 import { openDB, type DBSchema } from 'idb';
-import type { AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeQuestionPayload, AttributeSubject, FlowStage, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, GameVariantSummary, HomeIDPayload, HomePayload, RuleCard, RuleCategory, RuleSearchResult, SubmissionInput, TagSelection, TagSummary } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeImportCandidate, AttributeMatrixValue, AttributeQuestionPayload, AttributeSubject, FlowStage, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, GameVariantSummary, HomeIDPayload, HomePayload, RuleCard, RuleCategory, SubmissionInput, TagSelection, TagSummary } from '../shared/types';
 import {
   type AttributeDirectRatingRecord
 } from './attributeDirectRatings';
 import { applyGameCatalogChanges } from './gameCatalog';
-
-export type SearchResponse = { games: GameSummary[]; rules: RuleSearchResult[] };
 
 export const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 
@@ -427,7 +425,6 @@ export const isCachedRuleSetUsable = (
 );
 
 export const localDbMemory = {
-  searchMemoryCache: new Map<string, CacheRecord<SearchResponse>>(),
   gameCatalogMemoryCache: undefined as GameCatalogCacheRecord | undefined,
   attributeTableMemoryCache: undefined as AttributeCatalogCacheRecord | undefined,
 };

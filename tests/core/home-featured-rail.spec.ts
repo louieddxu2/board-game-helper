@@ -9,13 +9,36 @@ const rule = (index: number): HomeRule => ({
   statement: `第 ${index} 款遊戲常被玩錯的規則。`, commonMistake: '玩錯的方式', status: 'published', importanceCount: 0, sourceLinks: [],
 });
 
-const showHome = async (page: Page) => {
-  await page.route('**/api/session', (route) => route.fulfill({ json: { user: null, googleClientId: null, localDevLogin: true } }));
+const showHome = async (page: Page, signedIn = false) => {
+  const user = signedIn ? { id: 'rail-user', roles: [] } : null;
+  await page.route('**/api/session', (route) => route.fulfill({ json: { user, googleClientId: null, localDevLogin: true } }));
+  if (signedIn) {
+    await page.route('**/api/account/home', (route) => route.fulfill({ json: { favorites: [], recentUpdates: [], generatedAt: Date.now() } }));
+    await page.route('**/api/games/*/rule-importance', (route) => route.fulfill({ json: { ruleIds: [] } }));
+  }
   await page.route('**/api/home', (route) => route.fulfill({ json: {
     generatedAt: Date.now(), featured: [], featuredRules: [1, 2].map(rule), recentRules: [rule(4), rule(5)], recentRuleIds: [],
   } }));
   await page.goto('/');
   await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(2);
+};
+
+// Swipes the rail from the first featured game to the second with native touch input.
+const swipeToSecondGame = async (page: Page) => {
+  const rail = page.locator('.home-featured-rail');
+  const client = await page.context().newCDPSession(page);
+  const box = (await rail.boundingBox())!;
+  const y = box.y + 40;
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) => client.send('Input.dispatchTouchEvent', {
+    type, touchPoints: x === undefined ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
+  });
+  await touch('touchStart', box.x + box.width - 30);
+  await touch('touchMove', box.x + box.width - 150);
+  await touch('touchMove', box.x + 40);
+  await touch('touchEnd');
+  await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(100);
+  await expect(page.getByRole('tab', { name: '測試遊戲 2' })).toHaveAttribute('aria-selected', 'true');
+  expect(await page.evaluate(() => scrollX)).toBe(0);
 };
 
 test('swipes through fixed height featured games, then takes the first tap on a card once', { tag: '@ui' }, async ({ page }) => {
@@ -32,25 +55,36 @@ test('swipes through fixed height featured games, then takes the first tap on a 
   await page.setViewportSize({ width: 393, height: 851 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
 
-  const client = await page.context().newCDPSession(page);
-  const box = (await rail.boundingBox())!;
-  const y = box.y + 40;
-  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) => client.send('Input.dispatchTouchEvent', {
-    type, touchPoints: x === undefined ? [] : [{ x, y, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
-  });
-  await touch('touchStart', box.x + box.width - 30);
-  await touch('touchMove', box.x + box.width - 150);
-  await touch('touchMove', box.x + 40);
-  await touch('touchEnd');
-  await expect.poll(() => rail.evaluate((element) => element.scrollLeft)).toBeGreaterThan(100);
-  await expect(page.getByRole('tab', { name: '測試遊戲 2' })).toHaveAttribute('aria-selected', 'true');
-  expect(await page.evaluate(() => scrollX)).toBe(0);
+  await swipeToSecondGame(page);
 
-  const second = page.locator('#rule-rail-rule-2').getByRole('button', { name: /將這條規則標為重要/ });
+  // Signed-out readers get no importance button, and no count while it is zero.
+  await expect(page.locator('#rule-rail-rule-2').getByRole('button', { name: /標為重要/ })).toHaveCount(0);
+  await expect(page.locator('#rule-rail-rule-2 .importance-count')).toHaveCount(0);
+  const second = page.locator('#rule-rail-rule-2').getByRole('button', { name: '複製內文' });
   await expect(second).toBeInViewport({ ratio: 1 });
   await second.tap();
-  await expect(page.getByRole('status')).toContainText('登入後即可將規則標為重要。');
+  // Copied or refused by the browser, the one tap reports exactly once.
+  await expect(page.getByRole('status')).toContainText('複製');
   await expect(page.getByRole('status')).toHaveCount(1);
+});
+
+test('marks a featured rule important with the first tap after a swipe, once', { tag: '@ui' }, async ({ page }) => {
+  const votes: unknown[] = [];
+  await page.route('**/api/rules/rail-rule-2/importance', (route) => {
+    votes.push(route.request().postDataJSON());
+    return route.fulfill({ json: { important: true, count: 1 } });
+  });
+  await showHome(page, true);
+  await swipeToSecondGame(page);
+
+  const vote = page.locator('#rule-rail-rule-2').getByRole('button', { name: /將這條規則標為重要，目前 0/ });
+  await expect(vote).toBeInViewport({ ratio: 1 });
+  await vote.tap();
+  const voted = page.locator('#rule-rail-rule-2').getByRole('button', { name: /取消重要標記，目前 1/ });
+  await expect(voted).toHaveAttribute('aria-pressed', 'true');
+  await expect(voted).toBeEnabled();
+  expect(votes).toEqual([{ important: true }]);
+  await expect(page.getByRole('status')).toHaveCount(0);
 });
 
 for (const input of ['tap', 'click'] as const) {

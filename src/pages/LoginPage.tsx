@@ -1,3 +1,5 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
@@ -8,6 +10,7 @@ import { GoogleSignIn } from '../components/GoogleSignIn';
 export { googleLoginErrorMessage, googleNameFromCredential } from '../components/GoogleSignIn';
 
 export const LoginPage = () => {
+  usePageTitle(sitePageTitle('登入'));
   const { user, loading } = useSession();
   const navigate = useNavigate();
   const returnTo = loginReturnTo(useLocation().search);

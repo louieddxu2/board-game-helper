@@ -1,9 +1,13 @@
 import zhTWCopy from '../content/zh-TW.json';
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 
 const updatedAt = '2026 年 10 月 18 日';
 const privacyOpeningCopy = zhTWCopy.author.privacyOpening;
 
-export const PrivacyPage = () => <div className="content-page privacy-page">
+export const PrivacyPage = () => {
+  usePageTitle(sitePageTitle('隱私與資料'));
+  return <div className="content-page privacy-page">
   <header>
     <p className="eyebrow">隱私與資料</p>
     <h1>實際保存什麼，以及為什麼</h1>
@@ -312,3 +316,4 @@ export const PrivacyPage = () => <div className="content-page privacy-page">
     <p>只要規則曾經由其他人共同修改，就不會被這個選項刪除，以免一併移除其他人的編輯成果及修訂歷史。</p>
   </section>
 </div>;
+};

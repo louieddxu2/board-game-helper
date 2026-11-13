@@ -84,7 +84,7 @@ export const Layout = () => {
       {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <button type="button" className="link-button" onClick={() => setSearchOpen(true)}>搜尋</button>
-        <NavLink to={addRuleHref} className="nav-primary">＋記錄</NavLink>
+        <NavLink to={addRuleHref} className={user ? 'nav-primary' : undefined}>＋記錄</NavLink>
         {isAdmin && <NavLink to="/review">校稿</NavLink>}
         {user && <NavLink to="/catalog">列表</NavLink>}
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
@@ -94,7 +94,7 @@ export const Layout = () => {
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true"><NavIcon name="search" /></span><small>搜尋</small></button>
-      <NavLink to={addRuleHref} className="mobile-primary"><span aria-hidden="true"><NavIcon name="add" /></span><small>記錄{user && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
+      <NavLink to={addRuleHref} className={user ? 'mobile-primary' : undefined}><span aria-hidden="true"><NavIcon name="add" /></span><small>記錄{user && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
       {isAdmin && <NavLink to="/review"><span aria-hidden="true"><NavIcon name="review" /></span><small>校稿</small></NavLink>}
       {user && <NavLink to="/catalog"><span aria-hidden="true"><NavIcon name="list" /></span><small>列表</small></NavLink>}
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true"><NavIcon name="admin" /></span><small>{adminLabel}</small></NavLink>}

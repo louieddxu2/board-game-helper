@@ -5,7 +5,7 @@ export type { AttributeActivity, AttributeActivitySubject, AttributeCatalogChang
 export type { AccountDeletionSummary, GameCatalogChange, GameCatalogChangesPayload, GameCatalogPayload, GameSummary, GameVariantSummary } from './catalogTypes';
 export { GAME_EXTERNAL_RESOURCE_CATEGORIES } from './contentTypes';
 
-export type { GameDetail, GameExternalResource, GameExternalResourceCategory, HomeIDPayload, HomePayload, PublicTagCatalogChange, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, RuleCard, RuleRevision, RuleSearchResult, TagSelection, TagSummary } from './contentTypes';
+export type { GameDetail, GameExternalResource, GameExternalResourceCategory, HomeIDPayload, HomePayload, PublicTagCatalogChange, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, RuleCard, RuleRevision, TagSelection, TagSummary } from './contentTypes';
 export { FLOW_STAGES, RULE_CATEGORIES, RULE_CATEGORY_LABELS } from './ruleTypes';
 
 export type { ContributionReviewStatus, FlowStage, RuleCategory, UserRole } from './ruleTypes';

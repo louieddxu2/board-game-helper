@@ -102,7 +102,6 @@ export const localDbContent = {
       await tx.objectStore('cache').delete(key);
     }
     await tx.done;
-    localDbMemory.searchMemoryCache.clear();
   },
   getCachedRuleEntity: async (ruleId: string) => {
     const db = await getDatabase();
@@ -238,7 +237,6 @@ export const localDbContent = {
     return resolved.filter(Boolean) as Array<{ id: string; slug: string; displayName: string; englishName?: string }>;
   },
   clearCache: async (options: { includeTags?: boolean } = {}) => {
-    localDbMemory.searchMemoryCache.clear();
     localDbMemory.gameCatalogMemoryCache = undefined;
     const db = await getDatabase();
     const keys = await db.getAllKeys('cache');

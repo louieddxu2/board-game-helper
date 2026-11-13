@@ -2,6 +2,9 @@ import type { GameDetail } from '../shared/types';
 
 export const SITE_TITLE = '玩錯的桌遊規則';
 
+// The tab title of a site page other than the home page and the game pages.
+export const sitePageTitle = (page: string) => `${page}｜${SITE_TITLE}`;
+
 const publishedRuleCount = (game: GameDetail) => game.publishedRuleCount ?? game.rules.length;
 
 // Only games with published rules belong in search results.

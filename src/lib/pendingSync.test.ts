@@ -22,7 +22,6 @@ describe('offline submission synchronization', () => {
     vi.spyOn(localDb, 'getDraft').mockResolvedValue(undefined);
     const invalidateGame = vi.spyOn(localDb, 'invalidateGame').mockResolvedValue(undefined);
     const invalidateHome = vi.spyOn(localDb, 'invalidateHome').mockResolvedValue(undefined);
-    const invalidateSearch = vi.spyOn(api, 'invalidateSearchCache').mockResolvedValue(undefined);
 
     await expect(flushPendingSubmissions('user-1')).resolves.toBe(1);
 
@@ -31,7 +30,6 @@ describe('offline submission synchronization', () => {
     expect(remove).toHaveBeenCalledWith('ok-key-1');
     expect(invalidateGame).toHaveBeenCalledWith('game-1');
     expect(invalidateHome).toHaveBeenCalledOnce();
-    expect(invalidateSearch).toHaveBeenCalledOnce();
   });
 
   test('deduplicates simultaneous flushes for one account', async () => {

@@ -1,3 +1,5 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
@@ -6,7 +8,6 @@ import type { AccountDeletionSummary, AccountRevisionSummary, AccountRuleSummary
 import { useConfirm } from '../context/ConfirmContext';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
-import { clearSearchCache } from '../components/GameSearch';
 import { LoginPage } from './LoginPage';
 import { DeleteAccountDialog } from '../components/DeleteAccountDialog';
 import { NICKNAME_RULES, NicknameForm } from '../components/NicknameForm';
@@ -48,6 +49,7 @@ const ModifiedRuleItem = ({ revision }: { revision: AccountRevisionSummary }) =>
 );
 
 export const AccountPage = () => {
+  usePageTitle(sitePageTitle('我的帳號'));
   const navigate = useNavigate();
   const { confirm } = useConfirm();
   const { user, realUser, loading, logout, canEdit, refresh } = useSession();
@@ -101,7 +103,6 @@ export const AccountPage = () => {
         ? { ...item, status: 'published', canRestore: false }
         : item));
       await localDb.invalidateAllGames();
-      clearSearchCache();
     } catch (caught) {
       setCreatedRulesError(caught instanceof ApiError && caught.code === 'forbidden'
         ? '這條規則不是由你隱藏，無法恢復。'

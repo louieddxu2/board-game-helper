@@ -324,4 +324,44 @@ describe('RuleCard', () => {
     }} /></MemoryRouter>);
     expect(screen.queryByLabelText(/標記數量/)).not.toBeInTheDocument();
   });
+  test('shares through the phone share sheet, and copies the link where there is none', async () => {
+    const rule: RuleCardType = { id: 'rule_share', gameId: 'game_1', statement: '可分享的規則', status: 'published', tags: [], sourceLinks: [] };
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const share = vi.fn().mockResolvedValue(undefined);
+    const coarse = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal('matchMedia', coarse);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    cleanup();
+    try {
+      render(<MemoryRouter><RuleCard rule={rule} gameName="測試遊戲" gameHref="/games/test-game" /></MemoryRouter>);
+      const button = screen.getByRole('button', { name: '分享此規則' });
+      fireEvent.click(button);
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/games/test-game#rule-rule_share`));
+
+      vi.stubGlobal('navigator', { clipboard: { writeText }, share });
+      fireEvent.click(button);
+      expect(share).toHaveBeenCalledWith({ title: '測試遊戲', text: '可分享的規則', url: `${window.location.origin}/games/test-game#rule-rule_share` });
+      expect(writeText).toHaveBeenCalledOnce();
+
+      // A mouse keeps the copied link even where the browser can share.
+      coarse.mockReturnValue({ matches: false });
+      fireEvent.click(button);
+      expect(share).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+
+      // Closing the sheet copies nothing; any other failure falls back to the link.
+      coarse.mockReturnValue({ matches: true });
+      share.mockRejectedValueOnce(Object.assign(new Error('closed'), { name: 'AbortError' }));
+      fireEvent.click(button);
+      await vi.waitFor(() => expect(share).toHaveBeenCalledTimes(2));
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledTimes(2);
+      share.mockRejectedValueOnce(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+      fireEvent.click(button);
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(3));
+    } finally {
+      vi.unstubAllGlobals();
+      cleanup();
+    }
+  });
 });

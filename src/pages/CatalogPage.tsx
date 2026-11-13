@@ -1,3 +1,5 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
@@ -45,6 +47,7 @@ const RulesSheet = ({ game }: { game: GameDetail }) => <div className="catalog-d
 </div>;
 
 export const CatalogPage = () => {
+  usePageTitle(sitePageTitle('遊戲列表'));
   const location = useLocation();
   const { canEdit, loading, user } = useSession();
   const [games, setGames] = useState<GameSummary[]>([]);

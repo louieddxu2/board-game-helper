@@ -1,6 +1,8 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { GameSearch } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { RuleCategoryInput } from '../components/RuleCategoryInput';
@@ -17,6 +19,7 @@ const stageNames: Record<FlowStage, string> = {
 const value = (input: string | null | undefined) => input ?? '';
 
 export const ReviewPage = () => {
+  usePageTitle(sitePageTitle('校稿工作臺'));
   const { isAdmin, loading } = useSession();
   const [game, setGame] = useState<GameSummary>();
   const [gameQuery, setGameQuery] = useState('');
@@ -136,7 +139,6 @@ export const ReviewPage = () => {
       const conflicts = result.outcomes.filter((outcome) => outcome.status === 'conflict' || outcome.status === 'stale').length;
       setMessage(`已處理 ${result.outcomes.length} 項${conflicts ? `，其中 ${conflicts} 項需要重新確認` : ''}。`);
       await localDb.clearCache();
-      clearSearchCache();
       await load();
     } finally { setBusy(false); }
   };

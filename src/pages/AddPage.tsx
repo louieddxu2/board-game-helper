@@ -1,6 +1,8 @@
+import { usePageTitle } from '../hooks/usePageTitle';
+import { sitePageTitle } from '../lib/gameSeo';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GameSearch, clearSearchCache } from '../components/GameSearch';
+import { GameSearch } from '../components/GameSearch';
 import { EditionInput } from '../components/EditionInput';
 import { PlayerCountInput } from '../components/PlayerCountInput';
 import { TagInput } from '../components/TagInput';
@@ -42,6 +44,7 @@ type RuleInput = {
 
 const blankRule = (): RuleInput => ({ id: crypto.randomUUID(), statement: '' });
 export const AddPage = () => {
+  usePageTitle(sitePageTitle('記錄玩錯的規則'));
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, canEdit, isAdmin, loading } = useSession();
@@ -316,7 +319,6 @@ export const AddPage = () => {
       queued = true;
       const result = await api.submit(payload);
       await Promise.all([localDb.removePending(payload.idempotencyKey), draftStorage.clear(), localDb.invalidateHome(), localDb.invalidateGame(result.gameId)]);
-      clearSearchCache();
       if (result.quota) setQuota(result.quota);
       const firstRule = result.ruleIds?.[0];
       uiHistory.navigate(() => navigate(`/games/${result.gameSlug}${firstRule ? `#rule-${firstRule}` : ''}`, { state: { justAdded: validRules.length, addedRuleIds: result.ruleIds ?? [] } }));

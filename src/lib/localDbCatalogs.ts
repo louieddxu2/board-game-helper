@@ -1,48 +1,10 @@
 import type { GameCatalogChangesPayload, GameCatalogPayload, GameSummary, HomeIDPayload, HomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, TagSummary } from '../shared/types';
 import { mergeGameCatalogEntries, upsertGameCatalogEntry } from './gameCatalog';
-import type { CacheRecord, CachedRuleUpdate, GameCatalogCacheRecord, RuleEntity, SearchResponse, TagCacheRecord } from './localDbCore';
+import type { CacheRecord, CachedRuleUpdate, GameCatalogCacheRecord, RuleEntity, TagCacheRecord } from './localDbCore';
 import { CATALOG_SYNC_FRESH_MS, HOME_VIEW_CACHE_KEY, HOUR_CACHE_FRESH_MS, LOCAL_GAME_CATALOG_OVERRIDES_KEY, PUBLIC_GAME_CATALOG_KEY, PUBLIC_TAGS_CACHE_KEY, PUBLIC_TAG_CATALOG_FRESH_MS, TAG_ENTITY_CACHE_FRESH_MS, applyGameCatalogChangesToCache, applyGameReferenceUpdate, getDatabase, getFreshCache, localDbMemory, replaceGameInHomeIds, toStoredRule } from './localDbCore';
 import { applyPublicTagCatalogChanges } from './tagCatalog';
 
 export const localDbCatalogs = {
-  cacheSearch: async (key: string, data: SearchResponse) => {
-    const record = { key: `search:${key}`, data, cachedAt: Date.now() } satisfies CacheRecord<SearchResponse>;
-    if (localDbMemory.searchMemoryCache.size >= 100 && !localDbMemory.searchMemoryCache.has(key)) {
-      localDbMemory.searchMemoryCache.delete(localDbMemory.searchMemoryCache.keys().next().value as string);
-    }
-    localDbMemory.searchMemoryCache.set(key, record);
-    await (await getDatabase()).put('cache', record);
-  },
-  getCachedSearch: async (key: string) => {
-    const memory = localDbMemory.searchMemoryCache.get(key);
-    if (memory) {
-      if (Date.now() - memory.cachedAt < HOUR_CACHE_FRESH_MS) return memory;
-      localDbMemory.searchMemoryCache.delete(key);
-    }
-    const cached = await getFreshCache<SearchResponse>(`search:${key}`, HOUR_CACHE_FRESH_MS);
-    if (cached) localDbMemory.searchMemoryCache.set(key, cached);
-    return cached;
-  },
-  getCachedSearchPrefix: async (prefix: string, targetKey: string) => {
-    for (const [key, cached] of localDbMemory.searchMemoryCache) {
-      if (Date.now() - cached.cachedAt >= HOUR_CACHE_FRESH_MS) {
-        localDbMemory.searchMemoryCache.delete(key);
-        continue;
-      }
-      if (key.startsWith(prefix) && targetKey.startsWith(key) && cached.data.games.length < 20) return cached;
-    }
-    return undefined;
-  },
-  invalidateSearch: async () => {
-    localDbMemory.searchMemoryCache.clear();
-    const db = await getDatabase();
-    const keys = await db.getAllKeys('cache');
-    for (const key of keys) {
-      if (typeof key === 'string' && key.startsWith('search:')) {
-        await db.delete('cache', key);
-      }
-    }
-  },
   cacheGameCatalog: async (data: GameCatalogPayload) => {
     const db = await getDatabase();
     const overrides = await db.get('cache', LOCAL_GAME_CATALOG_OVERRIDES_KEY) as CacheRecord<GameSummary[]> | undefined;
