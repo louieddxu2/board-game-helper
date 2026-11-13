@@ -1,0 +1,504 @@
+{
+  "capturedAt": "2026-11-13",
+  "gameCatalogThroughVersion": 1052,
+  "counts": {
+    "imported": 35
+  },
+  "games": [
+    {
+      "rank": 1,
+      "group": "party_light",
+      "bggId": 2944,
+      "displayName": "德國心臟病",
+      "originalName": "Halli Galli",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2738.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_2944"
+    },
+    {
+      "rank": 2,
+      "group": "party_light",
+      "bggId": 432,
+      "displayName": "誰是牛頭王",
+      "originalName": "6 nimmt!",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-2047.html"
+      },
+      "status": "imported",
+      "extraAliases": [
+        "Take 6!"
+      ],
+      "importedGameId": "game_bgg_432"
+    },
+    {
+      "rank": 3,
+      "group": "party_light",
+      "bggId": 8946,
+      "displayName": "Da Vinci Code",
+      "originalName": "Da Vinci Code",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-2128.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "終極密碼",
+      "extraAliases": [
+        "達文西密碼"
+      ],
+      "importedGameId": "game_bgg_8946"
+    },
+    {
+      "rank": 4,
+      "group": "party_light",
+      "bggId": 63268,
+      "displayName": "嗒寶",
+      "originalName": "Spot it!",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3537.html"
+      },
+      "status": "imported",
+      "extraAliases": [
+        "哆寶",
+        "Dobble"
+      ],
+      "importedGameId": "game_bgg_63268"
+    },
+    {
+      "rank": 5,
+      "group": "party_light",
+      "bggId": 83195,
+      "displayName": "閃靈快手",
+      "originalName": "Ghost Blitz",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3063.html"
+      },
+      "status": "imported",
+      "extraAliases": [
+        "Geistesblitz"
+      ],
+      "importedGameId": "game_bgg_83195"
+    },
+    {
+      "rank": 6,
+      "group": "party_light",
+      "bggId": 172225,
+      "displayName": "爆炸貓",
+      "originalName": "Exploding Kittens",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7862.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_172225"
+    },
+    {
+      "rank": 7,
+      "group": "party_light",
+      "bggId": 254640,
+      "displayName": "獨家暗語",
+      "originalName": "Just One",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7700.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_254640"
+    },
+    {
+      "rank": 8,
+      "group": "party_light",
+      "bggId": 262543,
+      "displayName": "心靈共感",
+      "originalName": "Wavelength",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8674.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_262543"
+    },
+    {
+      "rank": 9,
+      "group": "party_light",
+      "bggId": 92415,
+      "displayName": "骷髏牌",
+      "originalName": "Skull",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-8344.html"
+      },
+      "status": "imported",
+      "extraAliases": [
+        "骷髏與玫瑰"
+      ],
+      "importedGameId": "game_bgg_92415"
+    },
+    {
+      "rank": 10,
+      "group": "party_light",
+      "bggId": 147949,
+      "displayName": "One Night Ultimate Werewolf",
+      "originalName": "One Night Ultimate Werewolf",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-4517.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "一夜終極狼人",
+      "importedGameId": "game_bgg_147949"
+    },
+    {
+      "rank": 11,
+      "group": "party_light",
+      "bggId": 420087,
+      "displayName": "七翻天",
+      "originalName": "Flip 7",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-12726.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_420087"
+    },
+    {
+      "rank": 12,
+      "group": "party_light",
+      "bggId": 41,
+      "displayName": "欲罷不能",
+      "originalName": "Can't Stop",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-6458.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_41"
+    },
+    {
+      "rank": 13,
+      "group": "party_light",
+      "bggId": 169654,
+      "displayName": "Deep Sea Adventure",
+      "originalName": "Deep Sea Adventure",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-6997.html"
+      },
+      "bggIdSource": [
+        "https://dicetower.com/board-game/169654",
+        "https://boardgame-directory.vercel.app/games/169654"
+      ],
+      "note": "卡牌屋繁中基本版商品頁已下架；BGG ID 由兩個以 BGG ID 編目的網站交叉確認，Boost 版 427866 與卡牌屋商品頁的 BGG 連結一致。",
+      "status": "imported",
+      "traditionalAlias": "海底探險",
+      "importedGameId": "game_bgg_169654"
+    },
+    {
+      "rank": 14,
+      "group": "party_light",
+      "bggId": 15512,
+      "displayName": "印加寶藏",
+      "originalName": "Incan Gold",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-7375.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_15512"
+    },
+    {
+      "rank": 15,
+      "group": "party_light",
+      "bggId": 171131,
+      "displayName": "Captain Sonar",
+      "originalName": "Captain Sonar",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=party"
+      },
+      "status": "imported",
+      "traditionalAlias": "深海諜影",
+      "importedGameId": "game_bgg_171131"
+    },
+    {
+      "rank": 16,
+      "group": "family_entry",
+      "bggId": 295947,
+      "displayName": "卡斯卡迪亞之旅",
+      "originalName": "Cascadia",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-9597.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_295947"
+    },
+    {
+      "rank": 17,
+      "group": "family_entry",
+      "bggId": 199561,
+      "displayName": "聖家族大教堂",
+      "originalName": "Sagrada",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-13005.html"
+      },
+      "status": "imported",
+      "extraAliases": [
+        "聖家堂"
+      ],
+      "importedGameId": "game_bgg_199561"
+    },
+    {
+      "rank": 18,
+      "group": "family_entry",
+      "bggId": 70919,
+      "displayName": "熊貓御竹園",
+      "originalName": "Takenoko",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-4563.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_70919"
+    },
+    {
+      "rank": 19,
+      "group": "family_entry",
+      "bggId": 123540,
+      "displayName": "Tokaido",
+      "originalName": "Tokaido",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-4363.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "東海道",
+      "importedGameId": "game_bgg_123540"
+    },
+    {
+      "rank": 20,
+      "group": "family_entry",
+      "bggId": 70323,
+      "displayName": "東京之王",
+      "originalName": "King of Tokyo",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-3230.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_70323"
+    },
+    {
+      "rank": 21,
+      "group": "family_entry",
+      "bggId": 191862,
+      "displayName": "Imhotep",
+      "originalName": "Imhotep",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-5430.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "印和闐",
+      "importedGameId": "game_bgg_191862"
+    },
+    {
+      "rank": 22,
+      "group": "family_entry",
+      "bggId": 50,
+      "displayName": "Lost Cities",
+      "originalName": "Lost Cities",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-12271.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "失落的城市",
+      "importedGameId": "game_bgg_50"
+    },
+    {
+      "rank": 23,
+      "group": "family_entry",
+      "bggId": 54043,
+      "displayName": "Jaipur",
+      "originalName": "Jaipur",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=FAMILY"
+      },
+      "status": "imported",
+      "traditionalAlias": "齋普爾",
+      "importedGameId": "game_bgg_54043"
+    },
+    {
+      "rank": 24,
+      "group": "family_entry",
+      "bggId": 2655,
+      "displayName": "Hive",
+      "originalName": "Hive",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=Abstract"
+      },
+      "status": "imported",
+      "traditionalAlias": "蟲蟲攻防戰",
+      "importedGameId": "game_bgg_2655"
+    },
+    {
+      "rank": 25,
+      "group": "family_entry",
+      "bggId": 2453,
+      "displayName": "Blokus",
+      "originalName": "Blokus",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/goods-9730.html"
+      },
+      "status": "imported",
+      "traditionalAlias": "大格鬥",
+      "extraAliases": [
+        "格格不入"
+      ],
+      "importedGameId": "game_bgg_2453"
+    },
+    {
+      "rank": 26,
+      "group": "family_entry",
+      "bggId": 624,
+      "displayName": "步步為營",
+      "originalName": "Quoridor",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10460.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_624"
+    },
+    {
+      "rank": 27,
+      "group": "family_entry",
+      "bggId": 291453,
+      "displayName": "SCOUT",
+      "originalName": "SCOUT",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=FAMILY"
+      },
+      "status": "imported",
+      "traditionalAlias": "馬戲星探",
+      "importedGameId": "game_bgg_291453"
+    },
+    {
+      "rank": 28,
+      "group": "family_entry",
+      "bggId": 283155,
+      "displayName": "Calico",
+      "originalName": "Calico",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=Abstract"
+      },
+      "status": "imported",
+      "traditionalAlias": "貓與花毯",
+      "importedGameId": "game_bgg_283155"
+    },
+    {
+      "rank": 29,
+      "group": "family_entry",
+      "bggId": 367220,
+      "displayName": "海鹽折紙",
+      "originalName": "Sea Salt & Paper",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11534.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_367220"
+    },
+    {
+      "rank": 30,
+      "group": "family_entry",
+      "bggId": 345972,
+      "displayName": "盒中貓",
+      "originalName": "Cat in the Box",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-10230.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_345972"
+    },
+    {
+      "rank": 31,
+      "group": "family_entry",
+      "bggId": 411567,
+      "displayName": "紙牌幫",
+      "originalName": "The Gang",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-12604.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_411567"
+    },
+    {
+      "rank": 32,
+      "group": "family_entry",
+      "bggId": 391163,
+      "displayName": "森森不息",
+      "originalName": "Forest Shuffle",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-12439.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_391163"
+    },
+    {
+      "rank": 33,
+      "group": "medium_plus",
+      "bggId": 373106,
+      "displayName": "天合小隊",
+      "originalName": "Sky Team",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11770.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_373106"
+    },
+    {
+      "rank": 34,
+      "group": "medium_plus",
+      "bggId": 366013,
+      "displayName": "熱力狂飆",
+      "originalName": "Heat: Pedal to the Metal",
+      "traditionalNameSource": {
+        "kind": "traditional_edition_listing",
+        "url": "https://bghut.com/goods-11197.html"
+      },
+      "status": "imported",
+      "importedGameId": "game_bgg_366013"
+    },
+    {
+      "rank": 35,
+      "group": "medium_plus",
+      "bggId": 249259,
+      "displayName": "War Chest",
+      "originalName": "War Chest",
+      "traditionalNameSource": {
+        "kind": "taiwan_usage",
+        "url": "https://bghut.com/bgg_top.php?act=Abstract"
+      },
+      "status": "imported",
+      "traditionalAlias": "戰爭之匣",
+      "importedGameId": "game_bgg_249259"
+    }
+  ]
+}
