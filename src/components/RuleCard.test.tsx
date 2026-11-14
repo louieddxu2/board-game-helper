@@ -324,8 +324,11 @@ describe('RuleCard', () => {
     }} /></MemoryRouter>);
     expect(screen.queryByLabelText(/標記數量/)).not.toBeInTheDocument();
   });
-  test('shares through the phone share sheet, and copies the link where there is none', async () => {
-    const rule: RuleCardType = { id: 'rule_share', gameId: 'game_1', statement: '可分享的規則', status: 'published', tags: [], sourceLinks: [] };
+  test('shares the copied rule body through the phone share sheet, and copies it with the link where there is none', async () => {
+    const rule: RuleCardType = { id: 'rule_share', gameId: 'game_1', statement: '可分享的規則', commonMistake: '常見玩錯', details: '補充', status: 'published', tags: [], sourceLinks: [] };
+    const url = `${window.location.origin}/games/test-game#rule-rule_share`;
+    // Same body as the copy button, led by the game name for targets that drop the share title.
+    const text = '測試遊戲\n✅ 可分享的規則\n❌ 常見玩錯\n補充說明：補充';
     const writeText = vi.fn().mockResolvedValue(undefined);
     const share = vi.fn().mockResolvedValue(undefined);
     const coarse = vi.fn().mockReturnValue({ matches: true });
@@ -336,11 +339,11 @@ describe('RuleCard', () => {
       render(<MemoryRouter><RuleCard rule={rule} gameName="測試遊戲" gameHref="/games/test-game" /></MemoryRouter>);
       const button = screen.getByRole('button', { name: '分享此規則' });
       fireEvent.click(button);
-      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/games/test-game#rule-rule_share`));
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`${text}\n${url}`));
 
       vi.stubGlobal('navigator', { clipboard: { writeText }, share });
       fireEvent.click(button);
-      expect(share).toHaveBeenCalledWith({ title: '測試遊戲', text: '可分享的規則', url: `${window.location.origin}/games/test-game#rule-rule_share` });
+      expect(share).toHaveBeenCalledWith({ title: '測試遊戲', text, url });
       expect(writeText).toHaveBeenCalledOnce();
 
       // A mouse keeps the copied link even where the browser can share.

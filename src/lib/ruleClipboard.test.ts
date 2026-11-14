@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { buildRuleClipboard, copyRuleContent } from './ruleClipboard';
+import { buildRuleClipboard, buildRuleShareText, copyRuleContent } from './ruleClipboard';
 import type { RuleCard } from '../shared/types';
 
 const rule: RuleCard = {
@@ -20,6 +20,11 @@ describe('rule clipboard', () => {
     expect(result.html).toBe(`<a href="${url}">✅ 先拿 &lt;2&gt; &amp; &quot;3&quot;<br>再行動<br>❌ 不可跳過<br>補充說明：只有一次</a>`);
     expect(buildRuleClipboard({ ...rule, commonMistake: undefined, details: undefined }, url).text)
       .toBe(`✅ ${rule.statement}`);
+  });
+
+  test('shares the same body as the copy, led by the game name when known', () => {
+    expect(buildRuleShareText(rule, ' 測試遊戲 ')).toBe(`測試遊戲\n${buildRuleClipboard(rule, url).text}`);
+    expect(buildRuleShareText(rule)).toBe(buildRuleClipboard(rule, url).text);
   });
 
   test('writes plain text and HTML together in one clipboard item', async () => {

@@ -295,6 +295,7 @@ export const GamePage = () => {
         return <RuleCard
           key={rule.id}
           rule={rule}
+          gameName={game.displayName}
           showGameContext={false}
           onToggleExpanded={toggleExpanded}
           onTagClick={toggleTag}

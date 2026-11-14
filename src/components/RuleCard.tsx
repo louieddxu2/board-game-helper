@@ -6,7 +6,7 @@ import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import { RuleCardBody } from './RuleCardBody';
 import { RuleCardSource } from './RuleCardSource';
-import { copyRuleContent } from '../lib/ruleClipboard';
+import { buildRuleShareText, copyRuleContent } from '../lib/ruleClipboard';
 import { useWrappedTitle } from './useWrappedTitle';
 import { useTagsOwnRow } from './useTagsOwnRow';
 
@@ -75,23 +75,26 @@ export const RuleCard = ({
     return `${window.location.origin}${targetPath}`;
   };
 
-  // A phone opens its own share sheet; elsewhere, or when the sheet fails, the link is copied.
+  // A phone opens its own share sheet; elsewhere, or when the sheet fails, the same text and
+  // the link are copied. The text matches the copied rule body, led by the game name.
   const shareRule = (e: React.MouseEvent) => {
     e.stopPropagation();
     const url = getRuleUrl();
-    const copyLink = () => navigator.clipboard.writeText(url).then(() => {
-      showToast('已複製這條規則的直接連結 🔗', 'info');
+    const shareGameName = gameName || (rule as any).gameName;
+    const text = buildRuleShareText(rule, shareGameName);
+    const copyShare = () => navigator.clipboard.writeText(`${text}\n${url}`).then(() => {
+      showToast('已複製這條規則的內文與連結 🔗', 'info');
     }).catch(() => {
       showToast('無法複製，請確認瀏覽器的剪貼簿權限', 'error');
     });
     if (typeof navigator.share === 'function' && window.matchMedia?.('(pointer: coarse)').matches) {
-      void navigator.share({ title: effectiveGameName ?? document.title, text: rule.statement, url }).catch((error: unknown) => {
+      void navigator.share({ title: shareGameName ?? document.title, text, url }).catch((error: unknown) => {
         // Closing the sheet is a choice, not a failure.
-        if ((error as { name?: string } | null)?.name !== 'AbortError') void copyLink();
+        if ((error as { name?: string } | null)?.name !== 'AbortError') void copyShare();
       });
       return;
     }
-    void copyLink();
+    void copyShare();
   };
 
   const copyContent = (event: React.MouseEvent) => {
