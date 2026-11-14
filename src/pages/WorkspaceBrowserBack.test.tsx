@@ -87,7 +87,8 @@ describe('Workspace browser back behavior', () => {
     render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '搜尋' }));
     await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '不存在');
-    expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument();
+    // Rows follow useDeferredValue(searchQuery), so they commit in a later low-priority render.
+    await waitFor(() => expect(screen.queryByRole('row', { name: /花火/ })).not.toBeInTheDocument());
 
     const before = popCount;
     act(() => window.history.back());
@@ -95,7 +96,7 @@ describe('Workspace browser back behavior', () => {
     await waitFor(() => expect(screen.queryByRole('searchbox', { name: '搜尋此表' })).not.toBeInTheDocument());
     await waitFor(() => expect(popCount).toBeGreaterThan(before));
     expect(screen.getByRole('button', { name: '開啟目錄' })).toBeInTheDocument();
-    expect(screen.getByRole('row', { name: /花火/ })).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: /花火/ })).toBeInTheDocument();
   });
 
   it('closes the node menu before the drawer on successive browser Back actions', async () => {
