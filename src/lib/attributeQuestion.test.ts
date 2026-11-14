@@ -3,7 +3,7 @@ import { ATTRIBUTE_QUESTION_ENDINGS, attributeComparisonWording, attributeQuesti
 
 describe('attributeQuestionEnding', () => {
   test('provides intentional wording for every current attribute', () => {
-    expect(Object.keys(ATTRIBUTE_QUESTION_ENDINGS)).toHaveLength(27);
+    expect(Object.keys(ATTRIBUTE_QUESTION_ENDINGS)).toHaveLength(29);
     expect(attributeQuestionEnding('cooperation')).toBe('較多');
     expect(attributeQuestionEnding('setup_variability')).toBe('幅度較大');
     expect(attributeQuestionEnding('systemic_coherence')).toBe('較強');

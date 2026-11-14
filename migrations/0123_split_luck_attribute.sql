@@ -8,9 +8,9 @@ VALUES
 INSERT INTO attribute_translations (attribute_id, locale, name, full_description)
 VALUES
   ('attribute_risk_planning', 'zh-TW', '風險規劃',
-   '面對抽牌、擲骰或出價尺度難以預測等變數時，玩家有多需要在結果揭曉前衡量風險並調整決策。'),
-  ('attribute_luck_dependence', 'zh-TW', '靠運氣',
-   '在玩家決策水準相近時，抽牌、擲骰或隨機配置等偶然因素有多容易左右勝負或通關成敗。');
+   '玩家要在遊戲中考慮未來可能的隨機性，預先做好準備。'),
+  ('attribute_luck_dependence', 'zh-TW', '運氣成分',
+   '玩家有多容易靠運氣取得勝利。');
 
 CREATE TABLE migration_0123_ratings (
   subject_id TEXT NOT NULL REFERENCES attribute_subjects(id),

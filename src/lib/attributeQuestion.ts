@@ -4,6 +4,8 @@ export const ATTRIBUTE_QUESTION_ENDINGS: Record<string, string> = {
   cooperation: '較多',
   worker_placement: '成分較多',
   luck: '較多',
+  luck_dependence: '更重',
+  risk_planning: '',
   adaptability: '要求較高',
   long_term_planning: '可規劃得較長遠',
   setup_variability: '幅度較大',
@@ -28,6 +30,9 @@ export const ATTRIBUTE_QUESTION_ENDINGS: Record<string, string> = {
   real_time_reaction: '要求較高',
 };
 
+export const attributeQuestionStart = (attributeKey: string) =>
+  attributeKey === 'risk_planning' ? '哪款遊戲更依賴於' : '哪款遊戲的';
+
 export const attributeQuestionEnding = (attributeKey: string) => ATTRIBUTE_QUESTION_ENDINGS[attributeKey] ?? '程度較高';
 
 export interface AttributeComparisonWording {
@@ -37,6 +42,7 @@ export interface AttributeComparisonWording {
 
 const COMPARISON_WORDING_BY_ENDING: Record<string, AttributeComparisonWording> = {
   '較多': { higher: '更多', similar: '數量相近' },
+  '更重': { higher: '更重', similar: '程度相近' },
   '成分較多': { higher: '成分更多', similar: '成分相近' },
   '程度較高': { higher: '程度更高', similar: '程度相近' },
   '較強': { higher: '更強', similar: '強度相近' },

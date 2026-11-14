@@ -74,6 +74,20 @@ describe('AttributesPage question flow', () => {
     vi.restoreAllMocks();
   });
 
+  test.each([
+    ['risk_planning', '風險規劃', '哪款遊戲更依賴於「風險規劃」？', '玩家要在遊戲中考慮未來可能的隨機性，預先做好準備。'],
+    ['luck_dependence', '運氣成分', '哪款遊戲的「運氣成分」更重？', '玩家有多容易靠運氣取得勝利。'],
+  ])('renders the question and description for %s', async (key, name, heading, fullDescription) => {
+    vi.mocked(api.attributeTable).mockResolvedValue({
+      ...sharedAttributeCatalog,
+      attributes: [{ ...attribute, key, name, fullDescription }],
+    });
+    render(<MemoryRouter><AttributesPage /></MemoryRouter>);
+    const questionHeading = await screen.findByRole('heading', { level: 2 });
+    expect(questionHeading.textContent?.replace('↑ 範例', '')).toBe(heading);
+    expect(screen.getByText(fullDescription, { selector: '.attributes-question-description' })).toBeInTheDocument();
+  });
+
   test.each(['low', 'high'] as const)('bipolar %s direction aligns question, explanation, examples, direct scores and submission', async (highPole) => {
     const bipolar = { ...attribute, key: 'win_method', scaleType: 'bipolar' as const, endpoints: {
       low: { label: '得分取勝', question: '哪款遊戲的「得分取勝」比重較高？', fullDescription: '得分端原文' },

@@ -3,7 +3,7 @@ import { AttributeFilterDialog } from '../components/AttributeFilterDialog';
 import { AttributeGameCard } from '../components/AttributeGameCard';
 import { AttributeRatingTrack } from '../components/AttributeRatingTrack';
 import { AttributeScoreAxis } from '../components/AttributeScoreAxis';
-import { attributeQuestionEnding } from '../lib/attributeQuestion';
+import { attributeQuestionEnding, attributeQuestionStart } from '../lib/attributeQuestion';
 import { suggestedComparisonForRatings } from '../lib/attributeRatingSuggestion';
 import { attributeDisplayEndpoints, orientAttributeScore } from '../shared/attributeScale';
 import { activityText, attributeQuestionKey, ExtremeScoreMarker, mergeRecentActivities } from './attributesPageShared';
@@ -111,6 +111,7 @@ const attributeDescription = endpoints
 
 const questionLabel = endpoints?.high.label ?? question.attribute.name;
 
+const questionStart = attributeQuestionStart(question.attribute.key);
 const questionEnding = attributeQuestionEnding(question.attribute.key);
 
 const recentComparisons = mergeRecentActivities(payload.activities, optimisticActivities);
@@ -159,7 +160,7 @@ return <section className="attribute-vote-page">
           </AttributeScoreAxis>
         </div> : null}
         <div className="attributes-question-attribute">
-          <h2 id="attributes-question-heading" aria-live="polite">哪款遊戲的<span className="attributes-question-term"><strong>「{questionLabel}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
+          <h2 id="attributes-question-heading" aria-live="polite">{questionStart}<span className="attributes-question-term"><strong>「{questionLabel}」</strong>{(lowestExamples.length || highestExamples.length) ? <span className="attributes-example-cue" aria-hidden="true">↑ 範例</span> : null}</span>{questionEnding}？</h2>
           {attributeDescription && <p className="attributes-question-description">{attributeDescription}</p>}
         </div>
         <div className="attributes-question-pair">
