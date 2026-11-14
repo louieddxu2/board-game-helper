@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AttributeTablePage } from './AttributeTablePage';
@@ -152,10 +152,35 @@ describe('AttributeTablePage', () => {
     vi.spyOn(api, 'attributeTable').mockResolvedValue(noDataPayload);
 
     render(<MemoryRouter><ToastProvider><AttributeTablePage /></ToastProvider></MemoryRouter>);
-    fireEvent.click(await screen.findByRole('button', { name: '遊戲甲' }));
+    expect(await screen.findByTitle('尚無評分')).toHaveTextContent('—');
+    fireEvent.click(screen.getByRole('button', { name: '遊戲甲' }));
 
     expect(screen.getByRole('status')).toHaveTextContent('尚無可評斷相近的資料');
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
+  });
+
+  test('sorts missing and unrated scores after an actual five and a comparison-only zero', async () => {
+    const subjects = ['甲', '乙', '丙', '丁'].map((name, index) => ({
+      ...payload.subjects[0], id: `subject-${index}`, displayName: `遊戲${name}`,
+    }));
+    const baseValue = { ...payload.values[0], directAverage: undefined, directCount: 0, comparisonCount: 0, decisiveComparisonCount: 0 };
+    vi.spyOn(api, 'attributeTable').mockResolvedValue({
+      ...payload, subjects, candidates: [], values: [
+        { ...baseValue, subjectId: subjects[0].id, score: 5, evidenceCount: 0 },
+        { ...baseValue, subjectId: subjects[2].id, score: 5, evidenceCount: 1, directCount: 1, directAverage: 5 },
+        { ...baseValue, subjectId: subjects[3].id, score: 0, evidenceCount: undefined, comparisonCount: 1 },
+      ],
+    });
+    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
+    const sort = await screen.findByRole('button', { name: '運氣成分排序：正常' });
+    const scores = () => screen.getAllByRole('cell').map((cell) => cell.textContent);
+    expect(scores()).toEqual(['—', '—', '5.0', '0.0']);
+    fireEvent.click(sort);
+    expect(scores()).toEqual(['5.0', '0.0', '—', '—']);
+    fireEvent.click(sort);
+    expect(scores()).toEqual(['0.0', '5.0', '—', '—']);
+    const ratedRow = screen.getByRole('row', { name: /遊戲丙/ });
+    expect(within(ratedRow).getByTitle(/直接 1 筆/)).toHaveTextContent('5.0');
   });
 
   test('pans the full table with a mouse drag without activating a table control', async () => {

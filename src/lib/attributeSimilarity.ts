@@ -10,11 +10,11 @@ export interface AttributeSimilarityMatch {
   rankCost: number;
 }
 
-const evidenceCount = (value: AttributeMatrixValue) =>
+export const attributeEvidenceCount = (value: AttributeMatrixValue) =>
   value.evidenceCount ?? value.directCount + value.comparisonCount;
 
 const confidence = (value: AttributeMatrixValue | undefined) => {
-  if (!value || evidenceCount(value) <= 0) return 0;
+  if (!value || attributeEvidenceCount(value) <= 0) return 0;
   const deviation = Math.min(MAX_RATING_DEVIATION, Math.max(0, value.ratingDeviation ?? MAX_RATING_DEVIATION));
   return Math.max(0.1, 1 - (deviation / MAX_RATING_DEVIATION) ** 2);
 };

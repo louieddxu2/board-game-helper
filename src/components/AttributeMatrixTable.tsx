@@ -1,7 +1,7 @@
 import { useContext, useMemo, useState } from 'react';
 import { ToastContext } from '../context/ToastContext';
 import { useDragPanScroll } from '../hooks/useDragPanScroll';
-import { rankAttributeSimilarity, type AttributeSimilarityMatch } from '../lib/attributeSimilarity';
+import { attributeEvidenceCount, rankAttributeSimilarity, type AttributeSimilarityMatch } from '../lib/attributeSimilarity';
 import { normalizeGameSearchText } from '../lib/gameCatalog';
 import { attributeDisplayEndpoints } from '../shared/attributeScale';
 import type { AttributeMatrixValue, AttributesPayload } from '../shared/types';
@@ -29,7 +29,7 @@ const scoreClass = (value: number | undefined) => {
 };
 
 const valueDetails = (value: AttributesPayload['values'][number] | undefined) => {
-  if (!value) return '尚無資料';
+  if (!value) return '尚無評分';
   const direct = value.directCount > 0 ? `直接 ${value.directCount} 筆` : '無直接分數';
   const comparison = value.comparisonCount > 0 ? `比較 ${value.comparisonCount} 次` : '無比較資料';
   const evidence = value.evidenceCount == null ? '' : `；有效資料 ${value.evidenceCount} 筆`;
@@ -47,7 +47,10 @@ export const AttributeMatrixTable = ({ payload }: { payload: AttributesPayload }
   const valueMap = useMemo(() => new Map(payload.values.map((value) => [`${value.subjectId}:${value.attributeId}`, value])), [payload.values]);
   const tableRows = useMemo<AttributeTableRow[]>(() => {
     const processed: AttributeTableRow[] = payload.subjects.map((subject) => {
-      const cells = payload.attributes.map((attribute) => valueMap.get(`${subject.id}:${attribute.id}`));
+      const cells = payload.attributes.map((attribute) => {
+        const value = valueMap.get(`${subject.id}:${attribute.id}`);
+        return value && attributeEvidenceCount(value) > 0 ? value : undefined;
+      });
       return {
         id: subject.id,
         displayName: subject.displayName,
