@@ -31,7 +31,11 @@ VALUES
   ('attribute_subject_game:game_e5ba503d7d3748cfa9c05314b038b473', 6, 5),
   ('attribute_subject_game:game_attribute_import_marco_polo', 2, 3),
   ('attribute_subject_game:game_ece22ff7f8cc887f560d', 1, 2),
-  ('attribute_subject_game:game_attribute_import_key_flow', 4, 3);
+  ('attribute_subject_game:game_attribute_import_key_flow', 4, 3),
+  ('attribute_subject_game:game_attribute_import_hanabi', 1, 3),
+  ('attribute_subject_game:game_attribute_import_the_isle_of_cats', 7, 4),
+  ('attribute_subject_game:game_attribute_import_nova_luna', 7, 2),
+  ('attribute_subject_game:game_attribute_import_a_feast_for_odin', 1, 3);
 
 -- Record these as direct ratings with explicit import provenance. Replay
 -- reads responses, and the score state makes the new ratings usable now.
