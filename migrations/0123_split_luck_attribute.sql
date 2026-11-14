@@ -27,7 +27,11 @@ VALUES
   ('attribute_subject_game:game_b9d5d8eaf27e55734042', 6, 3),
   ('attribute_subject_game:game_188f6b31d9b1b4888025', 1, 1),
   ('attribute_subject_game:game_attribute_import_patchwork', 1, 0),
-  ('attribute_subject_game:game_bgg_107529', 7, 4);
+  ('attribute_subject_game:game_bgg_107529', 7, 4),
+  ('attribute_subject_game:game_e5ba503d7d3748cfa9c05314b038b473', 6, 5),
+  ('attribute_subject_game:game_attribute_import_marco_polo', 3, 3),
+  ('attribute_subject_game:game_ece22ff7f8cc887f560d', 2, 2),
+  ('attribute_subject_game:game_attribute_import_key_flow', 4, 3);
 
 -- Record these as direct ratings with explicit import provenance. Replay
 -- reads responses, and the score state makes the new ratings usable now.

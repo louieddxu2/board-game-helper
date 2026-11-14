@@ -116,7 +116,7 @@ test('luck split publishes only the approved direct scores and retains them afte
       SELECT subject_a_id, attribute_id, rating_a FROM attribute_vote_responses
       WHERE attribute_id IN (?, ?) ORDER BY subject_a_id, attribute_id
     `).all(...newAttributes);
-    expect(values).toHaveLength(16);
+    expect(values).toHaveLength(24);
     expect(values.filter((row) => row.subject_a_id === 'attribute_subject_game:game_attribute_import_patchwork'))
       .toEqual([
         { subject_a_id: 'attribute_subject_game:game_attribute_import_patchwork', attribute_id: newAttributes[0], rating_a: 0 },
@@ -129,11 +129,11 @@ test('luck split publishes only the approved direct scores and retains them afte
       SELECT COUNT(*) AS count FROM attribute_catalog_entries
       WHERE json_extract(entry_json, '$.attributeId') IN (?, ?)
         AND json_extract(entry_json, '$.directCount') = 1
-    `).get(...newAttributes)).toEqual({ count: 16 });
+    `).get(...newAttributes)).toEqual({ count: 24 });
     const replay = await replayAllAttributeScores(gateway);
     expect(replay.catalogPayload.attributes.map(({ id }) => id)).not.toContain('attribute_luck');
     expect(replay.catalogPayload.values.filter(({ attributeId, directCount }) => newAttributes.includes(attributeId) && directCount > 0))
-      .toHaveLength(16);
+      .toHaveLength(24);
     for (const row of values) {
       expect(replay.catalogPayload.values.find(({ subjectId, attributeId }) => subjectId === row.subject_a_id && attributeId === row.attribute_id))
         .toMatchObject({ directCount: 1, directAverage: row.rating_a, comparisonCount: 0 });
