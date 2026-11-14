@@ -244,20 +244,40 @@ export const availableAttributeSubjectIds = (
 ) => {
   const scoped = scopedSubjectIds ? new Set(scopedSubjectIds) : undefined;
   const candidates = catalog.subjects.filter((subject) => !scoped || scoped.has(subject.id));
-  const candidateIds = new Set(candidates.map((subject) => subject.id));
+  const candidatesById = new Map(candidates.map((subject) => [subject.id, subject]));
+  // A configuration carries its base game's BGG ID too, so a renamed or merged base game
+  // must resolve to the base game itself rather than to one of its expansion setups.
   const byBggId = new Map<number, string>();
-  candidates.forEach((subject) => attributeSubjectBggIds(subject).forEach((bggId) => {
-    if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
-  }));
-  const blocked = deferred.flatMap((preference) => {
-    const currentSubjectId = candidateIds.has(preference.subjectId)
+  [...candidates.filter((subject) => subject.kind !== 'configuration'), ...candidates.filter((subject) => subject.kind === 'configuration')]
+    .forEach((subject) => attributeSubjectBggIds(subject).forEach((bggId) => {
+      if (!byBggId.has(bggId)) byBggId.set(bggId, subject.id);
+    }));
+  const configurationsByBaseBggId = new Map<number, string[]>();
+  candidates.forEach((subject) => {
+    if (subject.kind !== 'configuration') return;
+    const baseBggId = subject.components?.find((component) => component.type === 'base' && component.bggId != null)?.bggId;
+    if (baseBggId != null) configurationsByBaseBggId.set(baseBggId, [...(configurationsByBaseBggId.get(baseBggId) ?? []), subject.id]);
+  });
+  // Skipping a base game means "I don't know this game", so its base-plus-expansion setups wait
+  // with it. Skipping a setup only defers that setup: the player may know the base game.
+  const blockedById = new Map<string, DeferredAttributeSubjectPreference>();
+  for (const preference of deferred) {
+    if (questionNumber >= preference.eligibleAfterQuestion) continue;
+    const currentSubjectId = candidatesById.has(preference.subjectId)
       ? preference.subjectId
       : preference.bggIds.map((bggId) => byBggId.get(bggId)).find(Boolean);
-    if (!currentSubjectId) return [];
-    const eligible = questionNumber >= preference.eligibleAfterQuestion;
-    return eligible ? [] : [{ subjectId: currentSubjectId, preference }];
-  });
-  const blockedIds = new Set(blocked.map((entry) => entry.subjectId));
+    const subject = currentSubjectId ? candidatesById.get(currentSubjectId) : undefined;
+    if (!subject) continue;
+    const family = subject.kind === 'configuration'
+      ? [subject.id]
+      : [subject.id, ...attributeSubjectBggIds(subject).flatMap((bggId) => configurationsByBaseBggId.get(bggId) ?? [])];
+    for (const subjectId of family) {
+      const current = blockedById.get(subjectId);
+      if (!current || current.eligibleAfterQuestion < preference.eligibleAfterQuestion) blockedById.set(subjectId, preference);
+    }
+  }
+  const blocked = [...blockedById].map(([subjectId, preference]) => ({ subjectId, preference }));
+  const blockedIds = new Set(blockedById.keys());
   const available = candidates.map((subject) => subject.id).filter((subjectId) => !blockedIds.has(subjectId));
   if (available.length >= 2) return available;
   blocked

@@ -247,6 +247,27 @@ describe('local attribute collection question selection', () => {
     expect(availableAttributeSubjectIds(catalog(), undefined, deferred, 20, 100)).toEqual(['subject-a', 'subject-b', 'subject-c']);
   });
 
+  test('defers a skipped base game together with its expansion setups, but a skipped setup alone', () => {
+    const withSetup = (): AttributeCatalogPayload => {
+      const base = catalog();
+      // The setup is listed first so the BGG fallback must prefer the base game deliberately.
+      return { ...base, subjects: [
+        { id: 'config-a', slug: 'config-a', kind: 'configuration', displayName: '遊戲甲＋擴充擴', bggIds: [123, 999], components: [
+          { order: 0, type: 'base', label: '遊戲甲', bggId: 123 },
+          { order: 1, type: 'expansion', label: '擴充擴', bggId: 999 },
+        ] },
+        ...base.subjects,
+      ] };
+    };
+    const skip = (subjectId: string, bggIds: number[]) => [{ subjectId, bggIds, skipCount: 1, skippedAt: 1, eligibleAfterQuestion: 20, eligibleAfterAt: Number.MAX_SAFE_INTEGER }];
+
+    expect(availableAttributeSubjectIds(withSetup(), undefined, skip('subject-a', [123]), 5)).toEqual(['subject-b', 'subject-c']);
+    expect(availableAttributeSubjectIds(withSetup(), undefined, skip('config-a', [123, 999]), 5)).toEqual(['subject-a', 'subject-b', 'subject-c']);
+    // A skipped base game whose subject ID changed is found by BGG ID as the base game, not its setup.
+    expect(availableAttributeSubjectIds(withSetup(), undefined, skip('merged-away', [123]), 5)).toEqual(['subject-b', 'subject-c']);
+    expect(availableAttributeSubjectIds(withSetup(), undefined, skip('subject-a', [123]), 20)).toEqual(['config-a', 'subject-a', 'subject-b', 'subject-c']);
+  });
+
   test('releases the nearest cooldown locally when a scope would have fewer than two choices', () => {
     const deferred = [{
       subjectId: 'old-subject-id',
