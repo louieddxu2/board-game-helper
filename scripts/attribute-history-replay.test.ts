@@ -78,7 +78,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
         : {}),
       recorded_online: 0,
     }));
-    expect(sqlite.prepare('SELECT * FROM attribute_vote_responses ORDER BY response_id').all()).toEqual(expected);
+    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id <> 'attribute-seed:0123' ORDER BY response_id").all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);
   } finally { sqlite.close(); }
   expect(() => setup(undefined, (db) => {
@@ -99,11 +99,45 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
     ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, 1, 1, 'public', 'pending', NULL, 1, ?, 'base')`)
       .run('game_bulk-mode-test', 'bulk-mode-test', '批次快取測試', '批次快取測試', 987654321);
 
-    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_score_states WHERE subject_id = ?').get('attribute_subject_game:game_bulk-mode-test')).toMatchObject({ count: 25 });
+    const activeAttributes = sqlite.prepare('SELECT COUNT(*) AS count FROM attributes WHERE is_active = 1').get();
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_score_states WHERE subject_id = ?').get('attribute_subject_game:game_bulk-mode-test')).toEqual(activeAttributes);
     expect(sqlite.prepare('SELECT current_version FROM attribute_catalog_clock WHERE id = 1').get()).toEqual(beforeClock);
     expect(sqlite.prepare("SELECT COUNT(*) AS count FROM attribute_catalog_entries WHERE entry_key LIKE 'subject:attribute_subject_game:game_bulk-mode-test' OR entry_key LIKE 'value:attribute_subject_game:game_bulk-mode-test:%'").get()).toMatchObject({ count: 0 });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_pair_stats').get()).toEqual(beforePairs);
+  } finally { sqlite.close(); }
+});
+
+test('luck split publishes only the approved direct scores and retains them after replay', async () => {
+  const { sqlite, gateway } = setup();
+  try {
+    const newAttributes = ['attribute_luck_dependence', 'attribute_risk_planning'];
+    const values = sqlite.prepare(`
+      SELECT subject_a_id, attribute_id, rating_a FROM attribute_vote_responses
+      WHERE attribute_id IN (?, ?) ORDER BY subject_a_id, attribute_id
+    `).all(...newAttributes);
+    expect(values).toHaveLength(16);
+    expect(values.filter((row) => row.subject_a_id === 'attribute_subject_game:game_attribute_import_patchwork'))
+      .toEqual([
+        { subject_a_id: 'attribute_subject_game:game_attribute_import_patchwork', attribute_id: newAttributes[0], rating_a: 0 },
+        { subject_a_id: 'attribute_subject_game:game_attribute_import_patchwork', attribute_id: newAttributes[1], rating_a: 1 },
+      ]);
+    expect(sqlite.prepare("SELECT is_active FROM attributes WHERE id = 'attribute_luck'").get()).toEqual({ is_active: 0 });
+    expect(sqlite.prepare("SELECT deleted FROM attribute_catalog_entries WHERE entry_key = 'attribute:attribute_luck'").get())
+      .toEqual({ deleted: 1 });
+    expect(sqlite.prepare(`
+      SELECT COUNT(*) AS count FROM attribute_catalog_entries
+      WHERE json_extract(entry_json, '$.attributeId') IN (?, ?)
+        AND json_extract(entry_json, '$.directCount') = 1
+    `).get(...newAttributes)).toEqual({ count: 16 });
+    const replay = await replayAllAttributeScores(gateway);
+    expect(replay.catalogPayload.attributes.map(({ id }) => id)).not.toContain('attribute_luck');
+    expect(replay.catalogPayload.values.filter(({ attributeId, directCount }) => newAttributes.includes(attributeId) && directCount > 0))
+      .toHaveLength(16);
+    for (const row of values) {
+      expect(replay.catalogPayload.values.find(({ subjectId, attributeId }) => subjectId === row.subject_a_id && attributeId === row.attribute_id))
+        .toMatchObject({ directCount: 1, directAverage: row.rating_a, comparisonCount: 0 });
+    }
   } finally { sqlite.close(); }
 });
 

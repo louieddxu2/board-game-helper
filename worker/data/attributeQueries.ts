@@ -151,6 +151,7 @@ export const queryAttributeValues = async (db: Database, subjectIds?: string[]):
     SELECT state.subject_id, state.attribute_id, state.score, state.rating_deviation, state.direct_sum, state.direct_count,
       state.comparison_count, state.decisive_comparison_count, state.evidence_count
     FROM attribute_score_states state
+    JOIN attributes attribute ON attribute.id = state.attribute_id AND attribute.is_active = 1
     ${filter}
     ORDER BY state.subject_id, state.attribute_id
   `).bind(...(subjectIds ?? [])).all<AttributeScoreStateRow>();
