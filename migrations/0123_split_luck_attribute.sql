@@ -13,7 +13,7 @@ VALUES
    '玩家有多容易靠運氣取得勝利。');
 
 CREATE TABLE migration_0123_ratings (
-  subject_id TEXT NOT NULL REFERENCES attribute_subjects(id),
+  subject_id TEXT NOT NULL PRIMARY KEY,
   risk_planning INTEGER NOT NULL,
   luck_dependence INTEGER NOT NULL
 );
@@ -42,10 +42,11 @@ VALUES
 INSERT INTO attribute_vote_responses
   (response_id, attribute_id, subject_a_id, rating_a, activity_json, session_id, created_at, updated_at)
 SELECT 'attribute-response-seed:0123:' || key || ':' || subject_id,
-  attribute.id, subject_id,
+  attribute.id, subject.id,
   CASE key WHEN 'risk_planning' THEN risk_planning ELSE luck_dependence END,
   '[]', 'attribute-seed:0123', 0, 0
 FROM migration_0123_ratings
+JOIN attribute_subjects subject ON subject.id = migration_0123_ratings.subject_id
 CROSS JOIN attributes attribute
 WHERE attribute.id IN ('attribute_risk_planning', 'attribute_luck_dependence');
 
@@ -85,10 +86,10 @@ WITH entries AS (
 )
 INSERT INTO attribute_catalog_entries (entry_key, catalog_version, entry_json, deleted, updated_at)
 SELECT entry_key,
-  (SELECT current_version FROM attribute_catalog_clock WHERE id = 1) +
-    ROW_NUMBER() OVER (ORDER BY entry_key),
+  clock.current_version + ROW_NUMBER() OVER (ORDER BY entry_key),
   entry_json, deleted, CAST((JULIANDAY('now') - 2440587.5) * 86400000 AS INTEGER)
 FROM entries
+JOIN attribute_catalog_clock clock ON clock.id = 1
 WHERE 1
 ON CONFLICT(entry_key) DO UPDATE SET
   catalog_version = excluded.catalog_version,
