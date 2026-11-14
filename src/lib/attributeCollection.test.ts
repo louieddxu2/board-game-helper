@@ -50,6 +50,24 @@ const catalog = (): AttributeCatalogPayload => ({
 });
 
 describe('local attribute collection question selection', () => {
+  test('draws the same questions with or without zero-evidence defaults', () => {
+    const dense = catalog();
+    dense.values[2].score = 5;
+    const sparse = { ...dense, values: dense.values.filter((value) => value.evidenceCount) };
+    const subjectIds = dense.subjects.map(({ id }) => id);
+    for (const options of [{}, { fixedSubjectAId: 'subject-a', fixedAttributeId: 'attribute-luck' },
+      { fixedSubjectBId: 'subject-b', fixedAttributeId: 'attribute-luck' }]) {
+      for (let seed = 0; seed < 100; seed += 1) {
+        const random = () => {
+          let index = seed;
+          return () => ((index++ * 37) % 100) / 100;
+        };
+        expect(chooseScopedAttributeQuestion(sparse, subjectIds, options, random()))
+          .toEqual(chooseScopedAttributeQuestion(dense, subjectIds, options, random()));
+      }
+    }
+  });
+
   test('maps imported IDs to canonical game subjects', () => {
     expect(matchCollectionSubjects(catalog(), [123, 123, 999, 456])).toEqual({
       subjectIds: ['subject-a', 'subject-b'],

@@ -58,6 +58,7 @@ const updatedCatalogFromSnapshot = async (db: Database): Promise<AttributeCatalo
   // A changed voting pool can reintroduce old votes whose states were retired.
   // Recalculate it from history instead of retaining missing/default values.
   if (!sameIds(baseline.subjects, current.subjects) || !sameIds(baseline.attributes, current.attributes)) return null;
+  if (current.values.some((value) => (value.evidenceCount ?? value.directCount + value.comparisonCount) === 0)) return null;
   return current;
 };
 

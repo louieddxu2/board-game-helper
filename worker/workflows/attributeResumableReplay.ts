@@ -118,7 +118,7 @@ export const runAttributeReplayWorkLocked = async (
     }
 
     if (await queryReplayCatalogPending(db)) return 'pending';
-    const calculated = await queryCalculatedReplayWork(db, metadata.subjectIds, metadata.attributes.keys());
+    const calculated = await queryCalculatedReplayWork(db, metadata.attributes.keys());
     const replay = await prepareCalculatedAttributeReplay(db, timestamp, metadata, calculated, { compareLiveStates: true });
     await publishPreparedAttributeReplay(db, lock, timestamp, revision, replay, {}, {
       verify: [assertReplayHistoryHead(db, head), assertReplayCatalogVersion(db, metadata.throughVersion)],

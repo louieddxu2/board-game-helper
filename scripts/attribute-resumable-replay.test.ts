@@ -23,6 +23,9 @@ test('resumes committed pages and defers new direct ratings without losing their
     const catalog = async () => attributeCatalogPayload(await queryAttributeCatalogSnapshot(gateway));
     const previous = await catalog();
     const previousScores = scoreRows(harness);
+    expect(previousScores).toEqual([]);
+    expect(previous.values).toEqual([]);
+    expect(previous.subjects.length).toBeGreaterThan(2);
     const [first, second] = subjects(harness);
     const insert = sqlite.prepare(`
       INSERT INTO attribute_vote_responses

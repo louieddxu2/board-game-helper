@@ -302,7 +302,7 @@ const prepareScoringStep = async (db: Database, scope: ReplayScope, attributeId:
   if (cursor.phase === 'ratings') {
     const totals = new Map(rows as Array<[string, DirectRatingTotals]>);
     accumulateAttributeReplayRatings(history, subjectIds, attributeIds, totals);
-    state = history.length ? [...totals] : [...initializeAttributeReplayStates(subjectIds, attributeIds, totals)];
+    state = history.length ? [...totals] : [...initializeAttributeReplayStates(totals)];
     if (!history.length) {
       next.phase = 'comparisons';
       next.chunk = 0;
@@ -358,17 +358,23 @@ export const prepareCalculateReplayAttribute = async (db: Database, scope: Repla
   };
 };
 
-export const queryCalculatedReplayWork = async (db: Database, subjectIds: Iterable<string>, attributeIds: Iterable<string>): Promise<CalculatedAttributeReplay> => {
+export const queryCalculatedReplayWork = async (db: Database, attributeIds: Iterable<string>): Promise<CalculatedAttributeReplay> => {
   const result = await db.statement(`
-    SELECT kind, attribute_id, payload FROM attribute_replay_work_chunks
+    SELECT kind, attribute_id, chunk_number, payload FROM attribute_replay_work_chunks
     WHERE kind = 'pairs' OR (kind = 'states' AND page = 0)
     ORDER BY kind, attribute_id, page, chunk_number
-  `).all<{ kind: 'states' | 'pairs'; attribute_id: string; payload: string }>();
-  const capturedStates = new Map<string, OnlineAttributeState>();
+  `).all<{ kind: 'states' | 'pairs'; attribute_id: string; chunk_number: number; payload: string }>();
+  const states = new Map<string, OnlineAttributeState>();
+  const completedAttributes = new Set<string>();
   const pairCounts = new Map<string, ReplayPair>();
   for (const row of result.results ?? []) {
     if (row.kind === 'states') {
-      for (const [key, state] of JSON.parse(row.payload) as Array<[string, OnlineAttributeState]>) capturedStates.set(key, state);
+      // Empty results still have a first chunk. Older checkpoints can contain
+      // zero-evidence states, so accept them without publishing their defaults.
+      if (row.chunk_number === 0) completedAttributes.add(row.attribute_id);
+      for (const [key, state] of JSON.parse(row.payload) as Array<[string, OnlineAttributeState]>) {
+        if (state.evidenceCount > 0) states.set(key, state);
+      }
     } else {
       for (const [subjectAId, subjectBId, count] of JSON.parse(row.payload) as Array<[string, string, number]>) {
         const attributeId = row.attribute_id;
@@ -379,13 +385,8 @@ export const queryCalculatedReplayWork = async (db: Database, subjectIds: Iterab
       }
     }
   }
-  const states = new Map<string, OnlineAttributeState>();
-  const attributes = [...attributeIds];
-  for (const subjectId of subjectIds) for (const attributeId of attributes) {
-    const key = mergeStateKey(subjectId, attributeId);
-    const state = capturedStates.get(key);
-    if (!state) throw new Error('incomplete_attribute_replay_work');
-    states.set(key, state);
+  for (const attributeId of attributeIds) {
+    if (!completedAttributes.has(attributeId)) throw new Error('incomplete_attribute_replay_work');
   }
   return { states, pairCounts };
 };

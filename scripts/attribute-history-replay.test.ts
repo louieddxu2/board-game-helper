@@ -86,7 +86,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
   })).toThrow(/CHECK constraint failed/);
 });
 
-test('bulk catalog mode creates initial states without per-state catalog deltas', () => {
+test('bulk catalog mode retains eligible subjects without provisioning default scores', () => {
   const { sqlite } = setup();
   try {
     const beforeClock = sqlite.prepare('SELECT current_version FROM attribute_catalog_clock WHERE id = 1').get() as { current_version: number };
@@ -99,8 +99,9 @@ test('bulk catalog mode creates initial states without per-state catalog deltas'
     ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, 1, 1, 'public', 'pending', NULL, 1, ?, 'base')`)
       .run('game_bulk-mode-test', 'bulk-mode-test', '批次快取測試', '批次快取測試', 987654321);
 
-    const activeAttributes = sqlite.prepare('SELECT COUNT(*) AS count FROM attributes WHERE is_active = 1').get();
-    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_score_states WHERE subject_id = ?').get('attribute_subject_game:game_bulk-mode-test')).toEqual(activeAttributes);
+    const subjectId = 'attribute_subject_game:game_bulk-mode-test';
+    expect(sqlite.prepare('SELECT subject_id FROM attribute_votable_subjects WHERE subject_id = ?').get(subjectId)).toEqual({ subject_id: subjectId });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_score_states WHERE subject_id = ?').get(subjectId)).toEqual({ count: 0 });
     expect(sqlite.prepare('SELECT current_version FROM attribute_catalog_clock WHERE id = 1').get()).toEqual(beforeClock);
     expect(sqlite.prepare("SELECT COUNT(*) AS count FROM attribute_catalog_entries WHERE entry_key LIKE 'subject:attribute_subject_game:game_bulk-mode-test' OR entry_key LIKE 'value:attribute_subject_game:game_bulk-mode-test:%'").get()).toMatchObject({ count: 0 });
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='attribute_vote_events'").all()).toEqual([]);
@@ -131,6 +132,7 @@ test('luck split publishes only the approved direct scores and retains them afte
         AND json_extract(entry_json, '$.directCount') = 1
     `).get(...newAttributes)).toEqual({ count: 32 });
     const replay = await replayAllAttributeScores(gateway);
+    expect(replay.catalogPayload.values.every(({ evidenceCount }) => (evidenceCount ?? 0) > 0)).toBe(true);
     expect(replay.catalogPayload.attributes.map(({ id }) => id)).not.toContain('attribute_luck');
     expect(replay.catalogPayload.values.filter(({ attributeId, directCount }) => newAttributes.includes(attributeId) && directCount > 0))
       .toHaveLength(32);
@@ -554,8 +556,8 @@ test('full replay applies three vote weights once, keeps raw counts, and ignores
 
     const untouched = sqlite.prepare(`
       SELECT subject_id, model_version FROM attribute_score_states
-      WHERE attribute_id = ? AND direct_count = 0 LIMIT 1
-    `).get(attributeId) as { subject_id: string; model_version: string };
+      WHERE subject_id = ? AND attribute_id = ?
+    `).get(first.id, attributeId) as { subject_id: string; model_version: string };
     sqlite.prepare(`UPDATE attribute_score_states SET model_version = 'legacy-v1' WHERE subject_id = ? AND attribute_id = ?`)
       .run(untouched.subject_id, attributeId);
     const secondReplay = await replayAllAttributeScores(gateway, timestamp + 11);

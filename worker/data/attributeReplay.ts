@@ -487,7 +487,7 @@ const queryLiveReplayStates = async (db: Database) => {
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
-    const { statements, ...replay } = await prepareAttributeReplay(db, timestamp);
+    const { statements, ...replay } = await prepareAttributeReplay(db, timestamp, { compareLiveStates: true });
     await commitAttributeReplay(db, lock, statements);
     return replay;
   } finally {

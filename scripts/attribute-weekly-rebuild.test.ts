@@ -6,12 +6,44 @@ import {
 } from '../worker/data/attributeCatalog';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
 import { queryAttributeSubjects, saveAttributeResponse } from '../worker/data/attributes';
-import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../worker/data/attributeScoring';
+import { applyComparison, ATTRIBUTE_SCORE_MODEL_VERSION, emptyAttributeState } from '../worker/data/attributeScoring';
 import { requireAttributeReplayAfterChange } from '../worker/data/attributeVoteWeights';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 import { runWeeklyAttributeRebuild } from '../worker/workflows/attributeWeeklyRebuild';
 
 import { close, createHarness, establishBaseline, scoreRows, status, subjects } from './attributeReplayTestHarness';
+
+test('first comparison creates only the two real states and survives replay', async () => {
+  const { harness, timestamp } = await establishBaseline(({ sqlite }) => {
+    sqlite.exec('DELETE FROM attribute_vote_responses');
+  });
+  try {
+    expect(scoreRows(harness)).toEqual([]);
+    const [first, second] = subjects(harness);
+    const result = await saveAttributeResponse(harness.gateway, {
+      subjectAId: first.id,
+      subjectBId: second.id,
+      attributeId: 'attribute_win_method',
+      responseId: 'first-sparse-comparison',
+      sessionId: 'weekly-test-session',
+      actorId: null,
+      comparison: 'A_HIGHER',
+      timestamp: timestamp + 1,
+    });
+    const expected = applyComparison(emptyAttributeState(), emptyAttributeState(), 'A_HIGHER');
+    expect(result.updatedValues).toMatchObject([
+      { subjectId: first.id, score: Number(expected.a.next.score.toFixed(2)), evidenceCount: 1 },
+      { subjectId: second.id, score: Number(expected.b.next.score.toFixed(2)), evidenceCount: 1 },
+    ]);
+    const liveRows = scoreRows(harness);
+    expect(liveRows).toHaveLength(2);
+    await runCompleteAttributeReplay(harness.gateway, timestamp + 2);
+    expect(scoreRows(harness)).toEqual(liveRows);
+    const snapshot = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    expect(snapshot.values).toHaveLength(2);
+    expect(snapshot.subjects.length).toBeGreaterThan(2);
+  } finally { close(harness); }
+});
 
 test('weekly cache refresh applies comparison deltas without rereading score history', async () => {
   const { harness, timestamp } = await establishBaseline();

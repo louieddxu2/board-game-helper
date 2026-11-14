@@ -1,28 +1,7 @@
 import type { AttributeComparisonResult } from '../../src/shared/types';
-import { ATTRIBUTE_INITIAL_RD, applyComparison, emptyAttributeState, type OnlineAttributeState } from './attributeScoring';
-
-interface AttributeReplayBaselineRow {
-  direct_sum: number;
-  direct_count: number;
-  weighted_sum?: number;
-  weight_sum?: number;
-}
+import { ATTRIBUTE_DIRECT_RATING_RD, applyComparison, emptyAttributeState, type OnlineAttributeState } from './attributeScoring';
 
 export const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
-
-const stateFromBaseline = (row: AttributeReplayBaselineRow): OnlineAttributeState => {
-  const directCount = Number(row.direct_count);
-  const directSum = Number(row.direct_sum);
-  return {
-    score: directCount ? (row.weighted_sum ?? directSum) / (row.weight_sum ?? directCount) : 5,
-    ratingDeviation: directCount ? 1.5 / Math.sqrt(row.weight_sum ?? directCount) : ATTRIBUTE_INITIAL_RD,
-    directSum,
-    directCount,
-    comparisonCount: 0,
-    decisiveComparisonCount: 0,
-    evidenceCount: directCount,
-  };
-};
 
 export const pairStatKey = (subjectAId: string, subjectBId: string, attributeId: string) =>
   `${subjectAId}\u0000${subjectBId}\u0000${attributeId}`;
@@ -102,16 +81,18 @@ export const accumulateAttributeReplayRatings = (
   }
 };
 
-export const initializeAttributeReplayStates = (
-  subjectIds: ReadonlySet<string>, attributeIds: ReadonlySet<string>, directRatings: Map<string, DirectRatingTotals>,
-) => {
+export const initializeAttributeReplayStates = (directRatings: Map<string, DirectRatingTotals>) => {
   const states = new Map<string, OnlineAttributeState>();
-  for (const subjectId of subjectIds) for (const attributeId of attributeIds) {
-    const direct = directRatings.get(mergeStateKey(subjectId, attributeId));
-    states.set(mergeStateKey(subjectId, attributeId), stateFromBaseline({
-      direct_sum: direct?.total ?? 0, direct_count: direct?.count ?? 0,
-      weighted_sum: direct?.weightedTotal ?? 0, weight_sum: direct?.weight ?? 0,
-    }));
+  for (const [key, direct] of directRatings) {
+    states.set(key, {
+      score: direct.weightedTotal / direct.weight,
+      ratingDeviation: ATTRIBUTE_DIRECT_RATING_RD / Math.sqrt(direct.weight),
+      directSum: direct.total,
+      directCount: direct.count,
+      comparisonCount: 0,
+      decisiveComparisonCount: 0,
+      evidenceCount: direct.count,
+    });
   }
   return states;
 };
@@ -142,7 +123,7 @@ export const calculateAttributeReplay = (
   const history = expandAttributeReplayHistory(responses);
   const directRatings = new Map<string, DirectRatingTotals>();
   accumulateAttributeReplayRatings(history, subjectIds, attributeIds, directRatings);
-  const states = initializeAttributeReplayStates(subjectIds, attributeIds, directRatings);
+  const states = initializeAttributeReplayStates(directRatings);
   const pairCounts = new Map<string, ReplayPair>();
   applyAttributeReplayComparisons(history, subjectIds, attributeIds, states, pairCounts);
   return { states, pairCounts };
