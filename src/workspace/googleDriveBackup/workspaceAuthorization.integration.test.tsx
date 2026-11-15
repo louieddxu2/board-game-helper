@@ -46,6 +46,7 @@ describe('Workspace frontend-to-Drive authorization contract', () => {
     const { flow, hook } = await connect();
     expect(flow.initTokenClient.mock.calls[0][0].scope.split(/\s+/).sort()).toEqual(DRIVE_SNAPSHOT_SCOPES.split(/\s+/).sort());
     expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(1); expect(hook.result.current.authorized).toBe(true); expect(hook.result.current.error).toBe('');
+    expect(flow.urls.length).toBeGreaterThan(0);
     expect(flow.urls.every(url => url.startsWith('https://www.googleapis.com/drive/') || url.startsWith('https://www.googleapis.com/upload/drive/'))).toBe(true);
     hook.unmount();
   });
@@ -61,7 +62,17 @@ describe('Workspace frontend-to-Drive authorization contract', () => {
     const flow = fixture(); flow.setFirst401();
     const hook = renderHook(() => useWorkspaceGoogleDriveBackup({ inspectChanges: false, loadGoogleClientId: async () => CLIENT, onRestored: vi.fn(), setNotice: vi.fn() }));
     await act(async () => { await hook.result.current.connect(); });
-    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2); expect(hook.result.current.authorized).toBe(true); expect(hook.result.current.error).toBe(''); hook.unmount();
+    const [initialRequest, retriedRequest] = flow.fetchBridge.mock.calls;
+    const initialBearer = new Headers(initialRequest?.[1]?.headers).get('Authorization');
+    const retryBearer = new Headers(retriedRequest?.[1]?.headers).get('Authorization');
+    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
+    expect(retriedRequest?.[0]).toBe(initialRequest?.[0]);
+    expect(initialBearer).toMatch(/^Bearer /);
+    expect(retryBearer).toMatch(/^Bearer /);
+    expect(retryBearer).not.toBe(initialBearer);
+    expect(hook.result.current.authorized).toBe(true);
+    expect(hook.result.current.error).toBe('');
+    hook.unmount();
   });
 
   test('does not reopen OAuth after a Drive 403, while an explicit retry can recover', async () => {

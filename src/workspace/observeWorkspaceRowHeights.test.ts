@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe('observeWorkspaceRowHeights', () => {
-  it('does not synchronously read geometry or measure rows', () => {
+  it('observes both rows without reading layout and measures only the reported row', () => {
     const first = row('row-a');
     const second = row('row-b');
     const measureRow = vi.fn();
@@ -62,32 +62,15 @@ describe('observeWorkspaceRowHeights', () => {
     expect(first.getBoundingClientRect).not.toHaveBeenCalled();
     expect(second.getBoundingClientRect).not.toHaveBeenCalled();
     expect(measureRow).not.toHaveBeenCalled();
-    expect(observer.observe).toHaveBeenNthCalledWith(1, first.element, { box: 'border-box' });
-    expect(observer.observe).toHaveBeenNthCalledWith(2, second.element, { box: 'border-box' });
-  });
-
-  it('measures only rows reported by ResizeObserver', () => {
-    const first = row('row-a');
-    const second = row('row-b');
-    const measureRow = vi.fn();
-    observeWorkspaceRowHeights([first.element, second.element], measureRow);
+    expect(observer.observe).toHaveBeenCalledTimes(2);
+    expect(observer.observe).toHaveBeenCalledWith(first.element, { box: 'border-box' });
+    expect(observer.observe).toHaveBeenCalledWith(second.element, { box: 'border-box' });
 
     observer.trigger([entry(second.element, 52)]);
 
     expect(measureRow).toHaveBeenCalledExactlyOnceWith('row-b', 52);
     expect(first.getBoundingClientRect).not.toHaveBeenCalled();
     expect(second.getBoundingClientRect).not.toHaveBeenCalled();
-  });
-
-  it('uses a valid border box without forcing a layout read', () => {
-    const measured = row('row-a');
-    const measureRow = vi.fn();
-    observeWorkspaceRowHeights([measured.element], measureRow);
-
-    observer.trigger([entry(measured.element, 64)]);
-
-    expect(measured.getBoundingClientRect).not.toHaveBeenCalled();
-    expect(measureRow).toHaveBeenCalledExactlyOnceWith('row-a', 64);
   });
 
   it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])('falls back to one changed row for border box height %s', height => {

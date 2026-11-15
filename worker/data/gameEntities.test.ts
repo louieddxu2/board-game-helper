@@ -46,30 +46,20 @@ describe('game entity promotion', () => {
     expect(firstDetails[7].bindings[3]).toBe('variant_of');
   });
 
-  test('reuses an existing entity without creating another game row', async () => {
+  test('reuses existing entities for normalized and exact labels', async () => {
     const { db, statements } = fakeDatabase([
       { game_id: 'variant-1', name: '挪威人擴' },
-    ]);
-
-    const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['挪威人擴充'], 100);
-    const details = statements as Array<{ sql: string; bindings: unknown[] }>;
-
-    expect(result).toHaveLength(1);
-    expect((result[0] as unknown as { sql: string }).sql).toContain('rule_game_variants');
-    expect(details.some((item) => item.sql.includes('INSERT OR IGNORE INTO games'))).toBe(false);
-  });
-
-  test('reuses an existing unclassified entity', async () => {
-    const { db, statements } = fakeDatabase([
       { game_id: 'variant-unknown', name: 'Promo' },
     ]);
 
-    const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['Promo'], 100);
-    const details = statements as Array<{ sql: string; bindings: unknown[] }>;
+    const result = await ensureRuleGameVariantStatements(db, 'game-1', 'rule-1', ['挪威人擴充', 'Promo'], 100);
 
-    expect(result).toHaveLength(1);
-    expect((result[0] as unknown as { sql: string }).sql).toContain('rule_game_variants');
-    expect(details.some((item) => item.sql.includes('INSERT OR IGNORE INTO games'))).toBe(false);
+    expect(statements.filter((item) => item.sql.includes('INSERT OR IGNORE INTO games'))).toEqual([]);
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sql: expect.stringContaining('rule_game_variants'), bindings: ['rule-1', 'variant-1', 100] }),
+      expect.objectContaining({ sql: expect.stringContaining('rule_game_variants'), bindings: ['rule-1', 'variant-unknown', 100] }),
+    ]));
   });
 
   test('links an imported expansion by its own name or alias even without an expansion marker', async () => {

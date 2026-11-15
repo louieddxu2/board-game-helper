@@ -164,29 +164,15 @@ describe('workspace table scroll anchor application', () => {
 });
 
 describe('workspace table row indexes', () => {
-  it('keeps source row positions when a filtered order rerenders', () => {
-    const options = makeOptions();
-    options.filteredRows = table.rows;
-    configureWindows(makeRowWindow(undefined));
-    const view = renderHook(() => useWorkspaceTableWindow(options));
-    const originalIndexes = view.result.current.tableRowIndexes;
-
-    expect([...originalIndexes.entries()]).toEqual([['row-a', 0], ['row-b', 1], ['row-c', 2]]);
-    expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[9]).toBe(originalIndexes);
-
-    options.filteredRows = [table.rows[2], table.rows[0]];
-    view.rerender();
-
-    expect(view.result.current.tableRowIndexes).toBe(originalIndexes);
-    expect([...view.result.current.tableRowIndexes.entries()]).toEqual([['row-a', 0], ['row-b', 1], ['row-c', 2]]);
-  });
-
   it('reuses global indexes for value edits and leaves filtered windows array-local', () => {
     const options = makeOptions();
     options.filteredRows = table.rows;
     configureWindows(makeRowWindow(undefined));
     const view = renderHook(() => useWorkspaceTableWindow(options));
     const originalIndexes = view.result.current.tableRowIndexes;
+    const originalPositions = [['row-a', 0], ['row-b', 1], ['row-c', 2]];
+    expect([...originalIndexes.entries()]).toEqual(originalPositions);
+
     const edited = applyWorkspaceCellChanges(table.rows, undefined, [{ rowId: 'row-b', columnId: column.id, before: null, after: '最新' }]);
 
     options.table = { ...table, rows: edited };
@@ -199,6 +185,7 @@ describe('workspace table row indexes', () => {
     options.filteredRows = filtered;
     view.rerender();
     expect(view.result.current.tableRowIndexes).toBe(originalIndexes);
+    expect([...originalIndexes.entries()]).toEqual(originalPositions);
     expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[0]).toBe(filtered);
     expect(vi.mocked(useWorkspaceRowWindow).mock.calls.at(-1)?.[9]).toBeUndefined();
   });

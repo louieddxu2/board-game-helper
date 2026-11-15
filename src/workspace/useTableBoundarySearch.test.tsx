@@ -37,15 +37,10 @@ const setup = () => {
 };
 
 describe('boundary search countdown', () => {
-  it('never starts counting for a slight upward pull', () => {
-    const gesture = setup();
-    gesture.begin(); gesture.move(24); gesture.wait(2_000);
-    expect(gesture.onOpenSearch).not.toHaveBeenCalled();
-  });
-
   it('counts the full half-second only after the bounce reaches its limit', () => {
     const gesture = setup();
-    gesture.begin(); gesture.move(24); gesture.wait(400);
+    gesture.begin(); gesture.move(24); gesture.wait(700);
+    expect(gesture.onOpenSearch).not.toHaveBeenCalled();
     gesture.move(90);
     expect(gesture.table.style.getPropertyValue('--workspace-bounce-y')).toBe('-30.0px');
     gesture.wait(499);

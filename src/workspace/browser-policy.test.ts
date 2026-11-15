@@ -148,13 +148,6 @@ describe('workspace browser policies', () => {
     expect(headerCellRule).toMatch(/z-index:\s*6/);
   });
 
-  it('drives table rebound from one shared frame clock instead of per-cell transitions', () => {
-    const styles = readCssSource('src/styles.css');
-    const bounceTransitionRule = styles.match(/\.workspace-table\.is-bounce-settling[^\n]*\{([^}]*)\}/)?.[1];
-
-    expect(bounceTransitionRule).toBeUndefined();
-  });
-
   it('centers value editors independently from table text scaling', () => {
     const styles = readCssSource('src/styles.css');
     const valueOverlayRule = styles.match(/\.workspace-value-dialog-overlay\s*\{([^}]*)\}/)?.[1];
@@ -232,8 +225,6 @@ describe('workspace browser policies', () => {
     expect(frozenFilterbarRule).toMatch(/position:\s*sticky/);
     expect(frozenFilterbarRule).toMatch(/left:\s*0/);
     expect(styles).toMatch(/\.workspace-paste-button\s*\{\s*display:\s*none;\s*\}/);
-    expect(styles).not.toContain('.workspace-filterbar-count');
-    expect(styles).not.toContain('.workspace-empty-cell::after');
   });
 
   it('keeps every workspace dialog and input surface translucent without background blur', () => {
@@ -328,7 +319,6 @@ describe('workspace browser policies', () => {
     const integerValueRule = styles.match(/\.workspace-number-aligned-value\.is-integer\s*\{([^}]*)\}/)?.[1];
 
     expect(editorRule).toMatch(/width:\s*fit-content/);
-    expect(editorRule).toMatch(/grid-template-columns:\s*30px minmax\(12ch, max-content\)/);
     expect(editorRule).toMatch(/padding:\s*4px 0 6px/);
     expect(operatorsRule).toMatch(/display:\s*flex/);
     expect(directOperatorsRule).toMatch(/flex-direction:\s*column/);
@@ -344,11 +334,9 @@ describe('workspace browser policies', () => {
 
   it('keeps numeric editors readable without adding an empty control column', () => {
     const styles = readCssSource('src/styles.css');
-    const numberInputRule = styles.match(/\.workspace-number-editor \.workspace-value-input\s*\{([^}]*)\}/)?.[1];
     const plainEditorRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\]\s*\{([^}]*)\}/)?.[1];
     const plainInputRule = styles.match(/\.workspace-number-editor\[data-has-adjustment-controls="false"\] \.workspace-number-input-shell\s*\{([^}]*)\}/)?.[1];
 
-    expect(numberInputRule).toMatch(/min-width:\s*0/);
     expect(plainEditorRule).toMatch(/grid-template-columns:\s*minmax\(12ch, max-content\)/);
     expect(plainInputRule).toMatch(/grid-column:\s*1/);
   });

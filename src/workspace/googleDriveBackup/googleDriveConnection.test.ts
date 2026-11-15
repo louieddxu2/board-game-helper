@@ -13,7 +13,7 @@ const connection = (scope = DRIVE_SNAPSHOT_SCOPES) => {
     appProperties: { backupKey: DRIVE_SNAPSHOT_KEY, backupKind: 'root' } });
   const requests: Array<{ url: string; token?: string }> = [];
   const grants = new Map<string, Record<string, string>>();
-  let tokenCounter = 0; let popupError: string | undefined; let failFirst401 = false; let always403 = false; let attempts = 0;
+  let tokenCounter = 0; let popupError: string | undefined; let always403 = false;
   let clientConfig: { scope: string; callback: (resp: unknown) => void; error_callback?: (err: { type: string }) => void } | undefined;
   const tokenClient = {
     callback: (_resp: unknown) => undefined,
@@ -41,26 +41,18 @@ const connection = (scope = DRIVE_SNAPSHOT_SCOPES) => {
   const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const token = new Headers(init?.headers).get('authorization')?.replace(/^Bearer\s+/i, '');
-    requests.push({ url, token }); attempts += 1;
-    if (always403 || (failFirst401 && attempts === 1)) return new Response(JSON.stringify({ error: { message: 'denied' } }), { status: always403 ? 403 : 401 });
+    requests.push({ url, token });
+    if (always403) return new Response(JSON.stringify({ error: { message: 'denied' } }), { status: 403 });
     if (!token || !grants.has(token)) return new Response(JSON.stringify({ error: { message: 'unknown token' } }), { status: 401 });
     return drive.fetchImpl(input, init);
   };
   const api = new GoogleDriveApi({ tokenProvider: provider, fetchImpl });
   return { drive, provider, api, tokenClient, initTokenClient, requests, grants,
-    setPopupError: (value?: string) => { popupError = value; }, setFailFirst401: () => { failFirst401 = true; }, setAlways403: () => { always403 = true; } };
+    setPopupError: (value?: string) => { popupError = value; }, setAlways403: () => { always403 = true; } };
 };
 
 describe('Google Drive GIS to direct Drive authorization', () => {
   afterEach(() => { window.localStorage.clear(); vi.unstubAllGlobals(); });
-
-  test('requests openid plus drive.file and sends the bearer only to Drive', async () => {
-    const flow = connection(); await flow.provider.signIn();
-    await expect(flow.api.getFile(ROOT)).resolves.toMatchObject({ id: ROOT });
-    expect(flow.initTokenClient.mock.calls[0][0]?.scope.split(/\s+/).sort()).toEqual(DRIVE_SNAPSHOT_SCOPES.split(/\s+/).sort());
-    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(1);
-    expect(flow.requests.every(request => request.url.startsWith('https://www.googleapis.com/drive/') || request.url.startsWith('https://www.googleapis.com/upload/drive/'))).toBe(true);
-  });
 
   test('accepts a real drive.file-only grant without fabricating an identity or tokeninfo request', async () => {
     const flow = connection(DRIVE_FILE_SCOPE); await flow.provider.signIn();
@@ -69,13 +61,6 @@ describe('Google Drive GIS to direct Drive authorization', () => {
     expect(file.id).toBe(ROOT); expect(flow.grants.get(token ?? '')).not.toHaveProperty('sub');
     expect(flow.initTokenClient.mock.calls[0][0]?.scope).toBe(DRIVE_FILE_SCOPE);
     expect(flow.requests.every(request => !request.url.includes('tokeninfo'))).toBe(true);
-  });
-
-  test('refreshes exactly once after a Drive 401', async () => {
-    const flow = connection(); flow.setFailFirst401();
-    await expect(flow.api.getFile(ROOT)).resolves.toMatchObject({ id: ROOT });
-    expect(flow.tokenClient.requestAccessToken).toHaveBeenCalledTimes(2);
-    expect(flow.requests.length).toBeGreaterThanOrEqual(2); expect(flow.requests[0].url).toBe(flow.requests[1].url); expect(flow.requests[0].token).not.toBe(flow.requests[1].token);
   });
 
   test('does not enter a popup loop after a Drive 403; a later explicit retry remains possible', async () => {
