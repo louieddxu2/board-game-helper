@@ -14,9 +14,6 @@ describe('rule clipboard', () => {
   test('copies readable body text and escaped HTML with a rule permalink and line breaks', () => {
     const result = buildRuleClipboard(rule, url);
     expect(result.text).toBe(`✅ ${rule.statement}\n❌ 不可跳過\n補充說明：只有一次`);
-    expect(result.text).not.toContain('玩錯情況');
-    expect(result.text).toContain('補充說明：只有一次');
-    expect(result.text).not.toContain(url);
     expect(result.html).toBe(`<a href="${url}">✅ 先拿 &lt;2&gt; &amp; &quot;3&quot;<br>再行動<br>❌ 不可跳過<br>補充說明：只有一次</a>`);
     expect(buildRuleClipboard({ ...rule, commonMistake: undefined, details: undefined }, url).text)
       .toBe(`✅ ${rule.statement}`);

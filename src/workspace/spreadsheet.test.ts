@@ -291,28 +291,21 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.rows[0].values[imported.table.columns[2].id]).toBe(2);
   });
 
-  it('preserves line breaks inside fixed options through an xlsx round trip', async () => {
+  it('round-trips column width, multiline multi-select options and numeric input mode through XLSX', async () => {
     ensureBlobArrayBuffer();
     const source = makeFixture();
-    source.tables[0].columns[1].options = ['第一行\n第二行', '單行'];
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
-    expect(imported.table?.columns[1].options).toEqual(['第一行\n第二行', '單行']);
-  });
+    const table = source.tables[0];
+    const [text, selection, number] = table.columns;
+    text.overflowMode = 'ellipsis';
+    text.widthLimitChars = 8;
+    selection.options = ['第一行\n第二行', '單行'];
+    selection.isMultiple = true;
+    number.numberInputMode = 'step';
 
-  it('preserves the multi-select property setting through an xlsx round trip', async () => {
-    ensureBlobArrayBuffer();
-    const source = makeFixture();
-    source.tables[0].columns[1].isMultiple = true;
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
-    expect(imported.table?.columns[1].isMultiple).toBe(true);
-  });
-
-  it('preserves the numeric input mode through an xlsx round trip', async () => {
-    ensureBlobArrayBuffer();
-    const source = makeFixture();
-    source.tables[0].columns[2].numberInputMode = 'step';
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
-    expect(imported.table?.columns[2].numberInputMode).toBe('step');
+    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
+    expect(imported.table?.columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 8 });
+    expect(imported.table?.columns[1]).toMatchObject({ options: ['第一行\n第二行', '單行'], isMultiple: true });
+    expect(imported.table?.columns[2]).toMatchObject({ numberInputMode: 'step' });
   });
 
   it('round-trips fixed option colors and numeric range colors', async () => {
@@ -334,16 +327,6 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns[1].hidden).toBe(true);
     expect(imported.table?.columns[2].numberRanges).toEqual(table.columns[2].numberRanges);
     expect(imported.table?.rowHeader?.optionColors).toEqual({ 已擁有: '#7C3AED' });
-  });
-
-  it('round-trips the full-width-character column width limit', async () => {
-    const source = makeFixture();
-    source.tables[0].columns[0].overflowMode = 'ellipsis';
-    source.tables[0].columns[0].widthLimitChars = 8;
-
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
-
-    expect(imported.table?.columns[0]).toMatchObject({ overflowMode: 'ellipsis', widthLimitChars: 8 });
   });
 
   it('round-trips the date-only display preference without changing the stored date-time', async () => {

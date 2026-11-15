@@ -60,34 +60,6 @@ describe('AttributeTablePage', () => {
     expect(screen.getByTitle(/目前 7.3/)).toBeInTheDocument();
   });
 
-  test('cycles an attribute column from descending to ascending and back to normal', async () => {
-    const sortablePayload: AttributeCatalogPayload = {
-      ...payload,
-      subjects: [
-        ...payload.subjects,
-        { id: 'subject-b', slug: 'game-b', kind: 'game', displayName: '遊戲乙' },
-      ],
-      values: [
-        ...payload.values,
-        { subjectId: 'subject-b', attributeId: 'attribute-luck', score: 9.5, ratingDeviation: 1, directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'glicko-rd-v1' },
-      ],
-    };
-    vi.spyOn(api, 'attributeTable').mockResolvedValue(sortablePayload);
-
-    render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
-
-    const rows = () => [...document.querySelectorAll('.attributes-matrix tbody tr')].map((row) => row.querySelector('th')?.textContent?.trim());
-    const normal = await screen.findByRole('button', { name: '運氣成分排序：正常' });
-    expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
-
-    fireEvent.click(normal);
-    expect(rows()).toEqual(['遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲甲已對應遊戲']);
-    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由大到小' }));
-    expect(rows()).toEqual(['遊戲甲已對應遊戲', '尚未對應遊戲待對應遊戲', '遊戲乙已對應遊戲']);
-    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由小到大' }));
-    expect(rows()).toEqual(['遊戲甲已對應遊戲', '遊戲乙已對應遊戲', '尚未對應遊戲待對應遊戲']);
-  });
-
   test('searches snapshot aliases, secondary names and configuration components without requesting more data', async () => {
     const subjects = [
       { ...payload.subjects[0], displayName: '神奇果汁', secondaryName: 'Juicy Fruits', aliases: ['Juice Fruit', '果汁大亨'] },
@@ -159,13 +131,13 @@ describe('AttributeTablePage', () => {
     expect(screen.getByText('尚未對應遊戲')).toBeInTheDocument();
   });
 
-  test('sorts missing and unrated scores after an actual five and a comparison-only zero', async () => {
+  test('cycles sort order across rated, unrated and pending items', async () => {
     const subjects = ['甲', '乙', '丙', '丁'].map((name, index) => ({
       ...payload.subjects[0], id: `subject-${index}`, displayName: `遊戲${name}`,
     }));
     const baseValue = { ...payload.values[0], directAverage: undefined, directCount: 0, comparisonCount: 0, decisiveComparisonCount: 0 };
     vi.spyOn(api, 'attributeTable').mockResolvedValue({
-      ...payload, subjects, candidates: [], values: [
+      ...payload, subjects, candidates: [{ ...payload.candidates[0], values: [2] }], values: [
         { ...baseValue, subjectId: subjects[0].id, score: 5, evidenceCount: 0 },
         { ...baseValue, subjectId: subjects[2].id, score: 5, evidenceCount: 1, directCount: 1, directAverage: 5 },
         { ...baseValue, subjectId: subjects[3].id, score: 0, evidenceCount: undefined, comparisonCount: 1 },
@@ -174,11 +146,15 @@ describe('AttributeTablePage', () => {
     render(<MemoryRouter><AttributeTablePage /></MemoryRouter>);
     const sort = await screen.findByRole('button', { name: '運氣成分排序：正常' });
     const scores = () => screen.getAllByRole('cell').map((cell) => cell.textContent);
-    expect(scores()).toEqual(['—', '—', '5.0', '0.0']);
+    const normalOrder = ['—', '—', '5.0', '0.0', '2.0'];
+    expect(scores()).toEqual(normalOrder);
     fireEvent.click(sort);
-    expect(scores()).toEqual(['5.0', '0.0', '—', '—']);
-    fireEvent.click(sort);
-    expect(scores()).toEqual(['0.0', '5.0', '—', '—']);
+    expect(scores()).toEqual(['5.0', '2.0', '0.0', '—', '—']);
+    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由大到小' }));
+    expect(scores()).toEqual(['0.0', '2.0', '5.0', '—', '—']);
+    fireEvent.click(screen.getByRole('button', { name: '運氣成分排序：由小到大' }));
+    expect(sort).toHaveAccessibleName('運氣成分排序：正常');
+    expect(scores()).toEqual(normalOrder);
     const ratedRow = screen.getByRole('row', { name: /遊戲丙/ });
     expect(within(ratedRow).getByTitle(/直接 1 筆/)).toHaveTextContent('5.0');
   });
