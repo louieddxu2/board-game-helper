@@ -469,14 +469,8 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
     expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeUnchangedReplay).toBeLessThan(100);
     expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
       .toEqual({ active_generation: timestamp + 6, generated_at: timestamp + 6 });
-    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
-    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
-    const writesBeforeSettledReplay = gateway.metrics?.().rowsWritten ?? 0;
-    executedSql.length = 0;
-    await runCompleteAttributeReplay(gateway, timestamp + 7);
-    expect((gateway.metrics?.().rowsWritten ?? 0) - writesBeforeSettledReplay).toBeLessThan(100);
-    expect(sqlite.prepare('SELECT active_generation, generated_at FROM attribute_catalog_snapshot_state WHERE id = 1').get())
-      .toEqual({ active_generation: timestamp + 7, generated_at: timestamp + 7 });
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_replay_state_snapshot_chunks\b/i.test(sql))).toBe(true);
+    expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_score_states\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
   } finally { sqlite.close(); }

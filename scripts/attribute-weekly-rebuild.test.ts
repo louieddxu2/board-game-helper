@@ -392,33 +392,31 @@ test('changed pools choose full replay', async () => {
   } finally { close(harness); }
 });
 
-test('incomplete snapshots choose full replay and repair the snapshot', async () => {
+test('weekly replay replaces snapshots with missing or malformed chunks', async () => {
   const { harness, timestamp } = await establishBaseline();
   try {
-    const snapshot = harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number };
-    harness.sqlite.prepare('DELETE FROM attribute_catalog_snapshot_chunks WHERE generation = ? AND chunk_number = 0')
-      .run(snapshot.active_generation);
-    harness.executedSql.length = 0;
-    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
-    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+    const readSnapshot = async () => attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
+    const original = await readSnapshot();
+    expect(original.values.length).toBeGreaterThan(0);
 
-    const repaired = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
-    expect(repaired.values.length).toBeGreaterThan(0);
-  } finally { close(harness); }
-});
+    const damage = [
+      ['missing', 'DELETE FROM attribute_catalog_snapshot_chunks WHERE generation = ? AND chunk_number = 0'],
+      ['malformed', "UPDATE attribute_catalog_snapshot_chunks SET entries_json = '{}' WHERE generation = ? AND chunk_number = 0"],
+    ] as const;
 
-test('malformed snapshots choose full replay and repair the snapshot', async () => {
-  const { harness, timestamp } = await establishBaseline();
-  try {
-    const snapshot = harness.sqlite.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').get() as { active_generation: number };
-    harness.sqlite.prepare('UPDATE attribute_catalog_snapshot_chunks SET entries_json = ? WHERE generation = ? AND chunk_number = 0')
-      .run('{}', snapshot.active_generation);
-    harness.executedSql.length = 0;
-    await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
-    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
-
-    const repaired = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
-    expect(repaired.values.length).toBeGreaterThan(0);
+    let generation = original.generation;
+    for (const [kind, sql] of damage) {
+      const result = harness.sqlite.prepare(sql).run(generation);
+      expect(Number(result.changes), kind).toBe(1);
+      harness.executedSql.length = 0;
+      const nextGeneration = generation + 1;
+      expect(await runWeeklyAttributeRebuild(harness.gateway, nextGeneration), kind).toBe('replay');
+      expect(harness.executedSql.filter((query) => /\bFROM\s+attribute_vote_responses\b/iu.test(query)), kind).toHaveLength(1);
+      const repaired = await readSnapshot();
+      expect(repaired.generation, kind).toBe(nextGeneration);
+      expect(repaired.values, kind).toEqual(original.values);
+      generation = repaired.generation;
+    }
   } finally { close(harness); }
 });
 

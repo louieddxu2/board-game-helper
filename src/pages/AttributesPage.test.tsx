@@ -153,10 +153,13 @@ describe('AttributesPage question flow', () => {
     } };
     vi.mocked(api.attributeTable).mockResolvedValue({ ...sharedAttributeCatalog, attributes: [bipolar] });
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
-    fireEvent.click(await screen.findByRole('button', { name: '換掉遊戲甲' }));
-    expect(screen.getByRole('heading', { name: /得分取勝/ })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /得分取勝/ });
+    vi.mocked(Math.random).mockReturnValue(0.9);
+    fireEvent.click(screen.getByRole('button', { name: '換掉遊戲甲' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '不知道，換一組' })).toBeEnabled());
+    expect(screen.getByRole('heading', { name: /得分取勝/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '不知道，換一組' }));
+    expect(await screen.findByRole('heading', { name: /條件取勝/ })).toBeInTheDocument();
   });
 
   test('starts with a locally selected question without game selectors or rendering the full table', async () => {

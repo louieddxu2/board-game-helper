@@ -329,31 +329,29 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.rowHeader?.optionColors).toEqual({ 已擁有: '#7C3AED' });
   });
 
-  it('round-trips the date-only display preference without changing the stored date-time', async () => {
+  it('round-trips date-time values and their display settings independently', async () => {
     const source = makeFixture();
-    source.tables[0].columns[0].inputType = 'datetime';
-    source.tables[0].columns[0].dateOnly = true;
-    source.tables[0].rows[0].values[source.tables[0].columns[0].id] = '2026-08-12T12:14:00.000Z';
+    const table = source.tables[0];
+    const dateOnlyColumn = table.columns[0];
+    dateOnlyColumn.inputType = 'datetime';
+    dateOnlyColumn.dateOnly = true;
+    dateOnlyColumn.lineLimit = 3;
+    table.rows[0].values[dateOnlyColumn.id] = '2026-08-12T12:14:00.000Z';
+    const dateTimeColumn = createColumn('建立時間', 'datetime');
+    table.columns.push(dateTimeColumn);
+    table.rows[0].values[dateTimeColumn.id] = '2024-02-03T06:05:00.000Z';
 
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, source.tables[0]));
-
-    expect(imported.table?.columns[0].dateOnly).toBe(true);
-    expect(imported.table?.rows[0].values[imported.table.columns[0].id]).toBe('2026-08-12T12:14:00.000Z');
-  });
-
-  it('round-trips the wrapped line limit without shifting the date-only setting', async () => {
-    const source = makeFixture();
-    source.tables[0].columns[0].dateOnly = true;
-    source.tables[0].columns[0].lineLimit = 3;
-
-    const exported = exportWorkspaceXlsx(source, source.tables[0]);
+    const exported = exportWorkspaceXlsx(source, table);
     const workbook = await readStoredWorkbook(exported);
     const columnSettings = workbook.sheetRows(1).find((row) => row[0] === 'column');
     const imported = await importWorkspaceXlsx(exported);
 
     expect(columnSettings).toContain('true');
     expect(columnSettings).toContain('3');
-    expect(imported.table?.columns[0]).toMatchObject({ dateOnly: true, lineLimit: 3 });
+    expect(imported.table?.columns[0]).toMatchObject({ inputType: 'datetime', dateOnly: true, lineLimit: 3 });
+    expect(imported.table?.rows[0].values[imported.table.columns[0].id]).toBe('2026-08-12T12:14:00.000Z');
+    expect(imported.table?.columns.at(-1)).toMatchObject({ name: '建立時間', inputType: 'datetime' });
+    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toBe('2024-02-03T06:05:00.000Z');
   });
 
   it('round-trips link values, overflow modes, and the editable first-column property', async () => {
@@ -383,20 +381,6 @@ describe('workspace spreadsheet format', () => {
     expect(imported.table?.columns.at(-1)).toMatchObject({ name: '規則', inputType: 'link', overflowMode: 'expand' });
     expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toEqual({ url: 'example.com/rules', label: '規則頁' });
     expect(imported.table?.rows[1].values[imported.table.columns.at(-1)!.id]).toEqual({ url: '', label: '僅名稱' });
-  });
-
-  it('round-trips date-time values as normalized ISO strings', async () => {
-    ensureBlobArrayBuffer();
-    const source = makeFixture();
-    const table = source.tables[0];
-    const dateTime = createColumn('建立時間', 'datetime');
-    table.columns.push(dateTime);
-    table.rows[0].values[dateTime.id] = '2024-02-03T06:05:00.000Z';
-
-    const imported = await importWorkspaceXlsx(exportWorkspaceXlsx(source, table));
-
-    expect(imported.table?.columns.at(-1)).toMatchObject({ name: '建立時間', inputType: 'datetime' });
-    expect(imported.table?.rows[0].values[imported.table.columns.at(-1)!.id]).toBe('2024-02-03T06:05:00.000Z');
   });
 
   it('round-trips the non-destructive transposed view preference', async () => {

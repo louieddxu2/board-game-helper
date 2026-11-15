@@ -27,35 +27,28 @@ const stateCount = (sqlite: DatabaseSync, gameId: string) => Number((sqlite.prep
   WHERE subject_id = ?
 `).get(`attribute_subject_game:${gameId}`) as { count: number }).count);
 
-test('external BGG mappings make a subject votable without provisioning scores', () => {
+test('external BGG mappings make or keep subjects votable without provisioning scores', () => {
   const sqlite = setup();
   try {
     insertGame(sqlite, 'external-only', null);
-    expect(stateCount(sqlite, 'external-only')).toBe(0);
-    const eligible = sqlite.prepare("SELECT subject_id FROM attribute_votable_subjects WHERE subject_id = 'attribute_subject_game:external-only'");
-    expect(eligible.get()).toBeUndefined();
-
-    sqlite.prepare(`
-      INSERT INTO game_external_ids (id, game_id, source, external_id, relation, created_at)
-      VALUES ('external:999991', 'external-only', 'bgg', '999991', 'primary', 2)
-    `).run();
-    expect(eligible.get()).toEqual({ subject_id: 'attribute_subject_game:external-only' });
-    expect(stateCount(sqlite, 'external-only')).toBe(0);
-  } finally {
-    sqlite.close();
-  }
-});
-
-test('a normalized mapping for an already-primary BGG ID does not provision states again', () => {
-  const sqlite = setup();
-  try {
     insertGame(sqlite, 'primary-bgg', 999992);
+    expect(stateCount(sqlite, 'external-only')).toBe(0);
     expect(stateCount(sqlite, 'primary-bgg')).toBe(0);
+    const eligible = sqlite.prepare('SELECT subject_id FROM attribute_votable_subjects WHERE subject_id = ?');
+    const externalSubjectId = 'attribute_subject_game:external-only';
+    const primarySubjectId = 'attribute_subject_game:primary-bgg';
+    expect(eligible.get(externalSubjectId)).toBeUndefined();
+    expect(eligible.get(primarySubjectId)).toEqual({ subject_id: primarySubjectId });
 
-    sqlite.prepare(`
+    const insertMapping = sqlite.prepare(`
       INSERT INTO game_external_ids (id, game_id, source, external_id, relation, created_at)
-      VALUES ('external:999992', 'primary-bgg', 'bgg', '999992', 'primary', 2)
-    `).run();
+      VALUES (?, ?, 'bgg', ?, 'primary', 2)
+    `);
+    insertMapping.run('external:999991', 'external-only', '999991');
+    insertMapping.run('external:999992', 'primary-bgg', '999992');
+    expect(eligible.get(externalSubjectId)).toEqual({ subject_id: externalSubjectId });
+    expect(eligible.get(primarySubjectId)).toEqual({ subject_id: primarySubjectId });
+    expect(stateCount(sqlite, 'external-only')).toBe(0);
     expect(stateCount(sqlite, 'primary-bgg')).toBe(0);
   } finally {
     sqlite.close();
