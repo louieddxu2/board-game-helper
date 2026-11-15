@@ -113,6 +113,10 @@ export const localDbEdits = {
     const item: PendingAttributeResponse = { ...payload, id: payload.id ?? payload.responseId, createdAt: payload.createdAt ?? Date.now() };
     return (await getDatabase()).put('attributeResponses', item);
   },
+  addPendingAttributeResponses: async (responses: PendingAttributeResponse[]) => {
+    const transaction = (await getDatabase()).transaction('attributeResponses', 'readwrite');
+    await Promise.all([...responses.map((response) => transaction.store.put(response)), transaction.done]);
+  },
   getPendingAttributeResponses: async () => (await getDatabase()).getAll('attributeResponses'),
   removePendingAttributeResponse: async (id: string) => (await getDatabase()).delete('attributeResponses', id),
   getAttributeDirectRatingKeys: async (ownerId: string) => {

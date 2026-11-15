@@ -176,7 +176,7 @@ export const matchCollectionSubjects = (catalog: AttributeCatalogPayload, bggIds
   return { subjectIds, matchedBggIds: [...new Set(bggIds.filter((id) => matchedBggIds.has(id)))] };
 };
 
-const randomSample = <T>(items: T[], limit: number, random: () => number): T[] => {
+export const randomSample = <T>(items: T[], limit: number, random: () => number): T[] => {
   const selected: T[] = [];
   const swaps = new Map<number, number>();
   const sampleCount = Math.min(items.length, Math.max(0, Math.floor(limit)));

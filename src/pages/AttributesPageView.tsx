@@ -49,7 +49,8 @@ export const AttributesPageView = ({
   setRatingA,
   setRatingB,
   responseError,
-}: AttributesPageViewModel) => {
+  onOpenRanking,
+}: AttributesPageViewModel & { onOpenRanking: () => void }) => {
 const questionBusy = scopeLoading || questionLoading || submitting || syncing || collectionImporting;
 const collectionImportControl = <label className="attributes-collection-import">
     <span>{collectionImporting ? '讀取中…' : '匯入收藏'}</span>
@@ -57,7 +58,7 @@ const collectionImportControl = <label className="attributes-collection-import">
   </label>;
 
 const voteHeader = <header className="attribute-vote-header">
-    <h1>屬性投票</h1>
+    <div className="attribute-vote-title"><h1>屬性投票</h1>{question && <button type="button" className="attribute-ranking-toggle" disabled={scopeLoading || questionLoading || submitting || collectionImporting} onClick={onOpenRanking}>多款排序</button>}</div>
     <div className="attributes-vote-actions">
       <AttributeFilterDialog options={attributeOptions} filter={attributeFilter} disabled={questionBusy} loadOptions={loadVotingCatalog} onApply={(next) => void changeAttributeFilter(next)} />
       {collectionImportControl}

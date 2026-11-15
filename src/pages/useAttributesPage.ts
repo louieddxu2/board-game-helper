@@ -7,11 +7,13 @@ import { createAttributeResponseId, getAttributeSessionId } from '../lib/attribu
 import { applyAttributeValueUpdates, localDb, type PendingAttributeResponse } from '../lib/localDb';
 import type { AttributeActivity, AttributeCatalogPayload, AttributeComparisonResult, AttributeDefinition, AttributeQuestion, AttributeQuestionPayload } from '../shared/types';
 import { drawAttributeVotingQuestion } from './attributeVotingQuestion';
+import { rankedAttributeResponses, RANKING_RESPONSE_ID_MARKER } from './attributeRanking';
 import type { AttributeResponseDraft, AttributeVoteScope, ConnectionState, QuestionMotion, VoteFeedback } from './attributesPageShared';
 import { ATTRIBUTE_QUESTION_CACHE_FRESH_MS, attributeQuestionKey, browserIsOffline, comparisonChoiceText, connectionStateAfterFailure, OPTIMISTIC_ACTIVITY_LIMIT, optimisticComparisonActivity, QUESTION_ENTER_MS, QUESTION_EXIT_MS, questionOptions, reducedMotion, SAVED_FEEDBACK_MS, wait } from './attributesPageShared';
 import { useAttributeCollectionImport } from './useAttributeCollectionImport';
 import { useAttributeActivities } from './useAttributeActivities';
 
+const shouldRetryResponse = (error: ApiError) => error.status === 409 || error.status === 429;
 export const useAttributesPage = () => {
   const session = useContext(SessionContext);
   const [payload, setPayload] = useState<AttributeQuestionPayload>();
@@ -23,6 +25,7 @@ export const useAttributesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
   const [responseError, setResponseError] = useState('');
+  const [rankingRejectedCount, setRankingRejectedCount] = useState(0);
   const [connectionState, setConnectionState] = useState<ConnectionState>(() => browserIsOffline() ? 'offline' : 'online');
   const [pendingCount, setPendingCount] = useState(0);
   const [awaitingNext, setAwaitingNext] = useState(false);
@@ -54,6 +57,7 @@ export const useAttributesPage = () => {
   const collectionInputRef = useRef<HTMLInputElement>(null);
   const responseIdRef = useRef<string | undefined>(undefined);
   const syncingRef = useRef(false);
+  const rankingSyncRequestedRef = useRef(false);
   const inFlightResponseIdsRef = useRef(new Set<string>());
   const motionTimerRef = useRef<number | undefined>(undefined);
   const mountedRef = useRef(true);
@@ -258,12 +262,13 @@ export const useAttributesPage = () => {
     }
   };
 
-  const syncPendingResponses = useCallback(async () => {
+  const syncPendingResponses = useCallback(async (): Promise<void> => {
     if (syncingRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
     syncingRef.current = true;
     setSyncing(true);
     try {
-      const pending = (await refreshPendingCount()).filter((item) => !inFlightResponseIdsRef.current.has(item.responseId));
+      const pending = (await refreshPendingCount()).filter((item) => !inFlightResponseIdsRef.current.has(item.responseId))
+        .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
       for (const item of pending) {
         try {
           const saved = await api.saveAttributeResponse(item);
@@ -275,12 +280,16 @@ export const useAttributesPage = () => {
           await localDb.removePendingAttributeResponse(item.id);
           setConnectionState(browserIsOffline() ? 'offline' : 'online');
         } catch (caught) {
-          if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
+          if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && !shouldRetryResponse(caught)) {
             await localDb.removePendingAttributeResponse(item.id);
             attributeDirectRatingKeysFromResponse(item).forEach((key) => directRatingKeysRef.current.delete(key));
-            setResponseError('有一筆離線回答已失效，請重新回答目前題目。');
             setConnectionState('online');
-          } else if (caught instanceof ApiError && caught.status === 409) {
+            if (item.responseId.includes(RANKING_RESPONSE_ID_MARKER)) {
+              setRankingRejectedCount((count) => count + 1);
+              continue;
+            }
+            setResponseError('有一筆離線回答已失效，請重新回答目前題目。');
+          } else if (caught instanceof ApiError && shouldRetryResponse(caught)) {
             setConnectionState('online');
           } else {
             setConnectionState(connectionStateAfterFailure());
@@ -310,6 +319,10 @@ export const useAttributesPage = () => {
     } finally {
       syncingRef.current = false;
       setSyncing(false);
+      if (rankingSyncRequestedRef.current) {
+        rankingSyncRequestedRef.current = false;
+        void syncPendingResponses();
+      }
     }
   }, [applyQuestionPayload, confirmActivity, question, refreshPendingCount, requestQuestion, sessionId]);
 
@@ -349,7 +362,7 @@ export const useAttributesPage = () => {
       setConnectionState(browserIsOffline() ? 'offline' : 'online');
     } catch (caught) {
       const wasQueued = await queuePromise;
-      if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && caught.status !== 409) {
+      if (caught instanceof ApiError && caught.status >= 400 && caught.status < 500 && !shouldRetryResponse(caught)) {
         if (wasQueued) await localDb.removePendingAttributeResponse(pendingItem.id).catch(() => undefined);
         directRatingKeys.forEach((key) => directRatingKeysRef.current.delete(key));
         setOptimisticActivities((current) => current.filter((activity) => activity.responseId !== draft.responseId));
@@ -357,7 +370,7 @@ export const useAttributesPage = () => {
         setResponseError('上一筆回答已失效，請重新回答。');
       } else {
         const queued = wasQueued || await localDb.addPendingAttributeResponse(pendingItem).then(() => true).catch(() => false);
-        setConnectionState(caught instanceof ApiError && caught.status === 409 ? 'online' : connectionStateAfterFailure());
+        setConnectionState(caught instanceof ApiError && shouldRetryResponse(caught) ? 'online' : connectionStateAfterFailure());
         setResponseError(caught instanceof ApiError && caught.status === 409
           ? '上一筆回答正在處理，會自動重試。'
           : queued
@@ -533,7 +546,15 @@ export const useAttributesPage = () => {
 
   const { handleCollectionImport } = useAttributeCollectionImport({ setCollectionImporting, setCollectionMessage, collectionIdsRef, setCollectionIds, setCollectionMatchKnown, loadVotingCatalog, setCollectionMatchCount, voteScopeRef, requestQuestion, question, setConnectionState, animateQuestionChange, applyQuestionPayload, setResponseError });
 
+  const queueRanking = async (round: AttributeQuestion, order: readonly string[]) => {
+    await localDb.addPendingAttributeResponses(rankedAttributeResponses(round, order, sessionId));
+    await refreshPendingCount();
+    if (syncingRef.current) rankingSyncRequestedRef.current = true;
+    else if (!browserIsOffline()) void syncPendingResponses();
+  };
   return {
+    queueRanking, rankingRejectedCount,
+    requestQuestion,
     collectionImporting,
     collectionInputRef,
     handleCollectionImport,

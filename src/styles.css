@@ -8,6 +8,7 @@
 @import './styles/global-mobile.css';
 @import './styles/attributes-foundation.css';
 @import './styles/attributes-vote.css';
+@import './styles/attributes-ranking.css';
 @import './styles/attributes-animations.css';
 @import './styles/search.css';
 @import './styles/feedback.css';
