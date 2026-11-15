@@ -1,49 +1,134 @@
 // @vitest-environment node
 
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-describe('core release gate wiring', () => {
-  test('runs the blocking core suite before deployment and smoke after deployment', () => {
-    const deploySource = readFileSync('scripts/deploy-with-migration-check.mjs', 'utf8');
-    const releaseGate = deploySource.indexOf("execSync('npm run test:release'");
-    const cloudflareAuth = deploySource.indexOf('await ensureCloudflareAuth()');
-    const deploy = deploySource.indexOf("execSync('npm run deploy:code'");
-    const productionSmoke = deploySource.indexOf("execSync('npm run smoke:production'");
-    const successRecord = deploySource.indexOf('recordSuccessfulDeploy(deployingSha)');
+const { execSync, execFileSync, ensureCloudflareAuth, listPendingRemoteMigrations, writeFileSync, rmSync } = vi.hoisted(() => ({
+  execSync: vi.fn(), execFileSync: vi.fn(), ensureCloudflareAuth: vi.fn(),
+  listPendingRemoteMigrations: vi.fn(), writeFileSync: vi.fn(), rmSync: vi.fn(),
+}));
+vi.mock('child_process', () => ({ execSync, execFileSync }));
+vi.mock('fs', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:fs')>(), mkdirSync: vi.fn(), writeFileSync, rmSync,
+}));
+vi.mock('./cloudflare-login.mjs', () => ({ ensureCloudflareAuth }));
+vi.mock('./d1-migration-list.mjs', () => ({ listPendingRemoteMigrations }));
+vi.mock('./check-d1-trigger-fanout.mjs', () => ({ checkD1TriggerFanout: vi.fn() }));
 
-    expect(releaseGate).toBeGreaterThan(-1);
-    expect(releaseGate).toBeLessThan(cloudflareAuth);
-    expect(deploy).toBeGreaterThan(cloudflareAuth);
-    expect(productionSmoke).toBeGreaterThan(deploy);
-    expect(successRecord).toBeGreaterThan(productionSmoke);
+const runProductionRelease = () => {
+  // @ts-expect-error The release entry point is executable plain JavaScript.
+  return import('./deploy-with-migration-check.mjs');
+};
+
+describe('production release execution', () => {
+  const sha = 'a'.repeat(40);
+  const commands: string[] = [];
+  const releaseTests = 'npm run test:release';
+  const migrate = 'npm run db:migrate:remote';
+  const deploy = 'npm run deploy:code';
+  const smoke = 'npm run smoke:production';
+  const workspaceRemoval = '0116_remove_workspace_backup_coordination.sql';
+  let failCommand: string | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubEnv('CI', 'true');
+    vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    commands.length = 0;
+    failCommand = undefined;
+    listPendingRemoteMigrations.mockReturnValue([]);
+    ensureCloudflareAuth.mockImplementation(async () => { commands.push('auth'); });
+    writeFileSync.mockImplementation(() => { commands.push('record'); });
+    execSync.mockImplementation((command: string) => {
+      if (command === releaseTests || command === migrate || command === deploy || command === smoke) {
+        commands.push(command);
+        if (command === failCommand) throw new Error('injected failure');
+        return '';
+      }
+      if (command === 'git rev-parse HEAD' || command === 'git rev-parse HEAD^') return sha;
+      if (command.startsWith('git merge-base --is-ancestor ') || command.startsWith('git diff ')) return '';
+      if (command.includes('wrangler secret list')) return JSON.stringify([{ name: 'EMAIL_HASH_SECRET' }]);
+      throw new Error(`Unexpected command: ${command}`);
+    });
   });
 
-  test('release suite includes complete tests, typecheck and browser E2E from the production schema baseline', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  test.each([
+    { name: 'ordinary migration', pending: ['0124_stop_provisioning_unrated_attribute_scores.sql'],
+      expected: [releaseTests, 'auth', migrate, deploy, smoke, 'record'] },
+    { name: 'deferred Workspace removal', pending: [workspaceRemoval],
+      expected: [releaseTests, 'auth', deploy, smoke, migrate, 'record'] },
+  ])('executes the release in order with $name', async ({ pending, expected }) => {
+    listPendingRemoteMigrations.mockReturnValue(pending);
+    await runProductionRelease();
+    await vi.waitFor(() => expect(writeFileSync).toHaveBeenCalledOnce());
+    expect(commands).toEqual(expected);
+    expect(writeFileSync).toHaveBeenCalledWith('.wrangler/last-successful-deploy-sha', `${sha}\n`, 'utf8');
+    expect(process.exit).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { failure: releaseTests, expected: [releaseTests] },
+    { failure: smoke, expected: [releaseTests, 'auth', deploy, smoke] },
+    { failure: migrate, expected: [releaseTests, 'auth', deploy, smoke, migrate] },
+  ])('stops on $failure failure', async ({ failure, expected }) => {
+    listPendingRemoteMigrations.mockReturnValue([workspaceRemoval]);
+    failCommand = failure;
+    await runProductionRelease();
+    await vi.waitFor(() => expect(process.exit).toHaveBeenCalledExactlyOnceWith(1));
+    expect(commands).toEqual(expected);
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('core release gate wiring', () => {
+  test('release suite includes complete tests, typecheck and browser E2E', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
-    expect(packageJson.scripts['test:release']).toContain('npm test');
-    expect(packageJson.scripts['test:release']).toContain('npm run typecheck');
-    expect(packageJson.scripts['test:release']).toContain('npm run test:core:e2e');
-    expect(packageJson.scripts['test:core:e2e']).toContain('run-core-e2e');
-    const runner = readFileSync('scripts/run-core-e2e.mjs', 'utf8');
-    expect(runner).toContain("execSync('npm run build'");
-    expect(runner).toContain("@playwright', 'test', 'cli.js");
-    expect(runner).toContain('playwright.workspace-startup.config.ts');
-    expect(runner).toContain('tests/workspace-startup/backup-progress.spec.ts');
-    expect(runner).toContain('tests/workspace-startup/backup-restore.spec.ts');
-    expect(runner).toContain('tests/workspace-startup/input-focus.spec.ts');
+    expect(packageJson.scripts['test:release'].split(/\s*&&\s*/u)).toEqual(expect.arrayContaining([
+      'npm run check:d1-fanout', 'npm test', 'npm run typecheck', 'npm run test:core:e2e',
+    ]));
+    expect(packageJson.scripts['test:core:e2e']).toBe('node scripts/run-core-e2e.mjs');
     expect(packageJson.scripts['test:core:prepare']).toContain('prepare-core-test');
     expect(packageJson.scripts['test:migrations:fresh']).toContain('CORE_TEST_DATABASE_MODE=fresh');
   });
 
-  test('Workspace record removal runs after the new Worker and production smoke, before marking deployment successful', () => {
-    const source = readFileSync('scripts/deploy-with-migration-check.mjs', 'utf8');
-    const smoke = source.indexOf("execSync('npm run smoke:production'");
-    const deferredCleanup = source.indexOf('if (removalAfterCode)', smoke);
-    const migration = source.indexOf("execSync('npm run db:migrate:remote'", deferredCleanup);
-    expect(deferredCleanup).toBeGreaterThan(smoke);
-    expect(migration).toBeGreaterThan(deferredCleanup);
-    expect(source.indexOf('recordSuccessfulDeploy(deployingSha)')).toBeGreaterThan(migration);
+  test('browser release runner builds, prepares a local database and runs both suites', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubEnv('RELEASE_GATE_ONLY', '0');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      execSync.mockImplementation(() => '');
+      execFileSync.mockImplementation(() => '');
+      // @ts-expect-error The browser release runner is executable plain JavaScript.
+      await import('./run-core-e2e.mjs');
+
+      expect(execSync.mock.calls.map(([command]) => command)).toEqual(['npm run build']);
+      expect(execFileSync.mock.calls.map(([command, args]) => [
+        command, args.map((arg: string) => arg.replaceAll('\\', '/')),
+      ])).toEqual([
+        [process.execPath, [expect.stringMatching(/\/scripts\/prepare-core-test\.mjs$/u)]],
+        [process.execPath, [expect.stringMatching(/\/@playwright\/test\/cli\.js$/u), 'test']],
+        [process.execPath, [expect.stringMatching(/\/@playwright\/test\/cli\.js$/u), 'test',
+          '--config', 'playwright.workspace-startup.config.ts',
+          'tests/workspace-startup/backup-progress.spec.ts',
+          'tests/workspace-startup/backup-restore.spec.ts',
+          'tests/workspace-startup/input-focus.spec.ts']],
+      ]);
+      expect(execSync.mock.invocationCallOrder[0]).toBeLessThan(execFileSync.mock.invocationCallOrder[0]);
+      expect(rmSync).toHaveBeenCalledOnce();
+      expect(execFileSync.mock.invocationCallOrder.at(-1)).toBeLessThan(rmSync.mock.invocationCallOrder[0]);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    }
   });
 
   test('pins date-sensitive release checks to the product timezone', () => {

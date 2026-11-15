@@ -16,16 +16,6 @@ describe('workspace browser policies', () => {
     expect(contentSecurityPolicy).toContain('https://www.googleapis.com');
   });
 
-  it('offers the installed PWA a stable shortcut back to the main website', () => {
-    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ url?: string }> };
-    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
-  });
-
-  it('offers the installed PWA a long-press shortcut to attribute voting', () => {
-    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { shortcuts?: Array<{ name?: string; short_name?: string; url?: string }> };
-    expect(manifest.shortcuts).toContainEqual(expect.objectContaining({ name: '開啟屬性投票', short_name: '屬性投票', url: '/attributes' }));
-  });
-
   it('constrains the workspace to the viewport so the table owns vertical scrolling', () => {
     const styles = readCssSource('src/styles.css');
     const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
@@ -259,13 +249,15 @@ describe('workspace browser policies', () => {
     expect(styles).not.toMatch(/\.workspace-(?:name|cell-name|value|link)-dialog[^{}]*\{[^}]*backdrop-filter:\s*blur/);
   });
 
-  it('keeps the main website as the PWA entry while offering a workspace shortcut', () => {
-    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')) as { start_url?: string; scope?: string; shortcuts?: Array<{ url?: string }> };
+  it('keeps the main website as the PWA entry and provides the three installed shortcuts', () => {
+    const manifest = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8'));
     expect(manifest.start_url).toBe('/');
     expect(manifest.scope).toBe('/');
-    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/?pwa-entry=home')).toBe(true);
-    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/attributes')).toBe(true);
-    expect(manifest.shortcuts?.some((shortcut) => shortcut.url === '/workspace')).toBe(true);
+    expect(manifest.shortcuts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ url: '/?pwa-entry=home' }),
+      expect.objectContaining({ name: '開啟屬性投票', short_name: '屬性投票', url: '/attributes' }),
+      expect.objectContaining({ url: '/workspace' }),
+    ]));
   });
 
   it('keeps value dialogs at their original floor while sizing numeric content independently', () => {
@@ -396,11 +388,9 @@ describe('workspace browser policies', () => {
 
   it('keeps bottom navigation in the Workspace layout, inside the iOS safe area, and removes it for a virtual keyboard', () => {
     const styles = readCssSource('src/styles.css');
-    const workspacePageRule = styles.match(/\.workspace-page\s*\{([^}]*)\}/)?.[1];
     const navigationRule = styles.match(/\.workspace-bottom-navigation\s*\{([^}]*)\}/)?.[1];
     const pageSource = readFileSync('src/workspace/WorkspacePageView.tsx', 'utf8');
 
-    expect(workspacePageRule).toMatch(/height:\s*100dvh/);
     expect(navigationRule).toMatch(/flex:\s*0 0 auto/);
     expect(navigationRule).toMatch(/env\(safe-area-inset-bottom/);
     expect(navigationRule).not.toMatch(/position:\s*fixed/);
