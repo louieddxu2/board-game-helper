@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { attributeQuestionEnding, attributeQuestionStart } from '../lib/attributeQuestion';
 import { attributeDisplayEndpoints } from '../shared/attributeScale';
 import type { AttributeQuestion, AttributeSubject } from '../shared/types';
-import { canPlaceRankedSubject, loadRankingRound, rankingComparisonEdges } from './attributeRanking';
+import { canPlaceRankedSubject, loadRankingRound, rankedPlayerOrder } from './attributeRanking';
 import type { AttributesPageViewModel } from './useAttributesPage';
 import { useAttributeRankingInput } from './useAttributeRankingInput';
 
@@ -42,7 +42,8 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
   const references = useMemo(() => new Map(round?.references.map((example) => [example.subject.id, example])), [round]);
   const referenceIds = useMemo(() => new Set(references.keys()), [references]);
   const order = useMemo(() => ordered.map(({ id }) => id), [ordered]);
-  const comparisonCount = rankingComparisonEdges(order, referenceIds).length;
+  const playerRanks = useMemo(() => new Map(rankedPlayerOrder(order, referenceIds).map((id, index) => [id, index + 1])), [order, referenceIds]);
+  const comparisonCount = Math.max(0, playerRanks.size - 1);
 
   useEffect(() => {
     let active = true;
@@ -90,7 +91,6 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
   const selectedName = nameFor(selected);
   const ghostName = nameFor(drag?.id);
   const locked = busy || submitted;
-  const minimumLabel = references.size > 0 ? '排入至少 1 款遊戲' : '至少排入 2 款';
 
   const onSubmit = async () => {
     if (inProgress.current || submitted || comparisonCount === 0) return;
@@ -177,11 +177,13 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
           {ordered.map((subject, index) => {
             const reference = references.get(subject.id);
             const referenceLabel = reference ? `參考 ${Number(reference.score.toFixed(2))} 分` : undefined;
+            const playerRank = playerRanks.get(subject.id);
+            const label = referenceLabel ? `${subject.displayName}，${referenceLabel}` : `第 ${playerRank} 名，${subject.displayName}`;
             return <Fragment key={subject.id}>
               {renderSlot(index)}
               <div className="attribute-rank-row" data-rank-row>
-                <button type="button" className="attribute-rank-game" data-rank-game={subject.id} data-rank-reference={reference?.score} data-dragged={drag?.id === subject.id || undefined} aria-pressed={selected === subject.id} aria-label={`第 ${index + 1} 名，${subject.displayName}${referenceLabel ? `，${referenceLabel}` : ''}`} disabled={locked} onClick={() => setSelected((current) => current === subject.id ? undefined : subject.id)}>
-                  <span className="attribute-rank-grip" data-rank-grip aria-hidden="true">⠿ <b>{index + 1}</b></span>
+                <button type="button" className="attribute-rank-game" data-rank-game={subject.id} data-rank-reference={reference?.score} data-dragged={drag?.id === subject.id || undefined} aria-pressed={selected === subject.id} aria-label={label} disabled={locked} onClick={() => setSelected((current) => current === subject.id ? undefined : subject.id)}>
+                  <span className="attribute-rank-grip" data-rank-grip aria-hidden="true">⠿ {playerRank !== undefined && <b>{playerRank}</b>}</span>
                   <span>{subject.displayName}{referenceLabel && <small className="attribute-rank-reference-score">{referenceLabel}</small>}</span>
                 </button>
                 {!submitted && !reference && <button type="button" className="attribute-rank-remove" disabled={busy} aria-label={`將${subject.displayName}移回候選區`} onClick={() => { setOrdered((current) => current.filter((item) => item.id !== subject.id)); setSelected(undefined); }}>×</button>}
@@ -199,7 +201,8 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
         {message && <p role="alert">{message}</p>}
         {rejectedCount > 0 && <p role="alert">有 {rejectedCount} 組比較已失效，未能同步。</p>}
         <p role="status">{selectedName ? `已選取${selectedName}，請點插入位置。`
-          : submitted ? `已儲存 ${comparisonCount} 組相鄰比較` : comparisonCount ? `將送出 ${comparisonCount} 組比較` : minimumLabel}</p>
+          : submitted ? `已儲存 ${comparisonCount} 組相鄰比較`
+            : comparisonCount ? `將送出 ${comparisonCount} 組自選遊戲比較` : '請排入至少 2 款玩過的遊戲'}</p>
         {pendingCount > 0 && <div className="attribute-rank-sync">
           <span>{pendingCount} 筆待同步</span>
           {online && !syncing && <button type="button" onClick={retrySync}>重新同步</button>}

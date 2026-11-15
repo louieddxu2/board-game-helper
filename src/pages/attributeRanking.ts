@@ -40,12 +40,8 @@ export const canPlaceRankedSubject = (order: readonly string[], referenceIds: Re
   return !crossed.some((subjectId) => referenceIds.has(subjectId));
 };
 
-export const rankingComparisonEdges = (order: readonly string[], referenceIds: ReadonlySet<string>) => {
-  const middle = order.length - 2;
-  return Array.from({ length: order.length - 1 }, (_, index) => index)
-    .filter((index) => !referenceIds.has(order[index]) || !referenceIds.has(order[index + 1]))
-    .sort((a, b) => Math.abs(2 * a - middle) - Math.abs(2 * b - middle) || a - b);
-};
+export const rankedPlayerOrder = (order: readonly string[], referenceIds: ReadonlySet<string>) =>
+  order.filter((id) => !referenceIds.has(id));
 
 export const rankedAttributeResponses = (
   question: AttributeQuestion,
@@ -55,13 +51,17 @@ export const rankedAttributeResponses = (
   batchId = createAttributeResponseId(),
   createdAt = Date.now(),
 ): PendingAttributeResponse[] => {
-  return rankingComparisonEdges(order, referenceIds).map((edge, index) => {
+  const playerOrder = rankedPlayerOrder(order, referenceIds);
+  const middle = playerOrder.length - 2;
+  const edges = Array.from({ length: playerOrder.length - 1 }, (_, index) => index)
+    .sort((a, b) => Math.abs(2 * a - middle) - Math.abs(2 * b - middle) || a - b);
+  return edges.map((edge, index) => {
     const responseId = `${batchId}${RANKING_RESPONSE_ID_MARKER}${String(index).padStart(6, '0')}`;
     return {
       id: responseId,
       responseId,
-      subjectAId: order[edge],
-      subjectBId: order[edge + 1],
+      subjectAId: playerOrder[edge],
+      subjectBId: playerOrder[edge + 1],
       attributeId: question.attribute.id,
       highPole: question.highPole,
       comparison: 'A_HIGHER',

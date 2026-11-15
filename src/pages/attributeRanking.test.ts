@@ -41,11 +41,11 @@ describe('rankedAttributeResponses', () => {
     expect(responses.map((response) => response.id)).toEqual(expected.map((_, index) => `test-batch:rank:${String(index).padStart(6, '0')}`));
   });
 
-  it('skips reference-only edges and preserves the center-out order of the remaining edges', () => {
-    const references = new Set(['1', '2', '5', '6']);
-    const responses = rankedAttributeResponses(question, [...'123456'], 'test-session', references);
-    expect(responses.map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(['34', '23', '45']);
-    expect(rankedAttributeResponses(question, [...'1256'], 'test-session', references)).toEqual([]);
+  it('compares player entries from the center out with references removed first', () => {
+    const references = new Set(['a', 'b', 'c', 'd']);
+    const responses = rankedAttributeResponses(question, [...'a12b3c45d6'], 'test-session', references);
+    expect(responses.map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(['34', '23', '45', '12', '56']);
+    expect(rankedAttributeResponses(question, [...'a1bcd'], 'test-session', references)).toEqual([]);
   });
 });
 

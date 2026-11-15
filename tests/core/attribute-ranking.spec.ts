@@ -100,7 +100,7 @@ test('ranks games with native touch and records only adjacent results in order t
   expect(recorded.map(({ responseId }: { responseId: string }) => responseId)).toEqual([...idsWritten].reverse());
 });
 
-test('prefills scored references and lets them pass a player entry while blocking changes to their order', async ({ page }) => {
+test('allows moving scored references in order and records votes only for player entries', async ({ page }) => {
   await page.route('**/api/attributes/table', async (route) => {
     const response = await route.fetch();
     const catalog: AttributeCatalogPayload = await response.json();
@@ -145,6 +145,11 @@ test('prefills scored references and lets them pass a player entry while blockin
   await drag(referenceGrip, 5, { fromLeft: false, blocked: true });
   await expect(page.getByText('參考遊戲須維持分數順序。')).toBeVisible();
   expect(await rankedIds()).toEqual([ids[0], candidateId, ...ids.slice(1)]);
+  await expect(submit).toBeDisabled();
+
+  const secondCandidateId = await candidate.getAttribute('data-rank-game');
+  await drag(candidate, 5);
+  expect(await rankedIds()).toEqual([ids[0], candidateId, ...ids.slice(1), secondCandidateId]);
 
   const pairs: string[][] = [];
   page.on('request', (request) => {
@@ -152,11 +157,10 @@ test('prefills scored references and lets them pass a player entry while blockin
     const { subjectAId, subjectBId } = request.postDataJSON();
     pairs.push([subjectAId, subjectBId]);
   });
-  const responses = [candidateId, ids[0]].map((id) => page.waitForResponse((response) => response.url().endsWith('/api/attributes/responses')
-    && response.request().postDataJSON().subjectAId === id));
+  const response = page.waitForResponse((result) => result.url().endsWith('/api/attributes/responses'));
   await submit.tap();
-  await expect(page.getByText('已儲存 2 組相鄰比較')).toBeVisible();
-  const saved = await Promise.all(responses);
-  expect(saved.every((response) => response.ok())).toBe(true);
-  expect(pairs).toEqual([[candidateId, ids[1]], [ids[0], candidateId]]);
+  await expect(page.getByText('已儲存 1 組相鄰比較')).toBeVisible();
+  expect((await response).ok()).toBe(true);
+  await expect(page.getByText(/待同步/)).toHaveCount(0);
+  expect(pairs).toEqual([[candidateId, secondCandidateId]]);
 });
