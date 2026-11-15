@@ -83,6 +83,9 @@
 .attribute-rank-game img { width: 25px; height: 29px; flex: 0 0 auto; object-fit: contain; }
 .attribute-rank-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .attribute-rank-row .attribute-rank-game { min-height: 44px; padding-block: 0; padding-inline-start: 0; }
+.attribute-rank-game[data-rank-reference] { background: color-mix(in srgb, var(--green) 7%, var(--white)); }
+.attribute-rank-game[data-rank-reference][aria-pressed='true'] { background: color-mix(in srgb, var(--green) 17%, var(--white)); }
+.attribute-rank-reference-score { display: block; color: var(--green); font-size: 11px; font-variant-numeric: tabular-nums; }
 .attribute-rank-grip {
   display: inline-flex;
   align-self: stretch;
@@ -104,7 +107,7 @@
   cursor: pointer;
 }
 .attribute-rank-slot { position: relative; height: 1px; background: var(--line); }
-.attribute-rank-slot[data-over]::after {
+.attribute-rank-slot:is([data-over], [data-blocked])::after {
   content: '';
   position: absolute;
   z-index: 1;
@@ -113,6 +116,7 @@
   background: var(--orange);
   pointer-events: none;
 }
+.attribute-rank-slot[data-blocked]::after { height: 0; border-top: 3px dashed var(--muted); background: transparent; }
 .attribute-rank-more, .attribute-rank-insert { justify-content: center; color: var(--green); cursor: pointer; }
 .attribute-rank-insert { border-block: 1px dashed var(--line); font-size: 12px; }
 .attribute-rank-empty { margin: 10px 6px; color: var(--muted); font-size: 12px; }

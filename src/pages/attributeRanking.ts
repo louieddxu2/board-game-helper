@@ -1,11 +1,12 @@
-import { availableAttributeSubjectIds, matchCollectionSubjects, randomSample } from '../lib/attributeCollection';
+import { availableAttributeSubjectIds, chooseScopedExtremeExamples, matchCollectionSubjects, randomSample } from '../lib/attributeCollection';
 import { createAttributeResponseId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
+import { orientAttributeScore } from '../shared/attributeScale';
 import type { AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
 
 export const RANKING_RESPONSE_ID_MARKER = ':rank:';
 
-export const loadRankingCandidates = async (catalog: AttributeCatalogPayload, question: AttributeQuestion, collectionIds?: number[]) => {
+export const loadRankingRound = async (catalog: AttributeCatalogPayload, question: AttributeQuestion, collectionIds?: number[]) => {
   const scope = collectionIds ? matchCollectionSubjects(catalog, collectionIds).subjectIds : undefined;
   const { deferred, questionNumber } = await localDb.getAttributeQuestionContext().catch(() => ({ deferred: [], questionNumber: 0 }));
   const available = new Set(availableAttributeSubjectIds(catalog, scope, deferred, questionNumber));
@@ -13,7 +14,7 @@ export const loadRankingCandidates = async (catalog: AttributeCatalogPayload, qu
   const candidates = catalog.subjects.filter((subject) => available.has(subject.id));
   const rest = candidates.filter((subject) => !preferred.has(subject.id));
   const gameIds = new Set<string>();
-  return [...candidates.filter((subject) => preferred.has(subject.id)), ...randomSample(rest, rest.length, Math.random)]
+  const distinct = [...candidates.filter((subject) => preferred.has(subject.id)), ...randomSample(rest, rest.length, Math.random)]
     .filter(({ gameId }) => {
       // The response endpoint forbids comparing two subjects linked to the same game.
       if (!gameId) return true;
@@ -21,19 +22,40 @@ export const loadRankingCandidates = async (catalog: AttributeCatalogPayload, qu
       gameIds.add(gameId);
       return true;
     });
+  // Keep at least two candidates available for the player to rank.
+  const referenceCatalog = { ...catalog, subjects: distinct.slice(2) };
+  const { lowest, highest } = chooseScopedExtremeExamples(referenceCatalog, question.attribute.id);
+  const references = [...lowest, ...highest]
+    .map((example) => ({ ...example, score: orientAttributeScore(example.score, question.highPole) }))
+    .sort((left, right) => right.score - left.score);
+  const referenceIds = new Set(references.map(({ subject }) => subject.id));
+  return { candidates: distinct.filter(({ id }) => !referenceIds.has(id)), references };
+};
+
+export const canPlaceRankedSubject = (order: readonly string[], referenceIds: ReadonlySet<string>, id: string, index: number) => {
+  if (!referenceIds.has(id)) return true;
+  const current = order.indexOf(id);
+  if (current < 0) return false;
+  const crossed = index > current ? order.slice(current + 1, index) : order.slice(index, current);
+  return !crossed.some((subjectId) => referenceIds.has(subjectId));
+};
+
+export const rankingComparisonEdges = (order: readonly string[], referenceIds: ReadonlySet<string>) => {
+  const middle = order.length - 2;
+  return Array.from({ length: order.length - 1 }, (_, index) => index)
+    .filter((index) => !referenceIds.has(order[index]) || !referenceIds.has(order[index + 1]))
+    .sort((a, b) => Math.abs(2 * a - middle) - Math.abs(2 * b - middle) || a - b);
 };
 
 export const rankedAttributeResponses = (
   question: AttributeQuestion,
   order: readonly string[],
   sessionId: string,
+  referenceIds: ReadonlySet<string>,
   batchId = createAttributeResponseId(),
   createdAt = Date.now(),
 ): PendingAttributeResponse[] => {
-  const middle = order.length - 2;
-  const edges = Array.from({ length: order.length - 1 }, (_, index) => index)
-    .sort((a, b) => Math.abs(2 * a - middle) - Math.abs(2 * b - middle) || a - b);
-  return edges.map((edge, index) => {
+  return rankingComparisonEdges(order, referenceIds).map((edge, index) => {
     const responseId = `${batchId}${RANKING_RESPONSE_ID_MARKER}${String(index).padStart(6, '0')}`;
     return {
       id: responseId,

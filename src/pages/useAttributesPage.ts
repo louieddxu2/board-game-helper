@@ -546,8 +546,8 @@ export const useAttributesPage = () => {
 
   const { handleCollectionImport } = useAttributeCollectionImport({ setCollectionImporting, setCollectionMessage, collectionIdsRef, setCollectionIds, setCollectionMatchKnown, loadVotingCatalog, setCollectionMatchCount, voteScopeRef, requestQuestion, question, setConnectionState, animateQuestionChange, applyQuestionPayload, setResponseError });
 
-  const queueRanking = async (round: AttributeQuestion, order: readonly string[]) => {
-    await localDb.addPendingAttributeResponses(rankedAttributeResponses(round, order, sessionId));
+  const queueRanking = async (round: AttributeQuestion, order: readonly string[], referenceIds: ReadonlySet<string>) => {
+    await localDb.addPendingAttributeResponses(rankedAttributeResponses(round, order, sessionId, referenceIds));
     await refreshPendingCount();
     if (syncingRef.current) rankingSyncRequestedRef.current = true;
     else if (!browserIsOffline()) void syncPendingResponses();
