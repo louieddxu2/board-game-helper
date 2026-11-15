@@ -19,7 +19,7 @@ const sameIds = (before: Array<{ id: string }>, after: Array<{ id: string }>) =>
   return ids.size === after.length && after.every((item) => ids.has(item.id));
 };
 
-const updatedCatalogFromSnapshot = async (db: Database): Promise<AttributeCatalogPayload | null> => {
+const updatedCatalogFromSnapshot = async (db: Database): Promise<AttributeCatalogPayload | 'unchanged' | null> => {
   // Capture the publication boundary before checking pending work. Otherwise
   // a version reserved by an unfinished publication could enter our cursor.
   const clock = await db.statement('SELECT current_version FROM attribute_catalog_clock WHERE id = 1')
@@ -59,7 +59,7 @@ const updatedCatalogFromSnapshot = async (db: Database): Promise<AttributeCatalo
   // Recalculate it from history instead of retaining missing/default values.
   if (!sameIds(baseline.subjects, current.subjects) || !sameIds(baseline.attributes, current.attributes)) return null;
   if (current.values.some((value) => (value.evidenceCount ?? value.directCount + value.comparisonCount) === 0)) return null;
-  return current;
+  return current.throughVersion === baseline.throughVersion ? 'unchanged' : current;
 };
 
 /** Weekly refresh; manual full replay remains a separate, unconditional action. */
@@ -67,7 +67,7 @@ export const runWeeklyAttributeRebuild = async (
   db: Database,
   timestamp = Date.now(),
   options: { maxChunkBytes?: number; workBudget?: ReplayWorkBudget } = {},
-): Promise<'replay' | 'cache' | 'pending'> => {
+): Promise<'replay' | 'cache' | 'pending' | 'idle'> => {
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
     const status = await queryAttributeReplayStatus(db);
@@ -78,6 +78,7 @@ export const runWeeklyAttributeRebuild = async (
     const needsReplay = !status || status.required_revision !== status.replayed_revision
       || status.replayed_model_version !== ATTRIBUTE_SCORE_MODEL_VERSION;
     const catalog = needsReplay ? null : await updatedCatalogFromSnapshot(db);
+    if (catalog === 'unchanged') return 'idle';
     if (catalog) {
       const snapshot = prepareAttributeCatalogSnapshot(db, catalog, catalog.throughVersion, timestamp, options);
       await commitAttributeReplay(db, lock, snapshot, revision);
