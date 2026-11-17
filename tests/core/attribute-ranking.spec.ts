@@ -11,7 +11,7 @@ const point = async (element: Locator) => {
 
 test('the first horizontal touch after a candidate fling adds exactly one game', async ({ page }) => {
   await page.goto('/attributes');
-  await page.getByRole('button', { name: '多款排序' }).tap();
+  await page.getByRole('button', { name: '切換為多款排序' }).tap();
   const pool = page.getByRole('region', { name: '候選遊戲' }).locator('.attribute-rank-list');
   await expect(pool.locator('[data-rank-source="pool"]').first()).toBeVisible();
   const list = page.locator('[data-rank-list]');
@@ -70,13 +70,16 @@ test('ranks games with native touch and records only adjacent results in order t
     }
   });
   await page.goto('/attributes');
-  const toggle = page.getByRole('button', { name: '多款排序' });
+  const toggle = page.getByRole('button', { name: /^切換為(?:多款排序|兩兩比較)$/ });
   await toggle.waitFor();
+  await expect(toggle).toHaveText('切換為多款排序');
+  const originalToggleBox = await toggle.boundingBox();
   const header = page.locator('.attribute-vote-header');
   const originalHeaderBox = await header.boundingBox();
   await header.evaluate((element) => { element.dataset.testOriginalHeader = 'true'; });
   await toggle.tap();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(toggle).toHaveText('切換為兩兩比較');
+  expect(await toggle.boundingBox()).toEqual(originalToggleBox);
   await expect(header).toHaveAttribute('data-test-original-header', 'true');
   expect(await header.boundingBox()).toEqual(originalHeaderBox);
   const panel = page.locator('.attribute-ranking-page');
@@ -113,7 +116,7 @@ test('ranks games with native touch and records only adjacent results in order t
   });
   await toggle.tap();
   const toggleEvents = await toggle.getAttribute('data-test-toggle-events');
-  expect(await toggle.getAttribute('aria-pressed'), `First mode-switch touch after dragging: ${toggleEvents}`).toBe('false');
+  expect(await toggle.textContent(), `First mode-switch touch after dragging: ${toggleEvents}`).toBe('切換為多款排序');
   await expect(header).toHaveAttribute('data-test-original-header', 'true');
   expect(await header.boundingBox()).toEqual(originalHeaderBox);
   await toggle.tap();
@@ -172,7 +175,7 @@ test('allows moving scored references in order and records votes only for player
   });
 
   await page.goto('/attributes');
-  await page.getByRole('button', { name: '多款排序' }).tap();
+  await page.getByRole('button', { name: '切換為多款排序' }).tap();
   const list = page.locator('[data-rank-list]');
   const references = list.locator('[data-rank-reference]');
   const candidate = page.locator('[data-rank-source="pool"]').first();

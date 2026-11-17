@@ -10,13 +10,13 @@ import { attributeDisplayEndpoints, orientAttributeScore } from '../shared/attri
 import { activityText, attributeQuestionKey, ExtremeScoreMarker, mergeRecentActivities } from './attributesPageShared';
 import type { AttributesPageViewModel } from './useAttributesPage';
 
-const RankingModeToggle = ({ pressed, disabled, onToggle }: { pressed: boolean; disabled: boolean; onToggle: () => void }) => {
+const RankingModeToggle = ({ rankingOpen, disabled, onToggle }: { rankingOpen: boolean; disabled: boolean; onToggle: () => void }) => {
   const start = useRef<{ id: number; x: number; y: number; time: number } | undefined>(undefined);
   const suppressClick = useRef(false);
   const stillTap = (event: PointerEvent<HTMLButtonElement>) => start.current?.id === event.pointerId
     && Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) < 9;
 
-  return <button type="button" className="attribute-ranking-toggle" aria-pressed={pressed} disabled={disabled}
+  return <button type="button" className="attribute-ranking-toggle" disabled={disabled}
     onPointerDown={(event) => {
       suppressClick.current = false;
       start.current = event.pointerType === 'touch' && event.isPrimary
@@ -37,7 +37,7 @@ const RankingModeToggle = ({ pressed, disabled, onToggle }: { pressed: boolean; 
       }
     }}
     onClick={(event) => { if (event.detail === 0 || !suppressClick.current) onToggle(); }}
-  >多款排序</button>;
+  >{rankingOpen ? '切換為兩兩比較' : '切換為多款排序'}</button>;
 };
 
 export const AttributesVoteToolbar = ({ view, rankingOpen, onToggleRanking }: {
@@ -53,7 +53,7 @@ const collectionImportControl = <label className="attributes-collection-import">
   </label>;
 
 const voteHeader = <header className="attribute-vote-header">
-    <div className="attribute-vote-title"><h1>屬性投票</h1>{(question || rankingOpen) && <RankingModeToggle pressed={rankingOpen} disabled={scopeLoading || questionLoading || submitting || collectionImporting} onToggle={onToggleRanking} />}</div>
+    <div className="attribute-vote-title"><h1>屬性投票</h1>{(question || rankingOpen) && <RankingModeToggle rankingOpen={rankingOpen} disabled={scopeLoading || questionLoading || submitting || collectionImporting} onToggle={onToggleRanking} />}</div>
     <div className="attributes-vote-actions">
       <AttributeFilterDialog options={attributeOptions} filter={attributeFilter} disabled={questionBusy} loadOptions={loadVotingCatalog} onApply={(next) => void changeAttributeFilter(next)} />
       {collectionImportControl}
