@@ -47,28 +47,35 @@ const { collectionImporting, collectionInputRef, handleCollectionImport, collect
   voteScope, changeVoteScope, scopeLoading, attributeOptions, attributeFilter, attributeFilterMessage, changeAttributeFilter,
   loadVotingCatalog, question, questionLoading, submitting, syncing, collectionMessage } = view;
 const questionBusy = scopeLoading || questionLoading || submitting || syncing || collectionImporting;
-const collectionImportControl = <label className="attributes-collection-import">
-    <span>{collectionImporting ? '讀取中…' : '匯入收藏'}</span>
-    <input ref={collectionInputRef} type="file" accept=".csv,text/csv" onChange={(event) => void handleCollectionImport(event)} disabled={questionBusy} />
-  </label>;
 
 const voteHeader = <header className="attribute-vote-header">
     <div className="attribute-vote-title"><h1>屬性投票</h1>{(question || rankingOpen) && <RankingModeToggle rankingOpen={rankingOpen} disabled={scopeLoading || questionLoading || submitting || collectionImporting} onToggle={onToggleRanking} />}</div>
     <div className="attributes-vote-actions">
       <AttributeFilterDialog options={attributeOptions} filter={attributeFilter} disabled={questionBusy} loadOptions={loadVotingCatalog} onApply={(next) => void changeAttributeFilter(next)} />
-      {collectionImportControl}
       <Link className="attributes-table-link" to="/attributes/table">屬性總表</Link>
     </div>
   </header>;
 
 const collectionScopeLabel = !collectionIds.length
-    ? '我的收藏'
+    ? '匯入收藏'
     : collectionMatchKnown ? `我的收藏 ${collectionMatchCount}/${collectionIds.length}` : `我的收藏 (${collectionIds.length})`;
 
 const voteScopeControl = <div className="attributes-vote-scope" role="group" aria-label="投票範圍">
     <span className="attributes-vote-scope-label">投票範圍</span>
     <button type="button" className={voteScope === 'all' ? 'is-active' : undefined} aria-pressed={voteScope === 'all'} onClick={() => void changeVoteScope('all')} disabled={questionBusy || voteScope === 'all'}>全部遊戲</button>
-    <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined} aria-pressed={voteScope === 'collection'} onClick={() => void changeVoteScope('collection')} disabled={questionBusy || voteScope === 'collection' || !collectionIds.length} title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '請先匯入收藏 CSV'}>{scopeLoading ? '切換中…' : collectionScopeLabel}</button>
+    <div className={`attributes-collection-scope${voteScope === 'collection' ? ' is-active' : ''}`}>
+      <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined}
+        aria-pressed={voteScope === 'collection'} disabled={questionBusy || voteScope === 'collection'}
+        onClick={() => collectionIds.length ? void changeVoteScope('collection') : collectionInputRef.current?.click()}
+        title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '匯入 GeekGroup 收藏 CSV'}
+      >{collectionImporting ? '讀取中…' : scopeLoading ? '切換中…' : collectionScopeLabel}</button>
+      {collectionIds.length > 0 && voteScope === 'collection' && <button type="button"
+        className="attributes-collection-reimport" disabled={questionBusy}
+        onClick={() => collectionInputRef.current?.click()}
+      >重新匯入</button>}
+    </div>
+    <input ref={collectionInputRef} type="file" accept=".csv,text/csv" aria-label="收藏 CSV"
+      hidden onChange={(event) => void handleCollectionImport(event)} disabled={questionBusy} />
   </div>;
 
 return <>

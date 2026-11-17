@@ -1,7 +1,7 @@
 /* Keep the source of questions visible without turning the voting page into a settings panel. */
 .attribute-vote-page .attributes-vote-scope {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   gap: 3px;
   align-items: center;
   width: 100%;
@@ -46,6 +46,29 @@
 .attribute-vote-page .attributes-vote-scope button:disabled:not(.is-active) {
   cursor: not-allowed;
   opacity: .48;
+}
+.attribute-vote-page .attributes-collection-scope {
+  display: flex;
+  min-width: 0;
+  border-radius: 4px;
+}
+.attribute-vote-page .attributes-collection-scope.is-active {
+  background: var(--attribute-ink);
+}
+.attribute-vote-page .attributes-collection-scope > button:first-child {
+  flex: 1;
+}
+.attribute-vote-page .attributes-vote-scope .attributes-collection-reimport {
+  flex: none;
+  padding: 0 6px;
+  border-left: 1px solid color-mix(in srgb, var(--attribute-surface) 30%, transparent);
+  border-radius: 0 4px 4px 0;
+  color: var(--attribute-surface);
+  font-size: 10px;
+  font-weight: 500;
+}
+.attribute-vote-page .attributes-collection-reimport:disabled {
+  color: var(--attribute-surface);
 }
 
 @media (max-width: 520px) {

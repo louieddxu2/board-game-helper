@@ -215,7 +215,7 @@ describe('AttributesPage question flow', () => {
     expect(screen.queryByText('＋ 同時給兩款評分')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: '投票範圍' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '全部遊戲' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '我的收藏' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '匯入收藏' })).toBeEnabled();
     expect(tableSpy).toHaveBeenCalledTimes(1);
     const leftRating = screen.getByRole('slider', { name: '評分：遊戲甲' });
     fireEvent.keyDown(leftRating, { key: 'ArrowRight' });
@@ -265,9 +265,13 @@ describe('AttributesPage question flow', () => {
 
     render(<MemoryRouter><AttributesPage /></MemoryRouter>);
 
+    expect(screen.queryByRole('button', { name: '重新匯入' })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: '我的收藏 (2)' }));
     await waitFor(() => expect(tableSpy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: '全部遊戲' })).not.toBeDisabled());
+    expect(screen.getByRole('button', { name: '重新匯入' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '全部遊戲' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '重新匯入' })).not.toBeInTheDocument());
   });
 
   test('uses the saved attribute filter with the collection scope and bypasses an excluded cached question', async () => {

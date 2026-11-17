@@ -23,6 +23,65 @@ const mockVotingCatalog = async (page: Page, attributes = [attribute]) => {
   await page.route('**/api/attributes/activities', (route) => route.fulfill({ json: { activities: [] } }));
 };
 
+for (const mobile of [true, false]) {
+  test.describe(`collection import with ${mobile ? 'touch' : 'mouse'}`, () => {
+    test.use({ viewport: { width: mobile ? 320 : 1280, height: 851 }, isMobile: mobile, hasTouch: mobile });
+
+    for (const ranking of [false, true]) {
+      test(`imports and reimports from the collection scope in ${ranking ? 'ranking' : 'pair'} mode`, async ({ page }) => {
+        await mockVotingCatalog(page);
+        await page.goto('/attributes');
+        const activate = async (target: ReturnType<Page['getByRole']>) => mobile ? target.tap() : target.click();
+        const scope = page.getByRole('group', { name: '投票範圍' });
+        const reimport = scope.getByRole('button', { name: '重新匯入' });
+        let chooserCount = 0;
+        page.on('filechooser', () => { chooserCount += 1; });
+        const chooseFile = async (name: string, csv: string) => {
+          const chosen = page.waitForEvent('filechooser');
+          await activate(scope.getByRole('button', { name, exact: true }));
+          await (await chosen).setFiles({ name: 'collection.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+        };
+        if (ranking) await activate(page.getByRole('button', { name: '切換為多款排序' }));
+        await expect(scope.getByRole('button', { name: '匯入收藏' })).toBeEnabled();
+        await expect(reimport).toHaveCount(0);
+        await chooseFile('匯入收藏', 'Name\nInvalid');
+        await expect(page.getByText('CSV 中找不到 Game ID 欄位。', { exact: true })).toBeVisible();
+        expect(chooserCount).toBe(1);
+        await chooseFile('匯入收藏', 'Game ID\n123\n456');
+        await expect(scope.getByRole('button', { name: '我的收藏 2/2', exact: true })).toBeEnabled();
+        await expect(reimport).toHaveCount(0);
+        expect(chooserCount).toBe(2);
+
+        await activate(scope.getByRole('button', { name: '我的收藏 2/2', exact: true }));
+        await expect(scope.getByRole('button', { name: '我的收藏 2/2', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        await expect(reimport).toBeEnabled();
+        await chooseFile('重新匯入', 'Game ID\n789\n101112');
+        await expect(reimport).toBeEnabled();
+        expect(chooserCount).toBe(3);
+        if (ranking) {
+          await expect(page.getByRole('region', { name: '候選遊戲' })).toContainText(subjectC.displayName);
+          await expect(page.getByRole('region', { name: '候選遊戲' })).toContainText(subjectD.displayName);
+        } else {
+          await expect(page.locator('.attributes-question-pair')).toContainText(subjectC.displayName);
+          await expect(page.locator('.attributes-question-pair')).toContainText(subjectD.displayName);
+        }
+        await activate(scope.getByRole('button', { name: '全部遊戲', exact: true }));
+        await expect(reimport).toHaveCount(0);
+        await expect(scope.getByRole('button', { name: '我的收藏 2/2', exact: true })).toBeEnabled();
+        await activate(scope.getByRole('button', { name: '我的收藏 2/2', exact: true }));
+        await expect(reimport).toBeEnabled();
+        await page.reload();
+        await expect(reimport).toBeEnabled();
+        const clipped = await scope.evaluate((element) => [...element.querySelectorAll('button')]
+          .some((button) => button.scrollWidth > button.clientWidth));
+        expect(clipped).toBe(false);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+        await test.info().attach('collection-scope', { body: await scope.screenshot(), contentType: 'image/png' });
+      });
+    }
+  });
+}
+
 test('filters voting attributes with the first tap after scrolling and keeps the selection on reload', async ({ page }) => {
   const extraAttributes = Array.from({ length: 16 }, (_, index) => ({
     ...attribute, id: `extra-${index}`, key: `extra-${index}`, name: `測試屬性 ${index + 1}`, sortOrder: index + 2,
