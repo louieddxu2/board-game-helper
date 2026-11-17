@@ -107,17 +107,18 @@
   font-size: 20px;
   cursor: pointer;
 }
-.attribute-rank-slot { position: relative; height: 1px; background: var(--line); }
-.attribute-rank-slot:is([data-over], [data-blocked])::after {
+.attribute-rank-slot, .attribute-rank-insert { position: relative; }
+.attribute-rank-slot { height: 1px; background: var(--line); }
+[data-rank-slot]:is([data-over], [data-blocked])::after {
   content: '';
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   inset: 0 4px auto;
   height: 3px;
   background: var(--orange);
   pointer-events: none;
 }
-.attribute-rank-slot[data-blocked]::after { height: 0; border-top: 3px dashed var(--muted); background: transparent; }
+[data-rank-slot][data-blocked]::after { height: 0; border-top: 3px dashed var(--muted); background: transparent; }
 .attribute-rank-more, .attribute-rank-insert { justify-content: center; color: var(--green); cursor: pointer; }
 .attribute-rank-insert { border-block: 1px dashed var(--line); font-size: 12px; }
 .attribute-rank-empty { margin: 10px 6px; color: var(--muted); font-size: 12px; }
@@ -154,7 +155,7 @@
   background: var(--white);
   color: var(--green);
   box-shadow: 0 2px 7px #18332d38;
-  transform: translateY(-100%);
+  transform: translateY(calc(-100% - 18px));
   pointer-events: none;
   font-size: 13px;
   overflow-wrap: anywhere;

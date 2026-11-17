@@ -9,31 +9,67 @@ const point = async (element: Locator) => {
   return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
 };
 
-test('the first horizontal touch after a candidate fling adds exactly one game', async ({ page }) => {
-  await page.goto('/attributes');
-  await page.getByRole('button', { name: '切換為多款排序' }).tap();
-  const pool = page.getByRole('region', { name: '候選遊戲' }).locator('.attribute-rank-list');
-  await expect(pool.locator('[data-rank-source="pool"]').first()).toBeVisible();
-  const list = page.locator('[data-rank-list]');
-  const cdp = await page.context().newCDPSession(page);
-  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
-    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
-  const left = (await pool.boundingBox())!;
-  const right = (await list.boundingBox())!;
-  const x = Math.round(left.x + left.width * .72);
-  const startY = Math.round(left.y + left.height * .72);
-  const dragY = startY - 90;
-  await touch('touchStart', x, startY);
-  for (const offset of [15, 30, 45, 60, 75, 90]) await touch('touchMove', x, startY - offset);
-  await touch('touchEnd');
-  const scrollTop = await pool.evaluate((element) => element.scrollTop);
-  await touch('touchStart', x, dragY);
-  const dropX = Math.round(right.x + right.width / 2);
-  for (const offset of [.2, .4, .6, .8, 1]) await touch('touchMove', Math.round(x + (dropX - x) * offset), dragY);
-  await touch('touchEnd');
-  expect(scrollTop).toBeGreaterThan(0);
-  await expect(list.locator('[data-rank-game]')).toHaveCount(1);
-});
+for (const { width, selected } of [{ width: 320, selected: false }, { width: 390, selected: true }]) {
+  test(`the first drag after a candidate fling shows its landing spot and adds exactly one game (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 780 });
+    await page.goto('/attributes');
+    await page.getByRole('button', { name: '切換為多款排序' }).tap();
+    const pool = page.getByRole('region', { name: '候選遊戲' }).locator('.attribute-rank-list');
+    const candidates = pool.locator('[data-rank-source="pool"]');
+    await expect(candidates.first()).toBeVisible();
+    const list = page.locator('[data-rank-list]');
+    const ordered = list.locator('[data-rank-game]');
+    if (selected) {
+      await candidates.first().tap();
+      await list.locator('.attribute-rank-insert').last().tap();
+      await candidates.first().tap();
+      await expect(list.getByRole('button', { name: /後面$/ })).toBeVisible();
+    }
+    const orderedIds = () => ordered.evaluateAll((cards) => cards.map((card) => card.getAttribute('data-rank-game')));
+    const before = await orderedIds();
+    await pool.evaluate((element) => {
+      element.addEventListener('pointerdown', (event) => {
+        element.dataset.touchSource = (event.target as HTMLElement).closest<HTMLElement>('[data-rank-game]')?.dataset.rankGame ?? '';
+      }, { capture: true });
+      const board = element.closest<HTMLElement>('.attribute-ranking-page')!;
+      board.addEventListener('pointermove', (event) => { board.dataset.testFingerY = String(event.clientY); }, { capture: true });
+    });
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    const left = (await pool.boundingBox())!;
+    const x = Math.round(left.x + left.width * .72);
+    const startY = Math.round(left.y + left.height * .72);
+    const dragY = startY - 90;
+    const drop = await point(list.locator(`[data-rank-slot="${before.length}"]`));
+    await touch('touchStart', x, startY);
+    for (const offset of [15, 30, 45, 60, 75, 90]) await touch('touchMove', x, startY - offset);
+    await touch('touchEnd');
+    await touch('touchStart', x, dragY);
+    expect(await pool.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    const pickupY = dragY + (selected ? 12 : -12);
+    await touch('touchMove', x + 24, pickupY);
+    for (const offset of [.2, .4, .6, .8, 1]) {
+      await touch('touchMove', Math.round(x + 24 + (drop.x - x - 24) * offset), Math.round(pickupY + (drop.y - pickupY) * offset));
+    }
+    const landing = list.locator('[data-rank-slot][data-over]');
+    await expect(landing).toHaveAttribute('data-rank-slot', String(before.length), { timeout: 1500 });
+    const marker = await landing.evaluate((element) => ({ height: getComputedStyle(element, '::after').height, content: getComputedStyle(element, '::after').content }));
+    expect(marker).toEqual({ height: '3px', content: '""' });
+    const ghost = page.locator('.attribute-rank-ghost');
+    const ghostClearance = await ghost.evaluate((element) => {
+      const fingerY = Number(element.closest<HTMLElement>('.attribute-ranking-page')!.dataset.testFingerY);
+      return fingerY - element.getBoundingClientRect().bottom;
+    });
+    expect(ghostClearance).toBeGreaterThanOrEqual(17);
+    if (selected) await test.info().attach('390px touch drag preview', { body: await page.screenshot(), contentType: 'image/png' });
+    const dragged = await pool.getAttribute('data-touch-source');
+    await touch('touchEnd');
+    expect(dragged).toBeTruthy();
+    await expect(ordered).toHaveCount(before.length + 1);
+    expect(await orderedIds()).toEqual([...before, dragged]);
+  });
+}
 
 const rankingDrag = async (page: Page, list: Locator) => {
   const cdp = await page.context().newCDPSession(page);

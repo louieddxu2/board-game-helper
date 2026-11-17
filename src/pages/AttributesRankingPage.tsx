@@ -156,9 +156,10 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
       : after ? `放在${after}前面` : before ? `放在${before}後面` : '放進比較欄';
     const activeDrop = drag?.index === index;
     const blockedDrop = activeDrop && !canPlaceRankedSubject(order, referenceIds, drag.id, index);
+    const dropIndicator = { 'data-rank-slot': index, 'data-over': activeDrop && !blockedDrop || undefined, 'data-blocked': blockedDrop || undefined };
     return selected && !locked && canPlaceRankedSubject(order, referenceIds, selected, index)
-      ? <button type="button" className="attribute-rank-insert" onClick={() => place(selected, index)} aria-label={label}><span aria-hidden="true">＋</span> 插在這裡</button>
-      : <div className="attribute-rank-slot" data-rank-slot={index} data-over={activeDrop && !blockedDrop || undefined} data-blocked={blockedDrop || undefined} aria-hidden="true" />;
+      ? <button type="button" className="attribute-rank-insert" {...dropIndicator} onClick={() => place(selected, index)} aria-label={label}><span aria-hidden="true">＋</span> 插在這裡</button>
+      : <div className="attribute-rank-slot" {...dropIndicator} aria-hidden="true" />;
   };
 
   return <section className="attribute-ranking-page" hidden={hidden} {...input} aria-labelledby="attribute-ranking-question">
@@ -216,7 +217,7 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
       <div className="attribute-rank-footer-copy">
         {message && <p role="alert">{message}</p>}
         {rejectedCount > 0 && <p role="alert">有 {rejectedCount} 組比較已失效，未能同步。</p>}
-        <p role="status">{selectedName ? `已選取${selectedName}，請點插入位置。`
+        <p role="status">{drag ? '往右拖入比較欄，放手插入。' : selectedName ? `已選取${selectedName}，請點插入位置。`
           : submitted ? `已儲存 ${comparisonCount} 組相鄰比較`
             : comparisonCount ? `將送出 ${comparisonCount} 組自選遊戲比較` : '請排入至少 2 款玩過的遊戲'}</p>
         {pendingCount > 0 && <div className="attribute-rank-sync">
