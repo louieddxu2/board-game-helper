@@ -159,7 +159,7 @@ test('allows moving scored references in order and records votes only for player
     const attribute = catalog.attributes[0];
     catalog.subjects = catalog.subjects.slice(0, 22).map((subject, index) => ({ ...subject, secondaryName: `Ranking game ${index + 1}` }));
     catalog.values = catalog.subjects.slice(18).map((subject, index) => ({
-      subjectId: subject.id, attributeId: attribute.id, score: index < 2 ? 9 : 1,
+      subjectId: subject.id, attributeId: attribute.id, score: [9.26, 9, 1.24, 0.96][index],
       directCount: 1, decisiveComparisonCount: 0, evidenceCount: 1, comparisonCount: 0,
       ratingDeviation: 1, modelVersion: 'glicko-rd-v2',
     }));
@@ -180,7 +180,7 @@ test('allows moving scored references in order and records votes only for player
   const references = list.locator('[data-rank-reference]');
   const candidate = page.locator('[data-rank-source="pool"]').first();
   const submit = page.getByRole('button', { name: '送出排序' });
-  await expect(references.locator('.attribute-rank-reference-score')).toHaveText(['9 分', '9 分', '1 分', '1 分']);
+  await expect(references.locator('.attribute-rank-reference-score')).toHaveText(['9.3 分', '9 分', '1.2 分', '1 分']);
   await expect(candidate.locator('.attribute-rank-name small')).toHaveText(/Ranking game/);
   await expect(references.first().locator('.attribute-rank-name small')).toHaveText(/Ranking game/);
   expect((await point(references.first().locator('.attribute-rank-reference-score'))).x).toBeGreaterThan((await point(references.first().locator('.attribute-rank-name'))).x);
