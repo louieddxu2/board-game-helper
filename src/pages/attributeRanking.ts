@@ -1,10 +1,16 @@
-import { availableAttributeSubjectIds, chooseScopedExtremeExamples, matchCollectionSubjects, randomSample } from '../lib/attributeCollection';
+import { attributeSubjectBggIds, availableAttributeSubjectIds, chooseScopedExtremeExamples, matchCollectionSubjects, randomSample } from '../lib/attributeCollection';
 import { createAttributeResponseId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import { orientAttributeScore } from '../shared/attributeScale';
-import type { AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
+import type { AttributeCatalogPayload, AttributeQuestion, AttributeSubject } from '../shared/types';
 
 export const RANKING_RESPONSE_ID_MARKER = ':rank:';
+export const RANKING_CANDIDATES_PER_PAGE = 18;
+
+export const deferRankingCandidate = async (subject: AttributeSubject) => {
+  const questionNumber = await localDb.getAttributeQuestionNumber();
+  await localDb.deferAttributeSubject(subject.id, attributeSubjectBggIds(subject), questionNumber, 100);
+};
 
 export const loadRankingRound = async (catalog: AttributeCatalogPayload, question: AttributeQuestion, collectionIds?: number[]) => {
   const scope = collectionIds ? matchCollectionSubjects(catalog, collectionIds).subjectIds : undefined;
@@ -22,8 +28,8 @@ export const loadRankingRound = async (catalog: AttributeCatalogPayload, questio
       gameIds.add(gameId);
       return true;
     });
-  // Keep at least two candidates available for the player to rank.
-  const referenceCatalog = { ...catalog, subjects: distinct.slice(2) };
+  // Preserve the whole first draw. References come only from games outside it.
+  const referenceCatalog = { ...catalog, subjects: distinct.slice(RANKING_CANDIDATES_PER_PAGE) };
   const { lowest, highest } = chooseScopedExtremeExamples(referenceCatalog, question.attribute.id);
   const references = [...lowest, ...highest]
     .map((example) => ({ ...example, score: orientAttributeScore(example.score, question.highPole) }))

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react';
+import { useMomentumScroll } from '../workspace/useMomentumScroll';
 
 type RankingGesture = {
   pointerId: number;
-  button: HTMLButtonElement;
+  button: HTMLButtonElement | null;
   id?: string;
   horizontal: boolean;
   touch: boolean;
@@ -12,16 +13,19 @@ type RankingGesture = {
   x: number;
   y: number;
   dragging: boolean;
+  panning: boolean;
+  poolScrollStart?: number;
 };
 
-export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | null>, onPlace: (id: string, index: number) => void) => {
+export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | null>, poolRef: RefObject<HTMLDivElement | null>, onPlace: (id: string, index: number) => void) => {
   const gesture = useRef<RankingGesture | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const frame = useRef(0);
   const ignoreClick = useRef(false);
   const [drag, setDrag] = useState<{ id: string; index: number | null } | null>(null);
+  const { stop, trackMove, release } = useMomentumScroll();
 
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useEffect(() => () => { cancelAnimationFrame(frame.current); stop(); }, [stop]);
 
   const dropIndex = (x: number, y: number) => {
     const list = listRef.current;
@@ -68,6 +72,8 @@ export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | nul
   };
 
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
+    // A fresh touch takes ownership even while the candidate column is coasting.
+    stop();
     if (!event.isPrimary) {
       finish(event.currentTarget);
       return;
@@ -75,15 +81,17 @@ export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | nul
     ignoreClick.current = false;
     const target = event.target as HTMLElement;
     const button = target.closest<HTMLButtonElement>('button:enabled');
-    if (!button || event.button !== 0) return;
     const touch = event.pointerType === 'touch';
-    const horizontal = button.dataset.rankSource === 'pool';
-    const id = !touch || horizontal || target.closest('[data-rank-grip]') ? button.dataset.rankGame : undefined;
+    const pool = touch && poolRef.current?.contains(target) ? poolRef.current : null;
+    if ((!button && !pool) || event.button !== 0) return;
+    const horizontal = button?.dataset.rankSource === 'pool';
+    const id = !touch || horizontal || target.closest('[data-rank-grip]') ? button?.dataset.rankGame : undefined;
     if (!touch && id == null) return;
+    if (pool) trackMove(event.clientX, event.clientY);
     gesture.current = {
       button, id, horizontal, touch, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY, startedAt: event.timeStamp,
-      x: event.clientX, y: event.clientY, dragging: false,
+      x: event.clientX, y: event.clientY, dragging: false, panning: false, poolScrollStart: pool?.scrollTop,
     };
   };
 
@@ -94,18 +102,27 @@ export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | nul
     const dx = x - active.startX;
     const dy = y - active.startY;
     const distance = Math.hypot(dx, dy);
-    if (!active.dragging) {
+    if (!active.dragging && !active.panning) {
       if (distance < 9) return;
-      const verticalScroll = active.touch && active.horizontal && Math.abs(dy) >= Math.abs(dx);
-      if (active.id == null || verticalScroll || (active.touch && event.timeStamp - active.startedAt > 500)) {
+      const verticalScroll = active.poolScrollStart !== undefined && Math.abs(dy) >= Math.abs(dx);
+      if (verticalScroll) {
+        active.panning = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } else if (active.id == null || (active.touch && event.timeStamp - active.startedAt > 500)) {
         finish(event.currentTarget);
         return;
+      } else {
+        if (active.touch && active.horizontal && dx < 9) return;
+        active.dragging = true;
+        ignoreClick.current = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        frame.current = requestAnimationFrame(scrollAtEdge);
       }
-      if (active.touch && active.horizontal && dx < 9) return;
-      active.dragging = true;
-      ignoreClick.current = true;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      frame.current = requestAnimationFrame(scrollAtEdge);
+    }
+    if (active.panning && poolRef.current && active.poolScrollStart !== undefined) {
+      poolRef.current.scrollTop = active.poolScrollStart - dy;
+      trackMove(x, y);
+      return;
     }
     active.x = x;
     active.y = y;
@@ -124,11 +141,15 @@ export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | nul
     const { clientX: x, clientY: y } = event;
     const index = active.dragging ? dropIndex(x, y) : null;
     finish(event.currentTarget);
+    if (active.panning) {
+      if (poolRef.current && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) release(poolRef.current, 'y');
+      return;
+    }
     if (active.id != null && index != null) {
       onPlace(active.id, index);
       return;
     }
-    if (!active.dragging && active.touch && Math.hypot(x - active.startX, y - active.startY) < 9
+    if (!active.dragging && active.touch && active.button && Math.hypot(x - active.startX, y - active.startY) < 9
       && event.timeStamp - active.startedAt <= 500 && document.elementFromPoint(x, y)?.closest('button') === active.button) {
       // A native touch release can arrive without a compatibility click after a drag.
       active.button.click();
@@ -141,7 +162,7 @@ export const useAttributeRankingInput = (listRef: RefObject<HTMLDivElement | nul
       onPointerDown, onPointerMove, onPointerUp,
       onPointerCancel: (event: PointerEvent<HTMLElement>) => finish(event.currentTarget),
       onPointerLeave: (event: PointerEvent<HTMLElement>) => {
-        if (!gesture.current?.dragging) finish(event.currentTarget);
+        if (!gesture.current?.dragging && !gesture.current?.panning) finish(event.currentTarget);
       },
       onLostPointerCapture: (event: PointerEvent<HTMLElement>) => {
         if (event.target === event.currentTarget) finish(event.currentTarget);

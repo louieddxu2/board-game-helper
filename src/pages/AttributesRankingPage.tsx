@@ -2,19 +2,22 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { attributeQuestionEnding, attributeQuestionStart } from '../lib/attributeQuestion';
 import { attributeDisplayEndpoints } from '../shared/attributeScale';
 import type { AttributeQuestion, AttributeSubject } from '../shared/types';
-import { canPlaceRankedSubject, loadRankingRound, rankedPlayerOrder } from './attributeRanking';
+import { canPlaceRankedSubject, deferRankingCandidate, loadRankingRound, rankedPlayerOrder, RANKING_CANDIDATES_PER_PAGE } from './attributeRanking';
 import type { AttributesPageViewModel } from './useAttributesPage';
 import { useAttributeRankingInput } from './useAttributeRankingInput';
 
-const CANDIDATES_PER_PAGE = 18;
 type RankingRound = Awaited<ReturnType<typeof loadRankingRound>>;
+
+const RankingGameName = ({ subject }: { subject: AttributeSubject }) => <span className="attribute-rank-name">
+  <span>{subject.displayName}</span>
+  {subject.secondaryName && subject.secondaryName !== subject.displayName && <small>{subject.secondaryName}</small>}
+</span>;
 
 interface RankingProps {
   initialQuestion: AttributeQuestion;
   scope: AttributesPageViewModel['voteScope'];
   collectionIds: number[];
   hidden: boolean;
-  onExit: () => void;
   loadVotingCatalog: AttributesPageViewModel['loadVotingCatalog'];
   requestQuestion: AttributesPageViewModel['requestQuestion'];
   queueRanking: AttributesPageViewModel['queueRanking'];
@@ -25,10 +28,10 @@ interface RankingProps {
   retrySync: () => void;
 }
 
-export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, hidden, onExit, loadVotingCatalog, requestQuestion, queueRanking, pendingCount, rejectedCount, syncing, online, retrySync }: RankingProps) => {
+export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, hidden, loadVotingCatalog, requestQuestion, queueRanking, pendingCount, rejectedCount, syncing, online, retrySync }: RankingProps) => {
   const [question, setQuestion] = useState(initialQuestion);
   const [round, setRound] = useState<RankingRound>();
-  const [limit, setLimit] = useState(CANDIDATES_PER_PAGE);
+  const [limit, setLimit] = useState(RANKING_CANDIDATES_PER_PAGE);
   const [ordered, setOrdered] = useState<AttributeSubject[]>([]);
   const [selected, setSelected] = useState<string>();
   const [loadingAttempt, setLoadingAttempt] = useState(0);
@@ -75,7 +78,7 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
     setMessage('');
   };
 
-  const { drag, ghostRef, input } = useAttributeRankingInput(listRef, place);
+  const { drag, ghostRef, input } = useAttributeRankingInput(listRef, poolRef, place);
   const endpoints = attributeDisplayEndpoints(question.attribute, question.highPole);
   const highLabel = endpoints?.high.label ?? question.attribute.name;
   const description = endpoints
@@ -91,6 +94,16 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
   const selectedName = nameFor(selected);
   const ghostName = nameFor(drag?.id);
   const locked = busy || submitted;
+  const replacement = remaining[limit];
+
+  const refreshCandidate = (subject: AttributeSubject) => {
+    if (!replacement || locked) return;
+    setRound((current) => current && ({ ...current, candidates: current.candidates
+      .filter(({ id }) => id !== replacement.id)
+      .map((candidate) => candidate.id === subject.id ? replacement : candidate) }));
+    setSelected((current) => current === subject.id ? undefined : current);
+    void deferRankingCandidate(subject).catch(() => undefined);
+  };
 
   const onSubmit = async () => {
     if (inProgress.current || submitted || comparisonCount === 0) return;
@@ -122,7 +135,7 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
       }
       setOrdered([]);
       setRound(undefined);
-      setLimit(CANDIDATES_PER_PAGE);
+      setLimit(RANKING_CANDIDATES_PER_PAGE);
       setLoadingError(false);
       setSubmitted(false);
       setQuestion(next);
@@ -149,12 +162,8 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
   };
 
   return <section className="attribute-ranking-page" hidden={hidden} {...input} aria-labelledby="attribute-ranking-question">
-    <header className="attribute-rank-topbar">
-      <span>屬性投票</span>
-      <button type="button" className="attribute-ranking-toggle" onClick={onExit} disabled={busy}>切回兩兩比較</button>
-    </header>
     <div className="attribute-rank-description">
-      <h1 id="attribute-ranking-question">{attributeQuestionStart(question.attribute.key)}<strong>「{highLabel}」</strong>{attributeQuestionEnding(question.attribute.key)}？</h1>
+      <h2 id="attribute-ranking-question">{attributeQuestionStart(question.attribute.key)}<strong>「{highLabel}」</strong>{attributeQuestionEnding(question.attribute.key)}？</h2>
       {description && <p>{description}</p>}
     </div>
     <div className="attribute-rank-board">
@@ -164,27 +173,33 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
           {!round && !loadingError && <p className="attribute-rank-empty" role="status">載入遊戲中…</p>}
           {loadingError && <button type="button" className="attribute-rank-more" onClick={() => { setLoadingError(false); setLoadingAttempt((attempt) => attempt + 1); }}>重新載入遊戲</button>}
           {round && !remaining.length && <p className="attribute-rank-empty">{round.candidates.length ? '已排入全部候選遊戲。' : '這個範圍目前沒有候選遊戲。'}</p>}
-          {remaining.slice(0, limit).map((subject) => <button type="button" key={subject.id} className="attribute-rank-game" data-rank-game={subject.id} data-rank-source="pool" data-dragged={drag?.id === subject.id || undefined} aria-pressed={selected === subject.id} disabled={locked} onClick={() => setSelected((current) => current === subject.id ? undefined : subject.id)}>
-            {subject.thumbnailUrl && <img src={subject.thumbnailUrl} alt="" loading="lazy" draggable={false} onError={(event) => { event.currentTarget.hidden = true; }} />}
-            <span>{subject.displayName}</span>
-          </button>)}
-          {remaining.length > limit && <button type="button" className="attribute-rank-more" disabled={locked} onClick={() => setLimit((current) => current + CANDIDATES_PER_PAGE)}>更多遊戲</button>}
+          {remaining.slice(0, limit).map((subject) => <div key={subject.id} className="attribute-rank-candidate">
+            <button type="button" className="attribute-rank-refresh" disabled={locked || !replacement} aria-label={`換掉${subject.displayName}`} onClick={() => refreshCandidate(subject)}>↻</button>
+            <button type="button" className="attribute-rank-game" data-rank-game={subject.id} data-rank-source="pool" data-dragged={drag?.id === subject.id || undefined} aria-pressed={selected === subject.id} disabled={locked} onClick={() => setSelected((current) => current === subject.id ? undefined : subject.id)}>
+              {subject.thumbnailUrl && <img src={subject.thumbnailUrl} alt="" loading="lazy" draggable={false} onError={(event) => { event.currentTarget.hidden = true; }} />}
+              <RankingGameName subject={subject} />
+            </button>
+          </div>)}
+          {replacement && <button type="button" className="attribute-rank-more" disabled={locked} onClick={() => setLimit((current) => current + RANKING_CANDIDATES_PER_PAGE)}>更多遊戲</button>}
         </div>
       </section>
       <section className="attribute-rank-order" aria-label="比較欄">
-        <h2>比較欄 <span>↑ {endpoints?.high.label ?? '程度較高'}</span></h2>
+        <h2>比較欄</h2>
         <div className="attribute-rank-list" ref={listRef} data-rank-list>
+          <div className="attribute-rank-stack">
+          <p className="attribute-rank-pole">↑ {endpoints?.high.label ?? '程度較高'}</p>
           {ordered.map((subject, index) => {
             const reference = references.get(subject.id);
-            const referenceLabel = reference ? `參考 ${Number(reference.score.toFixed(2))} 分` : undefined;
+            const score = reference ? `${Number(reference.score.toFixed(2))} 分` : undefined;
             const playerRank = playerRanks.get(subject.id);
-            const label = referenceLabel ? `${subject.displayName}，${referenceLabel}` : `第 ${playerRank} 名，${subject.displayName}`;
+            const label = score ? `${subject.displayName}，參考 ${score}` : `第 ${playerRank} 名，${subject.displayName}`;
             return <Fragment key={subject.id}>
               {renderSlot(index)}
               <div className="attribute-rank-row" data-rank-row>
                 <button type="button" className="attribute-rank-game" data-rank-game={subject.id} data-rank-reference={reference?.score} data-dragged={drag?.id === subject.id || undefined} aria-pressed={selected === subject.id} aria-label={label} disabled={locked} onClick={() => setSelected((current) => current === subject.id ? undefined : subject.id)}>
                   <span className="attribute-rank-grip" data-rank-grip aria-hidden="true">⠿ {playerRank !== undefined && <b>{playerRank}</b>}</span>
-                  <span>{subject.displayName}{referenceLabel && <small className="attribute-rank-reference-score">{referenceLabel}</small>}</span>
+                  <RankingGameName subject={subject} />
+                  {score && <small className="attribute-rank-reference-score" title="參考分數">{score}</small>}
                 </button>
                 {!submitted && !reference && <button type="button" className="attribute-rank-remove" disabled={busy} aria-label={`將${subject.displayName}移回候選區`} onClick={() => { setOrdered((current) => current.filter((item) => item.id !== subject.id)); setSelected(undefined); }}>×</button>}
               </div>
@@ -192,8 +207,9 @@ export const AttributesRankingPage = ({ initialQuestion, scope, collectionIds, h
           })}
           {renderSlot(ordered.length)}
           {!ordered.length && !selected && <p className="attribute-rank-empty">從左邊拖入遊戲</p>}
+          <p className="attribute-rank-pole">↓ {endpoints?.low.label ?? '程度較低'}</p>
+          </div>
         </div>
-        <p className="attribute-rank-low">↓ {endpoints?.low.label ?? '程度較低'}</p>
       </section>
     </div>
     <div className="attribute-rank-footer">

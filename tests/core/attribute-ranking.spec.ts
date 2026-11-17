@@ -9,6 +9,32 @@ const point = async (element: Locator) => {
   return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
 };
 
+test('the first horizontal touch after a candidate fling adds exactly one game', async ({ page }) => {
+  await page.goto('/attributes');
+  await page.getByRole('button', { name: '多款排序' }).tap();
+  const pool = page.getByRole('region', { name: '候選遊戲' }).locator('.attribute-rank-list');
+  await expect(pool.locator('[data-rank-source="pool"]').first()).toBeVisible();
+  const list = page.locator('[data-rank-list]');
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  const left = (await pool.boundingBox())!;
+  const right = (await list.boundingBox())!;
+  const x = Math.round(left.x + left.width * .72);
+  const startY = Math.round(left.y + left.height * .72);
+  const dragY = startY - 90;
+  await touch('touchStart', x, startY);
+  for (const offset of [15, 30, 45, 60, 75, 90]) await touch('touchMove', x, startY - offset);
+  await touch('touchEnd');
+  const scrollTop = await pool.evaluate((element) => element.scrollTop);
+  await touch('touchStart', x, dragY);
+  const dropX = Math.round(right.x + right.width / 2);
+  for (const offset of [.2, .4, .6, .8, 1]) await touch('touchMove', Math.round(x + (dropX - x) * offset), dragY);
+  await touch('touchEnd');
+  expect(scrollTop).toBeGreaterThan(0);
+  await expect(list.locator('[data-rank-game]')).toHaveCount(1);
+});
+
 const rankingDrag = async (page: Page, list: Locator) => {
   const cdp = await page.context().newCDPSession(page);
   const move = (type: 'touchStart' | 'touchMove' | 'touchEnd' | 'touchCancel', coordinates?: { x: number; y: number }) =>
@@ -44,7 +70,15 @@ test('ranks games with native touch and records only adjacent results in order t
     }
   });
   await page.goto('/attributes');
-  await page.getByRole('button', { name: '多款排序' }).tap();
+  const toggle = page.getByRole('button', { name: '多款排序' });
+  await toggle.waitFor();
+  const header = page.locator('.attribute-vote-header');
+  const originalHeaderBox = await header.boundingBox();
+  await header.evaluate((element) => { element.dataset.testOriginalHeader = 'true'; });
+  await toggle.tap();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(header).toHaveAttribute('data-test-original-header', 'true');
+  expect(await header.boundingBox()).toEqual(originalHeaderBox);
   const panel = page.locator('.attribute-ranking-page');
   const candidates = panel.locator('[data-rank-source="pool"]');
   const list = panel.locator('[data-rank-list]');
@@ -54,6 +88,11 @@ test('ranks games with native touch and records only adjacent results in order t
   await expect(submit).toBeDisabled();
   expect(await panel.evaluate((element) => element.offsetWidth)).toBe(360);
   expect((await panel.locator('.attribute-rank-footer').boundingBox())?.height).toBeLessThanOrEqual(48);
+  const firstCandidates = await candidates.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-rank-game')));
+  await panel.locator('.attribute-rank-refresh').first().tap();
+  const refreshedCandidates = await candidates.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-rank-game')));
+  expect(firstCandidates).not.toContain(refreshedCandidates[0]);
+  expect(refreshedCandidates.slice(1)).toEqual(firstCandidates.slice(1));
   const ids = (await candidates.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-rank-game')!))).slice(0, 7);
 
   const drag = await rankingDrag(page, list);
@@ -67,8 +106,17 @@ test('ranks games with native touch and records only adjacent results in order t
   await drag(ordered.first().locator('[data-rank-grip]'), 2, { fromLeft: false });
   await expect(ordered.first()).toHaveAttribute('data-rank-game', ids[0]);
 
-  await panel.getByRole('button', { name: '切回兩兩比較' }).tap();
-  await page.getByRole('button', { name: '多款排序' }).tap();
+  await toggle.evaluate((button) => {
+    for (const name of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
+      button.addEventListener(name, () => { button.dataset.testToggleEvents = `${button.dataset.testToggleEvents ?? ''} ${name}`; });
+    }
+  });
+  await toggle.tap();
+  const toggleEvents = await toggle.getAttribute('data-test-toggle-events');
+  expect(await toggle.getAttribute('aria-pressed'), `First mode-switch touch after dragging: ${toggleEvents}`).toBe('false');
+  await expect(header).toHaveAttribute('data-test-original-header', 'true');
+  expect(await header.boundingBox()).toEqual(originalHeaderBox);
+  await toggle.tap();
   await expect(ordered).toHaveCount(2);
   for (const [offset, id] of ids.slice(2, 6).entries()) {
     await candidate(id).tap();
@@ -101,12 +149,14 @@ test('ranks games with native touch and records only adjacent results in order t
 });
 
 test('allows moving scored references in order and records votes only for player entries', async ({ page }) => {
+  await page.addInitScript(() => { Math.random = () => 0; });
   await page.route('**/api/attributes/table', async (route) => {
     const response = await route.fetch();
     const catalog: AttributeCatalogPayload = await response.json();
-    const attributes = catalog.attributes[0];
-    catalog.values = catalog.subjects.slice(0, 12).map((subject, index) => ({
-      subjectId: subject.id, attributeId: attributes.id, score: index < 6 ? 9 : 1,
+    const attribute = catalog.attributes[0];
+    catalog.subjects = catalog.subjects.slice(0, 22).map((subject, index) => ({ ...subject, secondaryName: `Ranking game ${index + 1}` }));
+    catalog.values = catalog.subjects.slice(18).map((subject, index) => ({
+      subjectId: subject.id, attributeId: attribute.id, score: index < 2 ? 9 : 1,
       directCount: 1, decisiveComparisonCount: 0, evidenceCount: 1, comparisonCount: 0,
       ratingDeviation: 1, modelVersion: 'glicko-rd-v2',
     }));
@@ -127,7 +177,10 @@ test('allows moving scored references in order and records votes only for player
   const references = list.locator('[data-rank-reference]');
   const candidate = page.locator('[data-rank-source="pool"]').first();
   const submit = page.getByRole('button', { name: '送出排序' });
-  await expect(references).toHaveText([/參考 9 分/, /參考 9 分/, /參考 1 分/, /參考 1 分/]);
+  await expect(references.locator('.attribute-rank-reference-score')).toHaveText(['9 分', '9 分', '1 分', '1 分']);
+  await expect(candidate.locator('.attribute-rank-name small')).toHaveText(/Ranking game/);
+  await expect(references.first().locator('.attribute-rank-name small')).toHaveText(/Ranking game/);
+  expect((await point(references.first().locator('.attribute-rank-reference-score'))).x).toBeGreaterThan((await point(references.first().locator('.attribute-rank-name'))).x);
   await expect(submit).toBeDisabled();
   const ids = await references.evaluateAll((rows) => rows.map((row) => row.getAttribute('data-rank-game')!));
   for (const id of ids) await expect(page.locator(`[data-rank-source="pool"][data-rank-game="${id}"]`)).toHaveCount(0);

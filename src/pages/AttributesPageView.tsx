@@ -1,3 +1,4 @@
+import { useRef, type PointerEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AttributeFilterDialog } from '../components/AttributeFilterDialog';
 import { AttributeGameCard } from '../components/AttributeGameCard';
@@ -9,48 +10,42 @@ import { attributeDisplayEndpoints, orientAttributeScore } from '../shared/attri
 import { activityText, attributeQuestionKey, ExtremeScoreMarker, mergeRecentActivities } from './attributesPageShared';
 import type { AttributesPageViewModel } from './useAttributesPage';
 
-export const AttributesPageView = ({
-  collectionImporting,
-  collectionInputRef,
-  handleCollectionImport,
-  collectionIds,
-  collectionMatchKnown,
-  collectionMatchCount,
-  voteScope,
-  changeVoteScope,
-  scopeLoading,
-  attributeOptions,
-  attributeFilter,
-  attributeFilterMessage,
-  changeAttributeFilter,
-  loadVotingCatalog,
-  loading,
-  error,
-  payload,
-  question,
-  collectionMessage,
-  optimisticActivities,
-  comparisonQuestionKey,
-  ratingA,
-  ratingB,
-  connectionState,
-  pendingCount,
-  syncPendingResponses,
-  loadQuestion,
-  syncing,
-  questionLoading,
-  questionMotion,
-  submitting,
-  comparison,
-  chooseComparison,
-  awaitingNext,
-  voteFeedback,
-  deferCurrentAndLoad,
-  setRatingA,
-  setRatingB,
-  responseError,
-  onOpenRanking,
-}: AttributesPageViewModel & { onOpenRanking: () => void }) => {
+const RankingModeToggle = ({ pressed, disabled, onToggle }: { pressed: boolean; disabled: boolean; onToggle: () => void }) => {
+  const start = useRef<{ id: number; x: number; y: number; time: number } | undefined>(undefined);
+  const suppressClick = useRef(false);
+  const stillTap = (event: PointerEvent<HTMLButtonElement>) => start.current?.id === event.pointerId
+    && Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) < 9;
+
+  return <button type="button" className="attribute-ranking-toggle" aria-pressed={pressed} disabled={disabled}
+    onPointerDown={(event) => {
+      suppressClick.current = false;
+      start.current = event.pointerType === 'touch' && event.isPrimary
+        ? { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp }
+        : undefined;
+    }}
+    onPointerMove={(event) => { if (!stillTap(event)) start.current = undefined; }}
+    onPointerCancel={() => { start.current = undefined; }}
+    onContextMenu={() => { start.current = undefined; }}
+    onPointerUp={(event) => {
+      const tap = start.current && stillTap(event) && event.timeStamp - start.current.time <= 500
+        && event.currentTarget.contains(document.elementFromPoint(event.clientX, event.clientY));
+      start.current = undefined;
+      if (tap) {
+        // A previous drag can suppress the compatibility click of the next tap.
+        suppressClick.current = true;
+        onToggle();
+      }
+    }}
+    onClick={(event) => { if (event.detail === 0 || !suppressClick.current) onToggle(); }}
+  >多款排序</button>;
+};
+
+export const AttributesVoteToolbar = ({ view, rankingOpen, onToggleRanking }: {
+  view: AttributesPageViewModel; rankingOpen: boolean; onToggleRanking: () => void;
+}) => {
+const { collectionImporting, collectionInputRef, handleCollectionImport, collectionIds, collectionMatchKnown, collectionMatchCount,
+  voteScope, changeVoteScope, scopeLoading, attributeOptions, attributeFilter, attributeFilterMessage, changeAttributeFilter,
+  loadVotingCatalog, question, questionLoading, submitting, syncing, collectionMessage } = view;
 const questionBusy = scopeLoading || questionLoading || submitting || syncing || collectionImporting;
 const collectionImportControl = <label className="attributes-collection-import">
     <span>{collectionImporting ? '讀取中…' : '匯入收藏'}</span>
@@ -58,7 +53,7 @@ const collectionImportControl = <label className="attributes-collection-import">
   </label>;
 
 const voteHeader = <header className="attribute-vote-header">
-    <div className="attribute-vote-title"><h1>屬性投票</h1>{question && <button type="button" className="attribute-ranking-toggle" disabled={scopeLoading || questionLoading || submitting || collectionImporting} onClick={onOpenRanking}>多款排序</button>}</div>
+    <div className="attribute-vote-title"><h1>屬性投票</h1>{(question || rankingOpen) && <RankingModeToggle pressed={rankingOpen} disabled={scopeLoading || questionLoading || submitting || collectionImporting} onToggle={onToggleRanking} />}</div>
     <div className="attributes-vote-actions">
       <AttributeFilterDialog options={attributeOptions} filter={attributeFilter} disabled={questionBusy} loadOptions={loadVotingCatalog} onApply={(next) => void changeAttributeFilter(next)} />
       {collectionImportControl}
@@ -76,20 +71,28 @@ const voteScopeControl = <div className="attributes-vote-scope" role="group" ari
     <button type="button" className={voteScope === 'collection' ? 'is-active' : undefined} aria-pressed={voteScope === 'collection'} onClick={() => void changeVoteScope('collection')} disabled={questionBusy || voteScope === 'collection' || !collectionIds.length} title={collectionIds.length ? '只從匯入收藏中有屬性資料的遊戲出題' : '請先匯入收藏 CSV'}>{scopeLoading ? '切換中…' : collectionScopeLabel}</button>
   </div>;
 
-const filterMessage = attributeFilterMessage && <p className="attributes-collection-message" role="status">{attributeFilterMessage}</p>;
+return <>
+  {voteHeader}
+  {voteScopeControl}
+  {attributeFilterMessage && <p className="attributes-collection-message" role="status">{attributeFilterMessage}</p>}
+  {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
+</>;
+};
 
-if (loading) return <section className="attribute-vote-page"><p>載入中…</p></section>;
+export const AttributesPageView = ({
+  loading, error, payload, question, voteScope, collectionMatchKnown, collectionMatchCount, attributeFilter, optimisticActivities,
+  comparisonQuestionKey, ratingA, ratingB, connectionState, pendingCount, syncPendingResponses, loadQuestion, syncing, questionLoading,
+  questionMotion, submitting, comparison, chooseComparison, awaitingNext, voteFeedback, deferCurrentAndLoad, setRatingA, setRatingB,
+  responseError,
+}: AttributesPageViewModel) => {
+if (loading) return <p>載入中…</p>;
 
-if (error || !payload || !question) return <section className="attribute-vote-page attributes-no-question">
-    {voteHeader}
-    {voteScopeControl}
-    {filterMessage}
+if (error || !payload || !question) return <>
     <p>{voteScope === 'collection' && collectionMatchKnown && collectionMatchCount < 2
       ? `我的收藏中只有 ${collectionMatchCount} 款遊戲可用，至少需要兩款。`
       : attributeFilter ? '目前沒有符合範圍的題目，可調整抽選屬性。' : '目前無法取得題目。'}</p>
-    {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
     <button type="button" className="button primary" onClick={() => window.location.reload()}>重新載入</button>
-  </section>;
+  </>;
 
 const endpoints = attributeDisplayEndpoints(question.attribute, question.highPole);
 
@@ -127,11 +130,7 @@ const ratingSuggestionText = ratingSuggestion === 'A_HIGHER'
       ? `依照分數，建議點「${question.subjectB.displayName}」`
       : ratingSuggestion === 'SIMILAR' ? '依照分數，建議選「差不多」' : '';
 
-return <section className="attribute-vote-page">
-    {voteHeader}
-    {voteScopeControl}
-    {filterMessage}
-    {collectionMessage && <p className="attributes-collection-message" role="status">{collectionMessage}</p>}
+return <>
     <div className="attributes-inline-activity" aria-label="最近投票記錄">
       {recentComparisons.length ? <ol>{recentComparisons.map((activity) => <li key={activity.id}><span className="attributes-inline-activity-icon" aria-hidden="true">比</span><span>{activityText(activity)}</span></li>)}</ol> : <span className="attributes-inline-activity-empty">尚無近期紀錄</span>}
     </div>
@@ -188,5 +187,5 @@ return <section className="attribute-vote-page">
       </div>
     </section>
 
-  </section>;
+  </>;
 };

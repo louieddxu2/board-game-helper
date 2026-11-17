@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { localDb } from '../lib/localDb';
 import type { AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
-import { canPlaceRankedSubject, loadRankingRound, rankedAttributeResponses } from './attributeRanking';
+import { canPlaceRankedSubject, loadRankingRound, rankedAttributeResponses, RANKING_CANDIDATES_PER_PAGE } from './attributeRanking';
 
 const subject = (id: string) => ({ id, slug: id, displayName: id, kind: 'game' as const });
 const question: AttributeQuestion = {
@@ -11,20 +11,23 @@ const question: AttributeQuestion = {
 
 it('uses the displayed attribute direction and keeps the drawn candidates separate from references', async () => {
   const context = vi.spyOn(localDb, 'getAttributeQuestionContext').mockResolvedValue({ deferred: [], questionNumber: 0 });
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0);
   try {
+    const candidates = ['a', 'b', ...Array.from({ length: RANKING_CANDIDATES_PER_PAGE - 2 }, (_, index) => `game-${index}`)];
     const catalog: AttributeCatalogPayload = {
       generation: 1, generatedAt: 1, throughVersion: 1, attributes: [question.attribute],
-      subjects: ['a', 'b', 'high', 'low'].map(subject), candidates: [], activities: [],
-      values: ([['a', 10], ['high', 9], ['low', 1]] as const).map(([subjectId, score]) => ({
+      subjects: [...candidates, 'high', 'low'].map(subject), candidates: [], activities: [],
+      values: ([['a', 10], ['game-8', 10], ['high', 9], ['low', 1]] as const).map(([subjectId, score]) => ({
         subjectId, attributeId: question.attribute.id, score,
         directCount: 1, comparisonCount: 0, decisiveComparisonCount: 0, evidenceCount: 1, modelVersion: 'test',
       })),
     };
     const round = await loadRankingRound(catalog, question);
-    expect(round.candidates.map(({ id }) => id)).toEqual(['a', 'b']);
+    expect(round.candidates.map(({ id }) => id)).toEqual(candidates);
     expect(round.references.map(({ subject, score }) => [subject.id, score])).toEqual([['low', 9], ['high', 1]]);
   } finally {
     context.mockRestore();
+    random.mockRestore();
   }
 });
 
