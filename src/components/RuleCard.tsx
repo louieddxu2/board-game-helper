@@ -5,6 +5,8 @@ import { ToastContext } from '../context/ToastContext';
 import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import { RuleCardBody } from './RuleCardBody';
+import { CompactRuleText, markRuleMatches, useCompactSearchExcerpt } from './CompactRuleSearch';
+import { searchPlayerLabel } from '../lib/ruleSearch';
 import { RuleCardSource } from './RuleCardSource';
 import { buildRuleShareText, copyRuleContent } from '../lib/ruleClipboard';
 import { useWrappedTitle } from './useWrappedTitle';
@@ -270,22 +272,31 @@ export const RuleCard = ({
 
 export interface CompactRuleCardProps {
   rule: RuleCardType;
+  searchPattern?: RegExp;
   onToggleExpanded: () => void;
 }
 
 export const CompactRuleCard = ({
   rule,
+  searchPattern,
   onToggleExpanded,
 }: CompactRuleCardProps) => {
   const ruleEditions = getRuleEditions(rule);
+  const players = searchPlayerLabel(rule.playerCounts ?? [], searchPattern);
+  const visibleFields = [rule.statement, rule.commonMistake, players, ...ruleEditions, ...rule.tags.map(tag => tag.name)];
+  const showDetails = Boolean(searchPattern && rule.details && searchPattern.test(rule.details)
+    && !visibleFields.some(value => value && searchPattern.test(value)));
+  const secondText = showDetails ? rule.details : rule.commonMistake;
+  const cardRef = useCompactSearchExcerpt(searchPattern, rule);
   const press = useRef<{ x: number; y: number; started: number; canceled: boolean } | null>(null);
   return (
     <button
       type="button"
       className="rule-card-compact"
+      ref={cardRef}
       id={`rule-${rule.id}`}
       aria-label={`展開規則：${rule.statement}`}
-      aria-describedby={`rule-${rule.id}-meta${rule.commonMistake ? ` rule-${rule.id}-mistake` : ''}`}
+      aria-describedby={`rule-${rule.id}-meta${secondText ? ` rule-${rule.id}-note` : ''}`}
       aria-expanded={false}
       onPointerDown={(event) => {
         if (!event.isPrimary || event.button !== 0) {
@@ -315,24 +326,24 @@ export const CompactRuleCard = ({
         </svg>
       </span>
       <span className="compact-rule-meta" id={`rule-${rule.id}-meta`}>
-        {Boolean(rule.playerCounts?.length) && (
-          <span className="compact-attribute">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
+        {players && (
+          <span className="compact-attribute"><span>👥 {markRuleMatches(players, searchPattern)}</span></span>
         )}
         {ruleEditions.map((edition) => (
-          <span className="compact-attribute" key={edition}>📦 {edition}</span>
+          <span className="compact-attribute" key={edition}><span>📦 {markRuleMatches(edition, searchPattern)}</span></span>
         ))}
         {rule.tags.map((tag) => (
-          <span className="compact-attribute compact-tag" key={tag.id}>#{tag.name}</span>
+          <span className="compact-attribute compact-tag" key={tag.id}><span>#{markRuleMatches(tag.name, searchPattern)}</span></span>
         ))}
       </span>
       <span className="compact-rule-row compact-rule-correct">
         <strong aria-label="正確">✅</strong>
-        <span className="compact-rule-text">{rule.statement}</span>
+        <CompactRuleText text={rule.statement} pattern={searchPattern} />
       </span>
-      {rule.commonMistake && (
-        <span className="compact-rule-row compact-rule-mistake" id={`rule-${rule.id}-mistake`}>
-          <strong aria-label="玩錯">❌</strong>
-          <span className="compact-rule-text">{rule.commonMistake}</span>
+      {secondText && (
+        <span className={`compact-rule-row ${showDetails ? 'compact-rule-details' : 'compact-rule-mistake'}`} id={`rule-${rule.id}-note`}>
+          {showDetails ? <strong>補充說明</strong> : <strong aria-label="玩錯">❌</strong>}
+          <CompactRuleText text={secondText} pattern={searchPattern} sentenceOnly={showDetails} />
         </span>
       )}
     </button>

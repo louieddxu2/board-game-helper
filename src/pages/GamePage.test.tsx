@@ -141,13 +141,33 @@ describe('GamePage compact rule view', () => {
   test('describes the game for search results and restores the site defaults on leave', async () => {
     mocks.game.mockResolvedValue({ game });
     const { unmount } = renderGamePage('/games/test-game?players=2');
-    await screen.findByText('第一條正確規則');
+    await screen.findByText('找不到符合目前條件的規則。');
     expect(document.title).toBe('測試遊戲：玩錯的2條規則');
     expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute('href', `${window.location.origin}/games/test-game`);
     expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
     unmount();
     expect(document.title).toBe('玩錯的桌遊規則');
     expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
+  });
+
+  test('shows only explicitly selected player counts and can remove just that filter', async () => {
+    const user = userEvent.setup();
+    const counts = [[2], [2, 3], [3], [], undefined];
+    mocks.game.mockResolvedValue({ game: { ...game, rules: counts.map((playerCounts, index) => ({
+      ...game.rules[0], id: String(index), statement: `規則${index}`, playerCounts, editionNotes: ['本體'],
+    })) } });
+    const { container } = renderGamePage('/games/test-game?edition=本體');
+    const statements = () => [...container.querySelectorAll('.compact-rule-correct')].map(row => row.textContent);
+    await user.click(await screen.findByRole('button', { name: /2人$/ }));
+    expect(statements()).toEqual(['✅規則0', '✅規則1']);
+    await user.click(screen.getByRole('button', { name: /3人$/ }));
+    expect(statements()).toEqual(['✅規則0', '✅規則1', '✅規則2']);
+    await user.click(screen.getByRole('button', { name: /2人$/ }));
+    expect(statements()).toEqual(['✅規則1', '✅規則2']);
+    await user.type(screen.getByRole('searchbox'), '規則4');
+    await user.click(screen.getByRole('button', { name: '移除人數篩選' }));
+    expect(statements()).toEqual(['✅規則4']);
+    expect(currentUrl).toBe('/games/test-game?edition=本體&find=規則4');
   });
 
   test('keeps games without published rules and missing games out of search results', async () => {
@@ -308,7 +328,7 @@ describe('GamePage compact rule view', () => {
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.type(search, '第一條');
-    await waitFor(() => expect(screen.getByText('第一條正確規則')).toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: '展開規則：第一條正確規則' })).toHaveTextContent('第一條正確規則');
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.clear(search);
@@ -328,8 +348,16 @@ describe('GamePage compact rule view', () => {
 
     const search = await screen.findByRole('searchbox', { name: '關鍵字搜尋' });
     expect(search).toHaveValue('第一條');
-    expect(screen.getByText('第一條正確規則')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展開規則：第一條正確規則' })).toHaveTextContent('第一條正確規則');
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
+  });
+
+  test('keeps literal searches spanning the statement and mistake, marking both parts', async () => {
+    renderGamePage('/games/test-game?find=規則%20第一條');
+    const card = await screen.findByRole('button', { name: '展開規則：第一條正確規則' });
+    expect(card.querySelector('.compact-rule-correct mark:last-child')).toHaveTextContent('規則');
+    expect(card.querySelector('.compact-rule-mistake mark')).toHaveTextContent('第一條');
+    expect(screen.queryByRole('button', { name: '展開規則：第二條正確規則' })).not.toBeInTheDocument();
   });
 
   test.each(['tag', 'player', 'edition'] as const)('keeps a selected %s filter visible while searching', async (filterKind) => {

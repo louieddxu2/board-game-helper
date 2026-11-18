@@ -3,6 +3,7 @@ import { getRuleEditions } from '../lib/editionOptions';
 import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 import type { RuleFilterPatch, RuleFilterView } from '../lib/ruleFilterParams';
 import { sortRulesByImportance } from '../lib/ruleImportance';
+import { createRuleSearch } from '../lib/ruleSearch';
 import { RULE_CATEGORIES, type RuleCard, type RuleCategory, type TagSummary } from '../shared/types';
 
 export type TagOption = { name: string; count: number; selected: boolean };
@@ -57,23 +58,20 @@ export const useRuleFilterModel = (
   const selectedCategory = view.category !== 'all' && gameCategories.has(view.category) ? view.category : 'all';
 
   const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const rulesByQuery = useMemo(() => {
-    if (!normalizedQuery) return rules;
-    return rules.filter((rule) => [
-      rule.statement,
-      rule.commonMistake,
-      rule.details,
-      ...(rule.playerCounts ? rule.playerCounts.map((c) => `${c}人`) : []),
-      ...(rule.editionNotes ?? []),
-      ...rule.tags.map((t) => t.name),
-    ].join(' ').toLocaleLowerCase().includes(normalizedQuery));
-  }, [rules, normalizedQuery]);
+  const searchRule = useMemo(() => createRuleSearch(ruleQuery), [ruleQuery]);
+  const matches = useMemo(() => {
+    if (!searchRule) return undefined;
+    const found = new Map<RuleCard, RegExp>();
+    for (const rule of rules) {
+      const pattern = searchRule(rule);
+      if (pattern) found.set(rule, pattern);
+    }
+    return found;
+  }, [rules, searchRule]);
+  const rulesByQuery = useMemo(() => matches ? [...matches.keys()] : rules, [rules, matches]);
 
   const matchesSpecial = (rule: RuleCard) => {
-    if (activePlayerCounts.length > 0) {
-      const counts = rule.playerCounts ?? [];
-      if (counts.length > 0 && !activePlayerCounts.some((c) => counts.includes(c))) return false;
-    }
+    if (activePlayerCounts.length && !rule.playerCounts?.some(count => activePlayerCounts.includes(count))) return false;
     if (activeEditions.length > 0) {
       const editions = getRuleEditions(rule);
       if (!activeEditions.some((e) => editions.includes(e))) return false;
@@ -126,9 +124,11 @@ export const useRuleFilterModel = (
     availableEditions,
     availablePlayerCounts,
     clearAllFilters,
+    clearPlayerCounts: () => applyPatch({ playerCounts: [] }),
     // The search box alone is not a filter to clear; it has its own field.
     hasActiveFilters: activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0,
     ruleQuery,
+    matches,
     selectedCategory,
     setRuleQuery,
     tagOptions,

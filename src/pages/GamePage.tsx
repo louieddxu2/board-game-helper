@@ -289,6 +289,7 @@ export const GamePage = () => {
           return <CompactRuleCard
             key={rule.id}
             rule={rule}
+            searchPattern={filters.matches?.get(rule)}
             onToggleExpanded={toggleExpanded}
           />;
         }
@@ -307,7 +308,9 @@ export const GamePage = () => {
           onToggleImportance={user && importanceReady ? () => void toggleRuleImportance(rule) : undefined}
         />;
       })}
-      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p></div>}
+      {visibleRules.length === 0 && <div className="empty-state"><p>找不到符合目前條件的規則。</p>
+        {filters.activePlayerCounts.length > 0 && <button type="button" className="text-action" onClick={filters.clearPlayerCounts}>移除人數篩選</button>}
+      </div>}
     </div>
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}

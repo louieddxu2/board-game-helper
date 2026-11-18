@@ -37,6 +37,38 @@ for (const width of [393, 320, 1280]) {
     test.use({ viewport: { width, height: 851 }, deviceScaleFactor: touch ? 3 : 1, isMobile: touch, hasTouch: touch, serviceWorkers: 'block' });
     const activate = (target: Locator) => touch ? target.tap() : target.click();
 
+    test('shows the matching sentence within the collapsed lines and restores the original card', { tag: '@ui' }, async ({ page }) => {
+      const longLead = '這段已有正確敘述，應該可以逐字閱讀。'.repeat(12);
+      const rule = { ...game.rules[0], statement: '起始的 Town Hall 不算城市。', commonMistake: '將它當作城市計分。',
+        details: '規則書提到圖示。起始那片的圖案跟城市圖案很像，但顏色不同。另有其他圖案。',
+        playerCounts: [2, 3, 4], editionNotes: ['基本版'] };
+      const longRule = { ...game.rules[1], statement: longLead + '同一回合只能生效一次。' };
+      await showGame(page, { ...game, rules: [rule, longRule] });
+      const search = page.getByRole('searchbox');
+      const card = page.locator('.rule-card-compact').first();
+      for (const [query, expected] of [['town hall', 'Town Hall'], ['城市計分', '城市計分'], ['顏色', '顏色'], ['3人', '3人'], ['基本版', '基本版']]) {
+        await activate(search);
+        await search.fill(query);
+        await expect(card.locator('mark').first()).toHaveText(expected);
+        await expect(card.locator('.compact-rule-correct')).toHaveText('✅起始的 Town Hall 不算城市。');
+        await expect(card.locator('.compact-rule-details')).toHaveCount(query === '顏色' ? 1 : 0);
+        if (query === '顏色') await expect(card.locator('.compact-rule-details')).toHaveText('補充說明起始那片的圖案跟城市圖案很像，但顏色不同。');
+      }
+      await search.fill('生效');
+      const mark = card.locator('mark').first();
+      await expect(mark).toHaveText('生效');
+      expect(await mark.evaluate(hit => {
+        const row = hit.closest('.compact-rule-text')!.getBoundingClientRect();
+        const rect = hit.getBoundingClientRect();
+        return rect.height > 0 && rect.top >= row.top && rect.bottom <= row.bottom + 1;
+      })).toBe(true);
+      await activate(card);
+      await expect(page.locator('.rule-card .statement-text')).toHaveText(longRule.statement);
+      await search.fill('');
+      await expect(page.locator('.compact-rule-mistake').first()).toHaveText('❌將它當作城市計分。');
+      await expect(page.locator('.rule-card-compact mark')).toHaveCount(0);
+    });
+
     test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', { tag: '@ui' }, async ({ page }) => {
       const tags = ['行動', '褐色框', '關鍵字', '這個標籤名稱特別長仍然必須完整顯示'].map((name, index) => ({ id: `wrap-tag-${index}`, slug: `wrap-tag-${index}`, name }));
       const rule = { ...game.rules[0], categories: ['action_effect_detail'], playerCounts: [], editionNotes: [], createdByNickname: '東東', tags, tagIds: tags.map(tag => tag.id) };
