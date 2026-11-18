@@ -400,7 +400,7 @@ it('opens the drawer from a rightward swipe started anywhere in the first column
     dispatchPointer(viewport, 'pointerup', 130, 40);
   });
 
-it('opens the drawer from a rightward swipe started in the empty viewport area', async () => {
+it('opens the drawer from blank viewport space only within the row heading column', async () => {
     render(<WorkspacePage />);
     await screen.findByRole('table');
     const viewport = document.querySelector('.workspace-table-viewport')!;
@@ -410,13 +410,22 @@ it('opens the drawer from a rightward swipe started in the empty viewport area',
       fireEvent(element, event);
     };
 
-    dispatchPointer(viewport, 'pointerdown', 320, 220);
-    dispatchPointer(viewport, 'pointermove', 360, 220);
+    document.querySelectorAll('.workspace-row-heading, .workspace-row-corner').forEach(heading => {
+      Object.defineProperty(heading, 'getBoundingClientRect', { configurable: true, value: () => DOMRect.fromRect({ x: 0, y: 0, width: 120, height: 36 }) });
+    });
+
+    dispatchPointer(viewport, 'pointerdown', 160, 220);
+    dispatchPointer(viewport, 'pointermove', 200, 220);
+    expect(screen.queryByRole('complementary', { name: 'Workspace 目錄' })).not.toBeInTheDocument();
+    dispatchPointer(viewport, 'pointerup', 200, 220);
+
+    dispatchPointer(viewport, 'pointerdown', 90, 220);
+    dispatchPointer(viewport, 'pointermove', 130, 220);
     expect(screen.getByRole('complementary', { name: 'Workspace 目錄' })).toBeInTheDocument();
-    dispatchPointer(viewport, 'pointerup', 360, 220);
+    dispatchPointer(viewport, 'pointerup', 130, 220);
   });
 
-it('opens search after holding a vertical boundary bounce for half a second', async () => {
+it('opens or focuses search after holding a vertical boundary bounce for half a second', async () => {
     render(<WorkspacePage />);
     await screen.findByRole('table');
     const viewport = document.querySelector('.workspace-table-viewport') as HTMLDivElement;
@@ -431,11 +440,26 @@ it('opens search after holding a vertical boundary bounce for half a second', as
     });
     vi.useFakeTimers();
     try {
-      dispatchTouchPointer(cell, 'pointerdown', 120, 100, 32);
-      dispatchTouchPointer(viewport, 'pointermove', 120, 220, 32);
-      act(() => vi.advanceTimersByTime(500));
-      expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toBeInTheDocument();
-      dispatchTouchPointer(viewport, 'pointerup', 120, 220, 32);
+      const holdTopBoundary = (pointerId: number) => {
+        dispatchTouchPointer(cell, 'pointerdown', 120, 100, pointerId);
+        dispatchTouchPointer(viewport, 'pointermove', 120, 220, pointerId);
+        act(() => vi.advanceTimersByTime(500));
+        dispatchTouchPointer(viewport, 'pointerup', 120, 220, pointerId);
+      };
+      holdTopBoundary(32);
+      const search = screen.getByRole('searchbox', { name: '搜尋此表' });
+      expect(search).toHaveFocus();
+
+      // Shown but unfocused: the same pull focuses it again.
+      act(() => search.blur());
+      expect(search).not.toHaveFocus();
+      holdTopBoundary(33);
+      expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toBe(search);
+      expect(search).toHaveFocus();
+
+      // Already focused: the pull keeps focus and the bar stays open.
+      holdTopBoundary(34);
+      expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }

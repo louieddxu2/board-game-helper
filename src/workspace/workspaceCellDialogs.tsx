@@ -145,11 +145,13 @@ const NumericStepEditor = forwardRef<NumericCellEditorHandle, Pick<CellInputDial
   const commit = () => onSave(draft);
   useImperativeHandle(forwardedRef, () => ({ commit }), [commit]);
 
+  // The ± buttons change the value directly, so opening must not raise the keyboard;
+  // tapping the field is the explicit request for manual entry.
   return <div className="workspace-number-editor-shell">
     <div className="workspace-number-editor" data-mode="step" data-has-adjustment-controls="true" style={{ '--workspace-number-fraction-width': `${fractionDigits}ch` } as React.CSSProperties}>
       <button type="button" className="workspace-number-operation workspace-number-operation-subtract" aria-label="減少 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(-1)}>−</button>
       <div className="workspace-number-input-shell">
-        <input ref={inputRef} autoFocus aria-label={baseLabel} className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
+        <input ref={inputRef} aria-label={baseLabel} className="workspace-value-input" style={{ textAlign: 'center' }} type="number" inputMode="decimal" enterKeyHint="done" step="any" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } }} />
       </div>
       <button type="button" className="workspace-number-operation workspace-number-operation-add" aria-label="增加 1" onPointerDown={(event) => event.preventDefault()} onClick={() => step(1)}>＋</button>
     </div>

@@ -43,3 +43,17 @@ export const shouldKeepDrawerOpen = (offset: number, width: number) => width > 0
 export const isWorkspaceStandaloneMode = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-standalone') === 'true';
 
 export const canInitiateDrawerSwipe = (clientX: number, isStandalone = isWorkspaceStandaloneMode()) => isStandalone || clientX > 20;
+
+const isBlankViewportTarget = (target: Element) => !target.closest('th, td') || Boolean(target.closest('.workspace-virtual-spacer'));
+
+// The sticky row-heading column always sits at the viewport's left edge, so its horizontal span decides
+// whether a swipe in blank space counts as starting "on" the heading column, just like a swipe on a heading cell.
+const isWithinRowHeadingColumn = (viewport: Element, clientX: number) => {
+  const heading = viewport.querySelector('.workspace-row-heading, .workspace-row-corner');
+  if (!heading) return !viewport.querySelector('table');
+  const rect = heading.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right;
+};
+
+export const startsDrawerSwipeTarget = (viewport: Element, target: Element, clientX: number) =>
+  Boolean(target.closest('.workspace-row-heading')) || (isBlankViewportTarget(target) && isWithinRowHeadingColumn(viewport, clientX));

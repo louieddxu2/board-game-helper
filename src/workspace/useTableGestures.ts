@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
+import { canInitiateDrawerSwipe, CELL_SWEEP_CROSS_AXIS_DISTANCE, CELL_SWEEP_INTENT_DISTANCE, getTableBoundarySearchEdge, isCellSweepDirection, isInCellSweepLane, startsDrawerSwipeTarget, TABLE_BOUNDARY_SCROLL_TOLERANCE, TABLE_BOUNDARY_SEARCH_HOLD_MS } from './tableGestureGeometry';
 import type { CellHoldSession, TableHeaderTapSession, TableHeaderTapTarget, UseTableGesturesProps } from './tableGestureTypes';
 import { applyTableBounce, getTableContentScrollBounds, getTablePanAxis, resetTableBounce, settleTableBounce, TABLE_BOUNCE_LIMIT, TABLE_BOUNCE_RESISTANCE, TablePanAxis, useMomentumScroll } from './useMomentumScroll';
 import { useTableZoom } from './useTableZoom';
@@ -106,7 +106,9 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
   }, [bulkSelectionColumnId]);
 
   const armBoundarySearchHold = (pointerId: number, edge: 'top' | 'bottom') => {
-    if (!onOpenSearch || searchOpen || bulkSelectionColumnId) {
+    const searchFocused = searchOpen && document.activeElement !== null
+      && document.activeElement === workspacePageRef.current?.querySelector('.workspace-appbar-search input');
+    if (!onOpenSearch || searchFocused || bulkSelectionColumnId) {
       clearBoundarySearchHold();
       return;
     }
@@ -171,10 +173,7 @@ export function useTableGestures({ table, data, commit, viewportRef, workspacePa
       pointers.current.set(activeHold.pointerId, { x: activeHold.x, y: activeHold.y });
     }
     if (pointers.current.size === 0 && event.pointerType !== 'mouse' && (onDrawerSwipeProgress || onDrawerSwipeEnd)) {
-      const allowed = canInitiateDrawerSwipe(event.clientX);
-      const firstColumn = (event.target as Element).closest<HTMLElement>('.workspace-row-heading');
-      const startsInEmptyViewport = !(event.target as Element).closest('table');
-      drawerSwipe.current = allowed && (firstColumn || startsInEmptyViewport)
+      drawerSwipe.current = canInitiateDrawerSwipe(event.clientX) && startsDrawerSwipeTarget(viewport, event.target as Element, event.clientX)
         ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, lastDeltaX: 0 }
         : undefined;
     } else if (pointers.current.size > 0) {

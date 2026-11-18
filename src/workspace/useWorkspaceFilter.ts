@@ -16,6 +16,8 @@ interface UseWorkspaceFilterProps {
 export function useWorkspaceFilter({ table, rowHeader, readCell = getWorkspaceEffectiveCell }: UseWorkspaceFilterProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  // A search bar reopened from saved view state must not grab focus; only a user-opened one does.
+  const [searchRestored, setSearchRestored] = useState(false);
   const [headerFilters, setHeaderFilters] = useState<Record<string, HeaderFilterState>>({});
   const [filterTarget, setFilterTarget] = useState<HeaderFilterTarget>();
   const [viewTableId, setViewTableId] = useState<string>();
@@ -26,6 +28,7 @@ export function useWorkspaceFilter({ table, rowHeader, readCell = getWorkspaceEf
       setViewTableId(undefined);
       setSearchQuery('');
       setSearchOpen(false);
+      setSearchRestored(false);
       setHeaderFilters({});
       setFilterTarget(undefined);
       setScrollPosition({ left: 0, top: 0 });
@@ -35,10 +38,15 @@ export function useWorkspaceFilter({ table, rowHeader, readCell = getWorkspaceEf
     setViewTableId(table.id);
     setSearchQuery(restored.searchQuery);
     setSearchOpen(restored.searchOpen);
+    setSearchRestored(restored.searchOpen);
     setHeaderFilters(restored.headerFilters);
     setFilterTarget(undefined);
     setScrollPosition({ left: restored.scrollLeft, top: restored.scrollTop });
   }, [table?.id]);
+
+  useEffect(() => {
+    if (!searchOpen) setSearchRestored(false);
+  }, [searchOpen]);
 
   useEffect(() => {
     if (!table || viewTableId !== table.id) return;
@@ -168,7 +176,7 @@ export function useWorkspaceFilter({ table, rowHeader, readCell = getWorkspaceEf
   };
 
   return {
-    searchQuery, setSearchQuery, searchOpen, setSearchOpen,
+    searchQuery, setSearchQuery, searchOpen, setSearchOpen, searchAutoFocus: !searchRestored,
     headerFilters, setHeaderFilters, filterTarget, setFilterTarget,
     searchedRows, filteredRows, clearFilters,
     activeFilterKey, activeFilterState, activeFilterOptions, activeFilterInputType, activeNumericValues,

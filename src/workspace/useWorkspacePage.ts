@@ -157,8 +157,11 @@ export const useWorkspacePage = () => {
 
   const { localMinTextScale, viewportWidth, columnTextWidths, viewportHeight, textWidthCache, setMountedTextWidths } = useWorkspaceColumnSizing({ table, rowHeader, displayedColumns, viewportRef });
 
+  // Hidden: show it (the bar focuses itself on mount). Shown but unfocused: focus it so the keyboard rises.
   const openSearchFromGesture = useCallback(() => withActiveTable(() => {
-    setSearchOpen(true);
+    const input = workspacePageRef.current?.querySelector<HTMLInputElement>('.workspace-appbar-search input');
+    if (!input) setSearchOpen(true);
+    else if (document.activeElement !== input) input.focus();
     setEditBarOpen(false);
     setTableActionsOpen(false);
   }), [withActiveTable]);

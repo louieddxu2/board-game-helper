@@ -478,14 +478,21 @@ it('searches tables and folders from the drawer', async () => {
     expect(within(drawer).getByText('測試表格')).toBeInTheDocument();
   });
 
-it('restores a table search when returning to the workspace', async () => {
+it('restores a table search without focusing it, but focuses a search the user reopens', async () => {
     const user = userEvent.setup();
     const firstRender = render(<WorkspacePage />);
     await user.click(await screen.findByRole('button', { name: '搜尋' }));
+    expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toHaveFocus();
     await user.type(screen.getByRole('searchbox', { name: '搜尋此表' }), '花火');
     firstRender.unmount();
 
     render(<WorkspacePage />);
-    expect(await screen.findByRole('searchbox', { name: '搜尋此表' })).toHaveValue('花火');
+    const restored = await screen.findByRole('searchbox', { name: '搜尋此表' });
+    expect(restored).toHaveValue('花火');
+    expect(restored).not.toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: '搜尋' }));
+    await user.click(screen.getByRole('button', { name: '搜尋' }));
+    expect(screen.getByRole('searchbox', { name: '搜尋此表' })).toHaveFocus();
   });
 });

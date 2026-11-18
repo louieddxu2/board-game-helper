@@ -80,7 +80,7 @@ for (const touch of [true, false]) {
       await expect(input).toHaveValue('7');
     });
 
-    test('the stepper also focuses and selects its single numeric field on opening', async ({ page }) => {
+    test('the stepper opens without focusing its field and selects it on the first tap into it', async ({ page }) => {
       await activate(page.getByRole('columnheader', { name: '欄位 1', exact: true }));
       await activate(page.getByRole('dialog', { name: '屬性設定' }).getByRole('button', { name: '加減1', exact: true }));
       const overlay = page.locator('.workspace-column-dialog-overlay');
@@ -88,7 +88,14 @@ for (const touch of [true, false]) {
       else await overlay.click({ position: { x: 4, y: 4 } });
       await expect(overlay).toHaveCount(0);
       await activate(page.locator('td[data-bulk-row-id="row-0"][data-bulk-column-id="column-1"]'));
-      const input = page.getByRole('dialog', { name: '欄位 1', exact: true }).getByRole('spinbutton');
+      const dialog = page.getByRole('dialog', { name: '欄位 1', exact: true });
+      const input = dialog.getByRole('spinbutton');
+      await expect(input).toHaveValue('1200');
+      expect(await input.evaluate(element => element === document.activeElement)).toBe(false);
+      await activate(dialog.getByRole('button', { name: '增加 1' }));
+      await expect(input).toHaveValue('1201');
+      expect(await input.evaluate(element => element === document.activeElement)).toBe(false);
+      await activate(input);
       await expectImmediateFocus(input);
       await page.keyboard.insertText('7');
       await expect(input).toHaveValue('7');
