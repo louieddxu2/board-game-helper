@@ -158,7 +158,7 @@ export const WorkspacePageView = ({
       const node = data.nodes.find((candidate) => candidate.id === item.nodeId);
       if (!node || node.id === data.activeNodeId) return;
       bulk.closeBulkSelection();
-      filter.setSearchOpen(false);
+      // Each table restores its own search bar; closing it here would save the leaving table as closed.
       setEditBarOpen(false);
       setTableActionsOpen(false);
       openDrawerNode(node);
