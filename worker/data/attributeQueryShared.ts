@@ -1,4 +1,5 @@
 import { parseAttributeScale } from '../../src/shared/attributeScale';
+import type { AttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
 import type {
   AttributeActivity,
   AttributeComparisonResult,
@@ -271,6 +272,7 @@ export interface AttributeTableQueryOptions {
 }
 
 export interface AttributeResponseInput {
+  ranking?: AttributeRankingBallot;
   highPole?: 'low' | 'high';
   subjectAId: string;
   subjectBId: string;

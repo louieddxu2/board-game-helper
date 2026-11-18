@@ -47,16 +47,18 @@ if (apply) await runCompleteAttributeReplay(db, Date.now(), { maxChunkBytes: 50_
 
 const history = await db.statement(`
   SELECT 'response:' || response_id AS responseId,created_at AS createdAt,attribute_id AS attributeId,
-    subject_a_id AS subjectAId,subject_b_id AS subjectBId,rating_a AS ratingA,rating_b AS ratingB,comparison
+    subject_a_id AS subjectAId,subject_b_id AS subjectBId,rating_a AS ratingA,rating_b AS ratingB,comparison,ranking_json AS rankingJson
   FROM attribute_vote_responses WHERE attribute_id='attribute_win_method'
   UNION ALL
   SELECT 'event:' || e.response_id || ':' || CASE WHEN e.kind='rating' THEN '1:' ELSE '2:' END || e.event_key || ':' || e.id,
     e.created_at,e.attribute_id,e.subject_a_id,e.subject_b_id,
-    CASE WHEN e.kind='rating' THEN e.value ELSE NULL END,NULL,CASE WHEN e.kind='comparison' THEN e.result ELSE NULL END
+    CASE WHEN e.kind='rating' THEN e.value ELSE NULL END,NULL,CASE WHEN e.kind='comparison' THEN e.result ELSE NULL END,NULL
   FROM attribute_vote_events e WHERE e.attribute_id='attribute_win_method'
     AND NOT EXISTS (SELECT 1 FROM attribute_vote_responses r WHERE r.response_id=e.response_id AND r.attribute_id IS NOT NULL)
-`).all<AttributeResponseReplayRecord>();
-const expected = replayAttributeResponses(history.results ?? []);
+`).all<AttributeResponseReplayRecord & { rankingJson: string | null }>();
+const expected = replayAttributeResponses((history.results ?? []).map((row) => ({
+  ...row, ranking: row.rankingJson ? JSON.parse(row.rankingJson) : undefined,
+})));
 const actual = await db.statement(`SELECT subject_id,score,rating_deviation AS ratingDeviation,direct_sum AS directSum,
   direct_count AS directCount,comparison_count AS comparisonCount,decisive_comparison_count AS decisiveComparisonCount,evidence_count AS evidenceCount
   FROM attribute_score_states WHERE attribute_id='attribute_win_method' AND evidence_count>0`).all<OnlineAttributeState & {subject_id:string}>();

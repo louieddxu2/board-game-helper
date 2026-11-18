@@ -71,7 +71,7 @@ describe('attribute hot-path budgets', () => {
     const batchCalls = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(batchCalls).toHaveLength(2);
     expect(batchCalls[0][0]).toHaveLength(3);
-    expect(batchCalls[1][0]).toHaveLength(4);
+    expect(batchCalls[1][0]).toHaveLength(5);
     expect(sqlCalls.filter((sql) => sql.includes('SELECT a.id AS attribute_id'))).toHaveLength(1);
     expect(sqlCalls.some((sql) => sql.includes('LEFT JOIN attribute_score_states ssa'))).toBe(true);
     expect(sqlCalls.some((sql) => sql.includes('FROM attribute_score_states\n'))).toBe(false);

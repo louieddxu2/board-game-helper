@@ -133,7 +133,7 @@ export const prepareCaptureReplayHistory = async (
   const [result, authorized] = await Promise.all([
     db.statement(`
       SELECT rowid AS replay_rowid, response_id, attribute_id, subject_a_id, subject_b_id,
-        rating_a, rating_b, comparison, created_at, actor_id
+        rating_a, rating_b, comparison, created_at, actor_id, ranking_json
       FROM attribute_vote_responses WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
     `).bind(work.scanned_rowid, work.target_rowid, pageSize).all<VoteRow>(),
     queryAuthorizedAttributeVoters(db),
@@ -147,7 +147,7 @@ export const prepareCaptureReplayHistory = async (
     const entries = pages.get(row.attribute_id) ?? [];
     entries.push([
       row.response_id, row.subject_a_id, row.subject_b_id, row.rating_a, row.rating_b,
-      row.comparison, row.created_at, attributeVoteWeight(row.actor_id, authorized.has(row.actor_id ?? '')),
+      row.comparison, row.created_at, attributeVoteWeight(row.actor_id, authorized.has(row.actor_id ?? '')), row.ranking_json,
     ]);
     pages.set(row.attribute_id, entries);
   }
@@ -208,7 +208,7 @@ export const prepareCatchUpOnlineReplay = async (
   const [result, authorized] = await Promise.all([
     db.statement(`
       SELECT rowid AS replay_rowid, response_id, attribute_id, subject_a_id, subject_b_id,
-        rating_a, rating_b, comparison, created_at, actor_id, recorded_online
+        rating_a, rating_b, comparison, created_at, actor_id, recorded_online, ranking_json
       FROM attribute_vote_responses WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
     `).bind(after, through, pageSize).all<VoteRow & { recorded_online: number }>(),
     queryAuthorizedAttributeVoters(db),
@@ -240,7 +240,7 @@ export const prepareCatchUpOnlineReplay = async (
         const key = mergeStateKey(subjectId, attributeId);
         states.set(key, applyDirectRating(states.get(key) ?? emptyAttributeState(), rating, weight).next);
       }
-      if (row.comparison) {
+      if (row.comparison || row.ranking_json) {
         const history = expandAttributeReplayHistory([{ ...row, rating_a: null, rating_b: null, weight }]);
         applyAttributeReplayComparisons(history, subjectIds, attributeIds, states, pairs);
       }

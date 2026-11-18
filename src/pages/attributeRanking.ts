@@ -3,6 +3,7 @@ import { createAttributeResponseId } from '../lib/attributeSession';
 import { localDb, type PendingAttributeResponse } from '../lib/localDb';
 import { orientAttributeScore } from '../shared/attributeScale';
 import type { AttributeCatalogPayload, AttributeQuestion, AttributeSubject } from '../shared/types';
+import { rankingPlayerOrder } from '../shared/attributeRankingBallot';
 
 export const RANKING_RESPONSE_ID_MARKER = ':rank:';
 export const RANKING_CANDIDATES_PER_PAGE = 18;
@@ -57,22 +58,20 @@ export const rankedAttributeResponses = (
   batchId = createAttributeResponseId(),
   createdAt = Date.now(),
 ): PendingAttributeResponse[] => {
-  const playerOrder = rankedPlayerOrder(order, referenceIds);
-  const middle = playerOrder.length - 2;
-  const edges = Array.from({ length: playerOrder.length - 1 }, (_, index) => index)
-    .sort((a, b) => Math.abs(2 * a - middle) - Math.abs(2 * b - middle) || a - b);
-  return edges.map((edge, index) => {
-    const responseId = `${batchId}${RANKING_RESPONSE_ID_MARKER}${String(index).padStart(6, '0')}`;
-    return {
+  const ranking = { version: 1 as const, orderedSubjectIds: [...order],
+    referenceSubjectIds: order.filter((id) => referenceIds.has(id)) };
+  const playerOrder = rankingPlayerOrder(ranking);
+  if (playerOrder.length < 2) return [];
+  const responseId = `${batchId}${RANKING_RESPONSE_ID_MARKER}ballot`;
+  return [{
       id: responseId,
       responseId,
-      subjectAId: playerOrder[edge],
-      subjectBId: playerOrder[edge + 1],
+      subjectAId: playerOrder[0],
+      subjectBId: playerOrder[1],
       attributeId: question.attribute.id,
       highPole: question.highPole,
-      comparison: 'A_HIGHER',
+      ranking,
       sessionId,
       createdAt,
-    };
-  });
+  }];
 };

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import { ATTRIBUTE_ACTIVITIES_FRESH_MS, confirmedComparison, mergeAttributeActivities, type ActivityCache } from '../lib/attributeActivityCache';
+import { ATTRIBUTE_ACTIVITIES_FRESH_MS, confirmedComparisons, mergeAttributeActivities, type ActivityCache } from '../lib/attributeActivityCache';
 import { localDb } from '../lib/localDb';
 import type { AttributeActivity } from '../shared/types';
 
@@ -46,16 +46,16 @@ export const useAttributeActivities = () => {
   }, [show]);
 
   const confirm = useCallback(async (items: AttributeActivity[] | undefined, responseId: string) => {
-    const confirmed = confirmedComparison(items ?? [], responseId);
+    const confirmed = confirmedComparisons(items ?? [], responseId);
     try {
       // An idempotent retry may return no snapshot; revalidate next time.
-      const entry = await localDb.updateAttributeActivities(confirmed ? { confirmed } : { invalidate: true });
+      const entry = await localDb.updateAttributeActivities(confirmed.length ? { confirmed: confirmed.length === 1 ? confirmed[0] : confirmed } : { invalidate: true });
       revision.current += 1;
       show(entry);
     } catch {
-      if (confirmed && active.current) setActivities((current) => mergeAttributeActivities([confirmed], current ?? []));
+      if (confirmed.length && active.current) setActivities((current) => mergeAttributeActivities(confirmed, current ?? []));
     }
-    return Boolean(confirmed);
+    return confirmed.length > 0;
   }, [show]);
   return { activities, confirm };
 };

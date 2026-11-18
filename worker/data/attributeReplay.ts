@@ -322,7 +322,7 @@ const queryFullReplayHistory = async (db: Database): Promise<FullReplayResponseR
   // The canonical response table is read exactly once. Filtering active
   // attributes and expanding each response happen in Worker memory.
   const responses = await db.statement(`SELECT response_id, attribute_id, subject_a_id, subject_b_id,
-    rating_a, rating_b, comparison, created_at, actor_id FROM attribute_vote_responses`).all<Omit<FullReplayResponseRow, 'weight'> & { actor_id: string | null }>();
+    rating_a, rating_b, comparison, created_at, actor_id, ranking_json FROM attribute_vote_responses`).all<Omit<FullReplayResponseRow, 'weight'> & { actor_id: string | null }>();
   return (responses.results ?? []).map(({ actor_id, ...row }) => ({
     ...row,
     weight: attributeVoteWeight(actor_id, authorized.has(actor_id ?? '')),

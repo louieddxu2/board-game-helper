@@ -6,61 +6,18 @@ import type {
 } from '../../src/shared/types';
 import { createId } from '../utils';
 import type { AttributeWriteLock } from './attributeLocks';
-import { attributeWriteLockNames, batchChangeCount } from './attributeLocks';
 import type { AttributeResponseInput, SavedAttributeResponse } from './attributeQueryShared';
-import { ATTRIBUTE_REPLAY_LOCK_NAME, ATTRIBUTE_RESPONSE_LOCK_TTL_MS } from './attributeQueryShared';
-import { canonicalizeComparison, randomQuestionSlot, responseContextAndStates, stateToMatrixValue, toResponseActivitySubject } from './attributeResponseContext';
+import { canonicalizeComparison, responseContextAndStates, stateToMatrixValue, toResponseActivitySubject } from './attributeResponseContext';
 import {
-  ATTRIBUTE_SCORE_MODEL_VERSION,
   applyComparison,
   applyDirectRating,
   emptyAttributeState,
   type OnlineAttributeState
 } from './attributeScoring';
-import type { Database, DatabaseStatement } from './database';
+import type { Database } from './database';
 import { attributeVoteWeight } from './attributeVoteWeights';
-
-const releaseAttributeWriteLock = async (db: Database, lock: AttributeWriteLock): Promise<void> => {
-  if (!lock.names.length) return;
-  await db.statement(`
-    DELETE FROM attribute_vote_lock
-    WHERE lock_name IN (${lock.names.map(() => '?').join(',')}) AND token = ?
-  `).bind(...lock.names, lock.token).run();
-};
-
-const releaseAttributeWriteLockStatement = (db: Database, lock: AttributeWriteLock): DatabaseStatement => db.statement(`
-  DELETE FROM attribute_vote_lock
-  WHERE lock_name IN (${lock.names.map(() => '?').join(',')}) AND token = ?
-`).bind(...lock.names, lock.token);
-
-const acquireAttributeWriteLock = async (db: Database, input: AttributeResponseInput): Promise<AttributeWriteLock> => {
-  const token = createId('attribute-lock');
-  const names = attributeWriteLockNames(input);
-  const now = Date.now();
-  const expiresAt = Math.max(now, input.timestamp) + ATTRIBUTE_RESPONSE_LOCK_TTL_MS;
-  const results = await db.batch([
-    db.statement(`
-      DELETE FROM attribute_vote_lock
-      WHERE lock_name IN (${[...names, ATTRIBUTE_REPLAY_LOCK_NAME].map(() => '?').join(',')})
-        AND expires_at < ?
-    `).bind(...names, ATTRIBUTE_REPLAY_LOCK_NAME, now),
-    ...names.map((name) => db.statement(`
-      INSERT OR IGNORE INTO attribute_vote_lock (lock_name, token, expires_at)
-      SELECT ?, ?, ?
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM attribute_vote_lock
-        WHERE lock_name = ? AND expires_at >= ?
-      )
-    `).bind(name, token, expiresAt, ATTRIBUTE_REPLAY_LOCK_NAME, now)),
-  ]);
-  const acquired = names.filter((_, index) => batchChangeCount(results[index + 1]) === 1);
-  if (acquired.length !== names.length) {
-    await releaseAttributeWriteLock(db, { token, names: acquired });
-    throw new Error('attribute_response_busy');
-  }
-  return { token, names };
-};
+import { acquireAttributeWriteLock, attributeScoreUpsert, commitAttributeResponse, releaseAttributeWriteLock } from './attributeResponseStorage';
+import { saveAttributeRankingLocked, validateAttributeRankingInput } from './attributeRankingResponses';
 
 const saveAttributeResponseLocked = async (
   db: Database,
@@ -125,22 +82,7 @@ const saveAttributeResponseLocked = async (
   if (canonical) addActivity('comparison', canonical.subjectAId, canonical.subjectBId, null, canonical.result);
 
   const addStateUpsert = (subjectId: string, state: OnlineAttributeState) => {
-    statements.push(db.statement(`
-      INSERT INTO attribute_score_states
-        (subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
-         comparison_count, decisive_comparison_count, evidence_count, model_version, updated_at, random_key, question_slot)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(hex(randomblob(16))), ?)
-      ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
-        score = excluded.score,
-        rating_deviation = excluded.rating_deviation,
-        direct_sum = excluded.direct_sum,
-        direct_count = excluded.direct_count,
-        comparison_count = excluded.comparison_count,
-        decisive_comparison_count = excluded.decisive_comparison_count,
-        evidence_count = excluded.evidence_count,
-        model_version = excluded.model_version,
-        updated_at = excluded.updated_at
-    `).bind(subjectId, input.attributeId, state.score, state.ratingDeviation, state.directSum, state.directCount, state.comparisonCount, state.decisiveComparisonCount, state.evidenceCount, ATTRIBUTE_SCORE_MODEL_VERSION, input.timestamp, randomQuestionSlot()));
+    statements.push(attributeScoreUpsert(db, subjectId, input.attributeId, state, input.timestamp));
   };
   if (touchedSubjects.has(input.subjectAId)) addStateUpsert(input.subjectAId, stateA);
   if (touchedSubjects.has(input.subjectBId)) addStateUpsert(input.subjectBId, stateB);
@@ -170,8 +112,7 @@ const saveAttributeResponseLocked = async (
       UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1
     `));
   }
-  statements.push(releaseAttributeWriteLockStatement(db, lock));
-  await db.batch(statements);
+  await commitAttributeResponse(db, lock, statements);
 
   const updatedValues: AttributeMatrixValue[] = [];
   if (touchedSubjects.has(input.subjectAId)) updatedValues.push(stateToMatrixValue(input.subjectAId, input.attributeId, stateA));
@@ -180,8 +121,9 @@ const saveAttributeResponseLocked = async (
 };
 
 export const saveAttributeResponse = async (db: Database, input: AttributeResponseInput): Promise<SavedAttributeResponse> => {
+  validateAttributeRankingInput(input);
   if (input.subjectAId === input.subjectBId) throw new Error('attribute_subjects_must_differ');
-  if (input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
+  if (!input.ranking && input.comparison == null && input.ratingA == null && input.ratingB == null) throw new Error('attribute_response_empty');
 
   const lock = await acquireAttributeWriteLock(db, input);
   let lockReleasedInCommit = false;
@@ -190,10 +132,12 @@ export const saveAttributeResponse = async (db: Database, input: AttributeRespon
       .bind(input.responseId)
       .first<{ response_id: string }>();
     if (lockedExistingResponse) return { updatedValues: [], activities: [] };
-    const result = await saveAttributeResponseLocked(db, input, lock);
+    const result = input.ranking
+      ? await saveAttributeRankingLocked(db, input, lock)
+      : await saveAttributeResponseLocked(db, input, lock);
     lockReleasedInCommit = true;
     return result;
   } finally {
-    if (!lockReleasedInCommit) await releaseAttributeWriteLock(db, lock);
+    if (!lockReleasedInCommit) await releaseAttributeWriteLock(db, lock).run();
   }
 };

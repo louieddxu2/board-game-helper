@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.spyOn(localDb, 'getAttributeActivities').mockImplementation(async () => cache);
   vi.spyOn(localDb, 'updateAttributeActivities').mockImplementation(async (update) => {
     cache = { key: 'attributes:activities:v1', cachedAt: update.invalidate ? 0 : update.server ? Date.now() : cache?.cachedAt ?? 0,
-      data: { server: update.server ?? cache?.data.server ?? [], confirmed: update.confirmed ? [update.confirmed, ...(cache?.data.confirmed ?? [])] : cache?.data.confirmed ?? [] } };
+      data: { server: update.server ?? cache?.data.server ?? [], confirmed: update.confirmed ? [...(Array.isArray(update.confirmed) ? update.confirmed : [update.confirmed]), ...(cache?.data.confirmed ?? [])] : cache?.data.confirmed ?? [] } };
     return cache;
   });
   vi.spyOn(api, 'attributeActivities').mockResolvedValue({ activities: [] });

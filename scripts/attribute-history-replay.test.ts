@@ -77,6 +77,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
         ? { subject_a_id: 'attribute_subject_game:game_bgg_40628' }
         : {}),
       recorded_online: 0,
+      ranking_json: null,
     }));
     expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id <> 'attribute-seed:0123' ORDER BY response_id").all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);

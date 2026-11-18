@@ -1,4 +1,5 @@
 import { createId } from '../utils';
+import { rankingPlayerOrder } from '../../src/shared/attributeRankingBallot';
 import type { AttributeMergeLock, AttributeResponseInput } from './attributeQueryShared';
 import { ATTRIBUTE_MERGE_OPERATION_LOCK_NAME, ATTRIBUTE_REPLAY_LOCK_NAME, ATTRIBUTE_REPLAY_LOCK_TTL_MS, ATTRIBUTE_RESPONSE_LOCK_PREFIX, ATTRIBUTE_RESPONSE_LOCK_TTL_MS } from './attributeQueryShared';
 import type { Database, DatabaseStatement } from './database';
@@ -59,6 +60,7 @@ export const releaseAttributeReplayLock = (db: Database, lock: AttributeReplayLo
 
 export const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
   const subjectIds = new Set<string>();
+  if (input.ranking) rankingPlayerOrder(input.ranking).forEach((id) => subjectIds.add(id));
   if (input.comparison != null || input.ratingA != null) subjectIds.add(input.subjectAId);
   if (input.comparison != null || input.ratingB != null) subjectIds.add(input.subjectBId);
   return [...subjectIds]
@@ -138,7 +140,17 @@ export const canonicalizeAttributeMergeVoteSubjects = (
   return db.statement(`
     UPDATE attribute_vote_responses
     SET subject_a_id = CASE WHEN subject_a_id = ? THEN ? ELSE subject_a_id END,
-        subject_b_id = CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END
+        subject_b_id = CASE WHEN subject_b_id = ? THEN ? ELSE subject_b_id END,
+        ranking_json = CASE WHEN ranking_json IS NULL THEN NULL ELSE json_set(ranking_json,
+          '$.subjectMappings', json((SELECT json_group_object(key, value) FROM (
+            SELECT key, CASE WHEN value = ? THEN ? ELSE value END AS value
+            FROM json_each(ranking_json, '$.subjectMappings') WHERE key <> ?
+            UNION ALL SELECT ?, ?
+          )))) END
     WHERE subject_a_id = ? OR subject_b_id = ?
-  `).bind(sourceSubjectId, targetSubjectId, sourceSubjectId, targetSubjectId, sourceSubjectId, sourceSubjectId);
+      OR EXISTS (SELECT 1 FROM json_each(ranking_json, '$.orderedSubjectIds') WHERE value = ?)
+      OR EXISTS (SELECT 1 FROM json_each(ranking_json, '$.subjectMappings') WHERE value = ?)
+  `).bind(sourceSubjectId, targetSubjectId, sourceSubjectId, targetSubjectId,
+    sourceSubjectId, targetSubjectId, sourceSubjectId, sourceSubjectId, targetSubjectId,
+    sourceSubjectId, sourceSubjectId, sourceSubjectId, sourceSubjectId);
 };

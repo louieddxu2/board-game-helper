@@ -4,6 +4,7 @@ import {
   type AttributeDirectRatingRecord
 } from './attributeDirectRatings';
 import { applyGameCatalogChanges } from './gameCatalog';
+import type { AttributeRankingBallot } from '../shared/attributeRankingBallot';
 
 export const HOUR_CACHE_FRESH_MS = 60 * 60 * 1000;
 
@@ -196,6 +197,7 @@ export interface RulesDb extends DBSchema {
 }
 
 export interface PendingAttributeResponse {
+  ranking?: AttributeRankingBallot;
   /** Queued ratings and comparison are in this question's display direction. */
   highPole?: 'low' | 'high';
   id: string;

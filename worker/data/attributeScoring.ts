@@ -1,4 +1,5 @@
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
+import { rankingComparisons, rankingComparisonId, type StoredAttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
 
 /**
  * Glicko-1's rating/deviation update, expressed on the product's 0-10 scale.
@@ -54,6 +55,7 @@ export interface AttributeVoteReplayEvent {
 }
 
 export interface AttributeResponseReplayRecord {
+  ranking?: StoredAttributeRankingBallot;
   responseId: string;
   createdAt: number;
   attributeId: string;
@@ -314,7 +316,12 @@ export const replayAttributeResponses = (
   };
 
   const seenResponses = new Map<string, string>();
-  [...responses]
+  responses.flatMap((response) => response.ranking
+    ? rankingComparisons(response.ranking, response.ranking.highPole).map((comparison, index) => ({
+      ...response, ...comparison, responseId: rankingComparisonId(response.responseId, index),
+      ratingA: null, ratingB: null, ranking: undefined,
+    }))
+    : [response])
     .sort((left, right) => left.createdAt - right.createdAt || left.responseId.localeCompare(right.responseId))
     .forEach((response) => {
       const identity = JSON.stringify([response.createdAt, response.attributeId, response.subjectAId, response.subjectBId, response.ratingA, response.ratingB, response.comparison]);

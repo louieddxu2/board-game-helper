@@ -10,17 +10,16 @@ export const parseAttributeActivityFeedEntry = (raw: string, responseId?: string
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const activities = parsed.filter((item): item is AttributeActivity => Boolean(item && typeof item === 'object' && 'id' in item && 'kind' in item));
-    const comparison = activities.find((item) => item.kind === 'comparison');
-    if (!comparison?.subjectA || !comparison.subjectB) return [];
+    const comparisons = activities.filter((item) => item.kind === 'comparison' && item.subjectA && item.subjectB);
     const ratings = new Map(activities
       .filter((item) => item.kind === 'rating' && item.subject && item.value != null)
       .map((item) => [item.subject!.id, item.value!]));
-    return [{
+    return comparisons.reverse().map((comparison) => ({
       ...comparison,
-      ...(responseId || comparison.responseId ? { responseId: responseId ?? comparison.responseId } : {}),
-      ratingA: comparison.ratingA ?? ratings.get(comparison.subjectA.id),
-      ratingB: comparison.ratingB ?? ratings.get(comparison.subjectB.id),
-    }];
+      ...(responseId || comparison.responseId ? { responseId: comparison.responseId ?? responseId } : {}),
+      ratingA: comparison.ratingA ?? ratings.get(comparison.subjectA!.id),
+      ratingB: comparison.ratingB ?? ratings.get(comparison.subjectB!.id),
+    }));
   } catch {
     return [];
   }

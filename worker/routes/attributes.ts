@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { attributeRankingBallotSchema, rankingPlayerOrder } from '../../src/shared/attributeRankingBallot';
 import { ATTRIBUTE_COMPARISON_RESULTS } from '../../src/shared/types';
 import { getDatabase } from '../data/database';
 import {
@@ -24,6 +25,7 @@ const attributesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables 
 const sessionIdSchema = z.string().trim().min(8).max(120).regex(/^[A-Za-z0-9:_-]+$/);
 
 export const attributeResponseSchema = z.object({
+  ranking: attributeRankingBallotSchema.optional(),
   highPole: z.enum(['low', 'high']).optional(),
   subjectAId: z.string().trim().min(1).max(200),
   subjectBId: z.string().trim().min(1).max(200),
@@ -33,13 +35,24 @@ export const attributeResponseSchema = z.object({
   ratingA: z.number().int().min(0).max(10).nullable().optional(),
   ratingB: z.number().int().min(0).max(10).nullable().optional(),
   sessionId: sessionIdSchema,
-}).refine((input) => input.comparison != null || input.ratingA != null || input.ratingB != null, { message: 'attribute_response_empty' });
+}).superRefine((input, context) => {
+  if (input.ranking) {
+    const players = rankingPlayerOrder(input.ranking);
+    if (input.comparison != null || input.ratingA != null || input.ratingB != null
+      || input.subjectAId !== players[0] || input.subjectBId !== players[1]) {
+      context.addIssue({ code: 'custom', message: 'invalid_attribute_ranking' });
+    }
+  } else if (input.comparison == null && input.ratingA == null && input.ratingB == null) {
+    context.addIssue({ code: 'custom', message: 'attribute_response_empty' });
+  }
+});
 
 const respondWithAttributeError = (c: any, error: unknown) => {
   const message = error instanceof Error ? error.message : '';
   if (message === 'attribute_not_found' || message === 'attribute_subject_not_found') return c.json({ error: message }, 404);
   if (message === 'attribute_subjects_must_differ' || message === 'attribute_response_empty') return c.json({ error: message }, 400);
   if (message === 'attribute_response_busy') return c.json({ error: message }, 409);
+  if (message === 'invalid_attribute_ranking' || message === 'attribute_question_invalid') return c.json({ error: message }, 400);
   throw error;
 };
 

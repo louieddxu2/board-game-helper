@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { localDb } from '../lib/localDb';
 import type { AttributeCatalogPayload, AttributeQuestion } from '../shared/types';
 import { canPlaceRankedSubject, loadRankingRound, rankedAttributeResponses, RANKING_CANDIDATES_PER_PAGE } from './attributeRanking';
+import { rankingComparisons } from '../shared/attributeRankingBallot';
 
 const subject = (id: string) => ({ id, slug: id, displayName: id, kind: 'game' as const });
 const question: AttributeQuestion = {
@@ -36,18 +37,21 @@ describe('rankedAttributeResponses', () => {
     ['12', ['12']],
     ['12345', ['23', '34', '12', '45']],
     ['123456', ['34', '23', '45', '12', '56']],
-  ])('records only adjacent comparisons, from the center out (%s)', (order, expected) => {
+  ])('stores one original ballot that expands into center-out adjacent comparisons (%s)', (order, expected) => {
     const responses = rankedAttributeResponses(question, [...order], 'test-session', new Set(), 'test-batch', 100);
-    expect(responses.map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(expected);
+    expect(responses).toHaveLength(1);
+    expect(rankingComparisons(responses[0].ranking!).map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(expected);
     expect(responses.every((response) => response.attributeId === 'test-attribute' && response.highPole === 'low'
-      && response.comparison === 'A_HIGHER' && response.createdAt === 100)).toBe(true);
-    expect(responses.map((response) => response.id)).toEqual(expected.map((_, index) => `test-batch:rank:${String(index).padStart(6, '0')}`));
+      && response.comparison === undefined && response.createdAt === 100)).toBe(true);
+    expect(responses[0].ranking?.orderedSubjectIds).toEqual([...order]);
+    expect(responses[0].id).toBe('test-batch:rank:ballot');
   });
 
   it('compares player entries from the center out with references removed first', () => {
     const references = new Set(['a', 'b', 'c', 'd']);
     const responses = rankedAttributeResponses(question, [...'a12b3c45d6'], 'test-session', references);
-    expect(responses.map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(['34', '23', '45', '12', '56']);
+    expect(responses[0].ranking).toEqual({ version: 1, orderedSubjectIds: [...'a12b3c45d6'], referenceSubjectIds: [...'abcd'] });
+    expect(rankingComparisons(responses[0].ranking!).map(({ subjectAId, subjectBId }) => subjectAId + subjectBId)).toEqual(['34', '23', '45', '12', '56']);
     expect(rankedAttributeResponses(question, [...'a1bcd'], 'test-session', references)).toEqual([]);
   });
 });

@@ -318,7 +318,7 @@ describe('AttributesPage question flow', () => {
     };
     vi.mocked(localDb.getAttributeActivities).mockImplementation(async () => stored);
     vi.mocked(localDb.updateAttributeActivities).mockImplementation(async (update) => {
-      stored = { ...stored!, data: { ...stored!.data, confirmed: update.confirmed ? [update.confirmed] : stored!.data.confirmed } };
+      stored = { ...stored!, data: { ...stored!.data, confirmed: update.confirmed ? (Array.isArray(update.confirmed) ? update.confirmed : [update.confirmed]) : stored!.data.confirmed } };
       return stored;
     });
     vi.spyOn(api, 'saveAttributeResponse').mockResolvedValue({ ok: true, updatedValues: [], activities: [{

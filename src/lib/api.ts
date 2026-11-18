@@ -3,6 +3,7 @@ import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord 
 import { filterGameCatalog, isStandaloneGame } from './gameCatalog';
 import { homeContentKey } from './homeCache';
 import { withReadTimeout } from './readTimeout';
+import type { AttributeRankingBallot } from '../shared/attributeRankingBallot';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -459,7 +460,7 @@ export const api = {
   attributeTable,
   syncAttributeTable,
   attributeActivities: () => transportRequest<{ activities: import('../shared/types').AttributeActivity[] }>('/api/attributes/activities', undefined, 'cache-miss'),
-  saveAttributeResponse: (input: { highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => {
+  saveAttributeResponse: (input: { ranking?: AttributeRankingBallot; highPole?: 'low' | 'high'; subjectAId: string; subjectBId: string; attributeId: string; questionToken?: string; responseId: string; comparison?: AttributeComparisonResult | null; ratingA?: number | null; ratingB?: number | null; sessionId: string }) => {
     // Drop questionToken from older IndexedDB outbox rows. The server now
     // validates the submitted attribute and subjects against active records.
     const response = { ...input };

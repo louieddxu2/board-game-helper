@@ -91,15 +91,15 @@ const rankingDrag = async (page: Page, list: Locator) => {
   };
 };
 
-test('ranks games with native touch and records only adjacent results in order through the real API', async ({ page, context }) => {
-  const requests: { responseId: string; subjectAId: string; subjectBId: string; comparison: string }[] = [];
+test('stores a complete ranking ballot once through the real API after touch, lost acknowledgement and retry', async ({ page, context }) => {
+  const requests: { responseId: string; ranking: { orderedSubjectIds: string[]; referenceSubjectIds: string[] } }[] = [];
   await page.route('**/api/attributes/responses', async (route) => {
     requests.push(route.request().postDataJSON());
-    if (requests.length === 2) {
+    if (requests.length === 1) {
       const persisted = await route.fetch();
       expect(persisted.ok()).toBe(true);
       await route.abort('failed'); // Lose the acknowledgement after the actual database write.
-    } else if (requests.length === 4) {
+    } else if (requests.length === 2) {
       await route.fulfill({ status: 429, json: { error: 'rate_limited' } });
     } else {
       await route.continue();
@@ -165,26 +165,24 @@ test('ranks games with native touch and records only adjacent results in order t
 
   await context.setOffline(true);
   await submit.tap();
-  await expect(panel).toContainText('5 筆待同步');
+  await expect(panel).toContainText('1 筆待同步');
   expect(requests).toHaveLength(0);
   await context.setOffline(false);
-  await expect(panel).toContainText('4 筆待同步');
+  await expect.poll(() => requests.length).toBe(1);
+  await expect(panel.getByRole('button', { name: '重新同步' })).toBeEnabled();
   await panel.getByRole('button', { name: '重新同步' }).tap();
-  await expect(panel).toContainText('3 筆待同步');
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(panel.getByRole('button', { name: '重新同步' })).toBeEnabled();
   await panel.getByRole('button', { name: '重新同步' }).tap();
   await expect(panel.getByText(/待同步/)).toHaveCount(0);
 
-  const [one, two, three, four, five, six] = ids;
-  expect(requests.map(({ subjectAId, subjectBId, comparison }) => [subjectAId, subjectBId, comparison])).toEqual([
-    [three, four, 'A_HIGHER'], [two, three, 'A_HIGHER'], [two, three, 'A_HIGHER'],
-    [four, five, 'A_HIGHER'], [four, five, 'A_HIGHER'], [one, two, 'A_HIGHER'], [five, six, 'A_HIGHER'],
-  ]);
-  expect(requests[1].responseId).toBe(requests[2].responseId);
-  expect(requests[3].responseId).toBe(requests[4].responseId);
+  expect(requests).toHaveLength(3);
+  expect(requests.every((request) => request.responseId === requests[0].responseId)).toBe(true);
+  expect(requests[0].ranking).toEqual({ version: 1, orderedSubjectIds: ids.slice(0, 6), referenceSubjectIds: [] });
   const activity = await (await page.request.get('/api/attributes/activities')).json();
-  const idsWritten = new Set(requests.map(({ responseId }) => responseId));
-  const recorded = activity.activities.filter(({ responseId }: { responseId: string }) => idsWritten.has(responseId));
-  expect(recorded.map(({ responseId }: { responseId: string }) => responseId)).toEqual([...idsWritten].reverse());
+  const recorded = activity.activities.filter(({ responseId }: { responseId: string }) => responseId.startsWith(`${requests[0].responseId}:`));
+  expect(recorded.map(({ responseId }: { responseId: string }) => responseId)).toEqual(
+    Array.from({ length: 5 }, (_, index) => `${requests[0].responseId}:${String(4 - index).padStart(6, '0')}`));
 });
 
 test('allows moving scored references in order and records votes only for player entries', async ({ page }) => {
@@ -244,10 +242,12 @@ test('allows moving scored references in order and records votes only for player
   expect(await rankedIds()).toEqual([ids[0], candidateId, ...ids.slice(1), secondCandidateId]);
 
   const pairs: string[][] = [];
+  const ballots: unknown[] = [];
   page.on('request', (request) => {
     if (!request.url().endsWith('/api/attributes/responses')) return;
-    const { subjectAId, subjectBId } = request.postDataJSON();
+    const { subjectAId, subjectBId, ranking } = request.postDataJSON();
     pairs.push([subjectAId, subjectBId]);
+    ballots.push(ranking);
   });
   const response = page.waitForResponse((result) => result.url().endsWith('/api/attributes/responses'));
   await submit.tap();
@@ -255,4 +255,6 @@ test('allows moving scored references in order and records votes only for player
   expect((await response).ok()).toBe(true);
   await expect(page.getByText(/待同步/)).toHaveCount(0);
   expect(pairs).toEqual([[candidateId, secondCandidateId]]);
+  expect(ballots).toEqual([{ version: 1,
+    orderedSubjectIds: [ids[0], candidateId, ...ids.slice(1), secondCandidateId], referenceSubjectIds: ids }]);
 });

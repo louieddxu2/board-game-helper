@@ -1,4 +1,5 @@
 import type { AttributeComparisonResult } from '../../src/shared/types';
+import { expandStoredRankingResponse } from '../../src/shared/attributeRankingBallot';
 import { ATTRIBUTE_DIRECT_RATING_RD, applyComparison, emptyAttributeState, type OnlineAttributeState } from './attributeScoring';
 
 export const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
@@ -19,6 +20,7 @@ export interface FullReplayHistoryRow {
 }
 
 export interface FullReplayResponseRow {
+  ranking_json?: string | null;
   response_id: string;
   attribute_id: string;
   subject_a_id: string;
@@ -34,12 +36,13 @@ export type ReplayVoteEntry = [
   responseId: string, subjectAId: string, subjectBId: string | null,
   ratingA: number | null, ratingB: number | null, comparison: FullReplayResponseRow['comparison'],
   createdAt: number, weight: number,
+  rankingJson?: string | null,
 ];
 
 export const unpackAttributeReplayVotes = (attributeId: string, entries: ReplayVoteEntry[]): FullReplayResponseRow[] =>
   entries.map(
-    ([response_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight]) =>
-      ({ response_id, attribute_id: attributeId, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight }),
+    ([response_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight, ranking_json]) =>
+      ({ response_id, attribute_id: attributeId, subject_a_id, subject_b_id, rating_a, rating_b, comparison, created_at, weight, ranking_json }),
   );
 
 export const decodeAttributeReplayVotes = (attributeId: string, payload: string) =>
@@ -54,7 +57,7 @@ export interface CalculatedAttributeReplay {
 
 export const expandAttributeReplayHistory = (responses: FullReplayResponseRow[]): FullReplayHistoryRow[] => {
   const history: FullReplayHistoryRow[] = [];
-  for (const row of responses) {
+  for (const row of responses.flatMap(expandStoredRankingResponse)) {
     if (row.rating_a != null) history.push({ stream_id: `response:${row.response_id}:rating-a`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.rating_a, comparison: null, created_at: row.created_at, weight: row.weight });
     if (row.rating_b != null && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:rating-b`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_b_id, subject_b_id: null, value: row.rating_b, comparison: null, created_at: row.created_at, weight: row.weight });
     if (row.comparison && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:comparison`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.comparison, created_at: row.created_at, weight: row.weight });
