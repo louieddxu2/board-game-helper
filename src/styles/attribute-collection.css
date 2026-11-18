@@ -1,7 +1,7 @@
 /* Keep the source of questions visible without turning the voting page into a settings panel. */
 .attribute-vote-page .attributes-vote-scope {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
   gap: 3px;
   align-items: center;
   width: 100%;

@@ -34,6 +34,16 @@ for (const mobile of [true, false]) {
         const activate = async (target: ReturnType<Page['getByRole']>) => mobile ? target.tap() : target.click();
         const scope = page.getByRole('group', { name: '投票範圍' });
         const reimport = scope.getByRole('button', { name: '重新匯入' });
+        const expectEqualHalves = async () => {
+          const allBounds = (await scope.getByRole('button', { name: '全部遊戲', exact: true }).boundingBox())!;
+          const collectionBounds = (await scope.locator('.attributes-collection-scope').boundingBox())!;
+          expect(Math.abs(allBounds.width - collectionBounds.width)).toBeLessThan(1);
+          if (await reimport.count()) {
+            const importBounds = (await reimport.boundingBox())!;
+            expect(importBounds.x).toBeGreaterThan(collectionBounds.x);
+            expect(Math.abs(importBounds.x + importBounds.width - collectionBounds.x - collectionBounds.width)).toBeLessThan(1);
+          }
+        };
         let chooserCount = 0;
         page.on('filechooser', () => { chooserCount += 1; });
         const chooseFile = async (name: string, csv: string) => {
@@ -43,18 +53,21 @@ for (const mobile of [true, false]) {
         };
         if (ranking) await activate(page.getByRole('button', { name: '切換為多款排序' }));
         await expect(scope.getByRole('button', { name: '匯入收藏' })).toBeEnabled();
+        await expectEqualHalves();
         await expect(reimport).toHaveCount(0);
         await chooseFile('匯入收藏', 'Name\nInvalid');
         await expect(page.getByText('CSV 中找不到 Game ID 欄位。', { exact: true })).toBeVisible();
         expect(chooserCount).toBe(1);
         await chooseFile('匯入收藏', 'Game ID\n123\n456');
         await expect(scope.getByRole('button', { name: '我的收藏 2/2', exact: true })).toBeEnabled();
+        await expectEqualHalves();
         await expect(reimport).toHaveCount(0);
         expect(chooserCount).toBe(2);
 
         await activate(scope.getByRole('button', { name: '我的收藏 2/2', exact: true }));
         await expect(scope.getByRole('button', { name: '我的收藏 2/2', exact: true })).toHaveAttribute('aria-pressed', 'true');
         await expect(reimport).toBeEnabled();
+        await expectEqualHalves();
         await chooseFile('重新匯入', 'Game ID\n789\n101112');
         await expect(reimport).toBeEnabled();
         expect(chooserCount).toBe(3);
