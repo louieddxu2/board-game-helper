@@ -69,6 +69,24 @@ for (const width of [393, 320, 1280]) {
       await expect(page.locator('.rule-card-compact mark')).toHaveCount(0);
     });
 
+    test('matches Chinese quantities and highlights their original spelling', { tag: '@ui' }, async ({ page }) => {
+      const rules = [
+        { ...game.rules[0], statement: '起始設置每個玩家有３元。' },
+        { ...game.rules[1], statement: '每位玩家拿十三元。' },
+      ];
+      await showGame(page, { ...game, rules });
+      const search = page.getByRole('searchbox');
+      await activate(search);
+      for (const query of ['三元', '3元', '３元']) {
+        await search.fill(query);
+        const cards = page.locator('.rule-card-compact');
+        await expect(cards).toHaveCount(1);
+        await expect(cards.locator('.compact-rule-correct mark')).toHaveText('３元');
+      }
+      await search.fill('13元');
+      await expect(page.locator('.compact-rule-correct mark')).toHaveText('十三元');
+    });
+
     test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', { tag: '@ui' }, async ({ page }) => {
       const tags = ['行動', '褐色框', '關鍵字', '這個標籤名稱特別長仍然必須完整顯示'].map((name, index) => ({ id: `wrap-tag-${index}`, slug: `wrap-tag-${index}`, name }));
       const rule = { ...game.rules[0], categories: ['action_effect_detail'], playerCounts: [], editionNotes: [], createdByNickname: '東東', tags, tagIds: tags.map(tag => tag.id) };

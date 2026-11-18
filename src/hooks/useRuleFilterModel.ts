@@ -4,6 +4,7 @@ import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCateg
 import type { RuleFilterPatch, RuleFilterView } from '../lib/ruleFilterParams';
 import { sortRulesByImportance } from '../lib/ruleImportance';
 import { createRuleSearch } from '../lib/ruleSearch';
+import { ruleSearchSource } from '../lib/ruleSearchNumbers';
 import { RULE_CATEGORIES, type RuleCard, type RuleCategory, type TagSummary } from '../shared/types';
 
 export type TagOption = { name: string; count: number; selected: boolean };
@@ -16,12 +17,13 @@ const tagCollator = new Intl.Collator('zh-Hant');
 
 /** Orders the tag row: selected tags first in the order chosen, then by how many visible rules carry each tag. */
 export const orderTagOptions = (visibleRules: RuleCard[], activeTags: string[], query: string): TagOption[] => {
+  const pattern = query ? new RegExp(ruleSearchSource(query), 'iu') : undefined;
   const counts = new Map<string, number>();
   visibleRules.forEach((rule) => new Set(rule.tags.map((tag) => tag.name)).forEach((name) => {
     if (!activeTags.includes(name)) counts.set(name, (counts.get(name) ?? 0) + 1);
   }));
   const others = Array.from(counts, ([name, count]) => ({ name, count, selected: false }))
-    .filter((option) => !query || option.name.toLocaleLowerCase().includes(query))
+    .filter((option) => !pattern || pattern.test(option.name))
     .sort((left, right) => right.count - left.count || tagCollator.compare(left.name, right.name));
   return [...activeTags.map((name) => ({ name, count: visibleRules.length, selected: true })), ...others];
 };

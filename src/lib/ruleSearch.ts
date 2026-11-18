@@ -1,8 +1,7 @@
 import { getRuleEditions } from './editionOptions';
 import { formatPlayerCounts } from './playerCounts';
 import type { RuleCard } from '../shared/types';
-
-const escapePattern = (literal: string) => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+import { ruleSearchSource } from './ruleSearchNumbers';
 
 export const searchPlayerLabel = (counts: number[], pattern?: RegExp) => {
   const range = formatPlayerCounts(counts);
@@ -16,9 +15,9 @@ export const searchPlayerLabel = (counts: number[], pattern?: RegExp) => {
 export const createRuleSearch = (query: string) => {
   const text = query.trim();
   if (!text) return undefined;
-  const literal = new RegExp(`(${escapePattern(text)})`, 'iu');
+  const literal = new RegExp(`(${ruleSearchSource(text)})`, 'iu');
   const words = text.split(/ +/u);
-  const acrossFields = words.length > 1 ? new RegExp(`(${words.map(escapePattern).join('|')})`, 'iu') : undefined;
+  const acrossFields = words.length > 1 ? new RegExp(`(${words.map(ruleSearchSource).join('|')})`, 'iu') : undefined;
   return (rule: RuleCard) => {
     const counts = rule.playerCounts ?? [];
     const fields = [rule.statement, rule.commonMistake, rule.details, ...counts.map(count => `${count}人`),

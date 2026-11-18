@@ -26,4 +26,8 @@ describe('tag row order', () => {
   test('narrows unselected tags by the search text but keeps the selected ones', () => {
     expect(orderTagOptions(rules, ['終局'], '計').map((option) => option.name)).toEqual(['終局', '計分']);
   });
+
+  test('offers the original tag spelling for a matching Chinese quantity', () => {
+    expect(orderTagOptions([rule('a', ['３元', '十三元'])], [], '三元').map(tag => tag.name)).toEqual(['３元']);
+  });
 });
