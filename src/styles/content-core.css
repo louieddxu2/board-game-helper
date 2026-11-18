@@ -152,7 +152,7 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 .compact-rule-row strong { min-width: 20px; font-size: 15px; line-height: 1.5; }
 .compact-rule-text { display: -webkit-box; min-width: 0; margin: 0; overflow: hidden; font-size: 16px; line-height: 1.6; white-space: pre-line; word-break: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .compact-rule-correct strong { color: var(--green); }
-.rule-card-compact mark { background: #ffe7a6; color: inherit; }
+.rule-card-compact mark, .rule-card mark { background: #ffe7a6; color: inherit; }
 .compact-rule-row.compact-rule-details { grid-template-columns: auto minmax(0, 1fr); }
 .compact-rule-details > strong { color: var(--muted); font-size: 12px; }
 .compact-rule-text[data-excerpt] :is(.match-earlier-sentences, .match-later-sentences),

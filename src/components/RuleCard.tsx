@@ -2,7 +2,6 @@ import { useContext, useRef } from 'react';
 import type { RuleCard as RuleCardType } from '../shared/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { ToastContext } from '../context/ToastContext';
-import { formatPlayerCounts } from '../lib/playerCounts';
 import { getRuleEditions } from '../lib/editionOptions';
 import { RuleCardBody } from './RuleCardBody';
 import { CompactRuleText, markRuleMatches, useCompactSearchExcerpt } from './CompactRuleSearch';
@@ -14,6 +13,7 @@ import { useTagsOwnRow } from './useTagsOwnRow';
 
 export interface RuleCardProps {
   rule: RuleCardType;
+  searchPattern?: RegExp;
   gameName?: string;
   englishName?: string;
   gameHref?: string;
@@ -39,6 +39,7 @@ const toggleFromKeyboard = (event: React.KeyboardEvent<HTMLParagraphElement>, on
 
 export const RuleCard = ({
   rule,
+  searchPattern,
   gameName,
   englishName,
   gameHref,
@@ -60,6 +61,7 @@ export const RuleCard = ({
   const hasCredits = Boolean(rule.createdByNickname || rule.editedByNicknames?.length);
   const hasReviewMeta = (rule.reviewStatus ?? 'not_required') !== 'not_required';
   const ruleEditions = getRuleEditions(rule);
+  const players = searchPlayerLabel(rule.playerCounts ?? [], searchPattern);
 
   const shouldShowGameContext = showGameContext ?? Boolean(gameName || englishName || gameHref);
   const effectiveGameName = shouldShowGameContext ? gameName || (rule as any).gameName : undefined;
@@ -173,16 +175,16 @@ export const RuleCard = ({
             {ruleEditions.map((edition) => (
               onEditionClick ? (
                 <button type="button" className="attr-chip edition-chip" key={edition} onClick={(event) => { event.stopPropagation(); onEditionClick(edition); }}>
-                  📦 {edition}
+                  <span>📦 {markRuleMatches(edition, searchPattern)}</span>
                 </button>
-              ) : <span className="attr-chip edition-chip" key={edition}>📦 {edition}</span>
+              ) : <span className="attr-chip edition-chip" key={edition}><span>📦 {markRuleMatches(edition, searchPattern)}</span></span>
             ))}
-            {Boolean(rule.playerCounts?.length) && (
+            {players && (
               onPlayerCountsClick ? (
                 <button type="button" className="attr-chip player-chip" onClick={(event) => { event.stopPropagation(); onPlayerCountsClick(rule.playerCounts!); }}>
-                  👥 {formatPlayerCounts(rule.playerCounts!)}
+                  <span>👥 {markRuleMatches(players, searchPattern)}</span>
                 </button>
-              ) : <span className="attr-chip player-chip">👥 {formatPlayerCounts(rule.playerCounts!)}</span>
+              ) : <span className="attr-chip player-chip"><span>👥 {markRuleMatches(players, searchPattern)}</span></span>
             )}
           </div>
 
@@ -198,10 +200,10 @@ export const RuleCard = ({
                     onTagClick(tag.name);
                   }}
                 >
-                  #{tag.name}
+                  <span>#{markRuleMatches(tag.name, searchPattern)}</span>
                 </button>
               ) : (
-                <span className="tag-chip" key={tag.id}>#{tag.name}</span>
+                <span className="tag-chip" key={tag.id}><span>#{markRuleMatches(tag.name, searchPattern)}</span></span>
               ))}
             </div>
           )}
@@ -209,7 +211,7 @@ export const RuleCard = ({
 
       </div>}
 
-      <RuleCardBody rule={rule} previewLines={previewLines} toggleProps={expandedTextToggleProps} />
+      <RuleCardBody rule={rule} searchPattern={searchPattern} previewLines={previewLines} toggleProps={expandedTextToggleProps} />
 
       {/* 第五行：來源與右下角操作按鈕 */}
       <div className="rule-card-footer">

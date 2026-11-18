@@ -1,11 +1,13 @@
 import type { RuleCard } from '../shared/types';
 import zhTWCopy from '../content/zh-TW.json';
 import { useRulePreview } from './useRulePreview';
+import { markRuleMatches } from './CompactRuleSearch';
 
 type TextToggleProps = React.HTMLAttributes<HTMLParagraphElement>;
 
-export const RuleCardBody = ({ rule, previewLines, toggleProps = {} }: {
+export const RuleCardBody = ({ rule, searchPattern, previewLines, toggleProps = {} }: {
   rule: RuleCard;
+  searchPattern?: RegExp;
   previewLines?: number;
   toggleProps?: TextToggleProps;
 }) => {
@@ -14,15 +16,15 @@ export const RuleCardBody = ({ rule, previewLines, toggleProps = {} }: {
   const metrics = previewLines ? <span className="rule-preview-metrics" aria-hidden="true" /> : null;
   const content = <>
     <div className="rule-statement-section">
-      <p className={`statement-text${textClass}`} {...toggleProps}>{rule.statement}{metrics}</p>
+      <p className={`statement-text${textClass}`} {...toggleProps}>{markRuleMatches(rule.statement, searchPattern)}{metrics}</p>
     </div>
     {rule.commonMistake && <div className="mistake">
       <strong className="mistake-badge"><span>{zhTWCopy.terms.mistakeSituation.slice(0, 2)}<br />{zhTWCopy.terms.mistakeSituation.slice(2)}</span></strong>
-      <p className={`mistake-text${textClass}`} {...toggleProps}>{rule.commonMistake}{metrics}</p>
+      <p className={`mistake-text${textClass}`} {...toggleProps}>{markRuleMatches(rule.commonMistake, searchPattern)}{metrics}</p>
     </div>}
     {rule.details && <div className="rule-details-note">
       <strong className="details-badge"><span>補充<br />說明</span></strong>
-      <p className={`details-text${textClass}`} {...toggleProps}>{rule.details}{metrics}</p>
+      <p className={`details-text${textClass}`} {...toggleProps}>{markRuleMatches(rule.details, searchPattern)}{metrics}</p>
     </div>}
   </>;
 

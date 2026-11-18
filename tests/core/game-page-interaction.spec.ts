@@ -87,6 +87,30 @@ for (const width of [393, 320, 1280]) {
       await expect(page.locator('.compact-rule-correct mark')).toHaveText('十三元');
     });
 
+    test('keeps search hits in the expanded text and updates them as the query changes', { tag: '@ui' }, async ({ page }) => {
+      const rule = { ...game.rules[0], statement: '每人拿３元。', playerCounts: [2, 3, 4],
+        details: '兩片圖案看起來一樣。顏色不同，請核對顏色。' };
+      await showGame(page, { ...game, rules: [rule] });
+      const search = page.getByRole('searchbox');
+      await activate(search);
+      await search.fill('顏色');
+      const card = page.locator('#rule-interaction-rule-1');
+      await activate(card.locator('mark').first());
+      await expect(card.locator('.details-text')).toHaveText(rule.details);
+      await expect(card.locator('.details-text mark')).toHaveText(['顏色', '顏色']);
+      for (const [query, selector, original] of [
+        ['三元', '.statement-text', '３元'], ['城市計分', '.mistake-text', '城市計分'],
+        ['三人', '.player-chip', '3人'], ['基本版', '.edition-chip', '基本版'], ['設置', '.tag-chip', '設置'],
+      ]) {
+        await search.fill(query);
+        await expect(card.locator('mark')).toHaveCount(1);
+        await expect(card.locator(`${selector} mark`)).toHaveText(original);
+      }
+      await search.fill('');
+      await expect(card.locator('mark')).toHaveCount(0);
+      await expect(card.locator('.details-text')).toHaveText(rule.details);
+    });
+
     test('starts many rule tags at the top-left beside the credits and wraps them chip by chip', { tag: '@ui' }, async ({ page }) => {
       const tags = ['行動', '褐色框', '關鍵字', '這個標籤名稱特別長仍然必須完整顯示'].map((name, index) => ({ id: `wrap-tag-${index}`, slug: `wrap-tag-${index}`, name }));
       const rule = { ...game.rules[0], categories: ['action_effect_detail'], playerCounts: [], editionNotes: [], createdByNickname: '東東', tags, tagIds: tags.map(tag => tag.id) };
