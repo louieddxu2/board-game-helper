@@ -103,7 +103,7 @@ export const RuleCard = ({
 
   const copyContent = (event: React.MouseEvent) => {
     event.stopPropagation();
-    void copyRuleContent(rule, getRuleUrl()).then((format) => {
+    void copyRuleContent(rule, getRuleUrl(), gameName || (rule as any).gameName).then((format) => {
       showToast(format === 'rich' ? '已複製內文，支援格式的貼上可保留原文連結' : '已複製純文字內文', 'info');
     }).catch(() => {
       showToast('無法複製，請確認瀏覽器的剪貼簿權限', 'error');

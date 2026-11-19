@@ -328,7 +328,7 @@ describe('RuleCard', () => {
     const rule: RuleCardType = { id: 'rule_share', gameId: 'game_1', statement: '可分享的規則', commonMistake: '常見玩錯', details: '補充', status: 'published', tags: [], sourceLinks: [] };
     const url = `${window.location.origin}/games/test-game#rule-rule_share`;
     // Same body as the copy button, led by the game name for targets that drop the share title.
-    const text = '測試遊戲\n✅ 可分享的規則\n❌ 常見玩錯\n補充說明：補充';
+    const text = '測試遊戲\n✅ 可分享的規則\n❌ 常見玩錯\n🔍 補充';
     const writeText = vi.fn().mockResolvedValue(undefined);
     const share = vi.fn().mockResolvedValue(undefined);
     const coarse = vi.fn().mockReturnValue({ matches: true });

@@ -3,19 +3,25 @@ import type { RuleCard } from '../shared/types';
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]!);
-const htmlText = (text: string) => escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
 
-const ruleSections = (rule: RuleCard) => [
+/** The copied and shared body: the game name (when known), then the rule's sections, one per line. */
+const ruleLines = (rule: RuleCard, gameName?: string) => [
+  ...(gameName?.trim() ? [gameName.trim()] : []),
   `✅ ${rule.statement}`,
   ...(rule.commonMistake ? [`❌ ${rule.commonMistake}`] : []),
-  ...(rule.details ? [`補充說明：${rule.details}`] : []),
-];
+  ...(rule.details ? [`🔍 ${rule.details}`] : []),
+].join('\n').split(/\r\n|\r|\n/);
 
-export function buildRuleClipboard(rule: RuleCard, url: string) {
-  const sections = ruleSections(rule);
+/**
+ * Each line carries its own link and lines are joined by `<br>` outside the links, so the
+ * paste stays one paragraph. Rich editors such as 方格子 drop a `<br>` inside a link.
+ */
+export function buildRuleClipboard(rule: RuleCard, url: string, gameName?: string) {
+  const lines = ruleLines(rule, gameName);
+  const href = escapeHtml(url);
   return {
-    text: sections.join('\n'),
-    html: `<a href="${escapeHtml(url)}">${sections.map(htmlText).join('<br>')}</a>`,
+    text: lines.join('\n'),
+    html: lines.map((line) => (line.trim() ? `<a href="${href}">${escapeHtml(line)}</a>` : '')).join('<br>'),
   };
 }
 
@@ -24,12 +30,11 @@ export function buildRuleClipboard(rule: RuleCard, url: string) {
  * so the game name leads the text; the link travels separately as the share URL.
  */
 export function buildRuleShareText(rule: RuleCard, gameName?: string) {
-  const body = ruleSections(rule).join('\n');
-  return gameName?.trim() ? `${gameName.trim()}\n${body}` : body;
+  return ruleLines(rule, gameName).join('\n');
 }
 
-export async function copyRuleContent(rule: RuleCard, url: string) {
-  const { text, html } = buildRuleClipboard(rule, url);
+export async function copyRuleContent(rule: RuleCard, url: string, gameName?: string) {
+  const { text, html } = buildRuleClipboard(rule, url, gameName);
   if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
     try {
       await navigator.clipboard.write([new ClipboardItem({
