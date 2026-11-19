@@ -38,7 +38,7 @@ export const publishCompleteAttributeReplayLocked = async (
     compareLiveStates: options.compareLiveStates || !status || status.required_revision !== status.replayed_revision,
   });
   await publishPreparedAttributeReplay(db, lock, timestamp, status?.required_revision ?? 0, replay, options, {
-    verify: [assertReplayHistoryHead(db, head)], clear: [], throughRowid: head.rowid,
+    verify: [assertReplayHistoryHead(db, head)], clear: [], throughRowid: head.rowid, throughResponseId: head.response_id,
   });
 };
 
@@ -49,7 +49,7 @@ export const publishPreparedAttributeReplay = async (
   requiredRevision: number,
   replay: Awaited<ReturnType<typeof prepareAttributeReplay>>,
   options: AttributeReplayOptions = {},
-  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[]; replayedRevision?: number; throughRowid?: number },
+  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[]; replayedRevision?: number; throughRowid?: number; throughResponseId?: string | null },
 ) => {
   const snapshot = prepareAttributeCatalogSnapshot(
     db, replay.catalogPayload, replay.catalogThroughVersion, timestamp, options,
@@ -69,7 +69,7 @@ export const publishPreparedAttributeReplay = async (
     ...replay.statements,
     ...snapshot,
     acknowledge,
-    ...(checkpoint?.throughRowid != null ? [acknowledgeOnlineResponses(db, checkpoint.throughRowid)] : []),
+    ...(checkpoint?.throughRowid != null ? [acknowledgeOnlineResponses(db, checkpoint.throughRowid, checkpoint.throughResponseId ?? null)] : []),
     ...(checkpoint?.clear ?? []),
   ], requiredRevision);
 };

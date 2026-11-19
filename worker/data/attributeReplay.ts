@@ -491,7 +491,7 @@ export const replayAllAttributeScores = async (db: Database, timestamp = Date.no
   try {
     const head = await queryReplayHistoryHead(db);
     const { statements, ...replay } = await prepareAttributeReplay(db, timestamp, { compareLiveStates: true });
-    await commitAttributeReplay(db, lock, [assertReplayHistoryHead(db, head), ...statements, acknowledgeOnlineResponses(db, head.rowid)]);
+    await commitAttributeReplay(db, lock, [assertReplayHistoryHead(db, head), ...statements, acknowledgeOnlineResponses(db, head.rowid, head.response_id)]);
     return replay;
   } finally {
     await releaseAttributeReplayLock(db, lock);

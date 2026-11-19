@@ -3,7 +3,7 @@ import { parseAttributeScale } from '../../src/shared/attributeScale';
 import type { AttributeActivity } from '../../src/shared/types';
 import { createId } from '../utils';
 import { canonicalizeComparison, toResponseActivitySubject } from './attributeResponseContext';
-import { votableSubjectCondition, type AttributeResponseInput } from './attributeQueryShared';
+import type { AttributeResponseInput } from './attributeQueryShared';
 import { insertAttributeResponseReceipt } from './attributeResponseReceipt';
 import type { Database } from './database';
 
@@ -36,7 +36,7 @@ export const saveAttributeRankingReceipt = async (
     CROSS JOIN attribute_subjects subject ON subject.id = requested.value
     LEFT JOIN games game ON game.id = subject.game_id
     LEFT JOIN users actor ON actor.id = ?
-    WHERE attribute.id = ? AND attribute.is_active = 1 AND ${votableSubjectCondition('subject', 'game')}
+    WHERE attribute.id = ? AND attribute.is_active = 1
   `).bind(JSON.stringify(players), input.actorId, input.attributeId).all<RankingSubjectRow>();
   const rows = result.results ?? [];
   if (rows.length !== players.length) throw new Error('attribute_subject_not_found');

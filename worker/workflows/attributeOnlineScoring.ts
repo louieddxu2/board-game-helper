@@ -1,7 +1,8 @@
 import { expandStoredRankingResponse } from '../../src/shared/attributeRankingBallot';
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
-import { ATTRIBUTE_QUESTION_SLOT_COUNT, ATTRIBUTE_REPLAY_LOCK_NAME } from '../data/attributeQueryShared';
+import { ATTRIBUTE_REPLAY_LOCK_NAME } from '../data/attributeQueryShared';
+import { attributeScoreWrites } from '../data/attributeScoreWrites';
 import { stateToMatrixValue } from '../data/attributeResponseContext';
 import { applyComparison, applyDirectRating, emptyAttributeState, ATTRIBUTE_SCORE_MODEL_VERSION, type OnlineAttributeState } from '../data/attributeScoring';
 import type { Database } from '../data/database';
@@ -26,10 +27,10 @@ export interface OnlineScoringResult {
 }
 const stateKey = (subject: string, attribute: string) => `${subject}\0${attribute}`;
 
-export const acknowledgeOnlineResponses = (db: Database, through: number) => db.statement(`
+export const acknowledgeOnlineResponses = (db: Database, through: number, responseId: string | null) => db.statement(`
   UPDATE attribute_online_progress SET through_rowid = ?,
-    through_response_id = (SELECT response_id FROM attribute_vote_responses WHERE rowid = ?), model_version = ? WHERE id = 1
-`).bind(through, through, ATTRIBUTE_SCORE_MODEL_VERSION);
+    through_response_id = ?, model_version = ? WHERE id = 1
+`).bind(through, responseId, ATTRIBUTE_SCORE_MODEL_VERSION);
 
 const queryProgress = (db: Database) => db.statement(`
   SELECT progress.through_rowid, progress.through_response_id, progress.model_version, replay.history_revision,
@@ -57,8 +58,8 @@ const prepareScores = async (db: Database, receipts: PendingResponse[]) => {
       state.direct_sum, state.direct_count, state.comparison_count, state.decisive_comparison_count,
       state.evidence_count, state.updated_at
     FROM json_each(?) target
-    JOIN attribute_subjects subject ON subject.id = target.value ->> 0
-    JOIN attributes attribute ON attribute.id = target.value ->> 1 AND attribute.is_active = 1
+    CROSS JOIN attribute_subjects subject ON subject.id = target.value ->> 0
+    CROSS JOIN attributes attribute ON attribute.id = target.value ->> 1 AND attribute.is_active = 1
     LEFT JOIN attribute_score_states state ON state.subject_id = subject.id AND state.attribute_id = attribute.id
   `).bind(JSON.stringify([...targets.values()])).all<StateRow>() : { results: [] };
   const states = new Map<string, OnlineAttributeState>();
@@ -132,17 +133,8 @@ export const processAttributeResponses = async (
         SELECT 1 FROM attribute_online_progress progress JOIN attribute_replay_status replay ON replay.id = progress.id
         WHERE progress.id = 1 AND progress.through_rowid = ? AND replay.history_revision = ?
       ) THEN '$' ELSE 'attribute_online_revision_changed' END)`).bind(progress.through_rowid, progress.history_revision)];
-      if (plan.upserts.length) statements.push(db.statement(`INSERT INTO attribute_score_states
-        (subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count, comparison_count,
-         decisive_comparison_count, evidence_count, model_version, updated_at, random_key, question_slot)
-        SELECT value ->> 0, value ->> 1, value ->> 2, value ->> 3, value ->> 4, value ->> 5,
-          value ->> 6, value ->> 7, value ->> 8, value ->> 9, value ->> 10, lower(hex(randomblob(16))), ((random() & 2147483647) % ${ATTRIBUTE_QUESTION_SLOT_COUNT}) + 1
-        FROM json_each(?) WHERE true ON CONFLICT(subject_id, attribute_id) DO UPDATE SET
-          score = excluded.score, rating_deviation = excluded.rating_deviation, direct_sum = excluded.direct_sum,
-          direct_count = excluded.direct_count, comparison_count = excluded.comparison_count,
-          decisive_comparison_count = excluded.decisive_comparison_count, evidence_count = excluded.evidence_count,
-          model_version = excluded.model_version, updated_at = excluded.updated_at`).bind(JSON.stringify(plan.upserts)));
-      if (receipts.length) statements.push(acknowledgeOnlineResponses(db, through));
+      statements.push(...attributeScoreWrites(db, plan.upserts));
+      if (receipts.length) statements.push(acknowledgeOnlineResponses(db, through, receipts.at(-1)!.response_id));
       if (plan.outOfOrder) statements.push(db.statement('UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1'));
       // This indexed emptiness test and lease release share the score transaction.
       // A receipt arriving before it keeps the owner running; one arriving after it

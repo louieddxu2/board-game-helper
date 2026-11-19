@@ -66,8 +66,10 @@ try {
     const raw = await mf.getD1Database(name, 'ingestion') as unknown as D1Database;
     const requests: ReturnType<typeof createDatabase>[] = [];
     const readers = new Set<number>();
+    const apiCallCounts: number[] = [];
     const outputs: Awaited<ReturnType<typeof saveAttributeResponse>>[] = [];
     const run = async (index: number) => {
+      let apiCalls = 0;
       const originals = new WeakMap<D1PreparedStatement, D1PreparedStatement>();
       const sqls = new WeakMap<D1PreparedStatement, string>();
       const record = (sql: string, meta: { rows_read?: number; rows_written?: number } = {}) => {
@@ -76,15 +78,16 @@ try {
       const wrap = (p: D1PreparedStatement, sql: string): D1PreparedStatement => {
         const prepared: D1PreparedStatement = {
           bind: (...values) => wrap(p.bind(...values), sql),
-          first: async <T>() => { const r = await p.all<T>(); record(sql, r.meta); return r.results?.[0] ?? null; },
-          all: async <T>() => { const r = await p.all<T>(); record(sql, r.meta); return r; },
-          run: async <T>() => { const r = await p.run<T>(); record(sql, r.meta); return r; },
+          first: async <T>() => { apiCalls++; const r = await p.all<T>(); record(sql, r.meta); return r.results?.[0] ?? null; },
+          all: async <T>() => { apiCalls++; const r = await p.all<T>(); record(sql, r.meta); return r; },
+          run: async <T>() => { apiCalls++; const r = await p.run<T>(); record(sql, r.meta); return r; },
         };
         originals.set(prepared, p); sqls.set(prepared, sql); return prepared;
       };
       const traced: D1Database = {
         prepare: (sql) => wrap(raw.prepare(sql), sql),
         batch: async (statements) => {
+          apiCalls++;
           const result = await raw.batch(statements.map((p) => originals.get(p)!));
           result.forEach((r, i) => record(sqls.get(statements[i])!, r.meta)); return result;
         },
@@ -102,6 +105,7 @@ try {
       });
       outputs.push(result);
       await flushCatalogOutbox(db);
+      apiCallCounts.push(apiCalls);
     };
     const start = performance.now();
     if (name === 'SERIAL') for (let i = 0; i < 10; i++) await run(i);
@@ -130,8 +134,9 @@ try {
       uploads: 10, historicalRows: name === 'HISTORY' ? 100000 : 0, ...totals,
       scoreReaders: readers.size, pendingResponses: outputs.filter((r) => r.scoreStatus === 'pending').length,
       maxQueriesPerRequest: Math.max(...requests.map((db) => db.metrics().queries)),
+      maxApiCallsPerRequest: Math.max(...apiCallCounts),
       ms: Math.round(performance.now() - start), allVotesSavedAndScoredExactlyOnce: true };
-    assert(item.maxQueriesPerRequest <= 50, 'Free D1 invocation query limit exceeded');
+    assert(item.maxApiCallsPerRequest <= 50, 'Free D1 invocation API call limit exceeded');
     report.push(item); console.log(JSON.stringify(item));
     // Durable SQL failure, followed by server-only recovery on the actual D1 runtime.
     if (name === 'CONCURRENT') {

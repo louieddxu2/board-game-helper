@@ -3,7 +3,6 @@ import type {
   AttributeMatrixValue
 } from '../../src/shared/types';
 import type { AttributeResponseInput, ResponseContextRow } from './attributeQueryShared';
-import { votableSubjectCondition } from './attributeQueryShared';
 import {
   ATTRIBUTE_SCORE_MODEL_VERSION,
   type OnlineAttributeState
@@ -53,8 +52,6 @@ export const queryAttributeResponseContext = async (db: Database, input: Attribu
     LEFT JOIN games gb ON gb.id = sb.game_id
     LEFT JOIN users u ON u.id = ?
     WHERE a.id = ? AND a.is_active = 1
-      AND ${votableSubjectCondition('sa', 'ga')}
-      AND ${votableSubjectCondition('sb', 'gb')}
       AND (sa.game_id IS NULL OR sb.game_id IS NULL OR sa.game_id <> sb.game_id)
   `).bind(input.subjectAId, input.subjectBId, input.actorId, input.attributeId).first<ResponseContextRow>();
   if (!row) throw new Error('attribute_subject_not_found');

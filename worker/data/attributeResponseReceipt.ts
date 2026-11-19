@@ -1,23 +1,28 @@
 import type { AttributeActivity } from '../../src/shared/types';
 import { rankingPlayerOrder } from '../../src/shared/attributeRankingBallot';
 import { attributeVoteWeight } from './attributeVoteWeights';
-import { votableSubjectCondition, type AttributeResponseInput } from './attributeQueryShared';
+import { D1_SAFE_BOUND_PARAMETER_COUNT, votableSubjectCondition, type AttributeResponseInput } from './attributeQueryShared';
 import type { Database } from './database';
 
-/** Revalidate mutable subjects inside the receipt transaction, without score locks. */
+/** Validate mutable eligibility inside the receipt transaction, without score locks. */
 export const insertAttributeResponseReceipt = async (
   db: Database, input: AttributeResponseInput, activities: AttributeActivity[],
 ) => {
   const ids = input.ranking ? rankingPlayerOrder(input.ranking) : [input.subjectAId, input.subjectBId];
+  // Known small ID lists use direct PK lookups without a JSON virtual table.
+  // Large rankings retain the bounded-parameter JSON path.
+  const bindIds = ids.length <= D1_SAFE_BOUND_PARAMETER_COUNT - 2;
+  const subjects = bindIds ? 'attribute_subjects subject' : `json_each(?) requested
+      CROSS JOIN attribute_subjects subject ON subject.id = requested.value`;
   const statements = [
     db.statement(`SELECT json_extract('{}', CASE WHEN (
-      SELECT COUNT(*) FROM json_each(?) requested
-      CROSS JOIN attribute_subjects subject ON subject.id = requested.value
+      SELECT COUNT(*) FROM ${subjects}
       LEFT JOIN games game ON game.id = subject.game_id
       JOIN attributes attribute ON attribute.id = ? AND attribute.is_active = 1
-      WHERE ${votableSubjectCondition('subject', 'game')}
+      WHERE ${bindIds ? `subject.id IN (${ids.map(() => '?').join(', ')}) AND` : ''}
+        ${votableSubjectCondition('subject', 'game')}
     ) = ? THEN '$' ELSE 'attribute_subject_not_found' END)`)
-      .bind(JSON.stringify(ids), input.attributeId, ids.length),
+      .bind(...(bindIds ? [input.attributeId, ...ids, ids.length] : [JSON.stringify(ids), input.attributeId, ids.length])),
     // Explicit rowids remain beyond the scoring cursor even if an operator
     // deletes the last history row. Ordinary SQLite rowid reuse must not hide a vote.
     db.statement(`INSERT INTO attribute_vote_responses

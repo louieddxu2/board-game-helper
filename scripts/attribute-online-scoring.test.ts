@@ -184,3 +184,27 @@ test('a receipt accepted during final replay publication survives the rejected s
     expect(await hasPendingAttributeResponses(h.gateway)).toBe(false);
   } finally { vi.restoreAllMocks(); error.mockRestore(); h.sqlite.close(); }
 });
+
+test.each([false, true])('eligibility changed after metadata is rejected by the receipt transaction (ranking %s)', async (ranking) => {
+  const h = setup();
+  try {
+    const batch = h.gateway.batch.bind(h.gateway);
+    vi.spyOn(h.gateway, 'batch').mockImplementationOnce(async (statements) => {
+      h.sqlite.prepare(`UPDATE games SET visibility = 'hidden' WHERE id =
+        (SELECT game_id FROM attribute_subjects WHERE id = ?)`).run(h.ids[0]);
+      return batch(statements);
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => { (c as any).set('database', h.gateway); await next(); });
+    app.route('/', attributesRoutes as any);
+    const input = h.input(0);
+    const response = await app.request('https://test.local/api/attributes/responses', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(ranking ? input : { ...input, ranking: undefined, comparison: 'A_HIGHER' }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'attribute_subject_not_found' });
+    expect(h.sqlite.prepare('SELECT COUNT(*) AS n FROM attribute_vote_responses').get()).toEqual({ n: 0 });
+    expect(scoreRows(h)).toEqual([]); expect(h.cursor()).toBe(0);
+  } finally { vi.restoreAllMocks(); h.sqlite.close(); }
+});

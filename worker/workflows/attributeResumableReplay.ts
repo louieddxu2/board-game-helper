@@ -124,6 +124,7 @@ export const runAttributeReplayWorkLocked = async (
       verify: [assertReplayHistoryHead(db, head), assertReplayCatalogVersion(db, metadata.throughVersion)],
       clear: prepareClearReplayWork(db),
       throughRowid: head.rowid,
+      throughResponseId: head.response_id,
       replayedRevision: work.online_rowid == null ? revision : work.input_revision ?? undefined,
     });
     return 'replay';
