@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const workspaceRoot = process.cwd();
@@ -37,8 +37,13 @@ const migrations = readdirSync(path.resolve(workspaceRoot, 'migrations')).filter
 const baselineIndex = migrations.indexOf(baseline);
 if (baselineIndex === -1) throw new Error(`找不到 production schema baseline migration：${baseline}`);
 
-runWrangler([...executeArgs, '--file', snapshotPath]);
-for (const migration of migrations.slice(baselineIndex + 1)) {
-  runWrangler([...executeArgs, '--file', path.resolve(workspaceRoot, 'migrations', migration)]);
-}
-runWrangler([...executeArgs, '--file', seedPath]);
+// Each wrangler start costs seconds on Windows, so the snapshot, every migration after it and the
+// seed run as one file, in order. The migrations still run as written, keeping the rows they insert.
+const parts = [
+  ['snapshot', snapshotPath],
+  ...migrations.slice(baselineIndex + 1).map((migration) => [migration, path.resolve(workspaceRoot, 'migrations', migration)]),
+  ['seed', seedPath],
+];
+const combinedPath = path.join(stateDirectory, 'prepare.sql');
+writeFileSync(combinedPath, parts.map(([name, file]) => `-- ${name}\n${readFileSync(file, 'utf8').trimEnd()}\n`).join('\n'));
+runWrangler([...executeArgs, '--file', combinedPath]);
