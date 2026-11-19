@@ -78,6 +78,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
         : {}),
       recorded_online: 0,
       ranking_json: null,
+      online_weight: null,
     }));
     expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id <> 'attribute-seed:0123' ORDER BY response_id").all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);
@@ -270,7 +271,7 @@ test('complete replay and live responses cannot cross their state writes', async
       actorId: null,
       ratingA: 7,
       timestamp,
-    })).rejects.toThrow('attribute_response_busy');
+    })).resolves.toMatchObject({ scoreStatus: 'pending', updatedValues: [] });
     await expect(acquireAttributeMergeLock(
       gateway, subjects[0].game_id, subjects[1].game_id, timestamp,
     )).rejects.toThrow('attribute_response_busy');
@@ -459,7 +460,7 @@ test('canonical vote history survives cleanup, new votes and a complete rebuild'
       .toEqual({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
     expect(sqlite.prepare('SELECT active_generation, generated_at, chunk_count FROM attribute_replay_state_snapshot_state WHERE id = 1').get())
       .toMatchObject({ active_generation: timestamp + 5, generated_at: timestamp + 5 });
-    expect(executedSql.filter((sql) => /^\s*SELECT[\s\S]*FROM\s+attribute_vote_responses\b/i.test(sql))).toHaveLength(1);
+    expect(executedSql.filter((sql) => /^\s*SELECT[\s\S]*FROM\s+attribute_vote_responses\b/i.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toHaveLength(1);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_snapshot_(?:state|chunks)\b/i.test(sql))).toBe(false);
     expect(executedSql.some((sql) => /SELECT[\s\S]*FROM\s+attribute_catalog_entries\b/i.test(sql))).toBe(false);
     const writesBeforeUnchangedReplay = gateway.metrics?.().rowsWritten ?? 0;
@@ -547,7 +548,7 @@ test('full replay applies three vote weights once, keeps raw counts, and ignores
     expect(actual.model_version).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
     expect(replay.catalogPayload.scoreModelVersion).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
     expect(executedSql.filter((sql) => /SELECT user_id[\s\S]*FROM\s+user_roles/i.test(sql))).toHaveLength(1);
-    expect(executedSql.filter((sql) => /SELECT response_id[\s\S]*FROM\s+attribute_vote_responses/i.test(sql))).toHaveLength(1);
+    expect(executedSql.filter((sql) => /SELECT response_id[\s\S]*FROM\s+attribute_vote_responses/i.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toHaveLength(1);
 
     const untouched = sqlite.prepare(`
       SELECT subject_id, model_version FROM attribute_score_states

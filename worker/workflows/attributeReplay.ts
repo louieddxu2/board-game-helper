@@ -3,6 +3,8 @@ import { prepareAttributeReplay } from '../data/attributeReplay';
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock, type AttributeReplayLock } from '../data/attributeLocks';
 import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../data/attributeScoring';
 import { prepareAttributeCatalogSnapshot } from '../data/attributeCatalog';
+import { assertReplayHistoryHead, queryReplayHistoryHead } from '../data/attributeReplayWork';
+import { acknowledgeOnlineResponses } from './attributeOnlineScoring';
 
 export interface AttributeReplayStatus {
   required_revision: number;
@@ -29,12 +31,15 @@ export const publishCompleteAttributeReplayLocked = async (
   status: AttributeReplayStatus | null,
   options: AttributeReplayOptions = {},
 ): Promise<void> => {
+  const head = await queryReplayHistoryHead(db);
   const replay = await prepareAttributeReplay(db, timestamp, {
     maxChunkBytes: options.maxReplayChunkBytes,
     // Settled replays can still use the compact comparison checkpoint.
     compareLiveStates: options.compareLiveStates || !status || status.required_revision !== status.replayed_revision,
   });
-  await publishPreparedAttributeReplay(db, lock, timestamp, status?.required_revision ?? 0, replay, options);
+  await publishPreparedAttributeReplay(db, lock, timestamp, status?.required_revision ?? 0, replay, options, {
+    verify: [assertReplayHistoryHead(db, head)], clear: [], throughRowid: head.rowid,
+  });
 };
 
 export const publishPreparedAttributeReplay = async (
@@ -44,7 +49,7 @@ export const publishPreparedAttributeReplay = async (
   requiredRevision: number,
   replay: Awaited<ReturnType<typeof prepareAttributeReplay>>,
   options: AttributeReplayOptions = {},
-  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[]; replayedRevision?: number },
+  checkpoint?: { verify: DatabaseStatement[]; clear: DatabaseStatement[]; replayedRevision?: number; throughRowid?: number },
 ) => {
   const snapshot = prepareAttributeCatalogSnapshot(
     db, replay.catalogPayload, replay.catalogThroughVersion, timestamp, options,
@@ -64,6 +69,7 @@ export const publishPreparedAttributeReplay = async (
     ...replay.statements,
     ...snapshot,
     acknowledge,
+    ...(checkpoint?.throughRowid != null ? [acknowledgeOnlineResponses(db, checkpoint.throughRowid)] : []),
     ...(checkpoint?.clear ?? []),
   ], requiredRevision);
 };

@@ -69,7 +69,7 @@ test('weekly cache refresh applies comparison deltas without rereading score his
     harness.executedSql.length = 0;
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('cache');
     expect(scoreRows(harness)).toEqual(afterSaveRows);
-    expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toBe(false);
+    expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toBe(false);
     expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_score_states\b/iu.test(sql))).toBe(false);
 
     const snapshot = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
@@ -124,7 +124,7 @@ test('numeric responses force one full replay and acknowledge the revision', asy
 
     harness.executedSql.length = 0;
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
-    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toHaveLength(1);
     const after = status(harness);
     expect(after.required_revision).toBe(after.replayed_revision);
     expect(after.replayed_model_version).toBe(ATTRIBUTE_SCORE_MODEL_VERSION);
@@ -271,7 +271,7 @@ test('out-of-order comparison timestamps require a complete replay', async () =>
     await flushCatalogOutbox(harness.gateway, timestamp + 30);
     harness.executedSql.length = 0;
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 31)).resolves.toBe('replay');
-    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toHaveLength(1);
   } finally { close(harness); }
 });
 
@@ -367,7 +367,7 @@ test('keeps complete game and expansion aliases through replay, metadata deltas 
     await flushCatalogOutbox(harness.gateway, timestamp + 3);
     harness.executedSql.length = 0;
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 4)).resolves.toBe('cache');
-    expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toBe(false);
+    expect(harness.executedSql.some((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toBe(false);
     const refreshed = attributeCatalogPayload(await queryAttributeCatalogSnapshot(harness.gateway));
     expect(refreshed.subjects.find((subject) => subject.id === subjectId)?.aliases).toEqual([]);
     expect(refreshed.subjects.find((subject) => subject.id === configurationId)?.aliases).toEqual(['Expansion Alias', '擴充別名']);
@@ -388,7 +388,7 @@ test('changed pools choose full replay', async () => {
     await flushCatalogOutbox(harness.gateway, timestamp + 2);
     harness.executedSql.length = 0;
     await expect(runWeeklyAttributeRebuild(harness.gateway, timestamp + 3)).resolves.toBe('replay');
-    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql))).toHaveLength(1);
+    expect(harness.executedSql.filter((sql) => /\bFROM\s+attribute_vote_responses\b/iu.test(sql) && !/ORDER BY rowid|WHERE rowid/iu.test(sql))).toHaveLength(1);
   } finally { close(harness); }
 });
 
@@ -411,7 +411,7 @@ test('weekly replay replaces snapshots with missing or malformed chunks', async 
       harness.executedSql.length = 0;
       const nextGeneration = generation + 1;
       expect(await runWeeklyAttributeRebuild(harness.gateway, nextGeneration), kind).toBe('replay');
-      expect(harness.executedSql.filter((query) => /\bFROM\s+attribute_vote_responses\b/iu.test(query)), kind).toHaveLength(1);
+      expect(harness.executedSql.filter((query) => /\bFROM\s+attribute_vote_responses\b/iu.test(query) && !/ORDER BY rowid|WHERE rowid/iu.test(query)), kind).toHaveLength(1);
       const repaired = await readSnapshot();
       expect(repaired.generation, kind).toBe(nextGeneration);
       expect(repaired.values, kind).toEqual(original.values);

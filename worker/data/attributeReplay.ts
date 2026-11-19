@@ -16,6 +16,8 @@ import {
 } from './attributeReplayCalculation';
 import type { Database } from './database';
 import { attributeVoteWeight, queryAuthorizedAttributeVoters } from './attributeVoteWeights';
+import { assertReplayHistoryHead, queryReplayHistoryHead } from './attributeReplayWork';
+import { acknowledgeOnlineResponses } from '../workflows/attributeOnlineScoring';
 
 const rebuildStateStatement = (
   db: Database,
@@ -487,8 +489,9 @@ const queryLiveReplayStates = async (db: Database) => {
 export const replayAllAttributeScores = async (db: Database, timestamp = Date.now()): Promise<AttributeReplayResult> => {
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
+    const head = await queryReplayHistoryHead(db);
     const { statements, ...replay } = await prepareAttributeReplay(db, timestamp, { compareLiveStates: true });
-    await commitAttributeReplay(db, lock, statements);
+    await commitAttributeReplay(db, lock, [assertReplayHistoryHead(db, head), ...statements, acknowledgeOnlineResponses(db, head.rowid)]);
     return replay;
   } finally {
     await releaseAttributeReplayLock(db, lock);

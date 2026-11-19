@@ -123,6 +123,7 @@ export const runAttributeReplayWorkLocked = async (
     await publishPreparedAttributeReplay(db, lock, timestamp, revision, replay, {}, {
       verify: [assertReplayHistoryHead(db, head), assertReplayCatalogVersion(db, metadata.throughVersion)],
       clear: prepareClearReplayWork(db),
+      throughRowid: head.rowid,
       replayedRevision: work.online_rowid == null ? revision : work.input_revision ?? undefined,
     });
     return 'replay';

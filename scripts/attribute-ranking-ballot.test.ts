@@ -19,6 +19,7 @@ const attributeId = 'attribute_setup_variability';
 const setup = () => {
   const harness = createHarness();
   harness.sqlite.exec('DELETE FROM attribute_vote_responses; DELETE FROM attribute_score_states;');
+  harness.sqlite.exec('UPDATE attribute_online_progress SET through_rowid = 0, through_response_id = NULL');
   const subjects = harness.sqlite.prepare(`
     SELECT subject.id FROM attribute_subjects subject
     JOIN attribute_votable_subjects votable ON votable.subject_id = subject.id
@@ -111,7 +112,7 @@ test.each(['high', 'low'] as const)('resumable and complete replay agree for a %
 
 test.each([
   ['expired', true], ['replaced', true], ['expired', false], ['replaced', false],
-] as const)('the write transaction rejects a %s lease (ranking %s) and preserves a newer state', async (failure, ranking) => {
+] as const)('a %s scoring lease (ranking %s) preserves the accepted ballot and a newer state', async (failure, ranking) => {
   const harness = setup();
   try {
     const { gateway, sqlite, input, ids } = harness;
@@ -130,8 +131,8 @@ test.each([
       return batch(statements);
     });
     await expect(saveAttributeResponse(gateway, ranking ? input : { ...input, ranking: undefined, comparison: 'A_HIGHER' }))
-      .rejects.toThrow('attribute_response_busy');
-    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_vote_responses').get()).toEqual({ count: 0 });
+      .resolves.toMatchObject({ scoreStatus: 'pending', updatedValues: [] });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM attribute_vote_responses').get()).toEqual({ count: 1 });
     expect(sqlite.prepare('SELECT subject_id, score FROM attribute_score_states').all()).toEqual([{ subject_id: ids[0], score: 9 }]);
     if (failure === 'replaced') expect(sqlite.prepare('SELECT DISTINCT token FROM attribute_vote_lock').all()).toEqual([{ token: 'new-owner' }]);
   } finally { vi.restoreAllMocks(); harness.sqlite.close(); }

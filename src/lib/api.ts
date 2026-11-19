@@ -465,7 +465,7 @@ export const api = {
     // validates the submitted attribute and subjects against active records.
     const response = { ...input };
     delete response.questionToken;
-    return mutation<{ ok: true; updatedValues: AttributeMatrixValue[]; activities?: import('../shared/types').AttributeActivity[] }>('/api/attributes/responses', {
+    return mutation<{ ok: true; scoreStatus?: 'applied' | 'pending'; updatedValues: AttributeMatrixValue[]; activities?: import('../shared/types').AttributeActivity[] }>('/api/attributes/responses', {
       method: 'POST', body: JSON.stringify(response),
     });
   },

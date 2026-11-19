@@ -11,6 +11,7 @@ import { cleanupAttributeActivityFeed } from './data/attributes';
 import { cleanupAttributeCatalogDeltas } from './data/catalogRetention';
 import { runWeeklyAttributeRebuild } from './workflows/attributeWeeklyRebuild';
 import { resumePendingAttributeReplay } from './workflows/attributeResumableReplay';
+import { hasPendingAttributeResponses, processAttributeResponses } from './workflows/attributeOnlineScoring';
 
 import { authRoutes } from './routes/auth';
 import { homeRoutes } from './routes/home';
@@ -168,6 +169,13 @@ app.route('/', sitemapRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, 'DB'>) => {
   const db = createDatabase(env);
+  // Recover accepted votes after an interrupted upload-triggered scorer.
+  // The existing daily event remains the only scheduled invocation.
+  try {
+    if (await hasPendingAttributeResponses(db)) await processAttributeResponses(db);
+  } catch (error) {
+    console.error('attribute_online_recovery_failed', error);
+  }
   await Promise.all([
     cleanupGameViewData(db, controller.scheduledTime),
     cleanupExpiredSessions(db, controller.scheduledTime),

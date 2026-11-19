@@ -80,7 +80,9 @@ test('weekly replay rolls back a failed final publication and the next daily run
     }));
     expect(generation()).toEqual({ active_generation: monday + day + 1 });
     expect(scoreRows(harness)).toEqual(resumedScores);
-    expect(harness.executedSql.some((sql) => /\b(?:attribute_vote_responses|attribute_score_states)\b/iu.test(sql))).toBe(false);
+    expect(harness.executedSql.some((sql) => /\battribute_score_states\b/iu.test(sql))).toBe(false);
+    expect(harness.executedSql.filter((sql) => /\battribute_vote_responses\b/iu.test(sql)))
+      .toEqual([expect.stringContaining('WHERE rowid > through_rowid LIMIT 1')]);
     expect(harness.executedSql.some((sql) => /\bINSERT INTO attribute_catalog_snapshot_/iu.test(sql))).toBe(false);
   } finally {
     info.mockRestore();

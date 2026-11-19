@@ -217,7 +217,7 @@ export const subjectSecondaryNameExpression = (subjectAlias: string, gameAlias: 
     ELSE ${gameSecondaryNameExpression(gameAlias)} END)`;
 };
 
-interface ResponseContextRow {
+export interface ResponseContextRow {
   endpoints_json?: string | null;
   scale_type?: string;
   attribute_id: string;
@@ -231,27 +231,6 @@ interface ResponseContextRow {
   subject_b_slug: string;
   subject_b_game_slug: string | null;
   actor_name: string;
-}
-
-export interface ResponseContextAndStateRow extends ResponseContextRow {
-  state_a_subject_id: string | null;
-  state_a_score: number | null;
-  state_a_rating_deviation: number | null;
-  state_a_direct_sum: number | null;
-  state_a_direct_count: number | null;
-  state_a_comparison_count: number | null;
-  state_a_decisive_comparison_count: number | null;
-  state_a_evidence_count: number | null;
-  state_a_updated_at?: number | null;
-  state_b_subject_id: string | null;
-  state_b_score: number | null;
-  state_b_rating_deviation: number | null;
-  state_b_direct_sum: number | null;
-  state_b_direct_count: number | null;
-  state_b_comparison_count: number | null;
-  state_b_decisive_comparison_count: number | null;
-  state_b_evidence_count: number | null;
-  state_b_updated_at?: number | null;
 }
 
 export interface SubjectPageOptions {
@@ -290,6 +269,7 @@ export interface AttributeResponseInput {
 export interface SavedAttributeResponse {
   updatedValues: AttributeMatrixValue[];
   activities: AttributeActivity[];
+  scoreStatus?: 'applied' | 'pending';
 }
 
 export interface AttributeMergeLock {

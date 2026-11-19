@@ -1,13 +1,7 @@
 import { createId } from '../utils';
-import { rankingPlayerOrder } from '../../src/shared/attributeRankingBallot';
-import type { AttributeMergeLock, AttributeResponseInput } from './attributeQueryShared';
+import type { AttributeMergeLock } from './attributeQueryShared';
 import { ATTRIBUTE_MERGE_OPERATION_LOCK_NAME, ATTRIBUTE_REPLAY_LOCK_NAME, ATTRIBUTE_REPLAY_LOCK_TTL_MS, ATTRIBUTE_RESPONSE_LOCK_PREFIX, ATTRIBUTE_RESPONSE_LOCK_TTL_MS } from './attributeQueryShared';
 import type { Database, DatabaseStatement } from './database';
-
-export interface AttributeWriteLock {
-  token: string;
-  names: string[];
-}
 
 export interface AttributeReplayLock {
   token: string;
@@ -57,16 +51,6 @@ export const releaseAttributeReplayLock = (db: Database, lock: AttributeReplayLo
   DELETE FROM attribute_vote_lock
   WHERE lock_name = ? AND token = ?
 `).bind(ATTRIBUTE_REPLAY_LOCK_NAME, lock.token).run();
-
-export const attributeWriteLockNames = (input: AttributeResponseInput): string[] => {
-  const subjectIds = new Set<string>();
-  if (input.ranking) rankingPlayerOrder(input.ranking).forEach((id) => subjectIds.add(id));
-  if (input.comparison != null || input.ratingA != null) subjectIds.add(input.subjectAId);
-  if (input.comparison != null || input.ratingB != null) subjectIds.add(input.subjectBId);
-  return [...subjectIds]
-    .map((subjectId) => `${ATTRIBUTE_RESPONSE_LOCK_PREFIX}:${input.attributeId}:${subjectId}`)
-    .sort();
-};
 
 export const batchChangeCount = (result: { meta?: { changes?: number } } | undefined) => result?.meta?.changes ?? 1;
 
