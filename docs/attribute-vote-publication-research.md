@@ -2,16 +2,16 @@
 
 研究日期：2026-11-19。已提交的功能基準為 `45662e9`，包含 `73a2d43` 的先收票、單一計分者及每日補算。
 研究開始時工作目錄乾淨；路由、migration 0127、冪等收票、計分進度與每日恢復入口均已核對。
-本研究只新增 scripts 與文件，沒有改動正式 Worker、前端或 migration，也沒有部署。
+本文件最初記錄隔離研究；目前已將索引精簡、同交易分數差額及 metadata 發布保護整合進正式程式，尚未部署。
 
 ## 可重現量測
 
 執行 `node scripts/research-attribute-publication.mjs`；也可在後面指定 `pair-serial`、`ranking-serial` 等情境。
 使用獨立的 Miniflare D1 與完整 migration，建立四種隔離資料庫：
 
-- `current`：已提交的功能基準。
+- `current`：以 Git 讀取 `45662e9` 的功能基準。
 - `lean`：只在本機移除三個舊索引。
-- `inline`：只在本機編譯的 Worker 中注入同交易分數差額發布。
+- `inline`：實際工作目錄的正式差額發布程式，保留舊索引以便單獨比較。
 - `inline_lean`：合併上述兩個方向。
 
 量測包含收票、計分、索引／trigger 與目錄發布；不含共用 session middleware、既有目錄首次下載及驗證查詢。
@@ -26,6 +26,7 @@
 | 不同六款，十人同時 | 267.0／75.5 | 267.0／57.5 | 98.4／57.7 | 98.4／39.7 |
 | 十萬筆歷史，相同六款同時 | 79.0／10.7 | 79.0／8.9 | 60.6／9.1 | 60.6／7.3 |
 
+整合後使用正式 Worker 重新執行全部 24 組比較，結果與上表一致。
 這是本機 fixture 的結果；角色、遊戲組合、既有分數與併發時序會影響實際列數。
 
 ## 方向一：移除不再使用的變動欄位索引
@@ -37,7 +38,7 @@
 - `idx_attribute_score_states_question_slot_global`
 - `idx_attribute_score_states_attribute_score`
 
-本機原型僅移除這三個索引，保留欄位、主鍵與 `idx_attribute_score_states_random`。
+migration `0128_remove_obsolete_attribute_score_indexes.sql` 僅移除這三個索引，保留欄位、主鍵與 `idx_attribute_score_states_random`。
 後者以 attribute_id 起首，與以 subject_id 起首的主鍵分別覆蓋兩個外鍵，避免刪除父資料時退回全表掃描。
 量測內分數與計數完全相同，`foreign_key_check(attribute_score_states)` 也沒有違規。
 單次六款排序平均少 18 列寫入；此方向可以獨立實作，不需要改投票格式或發布協定。
@@ -47,7 +48,7 @@
 目前計分後會排入整款遊戲的 subject bundle，發布時再讀名稱、組合、所有屬性值等資料。
 例如逐筆六款排序的十次送出，原本目錄階段就讀 1,950 列、寫 250 列。
 
-原型直接使用計分時已產生的 `stateToMatrixValue`，建立現行讀取端已有的扁平 `kind: value` 增量：
+正式流程直接使用計分時已產生的 `stateToMatrixValue`，建立現行讀取端已有的扁平 `kind: value` 增量：
 
 1. 在同一 D1 batch 內暫時使用既有 rebuild flag，略過分數的整包目錄 outbox。
 2. 保存分數、更新目錄版本並寫入 value entries。
@@ -57,19 +58,20 @@
 不用重新查詢 subject bundle，也不用維護／刪除每個分數的發布 outbox；保留的 metadata 更新仍使用原有流程。
 格式直接沿用既有 JS formatter，沒有在 SQL 另做一套浮點捨入或計分規則。
 
-## 正式整合前必須一起處理的發布順序
+## 已整合的發布順序保護
 
 不能只把 value entries 寫進去就完成：既有 subject bundle 會替換該遊戲整組分數。
 若它先讀到舊分數、稍後才以較新的目錄版本發布，就可能蓋過剛發布的 value delta。
 
-研究中的 metadata 發布原型因此在同一交易核對：
+`attributeCatalogPublication.ts` 的 metadata 發布因此在同一交易核對：
 
 - 讀取 bundle 前的目錄版本仍相同。
 - 當時的 snapshot generation 仍相同；完整歷史重算可能換快照而不增加 delta clock。
 - 對應 outbox revision 仍相同。
 
 驗證後才原子保留版本、寫入 bundle 並確認 outbox。過期發布整筆回復，工作保留供重新讀取與發布。
-這套防護目前只存在研究原型，尚未接進正式的 `flushCatalogOutbox`。
+這套防護已接進正式的 `flushCatalogOutbox`，適用於 subject、definition 與 candidate。
+衝突回傳未處理，保留 outbox 供後續 flush 重新讀取；其他資料庫錯誤仍回報失敗。
 
 ## 已驗證的研究契約
 
@@ -80,11 +82,17 @@
 - 移除故障後，雲端處理者可自行補算並發布正確差額。
 - 新分數先發布時，過期 bundle 被拒絕，outbox 保留，重新讀取後可正確發布。
 - 完整重算更換 generation、delta clock 未變時，同樣拒絕過期 bundle；從新 snapshot 繼續套用增量仍正確。
+- 實際 metadata publisher 的 revision 變動、另一個 publisher 搶先完成、entry 寫入失敗均不會發布舊資料或提前確認工作。
+- 新增遊戲、停用屬性與刪除 subject，從既有快取分頁讀取後仍正確加入／移除資料。
 
-這些是本機 D1 原型及既有解析／快取函式的驗證，不是正式站或瀏覽器端的完整驗收。
+上述量測與故障注入是本機 D1 及既有解析／快取函式的驗證，不代表正式站已更新。
 
-## 建議實作順序
+## 維護與回歸
 
-先將索引精簡做成獨立 migration，驗證查詢及完整發布測試。
-再將差額發布與 metadata 的版本／generation／revision 防護一起整合，涵蓋新增遊戲、刪除屬性、歷史重算與多裝置快取恢復。
-不要將沒有 metadata 發布防護的原型直接套入正式程式。
+`scripts/attribute-catalog-publication.test.ts` 驗證正式發布與實際前後端快取契約；
+`scripts/attribute-online-scoring.test.ts` 驗證單一計分者、冪等收票、有限批次與每日恢復。
+比較腳本不再注入另一套原型，直接編譯正式程式，原先的 `attributePublicationPrototype.ts` 已刪除。
+維持立即收票與原有計分觸發方式，不新增十五分鐘排程。
+
+整合驗證：`npm test` 1,690 項通過、1 項既有略過；`npm run typecheck`、`npm run check:d1-fanout` 通過。
+本機正式前端／Worker／D1 的手機投票、排序、回應遺失後重試、十人併發及觸控回歸共 14 項通過。

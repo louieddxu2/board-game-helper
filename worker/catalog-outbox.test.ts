@@ -43,8 +43,8 @@ describe('catalog outbox publisher', () => {
             rating_deviation: 2, direct_sum: 15, direct_count: 2, comparison_count: 1,
             decisive_comparison_count: 1, evidence_count: 3,
           }] }) });
-        } else if (sql.includes('UPDATE attribute_catalog_clock')) {
-          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ current_version: 17 }) });
+        } else if (sql.includes('current_version AS version')) {
+          statement = prepared(sql, { first: vi.fn().mockResolvedValue({ version: 16, generation: 1 }) });
         } else {
           statement = prepared(sql);
         }
@@ -58,13 +58,13 @@ describe('catalog outbox publisher', () => {
       processed: { 'attribute-subject': 1 },
     });
 
-    expect(statements.some((statement) => /attribute_subject_catalog_source|attribute_catalog_snapshot|attribute_catalog_entries\s+WHERE/i.test(statement.sql))).toBe(false);
+    expect(statements.some((statement) => /attribute_subject_catalog_source|attribute_catalog_snapshot_chunks|attribute_catalog_entries\s+WHERE/i.test(statement.sql))).toBe(false);
     const entryBatch = (db.batch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as CapturedStatement[];
-    expect(entryBatch).toHaveLength(1);
-    expect(entryBatch[0].values).toEqual([
-      'subject:subject-a', 17, expect.stringContaining('"kind":"subjectBundle"'), 0, 123,
-    ]);
-    expect(JSON.parse(String(entryBatch[0].values[2]))).toMatchObject({
+    expect(entryBatch).toHaveLength(4);
+    expect(entryBatch[0].values).toEqual([16, 1, '[["subject-a",3]]', 'attribute-subject']);
+    const entries = JSON.parse(String(entryBatch[2].values[1]));
+    expect(entries).toEqual([['subject:subject-a', expect.stringContaining('"kind":"subjectBundle"'), 0, 123]]);
+    expect(JSON.parse(entries[0][1])).toMatchObject({
       kind: 'subjectBundle',
       subject: { id: 'subject-a', bggIds: [123] },
       values: [{ subjectId: 'subject-a', attributeId: 'attribute-luck', score: 7.5 }],

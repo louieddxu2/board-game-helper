@@ -7,6 +7,7 @@ import {
 } from './attributes';
 import { queryTargetedGameCatalogEntries } from './gameCatalog';
 import { queryTargetedPublicTagCatalogEntries } from './tagCatalog';
+import { publishAttributeCatalogJobs, queryAttributePublicationFence } from './attributeCatalogPublication';
 
 export const CATALOG_OUTBOX_PAGE_SIZE = 100;
 // One catalog parameter plus two parameters per (key, revision) tuple must
@@ -45,31 +46,6 @@ export interface CatalogOutboxFlushResult {
 const now = () => Date.now();
 
 const unique = (ids: string[]) => [...new Set(ids)].sort();
-
-const attributeCatalogStore: CatalogStore = {
-  reserve: async (db, count) => {
-    const row = await db.statement(`
-      UPDATE attribute_catalog_clock
-      SET current_version = current_version + ?
-      WHERE id = 1
-      RETURNING current_version
-    `).bind(count).first<{ current_version: number }>();
-    if (!row) throw new Error('attribute_catalog_clock_unavailable');
-    return Number(row.current_version);
-  },
-  write: async (db, entries) => {
-    await db.batch(entries.map((entry) => db.statement(`
-      INSERT INTO attribute_catalog_entries
-        (entry_key, catalog_version, entry_json, deleted, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(entry_key) DO UPDATE SET
-        catalog_version = excluded.catalog_version,
-        entry_json = excluded.entry_json,
-        deleted = excluded.deleted,
-        updated_at = excluded.updated_at
-    `).bind(entry.entryKey, entry.catalogVersion, entry.entryJson, entry.deleted ? 1 : 0, entry.updatedAt)));
-  },
-};
 
 const gameCatalogStore: CatalogStore = {
   reserve: async (db, count) => {
@@ -154,10 +130,10 @@ const publishGameEntries = async (db: Database, gameIds: string[], timestamp: nu
   await publishEntries(db, gameCatalogStore, entries);
 };
 
-const publishAttributeSubjectEntries = async (db: Database, subjectIds: string[], timestamp: number): Promise<void> => {
+const attributeSubjectEntries = async (db: Database, subjectIds: string[], timestamp: number): Promise<VersionedEntry[]> => {
   const bundles = await queryAttributeSubjectBundles(db, subjectIds);
   const byId = new Map(bundles.map((bundle) => [bundle.subject.id, bundle]));
-  const entries = subjectIds.map((subjectId) => {
+  return subjectIds.map((subjectId) => {
     const bundle = byId.get(subjectId);
     if (!bundle) return deletedEntry(`subject:${subjectId}`, timestamp);
     return {
@@ -171,13 +147,12 @@ const publishAttributeSubjectEntries = async (db: Database, subjectIds: string[]
       updatedAt: timestamp,
     };
   });
-  await publishEntries(db, attributeCatalogStore, entries);
 };
 
-const publishAttributeDefinitionEntries = async (db: Database, attributeIds: string[], timestamp: number): Promise<void> => {
+const attributeDefinitionEntries = async (db: Database, attributeIds: string[], timestamp: number): Promise<VersionedEntry[]> => {
   const definitions = await queryAttributeDefinitionsById(db, attributeIds);
   const byId = new Map(definitions.map((definition) => [definition.id, definition]));
-  const entries = attributeIds.map((attributeId) => {
+  return attributeIds.map((attributeId) => {
     const attribute = byId.get(attributeId);
     if (!attribute) return deletedEntry(`attribute:${attributeId}`, timestamp);
     return {
@@ -187,13 +162,12 @@ const publishAttributeDefinitionEntries = async (db: Database, attributeIds: str
       updatedAt: timestamp,
     };
   });
-  await publishEntries(db, attributeCatalogStore, entries);
 };
 
-const publishAttributeCandidateEntries = async (db: Database, candidateIds: string[], timestamp: number): Promise<void> => {
+const attributeCandidateEntries = async (db: Database, candidateIds: string[], timestamp: number): Promise<VersionedEntry[]> => {
   const candidates = await queryAttributeCandidatesById(db, candidateIds);
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-  const entries = candidateIds.map((candidateId) => {
+  return candidateIds.map((candidateId) => {
     const candidate = byId.get(candidateId);
     if (!candidate) return deletedEntry(`candidate:${candidateId}`, timestamp);
     return {
@@ -203,7 +177,6 @@ const publishAttributeCandidateEntries = async (db: Database, candidateIds: stri
       updatedAt: timestamp,
     };
   });
-  await publishEntries(db, attributeCatalogStore, entries);
 };
 
 const publishTagEntries = async (db: Database, tagIds: string[], timestamp: number): Promise<void> => {
@@ -260,10 +233,16 @@ export const flushCatalogOutbox = async (
     const catalogRows = byCatalog.get(catalog) ?? [];
     if (!catalogRows.length) continue;
     const entityKeys = unique(catalogRows.map((row) => row.entity_key));
+    if (catalog.startsWith('attribute-')) {
+      const fence = await queryAttributePublicationFence(db);
+      if (!fence) throw new Error('attribute_catalog_clock_unavailable');
+      const entries = catalog === 'attribute-subject' ? await attributeSubjectEntries(db, entityKeys, timestamp)
+        : catalog === 'attribute-definition' ? await attributeDefinitionEntries(db, entityKeys, timestamp)
+          : await attributeCandidateEntries(db, entityKeys, timestamp);
+      if (await publishAttributeCatalogJobs(db, catalog, catalogRows, fence, entries)) processed[catalog] = catalogRows.length;
+      continue;
+    }
     if (catalog === 'game') await publishGameEntries(db, entityKeys, timestamp);
-    if (catalog === 'attribute-subject') await publishAttributeSubjectEntries(db, entityKeys, timestamp);
-    if (catalog === 'attribute-definition') await publishAttributeDefinitionEntries(db, entityKeys, timestamp);
-    if (catalog === 'attribute-candidate') await publishAttributeCandidateEntries(db, entityKeys, timestamp);
     if (catalog === 'tag') await publishTagEntries(db, entityKeys, timestamp);
     await deletePublishedRows(db, catalog, catalogRows);
     processed[catalog] = catalogRows.length;

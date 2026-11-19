@@ -3,6 +3,7 @@ import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
 import { ATTRIBUTE_REPLAY_LOCK_NAME } from '../data/attributeQueryShared';
 import { attributeScoreWrites } from '../data/attributeScoreWrites';
+import { prepareAttributeScorePublication } from '../data/attributeCatalogPublication';
 import { stateToMatrixValue } from '../data/attributeResponseContext';
 import { applyComparison, applyDirectRating, emptyAttributeState, ATTRIBUTE_SCORE_MODEL_VERSION, type OnlineAttributeState } from '../data/attributeScoring';
 import type { Database } from '../data/database';
@@ -133,7 +134,14 @@ export const processAttributeResponses = async (
         SELECT 1 FROM attribute_online_progress progress JOIN attribute_replay_status replay ON replay.id = progress.id
         WHERE progress.id = 1 AND progress.through_rowid = ? AND replay.history_revision = ?
       ) THEN '$' ELSE 'attribute_online_revision_changed' END)`).bind(progress.through_rowid, progress.history_revision)];
-      statements.push(...attributeScoreWrites(db, plan.upserts));
+      if (plan.upserts.length) {
+        // This transaction owns the score/replay lease. Suppress whole-subject
+        // outbox triggers only while publishing these exact score deltas.
+        statements.push(db.statement('INSERT INTO attribute_catalog_rebuild_mode (id) VALUES (1)'));
+        statements.push(...attributeScoreWrites(db, plan.upserts));
+        statements.push(...prepareAttributeScorePublication(db, plan.values));
+        statements.push(db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1'));
+      }
       if (receipts.length) statements.push(acknowledgeOnlineResponses(db, through, receipts.at(-1)!.response_id));
       if (plan.outOfOrder) statements.push(db.statement('UPDATE attribute_replay_status SET required_revision = required_revision + 1 WHERE id = 1'));
       // This indexed emptiness test and lease release share the score transaction.

@@ -1,8 +1,9 @@
-// Isolated, real D1 research. No production module, schema or deployment changes.
+// Isolated, real D1 comparison: historical baseline vs the actual working tree.
 // node scripts/research-attribute-publication.mjs [scenario ...]
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { build } from 'esbuild';
@@ -34,27 +35,17 @@ writeFileSync(entry, [
   `export { stateToMatrixValue } from '${absolute('worker/data/attributeResponseContext.ts')}';`,
   `export { runCompleteAttributeReplay } from '${absolute('worker/workflows/attributeReplay.ts')}';`,
   `export { queryAttributeCatalogSnapshot, attributeCatalogPayload } from '${absolute('worker/data/attributeCatalog.ts')}';`,
-  `export { publishPrototypeSubjectBundle } from '${absolute('scripts/attributePublicationPrototype.ts')}';`,
 ].join('\n'));
 const modules = {};
 for (const variant of ['current', 'inline']) {
   const outfile = join(scratch, variant + '.mjs');
   await build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', format: 'esm',
-    plugins: variant === 'current' ? [] : [{ name: 'research-only-inline-score-publication', setup(b) {
-      b.onLoad({ filter: /[\\/]worker[\\/]workflows[\\/]attributeOnlineScoring\.ts$/ }, ({ path }) => {
-        const source = readFileSync(path, 'utf8');
-        const target = 'statements.push(...attributeScoreWrites(db, plan.upserts));';
-        assert.equal(source.split(target).length, 2, 'Prototype patch point changed');
-        return { loader: 'ts', resolveDir: resolve('worker/workflows'), contents:
-          `import { preparePrototypeScorePublication } from '${absolute('scripts/attributePublicationPrototype.ts')}';\n` +
-          source.replace(target, `if (plan.upserts.length) {
-            statements.push(db.statement('INSERT OR IGNORE INTO attribute_catalog_rebuild_mode (id) VALUES (1)'));
-            statements.push(...attributeScoreWrites(db, plan.upserts));
-            statements.push(...preparePrototypeScorePublication(db, plan.values));
-            statements.push(db.statement('DELETE FROM attribute_catalog_rebuild_mode WHERE id = 1'));
-          }`),
-        };
-      });
+    plugins: variant !== 'current' ? [] : [{ name: 'committed-baseline', setup(b) {
+      b.onLoad({ filter: /[\\/](?:worker|src[\\/]shared)[\\/].*\.ts$/ }, ({ path }) => ({
+        contents: execFileSync('git', ['-c', 'core.fsmonitor=false', 'show',
+          `45662e9:${relative(process.cwd(), path).replaceAll('\\', '/')}`], { encoding: 'utf8' }),
+        loader: 'ts', resolveDir: dirname(path),
+      }));
     } }],
   });
   modules[variant] = await import(pathToFileURL(outfile).href);
@@ -81,9 +72,12 @@ for (const filename of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject'
   try {
     const name = names.find((n) => sqlite.prepare('SELECT 1 FROM sqlite_schema WHERE name = ?').get('research_' + n));
     if (!name) continue;
-    for (const migration of migrations) sqlite.exec(readFileSync(join('migrations', migration), 'utf8'));
+    for (const migration of migrations) {
+      if (migration.startsWith('0128_') && !name.startsWith('lean_') && !name.startsWith('inline_lean_')) continue;
+      sqlite.exec(readFileSync(join('migrations', migration), 'utf8'));
+    }
     if (name.startsWith('lean_') || name.startsWith('inline_lean_')) {
-      for (const index of obsoleteIndexes) sqlite.exec(`DROP INDEX ${index}`);
+      for (const index of obsoleteIndexes) assert(!sqlite.prepare('SELECT 1 FROM sqlite_schema WHERE name = ?').get(index));
       // Keep the subject PK and an attribute-prefixed index for both foreign keys.
       const indexes = sqlite.prepare('PRAGMA index_list(attribute_score_states)').all();
       const prefixes = indexes.map((index) => sqlite.prepare(`PRAGMA index_info(${index.name})`).all().map((c) => c.name));
@@ -104,7 +98,7 @@ for (const filename of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject'
     }
   } finally { sqlite.close(); }
 }
-const report = { scope: 'Research only: current code vs injected same-transaction value publication; includes receipt, scoring, indexes/triggers and cache publication; excludes common session middleware',
+const report = { scope: 'Local D1: baseline 45662e9 vs actual integrated publication, with/without index migration; includes receipt, scoring, indexes/triggers and cache publication; excludes common session middleware',
   scenarios: [], checks: [] };
 const expectedStates = new Map();
 mf = new Miniflare(options());
@@ -186,29 +180,28 @@ try {
       await raw.prepare('DROP TRIGGER research_fail').run(); await m.processAttributeResponses(control);
       await verifyCache(cache);
       report.checks.push({ variant, publicationFailureRollsBackScoreCursorClock: true, durableVoteSurvives: true, serverOnlyRecoveryWorks: true });
-      // A normal metadata publisher must not install a bundle captured before
-      // a newer value delta. This gate is required before production adoption.
+      // Exercise the actual outbox publisher, not a separate prototype gate.
       await raw.prepare("UPDATE attribute_subjects SET display_name = display_name || ' research' WHERE id = ?").bind(ids[0]).run();
-      const readBundle = async () => {
-        const version = await clock();
-        const snapshot = await raw.prepare('SELECT active_generation FROM attribute_catalog_snapshot_state WHERE id = 1').first();
-        const bundle = (await m.queryAttributeSubjectBundles(control, [ids[0]]))[0];
-        const pending = await raw.prepare("SELECT revision FROM catalog_change_outbox WHERE catalog = 'attribute-subject' AND entity_key = ?").bind(ids[0]).first();
-        return { expectedVersion: version, expectedGeneration: snapshot?.active_generation ?? null, subjectId: ids[0], expectedRevision: pending.revision,
-          entryJson: JSON.stringify({ kind: 'subjectBundle', subject: bundle.subject, values: bundle.values }) };
+      const originalBatch = control.batch.bind(control);
+      control.batch = async (statements) => {
+        control.batch = originalBatch;
+        await m.saveAttributeResponse(control, input(11));
+        return originalBatch(statements);
       };
-      const stale = await readBundle();
-      await m.saveAttributeResponse(control, input(11));
-      await assert.rejects(m.publishPrototypeSubjectBundle(control, stale), /prototype_publication_changed/);
+      assert.deepEqual(await m.flushCatalogOutbox(control), { processed: {} });
       assert(await raw.prepare("SELECT 1 FROM catalog_change_outbox WHERE catalog = 'attribute-subject' AND entity_key = ?").bind(ids[0]).first());
-      await m.publishPrototypeSubjectBundle(control, await readBundle()); await verifyCache(cache);
+      await m.flushCatalogOutbox(control); await verifyCache(cache);
       report.checks.push({ variant, staleSubjectBundleRejected: true, metadataJobRetainedUntilFreshPublication: true });
       await raw.prepare("UPDATE attribute_subjects SET display_name = display_name || ' snapshot' WHERE id = ?").bind(ids[0]).run();
-      const beforeSnapshot = await readBundle();
-      await m.runCompleteAttributeReplay(control);
-      assert.equal(await clock(), beforeSnapshot.expectedVersion, 'Full replay can replace the snapshot without advancing the delta clock');
-      await assert.rejects(m.publishPrototypeSubjectBundle(control, beforeSnapshot), /prototype_publication_changed/);
-      await m.publishPrototypeSubjectBundle(control, await readBundle());
+      const beforeSnapshot = await clock();
+      control.batch = async (statements) => {
+        control.batch = originalBatch;
+        await m.runCompleteAttributeReplay(control);
+        assert.equal(await clock(), beforeSnapshot, 'Full replay can replace the snapshot without advancing the delta clock');
+        return originalBatch(statements);
+      };
+      assert.deepEqual(await m.flushCatalogOutbox(control), { processed: {} });
+      await m.flushCatalogOutbox(control);
       await verifyCache(m.attributeCatalogPayload(await m.queryAttributeCatalogSnapshot(control)));
       report.checks.push({ variant, fullReplayGenerationChangeRejectsStaleBundle: true });
     }
