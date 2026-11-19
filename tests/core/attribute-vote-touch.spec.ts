@@ -85,6 +85,25 @@ for (const mobile of [true, false]) {
         await expect(reimport).toBeEnabled();
         await page.reload();
         await expect(reimport).toBeEnabled();
+      });
+
+      // Whether the labels fit depends on the font, so this check runs locally (@ui), not on Linux CI.
+      test(`fits the active collection scope labels without clipping in ${ranking ? 'ranking' : 'pair'} mode`, { tag: '@ui' }, async ({ page }) => {
+        await mockVotingCatalog(page);
+        await page.goto('/attributes');
+        const activate = async (target: ReturnType<Page['getByRole']>) => mobile ? target.tap() : target.click();
+        const scope = page.getByRole('group', { name: '投票範圍' });
+        if (ranking) await activate(page.getByRole('button', { name: '切換為多款排序' }));
+        const chosen = page.waitForEvent('filechooser');
+        await activate(scope.getByRole('button', { name: '匯入收藏', exact: true }));
+        await (await chosen).setFiles({ name: 'collection.csv', mimeType: 'text/csv', buffer: Buffer.from('Game ID\n123\n456') });
+        const collection = scope.getByRole('button', { name: '我的收藏 2/2', exact: true });
+        await expect(collection).toBeEnabled();
+        await activate(collection);
+        await expect(collection).toHaveAttribute('aria-pressed', 'true');
+        await expect(scope.getByRole('button', { name: '重新匯入' })).toBeEnabled();
+        await page.reload();
+        await expect(scope.getByRole('button', { name: '重新匯入' })).toBeEnabled();
         const clipped = await scope.evaluate((element) => [...element.querySelectorAll('button')]
           .some((button) => button.scrollWidth > button.clientWidth));
         expect(clipped).toBe(false);
