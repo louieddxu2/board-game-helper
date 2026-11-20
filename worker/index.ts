@@ -224,4 +224,6 @@ const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, '
 };
 
 export { app, scheduled };
+// Service Binding RPC for the score pad Worker; it has no public route.
+export { ScorepadApi } from './scorepadApi';
 export default Object.assign(app, { scheduled });

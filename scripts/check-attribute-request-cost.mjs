@@ -38,16 +38,20 @@ const absolute = (path) => resolve(path).replaceAll('\\', '/');
 const entry = join(scratch, 'entry.ts');
 writeFileSync(entry, `export { app } from '${absolute('worker/index.ts')}';\n`);
 const modules = {};
+// Node cannot load the Workers runtime module; the cost check only uses the app.
+const workersRuntimeStub = { name: 'workers-runtime-stub', setup(b) {
+  b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: resolve('worker/testing/cloudflareWorkersStub.ts') }));
+} };
 for (const variant of variants) {
   const outfile = join(scratch, variant + '.mjs');
   await build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', format: 'esm',
-    plugins: variant !== 'baseline' ? [] : [{ name: 'historical-source', setup(b) {
+    plugins: [workersRuntimeStub, ...(variant !== 'baseline' ? [] : [{ name: 'historical-source', setup(b) {
       b.onLoad({ filter: /[\\/](?:worker|src[\\/]shared)[\\/].*\.ts$/ }, ({ path }) => ({
         contents: execFileSync('git', ['-c', 'core.fsmonitor=false', 'show',
           `${baseline}:${relative(process.cwd(), path).replaceAll('\\', '/')}`], { encoding: 'utf8' }),
         loader: 'ts', resolveDir: dirname(path),
       }));
-    } }],
+    } }])],
   });
   modules[variant] = await import(pathToFileURL(outfile).href);
 }
