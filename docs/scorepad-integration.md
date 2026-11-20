@@ -2,7 +2,7 @@
 
 萬用桌遊計分板是獨立的 App，有自己的 Worker 與 D1。它透過 Cloudflare Service Binding 呼叫本站 Worker 的內部 RPC `ScorepadApi`，取得遊戲名稱與 BGG 編號。
 
-計分板不再直接讀取本站 D1（`board-game-rules-prod`）。先前它用 D1 binding 直接讀 `games`、`game_aliases`、`game_external_ids`、`game_catalog_entries`、`game_catalog_clock`，沒有排除隱藏與待審核的遊戲；現在一律由本站過濾。
+計分板不再直接讀取本站 D1（`board-game-rules-prod`）。先前它用 D1 binding 直接讀 `games`、`game_aliases`、`game_external_ids`、`game_catalog_entries`、`game_catalog_clock`，沒有排除隱藏與已合併的遊戲；現在一律由本站過濾。
 
 ## 計分板 Worker 的設定
 
@@ -18,7 +18,7 @@
 
 實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts) 與 [`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；三個方法都只讀，不寫入任何資料。
 
-「可列出的遊戲」指 `visibility = 'public'`、`merged_into_game_id IS NULL`、`review_status <> 'pending'`。
+「可列出的遊戲」與本站公開頁面一致：`visibility = 'public'` 且 `merged_into_game_id IS NULL`。`review_status = 'pending'` 只表示遊戲資料等待編輯確認（批次匯入的遊戲都是這個狀態），公開頁面照樣顯示，所以不作為過濾條件。
 
 ### `lookupGamesByBgg(bggIds: string[])`
 
@@ -55,9 +55,9 @@ Promise<{
 
 - 每週增量同步用。以 `game_catalog_entries.catalog_version` 分頁，和本站公開目錄同一個游標；`limit` 為 1–200，`afterVersion` 為非負整數。
 - 下一頁傳入上一頁的 `throughVersion`；`hasMore` 為 `false` 時已讀完。沒有變更時 `throughVersion` 等於傳入的 `afterVersion`。
-- 遊戲是否可列出依目前的 `games` 資料判斷。已刪除、隱藏、待審核或已合併的遊戲以 `deleted: true` 回傳，只帶 `gameId`、`catalogVersion` 與 `bggIds`，計分板應移除這款遊戲的規則名稱。已從資料庫刪除的遊戲沒有 BGG 編號可回傳，`bggIds` 為空陣列，請以 `gameId` 對應。
+- 遊戲是否可列出依目前的 `games` 資料判斷。已刪除、隱藏或已合併的遊戲以 `deleted: true` 回傳，只帶 `gameId`、`catalogVersion` 與 `bggIds`，計分板應移除這款遊戲的規則名稱。已從資料庫刪除的遊戲沒有 BGG 編號可回傳，`bggIds` 為空陣列，請以 `gameId` 對應。
 - `bggIds` 同樣合併 `games.bgg_id` 與 `game_external_ids` 兩個來源。
-- 審核狀態、`bgg_id` 與 BGG 外部編號的變更也會推進目錄版本（migration 0130），所以待審核轉為已審核、新增或移除 BGG 編號都會出現在下一次同步。
+- `games.bgg_id` 與 BGG 外部編號的變更也會推進目錄版本（migration 0130），所以新增、修改或移除 BGG 編號都會出現在下一次同步。
 
 ## 成本
 

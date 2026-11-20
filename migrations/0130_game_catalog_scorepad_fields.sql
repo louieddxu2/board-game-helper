@@ -1,11 +1,11 @@
--- The score pad syncs game names through game_catalog_entries versions and
--- filters on review status and BGG ids. Those fields must also advance the
--- game catalog, or an approved game or a new BGG id never reaches it.
+-- The score pad syncs game names and BGG ids through game_catalog_entries
+-- versions. BGG id changes must also advance the game catalog, or a new or
+-- removed BGG id never reaches its incremental sync.
 DROP TRIGGER IF EXISTS game_catalog_outbox_games_after_update;
 CREATE TRIGGER game_catalog_outbox_games_after_update
 AFTER UPDATE OF slug, display_name, english_name, merged_into_game_id, visibility,
   published_rule_count, total_rule_count, latest_rule_updated_at, entity_kind,
-  review_status, bgg_id ON games
+  bgg_id ON games
 BEGIN
   INSERT INTO catalog_change_outbox (catalog, entity_key, change_kind, updated_at)
   VALUES ('game', NEW.id, 'upsert', NEW.updated_at)

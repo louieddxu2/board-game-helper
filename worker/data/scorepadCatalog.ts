@@ -31,10 +31,10 @@ export interface ScorepadGameChanges {
   hasMore: boolean;
 }
 
-// A game the score pad may show: public, not merged away and not awaiting review.
+// The same games the public site lists: public and not merged away. A pending
+// review_status only marks data awaiting an editor; those games stay listed.
 const LISTED = (alias: string) => `${alias}.visibility = 'public'
-  AND ${alias}.merged_into_game_id IS NULL
-  AND ${alias}.review_status <> 'pending'`;
+  AND ${alias}.merged_into_game_id IS NULL`;
 
 const ALIASES = (alias: string) => `COALESCE((
     SELECT json_group_array(alias) FROM (
@@ -108,8 +108,8 @@ const validInteger = (value: unknown, name: string, min: number, max = Number.MA
 };
 
 // Pages game_catalog_entries by catalog_version, the same cursor as the public
-// catalog. The current game row decides visibility, so hidden, pending,
-// merged and removed games come back as deleted. The page drives every lookup.
+// catalog. The current game row decides visibility, so hidden, merged and
+// removed games come back as deleted. The page drives every lookup.
 export const listScorepadGameChangesSince = async (
   db: Database,
   afterVersion: unknown,
