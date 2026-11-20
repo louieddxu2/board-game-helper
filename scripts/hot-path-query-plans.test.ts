@@ -62,19 +62,24 @@ const tableScans = (h: ReturnType<typeof setup>) => Array.from(new Set(h.execute
   .filter((detail) => /^SCAN /.test(detail) && !allowedScan.test(detail))
   .map((detail) => `${detail} :: ${sql.replace(/\s+/g, ' ').trim().slice(0, 100)}`));
 
-test('home, personal home and exact game lookup read only indexed rows', async () => {
+test('home and personal home read only indexed rows', async () => {
   const h = setup();
   h.sqlite.exec(`INSERT INTO game_daily_view_counts(game_id, view_date, view_count, last_view_at)
       VALUES('plan-game', DATE('now'), 3, 1);
     INSERT INTO user_game_favorites(user_id, game_id, created_at) VALUES('plan-user-1', 'plan-game', 1);`);
-  for (const path of ['/api/home', '/api/account/home', `/api/games/resolve?name=${encodeURIComponent('計畫遊戲')}`]) {
+  for (const path of ['/api/home', '/api/account/home']) {
     h.executedSql.length = 0;
     const response = await h.get(path);
     expect(response.status, path).toBe(200);
     expect(tableScans(h), path).toEqual([]);
   }
-  const resolved = await (await h.get(`/api/games/resolve?name=${encodeURIComponent('計畫遊戲')}`)).json() as { game: { id: string } | null };
-  expect(resolved.game?.id).toBe('plan-game');
+});
+
+test('removed per-query search endpoints are not served', async () => {
+  const h = setup();
+  for (const path of ['/api/search?q=x', '/api/games/search?q=x', '/api/games/resolve?name=x']) {
+    expect((await h.get(path)).status, path).toBe(404);
+  }
 });
 
 test('contributor nickname lookups stay within the D1 parameter limit', async () => {

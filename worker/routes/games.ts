@@ -8,9 +8,8 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { EXACT_GAME_NAME_IDS, gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges, queryGameCatalogSnapshot } from '../data/gameCatalog';
-import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 import { canEditContributionGame } from '../contributions';
 import { mergeGames } from '../data/gameMerge';
@@ -54,16 +53,6 @@ const toGameExternalResource = (row: GameExternalResourceRow): GameExternalResou
   updatedAt: row.updated_at,
 });
 
-gamesRoutes.get('/api/games/search', async (c) => {
-  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
-  if (rawQuery.length < 1) return c.json({ games: [] });
-  const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
-  logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
-  logD1Query(c, 'game_catalog_snapshot_chunks', snapshot.chunks);
-  setNoCache(c);
-  return c.json({ games: filterGameCatalog(gameCatalogPayload(snapshot).games, rawQuery, 20) });
-});
-
 gamesRoutes.get('/api/game-catalog', async (c) => {
   const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
   logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
@@ -79,41 +68,6 @@ gamesRoutes.get('/api/game-catalog/changes', async (c) => {
   const result = logD1Query(c, 'game_catalog_changes', await queryGameCatalogChanges(getDatabase(c), after));
   setNoCache(c);
   return c.json(gameCatalogChangesPayload(result, after));
-});
-
-gamesRoutes.get('/api/games/resolve', async (c) => {
-  const rawName = (c.req.query('name') ?? '').trim().slice(0, 120);
-  if (!rawName) return c.json({ game: null, suggestions: [] });
-  const name = normalizeText(rawName);
-  const exact = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
-      0 AS rule_count,
-      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
-    FROM games g
-    LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
-      AND g.id IN (${EXACT_GAME_NAME_IDS})
-    GROUP BY g.id
-    LIMIT 1
-  `).bind(name, name).first<GameRow>();
-  if (exact) {
-    setNoCache(c);
-    return c.json({ game: toGame(exact), suggestions: [] });
-  }
-  const result = await getDatabase(c).statement(`
-    SELECT g.id, g.slug, g.display_name, g.english_name, g.updated_at, g.entity_kind,
-      0 AS rule_count,
-      GROUP_CONCAT(DISTINCT a.alias) AS aliases_str
-    FROM games g
-    LEFT JOIN game_aliases a ON a.game_id = g.id
-    WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
-      AND (g.normalized_name LIKE ? OR a.normalized_alias LIKE ?)
-    GROUP BY g.id
-    ORDER BY g.display_name
-    LIMIT 5
-  `).bind(`%${name}%`, `%${name}%`).all<GameRow>();
-  setNoCache(c);
-  return c.json({ game: null, suggestions: (result.results ?? []).map(toGame) });
 });
 
 gamesRoutes.post('/api/games/:id/view', async (c) => {

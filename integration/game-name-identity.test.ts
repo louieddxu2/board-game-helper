@@ -79,8 +79,6 @@ describe('stored game name identities', () => {
       expect(await response.json()).toMatchObject({ gameId: targetId, gameCreated: false });
       expect(sqlite.prepare('SELECT COUNT(*) AS count FROM games').get()).toEqual(before);
       expect(sqlite.prepare('SELECT game_id FROM rules WHERE statement = ?').get('規則必須保留。')).toEqual({ game_id: targetId });
-      const resolved = await app.request('https://rules.example/api/games/resolve?name=Mountain%20Goats%3A%20Legacy', {}, env);
-      expect(await resolved.json()).toMatchObject({ game: { id: targetId } });
       expect(sqlite.prepare('SELECT display_name FROM games WHERE id = ?').get(targetId)).toEqual({ display_name: 'Mountain Goats: Legacy' });
     } finally { sqlite.close(); }
   });

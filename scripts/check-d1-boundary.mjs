@@ -172,10 +172,10 @@ if (!apiSource.includes('getCachedRuleImportance(userId, gameId)')) {
   violations.push('src/lib/api.ts: personal vote state must pass through the local cache before network access');
 }
 
-const publicGameSearchHandler = gamesRouteSource.split("gamesRoutes.get('/api/games/search'")[1]?.split("gamesRoutes.get('/api/game-catalog'")[0] ?? '';
-const combinedSearchHandler = tagsRouteSource.split("tagsRoutes.get('/api/search'")[1]?.split("tagsRoutes.get('/api/tags'")[0] ?? '';
-if (/\bFROM\s+(?:games|game_aliases)\b/i.test(publicGameSearchHandler + combinedSearchHandler)) {
-  violations.push('worker routes: public search handlers must read the catalog snapshot, not games or aliases');
+// Search filters the synchronized catalog in the browser. Per-query public
+// search endpoints were removed: anyone could call them to spend D1 reads.
+if (/\.get\('\/api\/(?:games\/search|games\/resolve|search)'/.test(gamesRouteSource + tagsRouteSource)) {
+  violations.push('worker routes: per-query public search endpoints are removed; filter the synchronized catalog locally');
 }
 if (!apiSource.includes("transportRequest<GameCatalogPayload>('/api/game-catalog'")) {
   violations.push('src/lib/api.ts: public game search must bootstrap through the weekly game catalog snapshot endpoint');

@@ -8,25 +8,10 @@ import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normaliz
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanDetectionKeywords, cleanRuleCategories, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
-import { gameCatalogPayload, queryGameCatalogSnapshot } from '../data/gameCatalog';
-import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
 import { publicTagCatalogChangesPayload, queryPublicTagCatalogChanges } from '../data/tagCatalog';
 
 const tagsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
-
-tagsRoutes.get('/api/search', async (c) => {
-  const rawQuery = (c.req.query('q') ?? '').trim().slice(0, 100);
-  if (!rawQuery) return c.json({ games: [], rules: [] });
-  const snapshot = await queryGameCatalogSnapshot(getDatabase(c));
-  logD1Query(c, 'game_catalog_snapshot_state', snapshot.state);
-  logD1Query(c, 'game_catalog_snapshot_chunks', snapshot.chunks);
-  setNoCache(c);
-  return c.json({
-    games: filterGameCatalog(gameCatalogPayload(snapshot).games, rawQuery, 8),
-    rules: [],
-  });
-});
 
 tagsRoutes.get('/api/tags', async (c) => {
   const requestedIds = Array.from(new Set((c.req.query('ids') ?? '')
