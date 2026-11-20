@@ -6,8 +6,7 @@ import { detectAuthSensitiveReleaseChanges, missingRequiredSecrets, parseSecretL
 import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
 import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
 import { deferWorkspaceD1Removal } from './workspace-d1-release.mjs';
-
-const DEPLOY_STATE_PATH = '.wrangler/last-successful-deploy-sha';
+import { DEPLOY_STATE_PATH } from './release-test-scope.mjs';
 
 const run = (command, options = {}) => {
   try {
@@ -72,7 +71,7 @@ const askQuestion = (query) => {
 };
 
 const main = async () => {
-  console.log('🧪 正在執行不可略過的發布測試（登入、建立／編輯規則、完整 D1 migration 與瀏覽器流程）...');
+  console.log('🧪 正在執行不可略過的發布測試（登入、建立／編輯規則、完整 D1 migration 與瀏覽器流程；未動到頁面時略過 @ui 版面測試）...');
   execSync('npm run test:release', { stdio: 'inherit' });
   console.log('✅ 發布測試全部通過。');
   await ensureCloudflareAuth();

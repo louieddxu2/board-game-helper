@@ -3,9 +3,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { execSync, execFileSync, ensureCloudflareAuth, listPendingRemoteMigrations, writeFileSync, rmSync } = vi.hoisted(() => ({
+const { execSync, execFileSync, ensureCloudflareAuth, listPendingRemoteMigrations, writeFileSync, rmSync, changedFilesSinceLastDeploy } = vi.hoisted(() => ({
   execSync: vi.fn(), execFileSync: vi.fn(), ensureCloudflareAuth: vi.fn(),
-  listPendingRemoteMigrations: vi.fn(), writeFileSync: vi.fn(), rmSync: vi.fn(),
+  listPendingRemoteMigrations: vi.fn(), writeFileSync: vi.fn(), rmSync: vi.fn(), changedFilesSinceLastDeploy: vi.fn(),
 }));
 vi.mock('child_process', () => ({ execSync, execFileSync }));
 vi.mock('fs', async (importOriginal) => ({
@@ -14,6 +14,9 @@ vi.mock('fs', async (importOriginal) => ({
 vi.mock('./cloudflare-login.mjs', () => ({ ensureCloudflareAuth }));
 vi.mock('./d1-migration-list.mjs', () => ({ listPendingRemoteMigrations }));
 vi.mock('./check-d1-trigger-fanout.mjs', () => ({ checkD1TriggerFanout: vi.fn() }));
+vi.mock('./release-test-scope.mjs', async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(), changedFilesSinceLastDeploy,
+}));
 
 const runProductionRelease = () => {
   // @ts-expect-error The release entry point is executable plain JavaScript.
@@ -107,6 +110,7 @@ describe('core release gate wiring', () => {
     try {
       execSync.mockImplementation(() => '');
       execFileSync.mockImplementation(() => '');
+      changedFilesSinceLastDeploy.mockReturnValue(['src/pages/HomePage.tsx', 'worker/routes/home.ts']);
       // @ts-expect-error The browser release runner is executable plain JavaScript.
       await import('./run-core-e2e.mjs');
 
@@ -125,6 +129,26 @@ describe('core release gate wiring', () => {
       expect(execSync.mock.invocationCallOrder[0]).toBeLessThan(execFileSync.mock.invocationCallOrder[0]);
       expect(rmSync).toHaveBeenCalledOnce();
       expect(execFileSync.mock.invocationCallOrder.at(-1)).toBeLessThan(rmSync.mock.invocationCallOrder[0]);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('a release without page changes since the last deploy runs only the gate browser tests', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubEnv('RELEASE_GATE_ONLY', '0');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      execSync.mockImplementation(() => '');
+      execFileSync.mockImplementation(() => '');
+      changedFilesSinceLastDeploy.mockReturnValue(['worker/scorepadApi.ts', 'migrations/0130_game_catalog_scorepad_fields.sql', 'docs/scorepad-integration.md']);
+      // @ts-expect-error The browser release runner is executable plain JavaScript.
+      await import('./run-core-e2e.mjs');
+      const suites = execFileSync.mock.calls.map(([, args]) => args.slice(1));
+      expect(suites[1]).toEqual(['test', '--grep-invert', '@ui']);
+      expect(suites[2]).toEqual(expect.arrayContaining(['tests/workspace-startup/input-focus.spec.ts']));
     } finally {
       vi.unstubAllEnvs();
       vi.restoreAllMocks();
