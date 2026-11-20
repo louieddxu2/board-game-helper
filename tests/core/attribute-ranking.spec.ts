@@ -92,6 +92,21 @@ const rankingDrag = async (page: Page, list: Locator) => {
 };
 
 test('stores a complete ranking ballot once through the real API after touch, lost acknowledgement and retry', async ({ page, context }) => {
+  // Earlier core tests save real votes; their scores would add reference games
+  // whenever this test draws the same attribute. Blank only the local scores
+  // used to pick references; the ballot itself still goes to the real API.
+  await page.route('**/api/attributes/table', async (route) => {
+    const response = await route.fetch();
+    const catalog: AttributeCatalogPayload = await response.json();
+    await route.fulfill({ response, json: { ...catalog, values: [] } });
+  });
+  await page.route('**/api/attributes/table/changes?*', (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: {
+      changes: [], throughVersion: Number(query.get('after')), hasMore: false,
+      snapshot: { generation: Number(query.get('generation')), generatedAt: Number(query.get('generatedAt')) },
+    } });
+  });
   const requests: { responseId: string; ranking: { orderedSubjectIds: string[]; referenceSubjectIds: string[] } }[] = [];
   await page.route('**/api/attributes/responses', async (route) => {
     requests.push(route.request().postDataJSON());
