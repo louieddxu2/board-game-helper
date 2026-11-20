@@ -2,8 +2,10 @@ import type { Database } from './database';
 
 // Visitors and members other than editors and admins share one daily budget of
 // D1 rows written, so a script cannot spend the free plan's 100,000 daily
-// writes. Reading is never limited. The day follows D1's quota reset (UTC).
-export const DAILY_SHARED_WRITE_LIMIT = 50_000;
+// writes. The other 20,000 rows stay for editors, admins and scheduled work,
+// including a full weekly attribute replay. Reading is never limited. The day
+// follows D1's quota reset (UTC).
+export const DAILY_SHARED_WRITE_LIMIT = 80_000;
 export const WRITE_BUDGET_WARNING_RATIO = 0.8;
 export const WRITE_BUDGET_EXHAUSTED = 'daily_write_budget_exhausted';
 
