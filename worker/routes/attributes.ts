@@ -152,10 +152,12 @@ attributesRoutes.post('/api/attributes/responses', async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message === 'attribute_response_empty' ? 'attribute_response_empty' : 'invalid_input' }, 400);
   const db = getDatabase(c);
   try {
+    const user = c.get('user');
     const result = await saveAttributeResponse(getDatabase(c), {
       ...parsed.data,
-      actorId: c.get('user')?.id ?? null,
-      actorIsAuthorized: c.get('user')?.roles.some((role) => role === 'admin' || role === 'editor') ?? false,
+      actorId: user?.id ?? null,
+      actorIsAuthorized: user?.roles.some((role) => role === 'admin' || role === 'editor') ?? false,
+      actorName: user?.showNickname && user.nickname != null ? user.nickname : '匿名玩家',
       timestamp: now(),
     });
     setD1MetricsHeader(c, db);

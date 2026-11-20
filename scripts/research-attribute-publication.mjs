@@ -74,6 +74,7 @@ for (const filename of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject'
     if (!name) continue;
     for (const migration of migrations) {
       if (migration.startsWith('0128_') && !name.startsWith('lean_') && !name.startsWith('inline_lean_')) continue;
+      if (migration.startsWith('0129_') && !name.startsWith('inline_')) continue;
       sqlite.exec(readFileSync(join('migrations', migration), 'utf8'));
     }
     if (name.startsWith('lean_') || name.startsWith('inline_lean_')) {

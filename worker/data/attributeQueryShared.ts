@@ -16,10 +16,6 @@ export const ATTRIBUTE_ACTIVITY_FEED_LIMIT = 5;
 
 export const ATTRIBUTE_TABLE_PAGE_SIZE = 50;
 
-export const ATTRIBUTE_RESPONSE_MAX_READ_ROWS = 40;
-
-export const ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS = 30;
-
 export const ATTRIBUTE_RESPONSE_LOCK_PREFIX = 'attribute-vote';
 
 export const ATTRIBUTE_RESPONSE_LOCK_TTL_MS = 15_000;
@@ -263,6 +259,8 @@ export interface AttributeResponseInput {
   sessionId: string;
   actorId: string | null;
   actorIsAuthorized?: boolean;
+  /** Server session snapshot only; never accepted by the public request schema. */
+  actorName?: string;
   timestamp: number;
 }
 

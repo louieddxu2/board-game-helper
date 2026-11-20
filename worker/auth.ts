@@ -58,9 +58,12 @@ const userById = async (db: Database, userId: string): Promise<SessionUser | und
 
 const sessionUser = async (db: Database, token: string): Promise<SessionUser | undefined> => {
   const tokenHash = await sha256Hex(token);
+  // Seed-era statistics can favor scanning users as membership grows. Keep
+  // both lookups on their primary keys without caching sessions or roles.
   const row = await db.statement(`
     SELECT u.id, u.masked_email, u.nickname, u.show_nickname, s.expires_at
-    FROM sessions s JOIN users u ON u.id = s.user_id
+    FROM sessions s INDEXED BY sqlite_autoindex_sessions_1
+    CROSS JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = s.user_id
     WHERE s.id_hash = ?
   `).bind(tokenHash).first<{
     id: string;

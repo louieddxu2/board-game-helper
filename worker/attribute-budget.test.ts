@@ -1,15 +1,9 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest';
-import { ATTRIBUTE_RESPONSE_MAX_READ_ROWS, ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS, saveAttributeResponse } from './data/attributes';
+import { saveAttributeResponse } from './data/attributes';
 import { createHarness, scoreRows } from '../scripts/attributeReplayTestHarness';
 
-describe('attribute hot-path budgets and receipts', () => {
-  test('response row budgets stay below the product limit', () => {
-    expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS).toBeLessThan(100);
-    expect(ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
-    expect(ATTRIBUTE_RESPONSE_MAX_READ_ROWS + ATTRIBUTE_RESPONSE_MAX_WRITE_ROWS).toBeLessThan(100);
-  });
-
+describe('attribute canonical receipts (D1 budgets: check:attribute-cost)', () => {
   test.each([undefined, 'high', 'low'] as const)('a %s response stores canonical answers once', async (highPole) => {
     const h = createHarness();
     try {

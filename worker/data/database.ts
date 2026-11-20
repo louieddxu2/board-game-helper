@@ -39,6 +39,7 @@ class Statement implements DatabaseStatement {
     const result = await this.raw.all<T>();
     this.metrics.queries += 1;
     this.metrics.rowsRead += Number(result.meta?.rows_read ?? 0);
+    this.metrics.rowsWritten += Number(result.meta?.rows_written ?? result.meta?.changes ?? 0);
     return result;
   }
 

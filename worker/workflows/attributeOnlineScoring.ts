@@ -1,7 +1,7 @@
 import { expandStoredRankingResponse } from '../../src/shared/attributeRankingBallot';
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
-import { ATTRIBUTE_REPLAY_LOCK_NAME } from '../data/attributeQueryShared';
+import { ATTRIBUTE_REPLAY_LOCK_NAME, D1_SAFE_BOUND_PARAMETER_COUNT } from '../data/attributeQueryShared';
 import { attributeScoreWrites } from '../data/attributeScoreWrites';
 import { prepareAttributeScorePublication } from '../data/attributeCatalogPublication';
 import { stateToMatrixValue } from '../data/attributeResponseContext';
@@ -54,15 +54,25 @@ const prepareScores = async (db: Database, receipts: PendingResponse[]) => {
     if (!row.attribute_id) continue;
     for (const id of [row.subject_a_id, row.subject_b_id]) if (id) targets.set(stateKey(id, row.attribute_id), [id, row.attribute_id]);
   }
+  const targetRows = [...targets.values()];
+  const attributeId = targetRows[0]?.[1];
+  const singleAttribute = targets.size + 1 <= D1_SAFE_BOUND_PARAMETER_COUNT
+    && targetRows.every(([, id]) => id === attributeId);
+  const source = singleAttribute
+    ? `FROM attributes attribute CROSS JOIN attribute_subjects subject
+       LEFT JOIN attribute_score_states state ON state.subject_id = subject.id AND state.attribute_id = attribute.id
+       WHERE attribute.id = ? AND attribute.is_active = 1 AND subject.id IN (${targetRows.map(() => '?').join(', ')})`
+    : `FROM json_each(?) target
+       CROSS JOIN attribute_subjects subject ON subject.id = target.value ->> 0
+       CROSS JOIN attributes attribute ON attribute.id = target.value ->> 1 AND attribute.is_active = 1
+       LEFT JOIN attribute_score_states state ON state.subject_id = subject.id AND state.attribute_id = attribute.id`;
   const result = targets.size ? await db.statement(`
     SELECT subject.id AS subject_id, attribute.id AS attribute_id, state.score, state.rating_deviation,
       state.direct_sum, state.direct_count, state.comparison_count, state.decisive_comparison_count,
       state.evidence_count, state.updated_at
-    FROM json_each(?) target
-    CROSS JOIN attribute_subjects subject ON subject.id = target.value ->> 0
-    CROSS JOIN attributes attribute ON attribute.id = target.value ->> 1 AND attribute.is_active = 1
-    LEFT JOIN attribute_score_states state ON state.subject_id = subject.id AND state.attribute_id = attribute.id
-  `).bind(JSON.stringify([...targets.values()])).all<StateRow>() : { results: [] };
+    ${source}
+  `).bind(...(singleAttribute ? [attributeId, ...targetRows.map(([subject]) => subject)] : [JSON.stringify(targetRows)]))
+    .all<StateRow>() : { results: [] };
   const states = new Map<string, OnlineAttributeState>();
   const timestamps = new Map<string, number>();
   for (const row of result.results ?? []) {

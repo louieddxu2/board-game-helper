@@ -39,7 +39,7 @@ test('derives actor weight authority from the server session, not JSON fields', 
   vi.mocked(saveAttributeResponse).mockResolvedValue({ updatedValues: [], activities: [] });
   const app = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
   app.use('*', async (c, next) => {
-    c.set('user', { id: 'editor-1', roles: ['editor'] });
+    c.set('user', { id: 'editor-1', roles: ['editor'], nickname: '編輯者', showNickname: true });
     await next();
   });
   app.route('/', attributesRoutes);
@@ -49,7 +49,7 @@ test('derives actor weight authority from the server session, not JSON fields', 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       subjectAId: 'a', subjectBId: 'b', attributeId: 'score', responseId: 'response-456',
-      sessionId: 'session-456', comparison: 'A_HIGHER', actorId: 'guest-spoof', actorIsAuthorized: false,
+      sessionId: 'session-456', comparison: 'A_HIGHER', actorId: 'guest-spoof', actorIsAuthorized: false, actorName: '偽造名稱',
     }),
   });
 
@@ -57,5 +57,6 @@ test('derives actor weight authority from the server session, not JSON fields', 
   expect(saveAttributeResponse).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
     actorId: 'editor-1',
     actorIsAuthorized: true,
+    actorName: '編輯者',
   }));
 });

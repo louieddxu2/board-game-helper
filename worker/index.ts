@@ -45,8 +45,14 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.use('/api/*', async (c, next) => {
-  c.set('database', createDatabase(c.env));
+  const db = createDatabase(c.env);
+  c.set('database', db);
   await next();
+  // Measure after every downstream middleware, including authentication and
+  // the post-mutation outbox flush. Route-local headers are only partial.
+  const metrics = db.metrics();
+  c.header('X-D1-Rows-Read', String(metrics.rowsRead));
+  c.header('X-D1-Rows-Written', String(metrics.rowsWritten));
 });
 
 app.use('/sitemap.xml', async (c, next) => {
