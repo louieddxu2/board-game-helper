@@ -181,7 +181,7 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
   const note = body.data.note?.trim() || null;
   const timestamp = now();
 
-  const existingUser = await getDatabase(c).statement('SELECT id FROM users WHERE email_hash IN (?, ?)')
+  const existingUser = await getDatabase(c).statement('SELECT id FROM users INDEXED BY idx_users_email_hash WHERE email_hash IN (?, ?)')
     .bind(emailHash, legacyEmailHash).first<{ id: string }>();
   if (existingUser) {
     await getDatabase(c).batch([

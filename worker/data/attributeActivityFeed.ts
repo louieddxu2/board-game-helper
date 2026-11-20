@@ -5,6 +5,10 @@ import type { ActivityFeedRow } from './attributeQueryShared';
 import { ATTRIBUTE_ACTIVITY_FEED_LIMIT } from './attributeQueryShared';
 import type { Database } from './database';
 
+// Bound the history read: votes on deactivated attributes are skipped only
+// within this recent window, so a long run of them cannot force a deep scan.
+export const ATTRIBUTE_ACTIVITY_SCAN_LIMIT = ATTRIBUTE_ACTIVITY_FEED_LIMIT * 10;
+
 export const parseAttributeActivityFeedEntry = (raw: string, responseId?: string): AttributeActivity[] => {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -27,12 +31,17 @@ export const parseAttributeActivityFeedEntry = (raw: string, responseId?: string
 
 export const queryRecentActivities = async (db: Database): Promise<AttributeActivity[]> => {
   const result = await db.statement(`
-    SELECT response_id AS id, activity_json AS payload_json
-    FROM attribute_vote_responses
+    SELECT recent.response_id AS id, recent.activity_json AS payload_json
+    FROM (
+      SELECT response_id, attribute_id, activity_json, created_at
+      FROM attribute_vote_responses INDEXED BY idx_attribute_vote_responses_recent
+      ORDER BY created_at DESC, response_id DESC
+      LIMIT ${ATTRIBUTE_ACTIVITY_SCAN_LIMIT}
+    ) recent
     JOIN attributes active_attribute
-      ON active_attribute.id = attribute_vote_responses.attribute_id
+      ON active_attribute.id = recent.attribute_id
       AND active_attribute.is_active = 1
-    ORDER BY created_at DESC, response_id DESC
+    ORDER BY recent.created_at DESC, recent.response_id DESC
     LIMIT ${ATTRIBUTE_ACTIVITY_FEED_LIMIT}
   `).all<ActivityFeedRow>();
   const activities = (result.results ?? [])

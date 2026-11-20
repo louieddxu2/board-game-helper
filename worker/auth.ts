@@ -126,8 +126,14 @@ const upsertGoogleUser = async (c: AppContext, profile: {
   const emailHash = await hashEmail(profile.email, c.env.EMAIL_HASH_SECRET);
   const legacyEmailHash = await legacyHashEmail(profile.email);
   const maskedEmail = maskEmail(profile.email);
-  const existing = await getDatabase(c).statement('SELECT id, google_sub FROM users WHERE google_sub = ? OR email_hash IN (?, ?)')
-    .bind(profile.sub, emailHash, legacyEmailHash)
+  // One OR across two indexes lets stale statistics pick a users table scan.
+  // Two pinned lookups keep the identity-first order of a multi-index OR.
+  const existing = await getDatabase(c).statement(`
+    SELECT id, google_sub FROM users INDEXED BY sqlite_autoindex_users_2 WHERE google_sub = ?
+    UNION ALL
+    SELECT id, google_sub FROM users INDEXED BY idx_users_email_hash WHERE email_hash IN (?, ?)
+    LIMIT 1
+  `).bind(profile.sub, emailHash, legacyEmailHash)
     .first<{ id: string; google_sub: string }>();
   if (existing && existing.google_sub !== profile.sub) {
     throw new Error('google_identity_conflict');

@@ -291,7 +291,7 @@ rulesRoutes.get('/api/rules/:id/revisions', requireUser, async (c) => {
   const revisions = await getDatabase(c).statement(`
     SELECT r.id, r.reason, r.created_at, r.previous_json, u.masked_email editor_email
     FROM rule_revisions r
-    LEFT JOIN users u ON u.id = r.edited_by
+    LEFT JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = r.edited_by
     WHERE r.rule_id = ?
     ORDER BY r.created_at DESC
   `).bind(c.req.param('id')).all<{ id: string; reason: string; created_at: number; previous_json: string; editor_email: string | null }>();

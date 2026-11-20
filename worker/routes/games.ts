@@ -8,7 +8,7 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { EXACT_GAME_NAME_IDS, gameRuleSelect, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, resolvePublicNicknames, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { gameCatalogChangesPayload, gameCatalogPayload, queryGameCatalogChanges, queryGameCatalogSnapshot } from '../data/gameCatalog';
 import { filterGameCatalog } from '../../src/lib/gameCatalog';
 import { logD1Query } from './shared';
@@ -92,7 +92,7 @@ gamesRoutes.get('/api/games/resolve', async (c) => {
     FROM games g
     LEFT JOIN game_aliases a ON a.game_id = g.id
     WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
-      AND (g.normalized_name = ? OR a.normalized_alias = ?)
+      AND g.id IN (${EXACT_GAME_NAME_IDS})
     GROUP BY g.id
     LIMIT 1
   `).bind(name, name).first<GameRow>();
@@ -158,7 +158,8 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
       ${includePrivate ? 'g.total_rule_count' : 'g.published_rule_count'} AS rule_count,
       g.published_rule_count, g.total_rule_count, g.latest_rule_updated_at
     FROM games g
-    LEFT JOIN users reviewer ON reviewer.id = g.reviewed_by
+    -- Seed-era statistics can favor scanning users; keep the lookup on its primary key.
+    LEFT JOIN users reviewer INDEXED BY sqlite_autoindex_users_1 ON reviewer.id = g.reviewed_by
     WHERE (g.id = ? OR g.slug = ?) AND g.merged_into_game_id IS NULL
       AND (g.visibility = 'public' OR ? = 1)
     LIMIT 1

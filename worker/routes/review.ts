@@ -200,7 +200,7 @@ reviewRoutes.get('/api/admin/review/batches', requireRole('admin'), async (c) =>
     SELECT b.id, b.name, b.source_type, b.status, b.base_dataset_version, b.proposal_count, b.pending_count,
       b.accepted_count, b.rejected_count,
       b.created_by, b.created_at, b.updated_at, COALESCE(u.nickname, u.masked_email) created_by_name
-    FROM review_batches b JOIN users u ON u.id = b.created_by
+    FROM review_batches b CROSS JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = b.created_by
     ORDER BY b.created_at DESC
   `).all<{
     id: string; name: string; source_type: string; status: ReviewBatch['status']; base_dataset_version: string | null;
@@ -254,7 +254,7 @@ reviewRoutes.get('/api/admin/review/proposals', requireRole('admin'), async (c) 
     FROM review_proposals p
     JOIN rules r ON r.id = p.target_id
     JOIN games g ON g.id = r.game_id
-    LEFT JOIN users u1 ON u1.id = p.created_by
+    LEFT JOIN users u1 INDEXED BY sqlite_autoindex_users_1 ON u1.id = p.created_by
     ${whereClause}
     ORDER BY p.id DESC
     LIMIT ?

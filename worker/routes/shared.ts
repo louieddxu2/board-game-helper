@@ -150,15 +150,29 @@ export const publicNicknameIds = (rows: RuleRow[]): string[] => Array.from(new S
   return [...(row.created_by ? [row.created_by] : []), ...(row.reviewed_by ? [row.reviewed_by] : []), ...editorIds];
 })));
 
+// An OR across games and their aliases scans every game. Bind the normalized
+// name twice: each branch searches its own index.
+export const EXACT_GAME_NAME_IDS = `
+  SELECT id FROM games INDEXED BY idx_games_normalized_name WHERE normalized_name = ?
+  UNION
+  SELECT game_id FROM game_aliases INDEXED BY idx_game_aliases_search WHERE normalized_alias = ?
+`;
+
+// D1 rejects statements with more than 100 bound parameters.
+export const NICKNAME_LOOKUP_BATCH_SIZE = 100;
+
 export const resolvePublicNicknames = async (db: Database, rows: RuleRow[]): Promise<Map<string, string>> => {
   const ids = publicNicknameIds(rows);
   if (!ids.length) return new Map();
-  const result = await db.statement(`
-    SELECT id, nickname FROM users
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += NICKNAME_LOOKUP_BATCH_SIZE) chunks.push(ids.slice(i, i + NICKNAME_LOOKUP_BATCH_SIZE));
+  // Pin the primary key so contributor lookups never become a users table scan.
+  const results = await Promise.all(chunks.map((chunk) => db.statement(`
+    SELECT id, nickname FROM users INDEXED BY sqlite_autoindex_users_1
     WHERE show_nickname = 1 AND nickname IS NOT NULL
-      AND id IN (${ids.map(() => '?').join(',')})
-  `).bind(...ids).all<{ id: string; nickname: string }>();
-  return new Map((result.results ?? []).map((user) => [user.id, user.nickname]));
+      AND id IN (${chunk.map(() => '?').join(',')})
+  `).bind(...chunk).all<{ id: string; nickname: string }>()));
+  return new Map(results.flatMap((result) => result.results ?? []).map((user) => [user.id, user.nickname]));
 };
 
 export const toRule = (row: RuleRow, tagMap = new Map<string, TagSummary>(), nicknameMap = new Map<string, string>()): RuleCard => {

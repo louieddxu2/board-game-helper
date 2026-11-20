@@ -26,13 +26,17 @@ homeRoutes.get('/api/home', async (c) => {
 
   const [popularGameIdsRaw, recentRaw] = await Promise.all([
     getDatabase(c).statement(`
-      SELECT views.game_id, SUM(views.view_count) AS view_count
-      FROM game_daily_view_counts views
-      JOIN games g ON g.id = views.game_id
-      WHERE views.view_date >= DATE('now', '-6 days')
-        AND g.visibility = 'public' AND g.merged_into_game_id IS NULL
-      GROUP BY views.game_id
-      ORDER BY view_count DESC, MAX(last_view_at) DESC
+      SELECT views.game_id, views.view_count
+      FROM (
+        -- Read only this week's view rows, then look up just the viewed games.
+        SELECT game_id, SUM(view_count) AS view_count, MAX(last_view_at) AS last_view_at
+        FROM game_daily_view_counts INDEXED BY idx_game_daily_view_counts_date
+        WHERE view_date >= DATE('now', '-6 days')
+        GROUP BY game_id
+      ) views
+      CROSS JOIN games g ON g.id = views.game_id
+      WHERE g.visibility = 'public' AND g.merged_into_game_id IS NULL
+      ORDER BY views.view_count DESC, views.last_view_at DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
     getDatabase(c).statement(`

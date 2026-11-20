@@ -43,9 +43,10 @@ export const queryPersonalHome = async (db: Database, userId: string): Promise<P
       SELECT g.id, g.slug, g.display_name,
         latest.id latest_rule_id, latest.statement latest_rule_statement,
         head.updated_at latest_rule_updated_at
-      FROM game_public_rule_heads head
-      JOIN games g ON g.id = head.game_id AND g.merged_into_game_id IS NULL
-      JOIN rules latest ON latest.id = head.rule_id
+      FROM game_public_rule_heads head INDEXED BY idx_game_public_rule_heads_recent
+      -- Walk the newest heads and stop after six instead of scanning every game.
+      CROSS JOIN games g ON g.id = head.game_id AND g.merged_into_game_id IS NULL
+      CROSS JOIN rules latest ON latest.id = head.rule_id
       ORDER BY head.updated_at DESC, head.rule_id DESC
       LIMIT 6
     `).all<FavoriteHomeRow>();

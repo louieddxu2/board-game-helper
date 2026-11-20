@@ -70,7 +70,7 @@ authRoutes.get('/api/account/modified-rules', requireUser, async (c) => {
     FROM rule_revisions rr
     JOIN rules r ON r.id = rr.rule_id
     JOIN games g ON g.id = r.game_id
-    LEFT JOIN users u ON u.id = rr.edited_by
+    LEFT JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = rr.edited_by
     WHERE r.created_by = ? AND rr.edited_by <> ?
     ORDER BY rr.created_at DESC, rr.id DESC
     LIMIT 100
