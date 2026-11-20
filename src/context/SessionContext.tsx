@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { api } from '../lib/api';
 import type { SessionUser } from '../shared/types';
+import type { WriteBudgetStatus } from '../lib/writeBudget';
 import { flushPendingSubmissions } from '../lib/pendingSync';
 
 export type MockRole = 'unauthenticated' | 'user' | 'editor' | 'admin' | null;
@@ -11,6 +12,8 @@ interface SessionState {
   loading: boolean;
   googleClientId: string | null;
   localDevLogin: boolean;
+  /** Only sent to admins: today's shared write budget for visitors and members. */
+  writeBudget: WriteBudgetStatus | null;
   refresh(): Promise<void>;
   devLogin(): Promise<void>;
   /** Resolves true when this sign-in created the account. */
@@ -30,6 +33,7 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
   const [loading, setLoading] = useState(true);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [localDevLogin, setLocalDevLogin] = useState(false);
+  const [writeBudget, setWriteBudget] = useState<WriteBudgetStatus | null>(null);
   const [mockRole, setMockRoleState] = useState<MockRole>(() => {
     try {
       const saved = sessionStorage.getItem('mock_role_override');
@@ -52,6 +56,7 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
       setUser(response.user);
       setGoogleClientId(response.googleClientId);
       setLocalDevLogin(response.localDevLogin);
+      setWriteBudget(response.writeBudget ?? null);
     } catch {
       // The local Workspace must still boot when the app shell is opened offline.
       // Keep any already-known session state; an unavailable network is not a logout.
@@ -91,6 +96,7 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
     loading,
     googleClientId,
     localDevLogin,
+    writeBudget,
     refresh,
     canEdit,
     isAdmin,
@@ -107,9 +113,10 @@ export const SessionProvider = ({ children }: PropsWithChildren) => {
         // The local UI must not keep presenting an authenticated session when
         // the server-side logout request is unavailable or fails.
         setUser(null);
+        setWriteBudget(null);
       }
     },
-  }), [effectiveUser, user, loading, googleClientId, localDevLogin, refresh, canEdit, isAdmin, realIsAdmin, activeMockRole, setMockRole]);
+  }), [effectiveUser, user, loading, googleClientId, localDevLogin, writeBudget, refresh, canEdit, isAdmin, realIsAdmin, activeMockRole, setMockRole]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 };

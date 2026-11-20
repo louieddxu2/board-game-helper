@@ -110,3 +110,9 @@
     max-width: 100%;
   }
 }
+
+/* ===== Daily write budget ===== */
+.write-budget-notice { max-width: 1080px; margin: 12px auto; padding: 12px 16px; border-radius: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; background: #f5dfad; color: #5f481a; line-height: 1.5; }
+.write-budget-notice.is-admin { display: grid; background: #f6d3cf; color: #6b1d16; }
+.write-budget-notice .link-button { color: inherit; font-weight: 800; }
+@media (max-width: 760px) { .write-budget-notice { margin: 10px 14px; } }

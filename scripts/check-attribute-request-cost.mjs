@@ -11,19 +11,19 @@ import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from '../node_modules/wrangler/node_modules/miniflare/dist/src/index.js';
 
 const cases = [
-  { id: 'pair-guest', pair: true, budget: [65, 17] },
-  { id: 'pair-member', pair: true, member: true, budget: [70, 17] },
-  { id: 'pair-editor-direct', pair: true, member: true, editor: true, direct: true, budget: [75, 18] },
-  { id: 'ranking-guest', budget: [125, 31] },
-  { id: 'ranking-member', member: true, budget: [130, 31] },
-  { id: 'ranking-many-users', member: true, manyUsers: true, budget: [130, 31] },
-  { id: 'ranking-editor-references', member: true, editor: true, references: true, budget: [135, 31] },
-  { id: 'ranking-metadata', dirty: true, budget: [180, 32] },
-  { id: 'ranking-concurrent', concurrent: true, budget: [100, 20] },
-  { id: 'ranking-mixed', concurrent: true, mixed: true, budget: [150, 25] },
-  { id: 'ranking-disjoint', concurrent: true, disjoint: true, budget: [175, 65] },
-  { id: 'ranking-history', concurrent: true, history: true, budget: [100, 20] },
-  { id: 'ranking-large', large: true, budget: [2000, 350] },
+  { id: 'pair-guest', pair: true, budget: [68, 19] },
+  { id: 'pair-member', pair: true, member: true, budget: [73, 19] },
+  { id: 'pair-editor-direct', pair: true, member: true, editor: true, direct: true, budget: [78, 20] },
+  { id: 'ranking-guest', budget: [128, 33] },
+  { id: 'ranking-member', member: true, budget: [133, 33] },
+  { id: 'ranking-many-users', member: true, manyUsers: true, budget: [133, 33] },
+  { id: 'ranking-editor-references', member: true, editor: true, references: true, budget: [138, 33] },
+  { id: 'ranking-metadata', dirty: true, budget: [183, 34] },
+  { id: 'ranking-concurrent', concurrent: true, budget: [103, 22] },
+  { id: 'ranking-mixed', concurrent: true, mixed: true, budget: [153, 27] },
+  { id: 'ranking-disjoint', concurrent: true, disjoint: true, budget: [178, 67] },
+  { id: 'ranking-history', concurrent: true, history: true, budget: [103, 22] },
+  { id: 'ranking-large', large: true, budget: [2003, 352] },
 ];
 const args = process.argv.slice(2);
 const baseline = args.find((arg) => arg.startsWith('--baseline='))?.slice(11);

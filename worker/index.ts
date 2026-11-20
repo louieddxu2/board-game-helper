@@ -7,6 +7,7 @@ import { flushCatalogOutbox } from './data/catalogOutbox';
 import { rebuildGameCatalog } from './data/gameCatalog';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
+import { chargeWriteBudget, isWriteBudgetExhausted, writeBudgetExhaustedPayload } from './data/writeBudget';
 import { cleanupAttributeActivityFeed } from './data/attributes';
 import { cleanupAttributeCatalogDeltas } from './data/catalogRetention';
 import { runWeeklyAttributeRebuild } from './workflows/attributeWeeklyRebuild';
@@ -101,6 +102,30 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.use('/api/*', sessionMiddleware);
+
+// Visitors and members share one daily D1 write budget; editors and admins are
+// never limited, and reading is never limited. Logging out and deleting an
+// account always work. Google sign-in checks the budget itself, after it knows
+// whether the account belongs to an editor.
+const WRITE_BUDGET_EXEMPT = new Set(['POST /api/logout', 'POST /api/auth/dev', 'DELETE /api/account']);
+app.use('/api/*', async (c, next) => {
+  const method = c.req.method;
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return next();
+  const path = new URL(c.req.url).pathname;
+  const roles: string[] = c.get('user')?.roles ?? [];
+  if (WRITE_BUDGET_EXEMPT.has(`${method} ${path}`) || roles.includes('editor') || roles.includes('admin')) return next();
+  const db = getDatabase(c);
+  if (path !== '/api/auth/google' && await isWriteBudgetExhausted(db)) {
+    c.header('Cache-Control', 'no-store');
+    return c.json(writeBudgetExhaustedPayload(), 429);
+  }
+  await next();
+  try {
+    await chargeWriteBudget(db, db.metrics?.().rowsWritten ?? 0);
+  } catch (error) {
+    console.error('write_budget_charge_failed', error);
+  }
+});
 
 app.use('/api/*', async (c, next) => {
   await next();

@@ -6,6 +6,7 @@ import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
 import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
 import { requireAttributeReplayAfterChange } from './data/attributeVoteWeights';
+import { isWriteBudgetExhausted, WRITE_BUDGET_EXHAUSTED } from './data/writeBudget';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const SESSION_COOKIE = 'wbr_session';
@@ -216,8 +217,21 @@ export const verifyGoogleIdentity = async (
   };
 };
 
+// When the shared daily write budget is spent, only editors, admins and the
+// bootstrap admin may still sign in: signing in writes a session row.
+const assertSignInAllowed = async (c: AppContext, profile: { sub: string; email: string }) => {
+  const db = getDatabase(c);
+  if (!await isWriteBudgetExhausted(db)) return;
+  if (c.env.BOOTSTRAP_ADMIN_EMAIL && normalizeEmail(profile.email) === normalizeEmail(c.env.BOOTSTRAP_ADMIN_EMAIL)) return;
+  const existing = await db.statement('SELECT id FROM users INDEXED BY sqlite_autoindex_users_2 WHERE google_sub = ?')
+    .bind(profile.sub).first<{ id: string }>();
+  const roles = existing ? await rolesForUser(db, existing.id) : [];
+  if (!roles.some((role) => role === 'editor' || role === 'admin')) throw new Error(WRITE_BUDGET_EXHAUSTED);
+};
+
 const authenticateGoogleCredential = async (c: AppContext, credential: string): Promise<{ userId: string; user: SessionUser; firstLogin: boolean }> => {
   const profile = await verifyGoogleIdentity(credential, c.env);
+  await assertSignInAllowed(c, profile);
   const { userId, created } = await upsertGoogleUser(c, profile);
   const user = await userById(getDatabase(c), userId);
   if (!user) throw new Error('session_creation_failed');

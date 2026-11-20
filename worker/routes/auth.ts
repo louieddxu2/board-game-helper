@@ -9,6 +9,7 @@ import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewCo
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
 import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { deleteAccount, queryAccountDeletionSummary } from '../data/accountDeletion';
+import { queryWriteBudgetStatus, WRITE_BUDGET_EXHAUSTED, writeBudgetExhaustedPayload } from '../data/writeBudget';
 
 const authRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -20,12 +21,17 @@ const nicknameSchema = z.object({
   { message: 'invalid_nickname', path: ['nickname'] },
 );
 
-authRoutes.get('/api/session', (c) => c.json({
-  user: c.get('user') ?? null,
-  googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
-  googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null,
-  localDevLogin: ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname),
-}));
+authRoutes.get('/api/session', async (c) => {
+  const user = c.get('user') ?? null;
+  return c.json({
+    user,
+    googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
+    googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null,
+    localDevLogin: ['localhost', '127.0.0.1'].includes(new URL(c.req.url).hostname),
+    // Admins see the shared daily write budget on every page load (one row read).
+    ...(user?.roles.includes('admin') ? { writeBudget: await queryWriteBudgetStatus(getDatabase(c)) } : {}),
+  });
+});
 
 authRoutes.get('/api/account', requireUser, async (c) => {
   const user = c.get('user')!;
@@ -155,7 +161,12 @@ authRoutes.post('/api/auth/google', async (c) => {
   if (typeof body.credential !== 'string' || body.credential.length > 10_000) {
     return c.json({ error: 'invalid_credential' }, 400);
   }
-  return c.json(await signInWithGoogle(c, body.credential));
+  try {
+    return c.json(await signInWithGoogle(c, body.credential));
+  } catch (error) {
+    if (error instanceof Error && error.message === WRITE_BUDGET_EXHAUSTED) return c.json(writeBudgetExhaustedPayload(), 429);
+    throw error;
+  }
 });
 
 authRoutes.post('/api/auth/dev', async (c) => {

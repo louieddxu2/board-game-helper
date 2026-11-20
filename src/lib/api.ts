@@ -4,6 +4,7 @@ import { filterGameCatalog, isStandaloneGame } from './gameCatalog';
 import { homeContentKey } from './homeCache';
 import { withReadTimeout } from './readTimeout';
 import type { AttributeRankingBallot } from '../shared/attributeRankingBallot';
+import { announceWriteBudgetExhausted, WRITE_BUDGET_EXHAUSTED, type WriteBudgetStatus } from './writeBudget';
 
 export class ApiError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
@@ -31,8 +32,11 @@ const transportResponse = async <T>(path: string, init: RequestInit | undefined,
   const body = await response.json().catch(error => {
     if (init?.signal?.aborted) throw error;
     return {};
-  }) as T & { error?: string };
-  if (!response.ok) throw new ApiError(body.error ?? 'request_failed', response.status);
+  }) as T & { error?: string; resetsAt?: number };
+  if (!response.ok) {
+    if (body.error === WRITE_BUDGET_EXHAUSTED) announceWriteBudgetExhausted(body.resetsAt);
+    throw new ApiError(body.error ?? 'request_failed', response.status);
+  }
   return { data: body, response };
 };
 
@@ -345,7 +349,7 @@ const home = async (onUpdated?: (data: HomePayload) => void): Promise<HomePayloa
 };
 
 export const api = {
-  session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; googleDriveClientId?: string | null; localDevLogin: boolean }>('/api/session', 'session is request-scoped authentication state'),
+  session: () => uncachedRead<{ user: SessionUser | null; googleClientId: string | null; googleDriveClientId?: string | null; localDevLogin: boolean; writeBudget?: WriteBudgetStatus }>('/api/session', 'session is request-scoped authentication state'),
   account: () => uncachedRead<AccountPayload>('/api/account', 'account data is user-specific'),
   accountCreatedRules: () => uncachedRead<AccountCreatedRulesPayload>('/api/account/created-rules', 'account rule history is loaded only when expanded'),
   accountModifiedRules: () => uncachedRead<AccountModifiedRulesPayload>('/api/account/modified-rules', 'account revision history is loaded only when expanded'),

@@ -5,6 +5,7 @@ import { localDb } from '../lib/localDb';
 import { SearchModal } from './SearchModal';
 import { HomeStats } from './HomeStats';
 import { ScrollToTop } from './ScrollToTop';
+import { WriteBudgetNotice } from './WriteBudgetNotice';
 
 const mockLabels: Record<string, string> = {
   unauthenticated: '未登入',
@@ -69,6 +70,7 @@ export const Layout = () => {
   if (location.pathname === '/attributes' || location.pathname === '/attributes/table') {
     return <div className="attribute-app-shell">
       <ScrollToTop />
+      <WriteBudgetNotice />
       <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     </div>;
   }
@@ -91,6 +93,7 @@ export const Layout = () => {
         <NavLink to={user ? '/account' : '/login'}>{user ? '帳號' : '登入'}</NavLink>
       </nav>
     </header>
+    <WriteBudgetNotice />
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true"><NavIcon name="search" /></span><small>搜尋</small></button>
