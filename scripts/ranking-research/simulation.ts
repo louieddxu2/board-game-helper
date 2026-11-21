@@ -14,7 +14,7 @@ export type Scenario = 'wide-noisy' | 'near-noisy' | 'wide-gaussian' | 'wide-con
 export const checkpoints = Array.from({ length: 17 }, (_, i) => i * 10);
 export const seedCount = 64;
 
-function randomSource(seed: number) {
+export function randomSource(seed: number) {
   let state = seed;
   return () => {
     state = (Math.imul(1664525, state) + 1013904223) >>> 0;
