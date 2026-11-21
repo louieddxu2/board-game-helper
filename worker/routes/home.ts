@@ -89,6 +89,7 @@ homeRoutes.get('/api/home', async (c) => {
     .map((id) => ({
       gameSlug: gameMap.get(id)!.slug,
       gameName: gameMap.get(id)!.displayName,
+      gameEnglishName: gameMap.get(id)!.englishName,
       ruleId: ruleIdsByGame.get(id)![0],
       moreRuleIds: ruleIdsByGame.get(id)!.slice(1),
       publishedRuleCount: gameMap.get(id)!.publishedRuleCount,

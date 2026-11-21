@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { homeContentKey } from '../lib/homeCache';
 import { localDb } from '../lib/localDb';
 import { hydrateRuleTags } from '../lib/tagHydration';
+import { secondaryGameName } from '../lib/gameSecondaryName';
 import { PersonalHomeCard } from '../components/PersonalHomeCard';
 import { PwaInstallButton } from '../components/PwaInstallButton';
 import { RecentGamesRail } from '../components/RecentGamesRail';
@@ -36,6 +37,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<{ game?: { displayName: string }; rules: Array<unknown> }>();
   const [recentGames, setRecentGames] = useState<Array<{ id: string; slug: string; displayName: string }>>([]);
+  const [catalogNames, setCatalogNames] = useState<Map<string, { englishName?: string; aliases?: string[] }>>(new Map());
   const [resolvedCards, setResolvedCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   const [resolvedRecentCards, setResolvedRecentCards] = useState<(RuleCardModel & { gameName: string; gameSlug: string })[]>([]);
   // Each featured game's next rules, stacked under its card in the rule window.
@@ -95,6 +97,10 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     let active = true;
     void localDb.getDraft().then((value) => { if (active && value && value.rules.some((rule) => rule.statement)) setDraft(value); }).catch(() => undefined);
     void localDb.recentGames().then((games) => { if (active) setRecentGames(games); }).catch(() => undefined);
+    // Aliases come only from a game list this device already keeps; the home page never downloads it for them.
+    void localDb.getLatestGameCatalog().then((catalog) => {
+      if (active && catalog) setCatalogNames(new Map(catalog.data.games.map(game => [game.slug, game])));
+    }).catch(() => undefined);
     return () => { active = false; };
   }, []);
 
@@ -192,6 +198,11 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
   const featuredGames = displayedFeaturedRules.filter((rule, index, rules) =>
     rules.findIndex(candidate => candidate.gameId === rule.gameId) === index);
   const featuredKey = featuredGames.map(rule => rule.id).join(',');
+  const altGameName = (rule: { gameName: string; gameSlug: string }) => {
+    const known = catalogNames.get(rule.gameSlug);
+    const englishName = home?.featured?.find(ref => ref.gameSlug === rule.gameSlug)?.gameEnglishName ?? known?.englishName;
+    return secondaryGameName(rule.gameName, englishName, known?.aliases);
+  };
 
   // The window holds a card with six lines of rule text, whatever the screen height, plus the 看更多 row below it.
   // A first card with fewer lines leaves the rest of that space for the game's next rule.
@@ -323,7 +334,7 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
       {hasHomeError && <div className="content-load-error" role="alert"><p>{hasVisibleHome ? '首頁暫時無法更新，已保留目前內容。' : '首頁內容暫時無法載入，請再試一次。'}</p><button type="button" className="button secondary" disabled={homeLoading || resolvingHome} onClick={() => { setHomeLoading(true); setHomeError(false); setHomeAttempt(value => value + 1); }}>重新載入首頁內容</button></div>}
       {/* A phone, one game at a time, names the games in a tab row; wider screens name each game above its own card. */}
       {featuredGames.length > 1 && <HomeGameTabs
-        games={featuredGames.map(rule => ({ id: rule.gameId, name: rule.gameName }))}
+        games={featuredGames.map(rule => ({ id: rule.gameId, name: rule.gameName, altName: altGameName(rule) }))}
         active={railIndex}
         onSelect={showRailGame}
       />}
@@ -353,9 +364,11 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
             rule.gameId === primary.gameId && rule.id !== primary.id && rule.status === 'published'
             && candidates.findIndex(candidate => candidate.id === rule.id) === index)];
           const publishedRuleCount = home?.featured?.find(ref => ref.gameSlug === primary.gameSlug)?.publishedRuleCount;
+          const altName = altGameName(primary);
           return <div className="home-rail-game" key={primary.id}>
             <Link className="home-rail-game-name" to={gameHref}>
               <span className="home-rail-game-title">{primary.gameName}</span>
+              {altName && <span className="home-rail-game-alt">{altName}</span>}
               {publishedRuleCount !== undefined && <span className="home-rail-game-count">{publishedRuleCount} 條規則</span>}
               <span className="home-rail-game-arrow" aria-hidden="true">›</span>
             </Link>

@@ -19,17 +19,18 @@ const showHome = async (page: Page) => {
   await expect(page.locator('.home-featured-rail .rule-card')).toHaveCount(rules.length);
 };
 
-const truncated = (page: Page, name: string) => page.getByRole('tab', { name, exact: true }).locator('span')
+const truncated = (page: Page, name: string) => page.getByRole('tab', { name, exact: true }).locator('.home-game-tab-line').first()
   .evaluate(element => element.scrollWidth > element.clientWidth + 1);
 
 test.describe('mobile game tabs', () => {
   test.use({ viewport: { width: 393, height: 851 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
 
-  test('names each game above its card instead of on it, and shows the selected name in full', { tag: '@ui' }, async ({ page }) => {
+  test('names each game above its card instead of on it, and scrolls a selected name that does not fit', { tag: '@ui' }, async ({ page }) => {
     await showHome(page);
     await expect(page.getByRole('tab')).toHaveCount(4);
     await expect(page.getByRole('tab', { exact: true, name: names[0] })).toHaveAttribute('aria-selected', 'true');
-    expect(await truncated(page, names[0])).toBe(false);
+    // Tabs keep one width; the selected one moves a name longer than eight characters instead of widening.
+    await expect(page.getByRole('tab', { exact: true, name: names[0] }).locator('.home-game-tab-line').first()).toHaveAttribute('data-marquee', '');
     await expect(page.locator('.home-featured-rail .rule-game-title')).toHaveCount(0);
     await expect(page.locator('.home-rail-dots')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);

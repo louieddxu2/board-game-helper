@@ -44,10 +44,22 @@
 /* Side padding is set from the end tabs so the row stops when the first or last tab is centred. */
 .home-game-tabs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 0 0 8px; padding: 2px 0; position: relative; }
 .home-game-tabs::-webkit-scrollbar { display: none; }
-.home-game-tabs > button { flex: none; min-height: 36px; max-width: calc(6em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 18px; transition: max-width .25s ease, transform .2s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.home-game-tabs > button > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Every tab has one width, up to eight full-width characters, and one height whether or not it has a second name. */
+.home-game-tabs > button { flex: none; display: flex; flex-direction: column; justify-content: center; min-width: 0; height: 36px; min-height: 36px; max-width: calc(8em + 30px); padding: 0 14px; border: 1px solid var(--green); border-radius: 18px; transition: transform .2s ease, background-color .2s ease, color .2s ease; background: var(--white); color: var(--green); font: inherit; font-size: 14px; font-weight: 700; line-height: 16px; cursor: pointer; }
+.home-game-tab-line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The smaller second name never widens the tab; it ends in an ellipsis until the tab is selected. */
+.home-game-tab-alt { contain: inline-size; align-self: stretch; font-size: 10px; font-weight: 500; line-height: 12px; opacity: .8; }
+/* A selected tab's line that does not fit moves back and forth so the whole name can be read. Its ends fade slightly so cut letters do not show hard edges. */
+.home-game-tabs { --marquee-fade: linear-gradient(to right, transparent, #000 6px, #000 calc(100% - 6px), transparent); }
+.home-game-tab-line[data-marquee] { text-overflow: clip; -webkit-mask-image: var(--marquee-fade); mask-image: var(--marquee-fade); }
+.home-game-tab-line[data-marquee] > span { display: inline-block; animation: home-tab-marquee var(--marquee-duration, 4s) linear infinite alternate; }
+@keyframes home-tab-marquee { 0%, 20% { transform: translateX(0); } 80%, 100% { transform: translateX(var(--marquee-shift, 0)); } }
+@media (prefers-reduced-motion: reduce) {
+  .home-game-tab-line[data-marquee] { text-overflow: ellipsis; -webkit-mask-image: none; mask-image: none; }
+  .home-game-tab-line[data-marquee] > span { display: inline; animation: none; }
+}
 /* The selected tab grows slightly without taking more room in the row. */
-.home-game-tabs > button.active { max-width: calc(100vw - 36px); transform: scale(1.08); background: var(--green); color: var(--white); }
+.home-game-tabs > button.active { transform: scale(1.08); background: var(--green); color: var(--white); }
 .home-game-tabs > button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
 /* Each game's column: its name, then its window of rules filling the rest of the rail's height. */
 .home-rail-game { display: flex; flex-direction: column; gap: 8px; height: 100%; min-width: 0; }
@@ -57,10 +69,12 @@
 @media (min-width: 768px) {
   .home-game-tabs { display: none; }
   /* A plain heading for the column, in line with the card's text: the name, how many rules it has, and a link cue. */
-  .home-rail-game-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 4px 14px 0; color: var(--ink); text-decoration: none; }
-  .home-rail-game-title { overflow: hidden; min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-  .home-rail-game-count { flex: none; color: var(--muted); font-size: 13px; }
-  .home-rail-game-arrow { flex: none; margin-left: auto; color: var(--green); font-size: 18px; line-height: 1; }
+  .home-rail-game-name { display: grid; grid-template-columns: minmax(0, max-content) max-content 1fr max-content; align-items: baseline; align-content: start; column-gap: 8px; min-width: 0; min-height: 44px; padding: 4px 14px 0; color: var(--ink); text-decoration: none; }
+  .home-rail-game-title { grid-area: 1 / 1; overflow: hidden; min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+  /* The other name takes a small second line in the room the 44px touch target already leaves under the title. */
+  .home-rail-game-alt { grid-area: 2 / 1 / 3 / 4; overflow: hidden; min-width: 0; color: var(--muted); font-size: 12px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+  .home-rail-game-count { grid-area: 1 / 2; color: var(--muted); font-size: 13px; }
+  .home-rail-game-arrow { grid-area: 1 / 4; color: var(--green); font-size: 18px; line-height: 1; }
   .home-rail-game-name:hover .home-rail-game-title { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
   .home-rail-game-name:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 6px; }
 }

@@ -4,11 +4,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { HomePage } from './HomePage';
 
-const mocks = vi.hoisted(() => ({ home: vi.fn(), rule: vi.fn(), getLatestHomeView: vi.fn(), cacheHomeView: vi.fn(), cacheRuleEntity: vi.fn() }));
+const mocks = vi.hoisted(() => ({ home: vi.fn(), rule: vi.fn(), getLatestHomeView: vi.fn(), getLatestGameCatalog: vi.fn(), cacheHomeView: vi.fn(), cacheRuleEntity: vi.fn() }));
 vi.mock('../context/SessionContext', () => ({ useSession: () => ({ user: null, loading: false, canEdit: false }) }));
 vi.mock('../lib/api', () => ({ api: { home: mocks.home, rule: mocks.rule } }));
 vi.mock('../lib/localDb', () => ({ localDb: {
-  getLatestHomeView: mocks.getLatestHomeView, getDraft: async () => undefined, recentGames: async () => [],
+  getLatestHomeView: mocks.getLatestHomeView, getDraft: async () => undefined, recentGames: async () => [], getLatestGameCatalog: mocks.getLatestGameCatalog,
   cacheRuleEntity: mocks.cacheRuleEntity, cacheHomeView: mocks.cacheHomeView,
 } }));
 vi.mock('../lib/tagHydration', () => ({ hydrateRuleTags: async (rules: unknown[]) => rules }));
@@ -24,6 +24,7 @@ beforeEach(() => {
   mocks.cacheHomeView.mockReset().mockResolvedValue(undefined);
   mocks.cacheRuleEntity.mockReset().mockResolvedValue(undefined);
   mocks.getLatestHomeView.mockResolvedValue(undefined);
+  mocks.getLatestGameCatalog.mockReset().mockResolvedValue(undefined);
 });
 
 test('replaces cold-load skeletons with a manual retry and leaves search available', async () => {
@@ -106,4 +107,21 @@ test('keeps successfully loaded rules readable when writing the local cache fail
   expect(await screen.findByText(recoveredRule.statement)).toBeInTheDocument();
   await waitFor(() => expect(mocks.cacheHomeView).toHaveBeenCalled());
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('names each featured game with its English name or a Chinese alias beside the title', async () => {
+  Element.prototype.scrollTo = vi.fn();
+  const rules: Record<string, object> = {
+    'p-rule': { id: 'p-rule', statement: '石油公司的規則', gameId: 'p', gameName: '石油公司', gameSlug: 'pipeline', status: 'published', tags: [], sourceLinks: [] },
+    'v-rule': { id: 'v-rule', statement: 'Voyages 的規則', gameId: 'v', gameName: 'Voyages', gameSlug: 'voyages', status: 'published', tags: [], sourceLinks: [] },
+  };
+  mocks.rule.mockImplementation(async (id: string) => ({ rule: rules[id] }));
+  mocks.getLatestGameCatalog.mockResolvedValue({ data: { games: [{ slug: 'voyages', englishName: null, aliases: ['航行'] }] } });
+  mocks.home.mockResolvedValue({ ...emptyHome, featured: [
+    { gameSlug: 'pipeline', gameName: '石油公司', gameEnglishName: 'Pipeline', ruleId: 'p-rule' },
+    { gameSlug: 'voyages', gameName: 'Voyages', ruleId: 'v-rule' },
+  ] });
+  const { container } = render(<MemoryRouter><HomePage /></MemoryRouter>);
+  await waitFor(() => expect([...container.querySelectorAll('.home-rail-game-alt')].map(el => el.textContent)).toEqual(['Pipeline', '航行']));
+  expect(screen.getByRole('tab', { name: /石油公司\s*Pipeline/ })).toHaveAttribute('title', '石油公司（Pipeline）');
 });
