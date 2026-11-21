@@ -12,7 +12,7 @@ const pct = (fraction: number) => Number((100 * fraction).toFixed(2));
 const print = (event: string, values: object) => console.log(JSON.stringify({ event, ...values }));
 const flippedNeighbors = neighbors.filter(([low]) => truth[low] === 4 || truth[low] === 6);
 
-function fixture(seed: number, start: Start, noise: Noise) {
+function fixture(seed: number, start: Start, noise: Noise, voteCount = horizon + 80) {
   const random = randomSource(seed), setup = randomSource(seed ^ 0x6c8e9cf5);
   const base = truth.map((value, i) => {
     if (start === 'cold') return initial();
@@ -27,7 +27,7 @@ function fixture(seed: number, start: Start, noise: Noise) {
   // opposite persistent game-specific preferences, in addition to per-vote noise.
   const tasteA = truth.map(() => setup() < .5 ? -1 : 1);
   const tasteB = tasteA.map(v => -v);
-  const ballots = Array.from({ length: horizon + 80 }, () => {
+  const ballots = Array.from({ length: voteCount }, () => {
     if (noise !== 'mixed-tastes') return drawBallot(random, noise);
     return drawBallot(random, random() < .5 ? 2 : 5, random() < .5 ? tasteA : tasteB);
   });
@@ -37,6 +37,11 @@ type Fixture = ReturnType<typeof fixture>;
 
 function published(states: State[]) {
   return states.map(s => Number(s.score.toFixed(2)));
+}
+
+function scoreBallot(states: State[], ballot: Ballot, strategy: Strategy) {
+  if (typeof strategy === 'string') applyBallot(states, ballot, strategy);
+  else applyCandidate(states, ballot, strategy);
 }
 
 function nextVoteAccuracy(scores: number[], votes: Ballot[]) {
@@ -55,8 +60,7 @@ function run(f: Fixture, strategy: Strategy, detailed: boolean) {
   const states = [...f.base];
   let early = 0, lastUnfixed = 0;
   for (let t = 0; t < horizon; t++) {
-    if (typeof strategy === 'string') applyBallot(states, f.ballots[t], strategy);
-    else applyCandidate(states, f.ballots[t], strategy);
+    scoreBallot(states, f.ballots[t], strategy);
     if (!detailed) continue;
     if (t === 99) early = correct(published(states), pairs) / pairs.length;
     const low = Math.max(...states.slice(10, 15).map(s => s.score));
@@ -235,13 +239,58 @@ function timeUpdate(winner: Candidate) {
   }
 }
 
-sanity();
-const choices = tune();
-print('phase', { name: 'first-screen' });
-for (const [start, noise] of scenarios) validate(choices, start, noise, 157003991);
-const winner = tuneStrength(choices[0].method);
-print('phase', { name: 'fresh-confirmation' });
-for (const [start, noise] of [...scenarios, ['neighbor-swaps', 'mixed-tastes'] as const]) {
-  validate([winner], start, noise, 643000021);
+const sparseCheckpoints = [10, 25, 50, 100];
+const confirmationSeed = 643000021;
+const confirmationScenarios = [...scenarios, ['neighbor-swaps', 'mixed-tastes'] as const];
+
+function measureSparseVotes() {
+  // Freeze the settings from the 500-vote study and reuse the same held-out prefixes.
+  const tuned: Candidate = { method: 'bidirectional', slopeFactor: 1.5, evidenceScale: 2, softBounds: true };
+  const strategies: Strategy[] = ['adjacent', 'list', { ...tuned, method: 'forward' }, tuned,
+    { ...tuned, slopeFactor: 1 }, { ...tuned, method: 'all-pairs' }, { ...tuned, method: 'downweight-close' }];
+  const maxVotes = sparseCheckpoints.at(-1)!;
+  for (const [start, noise] of confirmationScenarios) {
+    const fixtures = Array.from({ length: testSeeds }, (_, i) =>
+      fixture(confirmationSeed + i * 7919, start, noise, maxVotes));
+    const seenAt = sparseCheckpoints.map(votes => ({
+      votes, seenGames: Number(mean(fixtures.map(f => new Set(f.ballots.slice(0, votes).flatMap(b => b.order)).size)).toFixed(2)),
+    }));
+    print('sparse-exposure', { start, noise, checkpoints: seenAt });
+    const wrongAtStart = start === 'swapped' ? swapped : start === 'neighbor-swaps' ? flippedNeighbors : [];
+    for (const strategy of strategies) {
+      const runs = fixtures.map(f => {
+        const states = [...f.base];
+        const checkpoints = [];
+        for (const [index, ballot] of f.ballots.entries()) {
+          scoreBallot(states, ballot, strategy);
+          if (!sparseCheckpoints.includes(index + 1)) continue;
+          const scores = published(states);
+          checkpoints.push({ all: correct(scores, pairs), near: correct(scores, neighbors),
+            planted: correct(scores, wrongAtStart) });
+        }
+        return checkpoints;
+      });
+      const checkpoints = sparseCheckpoints.map((votes, i) => {
+        const results = runs.map(r => r[i]);
+        return { votes, all: pct(mean(results.map(r => r.all)) / pairs.length),
+          near: pct(mean(results.map(r => r.near)) / neighbors.length),
+          planted: wrongAtStart.length ? pct(mean(results.map(r => r.planted)) / wrongAtStart.length) : undefined,
+          allPlantedFixed: wrongAtStart.length ? results.filter(r => r.planted === wrongAtStart.length).length : undefined };
+      });
+      print('sparse-accuracy', { start, noise, strategy, checkpoints });
+    }
+  }
 }
-timeUpdate(winner);
+
+sanity();
+if (process.argv.includes('--sparse')) {
+  measureSparseVotes();
+} else {
+  const choices = tune();
+  print('phase', { name: 'first-screen' });
+  for (const [start, noise] of scenarios) validate(choices, start, noise, 157003991);
+  const winner = tuneStrength(choices[0].method);
+  print('phase', { name: 'fresh-confirmation' });
+  for (const [start, noise] of confirmationScenarios) validate([winner], start, noise, confirmationSeed);
+  timeUpdate(winner);
+}
