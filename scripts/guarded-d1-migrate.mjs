@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
+import { checkMigrationRowBudget } from './check-migration-row-budget.mjs';
 import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
 import { readFileSync } from 'node:fs';
 import { productionReleaseConfig } from './production-smoke.mjs';
@@ -8,6 +9,8 @@ import { WORKSPACE_D1_REMOVAL_MIGRATION, assertWorkspaceD1RemovalReady } from '.
 try {
   const pending = listPendingRemoteMigrations();
   checkD1TriggerFanout(pending);
+  // Measured on an isolated local D1 holding the migrations' imported data, before production is touched.
+  await checkMigrationRowBudget(pending);
   if (pending.includes(WORKSPACE_D1_REMOVAL_MIGRATION)) {
     const { origin } = productionReleaseConfig(readFileSync('wrangler.production.jsonc', 'utf8'));
     await assertWorkspaceD1RemovalReady(origin);
@@ -15,7 +18,7 @@ try {
   if (pending.length === 0) {
     console.log('✅ No pending D1 migrations.');
   } else {
-    console.log(`✅ D1 fanout guard passed for ${pending.length} pending migration(s).`);
+    console.log(`✅ D1 fanout and row budget guards passed for ${pending.length} pending migration(s).`);
     execSync('cross-env XDG_CONFIG_HOME=.wrangler/xdg wrangler d1 migrations apply board-game-rules-prod --remote --config wrangler.production.jsonc', {
       stdio: 'inherit',
     });

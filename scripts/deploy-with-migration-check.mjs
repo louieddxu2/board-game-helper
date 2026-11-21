@@ -4,6 +4,7 @@ import readline from 'readline';
 import { ensureCloudflareAuth } from './cloudflare-login.mjs';
 import { detectAuthSensitiveReleaseChanges, missingRequiredSecrets, parseSecretList } from './deploy-preflight.mjs';
 import { checkD1TriggerFanout } from './check-d1-trigger-fanout.mjs';
+import { checkMigrationRowBudget } from './check-migration-row-budget.mjs';
 import { listPendingRemoteMigrations } from './d1-migration-list.mjs';
 import { deferWorkspaceD1Removal } from './workspace-d1-release.mjs';
 import { DEPLOY_STATE_PATH } from './release-test-scope.mjs';
@@ -70,7 +71,21 @@ const askQuestion = (query) => {
   }));
 };
 
+// Migrations added since the last successful release, so an over-budget one fails in seconds
+// instead of after the release tests. The remote check before applying them still runs.
+const migrationsAddedSinceLastRelease = () => {
+  const base = releaseComparisonBase(currentGitSha());
+  return run(`git diff --name-only --diff-filter=A ${base} -- migrations`).split(/\r?\n/u)
+    .filter((path) => path.endsWith('.sql')).map((path) => path.split('/').at(-1));
+};
+
 const main = async () => {
+  const added = migrationsAddedSinceLastRelease();
+  if (added.length > 0) {
+    console.log(`📏 正在本機量測新增 Migration 的 D1 讀寫列數（${added.join('、')}）...`);
+    await checkMigrationRowBudget(added);
+    console.log('✅ 新增 Migration 未超過 D1 讀寫列數上限。');
+  }
   console.log('🧪 正在執行不可略過的發布測試（登入、建立／編輯規則、完整 D1 migration 與瀏覽器流程；未動到頁面時略過 @ui 版面測試）...');
   execSync('npm run test:release', { stdio: 'inherit' });
   console.log('✅ 發布測試全部通過。');
@@ -83,6 +98,12 @@ const main = async () => {
   console.log('🔍 正在檢查遠端 Cloudflare D1 資料庫的 Migration 狀態...');
   const pending = listPendingRemoteMigrations();
   checkD1TriggerFanout(pending);
+  if (pending.length > 0) {
+    // Refuse before asking: a migration over its D1 row budget must be rewritten, not applied.
+    console.log('📏 正在本機量測待套用 Migration 的 D1 讀寫列數...');
+    await checkMigrationRowBudget(pending);
+    console.log('✅ 待套用 Migration 未超過 D1 讀寫列數上限。');
+  }
   const isCI = process.env.CI === 'true' || !process.stdin.isTTY;
   const removalAfterCode = deferWorkspaceD1Removal(pending);
 

@@ -3,9 +3,10 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { execSync, execFileSync, ensureCloudflareAuth, listPendingRemoteMigrations, writeFileSync, rmSync, changedFilesSinceLastDeploy } = vi.hoisted(() => ({
+const { execSync, execFileSync, ensureCloudflareAuth, listPendingRemoteMigrations, writeFileSync, rmSync, changedFilesSinceLastDeploy, checkMigrationRowBudget } = vi.hoisted(() => ({
   execSync: vi.fn(), execFileSync: vi.fn(), ensureCloudflareAuth: vi.fn(),
   listPendingRemoteMigrations: vi.fn(), writeFileSync: vi.fn(), rmSync: vi.fn(), changedFilesSinceLastDeploy: vi.fn(),
+  checkMigrationRowBudget: vi.fn(),
 }));
 vi.mock('child_process', () => ({ execSync, execFileSync }));
 vi.mock('fs', async (importOriginal) => ({
@@ -14,6 +15,7 @@ vi.mock('fs', async (importOriginal) => ({
 vi.mock('./cloudflare-login.mjs', () => ({ ensureCloudflareAuth }));
 vi.mock('./d1-migration-list.mjs', () => ({ listPendingRemoteMigrations }));
 vi.mock('./check-d1-trigger-fanout.mjs', () => ({ checkD1TriggerFanout: vi.fn() }));
+vi.mock('./check-migration-row-budget.mjs', () => ({ checkMigrationRowBudget }));
 vi.mock('./release-test-scope.mjs', async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(), changedFilesSinceLastDeploy,
 }));
@@ -31,7 +33,9 @@ describe('production release execution', () => {
   const deploy = 'npm run deploy:code';
   const smoke = 'npm run smoke:production';
   const workspaceRemoval = '0116_remove_workspace_backup_coordination.sql';
+  const rowBudget = 'row budget';
   let failCommand: string | undefined;
+  let addedMigrations = '';
 
   beforeEach(() => {
     vi.resetModules();
@@ -42,7 +46,13 @@ describe('production release execution', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     commands.length = 0;
     failCommand = undefined;
+    addedMigrations = '';
     listPendingRemoteMigrations.mockReturnValue([]);
+    checkMigrationRowBudget.mockImplementation(async (names: string[]) => {
+      commands.push(`${rowBudget}: ${names.join(', ')}`);
+      if (failCommand === rowBudget) throw new Error('D1 row budget exceeded');
+      return [];
+    });
     ensureCloudflareAuth.mockImplementation(async () => { commands.push('auth'); });
     writeFileSync.mockImplementation(() => { commands.push('record'); });
     execSync.mockImplementation((command: string) => {
@@ -52,6 +62,7 @@ describe('production release execution', () => {
         return '';
       }
       if (command === 'git rev-parse HEAD' || command === 'git rev-parse HEAD^') return sha;
+      if (command.startsWith('git diff --name-only --diff-filter=A ')) return addedMigrations;
       if (command.startsWith('git merge-base --is-ancestor ') || command.startsWith('git diff ')) return '';
       if (command.includes('wrangler secret list')) return JSON.stringify([{ name: 'EMAIL_HASH_SECRET' }]);
       throw new Error(`Unexpected command: ${command}`);
@@ -65,9 +76,9 @@ describe('production release execution', () => {
 
   test.each([
     { name: 'ordinary migration', pending: ['0124_stop_provisioning_unrated_attribute_scores.sql'],
-      expected: [releaseTests, 'auth', migrate, deploy, smoke, 'record'] },
+      expected: [releaseTests, 'auth', `${rowBudget}: 0124_stop_provisioning_unrated_attribute_scores.sql`, migrate, deploy, smoke, 'record'] },
     { name: 'deferred Workspace removal', pending: [workspaceRemoval],
-      expected: [releaseTests, 'auth', deploy, smoke, migrate, 'record'] },
+      expected: [releaseTests, 'auth', `${rowBudget}: ${workspaceRemoval}`, deploy, smoke, migrate, 'record'] },
   ])('executes the release in order with $name', async ({ pending, expected }) => {
     listPendingRemoteMigrations.mockReturnValue(pending);
     await runProductionRelease();
@@ -79,14 +90,24 @@ describe('production release execution', () => {
 
   test.each([
     { failure: releaseTests, expected: [releaseTests] },
-    { failure: smoke, expected: [releaseTests, 'auth', deploy, smoke] },
-    { failure: migrate, expected: [releaseTests, 'auth', deploy, smoke, migrate] },
+    { failure: rowBudget, expected: [releaseTests, 'auth', `${rowBudget}: ${workspaceRemoval}`] },
+    { failure: smoke, expected: [releaseTests, 'auth', `${rowBudget}: ${workspaceRemoval}`, deploy, smoke] },
+    { failure: migrate, expected: [releaseTests, 'auth', `${rowBudget}: ${workspaceRemoval}`, deploy, smoke, migrate] },
   ])('stops on $failure failure', async ({ failure, expected }) => {
     listPendingRemoteMigrations.mockReturnValue([workspaceRemoval]);
     failCommand = failure;
     await runProductionRelease();
     await vi.waitFor(() => expect(process.exit).toHaveBeenCalledExactlyOnceWith(1));
     expect(commands).toEqual(expected);
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  test('measures migrations added since the last release before the release tests, and stops when one is over budget', async () => {
+    addedMigrations = 'migrations/0200_expensive.sql\nmigrations/README.md\n';
+    failCommand = rowBudget;
+    await runProductionRelease();
+    await vi.waitFor(() => expect(process.exit).toHaveBeenCalledExactlyOnceWith(1));
+    expect(commands).toEqual([`${rowBudget}: 0200_expensive.sql`]);
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 });
