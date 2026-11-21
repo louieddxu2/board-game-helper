@@ -23,6 +23,12 @@ const home = (): HomePayload => ({
 });
 
 describe('home cache content key', () => {
+  test('refreshes a snapshot saved before featured games carried their English names', () => {
+    const featured = { gameSlug: 'emberleaf', gameName: '餘燼之葉', ruleId: 'featured-0' };
+    const before = { ...home(), featured: [featured] };
+    expect(homeContentKey({ ...before, featured: [{ ...featured, gameEnglishName: 'Emberleaf' }] })).not.toBe(homeContentKey(before));
+  });
+
   test('refreshes the home snapshot when only a featured game’s published rule count changes', () => {
     const featured = { gameSlug: 'emberleaf', gameName: 'Emberleaf', ruleId: 'featured-0', publishedRuleCount: 1 };
     const before = { ...home(), featured: [featured] };
