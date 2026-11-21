@@ -32,6 +32,8 @@ export interface Env {
   GOOGLE_CLIENT_IDS?: string;
   BOOTSTRAP_ADMIN_EMAIL?: string;
   EMAIL_HASH_SECRET?: string;
+  /** "1" only in the local development and test configs: responses then carry D1 row counts. */
+  EXPOSE_D1_METRICS?: string;
 }
 
 // Route handlers receive configuration and service bindings, never the raw D1 binding.

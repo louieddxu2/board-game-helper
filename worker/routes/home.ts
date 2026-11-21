@@ -8,19 +8,14 @@ import { getDatabase } from '../data/database';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { logD1Query, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 
 const homeRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
 const HOME_RULES_PER_GAME = 3;
 
 homeRoutes.get('/api/home', async (c) => {
-  const d1Logs: Array<{ name: string; rowsRead: number; meta: unknown }> = [];
-  const track = <T extends D1Result<unknown>>(name: string, res: T): T => {
-    const rowsRead = Number(res.meta?.rows_read ?? (res.meta as any)?.rowsRead ?? 0);
-    d1Logs.push({ name, rowsRead, meta: res.meta });
-    return res;
-  };
+  const track = <T extends D1Result<unknown>>(name: string, res: T): T => logD1Query(c, name, res);
 
   // Views are gated by login, but only anonymous browser-day aggregates reach this query.
 
@@ -56,7 +51,7 @@ homeRoutes.get('/api/home', async (c) => {
 
   if (popularGameIds.length === 0) {
     setNoCache(c);
-    return c.json({ generatedAt: now(), popularGameIds, recentRuleIds, featuredRuleIds: [], featured: [], debugD1Metrics: d1Logs });
+    return c.json({ generatedAt: now(), popularGameIds, recentRuleIds, featuredRuleIds: [], featured: [] });
   }
 
   // 3. 點對點極速解析內容 (WHERE id IN)
@@ -104,7 +99,6 @@ homeRoutes.get('/api/home', async (c) => {
     recentRuleIds,
     featuredRuleIds,
     featured,
-    debugD1Metrics: d1Logs,
   });
 });
 

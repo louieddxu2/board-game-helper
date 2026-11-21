@@ -377,7 +377,8 @@ export interface LoggedQueryContext {
 export const logD1Query = <T extends D1Result<unknown>>(c: AppContext, queryName: string, result: T): T => {
   const meta = result?.meta as Record<string, unknown> | undefined;
   const rowsRead = Number(meta?.rows_read ?? meta?.rowsRead ?? meta?.rows_served ?? 0);
-  console.log("[D1_METRICS] [" + c.req.path + "] " + queryName + ": " + rowsRead + " rows_read");
+  // Per-query lines only while developing locally; the totals reach the response headers there too.
+  if (c.env?.EXPOSE_D1_METRICS === '1') console.log(`[D1_METRICS] [${c.req.path}] ${queryName}: ${rowsRead} rows_read`);
   
   let ctx = c.get('d1Metrics');
   if (!ctx) {

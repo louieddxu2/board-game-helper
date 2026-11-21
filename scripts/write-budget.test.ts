@@ -30,7 +30,7 @@ const setup = () => {
   const ids = h.sqlite.prepare(`SELECT subject.id FROM attribute_subjects subject
     JOIN attribute_votable_subjects votable ON votable.subject_id = subject.id
     WHERE subject.kind = 'game' ORDER BY subject.id LIMIT 2`).all().map((row: { id: unknown }) => String(row.id));
-  const env = { ...h.env, APP_ORIGIN: 'https://budget.test', GOOGLE_CLIENT_ID: 'budget-client', EMAIL_HASH_SECRET: 'budget-secret-for-email-hashing-tests',
+  const env = { ...h.env, APP_ORIGIN: 'https://budget.test', EXPOSE_D1_METRICS: '1', GOOGLE_CLIENT_ID: 'budget-client', EMAIL_HASH_SECRET: 'budget-secret-for-email-hashing-tests',
     PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) }, WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) } };
   const request = (path: string, init: RequestInit & { as?: string } = {}) => app.request(`https://budget.test${path}`, {
     ...init,

@@ -32,6 +32,8 @@
     }
   ],
   "vars": {
+    // Responses carry D1 row counts (X-D1-Rows-Read/Written) only in local configs; never set in production.
+    "EXPOSE_D1_METRICS": "1",
     "APP_ORIGIN": "http://localhost:5173",
     "TRUSTED_APP_ORIGINS": "http://localhost:5174",
     "BOOTSTRAP_ADMIN_EMAIL": "louieddxu2@gmail.com",

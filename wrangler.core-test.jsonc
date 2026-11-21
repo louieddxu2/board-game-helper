@@ -30,6 +30,8 @@
     }
   ],
   "vars": {
+    // Responses carry D1 row counts (X-D1-Rows-Read/Written) only in local configs; never set in production.
+    "EXPOSE_D1_METRICS": "1",
     "APP_ORIGIN": "http://127.0.0.1:4173",
     "TRUSTED_APP_ORIGINS": "http://localhost:4173",
     "GOOGLE_CLIENT_ID": "core-flow-test.apps.googleusercontent.com",

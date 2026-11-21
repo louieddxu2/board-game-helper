@@ -158,7 +158,7 @@ try {
       const response = await app.request('https://cost.test/api/attributes/responses', {
         method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://cost.test',
           ...(scenario.member ? { cookie: `wbr_session=${token}` } : {}) }, body: JSON.stringify(input(i)),
-      }, { DB: meter.DB, APP_ORIGIN: 'https://cost.test',
+      }, { DB: meter.DB, APP_ORIGIN: 'https://cost.test', EXPOSE_D1_METRICS: '1',
         PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) }, WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) } });
       const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body));
       assert(body.activities.every((a) => a.actorName === (scenario.member ? '測試暱稱' : '匿名玩家')));

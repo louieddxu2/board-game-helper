@@ -35,6 +35,26 @@ app.get('/api/workspace-config', c => {
   return c.json({ googleDriveClientId: c.env.GOOGLE_DRIVE_CLIENT_ID ?? null });
 });
 
+// D1 row counts are a local development aid. Anywhere else they would show any visitor which
+// requests cost the most, so this outermost layer removes them unless the config turns them on.
+const D1_METRIC_HEADERS = ['X-D1-Rows-Read', 'X-D1-Rows-Written'];
+export const exposesD1Metrics = (env: Pick<Env, 'EXPOSE_D1_METRICS'>) => env.EXPOSE_D1_METRICS === '1';
+app.use('/api/*', async (c, next) => {
+  await next();
+  // Workspace responses never carry the counts, so their requests never read the config (no env access).
+  if (!c.res || !D1_METRIC_HEADERS.some(name => c.res.headers.has(name)) || exposesD1Metrics(c.env)) return;
+  // Hono copies the previous response's headers onto a replacement, so they are removed in place.
+  try {
+    D1_METRIC_HEADERS.forEach(name => c.res.headers.delete(name));
+  } catch {
+    const headers = new Headers(c.res.headers);
+    D1_METRIC_HEADERS.forEach(name => headers.delete(name));
+    const response = new Response(c.res.body, { status: c.res.status, statusText: c.res.statusText, headers });
+    c.res = undefined;
+    c.res = response;
+  }
+});
+
 // Reserve the entire Workspace API namespace before any site database/session middleware.
 // Only the public GET/HEAD configuration above is allowed; old and future API paths fail closed.
 app.use('/api/*', async (c, next) => {
@@ -82,7 +102,7 @@ app.use('/api/*', async (c, next) => {
   await next();
   if (origin && isTrusted) {
     c.header('Access-Control-Allow-Origin', origin);
-    c.header('Access-Control-Expose-Headers', 'ETag, X-API-Version, X-D1-Rows-Read, X-D1-Rows-Written');
+    c.header('Access-Control-Expose-Headers', exposesD1Metrics(c.env) ? `ETag, X-API-Version, ${D1_METRIC_HEADERS.join(', ')}` : 'ETag, X-API-Version');
     c.header('Vary', 'Origin');
   }
 });

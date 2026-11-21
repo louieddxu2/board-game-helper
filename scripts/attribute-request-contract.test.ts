@@ -25,7 +25,7 @@ const setup = () => {
   const post = (body: unknown, loggedIn = true) => app.request('https://contract.test/api/attributes/responses', {
     method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://contract.test',
       ...(loggedIn ? { cookie: `wbr_session=${token}` } : {}) }, body: JSON.stringify(body),
-  }, { ...h.env, APP_ORIGIN: 'https://contract.test', PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) },
+  }, { ...h.env, APP_ORIGIN: 'https://contract.test', EXPOSE_D1_METRICS: '1', PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) },
     WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) } });
   const receipt = (n: number) => h.sqlite.prepare('SELECT actor_id, online_weight, activity_json FROM attribute_vote_responses WHERE response_id = ?')
     .get(input(n).responseId)!;
