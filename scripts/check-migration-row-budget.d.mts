@@ -8,6 +8,7 @@ export interface MigrationRowMeasurement {
   reads: number;
   writes: number;
   budget: MigrationRowBudget;
+  growth?: { reads: number; writes: number; subjects: number; scores: number };
 }
 export declare const DEFAULT_MIGRATION_ROW_BUDGET: Readonly<MigrationRowBudget>;
 export declare const splitSqlStatements: (sql: string) => string[];

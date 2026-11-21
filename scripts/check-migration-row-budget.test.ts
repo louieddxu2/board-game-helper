@@ -1,5 +1,8 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   DEFAULT_MIGRATION_ROW_BUDGET, checkMigrationRowBudget, migrationRowBudget, rowBudgetViolations, splitSqlStatements,
 } from './check-migration-row-budget.mjs';
@@ -27,6 +30,8 @@ UPDATE a SET id = CASE id WHEN 'a' THEN 'b' END;
       .toEqual({ reads: 50000, writes: 4000, reason: 'rename every imported game once' });
     // A budget without a reason is not a declaration.
     expect(migrationRowBudget('-- d1-row-budget: reads=50000 writes=4000\n')).toEqual(DEFAULT_MIGRATION_ROW_BUDGET);
+    expect(() => migrationRowBudget('-- d1-row-budget: reads=999999999999999999999 writes=1 reason=invalid bound'))
+      .toThrow('safe integers');
   });
 
   test('reports reads or writes over the budget', () => {
@@ -38,6 +43,24 @@ UPDATE a SET id = CASE id WHEN 'a' THEN 'b' END;
     ]).map((violation) => violation.split(':')[0])).toEqual(['reads.sql', 'writes.sql']);
   });
 
+  test('rejects growth below the absolute budget; declared bulk work must still fit both samples', () => {
+    const sample = {
+      name: 'batch.sql', reads: 100, writes: 10, budget: { reads: 1000, writes: 100 },
+      growth: { reads: 900, writes: 10, subjects: 2000, scores: 4000 },
+    };
+    expect(rowBudgetViolations([sample])).toEqual([expect.stringContaining('reads grow')]);
+    expect(rowBudgetViolations([{ ...sample, growth: { ...sample.growth, reads: 100, writes: 500 } }]))
+      .toEqual(expect.arrayContaining([expect.stringContaining('writes grow')]));
+    expect(rowBudgetViolations([{ ...sample, budget: { ...sample.budget, reason: 'intentional bulk update' } }])).toEqual([]);
+    expect(rowBudgetViolations([{ ...sample, budget: { reads: 800, writes: 100, reason: 'intentional bulk update' } }]))
+      .toEqual([expect.stringContaining('read 900 rows (budget 800)')]);
+  });
+
+  test('fails closed when a pending migration is missing, even alongside a known migration', async () => {
+    await expect(checkMigrationRowBudget(['0132_six_pending_games.sql', 'missing.sql']))
+      .rejects.toThrow('Unknown pending migrations: missing.sql');
+  });
+
   // Migration 0133 compared every renamed game with every other through an unindexed table and
   // read about 146k production rows. Measured on the imported data, it must be refused.
   test('refuses migration 0133 and passes migration 0132 on the imported data', async () => {
@@ -45,5 +68,30 @@ UPDATE a SET id = CASE id WHEN 'a' THEN 'b' END;
       expect.objectContaining({ name: '0132_six_pending_games.sql', budget: DEFAULT_MIGRATION_ROW_BUDGET }),
     ]);
     await expect(checkMigrationRowBudget(['0133_name_based_bgg_slugs.sql'])).rejects.toThrow(/0133_name_based_bgg_slugs\.sql: read \d+ rows/u);
+  }, 120_000);
+
+  test('catches both 0134 catalog scans and accepts indexed lookups driven by the 30 approved subjects', async () => {
+    const name = '0134_seed_reviewed_risk_and_luck_ratings.sql';
+    // This historical SQL passed the old gate (1536 reads), then read about 7k in production.
+    // Exercise the real entry point without modifying the published migration.
+    await expect(checkMigrationRowBudget([name])).rejects.toThrow(/reads grow with unrelated catalog data/u);
+    const directory = mkdtempSync(join(tmpdir(), 'migration-cost-regression-'));
+    try {
+      cpSync('migrations', directory, { recursive: true });
+      const original = readFileSync(join(directory, name), 'utf8');
+      const subjectLookup = original.replace('JOIN attribute_subjects subject', 'CROSS JOIN attribute_subjects subject');
+      const scoreLookup = original.replace('JOIN attribute_score_states state', 'CROSS JOIN attribute_score_states state');
+      // Fixing either scan alone must still fail: a non-unique indexed SEARCH can also grow.
+      for (const sql of [subjectLookup, scoreLookup]) {
+        writeFileSync(join(directory, name), sql);
+        await expect(checkMigrationRowBudget([name], { directory })).rejects.toThrow(/reads grow/u);
+      }
+      writeFileSync(join(directory, name), subjectLookup.replace('JOIN attribute_score_states state', 'CROSS JOIN attribute_score_states state'));
+      const [bounded] = await checkMigrationRowBudget([name], { directory });
+      expect(bounded.growth).toMatchObject({ subjects: 2000, scores: expect.any(Number), reads: bounded.reads, writes: bounded.writes });
+      expect(bounded.growth!.scores).toBeGreaterThan(4000);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   }, 120_000);
 });
