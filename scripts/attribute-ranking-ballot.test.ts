@@ -1,11 +1,10 @@
 // @vitest-environment node
 import { Hono } from 'hono';
-import { expandStoredRankingResponse } from '../src/shared/attributeRankingBallot';
 import { expect, test, vi } from 'vitest';
 import { attributesRoutes } from '../worker/routes/attributes';
 import { saveAttributeResponse } from '../worker/data/attributeResponses';
 import { canonicalizeAttributeMergeVoteSubjects } from '../worker/data/attributeLocks';
-import { applyComparison, emptyAttributeState, type OnlineAttributeState } from '../worker/data/attributeScoring';
+import { ATTRIBUTE_SCORE_MODEL_VERSION, type OnlineAttributeState } from '../worker/data/attributeScoring';
 import { calculateAttributeReplay } from '../worker/data/attributeReplayCalculation';
 import { prepareCaptureReplayHistory, prepareCatchUpOnlineReplay, type ReplayScope } from '../worker/data/attributeReplayWork';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
@@ -36,7 +35,7 @@ const setup = () => {
   return { ...harness, ids, references, input };
 };
 
-test('the real route stores one raw ballot, keeps the old adjacent scoring and safely retries', async () => {
+test('the real route scores one complete ballot, keeps activity counts, and safely retries', async () => {
   const harness = setup();
   try {
     const { gateway, sqlite, input, ids, references } = harness;
@@ -55,14 +54,15 @@ test('the real route stores one raw ballot, keeps the old adjacent scoring and s
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ response_id: input.responseId, subject_a_id: null, subject_b_id: null, comparison: null, rating_a: null, rating_b: null });
     expect(JSON.parse(String(stored[0].ranking_json))).toEqual({ ...input.ranking, highPole: 'high' });
-    const expected = new Map<string, OnlineAttributeState>();
-    for (const [left, right] of [[2, 3], [1, 2], [3, 4], [0, 1], [4, 5]]) {
-      const next = applyComparison(expected.get(ids[left]) ?? emptyAttributeState(), expected.get(ids[right]) ?? emptyAttributeState(), 'A_HIGHER');
-      expected.set(ids[left], next.a.next); expected.set(ids[right], next.b.next);
-    }
-    for (const [id, state] of expected) {
-      expect(sqlite.prepare('SELECT score, rating_deviation, comparison_count, direct_count FROM attribute_score_states WHERE subject_id = ? AND attribute_id = ?')
-        .get(id, attributeId)).toEqual({ score: state.score, rating_deviation: state.ratingDeviation, comparison_count: state.comparisonCount, direct_count: 0 });
+    // Independent expected results from the dense research implementation.
+    const scores = [6.99755603686851, 6.171580273332351, 5.406600293405172, 4.593399706594828, 3.828419726667649, 3.0024439631314905];
+    const deviations = [2.597709157045495, 2.5525448330356255, 2.5624649624753078, 2.5624649624753078, 2.552544833035625, 2.5977091570454944];
+    for (const [i, id] of ids.entries()) {
+      const state = sqlite.prepare('SELECT score, rating_deviation, comparison_count, direct_count FROM attribute_score_states WHERE subject_id = ? AND attribute_id = ?')
+        .get(id, attributeId)!;
+      expect(state.score).toBeCloseTo(scores[i], 12);
+      expect(state.rating_deviation).toBeCloseTo(deviations[i], 12);
+      expect(state).toMatchObject({ comparison_count: i === 0 || i === ids.length - 1 ? 1 : 2, direct_count: 0 });
     }
     expect(sqlite.prepare('SELECT subject_id FROM attribute_score_states WHERE subject_id IN (?, ?)').all(...references)).toEqual([]);
     const beforeRetry = scoreRows(harness);
@@ -170,7 +170,7 @@ test('editing and deleting an original ranking invalidate captured replay histor
   } finally { harness.sqlite.close(); }
 });
 
-test('game merges preserve original positions and map the expanded pair history without changing its meaning', async () => {
+test('game merges preserve original positions and score each canonical subject once', async () => {
   const harness = setup();
   try {
     const { gateway, sqlite, ids, input } = harness;
@@ -193,12 +193,9 @@ test('game merges preserve original positions and map the expanded pair history 
     const raw = { response_id: input.responseId, attribute_id: attributeId, subject_a_id: '', subject_b_id: null,
       rating_a: null, rating_b: null, comparison: null, created_at: input.timestamp, weight: 1,
       ranking_json: String(original.ranking_json) };
-    const legacy = expandStoredRankingResponse(raw).map((row) => ({ ...row,
-      subject_a_id: mapped.subjectMappings[row.subject_a_id] ?? row.subject_a_id,
-      subject_b_id: mapped.subjectMappings[row.subject_b_id!] ?? row.subject_b_id,
-    }));
+    const canonical = { version: 1, orderedSubjectIds: [ids[4], ids[1], ids[3], ids[5]], referenceSubjectIds: [], highPole: 'high' };
     const actual = calculateAttributeReplay(new Set(ids), new Set([attributeId]), [{ ...raw, ranking_json: JSON.stringify(mapped) }]);
-    const expected = calculateAttributeReplay(new Set(ids), new Set([attributeId]), legacy);
+    const expected = calculateAttributeReplay(new Set(ids), new Set([attributeId]), [{ ...raw, ranking_json: JSON.stringify(canonical) }]);
     expect([...actual.states]).toEqual([...expected.states]);
     expect([...actual.pairCounts]).toEqual([...expected.pairCounts]);
   } finally { harness.sqlite.close(); }
@@ -218,7 +215,7 @@ test.each(['append', 'catchup'] as const)('a new ranking survives the %s path of
     const prepared = path === 'catchup'
       ? await prepareCatchUpOnlineReplay(gateway, scope, 0, head, 1)
       : await prepareCaptureReplayHistory(gateway, {
-        history_revision: 0, input_revision: 0, model_version: 'glicko-rd-v2', scope_json: JSON.stringify(scope),
+        history_revision: 0, input_revision: 0, model_version: ATTRIBUTE_SCORE_MODEL_VERSION, scope_json: JSON.stringify(scope),
         target_rowid: head, target_response_id: input.responseId, scanned_rowid: 0, online_rowid: null, online_response_id: null,
       }, scope, new Set([attributeId]), 1);
     await gateway.batch(prepared.statements);

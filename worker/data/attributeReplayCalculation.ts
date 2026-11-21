@@ -1,6 +1,8 @@
 import type { AttributeComparisonResult } from '../../src/shared/types';
-import { expandStoredRankingResponse } from '../../src/shared/attributeRankingBallot';
+import type { StoredAttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
 import { ATTRIBUTE_DIRECT_RATING_RD, applyComparison, emptyAttributeState, type OnlineAttributeState } from './attributeScoring';
+import { rankedAttributeSubjects } from './attributeRankedSubjects';
+import { applyAttributeRanking } from './attributeRankingUpdate';
 
 export const mergeStateKey = (subjectId: string, attributeId: string) => `${subjectId}\u0000${attributeId}`;
 
@@ -9,12 +11,13 @@ export const pairStatKey = (subjectAId: string, subjectBId: string, attributeId:
 
 export interface FullReplayHistoryRow {
   stream_id: string;
-  kind: 'rating' | 'comparison';
+  kind: 'rating' | 'comparison' | 'ranking';
   attribute_id: string;
   subject_a_id: string;
   subject_b_id: string | null;
   value: number | null;
   comparison: AttributeComparisonResult | null;
+  ranking?: StoredAttributeRankingBallot;
   created_at: number;
   weight: number;
 }
@@ -57,7 +60,13 @@ export interface CalculatedAttributeReplay {
 
 export const expandAttributeReplayHistory = (responses: FullReplayResponseRow[]): FullReplayHistoryRow[] => {
   const history: FullReplayHistoryRow[] = [];
-  for (const row of responses.flatMap(expandStoredRankingResponse)) {
+  for (const row of responses) {
+    if (row.ranking_json) {
+      history.push({ stream_id: `response:${row.response_id}:ranking`, kind: 'ranking', attribute_id: row.attribute_id,
+        subject_a_id: '', subject_b_id: null, value: null, comparison: null, created_at: row.created_at, weight: row.weight,
+        ranking: JSON.parse(row.ranking_json) as StoredAttributeRankingBallot });
+      continue;
+    }
     if (row.rating_a != null) history.push({ stream_id: `response:${row.response_id}:rating-a`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: null, value: row.rating_a, comparison: null, created_at: row.created_at, weight: row.weight });
     if (row.rating_b != null && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:rating-b`, kind: 'rating', attribute_id: row.attribute_id, subject_a_id: row.subject_b_id, subject_b_id: null, value: row.rating_b, comparison: null, created_at: row.created_at, weight: row.weight });
     if (row.comparison && row.subject_b_id) history.push({ stream_id: `response:${row.response_id}:comparison`, kind: 'comparison', attribute_id: row.attribute_id, subject_a_id: row.subject_a_id, subject_b_id: row.subject_b_id, value: null, comparison: row.comparison, created_at: row.created_at, weight: row.weight });
@@ -105,18 +114,33 @@ export const applyAttributeReplayComparisons = (
   states: Map<string, OnlineAttributeState>, pairCounts: Map<string, ReplayPair>,
 ) => {
   for (const row of history) {
-    if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjectIds.has(row.subject_a_id) || !subjectIds.has(row.subject_b_id) || !attributeIds.has(row.attribute_id) || row.subject_a_id === row.subject_b_id) continue;
+    if (!attributeIds.has(row.attribute_id)) continue;
+    if (row.ranking) {
+      const subjects = rankedAttributeSubjects(row.ranking, subjectIds);
+      if (subjects.length < 2) continue;
+      const keys = subjects.map((id) => mergeStateKey(id, row.attribute_id));
+      const next = applyAttributeRanking(keys.map((key) => states.get(key) ?? emptyAttributeState()), row.weight);
+      keys.forEach((key, index) => states.set(key, next[index]));
+      for (let i = 1; i < subjects.length; i++) recordPair(pairCounts, subjects[i - 1], subjects[i], row.attribute_id);
+      continue;
+    }
+    if (row.kind !== 'comparison' || !row.comparison || !row.subject_b_id || !subjectIds.has(row.subject_a_id)
+      || !subjectIds.has(row.subject_b_id) || row.subject_a_id === row.subject_b_id) continue;
     const keyA = mergeStateKey(row.subject_a_id, row.attribute_id);
     const keyB = mergeStateKey(row.subject_b_id, row.attribute_id);
     const updated = applyComparison(states.get(keyA) ?? emptyAttributeState(), states.get(keyB) ?? emptyAttributeState(), row.comparison, row.weight);
     states.set(keyA, updated.a.next); states.set(keyB, updated.b.next);
-    const [subjectAId, subjectBId] = row.subject_a_id < row.subject_b_id ? [row.subject_a_id, row.subject_b_id] : [row.subject_b_id, row.subject_a_id];
-    const key = pairStatKey(subjectAId, subjectBId, row.attribute_id);
-    const pair = pairCounts.get(key);
-    if (pair) pair.count += 1;
-    else pairCounts.set(key, { subjectAId, subjectBId, attributeId: row.attribute_id, count: 1 });
+    recordPair(pairCounts, row.subject_a_id, row.subject_b_id, row.attribute_id);
   }
 };
+
+function recordPair(pairCounts: Map<string, ReplayPair>, first: string, second: string, attributeId: string) {
+  const [subjectAId, subjectBId] = first < second ? [first, second] : [second, first];
+  const key = pairStatKey(subjectAId, subjectBId, attributeId);
+  const pair = pairCounts.get(key);
+  if (pair) pair.count += 1;
+  else pairCounts.set(key, { subjectAId, subjectBId, attributeId, count: 1 });
+}
 
 export const calculateAttributeReplay = (
   subjectIds: ReadonlySet<string>,

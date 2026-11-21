@@ -3,6 +3,7 @@
 INSERT OR IGNORE INTO game_catalog_clock (id, current_version) VALUES (1, 0);
 INSERT OR IGNORE INTO public_tag_catalog_clock (id, current_version) VALUES (1, 0);
 INSERT OR IGNORE INTO attribute_catalog_clock (id, current_version) VALUES (1, 0);
+UPDATE attribute_online_progress SET model_version = 'glicko-rd-v3' WHERE id = 1;
 
 -- A schema-only export has no active game snapshot. Start from an empty real
 -- snapshot; submissions then publish their normal versioned catalog deltas.
@@ -37,6 +38,6 @@ INSERT INTO attribute_catalog_snapshot_state
 SELECT 1, 1, current_version, 1,
   json_array(json_object('id', a.id, 'key', a.key, 'name', t.name, 'fullDescription', t.full_description,
     'minValue', a.min_value, 'maxValue', a.max_value, 'sortOrder', a.sort_order)),
-  'glicko-rd-v2', CAST(strftime('%s', 'now') AS INTEGER) * 1000
+  'glicko-rd-v3', CAST(strftime('%s', 'now') AS INTEGER) * 1000
 FROM attribute_catalog_clock CROSS JOIN attributes a JOIN attribute_translations t ON t.attribute_id = a.id
 WHERE a.id = 'core-ranking' AND t.locale = 'zh-TW';

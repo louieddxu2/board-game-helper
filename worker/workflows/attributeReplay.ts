@@ -35,7 +35,8 @@ export const publishCompleteAttributeReplayLocked = async (
   const replay = await prepareAttributeReplay(db, timestamp, {
     maxChunkBytes: options.maxReplayChunkBytes,
     // Settled replays can still use the compact comparison checkpoint.
-    compareLiveStates: options.compareLiveStates || !status || status.required_revision !== status.replayed_revision,
+    compareLiveStates: options.compareLiveStates || !status || status.required_revision !== status.replayed_revision
+      || status.replayed_model_version !== ATTRIBUTE_SCORE_MODEL_VERSION,
   });
   await publishPreparedAttributeReplay(db, lock, timestamp, status?.required_revision ?? 0, replay, options, {
     verify: [assertReplayHistoryHead(db, head)], clear: [], throughRowid: head.rowid, throughResponseId: head.response_id,

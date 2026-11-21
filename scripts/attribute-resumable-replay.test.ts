@@ -182,6 +182,8 @@ test('merges a large attribute across passes and retries the same block after a 
   try {
     const { gateway, sqlite } = harness;
     const [first, second] = subjects(harness);
+    const third = sqlite.prepare(`SELECT subject_id AS id FROM attribute_votable_subjects
+      WHERE subject_id NOT IN (?, ?) ORDER BY subject_id LIMIT 1`).get(first.id, second.id)!.id as string;
     const insert = sqlite.prepare(`
       INSERT INTO attribute_vote_responses
         (response_id, attribute_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison,
@@ -191,6 +193,13 @@ test('merges a large attribute across passes and retries the same block after a 
     for (let index = 0; index < 23; index += 1) {
       const at = timestamp + (index % 3);
       const id = `ordered-${['_', 'A', '-', 'z'][index % 4]}-${23 - index}`;
+      if (index === 7) {
+        const ranking = { version: 1, orderedSubjectIds: [second.id, third, first.id], referenceSubjectIds: [], highPole: 'low' };
+        sqlite.prepare(`INSERT INTO attribute_vote_responses
+          (response_id, attribute_id, ranking_json, activity_json, session_id, created_at, updated_at)
+          VALUES (?, ?, ?, '[]', 'merge-replay', ?, ?)`).run(id, attributeId, JSON.stringify(ranking), at, at);
+        continue;
+      }
       insert.run(id, attributeId, first.id, second.id, index % 3 ? 2.125 + index / 13 : null,
         index % 2 ? null : 9 - index / 11, index % 5 ? 'A_HIGHER' : 'B_HIGHER', at, at);
     }
@@ -249,6 +258,8 @@ test('merges a large attribute across passes and retries the same block after a 
     expect(checkpoint()).toBeUndefined();
     expect(stagedChunks()).toEqual([]);
     const published = await catalog();
+    expect(published.values.find((value) => value.subjectId === third && value.attributeId === attributeId))
+      .toMatchObject({ comparisonCount: 2, directCount: 0 });
     const pairs = pairRows();
     await runCompleteAttributeReplay(gateway, timestamp + 200);
     expect((await catalog()).values).toEqual(published.values);

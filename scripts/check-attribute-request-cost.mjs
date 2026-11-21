@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from '../node_modules/wrangler/node_modules/miniflare/dist/src/index.js';
-import { bidirectionalCostVariant } from './ranking-research/cost-variant.mjs';
+import { adjacentCostVariant } from './ranking-research/cost-variant.mjs';
 
 const cases = [
   { id: 'pair-guest', pair: true, budget: [68, 19] },
@@ -34,12 +34,13 @@ assert(!baseline || !compareRankingModel, 'Choose a historical baseline or a ran
 const selected = args.filter((arg) => !arg.startsWith('--baseline=') && arg !== '--compare-ranking-model');
 assert(selected.every((id) => cases.some((c) => c.id === id)), 'Unknown scenario');
 const scenarios = cases.filter((c) => !selected.length || selected.includes(c.id));
-const variants = baseline ? ['baseline', 'optimized'] : compareRankingModel ? ['optimized', 'bidirectional'] : ['optimized'];
+const variants = baseline ? ['baseline', 'optimized'] : compareRankingModel ? ['adjacent', 'optimized'] : ['optimized'];
 mkdirSync('.wrangler', { recursive: true });
 const scratch = mkdtempSync(resolve('.wrangler/attribute-request-cost-'));
 const absolute = (path) => resolve(path).replaceAll('\\', '/');
 const entry = join(scratch, 'entry.ts');
-writeFileSync(entry, `export { app } from '${absolute('worker/index.ts')}';\n`);
+writeFileSync(entry, `export { app } from '${absolute('worker/index.ts')}';
+export { ATTRIBUTE_SCORE_MODEL_VERSION } from '${absolute('worker/data/attributeScoring.ts')}';\n`);
 const modules = {};
 // Node cannot load the Workers runtime module; the cost check only uses the app.
 const workersRuntimeStub = { name: 'workers-runtime-stub', setup(b) {
@@ -48,7 +49,7 @@ const workersRuntimeStub = { name: 'workers-runtime-stub', setup(b) {
 for (const variant of variants) {
   const outfile = join(scratch, variant + '.mjs');
   await build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', format: 'esm',
-    plugins: [workersRuntimeStub, ...(variant === 'bidirectional' ? [bidirectionalCostVariant] : []),
+    plugins: [workersRuntimeStub, ...(variant === 'adjacent' ? [adjacentCostVariant] : []),
       ...(variant !== 'baseline' ? [] : [{ name: 'historical-source', setup(b) {
       b.onLoad({ filter: /[\\/](?:worker|src[\\/]shared)[\\/].*\.ts$/ }, ({ path }) => ({
         contents: execFileSync('git', ['-c', 'core.fsmonitor=false', 'show',
@@ -85,6 +86,8 @@ for (const file of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject')).f
     }
     db.exec(`DELETE FROM attribute_vote_responses; DELETE FROM attribute_score_states; DELETE FROM catalog_change_outbox;
       UPDATE attribute_online_progress SET through_rowid = 0, through_response_id = NULL;`);
+    const variant = name.split('_')[0];
+    db.prepare('UPDATE attribute_online_progress SET model_version = ? WHERE id = 1').run(modules[variant].ATTRIBUTE_SCORE_MODEL_VERSION);
     const ids = db.prepare(`SELECT subject.id FROM attribute_subjects subject
       JOIN attribute_votable_subjects votable ON votable.subject_id = subject.id
       WHERE subject.kind = 'game' ORDER BY subject.id LIMIT 100`).all().map((r) => r.id);
@@ -173,15 +176,19 @@ try {
       (SELECT through_rowid FROM attribute_online_progress WHERE id = 1) LIMIT 1`).first()), null);
     const states = (await raw.prepare(`SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
       comparison_count, decisive_comparison_count, evidence_count FROM attribute_score_states ORDER BY subject_id, attribute_id`).all()).results;
-    if (variant === 'bidirectional') {
+    if (compareRankingModel && variant === 'optimized') {
       const current = expected.get(scenario.id);
       if (scenario.pair) assert.deepEqual(states, current, 'The research variant changed two-game voting');
       else {
         assert.deepEqual(scoreShape(states), scoreShape(current), 'Ranking model changed score targets or evidence counters');
         assert.notDeepEqual(states, current, 'The ranking scorer did not change the score or RD');
       }
-    } else if (variant === 'baseline' || compareRankingModel) expected.set(scenario.id, states);
-    else if (baseline) assert.deepEqual(states, expected.get(scenario.id), 'Whole-request optimization changed scoring');
+    } else if (variant === 'baseline' || variant === 'adjacent') expected.set(scenario.id, states);
+    else if (baseline) {
+      if (scenario.pair || modules.baseline.ATTRIBUTE_SCORE_MODEL_VERSION === modules.optimized.ATTRIBUTE_SCORE_MODEL_VERSION) {
+        assert.deepEqual(states, expected.get(scenario.id), 'Whole-request optimization changed scoring');
+      } else assert.deepEqual(scoreShape(states), scoreShape(expected.get(scenario.id)), 'Ranking model changed evidence counters');
+    }
     const cost = totals(events), phases = {};
     for (const phase of new Set(events.map((e) => e.phase))) phases[phase] = totals(events.filter((e) => e.phase === phase));
     const queries = {};

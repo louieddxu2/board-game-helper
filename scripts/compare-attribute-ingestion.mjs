@@ -28,16 +28,21 @@ mkdirSync('.wrangler', { recursive: true });
 const scratch = mkdtempSync(resolve('.wrangler/attribute-baseline-comparison-'));
 const entry = join(scratch, 'entry.ts');
 const absolute = (path) => resolve(path).replaceAll('\\', '/');
-writeFileSync(entry, [
+const entryExports = [
   `export { saveAttributeResponse } from '${absolute('worker/data/attributeResponses.ts')}';`,
   `export { createDatabase } from '${absolute('worker/data/database.ts')}';`,
   `export { flushCatalogOutbox } from '${absolute('worker/data/catalogOutbox.ts')}';`,
-  `export { applyComparison, emptyAttributeState } from '${absolute('worker/data/attributeScoring.ts')}';`,
+  `export { ATTRIBUTE_SCORE_MODEL_VERSION, applyComparison, emptyAttributeState } from '${absolute('worker/data/attributeScoring.ts')}';`,
   `export { expandStoredRankingResponse } from '${absolute('src/shared/attributeRankingBallot.ts')}';`,
-].join('\n'));
+];
 const modules = {};
 const baselineFiles = new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', baseline, '--', 'worker', 'src/shared'], { encoding: 'utf8' }).trim().split('\n'));
 for (const variant of ['old', 'new']) {
+  const hasJointRanking = variant === 'new' || baselineFiles.has('worker/data/attributeRankingUpdate.ts');
+  writeFileSync(entry, [...entryExports, ...(hasJointRanking ? [
+    `export { applyAttributeRanking } from '${absolute('worker/data/attributeRankingUpdate.ts')}';`,
+    `export { rankedAttributeSubjects } from '${absolute('worker/data/attributeRankedSubjects.ts')}';`,
+  ] : [])].join('\n'));
   const outfile = join(scratch, variant + '.mjs');
   await build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', format: 'esm',
     plugins: variant === 'new' ? [] : [{ name: 'deployed-source', setup(b) {
@@ -79,7 +84,11 @@ for (const file of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject')).f
     if (isNew) for (const migration of migrations) sqlite.exec(readFileSync(join('migrations', migration), 'utf8'));
     else for (const sql of oldSql) sqlite.exec(sql);
     sqlite.exec('DELETE FROM attribute_vote_responses; DELETE FROM attribute_score_states; DELETE FROM catalog_change_outbox');
-    if (isNew) sqlite.exec('UPDATE attribute_online_progress SET through_rowid = 0, through_response_id = NULL');
+    const variant = isNew ? 'new' : 'old';
+    if (sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE name = 'attribute_online_progress'").get()) {
+      sqlite.prepare('UPDATE attribute_online_progress SET through_rowid = 0, through_response_id = NULL, model_version = ?')
+        .run(modules[variant].ATTRIBUTE_SCORE_MODEL_VERSION);
+    }
     const configuration = name.includes('configuration');
     const ids = sqlite.prepare(`SELECT subject.id FROM attribute_subjects subject
       JOIN attribute_votable_subjects votable ON votable.subject_id = subject.id
@@ -90,7 +99,9 @@ for (const file of readdirSync(join(scratch, 'd1/miniflare-D1DatabaseObject')).f
         INSERT INTO attribute_vote_responses(response_id, attribute_id, subject_a_id, subject_b_id,
           comparison, activity_json, session_id, created_at, updated_at)
         SELECT 'old-' || i, ?, ?, ?, 'A_HIGHER', '[]', 'old-fixture', 1, 1 FROM n`).run(attributeId, ids[0], ids[1]);
-      if (isNew) sqlite.exec("UPDATE attribute_online_progress SET through_rowid = 100000, through_response_id = 'old-100000'");
+      if (sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE name = 'attribute_online_progress'").get()) {
+        sqlite.exec("UPDATE attribute_online_progress SET through_rowid = 100000, through_response_id = 'old-100000'");
+      }
     }
   } finally { sqlite.close(); }
 }
@@ -142,9 +153,17 @@ try {
       FROM attribute_vote_responses WHERE session_id LIKE 'person-%' ORDER BY rowid`).all()).results;
     assert.equal(ballots.length, 10);
     const expected = new Map();
-    for (const row of ballots.flatMap(m.expandStoredRankingResponse)) {
-      const next = m.applyComparison(expected.get(row.subject_a_id) ?? m.emptyAttributeState(), expected.get(row.subject_b_id) ?? m.emptyAttributeState(), row.comparison);
-      expected.set(row.subject_a_id, next.a.next); expected.set(row.subject_b_id, next.b.next);
+    for (const ballot of ballots) {
+      if (m.applyAttributeRanking && ballot.ranking_json) {
+        const order = m.rankedAttributeSubjects(JSON.parse(ballot.ranking_json));
+        const scores = m.applyAttributeRanking(order.map((id) => expected.get(id) ?? m.emptyAttributeState()), 1);
+        order.forEach((id, index) => expected.set(id, scores[index]));
+        continue;
+      }
+      for (const row of m.expandStoredRankingResponse(ballot)) {
+        const next = m.applyComparison(expected.get(row.subject_a_id) ?? m.emptyAttributeState(), expected.get(row.subject_b_id) ?? m.emptyAttributeState(), row.comparison);
+        expected.set(row.subject_a_id, next.a.next); expected.set(row.subject_b_id, next.b.next);
+      }
     }
     const states = (await raw.prepare('SELECT * FROM attribute_score_states WHERE attribute_id = ?').bind(attributeId).all()).results;
     assert.equal(states.length, expected.size);
@@ -156,7 +175,11 @@ try {
       s.direct_sum, s.direct_count, s.comparison_count, s.decisive_comparison_count, s.evidence_count])
       .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     if (variant === 'old') baselineStates.set(scenario.id, canonicalStates);
-    else assert.deepEqual(canonicalStates, baselineStates.get(scenario.id), 'Old and new score/count results differ');
+    else {
+      const shape = scenario.kind !== 'pair' && modules.old.ATTRIBUTE_SCORE_MODEL_VERSION !== m.ATTRIBUTE_SCORE_MODEL_VERSION
+        ? (rows) => rows.map((row) => [...row.slice(0, 2), ...row.slice(4)]) : (rows) => rows;
+      assert.deepEqual(shape(canonicalStates), shape(baselineStates.get(scenario.id)), 'Old and new score/count results differ');
+    }
     const totals = requests.reduce((sum, db) => { const s = db.metrics(); return { reads: sum.reads + s.rowsRead, writes: sum.writes + s.rowsWritten, sql: sum.sql + s.queries }; }, { reads: 0, writes: 0, sql: 0 });
     const item = { scenario: scenario.id, variant, firstAccepted: first.filter(Boolean).length, retries: retryCount,
       savedAndScored: ballots.length, ...totals, maxSql: Math.max(...requests.map((db) => db.metrics().queries)), ms: Math.round(performance.now() - start) };

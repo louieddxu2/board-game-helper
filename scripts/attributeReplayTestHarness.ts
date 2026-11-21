@@ -3,6 +3,7 @@ import { type SQLInputValue } from 'node:sqlite';
 import { buildMigratedSchema } from './check-d1-trigger-fanout.mjs';
 import { createDatabase } from '../worker/data/database';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
+import { ATTRIBUTE_SCORE_MODEL_VERSION } from '../worker/data/attributeScoring';
 
 interface SqliteStatement {
   bind(...values: SQLInputValue[]): SqliteStatement;
@@ -16,6 +17,9 @@ export const createHarness = () => {
   // A migration fixture may contain delivery work from its seed history. The
   // weekly job starts after the real outbox worker has drained that work.
   sqlite.exec('DELETE FROM catalog_change_outbox');
+  // Most fixtures start with an activated scorer. Upgrade tests explicitly
+  // install the old marker and go through the real replay handoff.
+  sqlite.prepare('UPDATE attribute_online_progress SET model_version = ? WHERE id = 1').run(ATTRIBUTE_SCORE_MODEL_VERSION);
   const executedSql: string[] = [];
   const prepare = (sql: string, args: SQLInputValue[] = []): SqliteStatement => ({
     bind: (...values: SQLInputValue[]) => prepare(sql, values),

@@ -1,10 +1,12 @@
-import { expandStoredRankingResponse } from '../../src/shared/attributeRankingBallot';
+import type { StoredAttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
 import { acquireAttributeReplayLock, commitAttributeReplay, releaseAttributeReplayLock } from '../data/attributeLocks';
 import { ATTRIBUTE_REPLAY_LOCK_NAME, D1_SAFE_BOUND_PARAMETER_COUNT } from '../data/attributeQueryShared';
 import { attributeScoreWrites } from '../data/attributeScoreWrites';
 import { prepareAttributeScorePublication } from '../data/attributeCatalogPublication';
 import { stateToMatrixValue } from '../data/attributeResponseContext';
+import { rankedAttributeSubjects } from '../data/attributeRankedSubjects';
+import { applyAttributeRanking } from '../data/attributeRankingUpdate';
 import { applyComparison, applyDirectRating, emptyAttributeState, ATTRIBUTE_SCORE_MODEL_VERSION, type OnlineAttributeState } from '../data/attributeScoring';
 import type { Database } from '../data/database';
 
@@ -48,11 +50,13 @@ export const hasPendingAttributeResponses = async (db: Database) => Boolean(awai
 `).first());
 
 const prepareScores = async (db: Database, receipts: PendingResponse[]) => {
-  const rows = receipts.filter((row) => row.recorded_online === 1 && row.online_weight != null).flatMap(expandStoredRankingResponse);
+  const rows = receipts.filter((row) => row.recorded_online === 1 && row.online_weight != null)
+    .map((row) => ({ row, ranking: row.ranking_json ? rankedAttributeSubjects(JSON.parse(row.ranking_json) as StoredAttributeRankingBallot) : null }));
   const targets = new Map<string, [string, string]>();
-  for (const row of rows) {
-    if (!row.attribute_id) continue;
-    for (const id of [row.subject_a_id, row.subject_b_id]) if (id) targets.set(stateKey(id, row.attribute_id), [id, row.attribute_id]);
+  for (const { row, ranking } of rows) {
+    const attribute = row.attribute_id;
+    if (!attribute) continue;
+    for (const id of ranking ?? [row.subject_a_id, row.subject_b_id]) if (id) targets.set(stateKey(id, attribute), [id, attribute]);
   }
   const targetRows = [...targets.values()];
   const attributeId = targetRows[0]?.[1];
@@ -86,18 +90,29 @@ const prepareScores = async (db: Database, receipts: PendingResponse[]) => {
   const touched = new Set<string>();
   const lastReceipt = new Map<string, number>();
   let outOfOrder = false;
-  for (const row of rows) {
-    if (!row.attribute_id) continue;
-    const a = row.subject_a_id ? stateKey(row.subject_a_id, row.attribute_id) : '';
-    const b = row.subject_b_id ? stateKey(row.subject_b_id, row.attribute_id) : '';
+  for (const { row, ranking } of rows) {
+    const attribute = row.attribute_id;
+    if (!attribute) continue;
     const update = (key: string, state: OnlineAttributeState) => {
       states.set(key, state); timestamps.set(key, row.created_at); touched.add(key); lastReceipt.set(key, row.receipt_rowid);
     };
+    const checkOrder = (keys: string[]) => {
+      if (keys.some((key) => lastReceipt.get(key) !== row.receipt_rowid && timestamps.get(key)! >= row.created_at)) outOfOrder = true;
+    };
+    if (ranking) {
+      const keys = ranking.map((id) => stateKey(id, attribute)).filter((key) => states.has(key));
+      if (keys.length < 2) continue;
+      checkOrder(keys);
+      const next = applyAttributeRanking(keys.map((key) => states.get(key)!), row.online_weight!);
+      keys.forEach((key, i) => update(key, next[i]));
+      continue;
+    }
+    const a = row.subject_a_id ? stateKey(row.subject_a_id, attribute) : '';
+    const b = row.subject_b_id ? stateKey(row.subject_b_id, attribute) : '';
     if (row.rating_a != null && states.has(a)) update(a, applyDirectRating(states.get(a)!, row.rating_a, row.online_weight!).next);
     if (row.rating_b != null && states.has(b)) update(b, applyDirectRating(states.get(b)!, row.rating_b, row.online_weight!).next);
     if (row.comparison && a !== b && states.has(a) && states.has(b)) {
-      if (row.rating_a == null && row.rating_b == null && [a, b].some((key) =>
-        lastReceipt.get(key) !== row.receipt_rowid && timestamps.get(key)! >= row.created_at)) outOfOrder = true;
+      if (row.rating_a == null && row.rating_b == null) checkOrder([a, b]);
       const next = applyComparison(states.get(a)!, states.get(b)!, row.comparison, row.online_weight!);
       update(a, next.a.next); update(b, next.b.next);
     }

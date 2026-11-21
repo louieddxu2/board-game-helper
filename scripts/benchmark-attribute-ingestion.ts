@@ -9,8 +9,10 @@ import { createDatabase } from '../worker/data/database';
 import { saveAttributeResponse } from '../worker/data/attributeResponses';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
 import { hasPendingAttributeResponses, processAttributeResponses } from '../worker/workflows/attributeOnlineScoring';
-import { applyComparison, emptyAttributeState, type OnlineAttributeState } from '../worker/data/attributeScoring';
-import { expandStoredRankingResponse } from '../src/shared/attributeRankingBallot';
+import { ATTRIBUTE_SCORE_MODEL_VERSION, emptyAttributeState, type OnlineAttributeState } from '../worker/data/attributeScoring';
+import { applyAttributeRanking } from '../worker/data/attributeRankingUpdate';
+import { rankedAttributeSubjects } from '../worker/data/attributeRankedSubjects';
+import type { StoredAttributeRankingBallot } from '../src/shared/attributeRankingBallot';
 import type { D1Database, D1PreparedStatement } from '../worker/env';
 
 const root = resolve('.wrangler'); mkdirSync(root, { recursive: true });
@@ -45,6 +47,7 @@ for (const name of names) {
   sqlite.exec(`DELETE FROM attribute_vote_responses; DELETE FROM attribute_score_states;
     DELETE FROM catalog_change_outbox;
     UPDATE attribute_online_progress SET through_rowid = 0, through_response_id = NULL;`);
+  sqlite.prepare('UPDATE attribute_online_progress SET model_version = ? WHERE id = 1').run(ATTRIBUTE_SCORE_MODEL_VERSION);
   ids = sqlite.prepare(`SELECT subject.id FROM attribute_subjects subject
     JOIN attribute_votable_subjects votable ON votable.subject_id = subject.id
     WHERE subject.kind = 'game' ORDER BY subject.id LIMIT 6`).all().map((row) => String(row.id));
@@ -95,7 +98,7 @@ try {
       const db = createDatabase({ DB: traced }); requests.push(db);
       const statement = db.statement.bind(db);
       db.statement = (sql) => {
-        if (sql.includes('FROM json_each(?) target')) readers.add(index);
+        if (sql.includes('LEFT JOIN attribute_score_states state')) readers.add(index);
         return statement(sql);
       };
       const result = await saveAttributeResponse(db, {
@@ -114,13 +117,15 @@ try {
     assert.equal(await hasPendingAttributeResponses(control), false, 'The ten upload-triggered requests must drain without an extra trigger');
     const states = (await raw.prepare('SELECT subject_id, score, rating_deviation, comparison_count, evidence_count FROM attribute_score_states WHERE attribute_id = ?')
       .bind(attributeId).all()).results as Array<{ subject_id: string; score: number; rating_deviation: number; comparison_count: number; evidence_count: number }>;
-    const ballots = (await raw.prepare(`SELECT response_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison, ranking_json
-      FROM attribute_vote_responses WHERE session_id LIKE 'person-%' ORDER BY rowid`).all()).results as unknown as Parameters<typeof expandStoredRankingResponse>[0][];
+    const ballots = (await raw.prepare(`SELECT ranking_json, online_weight
+      FROM attribute_vote_responses WHERE session_id LIKE 'person-%' ORDER BY rowid`)
+      .all<{ ranking_json: string; online_weight: number }>()).results ?? [];
     assert.equal(ballots.length, 10);
     const expected = new Map<string, OnlineAttributeState>(ids.map((id) => [id, emptyAttributeState()]));
-    for (const row of ballots.flatMap(expandStoredRankingResponse)) {
-      const next = applyComparison(expected.get(row.subject_a_id!)!, expected.get(row.subject_b_id!)!, row.comparison!);
-      expected.set(row.subject_a_id!, next.a.next); expected.set(row.subject_b_id!, next.b.next);
+    for (const row of ballots) {
+      const order = rankedAttributeSubjects(JSON.parse(row.ranking_json) as StoredAttributeRankingBallot);
+      const next = applyAttributeRanking(order.map((id) => expected.get(id)!), row.online_weight);
+      order.forEach((id, index) => expected.set(id, next[index]));
     }
     for (const row of states) {
       const e = expected.get(row.subject_id)!;

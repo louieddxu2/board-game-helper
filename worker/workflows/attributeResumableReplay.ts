@@ -132,15 +132,23 @@ export const runAttributeReplayWorkLocked = async (
   return 'pending';
 };
 
-/** Outside the weekly window only resume previously scheduled work. */
+const needsScoreModelReplay = async (db: Database) => Boolean(await db.statement(`
+  SELECT 1 FROM attribute_online_progress WHERE id = 1 AND model_version <> ?
+`).bind(ATTRIBUTE_SCORE_MODEL_VERSION).first());
+
+/** Resume existing work or start a one-time model rebuild on the daily run. */
 export const resumePendingAttributeReplay = async (
   db: Database, timestamp: number, budget: ReplayWorkBudget = {},
 ): Promise<ResumableReplayOutcome | null> => {
-  if (!await queryAttributeReplayWork(db)) return null;
+  const pending = await db.statement(`
+    SELECT 1 WHERE EXISTS (SELECT 1 FROM attribute_replay_work WHERE id = 1)
+      OR EXISTS (SELECT 1 FROM attribute_online_progress WHERE id = 1 AND model_version <> ?)
+  `).bind(ATTRIBUTE_SCORE_MODEL_VERSION).first();
+  if (!pending) return null;
   const lock = await acquireAttributeReplayLock(db, timestamp);
   try {
     const work = await queryAttributeReplayWork(db);
-    if (!work) return null;
+    if (!work && !await needsScoreModelReplay(db)) return null;
     const status = await queryAttributeReplayStatus(db);
     return await runAttributeReplayWorkLocked(db, lock, timestamp, status, work, budget);
   } finally {

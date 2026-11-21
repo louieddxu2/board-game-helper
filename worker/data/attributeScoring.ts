@@ -1,5 +1,7 @@
 import type { AttributeComparisonResult, AttributeMatrixValue } from '../../src/shared/types';
-import { rankingComparisons, rankingComparisonId, type StoredAttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
+import type { StoredAttributeRankingBallot } from '../../src/shared/attributeRankingBallot';
+import { rankedAttributeSubjects } from './attributeRankedSubjects';
+import { applyAttributeRanking } from './attributeRankingUpdate';
 
 /**
  * Glicko-1's rating/deviation update, expressed on the product's 0-10 scale.
@@ -7,7 +9,7 @@ import { rankingComparisons, rankingComparisonId, type StoredAttributeRankingBal
  * represented by 40 classic points. Volatility is intentionally not part of
  * this model: RD is the only uncertainty state we persist.
  */
-export const ATTRIBUTE_SCORE_MODEL_VERSION = 'glicko-rd-v2';
+export const ATTRIBUTE_SCORE_MODEL_VERSION = 'glicko-rd-v3';
 export const ATTRIBUTE_INITIAL_SCORE = 5;
 export const ATTRIBUTE_MIN_SCORE = 0;
 export const ATTRIBUTE_MAX_SCORE = 10;
@@ -316,21 +318,25 @@ export const replayAttributeResponses = (
   };
 
   const seenResponses = new Map<string, string>();
-  responses.flatMap((response) => response.ranking
-    ? rankingComparisons(response.ranking, response.ranking.highPole).map((comparison, index) => ({
-      ...response, ...comparison, responseId: rankingComparisonId(response.responseId, index),
-      ratingA: null, ratingB: null, ranking: undefined,
-    }))
-    : [response])
+  [...responses]
     .sort((left, right) => left.createdAt - right.createdAt || left.responseId.localeCompare(right.responseId))
     .forEach((response) => {
-      const identity = JSON.stringify([response.createdAt, response.attributeId, response.subjectAId, response.subjectBId, response.ratingA, response.ratingB, response.comparison]);
+      const identity = JSON.stringify([response.createdAt, response.attributeId, response.subjectAId, response.subjectBId,
+        response.ratingA, response.ratingB, response.comparison, response.ranking]);
       const seen = seenResponses.get(response.responseId);
       if (seen !== undefined) {
         if (seen !== identity) throw new Error('attribute_response_replay_conflict');
         return;
       }
       seenResponses.set(response.responseId, identity);
+      if (response.ranking) {
+        const subjects = [...new Set(rankedAttributeSubjects(response.ranking).map(subjectMapper))];
+        if (subjects.length < 2) return;
+        const current = subjects.map((id) => getState(id, response.attributeId));
+        const next = applyAttributeRanking(current.map(({ state }) => state), 1);
+        current.forEach(({ key }, index) => states.set(key, next[index]));
+        return;
+      }
       const subjectAId = response.subjectAId ? subjectMapper(response.subjectAId) : null;
       const subjectBId = response.subjectBId ? subjectMapper(response.subjectBId) : null;
       if (subjectAId && response.ratingA != null) {

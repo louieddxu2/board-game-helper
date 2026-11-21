@@ -3,8 +3,10 @@ import { expect, test, vi } from 'vitest';
 import { Hono } from 'hono';
 import { attributesRoutes } from '../worker/routes/attributes';
 import { saveAttributeResponse } from '../worker/data/attributeResponses';
-import { applyComparison, emptyAttributeState, type OnlineAttributeState } from '../worker/data/attributeScoring';
-import { expandStoredRankingResponse } from '../src/shared/attributeRankingBallot';
+import { ATTRIBUTE_SCORE_MODEL_VERSION, emptyAttributeState, type OnlineAttributeState } from '../worker/data/attributeScoring';
+import type { StoredAttributeRankingBallot } from '../src/shared/attributeRankingBallot';
+import { rankedAttributeSubjects } from '../worker/data/attributeRankedSubjects';
+import { applyAttributeRanking } from '../worker/data/attributeRankingUpdate';
 import { hasPendingAttributeResponses, processAttributeResponses } from '../worker/workflows/attributeOnlineScoring';
 import { runCompleteAttributeReplay } from '../worker/workflows/attributeReplay';
 import { scheduled } from '../worker';
@@ -32,13 +34,14 @@ const setup = () => {
 };
 
 const expectScoredOnce = (h: ReturnType<typeof setup>, ballots: number, scoreTolerance = 0) => {
-  const raw = h.sqlite.prepare(`SELECT response_id, subject_a_id, subject_b_id, rating_a, rating_b, comparison,
-    ranking_json FROM attribute_vote_responses ORDER BY rowid`).all() as Parameters<typeof expandStoredRankingResponse>[0][];
+  const raw = h.sqlite.prepare('SELECT ranking_json, online_weight FROM attribute_vote_responses ORDER BY rowid')
+    .all() as Array<{ ranking_json: string; online_weight: number }>;
   expect(raw).toHaveLength(ballots);
   const expected = new Map<string, OnlineAttributeState>(h.ids.map((id) => [id, emptyAttributeState()]));
-  for (const row of raw.flatMap(expandStoredRankingResponse)) {
-    const next = applyComparison(expected.get(row.subject_a_id!)!, expected.get(row.subject_b_id!)!, row.comparison!);
-    expected.set(row.subject_a_id!, next.a.next); expected.set(row.subject_b_id!, next.b.next);
+  for (const row of raw) {
+    const ids = rankedAttributeSubjects(JSON.parse(row.ranking_json) as StoredAttributeRankingBallot);
+    const next = applyAttributeRanking(ids.map((id) => expected.get(id)!), row.online_weight);
+    ids.forEach((id, i) => expected.set(id, next[i]));
   }
   for (const [id, state] of expected) {
     const actual = h.sqlite.prepare(`SELECT score, rating_deviation, comparison_count,
@@ -48,6 +51,31 @@ const expectScoredOnce = (h: ReturnType<typeof setup>, ballots: number, scoreTol
       comparison_count: state.comparisonCount, evidence_count: state.evidenceCount });
   }
 };
+
+test('the daily job activates a new scoring model while uploads keep their original receipts', async () => {
+  const h = setup();
+  try {
+    const first = { ...h.input(0), timestamp: 100 };
+    const second = { ...h.input(1), timestamp: 200 };
+    await expect(saveAttributeResponse(h.gateway, first)).resolves.toMatchObject({ scoreStatus: 'applied' });
+    h.sqlite.exec(`UPDATE attribute_online_progress SET model_version = 'glicko-rd-v2';
+      UPDATE attribute_replay_status SET replayed_model_version = 'glicko-rd-v2';
+      UPDATE attribute_score_states SET score = 5, model_version = 'glicko-rd-v2';
+      DELETE FROM catalog_change_outbox;`);
+    await expect(saveAttributeResponse(h.gateway, second)).resolves.toMatchObject({ scoreStatus: 'pending' });
+    expect(h.cursor()).toBe(1);
+    expect(h.sqlite.prepare('SELECT COUNT(*) AS n FROM attribute_vote_responses').get()).toEqual({ n: 2 });
+    await scheduled({ scheduledTime: Date.parse('2026-11-17T01:00:00Z') }, h.env);
+    expect(h.sqlite.prepare('SELECT model_version, through_rowid FROM attribute_online_progress').get())
+      .toEqual({ model_version: ATTRIBUTE_SCORE_MODEL_VERSION, through_rowid: 2 });
+    expect(h.sqlite.prepare('SELECT score_model_version FROM attribute_catalog_snapshot_state').get())
+      .toEqual({ score_model_version: ATTRIBUTE_SCORE_MODEL_VERSION });
+    expectScoredOnce(h, 2);
+    const scores = scoreRows(h);
+    await expect(saveAttributeResponse(h.gateway, second)).resolves.toMatchObject({ scoreStatus: 'applied' });
+    expect(scoreRows(h)).toEqual(scores);
+  } finally { h.sqlite.close(); }
+});
 
 test('ten accepted uploads during a busy lease do not read scores; one owner scores the entire batch once', async () => {
   const h = setup();

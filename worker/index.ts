@@ -212,8 +212,8 @@ const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, '
     cleanupExpiredSessions(db, controller.scheduledTime),
     cleanupAttributeActivityFeed(db),
   ]);
-  // The daily run drains interrupted publications and resumes only an
-  // already-started replay. New catalog refreshes start in the weekly window.
+  // The daily run drains interrupted publications and resumes replay work
+  // or starts the one-time rebuild after a score model change.
   await flushCatalogOutbox(db, controller.scheduledTime);
   const weekly = isWeeklyCatalogRun(controller.scheduledTime);
   if (weekly) {

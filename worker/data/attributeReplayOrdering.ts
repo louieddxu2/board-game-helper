@@ -6,7 +6,7 @@ interface Position { chunk: number; offset: number; }
 
 type OrderedEvent = [
   time: number, streamId: string, subjectAId: string, subjectBId: string | null,
-  value: number | NonNullable<FullReplayHistoryRow['comparison']>, weight: number,
+  value: number | NonNullable<FullReplayHistoryRow['comparison'] | FullReplayHistoryRow['ranking']>, weight: number,
 ];
 
 export type ScoringCursor = { phase: 'ratings' | 'comparisons'; pass: number; chunk: number; lastEventAt: number | null };
@@ -38,16 +38,17 @@ export const prepareCalculationCursor = (db: Database, attributeId: string, curs
 const encodeEvents = (events: FullReplayHistoryRow[]) => encodeAttributeReplayChunks(events.map(
   (event): OrderedEvent => [
     event.created_at, event.stream_id, event.subject_a_id, event.subject_b_id,
-    event.kind === 'rating' ? event.value! : event.comparison!, event.weight,
+    event.ranking ?? event.value ?? event.comparison!, event.weight,
   ],
 ));
 
 const decodeEvents = (attributeId: string, payload: string): FullReplayHistoryRow[] =>
   (JSON.parse(payload) as OrderedEvent[]).map(([created_at, stream_id, subject_a_id, subject_b_id, result, weight]) => ({
     created_at, stream_id, subject_a_id, subject_b_id, attribute_id: attributeId, weight,
-    kind: typeof result === 'number' ? 'rating' : 'comparison',
+    kind: typeof result === 'number' ? 'rating' : typeof result === 'object' ? 'ranking' : 'comparison',
     value: typeof result === 'number' ? result : null,
-    comparison: typeof result === 'number' ? null : result,
+    comparison: typeof result === 'string' ? result : null,
+    ranking: typeof result === 'object' ? result : undefined,
   }));
 
 export const queryOrderedReplayEvents = async (db: Database, attributeId: string, pass: number, run: number, chunk: number) => {
