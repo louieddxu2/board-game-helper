@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { applyBallot, initial } from './ranking-research/models';
 import { correct, drawBallot, neighbors, pairs, swapped, truth } from './ranking-research/order-fixture';
-import { mean, median, randomSource } from './ranking-research/simulation';
+import { mean, median, pearsonCorrelation, randomSource } from './ranking-research/simulation';
 
 const models = ['adjacent', 'list'] as const;
 const trials = 100;
@@ -15,23 +15,10 @@ function midranks(values: number[]) {
   return values.map(v => (positions.indexOf(v) + positions.lastIndexOf(v)) / 2 + 1);
 }
 
-function correlation(x: number[], y: number[]) {
-  const mx = mean(x), my = mean(y);
-  let xx = 0, yy = 0, xy = 0;
-  for (let i = 0; i < x.length; i++) {
-    const dx = x[i] - mx, dy = y[i] - my;
-    xx += dx * dx;
-    yy += dy * dy;
-    xy += dx * dy;
-  }
-  assert(xx > 0 && yy > 0, 'Correlation needs variation in both inputs');
-  return xy / Math.sqrt(xx * yy);
-}
-
 const truthRanks = midranks(truth);
 function finalFit(scores: number[]) {
   // For one predictor and an intercept, in-sample OLS R² is squared Pearson r.
-  return { spearman: correlation(midranks(scores), truthRanks), rSquared: correlation(scores, truth) ** 2,
+  return { spearman: pearsonCorrelation(midranks(scores), truthRanks), rSquared: pearsonCorrelation(scores, truth) ** 2,
     ties: pairs.filter(([low, high]) => scores[low] === scores[high]).length };
 }
 

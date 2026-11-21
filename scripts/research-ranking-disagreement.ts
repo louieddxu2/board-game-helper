@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { applyBallot, initial, type Ballot, type State } from './ranking-research/models';
-import { correct, drawBallot, neighbors, pairs, swapped, truth } from './ranking-research/order-fixture';
+import { correct, drawBallot, drawBallotWithCappedMistakes, neighbors, pairs, swapped, truth } from './ranking-research/order-fixture';
 import { applyCandidate, methods, type Candidate } from './ranking-research/order-candidates';
-import { mean, median, randomSource } from './ranking-research/simulation';
+import { mean, median, pearsonCorrelation, randomSource } from './ranking-research/simulation';
 
 const trainSeeds = 24, testSeeds = 100, horizon = 500;
 type Start = 'swapped' | 'cold' | 'perturbed' | 'neighbor-swaps';
-type Noise = 2 | 5 | 'mixed-tastes';
+type Noise = 2 | 5 | 'mixed-tastes' | 'capped-mistakes';
 type Strategy = 'adjacent' | 'list' | Candidate;
 const pct = (fraction: number) => Number((100 * fraction).toFixed(2));
 const print = (event: string, values: object) => console.log(JSON.stringify({ event, ...values }));
@@ -28,6 +28,7 @@ function fixture(seed: number, start: Start, noise: Noise, voteCount = horizon +
   const tasteA = truth.map(() => setup() < .5 ? -1 : 1);
   const tasteB = tasteA.map(v => -v);
   const ballots = Array.from({ length: voteCount }, () => {
+    if (noise === 'capped-mistakes') return drawBallotWithCappedMistakes(random);
     if (noise !== 'mixed-tastes') return drawBallot(random, noise);
     return drawBallot(random, random() < .5 ? 2 : 5, random() < .5 ? tasteA : tasteB);
   });
@@ -243,15 +244,39 @@ const sparseCheckpoints = [10, 25, 50, 100];
 const confirmationSeed = 643000021;
 const confirmationScenarios = [...scenarios, ['neighbor-swaps', 'mixed-tastes'] as const];
 
-function measureSparseVotes() {
+function measureScoreAgreement(scores: number[]) {
+  return { correlation: pearsonCorrelation(scores, truth), mae: mean(scores.map((score, i) => Math.abs(score - truth[i]))) };
+}
+
+function observedMistakes(fixtures: Fixture[]) {
+  const byGap = Array.from({ length: 11 }, () => ({ count: 0, wrong: 0 }));
+  for (const { ballots } of fixtures) for (const ballot of ballots) {
+    const order = ballot.lowPole ? [...ballot.order].reverse() : ballot.order;
+    for (let i = 0; i < order.length; i++) for (let j = i + 1; j < order.length; j++) {
+      const difference = truth[order[i]] - truth[order[j]];
+      if (!difference) continue;
+      const bucket = byGap[Math.abs(difference)];
+      bucket.count++;
+      bucket.wrong += Number(difference < 0);
+    }
+  }
+  return byGap.slice(1).map(({ count, wrong }, i) => ({ gap: i + 1, count, mistakePercent: pct(wrong / count) }));
+}
+
+function measureSparseVotes(coldScoreFit: boolean) {
   // Freeze the settings from the 500-vote study and reuse the same held-out prefixes.
   const tuned: Candidate = { method: 'bidirectional', slopeFactor: 1.5, evidenceScale: 2, softBounds: true };
   const strategies: Strategy[] = ['adjacent', 'list', { ...tuned, method: 'forward' }, tuned,
     { ...tuned, slopeFactor: 1 }, { ...tuned, method: 'all-pairs' }, { ...tuned, method: 'downweight-close' }];
   const maxVotes = sparseCheckpoints.at(-1)!;
-  for (const [start, noise] of confirmationScenarios) {
+  const selectedScenarios = coldScoreFit ? [['cold', 'capped-mistakes'] as const] : confirmationScenarios;
+  for (const [start, noise] of selectedScenarios) {
     const fixtures = Array.from({ length: testSeeds }, (_, i) =>
       fixture(confirmationSeed + i * 7919, start, noise, maxVotes));
+    if (coldScoreFit) {
+      print('cold-score-baseline', { scoreCorrelation: null, scoreMae: mean(truth.map(score => Math.abs(score - 5))),
+        observedMistakes: observedMistakes(fixtures) });
+    }
     const seenAt = sparseCheckpoints.map(votes => ({
       votes, seenGames: Number(mean(fixtures.map(f => new Set(f.ballots.slice(0, votes).flatMap(b => b.order)).size)).toFixed(2)),
     }));
@@ -266,7 +291,7 @@ function measureSparseVotes() {
           if (!sparseCheckpoints.includes(index + 1)) continue;
           const scores = published(states);
           checkpoints.push({ all: correct(scores, pairs), near: correct(scores, neighbors),
-            planted: correct(scores, wrongAtStart) });
+            planted: correct(scores, wrongAtStart), ...measureScoreAgreement(scores) });
         }
         return checkpoints;
       });
@@ -274,6 +299,8 @@ function measureSparseVotes() {
         const results = runs.map(r => r[i]);
         return { votes, all: pct(mean(results.map(r => r.all)) / pairs.length),
           near: pct(mean(results.map(r => r.near)) / neighbors.length),
+          scoreCorrelation: Number(mean(results.map(r => r.correlation)).toFixed(4)),
+          scoreMae: Number(mean(results.map(r => r.mae)).toFixed(4)),
           planted: wrongAtStart.length ? pct(mean(results.map(r => r.planted)) / wrongAtStart.length) : undefined,
           allPlantedFixed: wrongAtStart.length ? results.filter(r => r.planted === wrongAtStart.length).length : undefined };
       });
@@ -283,8 +310,11 @@ function measureSparseVotes() {
 }
 
 sanity();
-if (process.argv.includes('--sparse')) {
-  measureSparseVotes();
+const coldScoreFit = process.argv.includes('--cold-score-fit');
+if (coldScoreFit || process.argv.includes('--sparse')) {
+  assert.deepEqual(measureScoreAgreement(truth), { correlation: 1, mae: 0 });
+  assert.deepEqual(measureScoreAgreement(truth.map(score => score + 1)), { correlation: 1, mae: 1 });
+  measureSparseVotes(coldScoreFit);
 } else {
   const choices = tune();
   print('phase', { name: 'first-screen' });

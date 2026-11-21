@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { applyBallot, initial, slope, type Ballot, type Model, type State } from './models';
 
 // Irregular gaps on a fixed 0–10 scale; six groups of four games.
@@ -9,6 +10,20 @@ export const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
   return (sorted[Math.floor((sorted.length - 1) / 2)] + sorted[Math.floor(sorted.length / 2)]) / 2;
 };
+
+export function pearsonCorrelation(x: number[], y: number[]) {
+  assert(x.length === y.length, 'Correlation inputs must contain the same observations');
+  const mx = mean(x), my = mean(y);
+  let xx = 0, yy = 0, xy = 0;
+  for (let i = 0; i < x.length; i++) {
+    const dx = x[i] - mx, dy = y[i] - my;
+    xx += dx * dx;
+    yy += dy * dy;
+    xy += dx * dy;
+  }
+  assert(xx > 0 && yy > 0, 'Correlation needs variation in both inputs');
+  return xy / Math.sqrt(xx * yy);
+}
 
 export type Scenario = 'wide-noisy' | 'near-noisy' | 'wide-gaussian' | 'wide-consistent' | 'high-island';
 export const checkpoints = Array.from({ length: 17 }, (_, i) => i * 10);
