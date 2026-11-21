@@ -63,6 +63,48 @@ function covariance(precision: Float64Array[]) {
   return result;
 }
 
+export function priorPrecision(states: State[], ids: number[]) {
+  const precision = identity(ids.length);
+  ids.forEach((id, i) => { precision[i][i] = 1 / states[id].ratingDeviation ** 2; });
+  return precision;
+}
+
+export function addRankEvidence(scores: number[], gradient: Float64Array, precision: Float64Array[],
+  beta: number, weight: number, bottomFirst = false) {
+  const n = scores.length;
+  const direction = bottomFirst ? -beta : beta;
+  const order = scores.map((_, i) => bottomFirst ? n - 1 - i : i);
+  const worth = scores.map(score => Math.exp(direction * score));
+  for (let first = 0; first < n - 1; first++) {
+    let total = 0;
+    for (let j = first; j < n; j++) total += worth[order[j]];
+    gradient[order[first]] += weight * direction;
+    for (let j = first; j < n; j++) {
+      const row = order[j];
+      const probability = worth[row] / total;
+      gradient[row] -= weight * direction * probability;
+      const curvature = weight * direction ** 2 * probability;
+      precision[row][row] += curvature;
+      for (let k = first; k < n; k++) precision[row][order[k]] -= curvature * worth[order[k]] / total;
+    }
+  }
+}
+
+export function updateRankedStates(states: State[], ids: number[], gradient: Float64Array,
+  precision: Float64Array[], softBounds = false) {
+  const cov = covariance(precision);
+  ids.forEach((id, i) => {
+    let delta = cov[i].reduce((sum, cell, j) => sum + cell * gradient[j], 0);
+    const previous = states[id].score;
+    if (softBounds) {
+      const room = delta > 0 ? 10 - previous : previous;
+      delta = room === 0 ? 0 : Math.sign(delta) * room * -Math.expm1(-Math.abs(delta) / room);
+    }
+    states[id] = { ...states[id], score: Math.max(0, Math.min(10, previous + delta)),
+      ratingDeviation: Math.max(ATTRIBUTE_MIN_RD, Math.sqrt(cov[i][i])) };
+  });
+}
+
 // One local Gaussian update of the weighted rank likelihood at the prior
 // means. Cross-game covariance is used inside this ballot only.
 export function applyBallot(states: State[], ballot: Ballot, model: Model, replayReference = false) {
@@ -70,10 +112,8 @@ export function applyBallot(states: State[], ballot: Ballot, model: Model, repla
   const ids = ballot.lowPole ? [...ballot.order].reverse() : ballot.order;
   const n = ids.length;
   const rankSlope = model === 'steeper-list' ? 2 * slope : slope;
-  const worth = ids.map(id => Math.exp(rankSlope * states[id].score));
   const gradient = new Float64Array(n);
-  const precision = identity(n);
-  for (let i = 0; i < n; i++) precision[i][i] = 1 / states[ids[i]].ratingDeviation ** 2;
+  const precision = priorPrecision(states, ids);
 
   const ref = ballot.reference;
   const useRef = ref && (model === 'anchor' && ref.confirmed || model === 'blind-control');
@@ -84,18 +124,7 @@ export function applyBallot(states: State[], ballot: Ballot, model: Model, repla
   const harmonicSum = ids.reduce((sum, _, i) => sum + 1 / (i + 1), 0);
   const rankWeight = ballot.weight * (budget - anchorUnits) / (2 * (n - harmonicSum)) * (slope / rankSlope) ** 2;
 
-  for (let first = 0; first < n - 1; first++) {
-    let total = 0;
-    for (let j = first; j < n; j++) total += worth[j];
-    gradient[first] += rankWeight * rankSlope;
-    for (let j = first; j < n; j++) {
-      const probability = worth[j] / total;
-      gradient[j] -= rankWeight * rankSlope * probability;
-      const curvature = rankWeight * rankSlope ** 2 * probability;
-      precision[j][j] += curvature;
-      for (let k = first; k < n; k++) precision[j][k] -= curvature * worth[k] / total;
-    }
-  }
+  addRankEvidence(ids.map(id => states[id].score), gradient, precision, rankSlope, rankWeight);
   if (useRef) {
     const index = ids.indexOf(ref.player);
     assert(index >= 0 && !ids.includes(ref.id));
@@ -107,10 +136,5 @@ export function applyBallot(states: State[], ballot: Ballot, model: Model, repla
     gradient[index] += ballot.weight * anchorUnits * slope * (Number(higher) - p);
     precision[index][index] += ballot.weight * anchorUnits * slope ** 2 * p * (1 - p);
   }
-  const cov = covariance(precision);
-  ids.forEach((id, i) => {
-    const delta = cov[i].reduce((sum, cell, j) => sum + cell * gradient[j], 0);
-    states[id] = { ...states[id], score: Math.max(0, Math.min(10, states[id].score + delta)),
-      ratingDeviation: Math.max(ATTRIBUTE_MIN_RD, Math.sqrt(cov[i][i])) };
-  });
+  updateRankedStates(states, ids, gradient, precision);
 }

@@ -1,44 +1,13 @@
 import assert from 'node:assert/strict';
-import { applyBallot, initial, type Ballot } from './ranking-research/models';
+import { applyBallot, initial } from './ranking-research/models';
+import { correct, drawBallot, neighbors, pairs, swapped, truth } from './ranking-research/order-fixture';
 import { mean, median, randomSource } from './ranking-research/simulation';
 
-// Five distinct subjects at each integer level. Only cross-level order is observable.
-const truth = Array.from({ length: 55 }, (_, id) => Math.floor(id / 5));
-const ids = truth.map((_, i) => i);
 const models = ['adjacent', 'list'] as const;
 const trials = 100;
 const horizon = 500;
 const checkpoints = new Set([0, 100, 250, horizon]);
-const pairs = ids.flatMap(low => ids.filter(high => truth[high] > truth[low]).map(high => [low, high] as const));
-const neighbors = pairs.filter(([low, high]) => truth[high] - truth[low] === 1);
-const swapped = pairs.filter(([low, high]) => truth[low] === 2 && truth[high] === 8);
 assert.deepEqual([pairs.length, neighbors.length, swapped.length], [1375, 250, 25]);
-
-function drawBallot(random: () => number, spread: number): Ballot {
-  let chosen: number[];
-  do {
-    const pool = [...ids];
-    for (let i = 0; i < 6; i++) {
-      const j = i + Math.floor(random() * (pool.length - i));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    chosen = pool.slice(0, 6);
-  } while (Math.max(...chosen.map(id => truth[id])) - Math.min(...chosen.map(id => truth[id])) < 8);
-  const perceptions = chosen.map(id => ({
-    id, score: Math.max(0, Math.min(10, truth[id] + Math.floor(random() * (2 * spread + 1)) - spread)),
-    tieBreaker: random(),
-  }));
-  const order = perceptions.sort((a, b) => b.score - a.score || b.tieBreaker - a.tieBreaker).map(v => v.id);
-  const lowPole = random() < .5;
-  return { order: lowPole ? order.reverse() : order, lowPole, weight: 1 };
-}
-
-// Strictly resolved order at the precision published in the catalog.
-function correct(scores: number[], subset: typeof pairs) {
-  let count = 0;
-  for (const [low, high] of subset) if (scores[low] < scores[high]) count++;
-  return count;
-}
 
 // Each tied observation gets the average of the positions occupied by its group.
 function midranks(values: number[]) {
