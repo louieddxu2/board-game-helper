@@ -7,7 +7,7 @@ import { useSession } from '../context/SessionContext';
 import { useGamePageMeta } from '../hooks/useGamePageMeta';
 import { useRuleFilters } from '../hooks/useRuleFilters';
 import { useToast } from '../context/ToastContext';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, supersedeGameRefreshes } from '../lib/api';
 import { writeHomeMode } from '../lib/homeMode';
 import { localDb } from '../lib/localDb';
 import { applyRuleImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
@@ -272,7 +272,12 @@ export const GamePage = () => {
         <div className="game-hero-meta">
           {game.englishName && <p className="english-name">{game.englishName}</p>}
           {canEdit && !canRenameGame && <span className="muted game-name-locked" title="已有其他作者參與，只有管理員可以修改遊戲名稱。" aria-label="遊戲名稱已鎖定">名稱已鎖定</span>}
-          {canEdit && game.reviewStatus === 'pending' && <button type="button" className="game-review-action" onClick={() => void api.reviewGame(game.id).then(() => load()).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}
+          {canEdit && game.reviewStatus === 'pending' && <button type="button" className="game-review-action" onClick={() => void api.reviewGame(game.id).then(async (result) => {
+            // Show the reviewed game now; a cached copy read during a reload would still be pending.
+            setGame((current) => current ? { ...current, reviewStatus: result.reviewStatus, reviewedByNickname: result.reviewedByNickname, reviewedAt: result.reviewedAt } : current);
+            supersedeGameRefreshes();
+            await localDb.invalidateGame(game.id);
+          }).catch((caught) => showToast(caught instanceof ApiError && caught.code === 'reviewer_nickname_required' ? '請先在帳號頁設定並公開顯示暱稱，才能完成審核。' : '審核失敗，請稍後再試。'))}>審核遊戲</button>}
         </div>
       </div>
       <div className="inline-actions game-hero-actions">

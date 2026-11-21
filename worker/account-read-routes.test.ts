@@ -68,7 +68,7 @@ describe('account read routes', () => {
     expect(recorded[0].sql).toContain('LIMIT 6');
     expect(recorded[1].sql).toContain("g.review_status = 'pending'");
     expect(recorded[1].sql).toContain("g.visibility = 'public'");
-    expect(recorded[1].sql).toContain('LIMIT 1');
+    expect(recorded[1].sql).toContain('LIMIT 6');
     expect(payload).toMatchObject({ quota: { pendingRules: 1, pendingGames: 1 } });
     expect(payload.rules).toHaveLength(1);
     expect(payload.games).toHaveLength(1);

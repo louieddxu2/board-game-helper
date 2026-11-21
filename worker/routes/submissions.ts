@@ -7,10 +7,11 @@ import { getDatabase, type DatabaseStatement } from '../data/database';
 import { assertMutationOrigin, cleanAliases, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
-import { EXACT_GAME_NAME_IDS, setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
+import { setNoCache, ruleSelect, homeRuleSelect, toRule, cleanTagNames, cleanEditionNotes, tagWriteStatements, toGame, reviewContentFromRow, reviewRuleSelect , RuleRow, GameRow, ReviewRuleRow } from './shared';
 import { contributionErrorCode, initialReviewStatus, isTrustedEditor, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 import { ensureRuleGameVariantStatements, resolveRuleBaseGame } from '../data/gameEntities';
+import { findGameByRequestedName } from '../data/gameNameMatch';
 
 const submissionsRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -95,12 +96,7 @@ submissionsRoutes.post('/api/submissions', requireUser, async (c) => {
   } else {
     const requested = parsed.data.newGame!;
     const normalizedName = normalizeText(requested.displayName);
-    const existingGame = await getDatabase(c).statement(`
-      SELECT g.id, g.slug FROM games g INDEXED BY sqlite_autoindex_games_1
-      WHERE g.merged_into_game_id IS NULL AND g.visibility = 'public'
-        AND g.id IN (${EXACT_GAME_NAME_IDS})
-      LIMIT 1
-    `).bind(normalizedName, normalizedName).first<{ id: string; slug: string }>();
+    const existingGame = await findGameByRequestedName(getDatabase(c), [requested.displayName, requested.englishName]);
     if (existingGame) {
       if (!await useBaseGame(existingGame.id)) return c.json({ error: 'game_not_found' }, 404);
     } else {

@@ -12,7 +12,7 @@ import { api, ApiError } from '../lib/api';
 import { collectEditionOptions } from '../lib/editionOptions';
 import { localDb } from '../lib/localDb';
 import { canUserReviewRule } from '../lib/rulePermissions';
-import { GAME_EXTERNAL_RESOURCE_CATEGORIES, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type RuleCard as RuleCardType, type RuleRevision, type TagSelection } from '../shared/types';
+import { GAME_EXTERNAL_RESOURCE_CATEGORIES, type GameDetail, type GameExternalResource, type GameExternalResourceCategory, type RuleCard as RuleCardType, type RuleContributor, type RuleRevision, type TagSelection } from '../shared/types';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 
 const RESOURCE_CATEGORY_LABELS: Record<GameExternalResourceCategory, string> = {
@@ -108,6 +108,13 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const [sourceUrl, setSourceUrl] = useState(rule.sourceUrl ?? '');
   const [saving, setSaving] = useState(false);
   const [revisions, setRevisions] = useState<RuleRevision[]>();
+  const [contributor, setContributor] = useState<RuleContributor | null>();
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    void api.ruleContributor(rule.id).then((data) => { if (active) setContributor(data.contributor); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [isAdmin, rule.id]);
   const canWithdraw = !canEdit && rule.reviewStatus === 'pending' && rule.createdBy === user?.id;
   const editionOptions = useMemo(() => collectEditionOptions(game.rules), [game.rules]);
   useEffect(() => {
@@ -143,7 +150,12 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   const review = async () => {
     setSaving(true);
     try {
-      await api.reviewRule(rule.id);
+      const result = await api.reviewRule(rule.id);
+      // Store the reviewed state before reloading, so the cached copy shown first is already current.
+      await localDb.cacheRuleEntity({ ...rule, reviewStatus: result.reviewStatus, reviewedByNickname: result.reviewedByNickname, reviewedAt: result.reviewedAt }).catch(() => undefined);
+      if (result.gameReviewed) {
+        await localDb.markCachedGameReviewed(game.id, { reviewedByNickname: result.reviewedByNickname, reviewedAt: result.reviewedAt }).catch(() => undefined);
+      }
       await localDb.invalidateHome();
       await onSaved();
     } catch (caught) {
@@ -155,6 +167,9 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
   return <div className="modal-backdrop" role="presentation">
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-rule-title">
       <div className="modal-heading"><h2 id="edit-rule-title">編輯規則</h2><button type="button" aria-label="關閉編輯視窗" onClick={onClose}>×</button></div>
+      {isAdmin && contributor !== undefined && <p className="muted rule-contributor">提交者（僅管理員可見）：{contributor
+        ? contributor.deleted ? '已刪除帳號' : [contributor.nickname, contributor.maskedEmail].filter(Boolean).join('・')
+        : '無紀錄'}</p>}
       <label>{zhTWCopy.terms.correctRule}<textarea rows={3} value={statement} onChange={(event) => setStatement(event.target.value)} /></label>
       <label>{zhTWCopy.terms.mistakeSituation}<textarea rows={2} value={commonMistake} onChange={(event) => setCommonMistake(event.target.value)} /></label>
       <label>補充說明<textarea rows={3} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
@@ -166,7 +181,7 @@ export const RuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail;
       {user && <section className="revision-panel">
         <button type="button" className="text-action" onClick={() => void api.ruleRevisions(rule.id).then((data) => setRevisions(data.revisions))}>查看版本紀錄</button>
         {revisions && (revisions.length ? <div className="admin-list">{revisions.map((revision) => <div key={revision.id}>
-          <span><strong>{revision.previousStatement}</strong><small>{new Date(revision.createdAt).toLocaleString('zh-TW')}・{revision.reason}</small></span>
+          <span><strong>{revision.previousStatement}</strong><small>{[new Date(revision.createdAt).toLocaleString('zh-TW'), revision.reason, revision.editorNickname ?? revision.editorEmail].filter(Boolean).join('・')}</small></span>
           {canEdit && <button type="button" className="text-action" onClick={() => void confirm({ title: '恢復這個版本？', message: '目前內容也會保留在版本紀錄中。', confirmLabel: '恢復版本' }).then((confirmed) => { if (confirmed) return api.restoreRevision(rule.id, revision.id).then(onSaved); })}>恢復</button>}
         </div>)}</div> : <p className="muted">尚無較早版本。</p>)}
       </section>}

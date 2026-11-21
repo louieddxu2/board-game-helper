@@ -185,4 +185,42 @@ describe('rule mutation URL validation', () => {
     expect(ownResponse.status).toBe(200);
     expect(otherResponse.status).toBe(403);
   });
+
+  const accountDatabase = () => {
+    const statement = (sql: string) => {
+      const item = {
+        bind: () => item,
+        first: async () => {
+          if (sql.includes('SELECT created_by FROM rules')) return { created_by: 'ordinary-1' };
+          if (sql.includes('SELECT u.id, u.masked_email, u.nickname')) return { id: 'ordinary-1', masked_email: 'o***1@gmail.com', nickname: '芋頭' };
+          return null;
+        },
+        all: async () => ({ results: sql.includes('FROM rule_revisions') ? [{
+          id: 'rev-1', reason: 'edit', created_at: 5, previous_json: '{"statement":"舊規則"}', editor_email: 'e***r@gmail.com', editor_nickname: '編輯',
+        }] : [], meta: {} }),
+        run: async () => ({ results: [], meta: {} }),
+      };
+      return item;
+    };
+    return { statement, batch: async () => [] } as unknown as Database;
+  };
+
+  test('shows who edited each revision only to admins', async () => {
+    const ownerRevisions = await (await appFor({ id: 'ordinary-1', roles: [] }, accountDatabase()).request('https://rules.example/api/rules/rule-1/revisions')).json() as { revisions: Array<Record<string, unknown>> };
+    const editorRevisions = await (await appFor({ id: 'editor-1', roles: ['editor'] }, accountDatabase()).request('https://rules.example/api/rules/rule-1/revisions')).json() as { revisions: Array<Record<string, unknown>> };
+    const adminRevisions = await (await appFor({ id: 'admin-1', roles: ['admin'] }, accountDatabase()).request('https://rules.example/api/rules/rule-1/revisions')).json() as { revisions: Array<Record<string, unknown>> };
+
+    expect(ownerRevisions.revisions[0]).not.toHaveProperty('editorEmail');
+    expect(editorRevisions.revisions[0]).not.toHaveProperty('editorEmail');
+    expect(adminRevisions.revisions[0]).toMatchObject({ previousStatement: '舊規則', editorEmail: 'e***r@gmail.com', editorNickname: '編輯' });
+  });
+
+  test('shows the submitter of a rule only to admins, even with a private nickname', async () => {
+    const admin = await appFor({ id: 'admin-1', roles: ['admin'] }, accountDatabase()).request('https://rules.example/api/rules/rule-1/contributor');
+    const editor = await appFor({ id: 'editor-1', roles: ['editor'] }, accountDatabase()).request('https://rules.example/api/rules/rule-1/contributor');
+
+    expect(admin.status).toBe(200);
+    expect(await admin.json()).toEqual({ contributor: { id: 'ordinary-1', maskedEmail: 'o***1@gmail.com', nickname: '芋頭', deleted: false } });
+    expect(editor.status).toBe(403);
+  });
 });

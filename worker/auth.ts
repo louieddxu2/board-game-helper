@@ -6,6 +6,7 @@ import type { Env, RouteEnv } from './env';
 import { getDatabase, type Database } from './data/database';
 import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeEmail, now, sha256Hex } from './utils';
 import { requireAttributeReplayAfterChange } from './data/attributeVoteWeights';
+import { trustContributorStatements } from './data/trustedContributor';
 import { isWriteBudgetExhausted, WRITE_BUDGET_EXHAUSTED } from './data/writeBudget';
 
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
@@ -35,13 +36,18 @@ export const googleAudiences = (env: Pick<Env, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIE
   ...(env.GOOGLE_CLIENT_IDS ?? '').split(','),
 ].map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 
-const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> => {
+const roleAccessForUser = async (db: Database, userId: string): Promise<Pick<SessionUser, 'roles' | 'roleGrantedAt'>> => {
   const rows = await db.statement(`
-    SELECT role FROM user_roles
+    SELECT role, granted_at FROM user_roles
     WHERE user_id = ? AND revoked_at IS NULL
-  `).bind(userId).all<{ role: UserRole }>();
-  return (rows.results ?? []).map((row) => row.role);
+  `).bind(userId).all<{ role: UserRole; granted_at: number | null }>();
+  const results = rows.results ?? [];
+  // The latest grant lets the account page announce new editor access once.
+  const roleGrantedAt = Math.max(0, ...results.map((row) => Number(row.granted_at ?? 0)));
+  return { roles: results.map((row) => row.role), ...(roleGrantedAt ? { roleGrantedAt } : {}) };
 };
+
+const rolesForUser = async (db: Database, userId: string): Promise<UserRole[]> => (await roleAccessForUser(db, userId)).roles;
 
 const userById = async (db: Database, userId: string): Promise<SessionUser | undefined> => {
   const row = await db.statement(`
@@ -53,7 +59,7 @@ const userById = async (db: Database, userId: string): Promise<SessionUser | und
     maskedEmail: row.masked_email ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
-    roles: await rolesForUser(db, row.id),
+    ...await roleAccessForUser(db, row.id),
   };
 };
 
@@ -78,13 +84,12 @@ const sessionUser = async (db: Database, token: string): Promise<SessionUser | u
     await db.statement('DELETE FROM sessions WHERE id_hash = ?').bind(tokenHash).run();
     return undefined;
   }
-  const roles = await rolesForUser(db, row.id);
   return {
     id: row.id,
     maskedEmail: row.masked_email ?? undefined,
     nickname: row.nickname ?? undefined,
     showNickname: Boolean(row.show_nickname),
-    roles,
+    ...await roleAccessForUser(db, row.id),
   };
 };
 
@@ -185,6 +190,7 @@ const upsertGoogleUser = async (c: AppContext, profile: {
         ON CONFLICT(user_id, role) DO NOTHING
       `).bind(userId, timestamp, invite.id),
       requireAttributeReplayAfterChange(getDatabase(c)),
+      ...trustContributorStatements(getDatabase(c), userId),
       getDatabase(c).statement(`
         UPDATE editor_invitations
         SET claimed_by = ?, claimed_at = ?, email_hash = NULL, masked_email = NULL

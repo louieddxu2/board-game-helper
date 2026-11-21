@@ -20,6 +20,14 @@ export const localDbContent = {
     }
     await tx.done;
   },
+  /** Marks a cached game reviewed, so a reload right after reviewing does not show it pending. */
+  markCachedGameReviewed: async (gameId: string, review: Pick<GameSummary, 'reviewedByNickname' | 'reviewedAt'>) => {
+    const db = await getDatabase();
+    const tx = db.transaction('games', 'readwrite');
+    const game = await tx.store.get(gameId);
+    if (game?.reviewStatus === 'pending') await tx.store.put({ ...game, ...review, reviewStatus: 'reviewed' });
+    await tx.done;
+  },
   mergeCachedGame: async (sourceGame: GameSummary, targetGame: GameSummary, movedRuleIds: string[] = []) => {
     const db = await getDatabase();
     const cachedAt = Date.now();

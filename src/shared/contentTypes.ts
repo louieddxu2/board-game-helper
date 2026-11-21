@@ -71,8 +71,18 @@ export interface RuleRevision {
   id: string;
   reason: string;
   createdAt: number;
+  /** Admins only, like other account information. */
   editorEmail?: string;
+  editorNickname?: string;
   previousStatement: string;
+}
+
+/** Who submitted a rule, shown to admins even when the account keeps its nickname private. */
+export interface RuleContributor {
+  id: string;
+  maskedEmail: string;
+  nickname?: string;
+  deleted: boolean;
 }
 
 export interface GameDetail extends GameSummary {

@@ -78,5 +78,7 @@ test('checked-in preview is reproducible from its retained source states', () =>
     activities: [], candidates: [],
   });
   expect(replay.rows).toEqual(saved.rows);
-  expect(renderWinMergePreview(replay, saved.fetchedAt, saved.source).trimEnd()).toBe(readFileSync('docs/attribute-win-merge-preview-2026-09-08.md', 'utf8').trimEnd());
+  // Git may check the document out with CRLF line endings on Windows (core.autocrlf); compare the text itself.
+  const checkedIn = readFileSync('docs/attribute-win-merge-preview-2026-09-08.md', 'utf8').replace(/\r\n/g, '\n');
+  expect(renderWinMergePreview(replay, saved.fetchedAt, saved.source).trimEnd()).toBe(checkedIn.trimEnd());
 });

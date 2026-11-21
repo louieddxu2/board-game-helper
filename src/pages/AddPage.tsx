@@ -15,6 +15,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useToast } from '../context/ToastContext';
 import { ApiError, api } from '../lib/api';
 import { collectEditionOptions, mergeEditionOptions } from '../lib/editionOptions';
+import { exactGameNameMatch } from '../lib/gameCatalog';
 import { localDb, type DraftRecord } from '../lib/localDb';
 import { parseRuleDraftImport } from '../lib/ruleDraftImport';
 import { hydrateRuleTags } from '../lib/tagHydration';
@@ -336,6 +337,18 @@ export const AddPage = () => {
   };
 
   const requestSubmit = async () => {
+    if (!game && gameQuery.trim()) {
+      // A typed catalog name selects that game; only a name the catalog lacks creates a new game.
+      const typed = gameQuery.trim();
+      let matched: GameSummary | undefined;
+      try { matched = exactGameNameMatch((await api.searchGames(typed, undefined, { includeGamesWithoutPublishedRules: true })).games, typed); }
+      catch { matched = undefined; }
+      if (matched) {
+        selectGame(matched);
+        showToast(`已選擇既有遊戲「${matched.displayName}」，請確認後再送出。`, 'info');
+        return;
+      }
+    }
     if (!game && gameQuery.trim() && !await confirm({ title: '建立新遊戲？', message: `將以「${gameQuery.trim()}」建立新遊戲並投稿規則。`, confirmLabel: '建立並投稿' })) return;
     await submit();
   };

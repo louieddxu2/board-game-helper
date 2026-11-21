@@ -1,4 +1,4 @@
-import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleRevision, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
+import type { AccountCreatedRulesPayload, AccountDeletionSummary, AccountModifiedRulesPayload, AccountPayload, AttributeCatalogChangesPayload, AttributeCatalogPayload, AttributeComparisonResult, AttributeMatrixValue, ContributionQuota, ContributionsPayload, EditorAdminPayload, FavoriteMutationPayload, GameCatalogChangesPayload, GameCatalogPayload, GameDetail, GameExternalResource, GameSummary, HomePayload, PersonalHomePayload, PublicTagCatalogChangesPayload, PublicTagCatalogPayload, ReviewBatch, ReviewContent, ReviewProposal, RuleCard, RuleImportanceMutationPayload, RuleImportancePayload, RuleContributor, RuleRevision, SessionUser, SubmissionInput, TagSummary } from '../shared/types';
 import { localDb, type AttributeCatalogCacheRecord, type GameCatalogCacheRecord } from './localDb';
 import { filterGameCatalog, isStandaloneGame } from './gameCatalog';
 import { homeContentKey } from './homeCache';
@@ -238,10 +238,18 @@ const gameContentKey = (game: GameDetail): string => JSON.stringify({
 });
 
 const gameRefreshRequests = new Map<string, Promise<{ game: GameDetail }>>();
+// Bumped after a write: a refresh already in flight may have read the game before that write,
+// so the next read must not join it, and its older response must not overwrite the cache.
+let gameRefreshGeneration = 0;
+export const supersedeGameRefreshes = () => {
+  gameRefreshGeneration += 1;
+  gameRefreshRequests.clear();
+};
 const refreshGame = (identifier: string, includePrivate: boolean): Promise<{ game: GameDetail }> => {
   const key = `${identifier}:${includePrivate ? 'private' : 'public'}`;
   const existing = gameRefreshRequests.get(key);
   if (existing) return existing;
+  const generation = gameRefreshGeneration;
   const request = (async () => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -250,7 +258,9 @@ const refreshGame = (identifier: string, includePrivate: boolean): Promise<{ gam
     finally { clearTimeout(timeout); }
     const rulesComplete = Boolean(response.rulesComplete);
     if (includePrivate && !rulesComplete) throw new ApiError('forbidden', 403);
-    if (!response.offlineFallback) await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
+    if (!response.offlineFallback && generation === gameRefreshGeneration) {
+      await localDb.cacheGame(response.game, rulesComplete).catch(() => undefined);
+    }
     return { game: presentGame(response.game, includePrivate) };
   })().finally(() => { if (gameRefreshRequests.get(key) === request) gameRefreshRequests.delete(key); });
   gameRefreshRequests.set(key, request);
@@ -501,11 +511,12 @@ export const api = {
     await localDb.updateCachedRuleEntity(response.rule).catch(() => undefined);
     return response;
   }),
-  reviewRule: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/rules/${id}/review`, { method: 'POST', body: '{}' }),
+  reviewRule: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number; gameReviewed?: boolean }>(`/api/rules/${id}/review`, { method: 'POST', body: '{}' }),
   reviewGame: (id: string) => mutation<{ ok: true; reviewStatus: 'reviewed'; reviewedByNickname: string; reviewedAt: number }>(`/api/games/${id}/review`, { method: 'POST', body: '{}' }),
   hideRule: (id: string) => mutation<{ ok: true }>(`/api/rules/${id}/hide`, { method: 'POST', body: '{}' }),
   restoreRule: (id: string) => mutation<{ ok: true }>(`/api/rules/${id}/restore`, { method: 'POST', body: '{}' }),
   ruleRevisions: (id: string) => uncachedRead<{ revisions: RuleRevision[] }>(`/api/rules/${id}/revisions`, 'revision history is user-specific and must be current'),
+  ruleContributor: (id: string) => uncachedRead<{ contributor: RuleContributor | null }>(`/api/rules/${id}/contributor`, 'submitter identity is admin-only account information and must be current'),
   restoreRevision: (ruleId: string, revisionId: string) => mutation<{ ok: true }>(`/api/rules/${ruleId}/revisions/${revisionId}/restore`, { method: 'POST', body: '{}' }),
   mergeGame: async (id: string, targetGameId: string) => {
     const response = await mutation<GameMergeResponse>(`/api/games/${id}/merge`, {

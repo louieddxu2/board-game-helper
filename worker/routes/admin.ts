@@ -9,6 +9,7 @@ import { createId, hashEmail, legacyHashEmail, maskEmail, normalizeText, now, sl
 import { resolveRuleTags, setNoCache, ruleSelect, toRule, cleanTagNames, tagWriteStatements, toGame, RuleRow, GameRow } from './shared';
 import { ensureRuleGameVariantStatements } from '../data/gameEntities';
 import { DELETED_ACCOUNT_ID } from '../data/accountDeletion';
+import { trustContributorStatements } from '../data/trustedContributor';
 
 const adminRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -162,6 +163,7 @@ adminRoutes.post('/api/admin/editors/:userId/grant', requireRole('admin'), async
       ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
     `).bind(userId, body.data.role, c.get('user')!.id, now()),
     requireAttributeReplayAfterChange(getDatabase(c)),
+    ...trustContributorStatements(getDatabase(c), userId),
   ]);
   return c.json({ ok: true });
 });
@@ -193,6 +195,7 @@ adminRoutes.post('/api/admin/editors/invite', requireRole('admin'), async (c) =>
         ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL, granted_at = excluded.granted_at, granted_by = excluded.granted_by
       `).bind(existingUser.id, body.data.role, c.get('user')!.id, timestamp),
       requireAttributeReplayAfterChange(getDatabase(c)),
+      ...trustContributorStatements(getDatabase(c), existingUser.id),
     ]);
     return c.json({ ok: true, userId: existingUser.id });
   }

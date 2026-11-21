@@ -71,7 +71,7 @@ describe('contribution policy helpers', () => {
 
     await expect(queryContributionQuota(db, 'ordinary')).resolves.toEqual({
       pendingRules: 4, ruleLimit: RULE_CONTRIBUTION_LIMIT, remainingRules: 2,
-      pendingGames: 1, gameLimit: GAME_CONTRIBUTION_LIMIT, remainingGames: 0,
+      pendingGames: 1, gameLimit: GAME_CONTRIBUTION_LIMIT, remainingGames: 5,
     });
     expect(ruleStatement.bind).toHaveBeenCalledWith('ordinary', 'ordinary');
     expect(gameStatement.bind).toHaveBeenCalledWith('ordinary');
@@ -81,7 +81,7 @@ describe('contribution policy helpers', () => {
     const db = {
       statement: vi.fn()
         .mockReturnValueOnce(statement({ count: 9 }))
-        .mockReturnValueOnce(statement({ count: 2 })),
+        .mockReturnValueOnce(statement({ count: 7 })),
     } as unknown as Database;
     await expect(queryContributionQuota(db, 'ordinary')).resolves.toMatchObject({ remainingRules: 0, remainingGames: 0 });
     expect(contributionErrorCode(new Error('D1_ERROR: pending_rule_limit'))).toBe('PENDING_RULE_LIMIT_REACHED');

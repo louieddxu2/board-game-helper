@@ -2,7 +2,7 @@ import type { ContributionQuota, ContributionReviewStatus, SessionUser } from '.
 import type { Database } from './data/database';
 
 export const RULE_CONTRIBUTION_LIMIT = 6;
-export const GAME_CONTRIBUTION_LIMIT = 1;
+export const GAME_CONTRIBUTION_LIMIT = 6;
 
 export const isTrustedEditor = (user: Pick<SessionUser, 'roles'>) =>
   user.roles.includes('admin') || user.roles.includes('editor');

@@ -7,6 +7,8 @@ export interface SessionUser {
   nickname?: string;
   showNickname?: boolean;
   roles: UserRole[];
+  /** When the latest active editor or admin role was granted. */
+  roleGrantedAt?: number;
 }
 
 export interface EditorAccessUser {

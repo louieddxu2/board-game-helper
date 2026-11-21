@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { api } from './api';
+import { api, supersedeGameRefreshes } from './api';
 import { localDb } from './localDb';
 afterEach(() => {
   vi.restoreAllMocks();
@@ -109,6 +109,31 @@ describe('api game cache boundary', () => {
 
     expect(initial.game).toEqual(game);
     await vi.waitFor(() => expect(onUpdated).toHaveBeenCalledWith({ game: updated }));
+  });
+
+  test('a read after a write does not join or cache a refresh that started before it', async () => {
+    const pendingRule = { id: 'r1', gameId: 'game-1', statement: 'Rule', status: 'published' as const, sourceLinks: [], tags: [], reviewStatus: 'pending' as const };
+    const reviewedRule = { ...pendingRule, reviewStatus: 'reviewed' as const };
+    let releaseOld: (value: unknown) => void = () => undefined;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseOld = resolve; }))
+      .mockResolvedValue({ ok: true, headers: new Headers(), json: async () => ({ game: { ...game, rules: [reviewedRule] } }) });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(localDb, 'getCachedGame').mockResolvedValue(undefined);
+    vi.spyOn(localDb, 'getLatestGame').mockResolvedValue(undefined);
+    const cacheGame = vi.spyOn(localDb, 'cacheGame').mockResolvedValue(undefined);
+
+    const before = api.game('game-1');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    supersedeGameRefreshes();
+    const after = await api.game('game-1');
+    releaseOld({ ok: true, headers: new Headers(), json: async () => ({ game: { ...game, rules: [pendingRule] } }) });
+    await before;
+
+    expect(after.game.rules[0].reviewStatus).toBe('reviewed');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(cacheGame).toHaveBeenCalledOnce();
+    expect(cacheGame).toHaveBeenCalledWith(expect.objectContaining({ rules: [reviewedRule] }), false);
   });
 
   test('publishes creator metadata when only cached rule credits changed', async () => {

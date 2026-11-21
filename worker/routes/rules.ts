@@ -11,6 +11,7 @@ import { queryUserRuleImportance, setRuleImportance } from '../data/ruleImportan
 import { canEditContributionRule, canRestoreHiddenContributionRule, contributionErrorCode, queryContributionQuota } from '../contributions';
 import { isSafeExternalUrl } from '../../src/shared/externalUrl';
 import { ensureRuleGameVariantStatements } from '../data/gameEntities';
+import { DELETED_ACCOUNT_ID } from '../data/accountDeletion';
 
 const rulesRoutes = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
 
@@ -273,12 +274,29 @@ rulesRoutes.post('/api/rules/:id/review', requireRole('editor'), async (c) => {
   if (!rule) return c.json({ error: 'rule_not_found' }, 404);
   if (rule.review_status !== 'pending') return c.json({ error: 'rule_not_pending_review' }, 409);
   const timestamp = now();
-  await getDatabase(c).statement(`
-    UPDATE rules SET review_status = 'reviewed', pending_review_by = NULL,
-      reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
-    WHERE id = ? AND review_status = 'pending'
-  `).bind(user.id, reviewer.nickname, timestamp, rule.id).run();
-  return c.json({ ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp });
+  // Reviewing a rule also accepts the pending game it was submitted for, and any pending
+  // expansion or version it names, so the reviewer does not have to review those separately.
+  // Each game update stays on a primary key; an OR across both would let SQLite scan games.
+  const [, baseGameResult] = await getDatabase(c).batch([
+    getDatabase(c).statement(`
+      UPDATE rules SET review_status = 'reviewed', pending_review_by = NULL,
+        reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
+      WHERE id = ? AND review_status = 'pending'
+    `).bind(user.id, reviewer.nickname, timestamp, rule.id),
+    getDatabase(c).statement(`
+      UPDATE games SET review_status = 'reviewed', reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
+      WHERE id = ? AND review_status = 'pending'
+    `).bind(user.id, reviewer.nickname, timestamp, rule.game_id),
+    getDatabase(c).statement(`
+      UPDATE games INDEXED BY sqlite_autoindex_games_1
+      SET review_status = 'reviewed', reviewed_by = ?, reviewed_by_nickname = ?, reviewed_at = ?
+      WHERE id IN (SELECT game_id FROM rule_game_variants WHERE rule_id = ?) AND review_status = 'pending'
+    `).bind(user.id, reviewer.nickname, timestamp, rule.id),
+  ]);
+  return c.json({
+    ok: true, reviewStatus: 'reviewed', reviewedByNickname: reviewer.nickname, reviewedAt: timestamp,
+    gameReviewed: Number(baseGameResult?.meta?.changes ?? 0) > 0,
+  });
 });
 
 rulesRoutes.get('/api/rules/:id/revisions', requireUser, async (c) => {
@@ -288,21 +306,45 @@ rulesRoutes.get('/api/rules/:id/revisions', requireUser, async (c) => {
   if (!rule) return c.json({ error: 'rule_not_found' }, 404);
   const canViewAnyRule = user.roles.some((role) => role === 'editor' || role === 'admin');
   if (!canViewAnyRule && rule.created_by !== user.id) return c.json({ error: 'forbidden' }, 403);
+  // Who made each edit is account information: only admins see it, as on the admin page.
+  const isAdmin = user.roles.includes('admin');
   const revisions = await getDatabase(c).statement(`
-    SELECT r.id, r.reason, r.created_at, r.previous_json, u.masked_email editor_email
+    SELECT r.id, r.reason, r.created_at, r.previous_json, u.masked_email editor_email, u.nickname editor_nickname
     FROM rule_revisions r
     LEFT JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = r.edited_by
     WHERE r.rule_id = ?
     ORDER BY r.created_at DESC
-  `).bind(c.req.param('id')).all<{ id: string; reason: string; created_at: number; previous_json: string; editor_email: string | null }>();
+  `).bind(c.req.param('id')).all<{ id: string; reason: string; created_at: number; previous_json: string; editor_email: string | null; editor_nickname: string | null }>();
 
   return c.json({
     revisions: (revisions.results ?? []).map((row) => {
       let previousStatement = '';
       try { previousStatement = (JSON.parse(row.previous_json) as { statement?: string }).statement ?? ''; } catch { /* ignore */ }
-      return { id: row.id, reason: row.reason, createdAt: row.created_at, editorEmail: row.editor_email ?? undefined, previousStatement };
+      return {
+        id: row.id, reason: row.reason, createdAt: row.created_at, previousStatement,
+        ...(isAdmin ? { editorEmail: row.editor_email ?? undefined, editorNickname: row.editor_nickname ?? undefined } : {}),
+      };
     }),
   });
+});
+
+// Admins can see who submitted a rule even when that account keeps its nickname private.
+rulesRoutes.get('/api/rules/:id/contributor', requireRole('admin'), async (c) => {
+  setNoCache(c);
+  const row = await getDatabase(c).statement(`
+    SELECT u.id, u.masked_email, u.nickname
+    FROM rules r
+    LEFT JOIN users u INDEXED BY sqlite_autoindex_users_1 ON u.id = r.created_by
+    WHERE r.id = ?
+  `).bind(c.req.param('id')).first<{ id: string | null; masked_email: string | null; nickname: string | null }>();
+  if (!row) return c.json({ error: 'rule_not_found' }, 404);
+  if (!row.id) return c.json({ contributor: null });
+  return c.json({ contributor: {
+    id: row.id,
+    maskedEmail: row.masked_email ?? '已保護個資',
+    nickname: row.nickname ?? undefined,
+    deleted: row.id === DELETED_ACCOUNT_ID,
+  } });
 });
 
 rulesRoutes.post('/api/rules/:id/revisions/:revisionId/restore', requireRole('editor'), async (c) => {

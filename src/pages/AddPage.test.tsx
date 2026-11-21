@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     saveDraft: vi.fn(),
     game: vi.fn(),
     submit: vi.fn(),
+    searchGames: vi.fn(),
     addPending: vi.fn(),
     removePending: vi.fn(),
     clearDraft: vi.fn(),
@@ -43,7 +44,7 @@ vi.mock('../components/TagInput', () => ({ TagInput: () => null }));
 vi.mock('../components/RuleCategoryInput', () => ({ RuleCategoryInput: () => null }));
 vi.mock('../lib/api', () => ({
   ApiError: mocks.ApiError,
-  api: { contributions: mocks.contributions, game: mocks.game, submit: mocks.submit },
+  api: { contributions: mocks.contributions, game: mocks.game, submit: mocks.submit, searchGames: mocks.searchGames },
 }));
 vi.mock('../lib/localDb', () => ({
   localDb: {
@@ -78,6 +79,7 @@ describe('AddPage contribution constraints', () => {
     mocks.invalidateHome.mockResolvedValue(undefined);
     mocks.invalidateGame.mockResolvedValue(undefined);
     mocks.submit.mockResolvedValue({ gameId: 'game-1', gameSlug: 'known-game', ruleIds: [] });
+    mocks.searchGames.mockResolvedValue({ games: [] });
     mocks.confirm.mockResolvedValue(true);
     mocks.game.mockResolvedValue({ game: { id: 'game-1', slug: 'known-game', displayName: '既有遊戲', aliases: [], rules: [], ruleCount: 0, updatedAt: 1 } });
   });
@@ -392,6 +394,25 @@ describe('AddPage contribution constraints', () => {
     });
     expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('剛輸入還沒等自動儲存的文字') }));
     expect(screen.getByDisplayValue('剛輸入還沒等自動儲存的文字')).toBeInTheDocument();
+  });
+
+  test('selects the catalog game a typed name names instead of creating a new game', async () => {
+    mocks.useSession.mockReturnValue({ user: { id: 'user-1', roles: [] }, canEdit: false, isAdmin: false, loading: false });
+    mocks.contributions.mockResolvedValue({ quota: { pendingRules: 0, ruleLimit: 6, remainingRules: 6, pendingGames: 0, gameLimit: 1, remainingGames: 1 }, rules: [], games: [] });
+    mocks.searchGames.mockResolvedValue({ games: [{ id: 'game_bgg_295947', slug: 'bgg-295947', displayName: '卡斯卡迪亞之旅', englishName: 'Cascadia', ruleCount: 0, updatedAt: 1 }] });
+    await renderReady(<MemoryRouter><AddPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('遊戲名稱搜尋'), { target: { value: 'cascadia' } });
+    fireEvent.change(await screen.findByLabelText('正確規則 *'), { target: { value: '每回合只拿一組' } });
+    fireEvent.click(screen.getByRole('button', { name: '送出 1 條規則' }));
+
+    await waitFor(() => expect(screen.getByLabelText('遊戲名稱')).toHaveValue('卡斯卡迪亞之旅'));
+    expect(mocks.searchGames).toHaveBeenCalledWith('cascadia', undefined, { includeGamesWithoutPublishedRules: true });
+    expect(mocks.showToast).toHaveBeenCalledWith('已選擇既有遊戲「卡斯卡迪亞之旅」，請確認後再送出。', 'info');
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '送出 1 條規則' }));
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledWith(expect.objectContaining({ gameId: 'game_bgg_295947' })));
+    expect(mocks.submit.mock.calls[0][0]).not.toHaveProperty('newGame');
   });
 
   test('does not claim a local backup exists when queueing the submission fails', async () => {

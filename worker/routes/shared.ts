@@ -150,14 +150,6 @@ export const publicNicknameIds = (rows: RuleRow[]): string[] => Array.from(new S
   return [...(row.created_by ? [row.created_by] : []), ...(row.reviewed_by ? [row.reviewed_by] : []), ...editorIds];
 })));
 
-// An OR across games and their aliases scans every game. Bind the normalized
-// name twice: each branch searches its own index.
-export const EXACT_GAME_NAME_IDS = `
-  SELECT id FROM games INDEXED BY idx_games_normalized_name WHERE normalized_name = ?
-  UNION
-  SELECT game_id FROM game_aliases INDEXED BY idx_game_aliases_search WHERE normalized_alias = ?
-`;
-
 // D1 rejects statements with more than 100 bound parameters.
 export const NICKNAME_LOOKUP_BATCH_SIZE = 100;
 

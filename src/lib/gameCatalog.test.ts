@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { filterGameCatalog, mergeGameCatalogEntries, taipeiDateKey, upsertGameCatalogEntry } from './gameCatalog';
+import { exactGameNameMatch, filterGameCatalog, mergeGameCatalogEntries, taipeiDateKey, upsertGameCatalogEntry } from './gameCatalog';
 import type { GameSummary } from '../shared/types';
 
 const games: GameSummary[] = [
@@ -12,6 +12,14 @@ describe('local versioned game catalog', () => {
     expect(filterGameCatalog(games, 'Birmingham').map((game) => game.id)).toEqual(['2']);
     expect(filterGameCatalog(games, '伯明翰').map((game) => game.id)).toEqual(['2']);
     expect(filterGameCatalog(games, 'brass').map((game) => game.id)).toEqual(['2', '1']);
+  });
+
+  test('finds the one game a typed name names exactly, by any of its names', () => {
+    expect(exactGameNameMatch(games, 'brass birmingham')?.id).toBe('2');
+    expect(exactGameNameMatch(games, '蘭開夏')?.id).toBe('1');
+    expect(exactGameNameMatch(games, 'Brass')).toBeUndefined();
+    expect(exactGameNameMatch([{ ...games[0], matchedVariantName: '伯明翰：擴充' }], '伯明翰擴充')?.id).toBe('2');
+    expect(exactGameNameMatch([games[0], { ...games[0], id: '3' }], '伯明翰')).toBeUndefined();
   });
 
   test('normalizes punctuation and ranks exact matches first', () => {

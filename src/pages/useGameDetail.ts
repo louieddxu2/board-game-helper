@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, supersedeGameRefreshes } from '../lib/api';
 import { localDb } from '../lib/localDb';
 import { hydrateGameTags } from '../lib/tagHydration';
 import type { GameDetail } from '../shared/types';
@@ -55,7 +55,10 @@ export const useGameDetail = (identifier: string, justAdded?: number) => {
       }));
     };
     try {
-      if (invalidate) await localDb.invalidateGame(identifier);
+      if (invalidate) {
+        supersedeGameRefreshes();
+        await localDb.invalidateGame(identifier);
+      }
       const response = await api.game(identifier, false, updated => {
         updateReceived = true;
         apply(updated);

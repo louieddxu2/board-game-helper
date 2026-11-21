@@ -47,6 +47,18 @@ export const filterGameCatalog = (
     .map(({ game, direct, variantName }) => direct || !variantName ? game : { ...game, matchedVariantName: variantName });
 };
 
+/**
+ * The single search result a typed name names exactly (its name, English name, alias, or the
+ * expansion that led to it), so a submission reuses that game instead of creating a duplicate.
+ */
+export const exactGameNameMatch = (results: GameSummary[], rawQuery: string): GameSummary | undefined => {
+  const query = normalizeGameSearchText(rawQuery);
+  if (!query) return undefined;
+  const exact = results.filter((game) => (game.matchedVariantName ? [game.matchedVariantName] : gameNames(game))
+    .some((name) => Boolean(name) && normalizeGameSearchText(name!) === query));
+  return exact.length === 1 ? exact[0] : undefined;
+};
+
 export const upsertGameCatalogEntry = (games: GameSummary[], game: GameSummary): GameSummary[] => {
   const existingIndex = games.findIndex((item) => item.id === game.id);
   if (existingIndex < 0) return [...games, game];

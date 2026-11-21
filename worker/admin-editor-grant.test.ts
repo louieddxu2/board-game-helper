@@ -62,6 +62,11 @@ describe('direct editor grants', () => {
     expect(calls[insertIndex].values.slice(0, 3)).toEqual(['user-2', 'editor', 'admin-1']);
     expect(calls[insertIndex].sql).toContain('ON CONFLICT(user_id, role) DO UPDATE SET revoked_at = NULL');
     expect(calls[insertIndex + 1].sql).toContain('UPDATE attribute_replay_status');
+    // The same batch trusts their earlier work, so it no longer shows a review line.
+    expect(batches[0]).toHaveLength(4);
+    expect(calls[insertIndex + 2].sql).toContain("UPDATE rules\n    SET review_status = 'not_required'");
+    expect(calls[insertIndex + 2].values).toEqual(['user-2', 'user-2']);
+    expect(calls[insertIndex + 3].sql).toContain('UPDATE games');
   });
 
   test('rejects unknown accounts and roles without writing', async () => {

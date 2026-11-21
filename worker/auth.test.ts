@@ -45,7 +45,7 @@ describe('public read authentication boundary', () => {
             } as T;
             return null;
           },
-          all: async <T>() => sql.includes('SELECT role FROM user_roles')
+          all: async <T>() => sql.includes('SELECT role, granted_at FROM user_roles')
             ? { results: [{ role: 'admin' }] as T[] }
             : { results: [] as T[] },
           run: async () => ({ success: true, results: [], meta: { changes: 1 } }),
