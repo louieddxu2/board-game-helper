@@ -1,5 +1,5 @@
 // Actual HTTP middleware + isolated Miniflare D1; never accesses production.
-// node scripts/check-attribute-request-cost.mjs [--baseline=<commit>] [scenario ...]
+// node scripts/check-attribute-request-cost.mjs [--baseline=<commit> | --compare-ranking-model] [scenario ...]
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from '../node_modules/wrangler/node_modules/miniflare/dist/src/index.js';
+import { bidirectionalCostVariant } from './ranking-research/cost-variant.mjs';
 
 const cases = [
   { id: 'pair-guest', pair: true, budget: [68, 19] },
@@ -27,11 +28,13 @@ const cases = [
 ];
 const args = process.argv.slice(2);
 const baseline = args.find((arg) => arg.startsWith('--baseline='))?.slice(11);
+const compareRankingModel = args.includes('--compare-ranking-model');
 assert(!baseline || /^[a-f0-9]{7,40}$/.test(baseline), 'Invalid baseline SHA');
-const selected = args.filter((arg) => !arg.startsWith('--baseline='));
+assert(!baseline || !compareRankingModel, 'Choose a historical baseline or a ranking model comparison');
+const selected = args.filter((arg) => !arg.startsWith('--baseline=') && arg !== '--compare-ranking-model');
 assert(selected.every((id) => cases.some((c) => c.id === id)), 'Unknown scenario');
 const scenarios = cases.filter((c) => !selected.length || selected.includes(c.id));
-const variants = baseline ? ['baseline', 'optimized'] : ['optimized'];
+const variants = baseline ? ['baseline', 'optimized'] : compareRankingModel ? ['optimized', 'bidirectional'] : ['optimized'];
 mkdirSync('.wrangler', { recursive: true });
 const scratch = mkdtempSync(resolve('.wrangler/attribute-request-cost-'));
 const absolute = (path) => resolve(path).replaceAll('\\', '/');
@@ -45,7 +48,8 @@ const workersRuntimeStub = { name: 'workers-runtime-stub', setup(b) {
 for (const variant of variants) {
   const outfile = join(scratch, variant + '.mjs');
   await build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', format: 'esm',
-    plugins: [workersRuntimeStub, ...(variant !== 'baseline' ? [] : [{ name: 'historical-source', setup(b) {
+    plugins: [workersRuntimeStub, ...(variant === 'bidirectional' ? [bidirectionalCostVariant] : []),
+      ...(variant !== 'baseline' ? [] : [{ name: 'historical-source', setup(b) {
       b.onLoad({ filter: /[\\/](?:worker|src[\\/]shared)[\\/].*\.ts$/ }, ({ path }) => ({
         contents: execFileSync('git', ['-c', 'core.fsmonitor=false', 'show',
           `${baseline}:${relative(process.cwd(), path).replaceAll('\\', '/')}`], { encoding: 'utf8' }),
@@ -129,8 +133,10 @@ const measuredDatabase = (raw) => {
   } };
 };
 const totals = (events) => events.reduce((s, e) => ({ reads: s.reads + e.reads, writes: s.writes + e.writes, sql: s.sql + 1 }), { reads: 0, writes: 0, sql: 0 });
-const report = { baseline: baseline ?? null, scope: 'Whole HTTP request including real session/roles, receipt, scoring, indexes/triggers, publication and final flush; fixture setup/checks excluded', scenarios: [] };
+const report = { baseline: baseline ?? null, compareRankingModel,
+  scope: 'Whole HTTP request including real session/roles, receipt, scoring, indexes/triggers, publication and final flush; fixture setup/checks excluded', scenarios: [] };
 const expected = new Map();
+const scoreShape = (states) => states.map(({ score, rating_deviation, ...other }) => other);
 mf = new Miniflare(options());
 try {
   for (const scenario of scenarios) for (const variant of variants) {
@@ -153,7 +159,7 @@ try {
         PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) }, WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) } });
       const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body));
       assert(body.activities.every((a) => a.actorName === (scenario.member ? '測試暱稱' : '匿名玩家')));
-      if (variant === 'optimized') {
+      if (variant !== 'baseline') {
         const cost = totals(meter.events);
         assert.equal(Number(response.headers.get('X-D1-Rows-Read')), cost.reads, 'HTTP read header omits request work');
         assert.equal(Number(response.headers.get('X-D1-Rows-Written')), cost.writes, 'HTTP write header omits request work');
@@ -167,18 +173,26 @@ try {
       (SELECT through_rowid FROM attribute_online_progress WHERE id = 1) LIMIT 1`).first()), null);
     const states = (await raw.prepare(`SELECT subject_id, attribute_id, score, rating_deviation, direct_sum, direct_count,
       comparison_count, decisive_comparison_count, evidence_count FROM attribute_score_states ORDER BY subject_id, attribute_id`).all()).results;
-    if (variant === 'baseline') expected.set(scenario.id, states);
+    if (variant === 'bidirectional') {
+      const current = expected.get(scenario.id);
+      if (scenario.pair) assert.deepEqual(states, current, 'The research variant changed two-game voting');
+      else {
+        assert.deepEqual(scoreShape(states), scoreShape(current), 'Ranking model changed score targets or evidence counters');
+        assert.notDeepEqual(states, current, 'The ranking scorer did not change the score or RD');
+      }
+    } else if (variant === 'baseline' || compareRankingModel) expected.set(scenario.id, states);
     else if (baseline) assert.deepEqual(states, expected.get(scenario.id), 'Whole-request optimization changed scoring');
     const cost = totals(events), phases = {};
     for (const phase of new Set(events.map((e) => e.phase))) phases[phase] = totals(events.filter((e) => e.phase === phase));
     const queries = {};
     for (const query of new Set(events.map((e) => e.query))) queries[query] = totals(events.filter((e) => e.query === query));
     const item = { scenario: scenario.id, variant, votes: 10, ...cost, phases };
-    if (variant === 'optimized') {
+    if (variant !== 'baseline') {
       assert(cost.reads / 10 <= scenario.budget[0], `${scenario.id}: ${cost.reads / 10} reads exceed ${scenario.budget[0]}`);
       assert(cost.writes / 10 <= scenario.budget[1], `${scenario.id}: ${cost.writes / 10} writes exceed ${scenario.budget[1]}`);
     }
     report.scenarios.push({ ...item, queries }); console.log(JSON.stringify(item));
-    writeFileSync(resolve('.wrangler/attribute-request-cost.json'), JSON.stringify(report, null, 2));
+    const filename = compareRankingModel ? 'attribute-ranking-model-cost.json' : 'attribute-request-cost.json';
+    writeFileSync(resolve('.wrangler', filename), JSON.stringify(report, null, 2));
   }
 } finally { await mf.dispose(); }
