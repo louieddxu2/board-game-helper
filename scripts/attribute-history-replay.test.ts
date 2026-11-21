@@ -80,7 +80,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
       ranking_json: null,
       online_weight: null,
     }));
-    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id <> 'attribute-seed:0123' ORDER BY response_id").all()).toEqual(expected);
+    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id NOT IN ('attribute-seed:0123', 'attribute-seed:0134') ORDER BY response_id").all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);
   } finally { sqlite.close(); }
   expect(() => setup(undefined, (db) => {
@@ -117,7 +117,7 @@ test('luck split publishes only the approved direct scores and retains them afte
     const newAttributes = ['attribute_luck_dependence', 'attribute_risk_planning'];
     const values = sqlite.prepare(`
       SELECT subject_a_id, attribute_id, rating_a FROM attribute_vote_responses
-      WHERE attribute_id IN (?, ?) ORDER BY subject_a_id, attribute_id
+      WHERE session_id = 'attribute-seed:0123' AND attribute_id IN (?, ?) ORDER BY subject_a_id, attribute_id
     `).all(...newAttributes);
     expect(values).toHaveLength(32);
     expect(values.filter((row) => row.subject_a_id === 'attribute_subject_game:game_attribute_import_patchwork'))
@@ -132,11 +132,15 @@ test('luck split publishes only the approved direct scores and retains them afte
       SELECT COUNT(*) AS count FROM attribute_catalog_entries
       WHERE json_extract(entry_json, '$.attributeId') IN (?, ?)
         AND json_extract(entry_json, '$.directCount') = 1
+        AND json_extract(entry_json, '$.subjectId') IN (
+          SELECT subject_a_id FROM attribute_vote_responses WHERE session_id = 'attribute-seed:0123'
+        )
     `).get(...newAttributes)).toEqual({ count: 32 });
     const replay = await replayAllAttributeScores(gateway);
     expect(replay.catalogPayload.values.every(({ evidenceCount }) => (evidenceCount ?? 0) > 0)).toBe(true);
     expect(replay.catalogPayload.attributes.map(({ id }) => id)).not.toContain('attribute_luck');
-    expect(replay.catalogPayload.values.filter(({ attributeId, directCount }) => newAttributes.includes(attributeId) && directCount > 0))
+    expect(replay.catalogPayload.values.filter(({ subjectId, attributeId, directCount }) =>
+      values.some((row) => row.subject_a_id === subjectId) && newAttributes.includes(attributeId) && directCount > 0))
       .toHaveLength(32);
     for (const row of values) {
       expect(replay.catalogPayload.values.find(({ subjectId, attributeId }) => subjectId === row.subject_a_id && attributeId === row.attribute_id))

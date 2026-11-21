@@ -11,15 +11,20 @@ interface SqliteStatement {
   run(): Promise<{ results: unknown[]; meta: { changes: number } }>;
 }
 
-export const createHarness = () => {
-  const sqlite = buildMigratedSchema();
+export const createHarness = (throughName?: string) => {
+  const sqlite = buildMigratedSchema(throughName);
   sqlite.exec('PRAGMA foreign_keys = ON');
   // A migration fixture may contain delivery work from its seed history. The
   // weekly job starts after the real outbox worker has drained that work.
   sqlite.exec('DELETE FROM catalog_change_outbox');
   // Most fixtures start with an activated scorer. Upgrade tests explicitly
   // install the old marker and go through the real replay handoff.
-  sqlite.prepare('UPDATE attribute_online_progress SET model_version = ? WHERE id = 1').run(ATTRIBUTE_SCORE_MODEL_VERSION);
+  // Migration imports already materialize their scores. Start runtime tests
+  // after those imported receipts, as with the original cursor bootstrap.
+  sqlite.prepare(`UPDATE attribute_online_progress SET model_version = ?,
+    through_rowid = COALESCE((SELECT rowid FROM attribute_vote_responses ORDER BY rowid DESC LIMIT 1), 0),
+    through_response_id = (SELECT response_id FROM attribute_vote_responses ORDER BY rowid DESC LIMIT 1)
+    WHERE id = 1`).run(ATTRIBUTE_SCORE_MODEL_VERSION);
   const executedSql: string[] = [];
   const prepare = (sql: string, args: SQLInputValue[] = []): SqliteStatement => ({
     bind: (...values: SQLInputValue[]) => prepare(sql, values),
