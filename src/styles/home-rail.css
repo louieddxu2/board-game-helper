@@ -12,7 +12,6 @@
 .home-rule-stack-entry { position: relative; flex: none; height: auto; }
 .home-rule-stack-entry[data-outside-stack="true"] { visibility: hidden; }
 .home-rule-stack-content, .home-rule-stack-content > .rule-card { height: auto; }
-.home-rule-stack .rule-credit-secondary { font-size: 11px; }
 .home-rule-stack-link { position: absolute; inset: 0; border-radius: 16px; }
 .home-rule-stack-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
 .home-rule-stack-more {

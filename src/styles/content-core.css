@@ -170,7 +170,7 @@ button.compact-attribute:hover { border-color: var(--green); background: #e3dccf
 
 /* 右上資訊只佔自己的高度，標籤換行後可使用卡片全寬。 */
 .rule-card-header { display: flow-root; min-width: 0; line-height: 0; }
-.rule-card-header-actions { float: right; display: flex; align-items: flex-start; gap: 6px; max-width: 42%; min-height: 44px; margin-left: 6px; }
+.rule-card-header-actions { float: right; display: flex; align-items: flex-start; gap: 6px; max-width: 42%; margin-left: 6px; }
 .rule-card-title-group { display: contents; }
 .rule-game-title { float: left; min-width: 0; max-width: 100%; font-size: 17px; font-weight: 700; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; color: var(--ink); margin: 0 6px 0 0; }
 .rule-card-header:has(> .rule-card-header-actions) .rule-game-title { max-width: calc(58% - 12px); }
