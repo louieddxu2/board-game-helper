@@ -1,11 +1,7 @@
+import type { RuleFilterView } from '../shared/ruleFilter';
 import { RULE_CATEGORIES, type RuleCategory } from '../shared/types';
 
-export type RuleFilterView = {
-  category: 'all' | RuleCategory;
-  tags: string[];
-  playerCounts: number[];
-  editions: string[];
-};
+export type { RuleFilterView };
 
 export type RuleFilterPatch = Partial<RuleFilterView & { query: string }>;
 

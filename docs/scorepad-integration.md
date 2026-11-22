@@ -1,6 +1,6 @@
 # 計分板整合
 
-萬用桌遊計分板是獨立的 App，有自己的 Worker 與 D1。它透過 Cloudflare Service Binding 呼叫本站 Worker 的內部 RPC `ScorepadApi`，取得遊戲名稱與 BGG 編號。
+萬用桌遊計分板是獨立的 App，有自己的 Worker 與 D1。它透過 Cloudflare Service Binding 呼叫本站 Worker 的內部 RPC `ScorepadApi`，取得遊戲名稱、BGG 編號，以及單款遊戲的規則。
 
 計分板不再直接讀取本站 D1（`board-game-rules-prod`）。先前它用 D1 binding 直接讀 `games`、`game_aliases`、`game_external_ids`、`game_catalog_entries`、`game_catalog_clock`，沒有排除隱藏與已合併的遊戲；現在一律由本站過濾。
 
@@ -16,7 +16,7 @@
 
 ## 介面
 
-實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts) 與 [`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；三個方法都只讀，不寫入任何資料。
+實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts) 與 [`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；所有方法都只讀，不寫入任何資料。
 
 「可列出的遊戲」與本站公開頁面一致：`visibility = 'public'` 且 `merged_into_game_id IS NULL`。`review_status = 'pending'` 只表示遊戲資料等待編輯確認（批次匯入的遊戲都是這個狀態），公開頁面照樣顯示，所以不作為過濾條件。
 
@@ -58,12 +58,56 @@ Promise<{
 - 遊戲是否可列出依目前的 `games` 資料判斷。已刪除、隱藏或已合併的遊戲以 `deleted: true` 回傳，只帶 `gameId`、`catalogVersion` 與 `bggIds`，計分板應移除這款遊戲的規則名稱。已從資料庫刪除的遊戲沒有 BGG 編號可回傳，`bggIds` 為空陣列，請以 `gameId` 對應。
 - `bggIds` 同樣合併 `games.bgg_id` 與 `game_external_ids` 兩個來源。
 - `games.bgg_id` 與 BGG 外部編號的變更也會推進目錄版本（migration 0130），所以新增、修改或移除 BGG 編號都會出現在下一次同步。
+### `getRuleSummaryByBgg(bggId: string)`
+
+```ts
+Promise<{ ruleGameId: string; publishedRuleCount: number; ruleVersion: string } | null>
+```
+
+- 玩家打開一場遊戲時呼叫，用來先顯示「N 條規則」，不讀規則本身。
+- 和網站相同，資料片、版本與變體一律對到本體遊戲：`ruleGameId` 是本體遊戲，數量與版本也是本體的。BGG 編號同時查 `games.bgg_id` 與 `game_external_ids`。
+- `publishedRuleCount` 包含尚未審核的規則。
+- `ruleVersion` 在已發布規則新增、修改、隱藏、刪除或移動時改變。計分板把它和自己快取的版本比對，相同就不必讀規則。審核通過一條規則、新增或移除外部資源不改變版本；快取裡的審核標記、外部資源與重要票數，要到下次規則變動或計分板自己的快取到期才更新。
+- 沒有可列出的遊戲、或資料片沒有可列出的本體時回傳 `null`。格式不是正整數字串時直接拒絕，不查詢 D1。查詢依序嘗試：本體遊戲自己的 `games.bgg_id`、本體遊戲的版本編號、資料片或版本對到的本體，找到第一筆就停止；若資料錯誤使一個 BGG 編號屬於兩款遊戲，以較前的順序為準（遊戲資料健檢會列出這種重複）。
+
+### `getGameRules(gameId: string)`
+
+```ts
+Promise<{
+  gameId: string; slug: string; displayName: string; englishName: string | null;
+  ruleVersion: string;
+  rules: Array<{
+    id: string; statement: string; commonMistake?: string; details?: string; flowStage?: FlowStage;
+    categories: RuleCategory[]; playerCounts: number[]; editionNotes: string[];
+    sourceLinks: Array<{ label?: string; url: string }>;
+    reviewStatus: 'not_required' | 'pending' | 'reviewed'; importanceCount: number; tagIds: string[];
+    createdAt: number; updatedAt: number;
+  }>;
+  tags: Array<{ id: string; name: string; categoryHints: RuleCategory[]; detectionKeywords: string[] }>;
+  externalResources: Array<{ id: string; name: string; category: 'teaching' | 'help_card' | 'faq'; url: string }>;
+} | null>
+```
+
+- 計分板只在玩家點開規則、而且本機快取的版本與 `ruleVersion` 不同時呼叫；進入遊戲不呼叫。
+- 傳入 `getRuleSummaryByBgg` 的 `ruleGameId`。不是可列出的本體遊戲（資料片、隱藏、已合併或不存在）時回傳 `null`；格式不符的 ID 直接拒絕，不查詢 D1。
+- 回傳全部已發布規則，包含未審核的（`reviewStatus: 'pending'`），順序與網站的遊戲頁查詢相同。排序、未審核的標示與重要票數的用法由計分板決定。
+- 不回傳貢獻者、編輯者、審核者與修改紀錄。
+- `tags` 是這些規則用到的 Tag，與網站遊戲頁載入的相同（名稱、分類提示與偵測關鍵字），以 `tagIds` 對應。沒有自訂分類的規則靠 Tag 的分類提示得到自動分類。
+- 連到網站的單條規則：`/games/{slug}#rule-{id}`。
+
+## 共用的規則篩選
+
+計分板逐字複製 [`src/shared/ruleFilter.ts`](../src/shared/ruleFilter.ts) 與它唯一引用的 [`src/shared/ruleTypes.ts`](../src/shared/ruleTypes.ts)，以 `computeRuleFilter(rules, publicTags, view, query)` 做和網站相同的搜尋、分類、Tag、人數與版本篩選；排序由各自決定。規則的 `tags` 以 `getGameRules` 的 `tags` 依 `tagIds` 組回；`publicTags` 傳入同一份 `tags`。
+
+[`scripts/shared-rule-filter.test.ts`](../scripts/shared-rule-filter.test.ts) 記錄兩個檔案的雜湊，也檢查它們沒有引用其他檔案。改動任一檔案後，把兩個檔案複製到計分板，並同時更新兩邊測試裡的雜湊。
 
 ## 成本
 
 以 Cloudflare 免費方案為前提（每次呼叫最多 50 個 D1 查詢、10 ms CPU）：
 
 - 每個方法固定只執行 1 個 D1 查詢，不隨 ID 數量或 `limit` 增加，也不使用快取。
+- 以本機 Miniflare D1 實測 `rows_read`：`getRuleSummaryByBgg` 本體遊戲 1 列、本體的版本編號 2 列、資料片 6 列、查無此編號 0 列。`getGameRules` 讀遊戲、已發布規則（內容與 Tag ID 各一次）、用到的 Tag 與外部資源，2 條規則時為 12 列，隨規則數線性增加；不可列出的遊戲只讀 1 列。
+- 查詢計畫由 [`scripts/scorepad-rules.test.ts`](../scripts/scorepad-rules.test.ts) 檢查。
 - 查詢由 ID 清單（`json_each(?)` 搭配 `CROSS JOIN`）或變更頁驅動，每一段都走索引；`IN (...)` 列出較多 ID 時 SQLite 會改成掃描 `game_external_ids`，所以不使用。執行計畫由 [`scripts/scorepad-api.test.ts`](../scripts/scorepad-api.test.ts) 檢查。
 
 ## 原則

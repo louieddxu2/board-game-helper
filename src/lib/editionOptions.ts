@@ -1,11 +1,11 @@
+import { getRuleEditions } from '../shared/ruleFilter';
+
+// getRuleEditions moved into the rule filter shared with the score pad app.
+export { getRuleEditions };
+
 const editionKey = (value: string) => value.normalize('NFKC').trim().toLocaleLowerCase();
 
 type EditionRule = { editionNotes?: string[]; editionNote?: string };
-
-export const getRuleEditions = (rule: EditionRule): string[] => {
-  const names = rule.editionNotes?.length ? rule.editionNotes : [rule.editionNote ?? ''];
-  return names.map((rawName) => rawName.normalize('NFKC').trim()).filter(Boolean);
-};
 
 export const collectEditionOptions = (rules: EditionRule[]): string[] => {
   const options = new Map<string, { name: string; count: number }>();

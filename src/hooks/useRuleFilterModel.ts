@@ -1,35 +1,18 @@
 import { useMemo } from 'react';
-import { getRuleEditions } from '../lib/editionOptions';
-import { effectiveRuleCategories, filterRulesByCategory } from '../lib/ruleCategories';
 import type { RuleFilterPatch, RuleFilterView } from '../lib/ruleFilterParams';
 import { sortRulesByImportance } from '../lib/ruleImportance';
-import { createRuleSearch } from '../lib/ruleSearch';
-import { ruleSearchSource } from '../lib/ruleSearchNumbers';
-import { RULE_CATEGORIES, type RuleCard, type RuleCategory, type TagSummary } from '../shared/types';
+import { computeRuleFilter } from '../shared/ruleFilter';
+import type { RuleCard, RuleCategory, TagSummary } from '../shared/types';
 
-export type TagOption = { name: string; count: number; selected: boolean };
+// The calculations live in the rule filter shared with the score pad app.
+export { orderTagOptions, type TagOption } from '../shared/ruleFilter';
 
 const toggleValue = <T>(values: T[], value: T) => values.includes(value)
   ? values.filter((current) => current !== value)
   : [...values, value];
 
-const tagCollator = new Intl.Collator('zh-Hant');
-
-/** Orders the tag row: selected tags first in the order chosen, then by how many visible rules carry each tag. */
-export const orderTagOptions = (visibleRules: RuleCard[], activeTags: string[], query: string): TagOption[] => {
-  const pattern = query ? new RegExp(ruleSearchSource(query), 'iu') : undefined;
-  const counts = new Map<string, number>();
-  visibleRules.forEach((rule) => new Set(rule.tags.map((tag) => tag.name)).forEach((name) => {
-    if (!activeTags.includes(name)) counts.set(name, (counts.get(name) ?? 0) + 1);
-  }));
-  const others = Array.from(counts, ([name, count]) => ({ name, count, selected: false }))
-    .filter((option) => !pattern || pattern.test(option.name))
-    .sort((left, right) => right.count - left.count || tagCollator.compare(left.name, right.name));
-  return [...activeTags.map((name) => ({ name, count: visibleRules.length, selected: true })), ...others];
-};
-
 /**
- * The rule filter calculations, independent of where the filter state lives:
+ * The rule filter, independent of where the filter state lives:
  * the game page keeps it in the URL, the record page's drawer in component state.
  */
 export const useRuleFilterModel = (
@@ -40,6 +23,14 @@ export const useRuleFilterModel = (
   applyPatch: (patch: RuleFilterPatch) => void,
 ) => {
   const { tags: activeTags, playerCounts: activePlayerCounts, editions: activeEditions } = view;
+  const filter = useMemo(
+    () => computeRuleFilter(rules, classificationTags, view, ruleQuery),
+    [rules, classificationTags, view.category, activeTags, activePlayerCounts, activeEditions, ruleQuery],
+  );
+  // The site shows the most important rules first; the shared filter keeps the game's order.
+  const visibleRules = useMemo(() => sortRulesByImportance(filter.filteredRules), [filter.filteredRules]);
+  const { selectedCategory } = filter;
+
   const setRuleQuery = (query: string) => applyPatch({ query });
   const toggleCategory = (category: RuleCategory) => applyPatch({ category: selectedCategory === category ? 'all' : category });
   const toggleTag = (tag: string) => applyPatch({ tags: toggleValue(activeTags, tag) });
@@ -55,85 +46,21 @@ export const useRuleFilterModel = (
   const toggleEdition = (edition: string) => applyPatch({ editions: toggleValue(activeEditions, edition) });
   const clearAllFilters = () => applyPatch({ tags: [], playerCounts: [], editions: [], query: '' });
 
-  const gameCategories = useMemo(() => new Set(rules
-    .flatMap((rule) => effectiveRuleCategories(rule, classificationTags))), [rules, classificationTags]);
-  const selectedCategory = view.category !== 'all' && gameCategories.has(view.category) ? view.category : 'all';
-
-  const normalizedQuery = ruleQuery.trim().toLocaleLowerCase();
-  const searchRule = useMemo(() => createRuleSearch(ruleQuery), [ruleQuery]);
-  const matches = useMemo(() => {
-    if (!searchRule) return undefined;
-    const found = new Map<RuleCard, RegExp>();
-    for (const rule of rules) {
-      const pattern = searchRule(rule);
-      if (pattern) found.set(rule, pattern);
-    }
-    return found;
-  }, [rules, searchRule]);
-  const rulesByQuery = useMemo(() => matches ? [...matches.keys()] : rules, [rules, matches]);
-
-  const matchesSpecial = (rule: RuleCard) => {
-    if (activePlayerCounts.length && !rule.playerCounts?.some(count => activePlayerCounts.includes(count))) return false;
-    if (activeEditions.length > 0) {
-      const editions = getRuleEditions(rule);
-      if (!activeEditions.some((e) => editions.includes(e))) return false;
-    }
-    return true;
-  };
-  const matchesTags = (rule: RuleCard) => activeTags.every((tagName) => rule.tags.some((tag) => tag.name === tagName));
-
-  // Only offer an index that leads to rules under the other filters; keep the selected one so it can be cleared.
-  const availableCategories = useMemo(() => {
-    const reachable = new Set(rulesByQuery
-      .filter((rule) => matchesSpecial(rule) && matchesTags(rule))
-      .flatMap((rule) => effectiveRuleCategories(rule, classificationTags)));
-    return RULE_CATEGORIES.filter((category) => category === selectedCategory || reachable.has(category));
-  }, [rulesByQuery, activePlayerCounts, activeEditions, activeTags, classificationTags, selectedCategory]);
-
-  const rulesByCategory = useMemo(
-    () => filterRulesByCategory(rulesByQuery, selectedCategory, classificationTags),
-    [rulesByQuery, selectedCategory, classificationTags],
-  );
-  const rulesBySpecial = useMemo(() => rulesByCategory.filter(matchesSpecial), [rulesByCategory, activePlayerCounts, activeEditions]);
-  const visibleRules = useMemo(() => sortRulesByImportance(rulesBySpecial.filter(matchesTags)), [rulesBySpecial, activeTags]);
-
-  const availablePlayerCounts = useMemo(() => {
-    const all = new Set<number>();
-    const valid = new Set<number>();
-    rules.forEach((r) => r.playerCounts?.forEach((c) => all.add(c)));
-    rulesByCategory.forEach((r) => r.playerCounts?.forEach((c) => valid.add(c)));
-    return Array.from(all).sort((a, b) => a - b).filter((c) => activePlayerCounts.includes(c) || valid.has(c));
-  }, [rules, rulesByCategory, activePlayerCounts]);
-
-  const availableEditions = useMemo(() => {
-    const all = new Set<string>();
-    const valid = new Set<string>();
-    rules.forEach((rule) => getRuleEditions(rule).forEach((edition) => all.add(edition)));
-    rulesByCategory.forEach((rule) => getRuleEditions(rule).forEach((edition) => valid.add(edition)));
-    return Array.from(all).sort().filter((e) => activeEditions.includes(e) || valid.has(e));
-  }, [rules, rulesByCategory, activeEditions]);
-
-  const tagOptions = useMemo(
-    () => orderTagOptions(visibleRules, activeTags, normalizedQuery),
-    [visibleRules, activeTags, normalizedQuery],
-  );
-
   return {
     activeEditions,
     activePlayerCounts,
     activeTags,
-    availableCategories,
-    availableEditions,
-    availablePlayerCounts,
+    availableCategories: filter.availableCategories,
+    availableEditions: filter.availableEditions,
+    availablePlayerCounts: filter.availablePlayerCounts,
     clearAllFilters,
     clearPlayerCounts: () => applyPatch({ playerCounts: [] }),
-    // The search box alone is not a filter to clear; it has its own field.
-    hasActiveFilters: activeTags.length > 0 || activePlayerCounts.length > 0 || activeEditions.length > 0,
+    hasActiveFilters: filter.hasActiveFilters,
     ruleQuery,
-    matches,
+    matches: filter.matches,
     selectedCategory,
     setRuleQuery,
-    tagOptions,
+    tagOptions: filter.tagOptions,
     toggleCategory,
     toggleEdition,
     togglePlayerCount,
