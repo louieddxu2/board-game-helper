@@ -13,7 +13,7 @@ VALUES
   ('attribute_config_food_chain_magnate_ketchup', 1, 1),
   ('attribute_config_great_western_trail_rails_north', 2, 3),
   ('attribute_config_trickerion_dahlgaards_academy', 1, 3),
-  ('attribute_config_7th_continent_what_goes_up', 8, 2),
+  ('attribute_config_7th_continent_what_goes_up', 10, 2),
   ('attribute_subject_game:game_attribute_import_fog_of_love', 2, 5),
   ('attribute_subject_game:game_attribute_import_and_then_we_held_hands', 3, 6),
   ('attribute_subject_game:game_bgg_460712', 4, 6);
