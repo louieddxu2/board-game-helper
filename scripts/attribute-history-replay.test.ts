@@ -80,7 +80,7 @@ test('compatibility cleanup preserves votes and refuses to drop nonempty tables'
       ranking_json: null,
       online_weight: null,
     }));
-    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id NOT IN ('attribute-seed:0123', 'attribute-seed:0134') ORDER BY response_id").all()).toEqual(expected);
+    expect(sqlite.prepare("SELECT * FROM attribute_vote_responses WHERE session_id NOT IN ('attribute-seed:0123', 'attribute-seed:0134', 'attribute-seed:0135') ORDER BY response_id").all()).toEqual(expected);
     expect(sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('attribute_initial_values','attribute_initial_value_batches','attribute_response_attribute_maps','attribute_response_mapping_receipts')").all()).toEqual([]);
   } finally { sqlite.close(); }
   expect(() => setup(undefined, (db) => {

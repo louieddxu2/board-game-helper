@@ -94,4 +94,18 @@ UPDATE a SET id = CASE id WHEN 'a' THEN 'b' END;
       rmSync(directory, { recursive: true, force: true });
     }
   }, 120_000);
+
+  test('0135 remains bounded with all nine production subjects present', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'remaining-rating-cost-'));
+    try {
+      cpSync('migrations', directory, { recursive: true });
+      // Historical imports use a different Bus identity. Include the site's real identity
+      // before measuring, so both samples exercise all 18 approved ratings.
+      writeFileSync(join(directory, '0134_test_production_bus.sql'), readFileSync('tests/fixtures/attribute-production-bus.sql', 'utf8'));
+      const [sample] = await checkMigrationRowBudget(['0135_seed_remaining_risk_and_luck_ratings.sql'], { directory });
+      expect(sample.growth).toMatchObject({ subjects: 2000, reads: sample.reads, writes: sample.writes });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
