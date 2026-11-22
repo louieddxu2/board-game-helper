@@ -103,6 +103,9 @@ describe('GamePage compact rule view', () => {
       <Route path="/games/:identifier" element={<><GamePage /><LocationProbe /></>} />
     </Routes>
   </MemoryRouter>);
+  // Compact and expanded rules both count; a lone filter result opens on its own.
+  const shownRules = (container: HTMLElement) => container.querySelectorAll('.game-rules > [id^="rule-"]');
+  const filterPanel = () => within(screen.getByRole('region', { name: '篩選規則' }));
 
   test('mirrors filters into a replaceable URL and keeps the shared rule hash', async () => {
     const user = userEvent.setup();
@@ -114,8 +117,8 @@ describe('GamePage compact rule view', () => {
     const index = await screen.findByRole('group', { name: '規則快速索引' });
 
     await user.click(within(index).getByRole('button', { name: '教學、設置、開局' }));
-    await user.click(screen.getByRole('button', { name: /2人$/ }));
-    await user.click(screen.getByRole('button', { name: '#設置' }));
+    await user.click(filterPanel().getByRole('button', { name: /2人$/ }));
+    await user.click(filterPanel().getByRole('button', { name: '#設置' }));
     await user.type(screen.getByRole('searchbox', { name: '關鍵字搜尋' }), '第一');
     expect(currentUrl).toBe('/games/test-game?category=teaching_setup_opening&players=2&tag=設置&find=第一#rule-rule-9');
 
@@ -132,9 +135,9 @@ describe('GamePage compact rule view', () => {
     ] } });
     const { container } = renderGamePage('/games/test-game?players=2&edition=標準版');
     await screen.findByText('第一條正確規則');
-    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: /2人$/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /標準版$/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(shownRules(container)).toHaveLength(1);
+    expect(filterPanel().getByRole('button', { name: /2人$/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(filterPanel().getByRole('button', { name: /標準版$/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '清除所有篩選' })).toBeInTheDocument();
   });
 
@@ -166,7 +169,9 @@ describe('GamePage compact rule view', () => {
     expect(statements()).toEqual(['✅規則1', '✅規則2']);
     await user.type(screen.getByRole('searchbox'), '規則4');
     await user.click(screen.getByRole('button', { name: '移除人數篩選' }));
-    expect(statements()).toEqual(['✅規則4']);
+    expect(statements()).toEqual([]);
+    expect(shownRules(container)).toHaveLength(1);
+    expect(container.querySelector('#rule-4')).toHaveClass('rule-card');
     expect(currentUrl).toBe('/games/test-game?edition=本體&find=規則4');
   });
 
@@ -219,7 +224,7 @@ describe('GamePage compact rule view', () => {
       expect(within(index).getAllByRole('button')).toHaveLength(2);
       expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(2);
       await userEvent.setup().click(opening);
-      expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+      expect(shownRules(container)).toHaveLength(1);
       expect(action).toBeEnabled();
       await userEvent.setup().click(action);
       expect(screen.getByText('第二條正確規則')).toBeInTheDocument();
@@ -243,7 +248,7 @@ describe('GamePage compact rule view', () => {
     const scoring = within(index).getByRole('button', { name: '流程、終局、計分' });
     await waitFor(() => expect(scoring).toBeEnabled());
     await userEvent.setup().click(scoring);
-    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+    expect(shownRules(container)).toHaveLength(1);
     expect(screen.getByText('第一條正確規則')).toBeInTheDocument();
   });
 
@@ -261,7 +266,7 @@ describe('GamePage compact rule view', () => {
     await userEvent.setup().click(opening);
     expect(opening).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('searchbox', { name: '關鍵字搜尋' })).toHaveValue('第一條');
-    expect(container.querySelectorAll('.rule-card-compact')).toHaveLength(1);
+    expect(shownRules(container)).toHaveLength(1);
     expect(mocks.game).toHaveBeenCalledOnce();
   });
 
@@ -328,7 +333,7 @@ describe('GamePage compact rule view', () => {
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.type(search, '第一條');
-    expect(await screen.findByRole('button', { name: '展開規則：第一條正確規則' })).toHaveTextContent('第一條正確規則');
+    await waitFor(() => expect(document.querySelector('#rule-rule-1')).toHaveClass('rule-card'));
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
 
     await user.clear(search);
@@ -348,8 +353,59 @@ describe('GamePage compact rule view', () => {
 
     const search = await screen.findByRole('searchbox', { name: '關鍵字搜尋' });
     expect(search).toHaveValue('第一條');
-    expect(screen.getByRole('button', { name: '展開規則：第一條正確規則' })).toHaveTextContent('第一條正確規則');
+    await waitFor(() => expect(document.querySelector('#rule-rule-1')).toHaveClass('rule-card'));
     expect(screen.queryByRole('button', { name: '清除所有篩選' })).not.toBeInTheDocument();
+  });
+
+  test('opens a lone filter result without scrolling, and keeps it closed once collapsed', async () => {
+    const user = userEvent.setup();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      const { container } = renderGamePage();
+      const search = await screen.findByRole('searchbox', { name: '關鍵字搜尋' });
+      await user.type(search, '第二條');
+      await waitFor(() => expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card'));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      await user.click(container.querySelector('#rule-rule-2 [aria-expanded="true"]') as HTMLElement);
+      await waitFor(() => expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card-compact'));
+      await user.type(search, '正確');
+      expect(container.querySelector('#rule-rule-2')).toHaveClass('rule-card-compact');
+
+      await user.clear(search);
+      await waitFor(() => expect(shownRules(container)).toHaveLength(2));
+      expect(container.querySelectorAll('.rule-card')).toHaveLength(0);
+      await user.type(search, '第一條');
+      await waitFor(() => expect(container.querySelector('#rule-rule-1')).toHaveClass('rule-card'));
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
+    }
+  });
+
+  test('keeps a game with a single rule compact', async () => {
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [game.rules[0]] } });
+    const { container } = renderGamePage();
+    await screen.findByText('第一條正確規則');
+    expect(container.querySelector('#rule-rule-1')).toHaveClass('rule-card-compact');
+  });
+
+  test('separates the player-count and edition choices only when both are offered', async () => {
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [
+      { ...game.rules[0], playerCounts: [2], editionNotes: ['標準版'] },
+      game.rules[1],
+    ] } });
+    const { container, unmount } = renderGamePage();
+    await screen.findByText('第一條正確規則');
+    const row = container.querySelector('.special-tag-filter') as HTMLElement;
+    expect([...row.children].map((child) => child.className)).toEqual(['tag-chip special-chip', 'filter-divider', 'tag-chip special-chip']);
+    unmount();
+
+    mocks.game.mockResolvedValue({ game: { ...game, rules: [{ ...game.rules[0], playerCounts: [2] }, game.rules[1]] } });
+    const second = renderGamePage();
+    await screen.findByText('第一條正確規則');
+    expect(second.container.querySelector('.filter-divider')).toBeNull();
   });
 
   test('keeps literal searches spanning the statement and mistake, marking both parts', async () => {
@@ -389,7 +445,7 @@ describe('GamePage compact rule view', () => {
     }
 
     const selectedFilterPattern = filterKind === 'tag' ? /#設置 ✕/ : filterKind === 'player' ? /2人$/ : /標準版$/;
-    const selectedChip = () => screen.getByRole('button', { name: selectedFilterPattern });
+    const selectedChip = () => filterPanel().getByRole('button', { name: selectedFilterPattern });
     expect(selectedChip()).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '清除所有篩選' })).toBeInTheDocument();
     if (filterKind === 'tag') {

@@ -44,6 +44,8 @@ export const GamePage = () => {
   const [importanceSaving, setImportanceSaving] = useState<Set<string>>(new Set());
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const handledRuleHash = useRef<string | undefined>(undefined);
+  const autoExpandedRuleId = useRef<string | undefined>(undefined);
+  const skipExpandScroll = useRef(false);
 
   const beginRuleEdit = async (rule: RuleCardType) => {
     const ordinary = Boolean(user && !user.roles.some((role) => role === 'editor' || role === 'admin'));
@@ -118,6 +120,9 @@ export const GamePage = () => {
   }, [game, location.hash]);
   useEffect(() => {
     if (!expandedRuleId) return;
+    // A rule opened because it is the only filter result is already beside the filters;
+    // scrolling there would move the page while the reader is still typing or tapping filters.
+    if (skipExpandScroll.current) { skipExpandScroll.current = false; return; }
     const timer = window.setTimeout(() => {
       const element = document.getElementById(`rule-${expandedRuleId}`);
       if (!element) return;
@@ -175,6 +180,17 @@ export const GamePage = () => {
       setExpandedRuleId(null);
     }
   }, [expandedRuleId, visibleRules]);
+  // When filters narrow the list to one rule, open it. Collapsing it keeps it closed until the result changes.
+  const onlyResultId = visibleRules.length === 1 && (game?.rules.length ?? 0) > 1 ? visibleRules[0].id : undefined;
+  useEffect(() => {
+    if (!onlyResultId) { autoExpandedRuleId.current = undefined; return; }
+    if (autoExpandedRuleId.current === onlyResultId) return;
+    autoExpandedRuleId.current = onlyResultId;
+    setExpandedRuleId((current) => {
+      if (current !== onlyResultId) skipExpandScroll.current = true;
+      return onlyResultId;
+    });
+  }, [onlyResultId]);
   const toggleExpandedRule = (ruleId: string) => {
     setExpandedRuleId((current) => current === ruleId ? null : ruleId);
   };

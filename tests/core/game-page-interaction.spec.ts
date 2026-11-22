@@ -43,7 +43,8 @@ for (const width of [393, 320, 1280]) {
         details: '規則書提到圖示。起始那片的圖案跟城市圖案很像，但顏色不同。另有其他圖案。',
         playerCounts: [2, 3, 4], editionNotes: ['基本版'] };
       const longRule = { ...game.rules[1], statement: longLead + '同一回合只能生效一次。' };
-      await showGame(page, { ...game, rules: [rule, longRule] });
+      // Copies keep two matches per query: a lone result opens on its own, and this checks compact previews.
+      await showGame(page, { ...game, rules: [rule, longRule, { ...rule, id: 'interaction-rule-1b' }, { ...longRule, id: 'interaction-rule-2b' }] });
       const search = page.getByRole('searchbox');
       const card = page.locator('.rule-card-compact').first();
       for (const [query, expected] of [['town hall', 'Town Hall'], ['城市計分', '城市計分'], ['顏色', '顏色'], ['3人', '3人'], ['基本版', '基本版']]) {
@@ -74,17 +75,18 @@ for (const width of [393, 320, 1280]) {
         { ...game.rules[0], statement: '起始設置每個玩家有３元。' },
         { ...game.rules[1], statement: '每位玩家拿十三元。' },
       ];
-      await showGame(page, { ...game, rules });
+      // Copies keep two matches per query: a lone result opens on its own, and this checks compact previews.
+      await showGame(page, { ...game, rules: [...rules, ...rules.map((rule) => ({ ...rule, id: `${rule.id}b` }))] });
       const search = page.getByRole('searchbox');
       await activate(search);
       for (const query of ['三元', '3元', '３元']) {
         await search.fill(query);
         const cards = page.locator('.rule-card-compact');
-        await expect(cards).toHaveCount(1);
-        await expect(cards.locator('.compact-rule-correct mark')).toHaveText('３元');
+        await expect(cards).toHaveCount(2);
+        await expect(cards.locator('.compact-rule-correct mark')).toHaveText(['３元', '３元']);
       }
       await search.fill('13元');
-      await expect(page.locator('.compact-rule-correct mark')).toHaveText('十三元');
+      await expect(page.locator('.compact-rule-correct mark')).toHaveText(['十三元', '十三元']);
     });
 
     test('keeps search hits in the expanded text and updates them as the query changes', { tag: '@ui' }, async ({ page }) => {

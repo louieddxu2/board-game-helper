@@ -44,6 +44,8 @@ export const RuleFilters = ({ filters }: { filters: RuleFilterState }) => {
             </button>
           );
         })}
+        {/* Each side matches any of its own choices; both sides must match. */}
+        {availablePlayerCounts.length > 0 && availableEditions.length > 0 && <span className="filter-divider" aria-hidden="true" />}
         {availableEditions.map((edition) => {
           const isSelected = activeEditions.includes(edition);
           return (

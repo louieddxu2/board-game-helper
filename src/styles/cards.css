@@ -86,6 +86,7 @@
 .filter-row::-webkit-scrollbar { display: none; }
 .filter-row[data-at-end="true"] { -webkit-mask-image: none; mask-image: none; }
 .filter-row > button { flex: none; white-space: nowrap; }
+.filter-row > .filter-divider { flex: none; align-self: stretch; width: 1px; margin-inline: 2px; background: #cfc5b1; }
 
 /* Icon-only clear button: a 28px circle that keeps the full-height tap area without widening the row. */
 .filter-row .filter-clear {
