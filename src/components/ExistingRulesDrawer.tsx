@@ -50,10 +50,11 @@ export const ExistingRulesDrawer = ({ open, gameName, rules, drafts, onClose }: 
     return () => window.removeEventListener('keydown', closeOnEscape, true);
   }, [open]);
 
-  // Rules resembling a draft come first, closest first; the rest keep the importance order.
+  // With a draft, every rule is ordered by how much of the draft it covers, closest first, so a
+  // reworded duplicate rises even below the flag; ties and an empty draft keep the importance order.
   const listed = useMemo(() => {
     const scored = filters.visibleRules.map((rule, order) => ({
-      rule, order, match: closestDraft(rule.statement, rule.tags.map((tag) => tag.name), drafts),
+      rule, order, match: closestDraft({ ...rule, tags: rule.tags.map((tag) => tag.name) }, drafts),
     }));
     return scored.sort((left, right) => (right.match?.score ?? -1) - (left.match?.score ?? -1) || left.order - right.order);
   }, [filters.visibleRules, drafts]);
@@ -95,7 +96,7 @@ export const ExistingRulesDrawer = ({ open, gameName, rules, drafts, onClose }: 
         {listed.length === 0 && <li className="existing-rules-empty">沒有符合條件的規則。</li>}
         {listed.map(({ rule, match }) => <li key={rule.id}>
           <button type="button" className="existing-rule" aria-expanded={expanded.has(rule.id)} onClick={() => toggle(rule.id)}>
-            {match && <span className="existing-rule-similar">可能與第 {match.draftIndex + 1} 條相似</span>}
+            {match?.similar && <span className="existing-rule-similar">可能與第 {match.draftIndex + 1} 條相似</span>}
             <span className="existing-rule-statement">{rule.statement}</span>
             {rule.tags.length > 0 && <span className="existing-rule-tags">{rule.tags.map((tag) => `#${tag.name}`).join(' ')}</span>}
           </button>

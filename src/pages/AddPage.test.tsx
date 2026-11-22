@@ -125,6 +125,14 @@ describe('AddPage contribution constraints', () => {
     expect(statements[0]).toBe('可能與第 1 條相似大教堂只能蓋在自己的城市旁邊。');
     expect(statements[1]).toBe('船隻移動時不能穿越其他玩家的船。');
     fireEvent.click(within(drawer).getByRole('button', { name: '關閉' }));
+
+    // A loosely worded draft is not flagged, but the rule it is about still rises above the more-voted one.
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '大教堂一定要放在城市附近' } });
+    fireEvent.click(screen.getByRole('button', { name: '對照既有規則 2' }));
+    const loose = within(screen.getByRole('dialog')).getAllByRole('button', { expanded: false }).map((item) => item.textContent);
+    expect(loose).toEqual(['大教堂只能蓋在自己的城市旁邊。', '船隻移動時不能穿越其他玩家的船。']);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '關閉' }));
+    fireEvent.change(screen.getByLabelText('正確規則 *'), { target: { value: '大教堂只能蓋在自己城市旁' } });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('正確規則 *')).toHaveValue('大教堂只能蓋在自己城市旁');
   });
