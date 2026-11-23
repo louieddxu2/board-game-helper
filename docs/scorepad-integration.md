@@ -23,7 +23,10 @@
 ### `lookupGamesByBgg(bggIds: string[])`
 
 ```ts
-Promise<Array<{ bggId: string; gameId: string; displayName: string; englishName: string | null; aliases: string[] }>>
+Promise<Array<{ bggId: string; gameId: string; displayName: string; englishName: string | null; aliases: string[] } & RuleRef>>
+
+// 規則在哪款遊戲（見下方「目錄裡的規則數」）
+type RuleRef = { ruleGameId: string | null; publishedRuleCount?: number; ruleVersion?: string };
 ```
 
 - 用於管理員發布或登記官方計分板時查少數幾款遊戲。
@@ -47,7 +50,7 @@ Promise<{
   changes: Array<{
     gameId: string; catalogVersion: number; bggIds: string[]; deleted: boolean;
     displayName?: string; englishName?: string | null; aliases?: string[];
-  }>;
+  } & Partial<RuleRef>>; // 未刪除時帶 RuleRef
   throughVersion: number;
   hasMore: boolean;
 }>
@@ -55,16 +58,27 @@ Promise<{
 
 - 每週增量同步用。以 `game_catalog_entries.catalog_version` 分頁，和本站公開目錄同一個游標；`limit` 為 1–200，`afterVersion` 為非負整數。
 - 下一頁傳入上一頁的 `throughVersion`；`hasMore` 為 `false` 時已讀完。沒有變更時 `throughVersion` 等於傳入的 `afterVersion`。
-- 遊戲是否可列出依目前的 `games` 資料判斷。已刪除、隱藏或已合併的遊戲以 `deleted: true` 回傳，只帶 `gameId`、`catalogVersion` 與 `bggIds`，計分板應移除這款遊戲的規則名稱。已從資料庫刪除的遊戲沒有 BGG 編號可回傳，`bggIds` 為空陣列，請以 `gameId` 對應。
+- 遊戲是否可列出依目前的 `games` 資料判斷。已刪除、已合併、或隱藏且沒有 BGG 編號的遊戲以 `deleted: true` 回傳，只帶 `gameId`、`catalogVersion` 與 `bggIds`，計分板應移除這款遊戲的規則名稱。已從資料庫刪除的遊戲沒有 BGG 編號可回傳，`bggIds` 為空陣列，請以 `gameId` 對應。
 - `bggIds` 同樣合併 `games.bgg_id` 與 `game_external_ids` 兩個來源。
 - `games.bgg_id` 與 BGG 外部編號的變更也會推進目錄版本（migration 0130），所以新增、修改或移除 BGG 編號都會出現在下一次同步。
+
+### 目錄裡的規則數（`RuleRef`）
+
+`lookupGamesByBgg` 與 `listGameChangesSince` 的每款遊戲都帶規則所在位置，計分板因此能在本機顯示「N 條規則」，打開遊戲時不必呼叫 `getRuleSummaryByBgg`：
+
+- 可列出的本體遊戲：`ruleGameId` 是自己，並帶 `publishedRuleCount`（含未審核）與 `ruleVersion`（與 `getRuleSummaryByBgg`、`getGameRules` 相同）。
+- 資料片、版本與變體：`ruleGameId` 是它對到的公開本體，不帶數量與版本。請讀本體那一筆的 `publishedRuleCount` 與 `ruleVersion`；只有本體那筆會隨規則變動更新，所以不在資料片上複製一份。
+- `ruleGameId: null`：本站沒有這款遊戲的規則（隱藏的本體、沒有對到公開本體的資料片）。
+- 已發布規則的數量或最新時間改變時，觸發器會推進本體的目錄版本；資料片關係新增、修改或刪除時，推進資料片的版本。所以下次增量同步就會拿到新的數量與 `ruleVersion`。
+- 數量的新舊取決於計分板同步的頻率。`getRuleSummaryByBgg` 仍可用於本機目錄還沒有這款遊戲時。
+- 讀取成本：本體遊戲的欄位在已讀的 `games` 列上，不多讀；資料片多讀一筆關係與一筆本體（約 2 列）。
 ### `getRuleSummaryByBgg(bggId: string)`
 
 ```ts
 Promise<{ ruleGameId: string; publishedRuleCount: number; ruleVersion: string } | null>
 ```
 
-- 玩家打開一場遊戲時呼叫，用來先顯示「N 條規則」，不讀規則本身。
+- 本機目錄沒有這款遊戲時的備援：先顯示「N 條規則」，不讀規則本身。目錄已帶 `RuleRef` 時不必呼叫。
 - 和網站相同，資料片、版本與變體一律對到本體遊戲：`ruleGameId` 是本體遊戲，數量與版本也是本體的。BGG 編號同時查 `games.bgg_id` 與 `game_external_ids`。
 - `publishedRuleCount` 包含尚未審核的規則。
 - `ruleVersion` 在已發布規則新增、修改、隱藏、刪除或移動時改變。計分板把它和自己快取的版本比對，相同就不必讀規則。審核通過一條規則、新增或移除外部資源不改變版本；快取裡的審核標記、外部資源與重要票數，要到下次規則變動或計分板自己的快取到期才更新。
@@ -89,7 +103,7 @@ Promise<{
 ```
 
 - 計分板只在玩家點開規則、而且本機快取的版本與 `ruleVersion` 不同時呼叫；進入遊戲不呼叫。
-- 傳入 `getRuleSummaryByBgg` 的 `ruleGameId`。不是可列出的本體遊戲（資料片、隱藏、已合併或不存在）時回傳 `null`；格式不符的 ID 直接拒絕，不查詢 D1。
+- 傳入目錄或 `getRuleSummaryByBgg` 的 `ruleGameId`。不是可列出的本體遊戲（資料片、隱藏、已合併或不存在）時回傳 `null`；格式不符的 ID 直接拒絕，不查詢 D1。
 - 回傳全部已發布規則，包含未審核的（`reviewStatus: 'pending'`），順序與網站的遊戲頁查詢相同。排序、未審核的標示與重要票數的用法由計分板決定。
 - 不回傳貢獻者、編輯者、審核者與修改紀錄。
 - `tags` 是這些規則用到的 Tag，與網站遊戲頁載入的相同（名稱、分類提示與偵測關鍵字），以 `tagIds` 對應。沒有自訂分類的規則靠 Tag 的分類提示得到自動分類。

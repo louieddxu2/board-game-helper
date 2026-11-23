@@ -40,7 +40,7 @@ test('lookupGamesByBgg finds both BGG id sources and returns unmerged games, hid
   ].sort((a, b) => a[0].localeCompare(b[0])));
   const listed = found.find((game) => game.gameId === h.listed.id)!;
   expect(listed.aliases).toContain('計分板別名');
-  expect(Object.keys(listed).sort()).toEqual(['aliases', 'bggId', 'displayName', 'englishName', 'gameId']);
+  expect(Object.keys(listed).sort()).toEqual(['aliases', 'bggId', 'displayName', 'englishName', 'gameId', 'publishedRuleCount', 'ruleGameId', 'ruleVersion']);
   expect(typeof listed.displayName).toBe('string');
   // The site hides expansions and versions while their names await review; with a BGG id a score pad can still play them.
   expect(found.find((game) => game.gameId === h.hidden.id)?.aliases).toEqual(['隱藏別名']);
@@ -127,4 +127,47 @@ test('listGameChangesSince validates its cursor and page size', async () => {
   await expect(h.api.listGameChangesSince(-1, 10)).rejects.toThrow('after_version');
   await expect(h.api.listGameChangesSince(1.5, 10)).rejects.toThrow('after_version');
   expect(h.executedSql).toHaveLength(0);
+});
+
+test('catalog entries say where each game\'s rules live, with the count and version only on the base game', async () => {
+  const h = setup();
+  h.sqlite.exec(`INSERT INTO games(id, slug, display_name, normalized_name, created_at, updated_at, visibility, review_status, entity_kind, bgg_id)
+      VALUES('scorepad-expansion', 'scorepad-expansion', '計分擴充', '計分擴充', 1, 1, 'hidden', 'pending', 'expansion', 990010);
+    INSERT INTO game_entity_relations(id, source_game_id, target_game_id, relation_type, created_at)
+      VALUES('scorepad-relation', 'scorepad-expansion', '${h.listed.id}', 'expansion_of', 1);`);
+  const row = h.sqlite.prepare('SELECT published_rule_count, latest_rule_updated_at FROM games WHERE id = ?').get(h.listed.id) as {
+    published_rule_count: number | null; latest_rule_updated_at: number | null };
+  const baseRef = {
+    ruleGameId: h.listed.id,
+    publishedRuleCount: Number(row.published_rule_count ?? 0),
+    ruleVersion: `${Number(row.latest_rule_updated_at ?? 0)}:${Number(row.published_rule_count ?? 0)}`,
+  };
+  h.executedSql.length = 0;
+  const found = await h.api.lookupGamesByBgg([String(h.listed.bgg_id), '990010', String(h.hidden.bgg_id)]);
+  expect(h.executedSql).toHaveLength(1);
+  expect(baseTableScans(h.plan(h.executedSql[0]))).toEqual([]);
+  const byId = new Map(found.map((game) => [game.gameId, game]));
+  expect(byId.get(h.listed.id)).toMatchObject(baseRef);
+  expect(baseRef.ruleVersion).toBe((await h.api.getRuleSummaryByBgg(String(h.listed.bgg_id)))?.ruleVersion);
+  // The expansion points at its base game; its count is read from the base game's entry.
+  expect(byId.get('scorepad-expansion')).toEqual(expect.objectContaining({ ruleGameId: h.listed.id }));
+  expect(byId.get('scorepad-expansion')).not.toHaveProperty('publishedRuleCount');
+  // A hidden base game has no rules on the site.
+  expect(byId.get(h.hidden.id)).toEqual(expect.objectContaining({ ruleGameId: null }));
+
+  await flushCatalogOutbox(h.gateway);
+  const before = await h.api.currentGameCatalogVersion();
+  // A rule count change moves the base game's entry, so a synced count stays current.
+  h.sqlite.exec(`UPDATE games SET published_rule_count = ${baseRef.publishedRuleCount + 1}, latest_rule_updated_at = 77 WHERE id = '${h.listed.id}';`);
+  await flushCatalogOutbox(h.gateway);
+  const changed = await h.api.listGameChangesSince(before, 200);
+  expect(changed.changes).toEqual([expect.objectContaining({
+    gameId: h.listed.id, ruleGameId: h.listed.id, publishedRuleCount: baseRef.publishedRuleCount + 1,
+    ruleVersion: `77:${baseRef.publishedRuleCount + 1}`,
+  })]);
+  // Removing the relation moves the expansion's entry; it no longer leads to rules.
+  h.sqlite.exec(`DELETE FROM game_entity_relations WHERE id = 'scorepad-relation';`);
+  await flushCatalogOutbox(h.gateway);
+  const unlinked = await h.api.listGameChangesSince(changed.throughVersion, 200);
+  expect(unlinked.changes).toEqual([expect.objectContaining({ gameId: 'scorepad-expansion', deleted: false, ruleGameId: null })]);
 });

@@ -1,4 +1,5 @@
 import type { Database } from './database';
+import { ruleVersionOf } from './scorepadRules';
 
 // Read-only game data for the score pad Worker, reached only through the
 // ScorepadApi Service Binding entrypoint. Every method issues one D1 query,
@@ -7,7 +8,21 @@ import type { Database } from './database';
 export const SCOREPAD_BGG_LOOKUP_LIMIT = 100;
 export const SCOREPAD_CHANGES_PAGE_LIMIT = 200;
 
-export interface ScorepadGame {
+/**
+ * Where a game's rules live, so a score pad shows the rule count without asking.
+ * A listed base game names itself and carries its count and version; an expansion
+ * or version names its base game and carries neither, so read them from the base
+ * game's own entry, which stays current when its rules change. Null: no rules here.
+ */
+export interface ScorepadRuleRef {
+  ruleGameId: string | null;
+  /** Only on the entry whose gameId is ruleGameId. */
+  publishedRuleCount?: number;
+  /** Only on the entry whose gameId is ruleGameId; equals getRuleSummaryByBgg's. */
+  ruleVersion?: string;
+}
+
+export interface ScorepadGame extends ScorepadRuleRef {
   bggId: string;
   gameId: string;
   displayName: string;
@@ -23,6 +38,10 @@ export interface ScorepadGameChange {
   displayName?: string;
   englishName?: string | null;
   aliases?: string[];
+  /** Present when not deleted. */
+  ruleGameId?: string | null;
+  publishedRuleCount?: number;
+  ruleVersion?: string;
 }
 
 export interface ScorepadGameChanges {
@@ -44,6 +63,38 @@ const ALIASES = (alias: string) => `COALESCE((
       WHERE game_id = ${alias}.id ORDER BY alias
     )
   ), '[]')`;
+
+// The columns behind ScorepadRuleRef, by the rules site's own rule: a base game
+// that is listed holds its rules; an expansion or version leads, through its
+// relation, to a listed base game. One primary-key or index lookup per game.
+const RULE_REF_COLUMNS = (alias: string) => `
+  CASE WHEN COALESCE(${alias}.entity_kind, 'base') = 'base'
+    THEN CASE WHEN ${IS_PUBLIC(alias)} AND ${UNMERGED(alias)} THEN ${alias}.id END
+    ELSE (
+      SELECT base.id
+      FROM game_entity_relations relation INDEXED BY idx_game_entity_relations_source_type_target
+      CROSS JOIN games base INDEXED BY sqlite_autoindex_games_1 ON base.id = relation.target_game_id
+      WHERE relation.source_game_id = ${alias}.id
+        AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
+        AND base.entity_kind = 'base' AND ${IS_PUBLIC('base')} AND ${UNMERGED('base')}
+      ORDER BY relation.id LIMIT 1
+    ) END AS rule_game_id,
+  ${alias}.published_rule_count, ${alias}.latest_rule_updated_at`;
+
+interface RuleRefRow {
+  game_id: string;
+  rule_game_id: string | null;
+  published_rule_count: number | null;
+  latest_rule_updated_at: number | null;
+}
+
+const toRuleRef = (row: RuleRefRow): ScorepadRuleRef => row.rule_game_id === row.game_id
+  ? {
+    ruleGameId: row.rule_game_id,
+    publishedRuleCount: Number(row.published_rule_count ?? 0),
+    ruleVersion: ruleVersionOf(row.latest_rule_updated_at, row.published_rule_count),
+  }
+  : { ruleGameId: row.rule_game_id ?? null };
 
 const BGG_ID = /^[1-9]\d{0,9}$/;
 
@@ -78,20 +129,22 @@ export const lookupScorepadGamesByBgg = async (db: Database, bggIds: unknown): P
       CROSS JOIN game_external_ids external INDEXED BY sqlite_autoindex_game_external_ids_2
         ON external.source = 'bgg' AND external.external_id = requested.bgg_id
     )
-    SELECT matched.bgg_id, g.id AS game_id, g.display_name, g.english_name, ${ALIASES('g')} AS aliases_json
+    SELECT matched.bgg_id, g.id AS game_id, g.display_name, g.english_name, ${ALIASES('g')} AS aliases_json,
+      ${RULE_REF_COLUMNS('g')}
     FROM matched
     CROSS JOIN games g INDEXED BY sqlite_autoindex_games_1 ON g.id = matched.game_id
     WHERE ${UNMERGED('g')}
     ORDER BY matched.bgg_id, g.id
   `).bind(JSON.stringify(ids)).all<{
     bgg_id: string; game_id: string; display_name: string; english_name: string | null; aliases_json: string;
-  }>();
+  } & RuleRefRow>();
   return (result.results ?? []).map((row) => ({
     bggId: String(row.bgg_id),
     gameId: row.game_id,
     displayName: row.display_name,
     englishName: row.english_name ?? null,
     aliases: parseStrings(row.aliases_json),
+    ...toRuleRef(row),
   }));
 };
 
@@ -132,6 +185,7 @@ export const listScorepadGameChangesSince = async (
       CASE WHEN ${IS_PUBLIC('g')} THEN 1 ELSE 0 END AS is_public,
       g.display_name, g.english_name,
       CASE WHEN g.id IS NULL THEN '[]' ELSE ${ALIASES('g')} END AS aliases_json,
+      ${RULE_REF_COLUMNS('g')},
       COALESCE((
         SELECT json_group_array(bgg_id) FROM (
           SELECT CAST(owner.bgg_id AS TEXT) AS bgg_id
@@ -149,7 +203,7 @@ export const listScorepadGameChangesSince = async (
   `).bind(after, size).all<{
     game_id: string; catalog_version: number; present: number; is_public: number; display_name: string | null;
     english_name: string | null; aliases_json: string; bgg_ids_json: string;
-  }>();
+  } & RuleRefRow>();
   const rows = result.results ?? [];
   const changes = rows.map((row): ScorepadGameChange => {
     const base = { gameId: row.game_id, catalogVersion: Number(row.catalog_version), bggIds: parseStrings(row.bgg_ids_json) };
@@ -160,6 +214,7 @@ export const listScorepadGameChangesSince = async (
       displayName: row.display_name ?? '',
       englishName: row.english_name ?? null,
       aliases: parseStrings(row.aliases_json),
+      ...toRuleRef(row),
     };
   });
   return {
