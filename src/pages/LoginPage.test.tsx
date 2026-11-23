@@ -156,7 +156,6 @@ describe('LoginPage', () => {
 
     const benefits = screen.getAllByRole('listitem').map((item) => item.textContent);
     expect(benefits).toEqual([
-      '查看遊戲列表。',
       '收藏遊戲至個人首頁。',
       '有限度地新增玩錯的規則記錄。',
       '投票玩錯的規則。',

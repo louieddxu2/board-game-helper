@@ -22,12 +22,11 @@
       "title": "白話文版本",
       "currentVersion": "此頁僅為當前版本的說明，後續可能異動，但隱私方面的精神不會有太大變化。",
       "signedOutLabel": "未登入：",
-      "signedOut": "玩家不用登入也能搜尋遊戲、瀏覽規則。",
+      "signedOut": "玩家不用登入也能搜尋遊戲、查看遊戲列表、瀏覽規則。",
       "signedInLabel": "登入：",
       "signedIn": "是串接 Google 帳號自動登入，只取得登入帳號資訊作為驗證，沒有要求任何額外權限（如 Gmail、Google Drive）。",
       "benefitsIntroduction": "目前登入後的好處是：",
       "benefits": [
-        "查看遊戲列表",
         "有限度地建立規則",
         "為規則投票「重要！」",
         "收藏一些遊戲放到個人首頁，以便快速連結到常玩的遊戲"

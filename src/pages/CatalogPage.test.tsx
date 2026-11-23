@@ -7,8 +7,9 @@ import { CatalogPage } from './CatalogPage';
 const tag = { id: 'tag-1', slug: 'setup', name: '起始設置' };
 const game = { id: 'game-1', slug: 'shipyard', displayName: '船廠', englishName: 'Shipyard', aliases: [], ruleCount: 1, updatedAt: 1,
   rules: [{ id: 'rule-1', statement: '原本展開的規則', tags: [tag], categories: [], status: 'published', updatedAt: 1 }] };
-const mocks = vi.hoisted(() => ({ game: vi.fn(), catalogGames: vi.fn() }));
-vi.mock('../context/SessionContext', () => ({ useSession: () => ({ user: { id: 'admin' }, loading: false, canEdit: true, isAdmin: true }) }));
+const admin = { user: { id: 'admin' }, loading: false, canEdit: true, isAdmin: true };
+const mocks = vi.hoisted(() => ({ game: vi.fn(), catalogGames: vi.fn(), session: { current: {} as Record<string, unknown> } }));
+vi.mock('../context/SessionContext', () => ({ useSession: () => mocks.session.current }));
 vi.mock('../lib/api', () => ({ api: { game: mocks.game, catalogGames: mocks.catalogGames,
   editorContributions: async () => ({ games: [{ gameId: 'game-1', pendingRuleCount: 1 }], pendingGameIds: [] }),
   tags: async () => ({ tags: [tag] }),
@@ -22,7 +23,7 @@ const initial = '/catalog?q=%E8%88%B9&pending=1&game=game-1';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  mocks.game.mockReset(); mocks.catalogGames.mockReset();
+  mocks.game.mockReset(); mocks.catalogGames.mockReset(); mocks.session.current = admin;
   mocks.game.mockResolvedValue({ game }); mocks.catalogGames.mockResolvedValue({ games: [game] });
 });
 
@@ -65,4 +66,17 @@ test('changing local filters does not reload an already expanded game', async ()
   await waitFor(() => expect(screen.getByRole('searchbox')).toHaveValue('Shipyard'));
   expect(mocks.game).toHaveBeenCalledTimes(1);
   expect(mocks.catalogGames).toHaveBeenCalledTimes(1);
+});
+
+test('shows the public list to a visitor who is not signed in, without editor counts', async () => {
+  mocks.session.current = { user: undefined, loading: false, canEdit: false, isAdmin: false };
+  render(<MemoryRouter initialEntries={['/catalog']}><Routes>
+    <Route path="/catalog" element={<CatalogPage />} />
+    <Route path="/login" element={<h1>登入頁</h1>} />
+  </Routes></MemoryRouter>);
+  expect(await screen.findByRole('heading', { name: '遊戲列表' })).toBeInTheDocument();
+  expect(await screen.findByText('船廠')).toBeInTheDocument();
+  expect(mocks.catalogGames).toHaveBeenCalledWith(false, expect.any(Function));
+  expect(screen.queryByRole('heading', { name: '登入頁' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '同步目錄' })).not.toBeInTheDocument();
 });

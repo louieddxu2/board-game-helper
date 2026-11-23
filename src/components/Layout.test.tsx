@@ -125,5 +125,7 @@ describe('Layout navigation', () => {
     expect(recordLinks).toHaveLength(2);
     expect(recordLinks.every((link) => !/primary/u.test(link.className))).toBe(true);
     expect(recordLinks.every((link) => link.getAttribute('href') === '/add')).toBe(true);
+    // The public game list is open to visitors, in both the desktop and mobile navigation.
+    expect(screen.getAllByRole('link', { name: /列表/ }).map((link) => link.getAttribute('href'))).toEqual(['/catalog', '/catalog']);
   });
 });

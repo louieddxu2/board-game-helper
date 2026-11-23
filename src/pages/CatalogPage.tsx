@@ -1,11 +1,10 @@
 import { usePageTitle } from '../hooks/usePageTitle';
 import { sitePageTitle } from '../lib/gameSeo';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
+import { Link, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
 import { api } from '../lib/api';
 import type { GameDetail, GameSummary, RuleCard } from '../shared/types';
-import { loginHref } from '../lib/loginNavigation';
 
 const formatDate = (timestamp: number) => new Date(timestamp).toLocaleDateString('zh-TW', {
   year: 'numeric', month: 'numeric', day: 'numeric',
@@ -48,7 +47,6 @@ const RulesSheet = ({ game }: { game: GameDetail }) => <div className="catalog-d
 
 export const CatalogPage = () => {
   usePageTitle(sitePageTitle('遊戲列表'));
-  const location = useLocation();
   const { canEdit, loading, user } = useSession();
   const [games, setGames] = useState<GameSummary[]>([]);
   const [viewParams, setViewParams] = useSearchParams();
@@ -111,7 +109,7 @@ export const CatalogPage = () => {
     }
   };
 
-  useEffect(() => { if (user) void loadGames(); }, [user?.id, canEdit]);
+  useEffect(() => { if (!loading) void loadGames(); }, [loading, user?.id, canEdit]);
   useEffect(() => {
     if (!canEdit) { setPendingRuleCounts({}); setPendingGameIds([]); return; }
     void api.editorContributions().then((data) => {
@@ -148,7 +146,6 @@ export const CatalogPage = () => {
   }, [availableExpandedGameId, canEdit]);
 
   if (loading) return <section className="catalog-page"><h1>正在確認權限…</h1></section>;
-  if (!user) return <Navigate to={loginHref(location)} replace />;
 
   return <section className="catalog-page">
     <header className="catalog-header">
