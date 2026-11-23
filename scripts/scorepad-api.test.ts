@@ -29,19 +29,22 @@ const setup = () => {
 const baseTableScans = (plan: string[]) => plan.filter((detail) => /^SCAN /.test(detail)
   && !/^SCAN (requested|page|matched|json_each|CONSTANT ROW|\(subquery)/.test(detail));
 
-test('lookupGamesByBgg finds both BGG id sources and returns only public, unmerged games', async () => {
+test('lookupGamesByBgg finds both BGG id sources and returns unmerged games, hidden ones included', async () => {
   const h = setup();
   h.executedSql.length = 0;
   const found = await h.api.lookupGamesByBgg([String(h.listed.bgg_id), '990001', String(h.hidden.bgg_id),
     String(h.pending.bgg_id), String(h.merged.bgg_id), '999999999', String(h.listed.bgg_id)]);
   expect(found.map((game) => [game.bggId, game.gameId])).toEqual([
-    [String(h.listed.bgg_id), h.listed.id], ['990001', h.edition.id], [String(h.pending.bgg_id), h.pending.id],
+    [String(h.listed.bgg_id), h.listed.id], ['990001', h.edition.id], [String(h.hidden.bgg_id), h.hidden.id],
+    [String(h.pending.bgg_id), h.pending.id],
   ].sort((a, b) => a[0].localeCompare(b[0])));
   const listed = found.find((game) => game.gameId === h.listed.id)!;
   expect(listed.aliases).toContain('計分板別名');
   expect(Object.keys(listed).sort()).toEqual(['aliases', 'bggId', 'displayName', 'englishName', 'gameId']);
   expect(typeof listed.displayName).toBe('string');
-  expect(JSON.stringify(found)).not.toContain('隱藏別名');
+  // The site hides expansions and versions while their names await review; with a BGG id a score pad can still play them.
+  expect(found.find((game) => game.gameId === h.hidden.id)?.aliases).toEqual(['隱藏別名']);
+  expect(found.map((game) => game.gameId)).not.toContain(h.merged.id);
   expect(h.executedSql).toHaveLength(1);
   expect(baseTableScans(h.plan(h.executedSql[0]))).toEqual([]);
 });
@@ -57,7 +60,7 @@ test('lookupGamesByBgg rejects oversize and malformed id lists before reading D1
   await expect(h.api.lookupGamesByBgg([])).resolves.toEqual([]);
 });
 
-test('listGameChangesSince pages the catalog and reports hidden and merged games as deleted', async () => {
+test('listGameChangesSince pages the catalog and reports merged games and hidden games without a BGG id as deleted', async () => {
   const h = setup();
   await flushCatalogOutbox(h.gateway);
   const version = await h.api.currentGameCatalogVersion();
@@ -76,13 +79,19 @@ test('listGameChangesSince pages the catalog and reports hidden and merged games
   expect(after).toBe(version);
   const byId = new Map(all.map((change) => [change.gameId, change]));
   expect(byId.size).toBe(all.length);
-  for (const game of [h.hidden, h.merged]) {
-    expect(byId.get(game.id)).toEqual({ gameId: game.id, catalogVersion: expect.any(Number), deleted: true, bggIds: [String(game.bgg_id)] });
-  }
+  expect(byId.get(h.merged.id)).toEqual({ gameId: h.merged.id, catalogVersion: expect.any(Number), deleted: true, bggIds: [String(h.merged.bgg_id)] });
+  expect(byId.get(h.hidden.id)).toEqual(expect.objectContaining({ deleted: false, bggIds: [String(h.hidden.bgg_id)], aliases: ['隱藏別名'] }));
   expect(byId.get(h.listed.id)).toEqual(expect.objectContaining({ deleted: false, bggIds: [String(h.listed.bgg_id)], aliases: expect.arrayContaining(['計分板別名']) }));
   expect(byId.get(h.edition.id)?.bggIds).toEqual([String(h.edition.bgg_id), '990001'].sort());
   expect(byId.get(h.pending.id)).toEqual(expect.objectContaining({ deleted: false, bggIds: [String(h.pending.bgg_id)] }));
 
+  // A hidden game that loses its BGG id leaves the score pad's catalog; made public, it returns.
+  h.sqlite.exec(`UPDATE games SET bgg_id = NULL WHERE id = '${h.hidden.id}';
+    DELETE FROM game_external_ids WHERE game_id = '${h.hidden.id}' AND source = 'bgg';`);
+  await flushCatalogOutbox(h.gateway);
+  const dropped = await h.api.listGameChangesSince(after, 200);
+  expect(dropped.changes).toEqual([{ gameId: h.hidden.id, catalogVersion: expect.any(Number), deleted: true, bggIds: [] }]);
+  after = dropped.throughVersion;
   h.sqlite.exec(`UPDATE games SET visibility = 'public' WHERE id = '${h.hidden.id}';`);
   await flushCatalogOutbox(h.gateway);
   const shown = await h.api.listGameChangesSince(after, 200);

@@ -72,15 +72,16 @@ const IS_BASE = (alias: string) => `COALESCE(${alias}.entity_kind, 'base') = 'ba
 
 /**
  * The rule count and version of the game a BGG id leads to, as the site shows it: a base game's own
- * rules, or for an expansion or version its base game's. Null when no listed game, or no listed
- * base game, has the id. Both BGG id sources are searched; should a data error give the id to two
+ * rules, or for an expansion or version its base game's. Like the site, an expansion or version
+ * still leads to its base game while the site keeps it hidden for review; only the base game must
+ * be listed. Null when no listed base game is reached. Both BGG id sources are searched; should a data error give the id to two
  * games, the earlier branch below answers.
  */
 export const getScorepadRuleSummaryByBgg = async (db: Database, bggId: unknown): Promise<ScorepadRuleSummary | null> => {
   if (typeof bggId !== 'string' || !BGG_ID.test(bggId)) throw new TypeError('scorepad_bgg_id_must_be_a_positive_integer_string');
   // Branches run in order and stop at the first row, so the common case reads one games row:
   // 1. a base game carrying the id itself, 2. a base game holding it as an edition id,
-  // 3. an expansion or version carrying it, through its relation to a listed base game.
+  // 3. an unmerged expansion or version carrying it, hidden or not, through its relation to a listed base game.
   const row = await db.statement(`
     SELECT rule_game_id, published_rule_count, latest_rule_updated_at FROM (
       SELECT g.id AS rule_game_id, g.published_rule_count, g.latest_rule_updated_at
@@ -103,7 +104,7 @@ export const getScorepadRuleSummaryByBgg = async (db: Database, bggId: unknown):
       CROSS JOIN game_entity_relations relation INDEXED BY idx_game_entity_relations_source_type_target
         ON relation.source_game_id = variant.id AND relation.relation_type IN ('expansion_of', 'version_of', 'variant_of')
       CROSS JOIN games base INDEXED BY sqlite_autoindex_games_1 ON base.id = relation.target_game_id
-      WHERE ${LISTED('variant')} AND NOT ${IS_BASE('variant')} AND base.entity_kind = 'base' AND ${LISTED('base')}
+      WHERE variant.merged_into_game_id IS NULL AND NOT ${IS_BASE('variant')} AND base.entity_kind = 'base' AND ${LISTED('base')}
     )
     LIMIT 1
   `).bind(bggId).first<{ rule_game_id: string; published_rule_count: number | null; latest_rule_updated_at: number | null }>();

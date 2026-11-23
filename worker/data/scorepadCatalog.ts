@@ -31,10 +31,12 @@ export interface ScorepadGameChanges {
   hasMore: boolean;
 }
 
-// The same games the public site lists: public and not merged away. A pending
-// review_status only marks data awaiting an editor; those games stay listed.
-const LISTED = (alias: string) => `${alias}.visibility = 'public'
-  AND ${alias}.merged_into_game_id IS NULL`;
+// Every game the public site lists (public and not merged away), plus hidden
+// expansions and versions that carry a BGG id: the site keeps those hidden while
+// their names await review, yet a score pad can play them and reach their base
+// game's rules. A pending review_status only marks data awaiting an editor.
+const UNMERGED = (alias: string) => `${alias}.merged_into_game_id IS NULL`;
+const IS_PUBLIC = (alias: string) => `${alias}.visibility = 'public'`;
 
 const ALIASES = (alias: string) => `COALESCE((
     SELECT json_group_array(alias) FROM (
@@ -79,7 +81,7 @@ export const lookupScorepadGamesByBgg = async (db: Database, bggIds: unknown): P
     SELECT matched.bgg_id, g.id AS game_id, g.display_name, g.english_name, ${ALIASES('g')} AS aliases_json
     FROM matched
     CROSS JOIN games g INDEXED BY sqlite_autoindex_games_1 ON g.id = matched.game_id
-    WHERE ${LISTED('g')}
+    WHERE ${UNMERGED('g')}
     ORDER BY matched.bgg_id, g.id
   `).bind(JSON.stringify(ids)).all<{
     bgg_id: string; game_id: string; display_name: string; english_name: string | null; aliases_json: string;
@@ -108,8 +110,8 @@ const validInteger = (value: unknown, name: string, min: number, max = Number.MA
 };
 
 // Pages game_catalog_entries by catalog_version, the same cursor as the public
-// catalog. The current game row decides visibility, so hidden, merged and
-// removed games come back as deleted. The page drives every lookup.
+// catalog. The current game row decides what is listed, so merged, removed and
+// hidden games without a BGG id come back as deleted. The page drives every lookup.
 export const listScorepadGameChangesSince = async (
   db: Database,
   afterVersion: unknown,
@@ -126,7 +128,8 @@ export const listScorepadGameChangesSince = async (
       LIMIT ?
     )
     SELECT page.game_id, page.catalog_version,
-      CASE WHEN g.id IS NOT NULL AND ${LISTED('g')} THEN 1 ELSE 0 END AS listed,
+      CASE WHEN g.id IS NOT NULL AND ${UNMERGED('g')} THEN 1 ELSE 0 END AS present,
+      CASE WHEN ${IS_PUBLIC('g')} THEN 1 ELSE 0 END AS is_public,
       g.display_name, g.english_name,
       CASE WHEN g.id IS NULL THEN '[]' ELSE ${ALIASES('g')} END AS aliases_json,
       COALESCE((
@@ -144,13 +147,13 @@ export const listScorepadGameChangesSince = async (
     LEFT JOIN games g INDEXED BY sqlite_autoindex_games_1 ON g.id = page.game_id
     ORDER BY page.catalog_version, page.game_id
   `).bind(after, size).all<{
-    game_id: string; catalog_version: number; listed: number; display_name: string | null;
+    game_id: string; catalog_version: number; present: number; is_public: number; display_name: string | null;
     english_name: string | null; aliases_json: string; bgg_ids_json: string;
   }>();
   const rows = result.results ?? [];
   const changes = rows.map((row): ScorepadGameChange => {
     const base = { gameId: row.game_id, catalogVersion: Number(row.catalog_version), bggIds: parseStrings(row.bgg_ids_json) };
-    if (!row.listed) return { ...base, deleted: true };
+    if (!row.present || (!row.is_public && !base.bggIds.length)) return { ...base, deleted: true };
     return {
       ...base,
       deleted: false,

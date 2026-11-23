@@ -79,6 +79,14 @@ test('getRuleSummaryByBgg leads every BGG id of a game to the count and version 
     expect(h.executedSql).toHaveLength(1);
     expect(h.scans(h.executedSql[0])).toEqual([]);
   }
+  // The site keeps an expansion hidden while its name awaits review; it still leads to its base game.
+  h.sqlite.exec(`UPDATE games SET visibility = 'hidden' WHERE id = 'sp-expansion'`);
+  h.executedSql.length = 0;
+  expect(await h.api.getRuleSummaryByBgg('980002')).toEqual(expected);
+  expect(h.scans(h.executedSql[0])).toEqual([]);
+  h.sqlite.exec(`UPDATE games SET merged_into_game_id = 'sp-base' WHERE id = 'sp-expansion'`);
+  await expect(h.api.getRuleSummaryByBgg('980002')).resolves.toBeNull();
+  h.sqlite.exec(`UPDATE games SET merged_into_game_id = NULL, visibility = 'public' WHERE id = 'sp-expansion'`);
   await expect(h.api.getRuleSummaryByBgg('980003')).resolves.toBeNull();
   await expect(h.api.getRuleSummaryByBgg('999999999')).resolves.toBeNull();
 

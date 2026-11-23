@@ -18,7 +18,7 @@
 
 實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts) 與 [`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；所有方法都只讀，不寫入任何資料。
 
-「可列出的遊戲」與本站公開頁面一致：`visibility = 'public'` 且 `merged_into_game_id IS NULL`。`review_status = 'pending'` 只表示遊戲資料等待編輯確認（批次匯入的遊戲都是這個狀態），公開頁面照樣顯示，所以不作為過濾條件。
+「可列出的遊戲」是本站公開頁面列出的遊戲（`visibility = 'public'` 且 `merged_into_game_id IS NULL`），再加上帶 BGG 編號的隱藏遊戲：本站會把規則文字提到、名稱尚待審核的資料片或版本先建成隱藏遊戲，它們有 BGG 編號時計分板仍可遊玩，並經 `getRuleSummaryByBgg` 對到本體規則（migration 0136 把當時已有的這類遊戲重送一次目錄變更）。已合併的遊戲一律不列出。`review_status = 'pending'` 只表示遊戲資料等待編輯確認（批次匯入的遊戲都是這個狀態），公開頁面照樣顯示，所以不作為過濾條件。
 
 ### `lookupGamesByBgg(bggIds: string[])`
 
@@ -68,7 +68,7 @@ Promise<{ ruleGameId: string; publishedRuleCount: number; ruleVersion: string } 
 - 和網站相同，資料片、版本與變體一律對到本體遊戲：`ruleGameId` 是本體遊戲，數量與版本也是本體的。BGG 編號同時查 `games.bgg_id` 與 `game_external_ids`。
 - `publishedRuleCount` 包含尚未審核的規則。
 - `ruleVersion` 在已發布規則新增、修改、隱藏、刪除或移動時改變。計分板把它和自己快取的版本比對，相同就不必讀規則。審核通過一條規則、新增或移除外部資源不改變版本；快取裡的審核標記、外部資源與重要票數，要到下次規則變動或計分板自己的快取到期才更新。
-- 沒有可列出的遊戲、或資料片沒有可列出的本體時回傳 `null`。格式不是正整數字串時直接拒絕，不查詢 D1。查詢依序嘗試：本體遊戲自己的 `games.bgg_id`、本體遊戲的版本編號、資料片或版本對到的本體，找到第一筆就停止；若資料錯誤使一個 BGG 編號屬於兩款遊戲，以較前的順序為準（遊戲資料健檢會列出這種重複）。
+- 資料片或版本只要未被合併，即使本站仍隱藏（名稱待審），也和網站一樣對到公開的本體。沒有可列出的本體遊戲時回傳 `null`。格式不是正整數字串時直接拒絕，不查詢 D1。查詢依序嘗試：本體遊戲自己的 `games.bgg_id`、本體遊戲的版本編號、資料片或版本對到的本體，找到第一筆就停止；若資料錯誤使一個 BGG 編號屬於兩款遊戲，以較前的順序為準（遊戲資料健檢會列出這種重複）。
 
 ### `getGameRules(gameId: string)`
 
