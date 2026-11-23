@@ -543,6 +543,29 @@ describe('GamePage compact rule view', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  test('offers to delete only the external resources an editor added, and every resource to an admin', async () => {
+    mocks.canEdit = true;
+    mocks.user = { id: 'editor-1', roles: ['editor'] } as unknown as SessionUser;
+    mocks.game.mockResolvedValue({ game: {
+      ...game,
+      externalResources: [
+        { id: 'resource-own', gameId: 'game-1', name: '自己的教學', category: 'teaching', url: 'https://example.com/own', createdBy: 'editor-1' },
+        { id: 'resource-other', gameId: 'game-1', name: '別人的教學', category: 'teaching', url: 'https://example.com/other', createdBy: 'editor-2' },
+      ],
+    } });
+    const { unmount } = renderGamePage();
+    await userEvent.setup().click(await screen.findByRole('button', { name: /外部資源/ }));
+    expect(screen.getAllByRole('button', { name: '刪除' })).toHaveLength(1);
+    expect(screen.getByText('自己的教學').closest('.external-resource-item')!.querySelector('.danger-link')).not.toBeNull();
+    expect(screen.getByText('別人的教學').closest('.external-resource-item')!.querySelector('.danger-link')).toBeNull();
+    unmount();
+
+    mocks.isAdmin = true;
+    renderGamePage();
+    await userEvent.setup().click(await screen.findByRole('button', { name: /外部資源/ }));
+    expect(screen.getAllByRole('button', { name: '刪除' })).toHaveLength(2);
+  });
+
   test('refreshes the rule snapshot before opening an editor', async () => {
     const originalMatchMedia = window.matchMedia;
     const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;

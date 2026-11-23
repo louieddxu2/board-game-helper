@@ -102,6 +102,8 @@ export interface GameExternalResource {
   name: string;
   category: GameExternalResourceCategory;
   url: string;
+  /** The editor who added it; only they or an admin may delete it. */
+  createdBy?: string;
   createdAt: number;
   updatedAt: number;
 }

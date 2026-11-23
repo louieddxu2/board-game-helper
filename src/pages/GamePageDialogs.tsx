@@ -21,7 +21,7 @@ const RESOURCE_CATEGORY_LABELS: Record<GameExternalResourceCategory, string> = {
   faq: 'FAQ',
 };
 
-export const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: { game: GameDetail; canEdit: boolean; onClose(): void; onChanged(): Promise<void> }) => {
+export const ExternalResourcesDialog = ({ game, canEdit, userId, isAdmin, onClose, onChanged }: { game: GameDetail; canEdit: boolean; userId?: string; isAdmin: boolean; onClose(): void; onChanged(): Promise<void> }) => {
   const [addOpen, setAddOpen] = useState(false);
   useWorkspaceBrowserBack({ active: true, onBack: onClose });
   const resources = game.externalResources ?? [];
@@ -33,7 +33,7 @@ export const ExternalResourcesDialog = ({ game, canEdit, onClose, onChanged }: {
           {resources.length === 0 && <p className="muted">尚未新增外部資源。</p>}
           {resources.map((resource) => <div className="external-resource-item" key={resource.id}>
             <div><strong>{resource.name}</strong><small>{RESOURCE_CATEGORY_LABELS[resource.category]}</small><ExternalLinkGuard url={resource.url}>{resource.url}</ExternalLinkGuard></div>
-            {canEdit && <ExternalResourceDeleteButton game={game} resource={resource} onChanged={onChanged} />}
+            {canEdit && (isAdmin || (userId !== undefined && resource.createdBy === userId)) && <ExternalResourceDeleteButton game={game} resource={resource} onChanged={onChanged} />}
           </div>)}
         </div>
         <div className="modal-actions"><span />

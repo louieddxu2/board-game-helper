@@ -31,6 +31,7 @@ interface GameExternalResourceRow {
   name: string;
   category: GameExternalResourceCategory;
   url: string;
+  created_by: string;
   created_at: number;
   updated_at: number;
 }
@@ -49,6 +50,7 @@ const toGameExternalResource = (row: GameExternalResourceRow): GameExternalResou
   name: row.name,
   category: row.category,
   url: row.url,
+  createdBy: row.created_by,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -140,7 +142,7 @@ gamesRoutes.get('/api/games/:identifier', async (c) => {
         r.created_at DESC
     `).bind(game.id).all<RuleRow>(),
     getDatabase(c).statement(`
-      SELECT id, game_id, name, category, url, created_at, updated_at
+      SELECT id, game_id, name, category, url, created_by, created_at, updated_at
       FROM game_external_resources
       WHERE game_id = ?
       ORDER BY CASE category WHEN 'teaching' THEN 1 WHEN 'help_card' THEN 2 ELSE 3 END, name, id
@@ -255,16 +257,22 @@ gamesRoutes.post('/api/games/:id/external-resources', requireRole('editor'), asy
     INSERT INTO game_external_resources (id, game_id, name, category, url, created_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(resourceId, game.id, parsed.data.name, parsed.data.category, parsed.data.url, c.get('user')!.id, timestamp, timestamp).run();
-  return c.json({ resource: { id: resourceId, gameId: game.id, ...parsed.data, createdAt: timestamp, updatedAt: timestamp } satisfies GameExternalResource }, 201);
+  return c.json({ resource: { id: resourceId, gameId: game.id, ...parsed.data, createdBy: c.get('user')!.id, createdAt: timestamp, updatedAt: timestamp } satisfies GameExternalResource }, 201);
 });
 
 gamesRoutes.delete('/api/games/:id/external-resources/:resourceId', requireRole('editor'), async (c) => {
   const game = await getDatabase(c).statement('SELECT id FROM games WHERE id = ? AND merged_into_game_id IS NULL').bind(c.req.param('id')).first<{ id: string }>();
   if (!game) return c.json({ error: 'game_not_found' }, 404);
+  // Editors remove only the resources they added; admins remove any.
+  const user = c.get('user')!;
+  const resource = await getDatabase(c).statement('SELECT created_by FROM game_external_resources WHERE id = ? AND game_id = ?')
+    .bind(c.req.param('resourceId'), game.id).first<{ created_by: string }>();
+  if (!resource) return c.json({ error: 'external_resource_not_found' }, 404);
+  if (!user.roles.includes('admin') && resource.created_by !== user.id) return c.json({ error: 'external_resource_not_owned' }, 403);
   const deleted = await getDatabase(c).statement(`
     DELETE FROM game_external_resources
     WHERE id = ? AND game_id = ?
-  `).bind(c.req.param('resourceId'), c.req.param('id')).run();
+  `).bind(c.req.param('resourceId'), game.id).run();
   if (!deleted.meta?.changes) return c.json({ error: 'external_resource_not_found' }, 404);
   return c.json({ ok: true });
 });
