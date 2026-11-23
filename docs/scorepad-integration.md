@@ -75,6 +75,7 @@ Promise<
       displayName: string;
       englishName: string | null;
       aliases: string[];
+      entityKind: 'base' | 'expansion' | 'version' | 'unknown'; // games.entity_kind
     } & RuleRef> }
 >
 ```
@@ -86,14 +87,15 @@ Promise<
   - 呼叫時回傳「快照＋快照之後變動的遊戲」合併後的整份清單，所以變動在目錄寫入後就會出現，不必等每週快照。
 - `version` 是十進位整數字串（例如 `"512"`），只在某款遊戲的收錄內容實際變動時增加；請當作不透明字串保存，下次原樣傳回。
 - `knownVersion` 與目前版本相同時回 `{ unchanged: true, version }`；不同或未給時回整份 `games`。格式不符（不是 1–16 位數字）時在讀取 D1 前拋出 `TypeError`。
-- 部署後第一次呼叫（或第一次每週排程）會從來源表一次建好全部預存資料與快照；在那之前，目錄變更不會寫入預存資料。
+- `entityKind` 是遊戲本身的種類，與 [`src/shared/gameEntity.ts`](../src/shared/gameEntity.ts) 的 `GAME_ENTITY_KINDS` 一致。計分板開局搜尋只列 `base` 與 `unknown`；資料片與版本仍留在目錄裡，讓已填資料片 BGG 編號的計分板查到本體的規則數。它變動時 `version` 也會增加。
+- 部署後第一次呼叫（或第一次每週排程）會從來源表一次建好全部預存資料與快照；在那之前，目錄變更不會寫入預存資料。預存資料的格式改變時，migration 清掉狀態列，下次呼叫就照同樣方式重建（2026-11-24 的 0138 加入 `entityKind`）；重建後的 `version` 一定比之前的大。
 
 2026-11-23 正式站共 510 款、約 120 KB，1 個 chunk。BGG 244358 在回傳中是：
 
 ```json
 { "gameId": "game-variant-614654ecc6231f6dee07fe1dd83bb837", "bggIds": ["244358"],
   "displayName": "達爾加德學院擴", "englishName": "Dahlgaard's Academy",
-  "aliases": ["大魔術師：學院擴", "魔幻傳奇：學院擴"],
+  "aliases": ["大魔術師：學院擴", "魔幻傳奇：學院擴"], "entityKind": "expansion",
   "ruleGameId": "game_e93681b393644145994dfcf71ee62b67" }
 ```
 

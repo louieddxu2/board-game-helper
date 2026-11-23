@@ -55,8 +55,9 @@ test('getScorepadCatalog returns every unmerged game with a BGG id, hidden ones 
   }));
   // A hidden expansion awaiting review leads to its base game and carries no count of its own.
   expect(byId.get('snap-expansion')).toEqual({
-    gameId: 'snap-expansion', bggIds: ['990020'], displayName: '快照擴充', englishName: null, aliases: ['快照別名'], ruleGameId: h.base.id,
+    gameId: 'snap-expansion', bggIds: ['990020'], displayName: '快照擴充', englishName: null, aliases: ['快照別名'], entityKind: 'expansion', ruleGameId: h.base.id,
   });
+  expect(byId.get(h.base.id)?.entityKind).toBe('base');
   // A BGG id held only in game_external_ids is enough; a hidden base game has no rules here.
   expect(byId.get('snap-edition-only')).toEqual(expect.objectContaining({ bggIds: ['990021'], ruleGameId: null }));
   expect(h.count('scorepad_catalog_snapshot_chunks')).toBe(1);
@@ -130,6 +131,24 @@ test('a flush updates only the entries whose content changed, and a call merges 
   expect(h.count('scorepad_catalog_entries WHERE deleted = 1')).toBe(0);
   expect((await h.games()).games).toEqual(removed.games);
   await expect(rebuildScorepadCatalog(h.gateway, 4000)).resolves.toBe(false);
+});
+
+test('an entity kind change moves the version, and a cleared state rebuilds with a newer version', async () => {
+  const h = setup();
+  await rebuildScorepadCatalog(h.gateway, 1000);
+  const first = await h.games();
+  h.sqlite.exec(`UPDATE games SET entity_kind = 'version' WHERE id = 'snap-expansion'`);
+  await flushCatalogOutbox(h.gateway);
+  const changed = await h.games(first.version);
+  expect(changed.version).not.toBe(first.version);
+  expect(changed.byId.get('snap-expansion')?.entityKind).toBe('version');
+
+  // A migration that changes the entry format clears the state row; the rebuild never reuses a version.
+  h.sqlite.exec('DELETE FROM scorepad_catalog_snapshot_state WHERE id = 1');
+  const rebuilt = await h.games(changed.version);
+  expect(Number(rebuilt.version)).toBeGreaterThan(Number(changed.version));
+  expect(rebuilt.games).toEqual(await queryScorepadCatalogGames(h.gateway));
+  expect(await h.api.getScorepadCatalog(rebuilt.version)).toEqual({ unchanged: true, version: rebuilt.version });
 });
 
 test('getScorepadCatalog rejects a malformed version before D1', async () => {

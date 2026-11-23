@@ -1,3 +1,4 @@
+import { GAME_ENTITY_KINDS, type GameEntityKind } from '../../src/shared/gameEntity';
 import type { Database } from './database';
 import {
   ALIASES,
@@ -20,6 +21,8 @@ export type ScorepadCatalogGame = {
   displayName: string;
   englishName: string | null;
   aliases: string[];
+  /** games.entity_kind; a score pad offers only base and unknown games when a game is set up. */
+  entityKind: GameEntityKind;
 } & ScorepadRuleRef;
 
 export type ScorepadCatalog =
@@ -32,13 +35,13 @@ const RELATION_TYPES = `('expansion_of', 'version_of', 'variant_of')`;
 const encoder = new TextEncoder();
 
 type GameRow = {
-  game_id: string; present: number; display_name: string | null; english_name: string | null;
+  game_id: string; present: number; display_name: string | null; english_name: string | null; entity_kind: string | null;
   aliases_json: string; bgg_ids_json: string;
 } & RuleRefRow;
 
 const COLUMNS = (id: string) => `${id} AS game_id,
   CASE WHEN g.id IS NOT NULL AND ${UNMERGED('g')} THEN 1 ELSE 0 END AS present,
-  g.display_name, g.english_name,
+  g.display_name, g.english_name, g.entity_kind,
   CASE WHEN g.id IS NULL THEN '[]' ELSE ${ALIASES('g')} END AS aliases_json,
   ${RULE_REF_COLUMNS('g')},
   (
@@ -61,6 +64,7 @@ const toGame = (row: GameRow): ScorepadCatalogGame | null => {
     displayName: row.display_name ?? '',
     englishName: row.english_name ?? null,
     aliases: parseStrings(row.aliases_json),
+    entityKind: (GAME_ENTITY_KINDS as readonly string[]).includes(row.entity_kind ?? '') ? row.entity_kind as GameEntityKind : 'base',
     ...toRuleRef(row),
   };
 };
@@ -154,8 +158,12 @@ const writeSnapshot = (db: Database, games: ScorepadCatalogGame[], throughVersio
 
 /** First build: every entry and the snapshot from the source tables, once. */
 const bootstrap = async (db: Database, timestamp: number) => {
+  // A rebuild (a migration clears the state row when the entry format changes) continues after
+  // the stored entries, so a score pad holding an older version always receives the new games.
+  const previous = await db.statement('SELECT MAX(entry_version) AS version FROM scorepad_catalog_entries')
+    .first<{ version: number | null }>();
+  const version = Number(previous?.version ?? 0) + 1;
   const games = await queryScorepadCatalogGames(db);
-  const version = 1;
   await db.batch([
     db.statement('DELETE FROM scorepad_catalog_entries'),
     ...games.map((game) => db.statement(`
