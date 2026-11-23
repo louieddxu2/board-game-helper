@@ -54,10 +54,10 @@ export interface ScorepadGameChanges {
 // expansions and versions that carry a BGG id: the site keeps those hidden while
 // their names await review, yet a score pad can play them and reach their base
 // game's rules. A pending review_status only marks data awaiting an editor.
-const UNMERGED = (alias: string) => `${alias}.merged_into_game_id IS NULL`;
-const IS_PUBLIC = (alias: string) => `${alias}.visibility = 'public'`;
+export const UNMERGED = (alias: string) => `${alias}.merged_into_game_id IS NULL`;
+export const IS_PUBLIC = (alias: string) => `${alias}.visibility = 'public'`;
 
-const ALIASES = (alias: string) => `COALESCE((
+export const ALIASES = (alias: string) => `COALESCE((
     SELECT json_group_array(alias) FROM (
       SELECT alias FROM game_aliases INDEXED BY idx_game_aliases_unique
       WHERE game_id = ${alias}.id ORDER BY alias
@@ -67,7 +67,7 @@ const ALIASES = (alias: string) => `COALESCE((
 // The columns behind ScorepadRuleRef, by the rules site's own rule: a base game
 // that is listed holds its rules; an expansion or version leads, through its
 // relation, to a listed base game. One primary-key or index lookup per game.
-const RULE_REF_COLUMNS = (alias: string) => `
+export const RULE_REF_COLUMNS = (alias: string) => `
   CASE WHEN COALESCE(${alias}.entity_kind, 'base') = 'base'
     THEN CASE WHEN ${IS_PUBLIC(alias)} AND ${UNMERGED(alias)} THEN ${alias}.id END
     ELSE (
@@ -81,14 +81,14 @@ const RULE_REF_COLUMNS = (alias: string) => `
     ) END AS rule_game_id,
   ${alias}.published_rule_count, ${alias}.latest_rule_updated_at`;
 
-interface RuleRefRow {
+export interface RuleRefRow {
   game_id: string;
   rule_game_id: string | null;
   published_rule_count: number | null;
   latest_rule_updated_at: number | null;
 }
 
-const toRuleRef = (row: RuleRefRow): ScorepadRuleRef => row.rule_game_id === row.game_id
+export const toRuleRef = (row: RuleRefRow): ScorepadRuleRef => row.rule_game_id === row.game_id
   ? {
     ruleGameId: row.rule_game_id,
     publishedRuleCount: Number(row.published_rule_count ?? 0),
@@ -98,7 +98,7 @@ const toRuleRef = (row: RuleRefRow): ScorepadRuleRef => row.rule_game_id === row
 
 const BGG_ID = /^[1-9]\d{0,9}$/;
 
-const parseStrings = (json: string | null): string[] => {
+export const parseStrings = (json: string | null): string[] => {
   const parsed: unknown = JSON.parse(json ?? '[]');
   return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
 };

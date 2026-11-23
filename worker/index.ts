@@ -5,6 +5,7 @@ import { assertMutationOrigin, trustedOrigins } from './utils';
 import { createDatabase, getDatabase } from './data/database';
 import { flushCatalogOutbox } from './data/catalogOutbox';
 import { rebuildGameCatalog } from './data/gameCatalog';
+import { rebuildScorepadCatalog } from './data/scorepadSnapshot';
 import { cleanupGameViewData, isWeeklyCatalogRun } from './data/gameViews';
 import { cleanupExpiredSessions } from './data/retention';
 import { chargeWriteBudget, isWriteBudgetExhausted, writeBudgetExhaustedPayload } from './data/writeBudget';
@@ -262,6 +263,12 @@ const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, '
   }
   if (weekly || outcome === 'replay') {
     await flushCatalogOutbox(db, controller.scheduledTime);
+  }
+  // After every flush, so the score pad snapshot includes today's catalog changes.
+  try {
+    await rebuildScorepadCatalog(db, controller.scheduledTime);
+  } catch (error) {
+    console.error('scorepad_catalog_rebuild_failed', error);
   }
   // The active snapshot is the authoritative browser baseline. Retire only
   // a small page of deltas it already contains; newer deltas stay available.
