@@ -2,7 +2,7 @@
 import { expect, test } from 'vitest';
 import { ScorepadApi } from '../worker';
 import { flushCatalogOutbox } from '../worker/data/catalogOutbox';
-import { rebuildScorepadCatalog } from '../worker/data/scorepadSnapshot';
+import { queryScorepadCatalogGames, rebuildScorepadCatalog } from '../worker/data/scorepadSnapshot';
 import { createHarness } from './attributeReplayTestHarness';
 
 const setup = () => {
@@ -27,24 +27,28 @@ const setup = () => {
   const plan = (sql: string): string[] => h.sqlite.prepare('EXPLAIN QUERY PLAN ' + sql).all()
     .map((row: { detail: unknown }) => String(row.detail));
   const count = (table: string) => (h.sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
-  return { ...h, api, plan, count, base, merged, noBgg };
+  const games = async (knownVersion?: string) => {
+    const result = await api.getScorepadCatalog(knownVersion);
+    if (result.unchanged) throw new Error('expected games');
+    return { ...result, byId: new Map(result.games.map((game) => [game.gameId, game])) };
+  };
+  return { ...h, api, plan, count, games, base, merged, noBgg };
 };
 
 const baseTableScans = (plan: string[]) => plan.filter((detail) => /^SCAN /.test(detail)
-  && !/^SCAN (candidates|json_each|CONSTANT ROW|\(subquery)/.test(detail));
+  && !/^SCAN (candidates|requested|json_each|CONSTANT ROW|\(subquery)/.test(detail));
 
 test('getScorepadCatalog returns every unmerged game with a BGG id, hidden ones included, with RuleRef', async () => {
   const h = setup();
-  const result = await h.api.getScorepadCatalog();
-  if (result.unchanged) throw new Error('expected games');
-  expect(result.version).toMatch(/^[0-9a-f]{16}$/);
-  const byId = new Map(result.games.map((game) => [game.gameId, game]));
-  expect(byId.size).toBe(result.games.length);
-  expect(result.games.every((game) => game.bggIds.length > 0)).toBe(true);
+  await flushCatalogOutbox(h.gateway);
+  const { version, games, byId } = await h.games();
+  expect(version).toBe('1');
+  expect(byId.size).toBe(games.length);
+  expect(games.map((game) => game.gameId)).toEqual([...byId.keys()].sort());
+  expect(games.every((game) => game.bggIds.length > 0)).toBe(true);
   expect(byId.has(h.merged.id)).toBe(false);
   expect(byId.has(h.noBgg.id)).toBe(false);
-  const row = h.sqlite.prepare('SELECT published_rule_count, latest_rule_updated_at FROM games WHERE id = ?').get(h.base.id) as {
-    published_rule_count: number | null; latest_rule_updated_at: number | null };
+  const row = h.sqlite.prepare('SELECT published_rule_count FROM games WHERE id = ?').get(h.base.id) as { published_rule_count: number | null };
   expect(byId.get(h.base.id)).toEqual(expect.objectContaining({
     bggIds: [String(h.base.bgg_id)], ruleGameId: h.base.id, publishedRuleCount: Number(row.published_rule_count ?? 0),
     ruleVersion: (await h.api.getRuleSummaryByBgg(String(h.base.bgg_id)))!.ruleVersion,
@@ -56,66 +60,82 @@ test('getScorepadCatalog returns every unmerged game with a BGG id, hidden ones 
   // A BGG id held only in game_external_ids is enough; a hidden base game has no rules here.
   expect(byId.get('snap-edition-only')).toEqual(expect.objectContaining({ bggIds: ['990021'], ruleGameId: null }));
   expect(h.count('scorepad_catalog_snapshot_chunks')).toBe(1);
+  expect(h.count('scorepad_catalog_entries')).toBe(games.length);
 });
 
-test('the catalog query and the call reach every table through an index, and a current version reads one query', async () => {
+test('a current version costs one state-row read, and every query reaches its tables through an index', async () => {
   const h = setup();
   h.executedSql.length = 0;
   await rebuildScorepadCatalog(h.gateway, 1000);
-  const catalogSql = h.executedSql.find((sql) => sql.includes('WITH candidates'))!;
-  expect(baseTableScans(h.plan(catalogSql))).toEqual([]);
-  const first = await h.api.getScorepadCatalog();
+  expect(baseTableScans(h.plan(h.executedSql.find((sql) => sql.includes('WITH candidates'))!))).toEqual([]);
   h.executedSql.length = 0;
-  expect(await h.api.getScorepadCatalog(first.version)).toEqual({ unchanged: true, version: first.version });
-  expect(h.executedSql).toHaveLength(1);
-  expect(h.plan(h.executedSql[0]).filter((detail) => /^SCAN /.test(detail))).toEqual([]);
-  h.executedSql.length = 0;
-  await expect(h.api.getScorepadCatalog('abc123')).resolves.toMatchObject({ unchanged: false, version: first.version });
-  expect(h.executedSql).toHaveLength(1);
-});
-
-test('the schedule rebuilds only after the catalog changed, and the version moves only with the content', async () => {
-  const h = setup();
-  await flushCatalogOutbox(h.gateway);
-  await rebuildScorepadCatalog(h.gateway, 1000);
-  const first = await h.api.getScorepadCatalog();
-  // Nothing changed: two one-row reads, no writes.
-  h.executedSql.length = 0;
-  await expect(rebuildScorepadCatalog(h.gateway, 2000)).resolves.toBeNull();
+  const { version } = await h.games();
   expect(h.executedSql).toHaveLength(2);
+  expect(h.executedSql.flatMap((sql) => h.plan(sql)).filter((detail) => /^SCAN /.test(detail))).toEqual([]);
+  h.executedSql.length = 0;
+  expect(await h.api.getScorepadCatalog(version)).toEqual({ unchanged: true, version });
+  expect(h.executedSql).toHaveLength(1);
 
-  // A change the catalog carries gives a new version, and the old version gets the new games.
-  h.sqlite.exec(`UPDATE games SET display_name = '快照擴充（改名）' WHERE id = 'snap-expansion'`);
+  // A flush touching one base game reads that game and the expansions that lead to it.
+  h.sqlite.exec(`UPDATE games SET published_rule_count = 99, latest_rule_updated_at = 77 WHERE id = '${h.base.id}'`);
+  h.executedSql.length = 0;
   await flushCatalogOutbox(h.gateway);
-  await rebuildScorepadCatalog(h.gateway, 3000);
-  const renamed = await h.api.getScorepadCatalog(first.version);
-  if (renamed.unchanged) throw new Error('expected games');
-  expect(renamed.version).not.toBe(first.version);
-  expect(renamed.games.find((game) => game.gameId === 'snap-expansion')?.displayName).toBe('快照擴充（改名）');
-  expect(h.count('scorepad_catalog_snapshot_chunks')).toBe(1);
+  const targeted = h.executedSql.find((sql) => sql.includes('WITH requested'))!;
+  expect(baseTableScans(h.plan(targeted))).toEqual([]);
+  h.executedSql.length = 0;
+  await rebuildScorepadCatalog(h.gateway, 2000);
+  expect(h.executedSql.filter((sql) => /FROM scorepad_catalog_entries/.test(sql)).flatMap((sql) => h.plan(sql))
+    .filter((detail) => /^SCAN /.test(detail) && !/USING INDEX/.test(detail))).toEqual([]);
+});
 
-  // A rule count change moves the base game's entry.
+test('a flush updates only the entries whose content changed, and a call merges them over the snapshot', async () => {
+  const h = setup();
+  await rebuildScorepadCatalog(h.gateway, 1000);
+  const first = await h.games();
+
+  // A rule count change moves the base game's entry only.
   h.sqlite.exec(`UPDATE games SET published_rule_count = 99, latest_rule_updated_at = 77 WHERE id = '${h.base.id}'`);
   await flushCatalogOutbox(h.gateway);
-  await rebuildScorepadCatalog(h.gateway, 4000);
-  const counted = await h.api.getScorepadCatalog(renamed.version);
-  if (counted.unchanged) throw new Error('expected games');
-  expect(counted.games.find((game) => game.gameId === h.base.id)).toMatchObject({ publishedRuleCount: 99, ruleVersion: '77:99' });
+  const counted = await h.games(first.version);
+  expect(counted.version).toBe('2');
+  expect(counted.byId.get(h.base.id)).toMatchObject({ publishedRuleCount: 99, ruleVersion: '77:99' });
 
-  // A catalog change outside what the score pad carries keeps the version; only the state row is written.
+  // Hiding the base game moves its expansion's rule reference too.
+  h.sqlite.exec(`UPDATE games SET visibility = 'hidden' WHERE id = '${h.base.id}'`);
+  await flushCatalogOutbox(h.gateway);
+  const hidden = await h.games(counted.version);
+  expect(hidden.byId.get('snap-expansion')).toMatchObject({ ruleGameId: null });
+  expect(hidden.byId.get(h.base.id)).toMatchObject({ ruleGameId: null });
+
+  // A game that loses its BGG ids leaves the catalog; one that is merged away does too.
+  h.sqlite.exec(`DELETE FROM game_external_ids WHERE id = 'snap-external';
+    UPDATE games SET merged_into_game_id = '${h.base.id}' WHERE id = 'snap-expansion';`);
+  await flushCatalogOutbox(h.gateway);
+  const removed = await h.games(hidden.version);
+  expect(removed.byId.has('snap-edition-only')).toBe(false);
+  expect(removed.byId.has('snap-expansion')).toBe(false);
+  // The entries equal a fresh read of the source tables.
+  expect(removed.games).toEqual(await queryScorepadCatalogGames(h.gateway));
+
+  // A catalog change the score pad does not carry keeps the version and writes no entry.
+  const before = h.count('scorepad_catalog_entries');
   h.sqlite.exec(`INSERT INTO game_aliases(id, game_id, alias, normalized_alias, created_at)
     VALUES('snap-no-bgg-alias', '${h.noBgg.id}', '無編號別名', 'snap-no-bgg-alias', 1)`);
   await flushCatalogOutbox(h.gateway);
-  h.executedSql.length = 0;
-  await expect(rebuildScorepadCatalog(h.gateway, 5000)).resolves.toEqual(expect.any(Array));
-  expect(h.executedSql.filter((sql) => /^\s*(INSERT|DELETE)/.test(sql))).toEqual([]);
-  expect(await h.api.getScorepadCatalog(counted.version)).toEqual({ unchanged: true, version: counted.version });
+  expect(await h.api.getScorepadCatalog(removed.version)).toEqual({ unchanged: true, version: removed.version });
+  expect(h.count('scorepad_catalog_entries')).toBe(before);
+
+  // The weekly snapshot folds the entries in, drops the removals, and serves the same games.
+  await expect(rebuildScorepadCatalog(h.gateway, 3000)).resolves.toBe(true);
+  expect(h.count('scorepad_catalog_entries WHERE deleted = 1')).toBe(0);
+  expect((await h.games()).games).toEqual(removed.games);
+  await expect(rebuildScorepadCatalog(h.gateway, 4000)).resolves.toBe(false);
 });
 
 test('getScorepadCatalog rejects a malformed version before D1', async () => {
   const h = setup();
   h.executedSql.length = 0;
-  for (const bad of ['', 'XYZ', "1' OR 1=1", 'a'.repeat(65), 42 as never]) {
+  for (const bad of ['', 'abc', "1' OR 1=1", '1'.repeat(17), 42 as never]) {
     await expect(h.api.getScorepadCatalog(bad)).rejects.toThrow('version');
   }
   expect(h.executedSql).toHaveLength(0);

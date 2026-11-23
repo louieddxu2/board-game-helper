@@ -7,6 +7,7 @@ import {
 } from './attributes';
 import { queryTargetedGameCatalogEntries } from './gameCatalog';
 import { queryTargetedPublicTagCatalogEntries } from './tagCatalog';
+import { updateScorepadCatalogEntries } from './scorepadSnapshot';
 import { publishAttributeCatalogJobs, queryAttributePublicationFence } from './attributeCatalogPublication';
 
 export const CATALOG_OUTBOX_PAGE_SIZE = 100;
@@ -242,7 +243,10 @@ export const flushCatalogOutbox = async (
       if (await publishAttributeCatalogJobs(db, catalog, catalogRows, fence, entries)) processed[catalog] = catalogRows.length;
       continue;
     }
-    if (catalog === 'game') await publishGameEntries(db, entityKeys, timestamp);
+    if (catalog === 'game') {
+      await publishGameEntries(db, entityKeys, timestamp);
+      await updateScorepadCatalogEntries(db, entityKeys);
+    }
     if (catalog === 'tag') await publishTagEntries(db, entityKeys, timestamp);
     await deletePublishedRows(db, catalog, catalogRows);
     processed[catalog] = catalogRows.length;

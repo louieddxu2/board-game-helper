@@ -1,13 +1,22 @@
--- The score pad catalog snapshot (worker/data/scorepadSnapshot.ts): every unmerged game with a
--- BGG id, rebuilt by the daily schedule. Empty here; the first schedule or call builds it.
+-- The score pad catalog (worker/data/scorepadSnapshot.ts), built like the game catalog: one
+-- entry per game with a BGG id, refreshed by the catalog outbox flush, and a weekly snapshot
+-- of those entries. Empty here; the first weekly schedule or call builds both.
+CREATE TABLE scorepad_catalog_entries (
+  game_id TEXT PRIMARY KEY,
+  entry_version INTEGER NOT NULL,
+  entry_json TEXT,
+  deleted INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_scorepad_catalog_entries_version ON scorepad_catalog_entries(entry_version);
+
 CREATE TABLE scorepad_catalog_snapshot_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   generation INTEGER NOT NULL,
-  version TEXT NOT NULL,
   through_version INTEGER NOT NULL,
+  entries_version INTEGER NOT NULL,
   chunk_count INTEGER NOT NULL,
-  generated_at INTEGER NOT NULL,
-  checked_at INTEGER NOT NULL
+  generated_at INTEGER NOT NULL
 );
 
 CREATE TABLE scorepad_catalog_snapshot_chunks (

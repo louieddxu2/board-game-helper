@@ -241,6 +241,11 @@ const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, '
     // Game-list snapshots and attribute refresh are intentionally separate:
     // the game snapshot writes only when its own catalog version changed.
     await rebuildGameCatalog(db, controller.scheduledTime);
+    try {
+      await rebuildScorepadCatalog(db, controller.scheduledTime);
+    } catch (error) {
+      console.error('scorepad_catalog_rebuild_failed', error);
+    }
   }
   const beforeReplay = db.metrics();
   const replayStartedAt = Date.now();
@@ -263,12 +268,6 @@ const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, '
   }
   if (weekly || outcome === 'replay') {
     await flushCatalogOutbox(db, controller.scheduledTime);
-  }
-  // After every flush, so the score pad snapshot includes today's catalog changes.
-  try {
-    await rebuildScorepadCatalog(db, controller.scheduledTime);
-  } catch (error) {
-    console.error('scorepad_catalog_rebuild_failed', error);
   }
   // The active snapshot is the authoritative browser baseline. Retire only
   // a small page of deltas it already contains; newer deltas stay available.

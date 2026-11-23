@@ -20,7 +20,7 @@ import { getScorepadCatalog, type ScorepadCatalog } from './data/scorepadSnapsho
  * Internal RPC for the score pad Worker (service "board-game-helper",
  * entrypoint "ScorepadApi"). RPC methods are not reachable through fetch, so
  * this has no public URL, no CORS and no session. Every method is read-only,
- * except that getScorepadCatalog builds the snapshot once if no schedule has yet.
+ * except that getScorepadCatalog builds its stored entries once if no schedule has yet.
  */
 export class ScorepadApi extends WorkerEntrypoint<Env> {
   lookupGamesByBgg(bggIds: string[]): Promise<ScorepadGame[]> {

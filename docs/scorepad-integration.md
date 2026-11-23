@@ -16,7 +16,7 @@
 
 ## 介面
 
-實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts)、[`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts) 與 [`worker/data/scorepadSnapshot.ts`](../worker/data/scorepadSnapshot.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；除了 `getScorepadCatalog` 在快照尚未建立時自己建一次，所有方法都只讀。
+實作在 [`worker/scorepadApi.ts`](../worker/scorepadApi.ts)、[`worker/data/scorepadCatalog.ts`](../worker/data/scorepadCatalog.ts) 與 [`worker/data/scorepadSnapshot.ts`](../worker/data/scorepadSnapshot.ts)，由 `worker/index.ts` 另外 export。RPC 方法不經過 `fetch`，沒有公開網址、CORS 或 Session；除了 `getScorepadCatalog` 在預存資料尚未建立時自己建一次，所有方法都只讀。
 
 「可列出的遊戲」是本站公開頁面列出的遊戲（`visibility = 'public'` 且 `merged_into_game_id IS NULL`），再加上帶 BGG 編號的隱藏遊戲：本站會把規則文字提到、名稱尚待審核的資料片或版本先建成隱藏遊戲，它們有 BGG 編號時計分板仍可遊玩，並經 `getRuleSummaryByBgg` 對到本體規則（migration 0136 把當時已有的這類遊戲重送一次目錄變更）。已合併的遊戲一律不列出。`review_status = 'pending'` 只表示遊戲資料等待編輯確認（批次匯入的遊戲都是這個狀態），公開頁面照樣顯示，所以不作為過濾條件。
 
@@ -80,10 +80,13 @@ Promise<
 ```
 
 - 收錄所有未合併、且至少有一個 BGG 編號的遊戲，包括隱藏、名稱待審的資料片與版本；沒有 BGG 編號的遊戲不收。`RuleRef` 規則同下方「目錄裡的規則數」。遊戲依 `gameId` 排序；不在清單中的遊戲即已移除。
-- 本站把整份清單存成快照（`scorepad_catalog_snapshot_state` 一列狀態，加 `scorepad_catalog_snapshot_chunks` 每列最多約 900 KB 的 JSON）。每天 01:00 UTC 的排程在目錄變更寫入後檢查：遊戲目錄時鐘沒動就不重建；有動就重讀清單，內容雜湊相同時只更新狀態列，不同才寫入新的 chunk 並刪除舊的。所以計分板最多晚一天看到變動。
-- `version` 是內容雜湊的前 16 個十六進位字元（例如 `3f9a0c12d4e5b678`），收錄欄位有任何變動才會改變；請當作不透明字串保存，下次原樣傳回。
-- `knownVersion` 與目前版本相同時回 `{ unchanged: true, version }`；不同或未給時回整份 `games`。格式不符（不是 1–64 個小寫十六進位字元）時在讀取 D1 前拋出 `TypeError`。
-- 本站部署後第一次呼叫若排程還沒建過快照，該次呼叫會自己建一次（成本同排程重建）。
+- 做法與首頁的遊戲目錄相同：
+  - 每款遊戲在 `scorepad_catalog_entries` 存一筆計分板用的 JSON。目錄變更寫入時（每次網站寫入後與每天 01:00 UTC 的排程），只重算受影響的遊戲，以及以它為本體的資料片與版本；內容沒變就不寫入。
+  - 每週一的排程把這些預存資料整理成快照（`scorepad_catalog_snapshot_chunks`，每列最多約 900 KB），只讀預存資料、不重讀來源表；上次快照後沒有變動就跳過。
+  - 呼叫時回傳「快照＋快照之後變動的遊戲」合併後的整份清單，所以變動在目錄寫入後就會出現，不必等每週快照。
+- `version` 是十進位整數字串（例如 `"512"`），只在某款遊戲的收錄內容實際變動時增加；請當作不透明字串保存，下次原樣傳回。
+- `knownVersion` 與目前版本相同時回 `{ unchanged: true, version }`；不同或未給時回整份 `games`。格式不符（不是 1–16 位數字）時在讀取 D1 前拋出 `TypeError`。
+- 部署後第一次呼叫（或第一次每週排程）會從來源表一次建好全部預存資料與快照；在那之前，目錄變更不會寫入預存資料。
 
 2026-11-23 正式站共 510 款、約 120 KB，1 個 chunk。BGG 244358 在回傳中是：
 
@@ -152,7 +155,10 @@ Promise<{
 以 Cloudflare 免費方案為前提（每次呼叫最多 50 個 D1 查詢、10 ms CPU）：
 
 - 每個方法固定只執行 1 個 D1 查詢，不隨 ID 數量或 `limit` 增加；只有 `getScorepadCatalog` 讀預先存好的快照。
-- `getScorepadCatalog`：版本相同時讀 1 列（狀態列）；版本不同時讀狀態列加快照的 chunk，目前預估共 2 列（以主鍵讀取，未在正式站實測）。排程重建只在遊戲目錄時鐘變動時執行，2026-11-23 在正式站實測讀 5,148 列、寫入 chunk 數加 2 列（狀態列與刪除舊 chunk）；時鐘沒動時讀 2 列、不寫入。查詢計畫由 [`scripts/scorepad-snapshot.test.ts`](../scripts/scorepad-snapshot.test.ts) 檢查。
+- `getScorepadCatalog`：版本相同時只讀狀態列（1 個查詢、1 列）；版本不同時多 1 個查詢，讀快照的 chunk（目前 1 列）加上快照之後變動的遊戲各 1 列。以上為依主鍵與索引讀取的預估，未在正式站實測。
+- 目錄變更寫入時：每款受影響的遊戲約讀 10 列（重算一次，加上比對既有資料），內容有變才寫入 1 列。
+- 每週快照：沒有變動時讀 1 列；有變動時讀全部預存資料（目前約 510 列）並寫入 chunk。第一次建立時從來源表讀取，2026-11-23 在正式站實測這個查詢讀 5,148 列，只發生一次。
+- 查詢計畫由 [`scripts/scorepad-snapshot.test.ts`](../scripts/scorepad-snapshot.test.ts) 檢查。
 - 以本機 Miniflare D1 實測 `rows_read`：`getRuleSummaryByBgg` 本體遊戲 1 列、本體的版本編號 2 列、資料片 6 列、查無此編號 0 列。`getGameRules` 讀遊戲、已發布規則（內容與 Tag ID 各一次）、用到的 Tag 與外部資源，2 條規則時為 12 列，隨規則數線性增加；不可列出的遊戲只讀 1 列。
 - 查詢計畫由 [`scripts/scorepad-rules.test.ts`](../scripts/scorepad-rules.test.ts) 檢查。
 - 查詢由 ID 清單（`json_each(?)` 搭配 `CROSS JOIN`）或變更頁驅動，每一段都走索引；`IN (...)` 列出較多 ID 時 SQLite 會改成掃描 `game_external_ids`，所以不使用。執行計畫由 [`scripts/scorepad-api.test.ts`](../scripts/scorepad-api.test.ts) 檢查。
