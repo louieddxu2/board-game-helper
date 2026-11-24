@@ -5,7 +5,8 @@ vi.mock('./data/database', () => ({
   getDatabase: () => ({
     statement: (sql: string) => {
       const result = sql.includes('game_daily_view_counts') ? [{ game_id: 'game-1' }]
-        : sql.includes('SELECT r.id FROM rules') ? [{ id: 'rule-1' }]
+        : sql.includes('SELECT r.id, r.game_id') ? [{ id: 'rule-1', game_id: 'game-1', created_at: 1 }]
+        : sql.includes('SELECT COUNT(*) AS n') ? [{ n: 1 }]
         : sql.includes('FROM games g') ? [{ id: 'game-1', slug: 'game-one', display_name: '遊戲', updated_at: 1, published_rule_count: 1 }]
         : sql.includes("WHERE game_id = ? AND status = 'published'") ? [{ id: 'rule-1' }, { id: 'rule-2' }]
         : (() => { throw new Error(`Unexpected query: ${sql}`); })();

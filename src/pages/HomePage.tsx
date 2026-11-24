@@ -17,10 +17,14 @@ import { PersonalHomeCard } from '../components/PersonalHomeCard';
 import { PwaInstallButton } from '../components/PwaInstallButton';
 import { RecentGamesRail } from '../components/RecentGamesRail';
 import { readHomeMode, resolveHomeMode, writeHomeMode, type HomeMode } from '../lib/homeMode';
-import type { HomePayload, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
+import type { HomePayload, HomeRecentGame, PersonalHomePayload, RuleCard as RuleCardModel } from '../shared/types';
 
 // Lines of rule text a featured card shows; the rail window is sized to hold exactly that.
 const RULE_WINDOW_LINES = 6;
+
+// The count is the game's rules published on its newest rule's day, so the date says which day.
+const recentAddedLabel = ({ addedOn, addedCount }: HomeRecentGame) =>
+  `${Number(addedOn.slice(5, 7))}/${Number(addedOn.slice(8, 10))} 新增 ${addedCount} 條`;
 
 // One swipe step of the featured rail: one game's card plus the gap after it.
 const railStep = (rail: HTMLElement) => {
@@ -403,11 +407,16 @@ const ExploreHome = ({ onShowPersonal }: { onShowPersonal?: () => void }) => {
     <AdSlot placement="home-after-game-exploration" />
     {resolvedRecentCards.length > 0 && <section className="content-section home-rule-section">
       <div className="section-heading"><div><h2>近期新增的玩錯規則</h2></div></div>
-      <ul className="home-recent-list">{resolvedRecentCards.map((rule) =>
-        <li key={rule.id}><Link to={`/games/${rule.gameSlug}#rule-${encodeURIComponent(rule.id)}`}>
-          <span className="home-recent-game">{rule.gameName}</span>
+      <ul className="home-recent-list">{resolvedRecentCards.map((rule) => {
+        const added = home?.recentGames?.find((game) => game.ruleId === rule.id);
+        return <li key={rule.id}><Link to={`/games/${rule.gameSlug}#rule-${encodeURIComponent(rule.id)}`}>
+          <span className="home-recent-heading">
+            <span className="home-recent-game">{rule.gameName}</span>
+            {added && <span className="home-recent-added">{recentAddedLabel(added)}</span>}
+          </span>
           <span className="home-recent-statement">{rule.statement}</span>
-        </Link></li>)}</ul>
+        </Link></li>;
+      })}</ul>
     </section>}
   </>;
 };

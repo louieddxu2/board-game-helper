@@ -116,8 +116,17 @@ export interface HomePayload {
   recentRules: Array<RuleCard & { gameName: string; gameSlug: string }>;
   popularGames: GameSummary[];
   popularGameIds?: string[];
+  /** One per game, aligned with recentRuleIds: the game's newest rule and that Taiwan day's count. */
   recentRuleIds?: string[];
+  recentGames?: HomeRecentGame[];
   featuredRuleIds?: string[];
+}
+
+export interface HomeRecentGame {
+  ruleId: string;
+  /** YYYY-MM-DD in Taiwan time. */
+  addedOn: string;
+  addedCount: number;
 }
 
 export interface HomeIDPayload {

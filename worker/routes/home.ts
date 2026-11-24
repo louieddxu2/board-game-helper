@@ -5,6 +5,7 @@ import { requireRole, type AppContext, type AppVariables, signInAsLocalAdmin, si
 import type { RouteEnv } from '../env';
 import type { D1Result } from '../data/database';
 import { getDatabase } from '../data/database';
+import { queryHomeRecentGames } from '../data/homeRecentGames';
 import { assertMutationOrigin, cleanOptional, createId, normalizeEmail, normalizeText, now, sha256Hex, slugify, trustedOrigins } from '../utils';
 import { normalizedReviewContent, REVIEW_FORMAT, REVIEW_SCHEMA_VERSION, reviewContentHash, reviewContentSchema, reviewFileSchema, sameReviewContent, type ReviewContent, type ReviewFile } from '../review';
 import { parseReviewCsv, serializeReviewCsv } from '../review-csv';
@@ -19,7 +20,7 @@ homeRoutes.get('/api/home', async (c) => {
 
   // Views are gated by login, but only anonymous browser-day aggregates reach this query.
 
-  const [popularGameIdsRaw, recentRaw] = await Promise.all([
+  const [popularGameIdsRaw, recentGames] = await Promise.all([
     getDatabase(c).statement(`
       SELECT views.game_id, views.view_count
       FROM (
@@ -34,24 +35,18 @@ homeRoutes.get('/api/home', async (c) => {
       ORDER BY views.view_count DESC, views.last_view_at DESC
       LIMIT 6
     `).all<{ game_id: string }>(),
-    getDatabase(c).statement(`
-      SELECT r.id FROM rules r
-      JOIN games g ON g.id = r.game_id
-      WHERE r.status = 'published' AND g.visibility = 'public'
-      ORDER BY r.created_at DESC LIMIT 6
-    `).all<{ id: string }>(),
+    queryHomeRecentGames(getDatabase(c), track),
   ]);
 
   const popularGameIdsResult = track('home:popular-games', popularGameIdsRaw);
-  const recentResult = track('home:recent-rules', recentRaw);
 
   // Only games people actually viewed; the section shrinks or hides rather than filling with unviewed games.
   const popularGameIds = (popularGameIdsResult.results ?? []).map((r) => r.game_id);
-  const recentRuleIds = (recentResult.results ?? []).map((r) => r.id);
+  const recentRuleIds = recentGames.map((game) => game.ruleId);
 
   if (popularGameIds.length === 0) {
     setNoCache(c);
-    return c.json({ generatedAt: now(), popularGameIds, recentRuleIds, featuredRuleIds: [], featured: [] });
+    return c.json({ generatedAt: now(), popularGameIds, recentRuleIds, recentGames, featuredRuleIds: [], featured: [] });
   }
 
   // 3. 點對點極速解析內容 (WHERE id IN)
@@ -97,6 +92,7 @@ homeRoutes.get('/api/home', async (c) => {
     generatedAt: now(),
     popularGameIds,
     recentRuleIds,
+    recentGames,
     featuredRuleIds,
     featured,
   });
