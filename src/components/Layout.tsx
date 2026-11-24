@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { useSiteMode } from '../hooks/useSiteMode';
 import { localDb } from '../lib/localDb';
+import { requestUncertainRuleAdd, SITE_MARKS, SITE_TITLES } from '../lib/siteMode';
 import { SearchModal } from './SearchModal';
 import { HomeStats } from './HomeStats';
 import { ScrollToTop } from './ScrollToTop';
@@ -39,6 +41,10 @@ export const Layout = () => {
   const gamePathMatch = location.pathname.match(/^\/games\/([^/]+)$/);
   const currentGameIdentifier = gamePathMatch ? decodeURIComponent(gamePathMatch[1]) : undefined;
   const addRuleHref = currentGameIdentifier ? `/add?game=${encodeURIComponent(currentGameIdentifier)}` : '/add';
+  const { mode, canSwitch, setMode } = useSiteMode();
+  const otherMode = mode === 'wrong' ? 'uncertain' : 'wrong';
+  // On a game page in the uncertain mode, 記錄 notes an uncertain rule instead of a wrong one.
+  const addsUncertainRule = mode === 'uncertain' && Boolean(currentGameIdentifier);
 
   useEffect(() => {
     let active = true;
@@ -79,14 +85,17 @@ export const Layout = () => {
     <ScrollToTop />
     <a className="skip-link" href="#main-content">跳至主要內容</a>
     <header className="site-header">
-      <NavLink to="/" className="brand" aria-label="玩錯的桌遊規則首頁">
-        <span className="brand-mark">✓</span>
-        <strong>玩錯的桌遊規則</strong>
-      </NavLink>
+      <div className={`brand-row site-mode-${mode}`}>
+        <NavLink to="/" className="brand" aria-label={`${SITE_TITLES[mode]}首頁`}>
+          <span className="brand-mark">{SITE_MARKS[mode]}</span>
+          <strong>{SITE_TITLES[mode]}</strong>
+        </NavLink>
+        {canSwitch && <button type="button" className="site-mode-switch" aria-label={`切換到${SITE_TITLES[otherMode]}`} title={`切換到${SITE_TITLES[otherMode]}`} onClick={() => setMode(otherMode)}>⇄{SITE_MARKS[otherMode]}</button>}
+      </div>
       {headerAction && <div className="site-header-action">{headerAction}</div>}
       <nav className="desktop-nav" aria-label="主要導覽">
         <button type="button" className="link-button" onClick={() => setSearchOpen(true)}>搜尋</button>
-        <NavLink to={addRuleHref} className={user ? 'nav-primary' : undefined}>＋記錄</NavLink>
+        {addsUncertainRule ? <button type="button" className="link-button nav-primary" onClick={requestUncertainRuleAdd}>＋記錄</button> : <NavLink to={addRuleHref} className={user ? 'nav-primary' : undefined}>＋記錄</NavLink>}
         {isAdmin && <NavLink to="/review">校稿</NavLink>}
         <NavLink to="/catalog">列表</NavLink>
         {realIsAdmin && <NavLink to="/admin" style={mockRole ? { outline: '2px solid var(--accent, #e53935)', borderRadius: '4px' } : undefined}>{adminLabel}</NavLink>}
@@ -97,7 +106,9 @@ export const Layout = () => {
     <main id="main-content"><Outlet context={{ setHeaderAction }} /></main>
     {!isAddFormPage && <nav className="mobile-nav" aria-label="手機主要導覽">
       <button type="button" onClick={() => setSearchOpen(true)}><span aria-hidden="true"><NavIcon name="search" /></span><small>搜尋</small></button>
-      <NavLink to={addRuleHref} className={user ? 'mobile-primary' : undefined}><span aria-hidden="true"><NavIcon name="add" /></span><small>記錄{user && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>
+      {addsUncertainRule
+        ? <button type="button" className="mobile-primary" onClick={requestUncertainRuleAdd}><span aria-hidden="true"><NavIcon name="add" /></span><small>記錄</small></button>
+        : <NavLink to={addRuleHref} className={user ? 'mobile-primary' : undefined}><span aria-hidden="true"><NavIcon name="add" /></span><small>記錄{user && pendingCount ? `・待送 ${pendingCount}` : ''}</small></NavLink>}
       {isAdmin && <NavLink to="/review"><span aria-hidden="true"><NavIcon name="review" /></span><small>校稿</small></NavLink>}
       <NavLink to="/catalog"><span aria-hidden="true"><NavIcon name="list" /></span><small>列表</small></NavLink>
       {realIsAdmin && <NavLink to="/admin"><span aria-hidden="true"><NavIcon name="admin" /></span><small>{adminLabel}</small></NavLink>}

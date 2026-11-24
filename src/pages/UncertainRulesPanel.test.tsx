@@ -1,9 +1,10 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { GameDetail, UncertainRule } from '../shared/types';
-import { UncertainRulesDialog } from './UncertainRulesDialog';
+import { requestUncertainRuleAdd } from '../lib/siteMode';
+import { UncertainRulesPanel } from './UncertainRulesPanel';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), showToast: vi.fn(), confirm: vi.fn(),
@@ -21,7 +22,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const renderDialog = () => render(<MemoryRouter><UncertainRulesDialog game={game} onClose={vi.fn()} /></MemoryRouter>);
+const renderDialog = () => render(<MemoryRouter><UncertainRulesPanel game={game} /></MemoryRouter>);
 const item = (question: string) => screen.getByText(question).closest('.uncertain-rule-item') as HTMLElement;
 
 test('shows whether each question was looked up, with the date', async () => {
@@ -34,10 +35,10 @@ test('copies only the selected questions as one post, plain or for AI', async ()
   const user = userEvent.setup();
   renderDialog();
   await screen.findByText('能啟動兩次嗎？');
-  const copyPost = screen.getByRole('button', { name: /^複製發文/ });
-  expect(copyPost).toBeDisabled();
+  expect(screen.getByRole('button', { name: '複製發文' })).toBeDisabled();
   await user.click(within(item('能啟動兩次嗎？')).getByRole('checkbox'));
-  await user.click(screen.getByRole('button', { name: '複製發文（1）' }));
+  expect(screen.getByText('已選 1 題')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '複製發文' }));
   const post = await navigator.clipboard.readText();
   expect(post).toContain('Title: Rules question about Seize the Bean');
   expect(post).toContain('Q. 能啟動兩次嗎？');
@@ -56,12 +57,12 @@ test('marking a question looked up shows the returned date', async () => {
   expect(await within(item('平手怎麼算？')).findByText('已查過，沒有・2026-11-24')).toBeInTheDocument();
 });
 
-test('records a new question with how the table played it', async () => {
+test('the add request from the header or hero opens the editor for a new question', async () => {
   const user = userEvent.setup();
   mocks.create.mockResolvedValue({ uncertainRule: { ...rule('c', '可以棄牌嗎？', null), tableRuling: '可以' } });
   renderDialog();
   await screen.findByText('平手怎麼算？');
-  await user.click(screen.getByRole('button', { name: '新增' }));
+  act(() => requestUncertainRuleAdd());
   const question = screen.getByLabelText('問題');
   expect(question).toHaveFocus();
   await user.type(question, '可以棄牌嗎？');
@@ -69,4 +70,12 @@ test('records a new question with how the table played it', async () => {
   await user.click(screen.getByRole('button', { name: '儲存' }));
   expect(mocks.create).toHaveBeenCalledWith('g1', { question: '可以棄牌嗎？', tableRuling: '可以', checked: false });
   expect(await screen.findByText('先這樣玩：可以')).toBeInTheDocument();
+});
+
+test('an empty list offers to note the first question', async () => {
+  const user = userEvent.setup();
+  mocks.list.mockResolvedValue({ uncertainRules: [] });
+  renderDialog();
+  await user.click(await screen.findByRole('button', { name: '記下第一題' }));
+  expect(screen.getByRole('dialog', { name: '記下不確定的規則' })).toBeInTheDocument();
 });

@@ -1,13 +1,21 @@
-/* 不確定的桌遊規則 dialog on the game page (admin-only). */
-.uncertain-rules-dialog { width: min(640px, 100%); }
+/* 不確定的桌遊規則: the site-mode switch in the header and the game page's uncertain side (admin-only). */
+.brand-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.site-mode-switch { flex: none; min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--white); color: var(--green); font-weight: 800; font-size: 13px; cursor: pointer; }
+.site-mode-uncertain .brand-mark { background: var(--yellow); color: var(--green); }
+
+.uncertain-rules { display: grid; gap: 8px; margin-top: 12px; }
+.uncertain-rules-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.uncertain-rules-toolbar > span { margin-right: auto; font-size: 14px; }
 .uncertain-rule-editor-backdrop { z-index: 110; }
-.uncertain-rule-list { display: grid; gap: 4px; max-height: 52vh; overflow: auto; }
-.uncertain-rule-item { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.uncertain-rule-pick { display: flex; align-items: flex-start; gap: 10px; }
-.uncertain-rule-pick input { margin-top: 4px; flex: none; }
+.uncertain-rule-list { display: grid; gap: 4px; }
+.uncertain-rule-item { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.uncertain-rule-pick { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.uncertain-rule-pick input { margin-top: 4px; flex: none; width: auto; }
 .uncertain-rule-pick > span { display: grid; gap: 3px; min-width: 0; }
 .uncertain-rule-pick strong, .uncertain-rule-pick small { overflow-wrap: anywhere; }
 .uncertain-rule-pick small { color: var(--muted); }
 .uncertain-rule-status.unchecked { color: #a52f23; }
 .uncertain-rule-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-left: 26px; }
-.uncertain-rules-footer { flex-wrap: wrap; }
+.uncertain-rules-toolbar .button { min-height: 34px; height: 34px; padding: 0 12px; font-size: 13px; }
+.uncertain-rule-actions .text-action, .uncertain-rule-actions .danger-link { font-size: 14px; }
+.uncertain-rule-actions .text-action { color: var(--green); }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useConfirm } from '../context/ConfirmContext';
 import { useToast } from '../context/ToastContext';
 import { buildUncertainRuleAiPrompt, buildUncertainRulePost } from '../lib/uncertainRulePost';
+import { UNCERTAIN_RULE_ADD_EVENT } from '../lib/siteMode';
 import { uncertainRulesApi } from '../lib/uncertainRulesApi';
 import type { GameDetail, UncertainRule } from '../shared/types';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
@@ -13,8 +14,8 @@ const formatDate = (timestamp: number) => {
 
 export const checkStatusLabel = (rule: UncertainRule) => rule.checkedAt === null ? '沒查過' : `已查過，沒有・${formatDate(rule.checkedAt)}`;
 
-/** 不確定的桌遊規則: the admin's private list of a game's unanswered rules questions. */
-export const UncertainRulesDialog = ({ game, onClose }: { game: GameDetail; onClose(): void }) => {
+/** 不確定的桌遊規則: the game page's uncertain side, the admin's private list of unanswered rules questions. */
+export const UncertainRulesPanel = ({ game }: { game: GameDetail }) => {
   const { confirm } = useConfirm();
   const { showToast } = useToast();
   const [rules, setRules] = useState<UncertainRule[]>();
@@ -22,13 +23,17 @@ export const UncertainRulesDialog = ({ game, onClose }: { game: GameDetail; onCl
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<UncertainRule | 'new'>();
   const [busyId, setBusyId] = useState<string>();
-  useWorkspaceBrowserBack({ active: !editing, onBack: onClose });
 
   const load = () => {
     setLoadFailed(false);
     uncertainRulesApi.list(game.id).then((response) => setRules(response.uncertainRules)).catch(() => setLoadFailed(true));
   };
   useEffect(load, [game.id]);
+  useEffect(() => {
+    const openNew = () => setEditing('new');
+    window.addEventListener(UNCERTAIN_RULE_ADD_EVENT, openNew);
+    return () => window.removeEventListener(UNCERTAIN_RULE_ADD_EVENT, openNew);
+  }, []);
 
   const replace = (rule: UncertainRule) => setRules((current) => current?.some((candidate) => candidate.id === rule.id)
     ? current.map((candidate) => candidate.id === rule.id ? rule : candidate)
@@ -63,41 +68,35 @@ export const UncertainRulesDialog = ({ game, onClose }: { game: GameDetail; onCl
     } catch { showToast('複製失敗，請稍後再試。', 'error'); }
   };
 
-  return <>
-    <div className="modal-backdrop" role="presentation">
-      <div className="modal uncertain-rules-dialog" role="dialog" aria-modal="true" aria-labelledby="uncertain-rules-title">
-        <div className="modal-heading"><h2 id="uncertain-rules-title">不確定的桌遊規則</h2><button type="button" aria-label="關閉不確定的桌遊規則" onClick={onClose}>×</button></div>
-        <div className="uncertain-rule-list">
-          {loadFailed && <div role="alert"><p>暫時無法載入。</p><button type="button" className="button secondary" onClick={load}>重新載入</button></div>}
-          {!loadFailed && !rules && <p className="muted">載入中…</p>}
-          {rules?.length === 0 && <p className="muted">還沒有記下不確定的規則。</p>}
-          {rules?.map((rule) => <div className="uncertain-rule-item" key={rule.id}>
-            <label className="uncertain-rule-pick">
-              <input type="checkbox" checked={selected.has(rule.id)} onChange={() => toggleSelected(rule.id)} />
-              <span><strong>{rule.question}</strong>
-                {rule.tableRuling && <small>先這樣玩：{rule.tableRuling}</small>}
-                <small className={rule.checkedAt === null ? 'uncertain-rule-status unchecked' : 'uncertain-rule-status'}>{checkStatusLabel(rule)}</small>
-              </span>
-            </label>
-            <div className="uncertain-rule-actions">
-              <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, true)}>{rule.checkedAt === null ? '查過了，沒有' : '重新查過'}</button>
-              {rule.checkedAt !== null && <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, false)}>改回沒查過</button>}
-              <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => setEditing(rule)}>編輯</button>
-              <button type="button" className="danger-link" disabled={busyId === rule.id} onClick={() => void remove(rule)}>刪除</button>
-            </div>
-          </div>)}
+  return <section className="uncertain-rules" aria-label="不確定的桌遊規則">
+    <div className="uncertain-rules-toolbar">
+      <span className="muted">{selectedRules.length ? `已選 ${selectedRules.length} 題` : '勾選要一起問的題目'}</span>
+      <button type="button" className="button secondary" disabled={selectedRules.length === 0} onClick={() => void copy(false)}>複製發文</button>
+      <button type="button" className="button secondary" disabled={selectedRules.length === 0} onClick={() => void copy(true)}>複製給 AI</button>
+    </div>
+    <div className="uncertain-rule-list">
+      {loadFailed && <div className="game-load-error" role="alert"><p>暫時無法載入。</p><button type="button" className="button secondary" onClick={load}>重新載入</button></div>}
+      {!loadFailed && !rules && <p className="muted">載入中…</p>}
+      {rules?.length === 0 && <div className="empty-state"><p>還沒有記下不確定的規則。</p><button type="button" className="text-action" onClick={() => setEditing('new')}>記下第一題</button></div>}
+      {rules?.map((rule) => <div className="uncertain-rule-item" key={rule.id}>
+        <label className="uncertain-rule-pick">
+          <input type="checkbox" checked={selected.has(rule.id)} onChange={() => toggleSelected(rule.id)} />
+          <span><strong>{rule.question}</strong>
+            {rule.tableRuling && <small>先這樣玩：{rule.tableRuling}</small>}
+            <small className={rule.checkedAt === null ? 'uncertain-rule-status unchecked' : 'uncertain-rule-status'}>{checkStatusLabel(rule)}</small>
+          </span>
+        </label>
+        <div className="uncertain-rule-actions">
+          <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, true)}>{rule.checkedAt === null ? '查過了，沒有' : '重新查過'}</button>
+          {rule.checkedAt !== null && <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, false)}>改回沒查過</button>}
+          <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => setEditing(rule)}>編輯</button>
+          <button type="button" className="danger-link" disabled={busyId === rule.id} onClick={() => void remove(rule)}>刪除</button>
         </div>
-        <div className="modal-actions uncertain-rules-footer">
-          <button type="button" className="button primary" disabled={!rules} onClick={() => setEditing('new')}>新增</button>
-          <button type="button" className="button secondary" disabled={selectedRules.length === 0} onClick={() => void copy(false)}>複製發文{selectedRules.length ? `（${selectedRules.length}）` : ''}</button>
-          <button type="button" className="button secondary" disabled={selectedRules.length === 0} onClick={() => void copy(true)}>複製給 AI</button>
-          <button type="button" className="button secondary" onClick={onClose}>關閉</button>
-        </div>
-      </div>
+      </div>)}
     </div>
     {editing && <UncertainRuleEditor game={game} rule={editing === 'new' ? undefined : editing} onClose={() => setEditing(undefined)}
       onSaved={(rule) => { replace(rule); setEditing(undefined); }} />}
-  </>;
+  </section>;
 };
 
 const UncertainRuleEditor = ({ game, rule, onClose, onSaved }: { game: GameDetail; rule?: UncertainRule; onClose(): void; onSaved(rule: UncertainRule): void }) => {

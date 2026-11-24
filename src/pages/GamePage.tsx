@@ -5,10 +5,12 @@ import { CompactRuleCard, RuleCard } from '../components/RuleCard';
 import { RuleFilters } from '../components/RuleFilters';
 import { useSession } from '../context/SessionContext';
 import { useGamePageMeta } from '../hooks/useGamePageMeta';
+import { useSiteMode } from '../hooks/useSiteMode';
 import { useRuleFilters } from '../hooks/useRuleFilters';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError, supersedeGameRefreshes } from '../lib/api';
 import { writeHomeMode } from '../lib/homeMode';
+import { requestUncertainRuleAdd } from '../lib/siteMode';
 import { localDb } from '../lib/localDb';
 import { applyRuleImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
@@ -16,7 +18,7 @@ import { hydrateRuleTags } from '../lib/tagHydration';
 import type { PersonalHomeGame } from '../shared/types';
 import type { RuleCard as RuleCardType, TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
-import { UncertainRulesDialog } from './UncertainRulesDialog';
+import { UncertainRulesPanel } from './UncertainRulesPanel';
 import { useGameDetail } from './useGameDetail';
 
 const NO_RULES: RuleCardType[] = [];
@@ -29,6 +31,7 @@ export const GamePage = () => {
   const { identifier = '' } = useParams();
   const location = useLocation();
   const { canEdit, user, isAdmin } = useSession();
+  const uncertain = useSiteMode().mode === 'uncertain';
   const canEditRule = (rule: RuleCardType) => canUserEditRule(rule, user, isAdmin);
   const { showToast } = useToast();
   const { game, setGame, loading, error: gameError, reload: load } = useGameDetail(identifier, (location.state as { justAdded?: number } | null)?.justAdded);
@@ -36,7 +39,6 @@ export const GamePage = () => {
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
   const [externalResourcesOpen, setExternalResourcesOpen] = useState(false);
-  const [uncertainRulesOpen, setUncertainRulesOpen] = useState(false);
   const [favorite, setFavorite] = useState<boolean>();
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [favoriteLimitGames, setFavoriteLimitGames] = useState<PersonalHomeGame[]>();
@@ -300,11 +302,11 @@ export const GamePage = () => {
       </div>
       <div className="inline-actions game-hero-actions">
         <button type="button" className="button secondary game-resources-button" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>資源</button>
-        {isAdmin && <button type="button" className="button secondary game-uncertain-button" aria-label="不確定的桌遊規則" onClick={() => setUncertainRulesOpen(true)}>不確定</button>}
-        {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
+        {uncertain ? <button type="button" className="button primary game-add-rule-button" onClick={requestUncertainRuleAdd}>＋記錄</button> : user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>
     </header>
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}
+    {uncertain ? <UncertainRulesPanel game={game} /> : <>
     <RuleFilters filters={filters} />
     <div className="game-rules compact-rules">
       {visibleRules.map((rule) => {
@@ -337,11 +339,11 @@ export const GamePage = () => {
         {filters.activePlayerCounts.length > 0 && <button type="button" className="text-action" onClick={filters.clearPlayerCounts}>移除人數篩選</button>}
       </div>}
     </div>
+    </>}
     {game.aliases.length > 0 && <aside className="alias-box"><strong>也可以用這些名稱找到</strong><p>{game.aliases.join('・')}</p></aside>}
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await load(); }} />}
     {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} userId={user?.id} isAdmin={isAdmin} onClose={() => setExternalResourcesOpen(false)} onChanged={() => load()} />}
-    {isAdmin && uncertainRulesOpen && <UncertainRulesDialog game={game} onClose={() => setUncertainRulesOpen(false)} />}
     {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
       onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}
   </section>;
