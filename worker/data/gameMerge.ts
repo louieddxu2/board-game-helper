@@ -64,6 +64,7 @@ export const mergeGames = async (queryDb: Database, sourceGameId: string, target
       queryDb.statement('UPDATE rule_importance_votes SET game_id = ? WHERE game_id = ?')
         .bind(targetGameId, sourceGameId),
       queryDb.statement('UPDATE submissions SET game_id = ? WHERE game_id = ?').bind(targetGameId, sourceGameId),
+      queryDb.statement('UPDATE uncertain_rules SET game_id = ? WHERE game_id = ?').bind(targetGameId, sourceGameId),
       queryDb.statement('UPDATE rules SET game_id = ?, updated_at = ? WHERE game_id = ?').bind(targetGameId, timestamp, sourceGameId),
       queryDb.statement(`
         UPDATE attribute_subject_components

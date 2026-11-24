@@ -45,12 +45,12 @@ const transportRequest = async <T>(path: string, init: RequestInit | undefined, 
 
 // GET endpoints that intentionally are not cached must explain why. This
 // keeps an accidental uncached read visible during review.
-const uncachedRead = <T>(path: string, reason: string) => {
+export const uncachedRead = <T>(path: string, reason: string) => {
   if (!reason.trim()) throw new Error(`Uncached read requires a reason: ${path}`);
   return transportRequest<T>(path, undefined, 'uncached-read');
 };
 
-const mutation = <T>(path: string, init: RequestInit) => transportRequest<T>(path, init, 'mutation');
+export const mutation = <T>(path: string, init: RequestInit) => transportRequest<T>(path, init, 'mutation');
 
 type ApiRule = RuleCard & { gameName: string; gameSlug: string };
 type GameMergeResponse = {

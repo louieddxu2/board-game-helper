@@ -1,0 +1,13 @@
+/* 不確定的桌遊規則 dialog on the game page (admin-only). */
+.uncertain-rules-dialog { width: min(640px, 100%); }
+.uncertain-rule-editor-backdrop { z-index: 110; }
+.uncertain-rule-list { display: grid; gap: 4px; max-height: 52vh; overflow: auto; }
+.uncertain-rule-item { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.uncertain-rule-pick { display: flex; align-items: flex-start; gap: 10px; }
+.uncertain-rule-pick input { margin-top: 4px; flex: none; }
+.uncertain-rule-pick > span { display: grid; gap: 3px; min-width: 0; }
+.uncertain-rule-pick strong, .uncertain-rule-pick small { overflow-wrap: anywhere; }
+.uncertain-rule-pick small { color: var(--muted); }
+.uncertain-rule-status.unchecked { color: #a52f23; }
+.uncertain-rule-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-left: 26px; }
+.uncertain-rules-footer { flex-wrap: wrap; }

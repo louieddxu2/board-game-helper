@@ -27,6 +27,7 @@ import { favoriteRoutes } from './routes/favorites';
 import { contributionRoutes } from './routes/contributions';
 import { attributesRoutes } from './routes/attributes';
 import { sitemapRoutes } from './routes/sitemap';
+import { uncertainRulesRoutes } from './routes/uncertainRules';
 
 const app = new Hono<{ Bindings: Env; Variables: any }>();
 
@@ -218,6 +219,7 @@ app.route('/', favoriteRoutes);
 app.route('/', contributionRoutes);
 app.route('/', attributesRoutes);
 app.route('/', sitemapRoutes);
+app.route('/', uncertainRulesRoutes);
 
 const scheduled = async (controller: { scheduledTime: number }, env: Pick<Env, 'DB'>) => {
   const db = createDatabase(env);

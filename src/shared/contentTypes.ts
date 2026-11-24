@@ -96,6 +96,19 @@ export const GAME_EXTERNAL_RESOURCE_CATEGORIES = ['teaching', 'help_card', 'faq'
 
 export type GameExternalResourceCategory = (typeof GAME_EXTERNAL_RESOURCE_CATEGORIES)[number];
 
+/** 不確定的桌遊規則: a rules question with no known answer yet. `checkedAt` null means not looked up yet. */
+export interface UncertainRule {
+  id: string;
+  gameId: string;
+  question: string;
+  /** How the table played it for now. */
+  tableRuling?: string;
+  /** When it was last looked up and nothing was found. */
+  checkedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface GameExternalResource {
   id: string;
   gameId: string;

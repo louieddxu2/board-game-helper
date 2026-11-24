@@ -16,6 +16,7 @@ import { hydrateRuleTags } from '../lib/tagHydration';
 import type { PersonalHomeGame } from '../shared/types';
 import type { RuleCard as RuleCardType, TagSummary } from '../shared/types';
 import { ExternalResourcesDialog, GameEditor, RuleEditor } from './GamePageDialogs';
+import { UncertainRulesDialog } from './UncertainRulesDialog';
 import { useGameDetail } from './useGameDetail';
 
 const NO_RULES: RuleCardType[] = [];
@@ -35,6 +36,7 @@ export const GamePage = () => {
   const [editing, setEditing] = useState<RuleCardType>();
   const [editingGame, setEditingGame] = useState(false);
   const [externalResourcesOpen, setExternalResourcesOpen] = useState(false);
+  const [uncertainRulesOpen, setUncertainRulesOpen] = useState(false);
   const [favorite, setFavorite] = useState<boolean>();
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [favoriteLimitGames, setFavoriteLimitGames] = useState<PersonalHomeGame[]>();
@@ -298,6 +300,7 @@ export const GamePage = () => {
       </div>
       <div className="inline-actions game-hero-actions">
         <button type="button" className="button secondary game-resources-button" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>資源</button>
+        {isAdmin && <button type="button" className="button secondary game-uncertain-button" aria-label="不確定的桌遊規則" onClick={() => setUncertainRulesOpen(true)}>不確定</button>}
         {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>
     </header>
@@ -338,6 +341,7 @@ export const GamePage = () => {
     {editing && <RuleEditor game={game} rule={editing} onClose={() => setEditing(undefined)} onSaved={async () => { setEditing(undefined); await load(); }} />}
     {editingGame && <GameEditor game={game} onClose={() => setEditingGame(false)} onSaved={async () => { setEditingGame(false); await load(); }} />}
     {externalResourcesOpen && <ExternalResourcesDialog game={game} canEdit={canEdit} userId={user?.id} isAdmin={isAdmin} onClose={() => setExternalResourcesOpen(false)} onChanged={() => load()} />}
+    {isAdmin && uncertainRulesOpen && <UncertainRulesDialog game={game} onClose={() => setUncertainRulesOpen(false)} />}
     {favoriteLimitGames && <FavoriteLimitDialog games={favoriteLimitGames} busyId={removingFavoriteId}
       onRemove={(favoriteGame) => void removeFavoriteForSpace(favoriteGame)} onClose={() => setFavoriteLimitGames(undefined)} />}
   </section>;

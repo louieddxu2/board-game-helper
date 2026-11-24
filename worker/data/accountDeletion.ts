@@ -113,6 +113,8 @@ export const deleteAccount = async (
     statement(db, 'UPDATE review_proposals SET created_by = ? WHERE created_by = ?', DELETED_ACCOUNT_ID, userId),
     statement(db, 'UPDATE review_proposals SET claimed_by = NULL, claimed_until = NULL WHERE claimed_by = ?', userId),
     statement(db, 'UPDATE review_proposals SET reviewed_by = NULL WHERE reviewed_by = ?', userId),
+    // Uncertain rules are the author's private question list, so they leave with the account.
+    statement(db, 'DELETE FROM uncertain_rules WHERE created_by = ?', userId),
     statement(db, 'DELETE FROM users WHERE id = ?', userId),
     requireAttributeReplayAfterChange(db),
   );
