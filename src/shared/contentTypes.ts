@@ -103,6 +103,11 @@ export interface UncertainRule {
   question: string;
   /** How the table played it for now. */
   tableRuling?: string;
+  /** The same optional settings a recorded rule takes. */
+  details?: string;
+  categories?: RuleCategory[];
+  playerCounts?: number[];
+  editionNotes?: string[];
   /** When it was last looked up and nothing was found. */
   checkedAt: number | null;
   createdAt: number;

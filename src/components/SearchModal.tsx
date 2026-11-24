@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSiteMode } from '../hooks/useSiteMode';
 import { localDb } from '../lib/localDb';
 import { useWorkspaceBrowserBack } from '../workspace/useWorkspaceBrowserBack';
 import { GameSearch } from './GameSearch';
@@ -15,6 +16,8 @@ interface Props {
 }
 const focusableSelector = 'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), [href]:not([tabindex="-1"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 export const SearchModal = ({ open, onClose }: Props) => {
+  // A game noted only as uncertain has no published rule yet; the uncertain mode still finds it.
+  const uncertain = useSiteMode().mode === 'uncertain';
   const navigate = useNavigate();
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -111,7 +114,8 @@ export const SearchModal = ({ open, onClose }: Props) => {
     }}>
       <div className="search-modal-heading"><h2 id="search-modal-title">搜尋遊戲 <span className="search-modal-shortcut">⌘K</span></h2><button type="button" onClick={onClose} aria-label="關閉搜尋">×</button></div>
       <GameSearch
-        value={searchValue} onChange={setSearchValue} allowCreate clearable inlineResults emptyResults={recents}
+        value={searchValue} onChange={setSearchValue} allowCreate clearable inlineResults emptyResults={recents} includeGamesWithoutPublishedRules={uncertain}
+        createLabel={uncertain ? (name) => `＋ 記下「${name}」的不確定規則` : undefined}
         onCreate={(name) => navigateFromSearch(`/add?name=${encodeURIComponent(name)}`)}
         onSelect={(game) => navigateFromSearch(`/games/${game.slug}`)}
       />

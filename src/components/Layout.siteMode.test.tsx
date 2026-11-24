@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
-import { SITE_MODE_STORAGE_KEY, UNCERTAIN_RULE_ADD_EVENT, writeSiteMode } from '../lib/siteMode';
+import { SITE_MODE_STORAGE_KEY, writeSiteMode } from '../lib/siteMode';
 import { Layout } from './Layout';
 
 const session = vi.hoisted(() => ({ isAdmin: true }));
@@ -39,19 +39,8 @@ test('everyone else always sees the wrong-rules site and no switch', () => {
   expect(screen.queryByRole('button', { name: /切換到/ })).not.toBeInTheDocument();
 });
 
-test('in the uncertain mode, 記錄 on a game page notes an uncertain rule instead of opening the add page', async () => {
-  const user = userEvent.setup();
+test('記錄 keeps its link in both modes; the add page itself follows the mode', () => {
   writeSiteMode('uncertain');
-  const requested = vi.fn();
-  window.addEventListener(UNCERTAIN_RULE_ADD_EVENT, requested);
   renderAt('/games/seize-the-bean');
-  const mobileNav = document.querySelector('.mobile-nav') as HTMLElement;
-  expect(within(mobileNav).queryByRole('link', { name: /記錄/ })).not.toBeInTheDocument();
-  await user.click(within(mobileNav).getByRole('button', { name: /記錄/ }));
-  expect(requested).toHaveBeenCalledTimes(1);
-  window.removeEventListener(UNCERTAIN_RULE_ADD_EVENT, requested);
-  cleanup();
-  // Away from a game page there is no game to note it under, so 記錄 keeps its usual page.
-  renderAt('/catalog');
-  expect(within(document.querySelector('.mobile-nav') as HTMLElement).getByRole('link', { name: /記錄/ })).toHaveAttribute('href', '/add');
+  expect(within(document.querySelector('.mobile-nav') as HTMLElement).getByRole('link', { name: /記錄/ })).toHaveAttribute('href', '/add?game=seize-the-bean');
 });

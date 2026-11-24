@@ -9,8 +9,6 @@ export type SiteMode = 'wrong' | 'uncertain';
 
 export const SITE_MODE_STORAGE_KEY = 'site_mode';
 const SITE_MODE_EVENT = 'site-mode-change';
-/** Asks the uncertain view on the current game page to open its editor for a new question. */
-export const UNCERTAIN_RULE_ADD_EVENT = 'uncertain-rule-add';
 
 export const SITE_TITLES: Record<SiteMode, string> = { wrong: '玩錯的桌遊規則', uncertain: '不確定的桌遊規則' };
 export const SITE_MARKS: Record<SiteMode, string> = { wrong: '✓', uncertain: '?' };
@@ -45,5 +43,3 @@ const subscribe = (onChange: () => void) => {
 
 /** The stored mode; callers gate it by who may use the uncertain side. */
 export const useStoredSiteMode = () => useSyncExternalStore(subscribe, snapshot, () => 'wrong' as SiteMode);
-
-export const requestUncertainRuleAdd = () => window.dispatchEvent(new Event(UNCERTAIN_RULE_ADD_EVENT));

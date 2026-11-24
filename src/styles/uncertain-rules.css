@@ -19,3 +19,11 @@
 .uncertain-rules-toolbar .button { min-height: 34px; height: 34px; padding: 0 12px; font-size: 13px; }
 .uncertain-rule-actions .text-action, .uncertain-rule-actions .danger-link { font-size: 14px; }
 .uncertain-rule-actions .text-action { color: var(--green); }
+.uncertain-rule-pick small.uncertain-rule-settings { color: var(--green); }
+.uncertain-rule-editor { width: min(620px, 100%); max-height: calc(100dvh - 32px); overflow: auto; }
+.uncertain-add-page .uncertain-rule-fields { margin-bottom: 12px; }
+/* The rule page bleeds these tracks under its number and remove columns; the uncertain fields have neither. */
+.uncertain-rule-fields.rule-input-fields > .rule-category-input,
+.uncertain-rule-fields.rule-input-fields > .player-count-input { margin-left: 0; margin-right: 0; }
+.uncertain-rule-fields.rule-input-fields > .rule-category-input legend,
+.uncertain-rule-fields.rule-input-fields > .player-count-input legend { padding-left: 0; }

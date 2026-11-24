@@ -1,5 +1,4 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { writeSiteMode } from '../lib/siteMode';
@@ -49,8 +48,7 @@ test('the uncertain mode swaps the game page from its rules to its uncertain rul
   renderGamePage();
   expect(await screen.findByText('平手怎麼算？')).toBeInTheDocument();
   expect(screen.queryByText('正確規則')).not.toBeInTheDocument();
-  await userEvent.setup().click(screen.getByRole('button', { name: '＋記錄' }));
-  expect(screen.getByRole('dialog', { name: '記下不確定的規則' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '＋記錄' })).toHaveAttribute('href', '/add?game=test-game');
   act(() => writeSiteMode('wrong'));
   expect(await screen.findByText('正確規則')).toBeInTheDocument();
   expect(screen.queryByText('平手怎麼算？')).not.toBeInTheDocument();

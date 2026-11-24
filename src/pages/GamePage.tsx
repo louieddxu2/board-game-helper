@@ -10,7 +10,6 @@ import { useRuleFilters } from '../hooks/useRuleFilters';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError, supersedeGameRefreshes } from '../lib/api';
 import { writeHomeMode } from '../lib/homeMode';
-import { requestUncertainRuleAdd } from '../lib/siteMode';
 import { localDb } from '../lib/localDb';
 import { applyRuleImportance, updateRuleImportanceCount } from '../lib/ruleImportance';
 import { canUserEditRule } from '../lib/rulePermissions';
@@ -302,7 +301,7 @@ export const GamePage = () => {
       </div>
       <div className="inline-actions game-hero-actions">
         <button type="button" className="button secondary game-resources-button" aria-label={`外部資源${(game.externalResources?.length ?? 0) > 0 ? `，共 ${game.externalResources?.length} 項` : ''}`} onClick={() => setExternalResourcesOpen(true)}>資源</button>
-        {uncertain ? <button type="button" className="button primary game-add-rule-button" onClick={requestUncertainRuleAdd}>＋記錄</button> : user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
+        {user && <Link className="button primary game-add-rule-button" to={addRuleHref}>＋記錄</Link>}
       </div>
     </header>
     {gameError && <div className="game-load-error" role="alert"><p>暫時無法更新，已保留目前內容。</p><button type="button" className="button secondary" onClick={() => void load()}>重新載入</button></div>}

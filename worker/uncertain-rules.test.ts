@@ -19,9 +19,13 @@ const setup = () => {
     const app = new Hono<{ Bindings: RouteEnv; Variables: AppVariables }>();
     app.use('*', async (c, next) => { c.set('database', h.gateway); if (user) c.set('user', user as never); await next(); });
     app.route('/', uncertainRulesRoutes);
-    return (path: string, method = 'GET', body?: unknown) => app.request(`/api/games/${game.id}/uncertain-rules${path}`, {
+    const send = (url: string, method: string, body?: unknown) => app.request(url, {
       method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
     });
+    // Creating goes to /api/uncertain-rules with the game id; reading and changing stay under the game.
+    return (path: string, method = 'GET', body?: unknown) => method === 'POST'
+      ? send('/api/uncertain-rules', method, path === 'new' ? body : { gameId: game.id, ...(body as object) })
+      : send(`/api/games/${game.id}/uncertain-rules${path}`, method, body);
   };
   const admin = as({ id: 'ur-admin', roles: ['admin'] });
   return { h, game, other, as, admin };
@@ -82,4 +86,40 @@ test('merging games keeps the questions, and deleting the account removes them',
   expect(h.sqlite.prepare('SELECT game_id FROM uncertain_rules WHERE id = ?').get('ur-1')).toEqual({ game_id: other.id });
   await deleteAccount(h.gateway, 'ur-admin', false);
   expect(h.sqlite.prepare('SELECT COUNT(*) AS n FROM uncertain_rules').get()).toEqual({ n: 0 });
+});
+
+test('a question carries the same optional settings as a recorded rule', async () => {
+  const { admin } = setup();
+  const created = await (await admin('', 'POST', {
+    question: '平手怎麼算？', details: '終局', categories: ['flow_endgame_scoring'], playerCounts: [4, 2, 2], editionNotes: ['二版'],
+  })).json() as { uncertainRule: { id: string } };
+  expect(created.uncertainRule).toMatchObject({ details: '終局', categories: ['flow_endgame_scoring'], playerCounts: [2, 4], editionNotes: ['二版'] });
+  const cleared = await (await admin(`/${created.uncertainRule.id}`, 'PATCH', { playerCounts: [], details: '' })).json() as { uncertainRule: Record<string, unknown> };
+  expect(cleared.uncertainRule).not.toHaveProperty('playerCounts');
+  expect(cleared.uncertainRule).not.toHaveProperty('details');
+  expect(cleared.uncertainRule).toMatchObject({ categories: ['flow_endgame_scoring'], editionNotes: ['二版'] });
+  expect((await admin('', 'POST', { question: '?', categories: ['rule_errata'] })).status).toBe(400);
+  expect((await admin('', 'POST', { question: '?', playerCounts: [9] })).status).toBe(400);
+});
+
+test('a new game name creates a rule-less public game once, and the same name reuses it', async () => {
+  const { h, admin } = setup();
+  // The database lets only a trusted editor create a game without review.
+  h.sqlite.exec(`INSERT INTO user_roles(user_id, role, granted_by, granted_at, revoked_at) VALUES('ur-admin', 'admin', NULL, 1, NULL)`);
+  const first = await admin('new', 'POST', { newGame: { displayName: '不確定測試遊戲', englishName: 'Uncertain Test Game' }, question: '可以嗎？' });
+  expect(first.status).toBe(201);
+  const created = await first.json() as { uncertainRule: { gameId: string }; gameSlug: string; gameCreated: boolean };
+  expect(created).toMatchObject({ gameSlug: 'uncertain-test-game', gameCreated: true });
+  expect(h.sqlite.prepare('SELECT visibility, published_rule_count FROM games WHERE id = ?').get(created.uncertainRule.gameId))
+    .toEqual({ visibility: 'public', published_rule_count: 0 });
+  const again = await (await admin('new', 'POST', { newGame: { displayName: '不確定測試遊戲' }, question: '那這樣呢？' })).json() as { uncertainRule: { gameId: string }; gameCreated: boolean };
+  expect(again).toMatchObject({ gameCreated: false, uncertainRule: { gameId: created.uncertainRule.gameId } });
+  expect(h.sqlite.prepare("SELECT COUNT(*) AS n FROM games WHERE display_name = '不確定測試遊戲'").get()).toEqual({ n: 1 });
+});
+
+test('creating needs exactly one of a game id or a new game name', async () => {
+  const { admin, game } = setup();
+  expect((await admin('new', 'POST', { question: '?' })).status).toBe(400);
+  expect((await admin('new', 'POST', { gameId: game.id, newGame: { displayName: 'x' }, question: '?' })).status).toBe(400);
+  expect((await admin('new', 'POST', { gameId: 'missing', question: '?' })).status).toBe(404);
 });

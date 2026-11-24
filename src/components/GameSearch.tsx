@@ -13,6 +13,8 @@ interface Props {
   allowCreate?: boolean;
   onCreate?(name: string): void;
   includeGamesWithoutPublishedRules?: boolean;
+  /** The create option's wording around the typed name; defaults to recording the game's first wrong rule. */
+  createLabel?: (name: string) => string;
   placeholder?: string;
   /** Keeps results in flow for a modal; the default keeps the shared floating portal. */
   inlineResults?: boolean;
@@ -74,7 +76,7 @@ export function formatGameSearchDisplay(
   };
 }
 
-export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeGamesWithoutPublishedRules = false, placeholder = '搜尋遊戲名稱...', inlineResults = false, emptyResults, clearable = false }: Props) => {
+export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate, onCreate, includeGamesWithoutPublishedRules = false, createLabel = (name) => `＋ 新增「${name}」的第一條玩錯規則`, placeholder = '搜尋遊戲名稱...', inlineResults = false, emptyResults, clearable = false }: Props) => {
   const inputId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +215,7 @@ export const GameSearch = ({ value, onChange, onSelect, selectedId, allowCreate,
       }}>重試搜尋</button></div>}
       {rawQuery && !visibleLoading && !visibleError && !(isEnglishOnly && rawQuery.length === 1) && !visibleGames.length && <p className="empty-search-message">找不到相符的遊戲</p>}
       {visibleGames.map((game, index) => { const display = formatGameSearchDisplay(game, rawQuery); return <button type="button" id={`${inputId}-option-${index}`} aria-selected={activeIndex === index} key={game.id} onClick={() => onSelect(game)} role="option" tabIndex={-1}><strong>{display.primary}</strong>{display.secondary && <span>({display.secondary})</span>}{includeGamesWithoutPublishedRules && (game.publishedRuleCount ?? game.ruleCount) === 0 && <small>尚無規則</small>}</button>; })}
-      {showCreateOption && <button type="button" id={`${inputId}-option-${visibleGames.length}`} aria-selected={activeIndex === visibleGames.length} role="option" tabIndex={-1} className="create-result" onClick={handleCreate}>＋ 新增「{rawQuery}」的第一條玩錯規則</button>}
+      {showCreateOption && <button type="button" id={`${inputId}-option-${visibleGames.length}`} aria-selected={activeIndex === visibleGames.length} role="option" tabIndex={-1} className="create-result" onClick={handleCreate}>{createLabel(rawQuery)}</button>}
     </>}
   </div>;
   return <div className={`game-search${inlineResults ? ' game-search-inline' : ''}`} ref={containerRef}>

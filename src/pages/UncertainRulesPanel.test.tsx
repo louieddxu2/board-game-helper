@@ -1,9 +1,8 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { GameDetail, UncertainRule } from '../shared/types';
-import { requestUncertainRuleAdd } from '../lib/siteMode';
 import { UncertainRulesPanel } from './UncertainRulesPanel';
 
 const mocks = vi.hoisted(() => ({
@@ -57,25 +56,22 @@ test('marking a question looked up shows the returned date', async () => {
   expect(await within(item('平手怎麼算？')).findByText('已查過，沒有・2026-11-24')).toBeInTheDocument();
 });
 
-test('the add request from the header or hero opens the editor for a new question', async () => {
+test('editing a question saves every setting it carries', async () => {
   const user = userEvent.setup();
-  mocks.create.mockResolvedValue({ uncertainRule: { ...rule('c', '可以棄牌嗎？', null), tableRuling: '可以' } });
+  mocks.update.mockResolvedValue({ uncertainRule: { ...rule('b', '平手怎麼算？', null), playerCounts: [2], details: '兩人局' } });
   renderDialog();
   await screen.findByText('平手怎麼算？');
-  act(() => requestUncertainRuleAdd());
-  const question = screen.getByLabelText('問題');
+  await user.click(within(item('平手怎麼算？')).getByRole('button', { name: '編輯' }));
+  const question = screen.getByLabelText(/不確定的問題/);
   expect(question).toHaveFocus();
-  await user.type(question, '可以棄牌嗎？');
-  await user.type(screen.getByLabelText(/我們這桌先這樣玩/), '可以');
+  await user.type(screen.getByLabelText('補充說明'), '兩人局');
   await user.click(screen.getByRole('button', { name: '儲存' }));
-  expect(mocks.create).toHaveBeenCalledWith('g1', { question: '可以棄牌嗎？', tableRuling: '可以', checked: false });
-  expect(await screen.findByText('先這樣玩：可以')).toBeInTheDocument();
+  expect(mocks.update).toHaveBeenCalledWith('g1', 'b', { question: '平手怎麼算？', tableRuling: '', details: '兩人局', categories: [], playerCounts: [], editionNotes: [] });
+  expect(await screen.findByText('2 人')).toBeInTheDocument();
 });
 
 test('an empty list offers to note the first question', async () => {
-  const user = userEvent.setup();
   mocks.list.mockResolvedValue({ uncertainRules: [] });
   renderDialog();
-  await user.click(await screen.findByRole('button', { name: '記下第一題' }));
-  expect(screen.getByRole('dialog', { name: '記下不確定的規則' })).toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: '記下第一題' })).toHaveAttribute('href', '/add?game=bean');
 });
