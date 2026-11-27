@@ -8,14 +8,14 @@ const { uncertainRulesApi } = await import('./uncertainRulesApi');
 beforeEach(() => { mocks.mutation.mockReset(); mocks.invalidateGameCatalogSync.mockReset().mockResolvedValue(undefined); });
 
 test('a newly created game makes the next search sync the game list', async () => {
-  mocks.mutation.mockResolvedValue({ uncertainRule: {}, gameSlug: 'new', gameCreated: true });
-  await uncertainRulesApi.create({ newGame: { displayName: '新' } }, { question: '?' });
-  expect(mocks.mutation).toHaveBeenCalledWith('/api/uncertain-rules', { method: 'POST', body: JSON.stringify({ newGame: { displayName: '新' }, question: '?' }) });
+  mocks.mutation.mockResolvedValue({ uncertainRules: [{}], gameSlug: 'new', gameCreated: true });
+  await uncertainRulesApi.create({ newGame: { displayName: '新' } }, [{ question: '?' }, { question: '!' }]);
+  expect(mocks.mutation).toHaveBeenCalledWith('/api/uncertain-rules', { method: 'POST', body: JSON.stringify({ newGame: { displayName: '新' }, rules: [{ question: '?' }, { question: '!' }] }) });
   expect(mocks.invalidateGameCatalogSync).toHaveBeenCalledTimes(1);
 });
 
 test('an existing game leaves the game list cache alone', async () => {
-  mocks.mutation.mockResolvedValue({ uncertainRule: {}, gameSlug: 'old', gameCreated: false });
-  await uncertainRulesApi.create({ gameId: 'g1' }, { question: '?' });
+  mocks.mutation.mockResolvedValue({ uncertainRules: [{}], gameSlug: 'old', gameCreated: false });
+  await uncertainRulesApi.create({ gameId: 'g1' }, [{ question: '?' }]);
   expect(mocks.invalidateGameCatalogSync).not.toHaveBeenCalled();
 });

@@ -21,9 +21,9 @@
 .uncertain-rule-actions .text-action { color: var(--green); }
 .uncertain-rule-pick small.uncertain-rule-settings { color: var(--green); }
 .uncertain-rule-editor { width: min(620px, 100%); max-height: calc(100dvh - 32px); overflow: auto; }
-.uncertain-add-page .uncertain-rule-fields { margin-bottom: 12px; }
-/* The rule page bleeds these tracks under its number and remove columns; the uncertain fields have neither. */
-.uncertain-rule-fields.rule-input-fields > .rule-category-input,
-.uncertain-rule-fields.rule-input-fields > .player-count-input { margin-left: 0; margin-right: 0; }
-.uncertain-rule-fields.rule-input-fields > .rule-category-input legend,
-.uncertain-rule-fields.rule-input-fields > .player-count-input legend { padding-left: 0; }
+/* The record page bleeds these tracks under its number and remove columns; the edit dialog has neither. */
+.uncertain-rule-editor .uncertain-rule-fields.rule-input-fields > .rule-category-input,
+.uncertain-rule-editor .uncertain-rule-fields.rule-input-fields > .player-count-input { margin-left: 0; margin-right: 0; }
+.uncertain-rule-editor .uncertain-rule-fields.rule-input-fields > .rule-category-input legend,
+.uncertain-rule-editor .uncertain-rule-fields.rule-input-fields > .player-count-input legend { padding-left: 0; }
+.uncertain-entry-fields { display: grid; gap: 4px; min-width: 0; }

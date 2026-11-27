@@ -12,6 +12,10 @@ import { sitePageTitle } from '../lib/gameSeo';
 import { uncertainRulesApi } from '../lib/uncertainRulesApi';
 import type { GameDetail, GameSummary } from '../shared/types';
 
+interface UncertainEntry { id: string; draft: UncertainRuleDraft; checked: boolean }
+let entrySequence = 0;
+const blankEntry = (): UncertainEntry => ({ id: `uncertain-entry-${entrySequence += 1}`, draft: EMPTY_UNCERTAIN_RULE_DRAFT, checked: false });
+
 /** 記錄不確定的規則: the uncertain mode's record page, laid out like the page for a wrong rule. */
 export const UncertainAddPage = () => {
   usePageTitle(sitePageTitle('記錄不確定的規則'));
@@ -23,8 +27,10 @@ export const UncertainAddPage = () => {
   const [gameQuery, setGameQuery] = useState(searchParams.get('name') ?? '');
   const [englishName, setEnglishName] = useState('');
   const [detail, setDetail] = useState<GameDetail>();
-  const [draft, setDraft] = useState<UncertainRuleDraft>(EMPTY_UNCERTAIN_RULE_DRAFT);
-  const [checked, setChecked] = useState(false);
+  const [entries, setEntries] = useState<UncertainEntry[]>(() => [blankEntry()]);
+  const [activeId, setActiveId] = useState(() => entries[0].id);
+  // Only an entry the admin just opened or added takes focus; the page itself opens without a keyboard.
+  const [focusId, setFocusId] = useState<string>();
   const [saving, setSaving] = useState(false);
 
   const selectGame = (selected: GameSummary) => {
@@ -32,7 +38,7 @@ export const UncertainAddPage = () => {
     setGame(baseGame);
     setGameQuery(baseGame.displayName);
     // Searching an expansion selects its base game; keep the expansion as the edition.
-    if (matchedVariantName) setDraft((current) => current.editionNotes.length ? current : { ...current, editionNotes: [matchedVariantName] });
+    if (matchedVariantName) setEntries((current) => current.map((entry) => entry.draft.editionNotes.length ? entry : { ...entry, draft: { ...entry.draft, editionNotes: [matchedVariantName] } }));
   };
 
   useEffect(() => {
@@ -52,9 +58,24 @@ export const UncertainAddPage = () => {
   }, [game?.id]);
   const editionOptions = useMemo(() => collectEditionOptions(detail?.rules ?? []), [detail]);
 
+  const validEntries = entries.filter((entry) => entry.draft.question.trim());
+  const setEntry = (id: string, patch: Partial<UncertainEntry>) => setEntries((current) => current.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
+  const open = (id: string) => { setActiveId(id); setFocusId(id); };
+  const addEntry = () => {
+    const next = blankEntry();
+    setEntries((current) => [...current, next]);
+    open(next.id);
+  };
+  const removeEntry = (id: string) => {
+    const remaining = entries.filter((entry) => entry.id !== id);
+    const next = remaining.length ? remaining : [blankEntry()];
+    setEntries(next);
+    if (activeId === id) setActiveId(next[0].id);
+  };
+
   const save = async () => {
     const typed = gameQuery.trim();
-    if (!draft.question.trim() || (!game && !typed)) return;
+    if (!validEntries.length || (!game && !typed)) return;
     let target = game;
     if (!target) {
       // A typed catalog name selects that game; only a name the catalog lacks creates a new game.
@@ -67,9 +88,10 @@ export const UncertainAddPage = () => {
     try {
       const response = await uncertainRulesApi.create(
         target ? { gameId: target.id } : { newGame: { displayName: typed, ...(englishName.trim() ? { englishName: englishName.trim() } : {}) } },
-        { ...uncertainRuleInput(draft), checked },
+        validEntries.map((entry) => ({ ...uncertainRuleInput(entry.draft), checked: entry.checked })),
       );
-      showToast(response.gameCreated ? '已建立遊戲並記下不確定的規則' : '已記下不確定的規則');
+      const count = response.uncertainRules.length;
+      showToast(response.gameCreated ? `已建立遊戲並記下 ${count} 題不確定的規則` : `已記下 ${count} 題不確定的規則`);
       navigate(`/games/${encodeURIComponent(response.gameSlug)}`);
     } catch { showToast('儲存失敗，請稍後再試。', 'error'); }
     finally { setSaving(false); }
@@ -86,13 +108,21 @@ export const UncertainAddPage = () => {
         : gameQuery.trim() && <label>英文名稱（新遊戲可填）<input value={englishName} onChange={(event) => setEnglishName(event.target.value)} /></label>}
     </div>
     <div className="rule-input-list">
-      <UncertainRuleFields value={draft} onChange={setDraft} editionOptions={editionOptions} variants={detail?.variants ?? []} />
-      <label className="checkbox-row"><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />已查過，沒找到答案</label>
+      <div className="list-heading"><h2>這次不確定的規則</h2><span>{validEntries.length} 題</span></div>
+      {entries.map((entry, index) => <div className={`rule-input ${entry.id === activeId ? 'active' : 'collapsed'}`} key={entry.id}>
+        <span className="rule-number">{index + 1}</span>
+        {entry.id === activeId ? <div className="uncertain-entry-fields">
+          <UncertainRuleFields value={entry.draft} onChange={(draft) => setEntry(entry.id, { draft })} editionOptions={editionOptions} variants={detail?.variants ?? []} autoFocus={entry.id === focusId} />
+          <label className="checkbox-row"><input type="checkbox" checked={entry.checked} onChange={(event) => setEntry(entry.id, { checked: event.target.checked })} />已查過，沒找到答案</label>
+        </div> : <button type="button" className="rule-input-summary" onClick={() => open(entry.id)}>{entry.draft.question.trim() || '新增不確定的問題'}</button>}
+        <button type="button" className="remove-button" onClick={() => removeEntry(entry.id)} aria-label={`移除第 ${index + 1} 題`}>×</button>
+      </div>)}
+      <button type="button" className="add-row-button" onClick={addEntry}>＋新增一題</button>
     </div>
     <div className="sticky-submit">
       <button type="button" className="button secondary mobile-cancel-btn" onClick={() => navigate(-1)}>取消</button>
       <p className="submit-info-text">只有管理員看得到不確定的規則。</p>
-      <button className="button primary save-button" type="button" disabled={saving || !draft.question.trim() || (!game && !gameQuery.trim())} onClick={() => void save()}>{saving ? '儲存中…' : '儲存'}</button>
+      <button className="button primary save-button" type="button" disabled={saving || !validEntries.length || (!game && !gameQuery.trim())} onClick={() => void save()}>{saving ? '儲存中…' : `儲存 ${validEntries.length} 題`}</button>
     </div>
   </section>;
 };

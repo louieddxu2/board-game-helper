@@ -31,29 +31,29 @@ afterEach(cleanup);
 
 test('from a game page it records the question under that game with its settings', async () => {
   const user = userEvent.setup();
-  mocks.create.mockResolvedValue({ uncertainRule: {}, gameSlug: 'seize-the-bean', gameCreated: false });
+  mocks.create.mockResolvedValue({ uncertainRules: [{}], gameSlug: 'seize-the-bean', gameCreated: false });
   renderPage('/add?game=seize-the-bean');
   expect(await screen.findByDisplayValue('柏林咖啡館')).toBeInTheDocument();
   await user.type(screen.getByLabelText(/不確定的問題/), '平手怎麼算？');
   await user.type(screen.getByLabelText('我們這桌先這樣玩'), '平分');
   await user.click(screen.getByRole('checkbox', { name: '已查過，沒找到答案' }));
-  await user.click(screen.getByRole('button', { name: '儲存' }));
-  expect(mocks.create).toHaveBeenCalledWith({ gameId: 'g1' }, {
+  await user.click(screen.getByRole('button', { name: '儲存 1 題' }));
+  expect(mocks.create).toHaveBeenCalledWith({ gameId: 'g1' }, [{
     question: '平手怎麼算？', tableRuling: '平分', details: '', categories: [], playerCounts: [], editionNotes: [], checked: true,
-  });
+  }]);
   await waitFor(() => expect(path).toBe('/games/seize-the-bean'));
 });
 
 test('a name the catalog lacks becomes a new game after confirmation', async () => {
   const user = userEvent.setup();
-  mocks.create.mockResolvedValue({ uncertainRule: {}, gameSlug: 'new-game', gameCreated: true });
+  mocks.create.mockResolvedValue({ uncertainRules: [{}], gameSlug: 'new-game', gameCreated: true });
   renderPage('/add');
   await user.type(screen.getByLabelText('搜尋遊戲'), '新遊戲');
   await user.type(screen.getByLabelText(/英文名稱/), 'New Game');
   await user.type(screen.getByLabelText(/不確定的問題/), '可以嗎？');
-  await user.click(screen.getByRole('button', { name: '儲存' }));
+  await user.click(screen.getByRole('button', { name: '儲存 1 題' }));
   expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: '建立新遊戲？' }));
-  expect(mocks.create).toHaveBeenCalledWith({ newGame: { displayName: '新遊戲', englishName: 'New Game' } }, expect.objectContaining({ question: '可以嗎？', checked: false }));
+  expect(mocks.create).toHaveBeenCalledWith({ newGame: { displayName: '新遊戲', englishName: 'New Game' } }, [expect.objectContaining({ question: '可以嗎？', checked: false })]);
   await waitFor(() => expect(path).toBe('/games/new-game'));
 });
 
@@ -63,8 +63,43 @@ test('a typed name the catalog has selects that game instead of creating one', a
   renderPage('/add');
   await user.type(screen.getByLabelText('搜尋遊戲'), '柏林咖啡館');
   await user.type(screen.getByLabelText(/不確定的問題/), '可以嗎？');
-  await user.click(screen.getByRole('button', { name: '儲存' }));
+  await user.click(screen.getByRole('button', { name: '儲存 1 題' }));
   expect(mocks.create).not.toHaveBeenCalled();
   expect(mocks.confirm).not.toHaveBeenCalled();
   expect(await screen.findByDisplayValue('柏林咖啡館')).toHaveAttribute('readonly');
+});
+
+test('one record holds several questions, like recording several wrong rules', async () => {
+  const user = userEvent.setup();
+  mocks.create.mockResolvedValue({ uncertainRules: [{}, {}], gameSlug: 'seize-the-bean', gameCreated: false });
+  renderPage('/add?game=seize-the-bean');
+  await screen.findByDisplayValue('柏林咖啡館');
+  expect(screen.getByLabelText(/不確定的問題/)).not.toHaveFocus();
+  await user.type(screen.getByLabelText(/不確定的問題/), '第一題');
+  await user.click(screen.getByRole('button', { name: '＋新增一題' }));
+  // The first question folds into its summary and the new one is ready to type.
+  expect(screen.getByRole('button', { name: '第一題' })).toBeInTheDocument();
+  expect(screen.getByLabelText(/不確定的問題/)).toHaveFocus();
+  await user.keyboard('第二題');
+  await user.click(screen.getByRole('checkbox', { name: '已查過，沒找到答案' }));
+  await user.click(screen.getByRole('button', { name: '＋新增一題' }));
+  await user.click(screen.getByRole('button', { name: '移除第 3 題' }));
+  expect(screen.getByText('2 題')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '儲存 2 題' }));
+  expect(mocks.create).toHaveBeenCalledWith({ gameId: 'g1' }, [
+    expect.objectContaining({ question: '第一題', checked: false }),
+    expect.objectContaining({ question: '第二題', checked: true }),
+  ]);
+});
+
+test('reopening a folded question shows its fields again', async () => {
+  const user = userEvent.setup();
+  renderPage('/add?game=seize-the-bean');
+  await screen.findByDisplayValue('柏林咖啡館');
+  await user.type(screen.getByLabelText(/不確定的問題/), '第一題');
+  await user.click(screen.getByRole('button', { name: '＋新增一題' }));
+  await user.click(screen.getByRole('button', { name: '第一題' }));
+  expect(screen.getByLabelText(/不確定的問題/)).toHaveValue('第一題');
+  expect(screen.getByLabelText(/不確定的問題/)).toHaveFocus();
+  expect(screen.getByRole('button', { name: '新增不確定的問題' })).toBeInTheDocument();
 });

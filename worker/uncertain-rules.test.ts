@@ -22,10 +22,20 @@ const setup = () => {
     const send = (url: string, method: string, body?: unknown) => app.request(url, {
       method, ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
     });
-    // Creating goes to /api/uncertain-rules with the game id; reading and changing stay under the game.
-    return (path: string, method = 'GET', body?: unknown) => method === 'POST'
-      ? send('/api/uncertain-rules', method, path === 'new' ? body : { gameId: game.id, ...(body as object) })
+    // Creating sends one question as a one-item record to /api/uncertain-rules, under this game unless
+    // the path is 'new'; the reply also carries that question as `uncertainRule` to keep the checks short.
+    const createOne = async (path: string, body: Record<string, unknown>) => {
+      const { gameId, newGame, ...rule } = body;
+      const target = path === 'new' ? { ...(gameId ? { gameId } : {}), ...(newGame ? { newGame } : {}) } : { gameId: game.id };
+      const response = await send('/api/uncertain-rules', 'POST', { ...target, rules: [rule] });
+      if (!response.ok) return response;
+      const payload = await response.json() as { uncertainRules: unknown[] };
+      return new Response(JSON.stringify({ ...payload, uncertainRule: payload.uncertainRules[0] }), { status: response.status });
+    };
+    const request = (path: string, method = 'GET', body?: unknown) => method === 'POST'
+      ? createOne(path, body as Record<string, unknown>)
       : send(`/api/games/${game.id}/uncertain-rules${path}`, method, body);
+    return Object.assign(request, { record: (body: unknown) => send('/api/uncertain-rules', 'POST', body) });
   };
   const admin = as({ id: 'ur-admin', roles: ['admin'] });
   return { h, game, other, as, admin };
@@ -122,4 +132,19 @@ test('creating needs exactly one of a game id or a new game name', async () => {
   expect((await admin('new', 'POST', { question: '?' })).status).toBe(400);
   expect((await admin('new', 'POST', { gameId: game.id, newGame: { displayName: 'x' }, question: '?' })).status).toBe(400);
   expect((await admin('new', 'POST', { gameId: 'missing', question: '?' })).status).toBe(404);
+});
+
+test('one record saves several questions for the game, in order, or none at all', async () => {
+  const { admin, game, h } = setup();
+  const saved = await admin.record({ gameId: game.id, rules: [{ question: '第一題' }, { question: '第二題', checked: true }, { question: '第三題' }] });
+  expect(saved.status).toBe(201);
+  const { uncertainRules } = await saved.json() as { uncertainRules: Array<{ question: string; checkedAt: number | null }> };
+  expect(uncertainRules.map((rule) => [rule.question, rule.checkedAt === null])).toEqual([['第一題', true], ['第二題', false], ['第三題', true]]);
+  const listed = await (await admin('')).json() as { uncertainRules: Array<{ question: string }> };
+  expect(listed.uncertainRules.map((rule) => rule.question)).toEqual(['第一題', '第二題', '第三題']);
+  // One invalid question refuses the whole record.
+  expect((await admin.record({ gameId: game.id, rules: [{ question: '好的' }, { question: ' ' }] })).status).toBe(400);
+  expect((await admin.record({ gameId: game.id, rules: [] })).status).toBe(400);
+  expect((await admin.record({ gameId: game.id, rules: Array.from({ length: 21 }, (_, index) => ({ question: `第${index}題` })) })).status).toBe(400);
+  expect(h.sqlite.prepare('SELECT COUNT(*) AS n FROM uncertain_rules').get()).toEqual({ n: 3 });
 });

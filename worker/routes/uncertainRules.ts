@@ -59,9 +59,7 @@ const fields = {
   editionNotes: z.array(z.string().trim().min(1).max(300)).max(20),
   checked: z.boolean(),
 };
-const createSchema = z.object({
-  gameId: z.string().min(1).optional(),
-  newGame: z.object({ displayName: z.string().trim().min(1).max(120), englishName: z.string().trim().max(120).optional() }).optional(),
+const newRuleSchema = z.object({
   question: fields.question,
   tableRuling: fields.tableRuling.optional(),
   details: fields.details.optional(),
@@ -69,6 +67,12 @@ const createSchema = z.object({
   playerCounts: fields.playerCounts.optional(),
   editionNotes: fields.editionNotes.optional(),
   checked: fields.checked.optional(),
+});
+// One record holds several questions for one game, like a recorded batch of wrong rules.
+const createSchema = z.object({
+  gameId: z.string().min(1).optional(),
+  newGame: z.object({ displayName: z.string().trim().min(1).max(120), englishName: z.string().trim().max(120).optional() }).optional(),
+  rules: z.array(newRuleSchema).min(1).max(20),
 }).refine((value) => Boolean(value.gameId) !== Boolean(value.newGame), 'game_or_new_game');
 // `checked: true` records a fresh lookup (today's date) even when one was already recorded.
 const updateSchema = z.object({
@@ -106,25 +110,26 @@ uncertainRulesRoutes.post('/api/uncertain-rules', requireRole('admin'), async (c
     : null;
   if (input.gameId && !target) return c.json({ error: 'game_not_found' }, 404);
   const resolved = target ? { game: target, statements: [], created: false } : await findOrCreateGameByName(db, input.newGame!, user, timestamp);
-  const row: UncertainRuleRow = {
+  const rows: UncertainRuleRow[] = input.rules.map((rule, index) => ({
     id: createId('uncertain'),
     game_id: resolved.game.id,
-    question: input.question,
-    table_ruling: input.tableRuling || null,
-    details: input.details || null,
-    categories_json: listJson(input.categories && Array.from(new Set(input.categories))),
-    player_counts_json: listJson(uniqueSorted(input.playerCounts)),
-    edition_notes_json: listJson(input.editionNotes && Array.from(new Set(input.editionNotes))),
-    checked_at: input.checked ? timestamp : null,
-    created_at: timestamp,
-    updated_at: timestamp,
-  };
+    question: rule.question,
+    table_ruling: rule.tableRuling || null,
+    details: rule.details || null,
+    categories_json: listJson(rule.categories && Array.from(new Set(rule.categories))),
+    player_counts_json: listJson(uniqueSorted(rule.playerCounts)),
+    edition_notes_json: listJson(rule.editionNotes && Array.from(new Set(rule.editionNotes))),
+    checked_at: rule.checked ? timestamp : null,
+    // Distinct times keep the record's order, since a game's list is ordered by creation.
+    created_at: timestamp + index,
+    updated_at: timestamp + index,
+  }));
   await getDatabase(c).batch([
     ...resolved.statements,
-    db.statement(`INSERT INTO uncertain_rules (${COLUMNS}, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(row.id, row.game_id, row.question, row.table_ruling, row.details, row.categories_json, row.player_counts_json, row.edition_notes_json, row.checked_at, row.created_at, row.updated_at, user.id),
+    ...rows.map((row) => db.statement(`INSERT INTO uncertain_rules (${COLUMNS}, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(row.id, row.game_id, row.question, row.table_ruling, row.details, row.categories_json, row.player_counts_json, row.edition_notes_json, row.checked_at, row.created_at, row.updated_at, user.id)),
   ]);
-  return c.json({ uncertainRule: toUncertainRule(row), gameSlug: resolved.game.slug, gameCreated: resolved.created }, 201);
+  return c.json({ uncertainRules: rows.map(toUncertainRule), gameSlug: resolved.game.slug, gameCreated: resolved.created }, 201);
 });
 
 uncertainRulesRoutes.patch('/api/games/:id/uncertain-rules/:ruleId', requireRole('admin'), async (c) => {

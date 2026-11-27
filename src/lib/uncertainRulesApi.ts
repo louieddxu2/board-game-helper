@@ -18,9 +18,9 @@ const path = (gameId: string, ruleId?: string) =>
 
 export const uncertainRulesApi = {
   list: (gameId: string) => uncachedRead<{ uncertainRules: UncertainRule[] }>(path(gameId), 'uncertain rules are an admin-only working list that is read only when opened'),
-  /** Names an existing game by id, or a new one by name; the server reuses a game that already has that name. */
-  create: async (target: GameTarget, input: UncertainRuleInput & { question: string }) => {
-    const response = await mutation<{ uncertainRule: UncertainRule; gameSlug: string; gameCreated: boolean }>('/api/uncertain-rules', { method: 'POST', body: JSON.stringify({ ...target, ...input }) });
+  /** Records several questions for one game: an existing one by id, or a new one by name (the server reuses a game that already has that name). */
+  create: async (target: GameTarget, rules: Array<UncertainRuleInput & { question: string }>) => {
+    const response = await mutation<{ uncertainRules: UncertainRule[]; gameSlug: string; gameCreated: boolean }>('/api/uncertain-rules', { method: 'POST', body: JSON.stringify({ ...target, rules }) });
     // The game list syncs on its own every ten minutes; a game created just now must be searchable at once.
     if (response.gameCreated) await localDb.invalidateGameCatalogSync().catch(() => undefined);
     return response;
