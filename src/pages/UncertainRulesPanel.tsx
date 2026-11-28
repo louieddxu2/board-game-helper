@@ -14,7 +14,7 @@ const formatDate = (timestamp: number) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
-export const checkStatusLabel = (rule: UncertainRule) => rule.checkedAt === null ? '沒查過' : `已查過，沒有・${formatDate(rule.checkedAt)}`;
+export const checkStatusLabel = (rule: UncertainRule) => rule.checkedAt === null ? '沒查過BGG' : `已查過BGG無答案・${formatDate(rule.checkedAt)}`;
 
 /** The optional settings in one line, as a recorded rule's card shows them. */
 const settingsLabel = (rule: UncertainRule) => [
@@ -93,8 +93,8 @@ export const UncertainRulesPanel = ({ game }: { game: GameDetail }) => {
           </span>
         </label>
         <div className="uncertain-rule-actions">
-          <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, true)}>{rule.checkedAt === null ? '查過了，沒有' : '重新查過'}</button>
-          {rule.checkedAt !== null && <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, false)}>改回沒查過</button>}
+          <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, true)}>{rule.checkedAt === null ? '已查過BGG無答案' : '重新查過BGG'}</button>
+          {rule.checkedAt !== null && <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => void setChecked(rule, false)}>改回沒查過BGG</button>}
           <button type="button" className="text-action" disabled={busyId === rule.id} onClick={() => setEditing(rule)}>編輯</button>
           <button type="button" className="danger-link" disabled={busyId === rule.id} onClick={() => void remove(rule)}>刪除</button>
         </div>

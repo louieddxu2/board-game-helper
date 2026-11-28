@@ -26,8 +26,8 @@ const item = (question: string) => screen.getByText(question).closest('.uncertai
 
 test('shows whether each question was looked up, with the date', async () => {
   renderDialog();
-  expect(await screen.findByText('已查過，沒有・2026-11-20')).toBeInTheDocument();
-  expect(within(item('平手怎麼算？')).getByText('沒查過')).toBeInTheDocument();
+  expect(await screen.findByText('已查過BGG無答案・2026-11-20')).toBeInTheDocument();
+  expect(within(item('平手怎麼算？')).getByText('沒查過BGG')).toBeInTheDocument();
 });
 
 test('copies only the selected questions as one post, plain or for AI', async () => {
@@ -51,9 +51,9 @@ test('marking a question looked up shows the returned date', async () => {
   mocks.update.mockResolvedValue({ uncertainRule: rule('b', '平手怎麼算？', new Date(2026, 10, 24).getTime()) });
   renderDialog();
   await screen.findByText('平手怎麼算？');
-  await user.click(within(item('平手怎麼算？')).getByRole('button', { name: '查過了，沒有' }));
+  await user.click(within(item('平手怎麼算？')).getByRole('button', { name: '已查過BGG無答案' }));
   expect(mocks.update).toHaveBeenCalledWith('g1', 'b', { checked: true });
-  expect(await within(item('平手怎麼算？')).findByText('已查過，沒有・2026-11-24')).toBeInTheDocument();
+  expect(await within(item('平手怎麼算？')).findByText('已查過BGG無答案・2026-11-24')).toBeInTheDocument();
 });
 
 test('editing a question saves every setting it carries', async () => {

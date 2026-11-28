@@ -12,7 +12,7 @@ test('several questions become one numbered post under the English name', () => 
     'Title: Rules questions about Seize the Bean',
     '',
     'Hi all, we ran into these rules questions while playing Seize the Bean.',
-    'We checked the rulebook and the forums but could not find an answer.',
+    'We searched BGG but could not find an answer.',
     '',
     'Q1. 能啟動兩次嗎？',
     'How we played it for now: 不行',
@@ -27,7 +27,7 @@ test('a single question is unnumbered and claims no search when it was not looke
   const post = buildUncertainRulePost({ displayName: '柏林咖啡館' }, [rule('平手怎麼算？', { checkedAt: null })]);
   expect(post).toContain('Title: Rules question about 柏林咖啡館');
   expect(post).toContain('\nQ. 平手怎麼算？');
-  expect(post).not.toContain('We checked');
+  expect(post).not.toContain('We searched');
 });
 
 test('the AI copy leads the same post with a translation instruction', () => {

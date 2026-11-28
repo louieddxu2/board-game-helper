@@ -12,13 +12,13 @@ export interface UncertainRulePostGame {
 export function buildUncertainRulePost(game: UncertainRulePostGame, rules: UncertainRule[]) {
   const name = game.englishName?.trim() || game.displayName.trim();
   const plural = rules.length > 1;
-  // Claim a search only when every selected question was looked up without finding an answer.
+  // Claim a BGG search only when every selected question was looked up there without an answer.
   const allChecked = rules.every((rule) => rule.checkedAt !== null);
   const lines = [
     `Title: Rules question${plural ? 's' : ''} about ${name}`,
     '',
     `Hi all, we ran into ${plural ? 'these rules questions' : 'this rules question'} while playing ${name}.`,
-    ...(allChecked ? ['We checked the rulebook and the forums but could not find an answer.'] : []),
+    ...(allChecked ? ['We searched BGG but could not find an answer.'] : []),
   ];
   rules.forEach((rule, index) => {
     lines.push('', `${plural ? `Q${index + 1}. ` : 'Q. '}${rule.question.trim()}`);

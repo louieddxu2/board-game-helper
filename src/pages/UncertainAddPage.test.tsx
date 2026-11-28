@@ -36,7 +36,7 @@ test('from a game page it records the question under that game with its settings
   expect(await screen.findByDisplayValue('柏林咖啡館')).toBeInTheDocument();
   await user.type(screen.getByLabelText(/不確定的問題/), '平手怎麼算？');
   await user.type(screen.getByLabelText('我們這桌先這樣玩'), '平分');
-  await user.click(screen.getByRole('checkbox', { name: '已查過，沒找到答案' }));
+  await user.click(screen.getByRole('checkbox', { name: '已查過BGG無答案' }));
   await user.click(screen.getByRole('button', { name: '儲存 1 題' }));
   expect(mocks.create).toHaveBeenCalledWith({ gameId: 'g1' }, [{
     question: '平手怎麼算？', tableRuling: '平分', details: '', categories: [], playerCounts: [], editionNotes: [], checked: true,
@@ -81,7 +81,7 @@ test('one record holds several questions, like recording several wrong rules', a
   expect(screen.getByRole('button', { name: '第一題' })).toBeInTheDocument();
   expect(screen.getByLabelText(/不確定的問題/)).toHaveFocus();
   await user.keyboard('第二題');
-  await user.click(screen.getByRole('checkbox', { name: '已查過，沒找到答案' }));
+  await user.click(screen.getByRole('checkbox', { name: '已查過BGG無答案' }));
   await user.click(screen.getByRole('button', { name: '＋新增一題' }));
   await user.click(screen.getByRole('button', { name: '移除第 3 題' }));
   expect(screen.getByText('2 題')).toBeInTheDocument();

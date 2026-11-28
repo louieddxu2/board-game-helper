@@ -113,7 +113,7 @@ export const UncertainAddPage = () => {
         <span className="rule-number">{index + 1}</span>
         {entry.id === activeId ? <div className="uncertain-entry-fields">
           <UncertainRuleFields value={entry.draft} onChange={(draft) => setEntry(entry.id, { draft })} editionOptions={editionOptions} variants={detail?.variants ?? []} autoFocus={entry.id === focusId} />
-          <label className="checkbox-row"><input type="checkbox" checked={entry.checked} onChange={(event) => setEntry(entry.id, { checked: event.target.checked })} />已查過，沒找到答案</label>
+          <label className="checkbox-row"><input type="checkbox" checked={entry.checked} onChange={(event) => setEntry(entry.id, { checked: event.target.checked })} />已查過BGG無答案</label>
         </div> : <button type="button" className="rule-input-summary" onClick={() => open(entry.id)}>{entry.draft.question.trim() || '新增不確定的問題'}</button>}
         <button type="button" className="remove-button" onClick={() => removeEntry(entry.id)} aria-label={`移除第 ${index + 1} 題`}>×</button>
       </div>)}

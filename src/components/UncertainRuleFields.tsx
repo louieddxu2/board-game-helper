@@ -34,7 +34,7 @@ export const UncertainRuleFields = ({ value, onChange, editionOptions, variants,
 }) => {
   const set = (patch: Partial<UncertainRuleDraft>) => onChange({ ...value, ...patch });
   return <div className="rule-input-fields uncertain-rule-fields">
-    <label>不確定的問題 *<textarea autoFocus={autoFocus} rows={3} maxLength={2000} value={value.question} onChange={(event) => set({ question: event.target.value })} placeholder="例如：急速運輸能不能啟動同一張牌兩次？" /></label>
+    <label>不確定的問題 *<textarea autoFocus={autoFocus} rows={3} maxLength={2000} value={value.question} onChange={(event) => set({ question: event.target.value })} /></label>
     <label>我們這桌先這樣玩<textarea rows={2} maxLength={2000} value={value.tableRuling} onChange={(event) => set({ tableRuling: event.target.value })} /></label>
     <label>補充說明<textarea rows={2} maxLength={5000} value={value.details} onChange={(event) => set({ details: event.target.value })} /></label>
     <RuleCategoryInput value={value.categories} onChange={(categories) => set({ categories })} />
