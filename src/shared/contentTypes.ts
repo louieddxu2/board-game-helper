@@ -114,6 +114,18 @@ export interface UncertainRule {
   updatedAt: number;
 }
 
+/** One game's uncertain rules, counted for the game list (admin-only). */
+export interface UncertainGameSummary {
+  gameId: string;
+  slug: string;
+  displayName: string;
+  englishName: string | null;
+  uncertainCount: number;
+  /** Those not yet looked up on BGG. */
+  uncheckedCount: number;
+  latestUpdatedAt: number;
+}
+
 export interface GameExternalResource {
   id: string;
   gameId: string;

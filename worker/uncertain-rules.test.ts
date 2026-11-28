@@ -35,7 +35,7 @@ const setup = () => {
     const request = (path: string, method = 'GET', body?: unknown) => method === 'POST'
       ? createOne(path, body as Record<string, unknown>)
       : send(`/api/games/${game.id}/uncertain-rules${path}`, method, body);
-    return Object.assign(request, { record: (body: unknown) => send('/api/uncertain-rules', 'POST', body) });
+    return Object.assign(request, { record: (body: unknown) => send('/api/uncertain-rules', 'POST', body), summary: () => send('/api/uncertain-rules/summary', 'GET') });
   };
   const admin = as({ id: 'ur-admin', roles: ['admin'] });
   return { h, game, other, as, admin };
@@ -147,4 +147,15 @@ test('one record saves several questions for the game, in order, or none at all'
   expect((await admin.record({ gameId: game.id, rules: [] })).status).toBe(400);
   expect((await admin.record({ gameId: game.id, rules: Array.from({ length: 21 }, (_, index) => ({ question: `第${index}題` })) })).status).toBe(400);
   expect(h.sqlite.prepare('SELECT COUNT(*) AS n FROM uncertain_rules').get()).toEqual({ n: 3 });
+});
+
+test('the game list counts each game’s uncertain rules for admins only', async () => {
+  const { admin, as, game, other } = setup();
+  await admin.record({ gameId: game.id, rules: [{ question: '一' }, { question: '二', checked: true }] });
+  await admin.record({ gameId: other.id, rules: [{ question: '三', checked: true }] });
+  const summary = await (await as({ id: 'ur-admin', roles: ['admin'] }).summary()).json() as { games: Array<{ gameId: string; uncertainCount: number; uncheckedCount: number }> };
+  expect(summary.games.map(({ gameId, uncertainCount, uncheckedCount }) => ({ gameId, uncertainCount, uncheckedCount })).sort((a, b) => a.gameId.localeCompare(b.gameId)))
+    .toEqual([{ gameId: game.id, uncertainCount: 2, uncheckedCount: 1 }, { gameId: other.id, uncertainCount: 1, uncheckedCount: 0 }].sort((a, b) => a.gameId.localeCompare(b.gameId)));
+  expect((await as({ id: 'ur-editor', roles: ['editor'] }).summary()).status).toBe(403);
+  expect((await as().summary()).status).toBe(401);
 });

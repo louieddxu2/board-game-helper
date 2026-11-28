@@ -10,6 +10,7 @@ const game = { id: 'game-1', slug: 'shipyard', displayName: '船廠', englishNam
 const admin = { user: { id: 'admin' }, loading: false, canEdit: true, isAdmin: true };
 const mocks = vi.hoisted(() => ({ game: vi.fn(), catalogGames: vi.fn(), session: { current: {} as Record<string, unknown> } }));
 vi.mock('../context/SessionContext', () => ({ useSession: () => mocks.session.current }));
+vi.mock('../lib/uncertainRulesApi', () => ({ uncertainRulesApi: { summary: async () => ({ games: [] }), list: async () => ({ uncertainRules: [] }) } }));
 vi.mock('../lib/api', () => ({ api: { game: mocks.game, catalogGames: mocks.catalogGames,
   editorContributions: async () => ({ games: [{ gameId: 'game-1', pendingRuleCount: 1 }], pendingGameIds: [] }),
   tags: async () => ({ tags: [tag] }),

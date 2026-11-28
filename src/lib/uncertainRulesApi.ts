@@ -1,4 +1,4 @@
-import type { RuleCategory, UncertainRule } from '../shared/types';
+import type { RuleCategory, UncertainGameSummary, UncertainRule } from '../shared/types';
 import { mutation, uncachedRead } from './api';
 import { localDb } from './localDb';
 
@@ -17,6 +17,7 @@ const path = (gameId: string, ruleId?: string) =>
   `/api/games/${encodeURIComponent(gameId)}/uncertain-rules${ruleId ? `/${encodeURIComponent(ruleId)}` : ''}`;
 
 export const uncertainRulesApi = {
+  summary: () => uncachedRead<{ games: UncertainGameSummary[] }>('/api/uncertain-rules/summary', 'uncertain counts are admin-only and read only when the game list opens'),
   list: (gameId: string) => uncachedRead<{ uncertainRules: UncertainRule[] }>(path(gameId), 'uncertain rules are an admin-only working list that is read only when opened'),
   /** Records several questions for one game: an existing one by id, or a new one by name (the server reuses a game that already has that name). */
   create: async (target: GameTarget, rules: Array<UncertainRuleInput & { question: string }>) => {

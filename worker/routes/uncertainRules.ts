@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { RULE_CATEGORIES, type RuleCategory, type UncertainRule } from '../../src/shared/types';
+import { RULE_CATEGORIES, type RuleCategory, type UncertainGameSummary, type UncertainRule } from '../../src/shared/types';
 import { requireRole, type AppVariables } from '../auth';
 import type { RouteEnv } from '../env';
 import { getDatabase } from '../data/database';
@@ -88,6 +88,27 @@ const updateSchema = z.object({
 const COLUMNS = 'id, game_id, question, table_ruling, details, categories_json, player_counts_json, edition_notes_json, checked_at, created_at, updated_at';
 const SELECT = `SELECT ${COLUMNS} FROM uncertain_rules`;
 const uniqueSorted = (values: number[] | undefined) => values && Array.from(new Set(values)).sort((a, b) => a - b);
+
+// The game list's uncertain column: every game with uncertain rules, including games that have no
+// published rule yet and so are missing from the public game catalog.
+uncertainRulesRoutes.get('/api/uncertain-rules/summary', requireRole('admin'), async (c) => {
+  setNoCache(c);
+  const { results } = await getDatabase(c).statement(`
+    SELECT g.id AS game_id, g.slug, g.display_name, g.english_name,
+      counts.uncertain_count, counts.unchecked_count, counts.latest_updated_at
+    FROM (
+      SELECT game_id, COUNT(*) AS uncertain_count, SUM(CASE WHEN checked_at IS NULL THEN 1 ELSE 0 END) AS unchecked_count,
+        MAX(updated_at) AS latest_updated_at
+      FROM uncertain_rules INDEXED BY idx_uncertain_rules_game GROUP BY game_id
+    ) counts
+    JOIN games g ON g.id = counts.game_id
+    WHERE g.merged_into_game_id IS NULL
+  `).all<{ game_id: string; slug: string; display_name: string; english_name: string | null; uncertain_count: number; unchecked_count: number; latest_updated_at: number }>();
+  return c.json({ games: (results ?? []).map((row): UncertainGameSummary => ({
+    gameId: row.game_id, slug: row.slug, displayName: row.display_name, englishName: row.english_name,
+    uncertainCount: row.uncertain_count, uncheckedCount: row.unchecked_count, latestUpdatedAt: row.latest_updated_at,
+  })) });
+});
 
 uncertainRulesRoutes.get('/api/games/:id/uncertain-rules', requireRole('admin'), async (c) => {
   setNoCache(c);
