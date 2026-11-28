@@ -145,7 +145,8 @@ describe('GamePage compact rule view', () => {
     mocks.game.mockResolvedValue({ game });
     const { unmount } = renderGamePage('/games/test-game?players=2');
     await screen.findByText('找不到符合目前條件的規則。');
-    expect(document.title).toBe('測試遊戲：玩錯的2條規則');
+    // The title is set in an effect after the rules render; a slow runner can read it before that effect runs.
+    await waitFor(() => expect(document.title).toBe('測試遊戲：玩錯的2條規則'));
     expect(document.head.querySelector('link[rel="canonical"]')).toHaveAttribute('href', `${window.location.origin}/games/test-game`);
     expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
     unmount();

@@ -9,8 +9,8 @@ const { createHarness } = await import('./attributeReplayTestHarness');
 const metricHeaders = (response: Response) => ['x-d1-rows-read', 'x-d1-rows-written']
   .filter(name => response.headers.has(name) || (response.headers.get('access-control-expose-headers') ?? '').toLowerCase().includes(name));
 
-const request = (path: string, exposed: boolean) => {
-  const h = createHarness();
+// Building the migrated database is the slow part, so both requests of a check share one; the routes only read.
+const request = (h: ReturnType<typeof createHarness>, path: string, exposed: boolean) => {
   const env = { ...h.env, APP_ORIGIN: 'https://metrics.test', ...(exposed ? { EXPOSE_D1_METRICS: '1' } : {}),
     PUBLIC_RATE_LIMITER: { limit: async () => ({ success: true }) }, WRITE_RATE_LIMITER: { limit: async () => ({ success: true }) } };
   return app.request(`https://metrics.test${path}`, { headers: { origin: 'https://metrics.test' } }, env);
@@ -20,12 +20,13 @@ const request = (path: string, exposed: boolean) => {
 const paths = ['/api/tags', '/api/game-catalog/changes?after=0', '/api/home', '/api/attributes/activities'];
 
 test.each(paths)('%s carries no D1 row counts unless the config exposes them', async (path) => {
-  const hidden = await request(path, false);
+  const h = createHarness();
+  const hidden = await request(h, path, false);
   expect(hidden.status).toBeLessThan(500);
   expect(metricHeaders(hidden)).toEqual([]);
   expect(await hidden.text()).not.toMatch(/debugD1Metrics|rows_read/);
 
-  const shown = await request(path, true);
+  const shown = await request(h, path, true);
   expect(shown.headers.get('x-d1-rows-read')).toMatch(/^\d+$/);
 });
 
