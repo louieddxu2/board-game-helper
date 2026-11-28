@@ -8,7 +8,7 @@ const maskCommentsAndStrings = (sql) => sql.replace(/'(?:''|[^'])*'|--[^\r\n]*|\
 const deleteTargets = (sql) => [...maskCommentsAndStrings(sql).matchAll(/\bDELETE\s+FROM\s+["`\[]?([a-z_][a-z_0-9]*)/giu)]
   .map((match) => match[1].toLowerCase());
 
-export const buildMigratedSchema = (throughName) => {
+const runMigrations = (throughName) => {
   const db = new DatabaseSync(':memory:');
   try {
     for (const name of migrationNames()) {
@@ -20,6 +20,25 @@ export const buildMigratedSchema = (throughName) => {
     db.close();
     throw error;
   }
+};
+
+// Running every migration takes about a second, and slower CI runners pushed tests that build several
+// databases past their time limit. Each process runs them once per target, keeps the result as bytes,
+// and hands out in-memory copies.
+const templates = new Map();
+
+/** A fresh in-memory database with the migrations applied, through `throughName` when given; each call is independent. */
+export const buildMigratedSchema = (throughName) => {
+  const key = throughName ?? '';
+  let bytes = templates.get(key);
+  if (!bytes) {
+    const db = runMigrations(throughName);
+    try { bytes = db.serialize(); } finally { db.close(); }
+    templates.set(key, bytes);
+  }
+  const db = new DatabaseSync(':memory:');
+  db.deserialize(bytes);
+  return db;
 };
 
 const missingForeignKeyIndexes = (db, parentTable) => {
